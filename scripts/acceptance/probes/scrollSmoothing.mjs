@@ -13,9 +13,29 @@ import { until } from '../harness.mjs';
  * A glide is recognised by its frames: sampled once per animation frame after one notch, the offset
  * passes through intermediate values and settles exactly one notch further. A jump has no
  * intermediate frame. Each sample run is bounded by a frame count rather than a fixed wait.
+ *
+ * On the request list the frames also say whether the glide feels like the reader's hand: it starts
+ * moving on the frame the list's own jump would have, and a wheel that keeps turning moves the list on
+ * every frame until it lands. A glide that waits a frame per notch, or loses the list's frame to the
+ * next notch, reads as a stutter and a lag even though it lands in the right place.
  */
 const NOTCH = 100;
 const SAMPLE_FRAMES = 40;
+/** Notches in a turning-wheel run, and the frames sampled to see all of them land. */
+const TURNED_NOTCHES = 6;
+const TURNED_SAMPLE_FRAMES = 80;
+/** How far a virtualized list may re-anchor as it measures rows during a turn of several notches. */
+const REMEASURE_PX = 4;
+/** The shortest gap after which a frame is presented on its own: three quarters of a 60Hz frame. */
+const SHOWN_FRAME_MS = 12;
+
+/** Waits for the page to run `count` animation frames: the spacing of a wheel the reader keeps turning. */
+async function nextFrames(page, count) {
+  await page.evaluate((frames) => new Promise((resolve) => {
+    const tick = (left) => (left === 0 ? resolve() : requestAnimationFrame(() => tick(left - 1)));
+    tick(frames);
+  }), count);
+}
 
 /** Marks the scroll node `findScroller` picks for sampling, so later steps address the same element. */
 async function markScroller(page, findScroller, argument) {
@@ -23,22 +43,49 @@ async function markScroller(page, findScroller, argument) {
 }
 
 /** Runs `act` and returns the offsets the marked scroller passed through over the next frames. */
-async function sampleScroll(page, act) {
+async function sampleScroll(page, act, sampleFrames = SAMPLE_FRAMES) {
   await page.evaluate((frames) => {
     const node = document.querySelector('[data-probe-scroller]');
     window.__scrollSamples = [node.scrollTop];
+    window.__scrollSampleTimes = [performance.now()];
+    window.__scrollInputAt = null;
+    window.__scrollHanded = 0;
+    // A glide drives a virtualized list with wheel events of its own; their deltas are what it asked
+    // the list to travel, apart from anything the list adds while it measures rows.
+    const noteInput = (event) => {
+      if (!event.isTrusted && event.type === 'wheel') window.__scrollHanded += event.deltaY;
+      if (event.isTrusted && window.__scrollInputAt === null) window.__scrollInputAt = performance.now();
+    };
+    window.addEventListener('wheel', noteInput, { capture: true });
+    window.addEventListener('keydown', noteInput, { capture: true });
     const record = () => {
       window.__scrollSamples.push(node.scrollTop);
-      if (window.__scrollSamples.length <= frames) requestAnimationFrame(record);
+      window.__scrollSampleTimes.push(performance.now());
+      if (window.__scrollSamples.length <= frames) {
+        requestAnimationFrame(record);
+      } else {
+        window.removeEventListener('wheel', noteInput, { capture: true });
+        window.removeEventListener('keydown', noteInput, { capture: true });
+      }
     };
     requestAnimationFrame(record);
-  }, SAMPLE_FRAMES);
+  }, sampleFrames);
   await act();
   await until(
-    () => page.evaluate((frames) => window.__scrollSamples.length > frames, SAMPLE_FRAMES),
+    () => page.evaluate((frames) => window.__scrollSamples.length > frames, sampleFrames),
     { label: 'scroll samples' },
   );
-  return page.evaluate(() => window.__scrollSamples);
+  const { samples, times, framesBeforeMove, handed } = await page.evaluate(() => {
+    const samples = window.__scrollSamples;
+    const times = window.__scrollSampleTimes;
+    // Frames that ran after the input and before the scroller first moved.
+    const firstMove = samples.findIndex((value, index) => index > 0 && Math.abs(value - samples[index - 1]) > 0.5);
+    const framesBeforeMove = firstMove < 0 || window.__scrollInputAt === null
+      ? null
+      : times.slice(1, firstMove).filter((time) => time > window.__scrollInputAt).length;
+    return { samples, times, framesBeforeMove, handed: window.__scrollHanded };
+  });
+  return Object.assign(samples, { framesBeforeMove, times, handed });
 }
 
 /** Turns the wheel one notch over (x, y) and returns the offsets the marked scroller passed through. */
@@ -54,7 +101,30 @@ function describeNotch(samples) {
   const low = Math.min(start, end);
   const high = Math.max(start, end);
   const intermediate = new Set(samples.filter((value) => value > low + 0.5 && value < high - 0.5).map(Math.round));
-  return { travelled: end - start, intermediateFrames: intermediate.size, detail: `samples=${samples.map(Math.round).join(',')}` };
+  // Frames between the first move and the landing on which the scroller stood still. Two kinds of
+  // frame are not a stall the reader could see: one that ran within a few milliseconds of the frame
+  // before is the browser catching up after a busy main thread (a first render on the dev server) and
+  // is never shown on its own, and the last pixels of a glide move by fractions an integer offset
+  // does not show.
+  const { times } = samples;
+  const moved = samples.map((value, index) => index > 0 && Math.abs(value - samples[index - 1]) > 0.5);
+  const firstMove = moved.indexOf(true);
+  const lastMove = moved.lastIndexOf(true);
+  let stalledFrames = 0;
+  for (let index = firstMove; firstMove >= 0 && index <= lastMove; index += 1) {
+    const isShown = times[index] - times[index - 1] >= SHOWN_FRAME_MS;
+    if (!moved[index] && isShown && Math.abs(end - samples[index]) > 2) stalledFrames += 1;
+  }
+  return {
+    travelled: end - start,
+    intermediateFrames: intermediate.size,
+    stalledFrames,
+    framesBeforeMove: samples.framesBeforeMove,
+    handed: samples.handed,
+    detail: `samples=${samples.map(Math.round).join(',')} framesBeforeMove=${samples.framesBeforeMove}`
+      + ` handed=${Math.round(samples.handed * 10) / 10}`
+      + ` frameMs=${times.slice(1).map((time, index) => Math.round(time - times[index])).join(',')}`,
+  };
 }
 
 export async function scrollSmoothing({ base, page, check }) {
@@ -171,6 +241,9 @@ export async function scrollSmoothing({ base, page, check }) {
   notch = describeNotch(await sampleNotch(page, { x: nextRow.x + nextRow.width / 2, y: nextRow.y + nextRow.height / 2 }));
   check('a notch over the virtualized list glides instead of jumping', notch.intermediateFrames >= 2, notch.detail);
   check('the list lands exactly one notch further', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  // The list applies a step on its next frame and shows it on the one after, which is when its own
+  // jump would have shown; a glide that waits for a frame of its own first is a frame of added lag.
+  check('the list starts moving as soon as its own jump would have', notch.framesBeforeMove !== null && notch.framesBeforeMove <= 2, notch.detail);
   notch = describeNotch(await sampleNotch(page, { x: nextRow.x + nextRow.width / 2, y: nextRow.y + nextRow.height / 2 }));
   check('the next notch continues from where the first landed', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
 
@@ -178,7 +251,29 @@ export async function scrollSmoothing({ base, page, check }) {
   // applies each step only once React commits it, frames behind the glide, and that lag must not
   // read as someone else moving the list - which would stop the glide a few pixels in.
   notch = describeNotch(await sampleScroll(page, async () => {
-    for (let turned = 0; turned < 3; turned += 1) await page.mouse.wheel(0, NOTCH);
-  }));
-  check('a wheel turned several notches glides the list through all of them', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH * 3) <= 1, notch.detail);
+    for (let turned = 0; turned < TURNED_NOTCHES; turned += 1) await page.mouse.wheel(0, NOTCH);
+  }, TURNED_SAMPLE_FRAMES));
+  // The list re-anchors its offset as it replaces estimated row heights with measured ones, and may
+  // shift by a few pixels doing so, as it does on its own jumps. The glide itself must hand over
+  // exactly the notches turned.
+  check('a wheel turned several notches glides the list through all of them', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES) <= REMEASURE_PX, notch.detail);
+  check('the glide hands the list exactly the notches turned', Math.abs(notch.handed - NOTCH * TURNED_NOTCHES) <= 0.5, notch.detail);
+
+  // Each notch the reader turns reaches the list too, and the list would let it cancel the frame that
+  // was about to apply the glide's last step: two frames without movement at every notch, then a
+  // jump. The notches are two frames apart, as a turning wheel delivers them, so each one lands while
+  // the glide is moving. Measured over rows the list has already rendered once, so a first mount's
+  // render on the dev server cannot pass for a stalled glide. A dev-server render can still miss one
+  // frame now and then; the defect misses two at every notch.
+  for (const [label, direction] of [['turned back', -1], ['turned down again', 1]]) {
+    notch = describeNotch(await sampleScroll(page, async () => {
+      for (let turned = 0; turned < TURNED_NOTCHES; turned += 1) {
+        await page.mouse.wheel(0, NOTCH * direction);
+        await nextFrames(page, 2);
+      }
+    }, TURNED_SAMPLE_FRAMES));
+    check(`${label}, a turning wheel keeps the list moving from notch to notch`, notch.stalledFrames < TURNED_NOTCHES / 2, notch.detail);
+    check(`${label}, the glide hands the list exactly the notches turned`, Math.abs(notch.handed - NOTCH * TURNED_NOTCHES * direction) <= 0.5, notch.detail);
+    check(`${label}, the list lands ${TURNED_NOTCHES} notches further`, Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES * direction) <= REMEASURE_PX, notch.detail);
+  }
 }

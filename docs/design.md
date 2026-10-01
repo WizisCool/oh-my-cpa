@@ -1461,11 +1461,18 @@ Each notch retargets the glide from where it is, so a turning wheel accelerates 
 the glide follows the nearest scroller under the pointer that can still move, and stops chaining at a
 scroller that contains its overscroll, as the native scroll does. A virtualized list (the request
 list, a Select's option popup) is moved through its own wheel handling, one step per frame, because
-it owns its offset. It applies a step only once React commits it, often frames behind, so an offset
-anywhere between where the glide started and where it has asked to be is that lag; only an offset
-outside that span counts as a correction and stops the glide. A component that turns a
-notch into something else — the request list collapsing its header on the first notch — says so with
-`consumeWheel`, since `preventDefault` from a React handler is ignored.
+it owns its offset. It applies a step on its next frame and shows it once React commits, two frames
+behind on a light page, so an offset anywhere between where the glide started and where it has asked
+to be is that lag; only an offset outside that span counts as a correction and stops the glide.
+
+**A glide never adds lag to the reader's hand** (ADR 0047). Every glide moves on its first frame;
+a virtualized list gets its first step from inside the input event, so it starts on the frame its own
+jump would have; and a notch that arrives while the list is still catching up neither costs it a
+frame nor starts over from where the list has got to. A wheel that keeps turning moves the list on
+every frame until it lands.
+
+A component that turns a notch into something else — the request list collapsing its header on the
+first notch — says so with `consumeWheel`, since `preventDefault` from a React handler is ignored.
 
 The glide is on by default and is **not** switched off by `prefers-reduced-motion`: it is the
 reader's own input following their hand, as inertial scrolling stays on under Reduce Motion on

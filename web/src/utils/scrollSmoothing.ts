@@ -220,7 +220,12 @@ export function consumeWheel(event: Event): boolean {
 interface Glide {
   from: number;
   to: number;
-  startedAt: number;
+  /**
+   * When the glide's curve starts, set on its first frame rather than at input. The first frame then
+   * already shows progress: an input lands partway through a frame, so a clock started at input would
+   * spend the next frame at or near zero, and a wheel still turning would stall at every notch.
+   */
+  startedAt: number | null;
   /** The offset this glide last wrote or requested, so a write by anyone else is detectable. */
   written: number;
   /**
@@ -229,17 +234,27 @@ interface Glide {
    * state and re-applies it from an updater that runs after the next write, so every frame of the
    * glide would be dragged back one frame and the glide would read its own echo as a foreign write.
    * The list is instead handed each frame's step as a wheel event of its own, which it applies
-   * through the same functional update it applies a real wheel with - one authority over the offset.
+   * through the same functional update it applies a real wheel with - one authority over the offset,
+   * and the rows it renders always match the offset it shows.
    */
   isVirtual: boolean;
+  /** Steps handed to a virtual list before the glide's first frame; see `handFirstStep`. */
+  framesAhead: number;
   /**
    * The span of offsets a virtual list may report while it catches up: from where the glide (or the
    * chain of retargeted glides it continues) started to every offset it has asked for since. The list
-   * applies a step only once React commits it, which is one frame later on a light page and several
-   * on a busy one, so its reported offset trails the glide by an unknown number of steps. Anywhere
-   * inside the span is that lag; outside it, something else moved the list.
+   * applies a step on its next frame and shows it once React commits, two frames behind on a light
+   * page and more on a busy one, so its reported offset trails the glide. Anywhere inside the span is
+   * that lag; outside it, something else moved the list.
    */
   span: { low: number; high: number };
+  /**
+   * Frames left for a virtual glide that has asked for its destination while its list catches up.
+   * A notch arriving meanwhile continues the chain from where the glide asked the list to be:
+   * starting from where the list has got to would add whatever it still holds on top of the notch.
+   * Once the list is within a rounding of the destination there is nothing left worth keeping.
+   */
+  settleFrames?: number;
 }
 
 /**
@@ -249,10 +264,40 @@ interface Glide {
  */
 const FOREIGN_WRITE_PX = 2;
 
+/**
+ * How many frames a finished virtual glide waits for its list to catch up. The list's lag is counted
+ * in frames, not milliseconds - a busy page runs fewer frames, not shorter ones - so the wait is too,
+ * with ample room over the two frames the list needs.
+ */
+const VIRTUAL_SETTLE_FRAMES = 20;
+
+/**
+ * How far a glide's first frame advances its curve: one frame at 60Hz. A fixed value rather than a
+ * measured interval, because the interval around an input is the least regular one - a frame the
+ * input forced, or one a long task delayed - and a first step taken from it would lurch.
+ */
+const FIRST_FRAME_MS = 1000 / 60;
+
 /** isForeignWrite decides whether something other than the glide has moved its scroller. */
 function isForeignWrite(offset: number, glide: Glide): boolean {
   if (!glide.isVirtual) return Math.abs(offset - glide.written) > FOREIGN_WRITE_PX;
   return offset < glide.span.low - FOREIGN_WRITE_PX || offset > glide.span.high + FOREIGN_WRITE_PX;
+}
+
+/**
+ * handStep hands a virtualized list one step of a glide.
+ *
+ * The list defers every wheel delta to its next animation frame, and any wheel it sees - the reader's
+ * own notch included, although this layer has claimed it - cancels that frame before it decides to
+ * ignore the event. The deltas it has collected are kept and applied by the next frame it schedules,
+ * so a step of zero re-arms a cancelled frame without moving anything.
+ */
+function handStep(element: Element, deltaY: number): void {
+  element.dispatchEvent(new WheelEvent('wheel', { deltaY, cancelable: true }));
+}
+
+function extendSpan(glide: Glide, position: number): void {
+  glide.span = { low: Math.min(glide.span.low, position), high: Math.max(glide.span.high, position) };
 }
 
 export interface ScrollSmoothing {
@@ -308,23 +353,61 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
         glides.delete(element);
         continue;
       }
+      if (glide.settleFrames !== undefined) {
+        // The list only moves toward the destination now, so the span it may report narrows to what
+        // is left of that way; a correction moving it anywhere else ends the chain.
+        glide.span = { low: Math.min(element.scrollTop, glide.written), high: Math.max(element.scrollTop, glide.written) };
+        glide.settleFrames -= 1;
+        if (Math.abs(element.scrollTop - glide.written) <= FOREIGN_WRITE_PX || glide.settleFrames <= 0) glides.delete(element);
+        continue;
+      }
       // Content can grow or shrink under a glide (a virtualized list measures rows as they render),
       // so the destination is re-clamped every frame rather than trusted from the input.
       glide.to = Math.min(glide.to, maxScrollTop(element));
+      glide.startedAt ??= now - FIRST_FRAME_MS * (glide.framesAhead + 1);
       const elapsed = now - glide.startedAt;
       const position = glidePosition(glide.from, glide.to, elapsed, durationMs);
       if (glide.isVirtual) {
         const stepPx = position - glide.written;
-        if (stepPx !== 0) element.dispatchEvent(new WheelEvent('wheel', { deltaY: stepPx, cancelable: true }));
+        if (stepPx !== 0) handStep(element, stepPx);
         glide.written = position;
-        glide.span = { low: Math.min(glide.span.low, position), high: Math.max(glide.span.high, position) };
+        extendSpan(glide, position);
+        if (elapsed >= durationMs) glide.settleFrames = VIRTUAL_SETTLE_FRAMES;
       } else {
         element.scrollTop = position;
         glide.written = element.scrollTop;
+        if (elapsed >= durationMs) glides.delete(element);
       }
-      if (elapsed >= durationMs) glides.delete(element);
     }
     if (glides.size > 0) frame = requestAnimationFrame(step);
+  };
+
+  /**
+   * handFirstStep starts a virtual glide from inside the input event.
+   *
+   * A step handed over during a frame is applied on the list's next frame and shown on the one after,
+   * so a glide that waited for its own first frame would start a frame later than the list's native
+   * jump would have. Handed over now, the first step lands on the frame the jump would have, and the
+   * glide adds no latency. A glide that continues a chain hands nothing: the list still holds the
+   * previous glide's last step, and adding the new one would show two frames of travel at once. It
+   * re-arms the list's frame instead, which the reader's notch has just cancelled.
+   *
+   * Either way the glide's own frame is then requested again, after the list's: frames run in the
+   * order they were requested, and a step handed over before the list's frame has run would cancel
+   * that frame and leave one frame on screen without movement.
+   */
+  const handFirstStep = (element: Element, glide: Glide, continuesChain: boolean) => {
+    if (continuesChain) {
+      handStep(element, 0);
+    } else {
+      const position = glidePosition(glide.from, glide.to, FIRST_FRAME_MS, durationMs);
+      handStep(element, position - glide.written);
+      glide.written = position;
+      glide.framesAhead = 1;
+      extendSpan(glide, position);
+    }
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(step);
   };
 
   const glideTo = (element: Element, destination: number) => {
@@ -333,19 +416,18 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     const isVirtual = isVirtualHolder(element);
     // A virtual list's offset trails the glide, so a retarget continues from where the glide asked it
     // to be rather than from where it has got to, and keeps the span the list may still be crossing.
-    const from = isVirtual && current ? current.written : element.scrollTop;
-    const span = isVirtual && current ? current.span : { low: from, high: from };
+    const continuesChain = isVirtual && current !== undefined;
+    const from = continuesChain ? current.written : element.scrollTop;
+    const span = continuesChain ? current.span : { low: from, high: from };
     // A new step retargets the glide from where it is now, so a turning wheel accelerates instead of
     // queueing notches behind each other.
-    glides.set(element, {
-      from,
-      to,
-      startedAt: performance.now(),
-      written: from,
-      isVirtual,
-      span,
-    });
-    if (!frame) frame = requestAnimationFrame(step);
+    const glide: Glide = { from, to, startedAt: null, written: from, isVirtual, framesAhead: 0, span };
+    glides.set(element, glide);
+    if (isVirtual) {
+      handFirstStep(element, glide, continuesChain);
+    } else if (!frame) {
+      frame = requestAnimationFrame(step);
+    }
   };
 
   const onWheelCapture = (event: WheelEvent) => {
@@ -425,6 +507,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointerdown', onPointerDown, { capture: true });
       if (frame) cancelAnimationFrame(frame);
+      frame = 0;
       glides.clear();
     },
   };
