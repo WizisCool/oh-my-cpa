@@ -234,6 +234,23 @@ import { fileURLToPath } from 'node:url';
  *     one would need.
  *   - Every other limit is untouched: the entry keeps 9.77 kB (3.2%) and the dist total 211 kB,
  *     so raising either would remove a check rather than relax one.
+ *
+ * ## The pricing tiers and new-matches re-baseline (2026-10-01)
+ *
+ * A clean build of the base commit measured entry 297.95 kB, JavaScript 10608.80 kB and dist
+ * 12320.51 kB; with the tier editor and the new-match prompts it measures 302.33, 10632.05 and
+ * 12346.86 kB. Only the entry leaves its limit.
+ *
+ * The entry's +4.38 kB is localized copy: the base dictionary's pricing keys grew by a net
+ * 4.48 kB of source (the long-context and time-of-day editor sections, the price ladder, the
+ * calculator and the new-match notices, less the retired single-list tier keys). The editor
+ * drawer and the shared pricing parts stay in lazy chunks; the entry names them only in its
+ * preload map, which was checked in the built assets rather than assumed.
+ *
+ *   - `main entry` 302 -> 314, leaving 11.67 kB (3.7%): within the range the earlier
+ *     re-baselines left (3.2-4.4%).
+ *   - Every other limit is untouched: total JavaScript keeps 267.95 kB and the dist total
+ *     153.14 kB, so raising either would remove a check rather than relax one.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
@@ -276,7 +293,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 302, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 314, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },
