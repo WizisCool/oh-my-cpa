@@ -141,6 +141,11 @@ export async function pricingBook({ base, page, check, writes }) {
     return bounds.top >= 0 && bounds.bottom <= innerHeight;
   }));
   const search = list.locator('[data-testid="pricing-search"]');
+  const providerFilter = list.locator('.ant-select').first();
+  // The test id lands on the inner input; the gap is measured from the visible search box.
+  const searchField = search.locator('xpath=ancestor::span[contains(@class, "ant-input-affix-wrapper")][1]');
+  const [filterBox, searchBox] = [await providerFilter.boundingBox(), await searchField.boundingBox()];
+  check('the provider filter sits beside the search', filterBox && searchBox && Math.abs(searchBox.y - filterBox.y) < 4 && searchBox.x - (filterBox.x + filterBox.width) <= 16, JSON.stringify({ filterBox, searchBox }));
   await list.locator('.ant-pagination-item-2').first().click();
   check('page two changes the rows', await isTrue(async () => !(await editRows.first().getAttribute('aria-label')).includes('claude-sonnet'), 'page two'));
   check('page two updates its range', (await pagination.innerText()).includes('21–40 of 48'));

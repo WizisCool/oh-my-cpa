@@ -188,9 +188,12 @@ a.usage-unpriced:hover {
   }
 }
 
+/* The toolbar spreads its ends apart; without the auto margin the select would sit alone in the
+   middle instead of beside the search it narrows together with. */
 .provider-filter {
   min-width: 180px;
   max-width: 100%;
+  margin-left: auto;
 }
 
 .provider-group {
