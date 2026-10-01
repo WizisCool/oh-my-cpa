@@ -74,6 +74,9 @@ type fakeUpstream struct {
 	// prove a manual sync is what fetched them; waiting on the reported mode
 	// alone would race the initial poll.
 	hold chan struct{}
+	// held is signalled when a pop reaches the barrier, so a test can release it
+	// only once the background poll is provably the one holding the first batch.
+	held chan struct{}
 }
 
 // holdPops bars pops until releasePops is called.
@@ -81,6 +84,7 @@ func (f *fakeUpstream) holdPops() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.hold = make(chan struct{})
+	f.held = make(chan struct{}, 1)
 }
 
 // releasePops unblocks pops with the given backlog.
@@ -99,9 +103,30 @@ func (f *fakeUpstream) releasePops(batches [][]string) {
 func (f *fakeUpstream) awaitHold() {
 	f.mu.Lock()
 	hold := f.hold
+	if hold != nil {
+		select {
+		case f.held <- struct{}{}:
+		default:
+		}
+	}
 	f.mu.Unlock()
 	if hold != nil {
 		<-hold
+	}
+}
+
+// waitForHeldPop blocks until a pop is waiting at the barrier. The collector
+// reports its mode before its first poll reaches the upstream, so the mode
+// alone does not prove which pass will take the first released batch.
+func (f *fakeUpstream) waitForHeldPop(t *testing.T) {
+	t.Helper()
+	f.mu.Lock()
+	held := f.held
+	f.mu.Unlock()
+	select {
+	case <-held:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no pop reached the barrier")
 	}
 }
 

@@ -80,6 +80,7 @@ func TestCaptureNowPullsFromCPABeforeItReturns(t *testing.T) {
 	}
 	startRunner(t, runner)
 	waitForMode(t, runner, ModeHTTPPull)
+	upstream.waitForHeldPop(t)
 
 	// The blocked background poll is released with an empty batch, so the records
 	// below can only be fetched by the manual pass this test is about.
@@ -177,6 +178,7 @@ func TestCaptureNowDrainsBacklogBeyondOneBatch(t *testing.T) {
 	}
 	startRunner(t, runner)
 	waitForMode(t, runner, ModeHTTPPull)
+	upstream.waitForHeldPop(t)
 
 	// The backlog is larger than one batch *and* larger than what one syncPull
 	// round can consume, so this pins the multi-batch drain. The first entry
