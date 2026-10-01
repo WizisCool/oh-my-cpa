@@ -232,8 +232,14 @@ interface Glide {
    * through the same functional update it applies a real wheel with - one authority over the offset.
    */
   isVirtual: boolean;
-  /** The last two frames' steps: a virtual list applies a step a frame late, so its offset trails by up to both. */
-  recentSteps: [number, number];
+  /**
+   * The span of offsets a virtual list may report while it catches up: from where the glide (or the
+   * chain of retargeted glides it continues) started to every offset it has asked for since. The list
+   * applies a step only once React commits it, which is one frame later on a light page and several
+   * on a busy one, so its reported offset trails the glide by an unknown number of steps. Anywhere
+   * inside the span is that lag; outside it, something else moved the list.
+   */
+  span: { low: number; high: number };
 }
 
 /**
@@ -242,6 +248,12 @@ interface Glide {
  * round differently across engines and zoom levels, so an exact comparison would cancel every glide.
  */
 const FOREIGN_WRITE_PX = 2;
+
+/** isForeignWrite decides whether something other than the glide has moved its scroller. */
+function isForeignWrite(offset: number, glide: Glide): boolean {
+  if (!glide.isVirtual) return Math.abs(offset - glide.written) > FOREIGN_WRITE_PX;
+  return offset < glide.span.low - FOREIGN_WRITE_PX || offset > glide.span.high + FOREIGN_WRITE_PX;
+}
 
 export interface ScrollSmoothing {
   setEnabled: (isEnabled: boolean) => void;
@@ -292,8 +304,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
   const step = (now: number) => {
     frame = 0;
     for (const [element, glide] of glides) {
-      const slack = glide.isVirtual ? Math.abs(glide.recentSteps[0]) + Math.abs(glide.recentSteps[1]) : 0;
-      if (!element.isConnected || Math.abs(element.scrollTop - glide.written) > FOREIGN_WRITE_PX + slack) {
+      if (!element.isConnected || isForeignWrite(element.scrollTop, glide)) {
         glides.delete(element);
         continue;
       }
@@ -305,8 +316,8 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
       if (glide.isVirtual) {
         const stepPx = position - glide.written;
         if (stepPx !== 0) element.dispatchEvent(new WheelEvent('wheel', { deltaY: stepPx, cancelable: true }));
-        glide.recentSteps = [stepPx, glide.recentSteps[0]];
         glide.written = position;
+        glide.span = { low: Math.min(glide.span.low, position), high: Math.max(glide.span.high, position) };
       } else {
         element.scrollTop = position;
         glide.written = element.scrollTop;
@@ -320,9 +331,10 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
     const to = Math.min(Math.max(destination, 0), maxScrollTop(element));
     const current = glides.get(element);
     const isVirtual = isVirtualHolder(element);
-    // A virtual list's offset trails the glide by a frame, so a retarget continues from where the
-    // glide asked it to be rather than from where it has got to.
+    // A virtual list's offset trails the glide, so a retarget continues from where the glide asked it
+    // to be rather than from where it has got to, and keeps the span the list may still be crossing.
     const from = isVirtual && current ? current.written : element.scrollTop;
+    const span = isVirtual && current ? current.span : { low: from, high: from };
     // A new step retargets the glide from where it is now, so a turning wheel accelerates instead of
     // queueing notches behind each other.
     glides.set(element, {
@@ -331,7 +343,7 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
       startedAt: performance.now(),
       written: from,
       isVirtual,
-      recentSteps: current?.recentSteps ?? [0, 0],
+      span,
     });
     if (!frame) frame = requestAnimationFrame(step);
   };
