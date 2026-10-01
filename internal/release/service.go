@@ -552,7 +552,7 @@ func (s *Service) Status(ctx context.Context, productKey, runningVersion string)
 		status.Comparison.LatestVersion = state.LatestTag
 	}
 
-	releases, err := s.selectNotes(ctx, productKey, runningVersion, status.Comparison.LatestVersion)
+	releases, err := s.selectNotes(ctx, productKey, runningVersion, status.Comparison)
 	if err != nil {
 		return status, err
 	}
@@ -645,9 +645,10 @@ func (s *Service) Releases(ctx context.Context, productKey, runningVersion strin
 	}
 
 	selected := make([]repository.ReleaseRecord, 0, len(records))
-	if len(inRange) == 0 {
+	if len(inRange) == 0 && log.Comparison.State == UpdateIndeterminate {
 		// No computable interval: show the newest stable release alone rather than
-		// asserting a range.
+		// asserting a range. A determinate comparison with an empty interval (up to date,
+		// or ahead) is a real answer - there is nothing newer - and gets an empty log.
 		if newest, ok := newestStable(records); ok {
 			selected = append(selected, newest)
 		}
@@ -683,7 +684,7 @@ func (s *Service) Releases(ctx context.Context, productKey, runningVersion strin
 }
 
 // selectNotes counts the releases the merged log would contain, for the card.
-func (s *Service) selectNotes(ctx context.Context, productKey, runningVersion, latestVersion string) ([]string, error) {
+func (s *Service) selectNotes(ctx context.Context, productKey, runningVersion string, comparison Comparison) ([]string, error) {
 	product, ok := s.ProductFor(productKey)
 	if !ok {
 		return nil, nil
@@ -696,8 +697,11 @@ func (s *Service) selectNotes(ctx context.Context, productKey, runningVersion, l
 	for _, record := range records {
 		candidates = append(candidates, rangeCandidate{Tag: record.Tag, Prerelease: record.Prerelease})
 	}
-	selected := SelectRange(candidates, runningVersion, latestVersion)
-	if len(selected) == 0 {
+	selected := SelectRange(candidates, runningVersion, comparison.LatestVersion)
+	// Mirrors Releases: only an indeterminate comparison falls back to the newest release.
+	// Counting it for an up-to-date build offered a one-entry change log for a version the
+	// operator already runs.
+	if len(selected) == 0 && comparison.State == UpdateIndeterminate {
 		if _, ok := newestStable(records); ok {
 			return []string{"newest"}, nil
 		}

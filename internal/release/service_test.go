@@ -223,6 +223,42 @@ func TestUncomparableRunningVersionShowsNewestWithoutClaimingARange(t *testing.T
 	}
 }
 
+func TestUpToDateAndAheadBuildsOfferNoChangeLog(t *testing.T) {
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writeJSON(t, writer, []Release{
+			{Tag: "v7.3.11", Body: "notes 11", PublishedAt: "2026-09-21T14:43:42Z"},
+			{Tag: "v7.3.10", Body: "notes 10", PublishedAt: "2026-09-20T23:05:09Z"},
+		})
+	})
+	ctx := context.Background()
+	if _, err := service.Check(ctx, ProductCPA); err != nil {
+		t.Fatal(err)
+	}
+
+	// A determinate comparison with nothing newer is a real answer, not a missing range:
+	// the newest-release fallback for uncomparable builds must not count here, or the card
+	// offers a one-entry change log for the version already running.
+	for running, wantState := range map[string]string{"v7.3.11": UpToDate, "v7.4.0": UpdateAhead} {
+		status, err := service.Status(ctx, ProductCPA, running)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.Comparison.State != wantState {
+			t.Fatalf("running %s: state = %q, want %q", running, status.Comparison.State, wantState)
+		}
+		if status.MergeCount != 0 {
+			t.Fatalf("running %s: merge count = %d, want 0", running, status.MergeCount)
+		}
+		log, err := service.Releases(ctx, ProductCPA, running)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(log.Releases) != 0 {
+			t.Fatalf("running %s: log has %d releases, want none: %+v", running, len(log.Releases), log.Releases)
+		}
+	}
+}
+
 func TestPrereleasesAreExcludedFromTheRange(t *testing.T) {
 	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(t, writer, []Release{
