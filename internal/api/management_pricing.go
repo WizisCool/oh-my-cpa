@@ -23,6 +23,8 @@ type PricingManager interface {
 	UsedUnpricedModels(ctx context.Context, limit int) ([]string, error)
 	Suggestions(ctx context.Context, model string, limit int) ([]pricing.UpstreamModel, error)
 	AutomaticMatch(ctx context.Context, model string) (pricing.Match, bool, error)
+	Candidates(ctx context.Context, prices []pricing.ModelPrice) (map[string]pricing.Candidate, error)
+	DismissCandidate(ctx context.Context, model, upstreamID string) error
 	StoredCatalog(ctx context.Context) ([]pricing.UpstreamModel, error)
 	SyncStateView(ctx context.Context) (pricing.SyncState, bool, error)
 	SetModelMode(ctx context.Context, change pricing.ModeChange) (pricing.ModelPrice, error)
@@ -74,6 +76,9 @@ func projectPricingUsage(usage repository.PricingUsage) pricingUsageDTO {
 type pricingModelDTO struct {
 	pricing.ModelPrice
 	Usage pricingUsageDTO `json:"usage_30d"`
+	// Candidate is an OpenRouter model a custom or linked price could follow
+	// that the operator has not seen yet.
+	Candidate *pricing.Candidate `json:"candidate,omitempty"`
 }
 
 type pricingUnpricedDTO struct {
@@ -156,9 +161,20 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 			partial, channelUsage = append(partial, "usage"), map[string]repository.PricingUsage{}
 		}
 	}
+	// Candidates are advice beside the book: a failed read leaves them out and
+	// names it in partial rather than failing the page.
+	candidates, err := h.pricing.Candidates(ctx, rows)
+	if err != nil {
+		slog.Warn("pricing candidates unavailable", "error", err)
+		partial, candidates = append(partial, "candidates"), nil
+	}
 	models := make([]pricingModelDTO, 0, len(rows))
 	for _, row := range rows {
-		models = append(models, pricingModelDTO{ModelPrice: row, Usage: projectPricingUsage(modelUsage[row.Model])})
+		dto := pricingModelDTO{ModelPrice: row, Usage: projectPricingUsage(modelUsage[row.Model])}
+		if candidate, ok := candidates[row.Model]; ok {
+			dto.Candidate = &candidate
+		}
+		models = append(models, dto)
 	}
 	attention := make([]pricingUnpricedDTO, 0, len(unpriced))
 	for _, model := range unpriced {
@@ -329,8 +345,16 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	} else if found {
 		automatic = map[string]any{"model": match.Model, "match_kind": match.Kind}
 	}
+	var candidate any
+	if current != nil {
+		if found, err := h.pricing.Candidates(ctx, []pricing.ModelPrice{*current}); err != nil {
+			slog.Warn("pricing candidate unavailable", "model", model, "error", err)
+		} else if value, ok := found[model]; ok {
+			candidate = value
+		}
+	}
 	response := map[string]any{"model": model, "price": current, "suggestions": suggestions, "automatic": automatic,
-		"versions": []repository.PriceVersion{}, "profile": repository.TokenProfile{}}
+		"candidate": candidate, "versions": []repository.PriceVersion{}, "profile": repository.TokenProfile{}}
 	if h.repo != nil {
 		if versions, err := h.repo.ListModelPriceVersions(ctx, model, 50); err == nil && versions != nil {
 			response["versions"] = versions
@@ -375,6 +399,7 @@ func pricingErrorResponse(writer http.ResponseWriter, err error) {
 		{pricing.ErrUpstreamNotFound, "pricing_upstream_not_found"},
 		{pricing.ErrNoAutomaticMatch, "pricing_no_automatic_match"},
 		{pricing.ErrInvalidMode, "pricing_invalid_mode"},
+		{pricing.ErrInvalidReview, "pricing_invalid_review"},
 	} {
 		if errors.Is(err, known.target) {
 			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": err.Error(), "code": known.code})
@@ -428,6 +453,37 @@ func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.R
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"price": row})
+}
+
+// dismissPricingCandidate records that the operator saw a model's candidate
+// and keeps their own price. Only a different candidate is offered later; the
+// price itself is untouched.
+func (h *Handler) dismissPricingCandidate(writer http.ResponseWriter, request *http.Request) {
+	if !h.requirePricing(writer) {
+		return
+	}
+	model, ok := pricingPathParam(request, "model")
+	if !ok {
+		writeError(writer, http.StatusBadRequest, "model path parameter is required")
+		return
+	}
+	var body struct {
+		UpstreamID string `json:"upstream_id"`
+	}
+	if err := decodeManagementJSON(writer, request, 4*1024, &body); err != nil {
+		return
+	}
+	if err := h.pricing.DismissCandidate(request.Context(), model, body.UpstreamID); err != nil {
+		pricingErrorResponse(writer, err)
+		return
+	}
+	if err := h.recordAudit(request, "pricing.model.dismiss_candidate", "pricing", model, "success", map[string]any{
+		"upstream_id": body.UpstreamID,
+	}); err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"dismissed": true})
 }
 
 // deletePricingModel retires the current price and any pin. A later sync may

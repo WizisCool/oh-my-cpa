@@ -300,11 +300,46 @@
   color: var(--success);
 }
 
-.tier-editor {
+.tier-sections {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
+}
+
+.tier-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   align-items: flex-start;
+}
+
+.tier-section > .mode-hint {
+  margin-top: -4px;
+}
+
+.tier-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.tier-section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.tier-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-2);
+  font-size: 12px;
 }
 
 .tier-row {
@@ -321,17 +356,147 @@
   border-color: var(--danger);
 }
 
-.tier-conditions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
-  align-items: end;
+.tier-condition {
+  display: flex;
+  align-items: flex-end;
   gap: 12px;
+}
+
+.tier-threshold {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.tier-threshold :global(.ant-input-affix-wrapper),
+.tier-threshold :global(.ant-picker) {
+  width: 100%;
+  max-width: 280px;
+}
+
+.tier-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tier-preset {
+  min-height: 24px;
+  padding: 0 8px;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  transition: border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+
+.tier-preset:hover {
+  color: var(--fg);
+  border-color: var(--fg-2);
+}
+
+.tier-preset:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tier-preset-active {
+  color: var(--fg);
+  border-color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--fg);
+}
+
+.tier-note {
+  color: var(--meta);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tier-unit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tier-rates-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .tier-rates {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
+}
+
+/* ── The price ladder ── */
+.schedule-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.schedule {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule th,
+.schedule td {
+  padding: 6px 8px;
+  text-align: right;
+  font-weight: 400;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.schedule thead th {
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.schedule th:first-child {
+  text-align: left;
+  color: var(--fg-2);
+  white-space: normal;
+}
+
+.schedule tbody th :global(.anticon) {
+  margin-right: 4px;
+  color: var(--meta);
+}
+
+.schedule td {
+  color: var(--fg);
+}
+
+.schedule-inherited,
+.schedule td.schedule-inherited {
+  color: var(--muted);
+}
+
+.schedule-ratio {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.schedule-active th,
+.schedule-active td {
+  background: var(--hover);
 }
 
 /* ── Preview and history ── */
@@ -367,6 +532,28 @@
 .preview-new {
   color: var(--fg);
   font-weight: 600;
+}
+
+.preview-tier {
+  display: block;
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.calculator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.calculator-label {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.calculator :global(.ant-input) {
+  width: 140px;
 }
 
 .history {
@@ -450,8 +637,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .rate-inputs,
-  .tier-conditions {
+  .rate-inputs {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .tier-threshold :global(.ant-input-affix-wrapper),
+  .tier-threshold :global(.ant-picker) {
+    max-width: none;
+  }
+}
+
+/* The answers to a new OpenRouter price, beside the notice that announces it. */
+.candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }

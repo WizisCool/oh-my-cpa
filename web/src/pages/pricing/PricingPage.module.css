@@ -44,6 +44,31 @@
   gap: 4px 8px;
 }
 
+/* A new OpenRouter price for a custom or linked model. It wraps under the model name rather than
+   truncating, because the answer depends on reading which model and what rate. */
+.candidate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  max-width: 100%;
+  padding: 2px 0 2px 8px;
+  border-left: 2px solid var(--accent);
+}
+
+.candidate-text {
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.candidate-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* ── The model list ── */
 .workbench {
   display: flex;

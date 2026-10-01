@@ -113,6 +113,9 @@ A CPA alias with conflicting targets is persisted with an empty `price_model`. I
   `pricing_channel_versions` and `usage_events.channel_version_id`/`price_tier`.
   Existing rows are copied with the version triggers dropped, so the upgrade mints
   no version and reprices nothing.
+- `migrations/031_pricing_match_reviews.sql`: `pricing_match_reviews`, the
+  OpenRouter model an operator last answered for each custom or linked price
+  (see "New matches for custom and linked prices").
 - `migrations/019_request_price_snapshots.sql` and
   `migrations/020_pricing_model_catalog.sql`: the append-only versions, the request
   snapshot columns and the CPA catalog projection this builds on.
@@ -127,6 +130,7 @@ A CPA alias with conflicting targets is persisted with an empty `price_model`. I
 - `internal/api/management_pricing.go`: `GET /v1/pricing`,
   `GET /v1/pricing/attention`, `GET /v1/pricing/catalog`,
   `GET|PUT|DELETE /v1/pricing/models/{model}`,
+  `POST /v1/pricing/models/{model}/dismiss-candidate`,
   `PUT|DELETE /v1/pricing/channels/{channel}`, `POST /v1/pricing/sync` (409 while
   running), `PUT /v1/pricing/sync-schedule`. Path parameters are decoded, so a
   model named `openai/gpt-5` works. The request detail response carries
@@ -143,7 +147,8 @@ A CPA alias with conflicting targets is persisted with an empty `price_model`. I
 
 The editor opens in place from every surface that shows a cost:
 
-- the price book's rows (where "Adopt" links a suggestion without opening the editor);
+- the price book's rows (where "Adopt" links a suggestion, and a new match can be
+  followed or ignored, without opening the editor);
 - an unpriced row of the request list, without opening the record;
 - the request drawer's cost breakdown;
 - an unpriced or partially priced group of the dashboard's model ranking, in the
@@ -152,7 +157,39 @@ The editor opens in place from every surface that shows a cost:
 
 The dashboard's cost tile links to the book when its total is partial. The editor
 previews the change on the model's median request of the last seven days, and
-on its largest recent prompt when that reaches a long-context tier.
+on its largest recent prompt when that reaches a long-context tier; each preview
+row names the tier the new price bills it at, and a calculator prices any input
+and output size the operator types ("300K").
+
+## Editing tiers
+
+The wire shape stays one `tiers` list; the editor presents it as the two
+questions operators ask. `web/src/components/pricing/PricingParts.tsx` holds the
+parts and `web/src/types/pricingDisplay.ts` the pure draft logic the logic suite
+pins:
+
+- **Long-context pricing** lists tiers with a threshold. The threshold is typed
+  as providers publish it (`200K`, `1M`, `272,000`) or picked from presets, and a
+  tier can additionally be limited to a time window, which covers the combined
+  tiers the server accepts.
+- **Time-of-day pricing** lists tiers with only a window. Window times are entered
+  in the OMC Time Zone or in UTC; the editor converts at the zone's current offset
+  and always shows the UTC rule it will save, and says so when the zone observes
+  daylight saving. The stored rule is UTC either way.
+- A tier's rates are entered as **multiples of the base** (the default) or as
+  **fixed prices**; a blank field inherits the base rate in both. Multiples are
+  converted to rates on save, so the server only ever stores rates. A stored tier
+  reopens as multiples only when every rate it sets is a readable multiple
+  (three decimals) of its base, so reopening and saving never rounds a price.
+  Switching the entry mode converts what is typed and keeps the price.
+- Saving writes long-context tiers before time-of-day ones. The server's rule only
+  falls back to list order between tiers with the same threshold and windowing,
+  which always share a section, so the grouping never changes the governing tier.
+  Two tiers with identical conditions are refused, as the second could never apply.
+- **The price ladder** (`priceSchedule`) shows the base and every tier as the four
+  rates a request pays there, with inherited rates muted and changed ones marked
+  with their multiple. It appears for automatic and linked prices that carry tiers
+  as well as under a custom price being edited.
 
 ## Provider-grouped workbench
 
@@ -163,6 +200,38 @@ Model membership is collected during the same complete CPA catalog sweep as alia
 Groups sort by descending routing priority, then natural provider name and stable id. Models sort naturally by name, case-insensitively first and uppercase first for case-only ties. Membership uses exact model identities: two names differing only in case remain distinct. A model served by multiple providers appears in each relevant group, but all entries edit the same global price. Models without recorded membership appear in an explicit unconfirmed group rather than a guessed maker group.
 
 Search, price-mode filters and a provider selector operate on the grouped book. One global page renders at most 20 membership rows across all groups on desktop and phones. Unpriced models occupy their normal sorted position and show any suggested link beside their name. The OpenRouter picker searches ids, canonical slugs and display names with separator-tolerant search; it paginates all matches in groups of 12 instead of truncating the catalog. Channel multipliers use 20-row pages and reuse known provider aliases/icons; a channel shared by several configured providers names those providers together.
+
+## New matches for custom and linked prices
+
+A sync never overwrites a custom or linked price, so a model priced by hand
+because OpenRouter did not list it yet stays on hand-set rates after OpenRouter
+starts listing it. The book announces that as a **candidate** instead:
+
+- a custom price's candidate is the automatic match when one exists, otherwise
+  the first suggestion (`kind` `automatic` or `suggested`);
+- a linked price's candidate is an automatic match that differs from its link;
+  suggestions never second-guess a link;
+- auto prices and unpriced models have no candidate (unpriced rows already carry
+  suggestions).
+
+`pricing_match_reviews` (migration 031) records, per model, the OpenRouter model
+the operator last answered. Saving a custom or linked price records the
+candidate visible at that moment, so a price set while a match already existed
+is not announced again; "Ignore" (`POST /v1/pricing/models/{model}/dismiss-candidate`
+with the shown `upstream_id`) records it explicitly. A candidate equal to the
+recorded model is withheld; a different one — a new or renamed OpenRouter entry —
+is announced again. Switching to auto and removing the price clear the record.
+Recording is best-effort after a successful write: a failure is logged and only
+means the candidate is shown once more.
+
+`GET /v1/pricing` adds `candidate` to each affected model row (a failed lookup
+adds `candidates` to `partial` and leaves the book intact), and
+`GET /v1/pricing/models/{model}` returns it as `candidate`. The book shows it
+under the model name with "Switch to Auto" (automatic, which keeps the model's
+multiplier) or "Adopt" (a link to the suggestion) and "Ignore", and a "New
+matches" filter counts them; the editor shows the same notice and takes the
+match up into its draft. The agent capability `pricing_list` returns them in
+`candidates`.
 
 ## Mode changes
 
@@ -201,6 +270,8 @@ Price history rejects corrupt tier snapshots rather than presenting them as base
   previous refresh error and schedule; only a successful price refresh clears it.
 - A model OpenRouter does not list stays unpriced until an operator links or
   prices it; suggestions only help when the name resembles a listed model.
+- An install upgraded to migration 031 has no recorded answers yet, so each
+  custom or linked price that already has a candidate is announced once.
 - Rows priced from models.dev before the switch keep their `modelsdev` source
   until a sync matches them, and stay priced meanwhile; the book labels them as
   legacy. A version written under that source still prices late-arriving

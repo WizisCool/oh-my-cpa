@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -419,5 +420,62 @@ func TestCorruptStoredTiersKeepCostBreakdown(t *testing.T) {
 	// History fails explicitly rather than silently presenting a corrupt tier as base-only.
 	if _, err := repo.ListModelPriceVersions(ctx, "broken", 10); err == nil {
 		t.Fatal("corrupt history was presented as valid")
+	}
+}
+
+// A review records the candidate an operator saw; removing the price clears it
+// so the model starts over if it is priced again.
+func TestMatchReviewsFollowThePrice(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	if err := r.ApplyModelPrice(ctx, pricing.ModelPrice{Model: "m", PromptPricePer1M: 5, PriceMultiplier: 1, Source: pricing.SourceManual}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SaveMatchReview(ctx, "m", "vendor/m"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SaveMatchReview(ctx, "m", "vendor/m-2"); err != nil {
+		t.Fatal(err)
+	}
+	reviews, err := r.ListMatchReviews(ctx)
+	if err != nil || len(reviews) != 1 || reviews["m"] != "vendor/m-2" {
+		t.Fatalf("review not replaced: %v %v", reviews, err)
+	}
+	if err := r.SaveMatchReview(ctx, "", "vendor/m"); err == nil {
+		t.Fatal("a review without a model was accepted")
+	}
+	if deleted, err := r.DeleteModelPrice(ctx, "m"); err != nil || !deleted {
+		t.Fatalf("delete: %v %v", deleted, err)
+	}
+	if reviews, err := r.ListMatchReviews(ctx); err != nil || len(reviews) != 0 {
+		t.Fatalf("removing the price kept its review: %v %v", reviews, err)
+	}
+	if err := r.SaveMatchReview(ctx, "n", "vendor/n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SaveMatchReview(ctx, "n", ""); err != nil {
+		t.Fatal(err)
+	}
+	if reviews, _ := r.ListMatchReviews(ctx); len(reviews) != 0 {
+		t.Fatalf("an empty id did not clear the review: %v", reviews)
+	}
+}
+
+func TestMatchReviewsRequireMigration031(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, "file:pricing_review_gate?mode=memory&cache=shared", withMigrationsUntil(30))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	repository := New(database)
+	if _, err := repository.ListMatchReviews(ctx); err == nil || !strings.Contains(err.Error(), "migration 31") {
+		t.Fatalf("read gate: %v", err)
+	}
+	if err := repository.ApplyModelPrice(ctx, pricing.ModelPrice{Model: "m", PromptPricePer1M: 5, PriceMultiplier: 1, Source: pricing.SourceManual}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := repository.DeleteModelPrice(ctx, "m"); err != nil || !deleted {
+		t.Fatalf("deleting a price before migration 31 failed: %v %v", deleted, err)
 	}
 }

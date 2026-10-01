@@ -3,17 +3,22 @@ import { compareModelNames, groupPricingModels, pagePricingGroups } from '../web
 import { pricingProviderIdentity, pricingModelIdentity } from '../web/src/components/pricing/pricingIdentity.ts';
 import type { PricingProvider } from '../web/src/types/pricing.ts';
 import {
+  convertTierDraftUnit,
   formatHHMM,
   formatMultiplier,
   formatRatePer1M,
+  formatTokenCount,
   formatUsd,
   modeOf,
   matchesModelSearch,
   newTierDraft,
+  parseTokenCount,
   previewCostUsd,
+  priceSchedule,
   rateDelta,
   searchUpstreamModels,
   selectTier,
+  shiftClockText,
   tierDraftsFrom,
   tiersFromDrafts,
   upstreamAuthor,
@@ -88,16 +93,108 @@ check('the preview prices uncached input, cache buckets and both multipliers lik
   assert.ok(Math.abs(tiered.usd - (60_000 * 6 + 150_000 * 0.3) / 1e6) < 1e-12, 'the tier inherits the base cache rate it does not set');
 });
 
+const BASE = { prompt_price_per_1m: 3, completion_price_per_1m: 15, cache_read_price_per_1m: 0.3, cache_write_price_per_1m: 3.75 };
+
 check('tier drafts round-trip and refuse what the server would refuse', () => {
   const tiers: PriceTier[] = [{ min_prompt_tokens: 200_000, prompt_price_per_1m: 6 }, { utc_start: 1600, utc_end: 0, completion_price_per_1m: 0.33 }];
   const back = tiersFromDrafts(tierDraftsFrom(tiers));
   assert.ok('tiers' in back);
   assert.deepEqual(back.tiers, tiers);
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ prompt: '1' })]), { error: 'condition', index: 0 });
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ utcStart: '16:00' })]), { error: 'window', index: 0 });
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ utcStart: '09:00', utcEnd: '09:00' })]), { error: 'window', index: 0 });
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '1000', prompt: '-1' })]), { error: 'rate', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ rateUnit: 'price', prompt: '1' })]), { error: 'condition', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '16:00' })]), { error: 'window', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '09:00', utcEnd: '09:00' })]), { error: 'window', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '1000', rateUnit: 'price', prompt: '-1' })]), { error: 'rate', index: 0 });
   assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '1.5' })]), { error: 'condition', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '200K', prompt: '2' })]), { error: 'base', index: 0 }, 'a multiple needs a base');
+  assert.deepEqual(
+    tiersFromDrafts([newTierDraft({ minPromptTokens: '200K' }), newTierDraft({ minPromptTokens: '200000' })], BASE),
+    { error: 'duplicate', index: 1 },
+    'a second tier with the same conditions could never apply',
+  );
+});
+
+check('a long-context tier limited to a window keeps both conditions, and an unticked window is dropped', () => {
+  const windowed = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: true, utcStart: '16:30', utcEnd: '00:30' })], BASE);
+  assert.deepEqual(windowed, { tiers: [{ min_prompt_tokens: 128_000, utc_start: 1630, utc_end: 30 }] });
+  const unticked = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: false, utcStart: '16:30', utcEnd: '00:30' })], BASE);
+  assert.deepEqual(unticked, { tiers: [{ min_prompt_tokens: 128_000 }] });
+  const reopened = tierDraftsFrom([{ min_prompt_tokens: 128_000, utc_start: 1630, utc_end: 30 }], BASE)[0];
+  assert.equal(reopened.kind, 'context');
+  assert.equal(reopened.isWindowed, true);
+});
+
+check('multiples are priced from the base and written as rates the server stores', () => {
+  const result = tiersFromDrafts([newTierDraft({ minPromptTokens: '200K', prompt: '2', completion: '1.5', cacheRead: '' })], BASE);
+  assert.deepEqual(result, { tiers: [{ min_prompt_tokens: 200_000, prompt_price_per_1m: 6, completion_price_per_1m: 22.5 }] }, 'a blank multiple inherits');
+  const noisy = tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '00:00', utcEnd: '08:00', prompt: '3' })], { ...BASE, prompt_price_per_1m: 0.1 });
+  assert.ok('tiers' in noisy && noisy.tiers[0].prompt_price_per_1m === 0.3, 'float noise from multiplying is trimmed');
+});
+
+check('stored tiers reopen as multiples only when every rate is a readable multiple', () => {
+  const published = tierDraftsFrom([{ min_prompt_tokens: 200_000, prompt_price_per_1m: 6, completion_price_per_1m: 22.5 }], BASE)[0];
+  assert.equal(published.rateUnit, 'multiple');
+  assert.deepEqual([published.minPromptTokens, published.prompt, published.completion, published.cacheRead], ['200K', '2', '1.5', '']);
+  const odd = tierDraftsFrom([{ min_prompt_tokens: 200_000, prompt_price_per_1m: 4 }], BASE)[0];
+  assert.equal(odd.rateUnit, 'price', '4 / 3 is not a multiple anyone published');
+  assert.equal(odd.prompt, '4');
+  assert.equal(tierDraftsFrom([{ utc_start: 0, utc_end: 800, prompt_price_per_1m: 1 }], { ...BASE, prompt_price_per_1m: 0 })[0].rateUnit, 'price', 'a zero base has no multiple');
+  const back = tiersFromDrafts([published], BASE);
+  assert.deepEqual(back, { tiers: [{ min_prompt_tokens: 200_000, prompt_price_per_1m: 6, completion_price_per_1m: 22.5 }] }, 'reopening and saving changes nothing');
+});
+
+check('switching how rates are entered keeps the price they describe', () => {
+  const asMultiple = newTierDraft({ minPromptTokens: '200K', prompt: '2', completion: '' });
+  const asPrice = convertTierDraftUnit(asMultiple, BASE, 'price');
+  assert.deepEqual([asPrice.rateUnit, asPrice.prompt, asPrice.completion], ['price', '6', '']);
+  assert.deepEqual(tiersFromDrafts([asPrice], BASE), tiersFromDrafts([asMultiple], BASE));
+  assert.equal(convertTierDraftUnit(asPrice, BASE, 'multiple').prompt, '2');
+});
+
+check('long-context tiers are written before time-of-day tiers without changing which applies', () => {
+  const drafts = [
+    newTierDraft({ kind: 'window', utcStart: '16:00', utcEnd: '00:00', rateUnit: 'price', prompt: '1' }),
+    newTierDraft({ minPromptTokens: '200K', rateUnit: 'price', prompt: '6' }),
+  ];
+  const result = tiersFromDrafts(drafts, BASE);
+  assert.ok('tiers' in result);
+  assert.equal(result.tiers[0].min_prompt_tokens, 200_000);
+  assert.equal(result.tiers[1].utc_start, 1600);
+  assert.equal(selectTier(result.tiers, 300_000, at(17, 0)), 0, 'the threshold still outranks the window');
+});
+
+check('token counts are read and written the way providers publish them', () => {
+  assert.equal(parseTokenCount('200K'), 200_000);
+  assert.equal(parseTokenCount('1m'), 1_000_000);
+  assert.equal(parseTokenCount('1.5M'), 1_500_000);
+  assert.equal(parseTokenCount('272,000'), 272_000);
+  assert.equal(parseTokenCount(''), undefined);
+  assert.ok(Number.isNaN(parseTokenCount('0')));
+  assert.ok(Number.isNaN(parseTokenCount('1.5')));
+  assert.ok(Number.isNaN(parseTokenCount('abc')));
+  assert.equal(formatTokenCount(272_000), '272K');
+  assert.equal(formatTokenCount(1_000_000), '1M');
+  assert.equal(formatTokenCount(131_072), '131072', 'a count that is not round stays exact');
+});
+
+check('a window shifts around the clock face between UTC and the console zone', () => {
+  assert.equal(shiftClockText('16:00', 480), '00:00');
+  assert.equal(shiftClockText('22:00', -240), '18:00');
+  assert.equal(shiftClockText('02:00', -240), '22:00');
+  assert.equal(shiftClockText('16:30', 345), '22:15');
+  assert.equal(shiftClockText('', 480), '');
+});
+
+check('the price ladder reads from the base up, with inherited rates marked', () => {
+  const rows = priceSchedule(BASE, [
+    { utc_start: 1600, utc_end: 0, prompt_price_per_1m: 1.5 },
+    { min_prompt_tokens: 500_000, prompt_price_per_1m: 9 },
+    { min_prompt_tokens: 200_000, prompt_price_per_1m: 6, completion_price_per_1m: 22.5 },
+  ]);
+  assert.deepEqual(rows.map((row) => row.tierIndex), [-1, 2, 1, 0]);
+  assert.equal(rows[0].upTo, 200_000, 'the base applies below the lowest threshold');
+  assert.equal(rows[1].rates.cache_read_price_per_1m, 0.3);
+  assert.deepEqual([...rows[1].inherited], ['cacheRead', 'cacheWrite']);
+  assert.equal(priceSchedule(BASE, [{ utc_start: 0, utc_end: 800 }])[0].upTo, null, 'a window alone sets no upper bound');
 });
 
 check('the mode falls back from the source when a row carries none', () => {

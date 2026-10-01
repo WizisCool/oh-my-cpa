@@ -269,6 +269,13 @@ func (r *Repository) DeleteModelPrice(ctx context.Context, model string) (bool, 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM pricing_model_links WHERE model = ?`, model); err != nil {
 		return false, fmt.Errorf("delete model link: %w", err)
 	}
+	// A model priced again later starts with nothing acknowledged. Older schemas
+	// have no reviews to clear.
+	if r.hasMigration(ctx, tx, pricingReviewMigration) {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM pricing_match_reviews WHERE model = ?`, model); err != nil {
+			return false, fmt.Errorf("delete match review: %w", err)
+		}
+	}
 	deleted, _ := result.RowsAffected()
 	return deleted > 0, tx.Commit()
 }
@@ -353,6 +360,80 @@ func (r *Repository) UpdatePricingSyncSchedule(ctx context.Context, source strin
 
 // requirePricingSchema refuses to touch pricing tables until the migration that
 // gives them provider membership is present.
+// pricingReviewMigration adds pricing_match_reviews.
+const pricingReviewMigration = 31
+
+// hasMigration reports whether a migration is recorded, reading through the
+// caller's transaction; an unreadable state counts as absent.
+func (r *Repository) hasMigration(ctx context.Context, tx *sql.Tx, version int) bool {
+	var applied int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&applied); err != nil {
+		return false
+	}
+	return applied > 0
+}
+
+func (r *Repository) requirePricingReviewSchema(ctx context.Context) error {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return err
+	}
+	var applied int
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, pricingReviewMigration).Scan(&applied); err != nil {
+		return fmt.Errorf("pricing review schema check: %w", err)
+	}
+	if applied == 0 {
+		return fmt.Errorf("pricing match review migration %d is not applied", pricingReviewMigration)
+	}
+	return nil
+}
+
+// ListMatchReviews returns the candidate each model's operator has already
+// seen, model → OpenRouter id.
+func (r *Repository) ListMatchReviews(ctx context.Context) (map[string]string, error) {
+	if err := r.requirePricingReviewSchema(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := r.SQL().QueryContext(ctx, `SELECT model, upstream_id FROM pricing_match_reviews`)
+	if err != nil {
+		return nil, fmt.Errorf("list match reviews: %w", err)
+	}
+	defer rows.Close()
+	reviews := make(map[string]string)
+	for rows.Next() {
+		var model, upstream string
+		if err := rows.Scan(&model, &upstream); err != nil {
+			return nil, err
+		}
+		reviews[model] = upstream
+	}
+	return reviews, rows.Err()
+}
+
+// SaveMatchReview records the candidate an operator has seen for a model; an
+// empty id clears the record.
+func (r *Repository) SaveMatchReview(ctx context.Context, model, upstreamID string) error {
+	if err := r.requirePricingReviewSchema(ctx); err != nil {
+		return err
+	}
+	model = strings.TrimSpace(model)
+	upstreamID = strings.TrimSpace(upstreamID)
+	if model == "" {
+		return errors.New("match review model is required")
+	}
+	var err error
+	if upstreamID == "" {
+		_, err = r.SQL().ExecContext(ctx, `DELETE FROM pricing_match_reviews WHERE model = ?`, model)
+	} else {
+		_, err = r.SQL().ExecContext(ctx, `INSERT INTO pricing_match_reviews(model, upstream_id, reviewed_at_ms) VALUES (?, ?, ?)
+ ON CONFLICT(model) DO UPDATE SET upstream_id = excluded.upstream_id, reviewed_at_ms = excluded.reviewed_at_ms`,
+			model, upstreamID, time.Now().UnixMilli())
+	}
+	if err != nil {
+		return fmt.Errorf("save match review %q: %w", model, err)
+	}
+	return nil
+}
+
 func (r *Repository) requirePricingSchema(ctx context.Context) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")

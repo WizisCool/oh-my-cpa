@@ -73,7 +73,7 @@ does.
 ### Model Pricing & Cost Accounting
 - **Request-Time Snapshots**: Each request locks its cost at completion using immutable price versions, ensuring historical numbers never drift when rates are updated.
 - **OpenRouter Price Book**: Prices every model the gateway serves from OpenRouter's public model list (`openrouter.ai`, no key) with deterministic matching, including long-context and time-of-day tiers; models are grouped by their configured providers with shared aliases/icons, priority and natural-name ordering, 20-row pagination, and one-click suggestions for unmatched names.
-- **Linked and Custom Prices**: Pin a model to a chosen OpenRouter model, or set your own rates and tiers per model — from the price book or in place from the request list, the request detail and the dashboard.
+- **Linked and Custom Prices**: Pin a model to a chosen OpenRouter model, or set your own rates per model — from the price book or in place from the request list, the request detail and the dashboard. Long-context and time-of-day tiers are entered as multiples of the base price (or fixed prices) with threshold presets such as `200K`, windows in your own time zone, a price ladder of what each step costs, and a calculator for any request size. When OpenRouter later lists a model you priced by hand, the book flags the new match so you can switch to it or ignore it.
 - **Channel Multipliers**: Scale every request one CPA provider answers (e.g. a relay at 30% of list), locked per request like prices; each request's detail explains its cost bucket by bucket.
 
 ### Configuration & Security

@@ -11,6 +11,7 @@ import (
 
 type Pricing interface {
 	ListPrices(context.Context) ([]pricing.ModelPrice, error)
+	Candidates(context.Context, []pricing.ModelPrice) (map[string]pricing.Candidate, error)
 	SetModelModeChecked(context.Context, pricing.ModeChange, func([]pricing.ModelPrice) error) (pricing.ModelPrice, error)
 	DeletePriceChecked(context.Context, string, func([]pricing.ModelPrice) error) (bool, error)
 	ListChannels(context.Context) ([]pricing.ChannelMultiplier, error)
@@ -23,11 +24,14 @@ type PriceQuery struct {
 	Offset int    `json:"offset,omitempty"`
 }
 type PricePage struct {
-	Providers []pricing.CatalogProvider   `json:"providers"`
-	Items     []pricing.ModelPrice        `json:"items"`
-	Channels  []pricing.ChannelMultiplier `json:"channels"`
-	HasMore   bool                        `json:"has_more"`
-	Revision  string                      `json:"revision"`
+	Providers []pricing.CatalogProvider `json:"providers"`
+	Items     []pricing.ModelPrice      `json:"items"`
+	// Candidates names, per custom or linked model on this page, an OpenRouter
+	// model it could follow that the operator has not acknowledged yet.
+	Candidates map[string]pricing.Candidate `json:"candidates"`
+	Channels   []pricing.ChannelMultiplier  `json:"channels"`
+	HasMore    bool                         `json:"has_more"`
+	Revision   string                       `json:"revision"`
 }
 
 func (s *Service) ListPrices(ctx context.Context, input PriceQuery) (PricePage, error) {
@@ -59,6 +63,10 @@ func (s *Service) ListPrices(ctx context.Context, input PriceQuery) (PricePage, 
 		end := min(input.Offset+50, len(filtered))
 		output.Items = filtered[input.Offset:end]
 		output.HasMore = end < len(filtered)
+	}
+	output.Candidates, err = s.Pricing.Candidates(ctx, output.Items)
+	if err != nil {
+		return PricePage{}, err
 	}
 	output.Providers = []pricing.CatalogProvider{}
 	if s.Repo != nil {
@@ -139,7 +147,7 @@ type ChannelInput struct {
 }
 
 func (s *Service) registerPricing(registry *capability.Registry) error {
-	if err := read(registry, "pricing_list", "Read current model prices (mode auto, linked or custom, OpenRouter id, tiers) and channel multipliers, paginated. Historical request cost snapshots do not change when current prices change.", s.ListPrices); err != nil {
+	if err := read(registry, "pricing_list", "Read current model prices (mode auto, linked or custom, OpenRouter id, tiers), the OpenRouter candidates custom or linked models could now follow, and channel multipliers, paginated. Historical request cost snapshots do not change when current prices change.", s.ListPrices); err != nil {
 		return err
 	}
 	metadata := Meta("pricing_sync", "Request a price refresh from OpenRouter, the configured pricing source.", "write", "high")

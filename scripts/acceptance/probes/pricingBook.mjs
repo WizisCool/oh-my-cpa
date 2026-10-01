@@ -28,6 +28,9 @@ const SOL = upstream('openai/gpt-6-sol', 2, 10, {
 });
 const MINI = upstream('openai/gpt-5.4-mini', 0.75, 4.5);
 const OPUS = upstream('anthropic/claude-opus-5.5', 4, 20);
+// OpenRouter started listing the model the book prices by hand, so its row offers to follow it.
+const SONNET = upstream('anthropic/claude-sonnet-4.5', 3, 15);
+const SONNET_CANDIDATE = { model: SONNET, kind: 'automatic', match_kind: 'date_stripped' };
 
 const usage = (requests, cost) => ({ requests, priced_requests: cost == null ? 0 : requests, cost_usd: cost });
 
@@ -48,7 +51,7 @@ function book() {
       {
         model: 'claude-sonnet-4-5-20250929', prompt_price_per_1m: 3, completion_price_per_1m: 15, cache_read_price_per_1m: 0.3, cache_write_price_per_1m: 3.75,
         price_multiplier: 1.2, tiers: [], source: 'manual', upstream_id: '', match_kind: '', mode: 'custom',
-        synced_at_ms: 0, updated_at_ms: now - 7_200_000, usage_30d: usage(40, 3.1),
+        synced_at_ms: 0, updated_at_ms: now - 7_200_000, usage_30d: usage(40, 3.1), candidate: SONNET_CANDIDATE,
       },
     ],
     unpriced: [{ model: 'gpt-5.4-mini-high', usage_30d: usage(12, null), suggestions: [MINI] },
@@ -75,8 +78,9 @@ function modelDetail(model) {
   return {
     model,
     price: current,
-    automatic: model === 'gpt-6-sol' ? { model: SOL, match_kind: 'exact' } : null,
+    automatic: model === 'gpt-6-sol' ? { model: SOL, match_kind: 'exact' } : current?.candidate ? { model: SONNET, match_kind: 'date_stripped' } : null,
     suggestions: model === 'gpt-5.4-mini-high' ? [MINI] : [],
+    candidate: current?.candidate ?? null,
     versions: current ? [{ id: 1, available: true, effective_from_ms: current.updated_at_ms, price: current }] : [],
     profile: { samples: 30, input: 18_000, output: 2_000, cache_read: 9_000, cache_write: 1_000, max_input: 300_000 },
   };
@@ -87,7 +91,11 @@ export function pricingFixtures(writes) {
   const body = (request) => JSON.parse(request.postData() ?? '{}');
   return [
     [(url) => url.pathname.endsWith('/pricing/attention'), () => ({ unpriced: ['gpt-5.4-mini-high'] })],
-    [(url) => url.pathname.endsWith('/pricing/catalog'), () => ({ models: [SOL, MINI, OPUS, ...Array.from({ length: 65 }, (_, index) => upstream(`test/catalog-model-${String(index).padStart(2, '0')}`, 1, 2))] })],
+    [(url) => url.pathname.endsWith('/pricing/catalog'), () => ({ models: [SOL, MINI, OPUS, SONNET, ...Array.from({ length: 65 }, (_, index) => upstream(`test/catalog-model-${String(index).padStart(2, '0')}`, 1, 2))] })],
+    [(url) => /\/pricing\/models\/[^/]+\/dismiss-candidate$/.test(url.pathname), (url, method, request) => {
+      writes.push({ kind: 'dismiss', model: decodeURIComponent(url.pathname.split('/').at(-2)), body: body(request) });
+      return { dismissed: true };
+    }],
     [(url) => /\/pricing\/models\/[^/]+$/.test(url.pathname), (url, method, request) => {
       const model = decodeURIComponent(url.pathname.split('/').at(-1));
       if (method === 'PUT') {
@@ -162,19 +170,60 @@ export async function pricingBook({ base, page, check, writes }) {
   const adoptWrite = writes.find((write) => write.kind === 'model' && write.model === 'gpt-5.4-mini-high');
   check('adopting a suggestion links the model to it', adopted && adoptWrite?.body.mode === 'linked' && adoptWrite?.body.upstream_id === 'openai/gpt-5.4-mini', JSON.stringify(adoptWrite));
 
+  // ── a custom price OpenRouter has since listed offers its match ──
+  await list.locator('.ant-segmented-item').filter({ hasText: /New matches/ }).click();
+  const candidateLine = list.locator('[data-testid="pricing-row-candidate"]');
+  check(
+    'the new-matches filter narrows to the custom model OpenRouter now lists',
+    await isTrue(async () => (await editRows.count()) === 1 && (await candidateLine.count()) === 1, 'the candidate filter')
+      && /anthropic\/claude-sonnet-4\.5[\s\S]*\$3\.00/.test(await candidateLine.innerText()),
+    await candidateLine.innerText().catch(() => ''),
+  );
+  await candidateLine.locator('[data-testid="pricing-candidate-dismiss"]').click();
+  const dismissed = await isTrue(async () => writes.some((write) => write.kind === 'dismiss'), 'the dismiss write');
+  const dismissWrite = writes.find((write) => write.kind === 'dismiss');
+  check('ignoring a match records the model it offered', dismissed && dismissWrite.model === 'claude-sonnet-4-5-20250929' && dismissWrite.body.upstream_id === SONNET.id, JSON.stringify(dismissWrite));
+  await candidateLine.locator('[data-testid="pricing-candidate-adopt"]').click();
+  const followed = await isTrue(async () => writes.some((write) => write.kind === 'model' && write.model === 'claude-sonnet-4-5-20250929'), 'the follow write');
+  const followWrite = writes.find((write) => write.kind === 'model' && write.model === 'claude-sonnet-4-5-20250929');
+  check('following an automatic match switches to auto and keeps the multiplier', followed && followWrite.body.mode === 'auto' && followWrite.body.price_multiplier === 1.2, JSON.stringify(followWrite));
+
   // ── the editor: auto shows its match, custom starts from the reference rates ──
   const edit = page.locator('[data-testid="pricing-row-edit"]');
-  await isTrue(async () => (await edit.count()) >= 2, 'the price rows');
+  await isTrue(async () => (await edit.count()) >= 1, 'the price rows');
   await list.locator('.ant-segmented-item').filter({ hasText: /^All/ }).click();
-  await list.locator('[data-testid="pricing-row-edit"][aria-label$=": gpt-6-sol"]').click();
+  await list.locator('[data-testid="pricing-row-edit"][aria-label$=": claude-sonnet-4-5-20250929"]').click();
   const editor = page.locator('[data-testid="pricing-editor"]');
+  const editorCandidate = editor.locator('[data-testid="pricing-editor-candidate"]');
+  check('the editor announces the match beside the custom price', await isTrue(async () => editorCandidate.isVisible(), 'the editor notice'));
+  await editorCandidate.locator('[data-testid="pricing-editor-candidate-adopt"]').click();
+  check(
+    'taking the match up switches the draft to auto and retires the notice',
+    await isTrue(async () => (await editorCandidate.count()) === 0 && (await editor.locator('[data-testid="pricing-upstream-summary"]').getByText(SONNET.id).count()) >= 1, 'the adopted draft'),
+  );
+  await editor.locator('.ant-drawer-close').click();
+  await isTrue(async () => !(await editor.isVisible()), 'the editor closing');
+  await list.locator('[data-testid="pricing-row-edit"][aria-label$=": gpt-6-sol"]').click();
   check('the editor opens in place', await isTrue(async () => editor.isVisible(), 'the editor'));
   check('auto mode shows the OpenRouter model it follows', await isTrue(async () => (await editor.locator('[data-testid="pricing-upstream-summary"]').getByText('openai/gpt-6-sol').count()) >= 1, 'the automatic match'));
   check('the preview prices a typical recent request', await isTrue(async () => /\$\d/.test(await editor.locator('[data-testid="pricing-preview"]').innerText()), 'the preview'));
+  const ladder = editor.locator('[data-testid="pricing-schedule"]');
+  check(
+    'a tiered price reads as a ladder with what each step costs',
+    await isTrue(async () => (await ladder.locator('tbody tr').count()) === 2 && /272K[\s\S]*\$4\.00/.test(await ladder.innerText()), 'the ladder'),
+    await ladder.innerText().catch(() => ''),
+  );
+  await editor.locator('input[data-testid="pricing-calc-input"]').fill('300K');
+  check(
+    'a request typed into the calculator is priced and named by its tier',
+    await isTrue(async () => /272K/.test(await editor.locator('[data-testid="pricing-preview-trial"]').innerText()), 'the trial row'),
+  );
   await editor.locator('[data-testid="pricing-mode-custom"]').click();
   // antd forwards a test id to the input element itself, so the selector takes either shape.
   const promptInput = editor.locator('input[data-testid="pricing-rate-prompt"], [data-testid="pricing-rate-prompt"] input').first();
   check('custom rates start from the OpenRouter reference', await isTrue(async () => (await promptInput.inputValue()) === '2', 'the prefilled rate'), await promptInput.inputValue());
+  const tierPrompt = editor.locator('[data-testid="pricing-context-tiers"] input[data-testid="pricing-tier-prompt"]');
+  check('a published long-context tier opens as multiples of the base', await isTrue(async () => (await tierPrompt.inputValue()) === '2', 'the tier multiple'), await tierPrompt.inputValue().catch(() => ''));
   await promptInput.fill('1.5');
   await editor.locator('[data-testid="pricing-editor-save"]').click();
   const customSaved = await isTrue(async () => writes.some((write) => write.kind === 'model' && write.model === 'gpt-6-sol'), 'the custom write');
@@ -183,6 +232,11 @@ export async function pricingBook({ base, page, check, writes }) {
     'saving custom rates sends the edited rate and the reference tier',
     customSaved && customWrite.body.mode === 'custom' && customWrite.body.prompt_price_per_1m === 1.5 && customWrite.body.tiers?.[0]?.min_prompt_tokens === 272_000,
     JSON.stringify(customWrite),
+  );
+  check(
+    'tier multiples follow the edited base and are sent as rates',
+    customWrite?.body.tiers?.[0]?.prompt_price_per_1m === 3 && customWrite?.body.tiers?.[0]?.completion_price_per_1m === 15,
+    JSON.stringify(customWrite?.body.tiers),
   );
   check('the editor closes after saving', await isTrue(async () => !(await editor.isVisible()), 'the editor closing'));
 

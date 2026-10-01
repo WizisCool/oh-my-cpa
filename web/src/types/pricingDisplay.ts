@@ -191,15 +191,50 @@ export function upstreamAuthor(id: string): string {
 }
 
 /**
- * One tier as the editor holds it: every field a string or null so a half-typed value survives
- * re-renders, converted to a `PriceTier` only on save.
+ * Which question a tier answers, as the editor groups them. A long-context tier always has a
+ * prompt threshold and may also be limited to a window; a time-of-day tier has only a window.
+ * The wire tier carries no kind - it is read from the conditions present.
+ */
+export type TierKind = 'context' | 'window';
+
+/**
+ * How a tier's rates are entered. Providers publish long-context and off-peak prices as a multiple
+ * of the base ("input doubles above 200K", "half price at night"), so a multiple is the default
+ * and keeps following the base rates while they are edited; an absolute price is the escape hatch.
+ */
+export type TierRateUnit = 'multiple' | 'price';
+
+export type RateKey = 'prompt' | 'completion' | 'cacheRead' | 'cacheWrite';
+
+export const RATE_KEYS: readonly RateKey[] = ['prompt', 'completion', 'cacheRead', 'cacheWrite'];
+
+const RATE_FIELD: Record<RateKey, keyof RateFields> = {
+  prompt: 'prompt_price_per_1m',
+  completion: 'completion_price_per_1m',
+  cacheRead: 'cache_read_price_per_1m',
+  cacheWrite: 'cache_write_price_per_1m',
+};
+
+/** The wire field a rate key reads and writes. */
+export function rateField(key: RateKey): keyof RateFields {
+  return RATE_FIELD[key];
+}
+
+/**
+ * One tier as the editor holds it: every field a string so a half-typed value survives
+ * re-renders, converted to a `PriceTier` only on save. The window is always held in UTC "HH:mm";
+ * showing it in another zone is the editor's presentation, never the stored rule.
  */
 export interface TierDraft {
   key: string;
+  kind: TierKind;
+  /** A token count as typed: "200000", "200,000", "200K" or "1M". */
   minPromptTokens: string;
-  /** "HH:mm", or empty for no window. */
+  /** Whether a long-context tier is further limited to a window; a time-of-day tier always is. */
+  isWindowed: boolean;
   utcStart: string;
   utcEnd: string;
+  rateUnit: TierRateUnit;
   prompt: string;
   completion: string;
   cacheRead: string;
@@ -212,29 +247,110 @@ function hhmmText(value: number | undefined): string {
   return typeof value === 'number' ? formatHHMM(value) : '';
 }
 
-function rateText(value: number | undefined): string {
-  return typeof value === 'number' ? String(value) : '';
+/** Up to twelve significant digits: enough for any published rate, short of float noise. */
+function cleanNumber(value: number): number {
+  return Number(value.toPrecision(12));
+}
+
+function numberText(value: number): string {
+  return String(cleanNumber(value));
 }
 
 export function newTierDraft(partial: Partial<TierDraft> = {}): TierDraft {
   tierDraftCounter += 1;
   return {
     key: `tier-${tierDraftCounter}`,
-    minPromptTokens: '', utcStart: '', utcEnd: '', prompt: '', completion: '', cacheRead: '', cacheWrite: '',
+    kind: 'context',
+    minPromptTokens: '',
+    isWindowed: false,
+    utcStart: '',
+    utcEnd: '',
+    rateUnit: 'multiple',
+    prompt: '',
+    completion: '',
+    cacheRead: '',
+    cacheWrite: '',
     ...partial,
   };
 }
 
-export function tierDraftsFrom(tiers: readonly PriceTier[] | null | undefined): TierDraft[] {
-  return (tiers ?? []).map((tier) => newTierDraft({
-    minPromptTokens: tier.min_prompt_tokens ? String(tier.min_prompt_tokens) : '',
-    utcStart: hhmmText(tier.utc_start),
-    utcEnd: hhmmText(tier.utc_end),
-    prompt: rateText(tier.prompt_price_per_1m),
-    completion: rateText(tier.completion_price_per_1m),
-    cacheRead: rateText(tier.cache_read_price_per_1m),
-    cacheWrite: rateText(tier.cache_write_price_per_1m),
-  }));
+/** A multiple short enough to read as one, such as 2 or 1.5 or 0.25. */
+function isReadableMultiple(ratio: number): boolean {
+  return Number.isFinite(ratio) && ratio >= 0 && Math.abs(ratio * 1000 - Math.round(ratio * 1000)) < 1e-6;
+}
+
+/**
+ * Drafts for stored tiers. Given the base they apply over, a tier whose every rate is a readable
+ * multiple of the base opens as multiples - how its provider published it - and any other as
+ * absolute prices, so nothing is rounded on the way in.
+ */
+export function tierDraftsFrom(tiers: readonly PriceTier[] | null | undefined, base?: RateFields | null): TierDraft[] {
+  return (tiers ?? []).map((tier) => {
+    const hasThreshold = (tier.min_prompt_tokens ?? 0) > 0;
+    const windowed = hasTimeWindow(tier);
+    const isMultiple = Boolean(base) && RATE_KEYS.every((key) => {
+      const rate = tier[RATE_FIELD[key]];
+      if (rate === undefined) return true;
+      const from = base![RATE_FIELD[key]];
+      return from > 0 && isReadableMultiple(rate / from);
+    });
+    const rateText = (key: RateKey) => {
+      const rate = tier[RATE_FIELD[key]];
+      if (rate === undefined) return '';
+      return isMultiple ? numberText(rate / base![RATE_FIELD[key]]) : numberText(rate);
+    };
+    return newTierDraft({
+      kind: hasThreshold ? 'context' : 'window',
+      minPromptTokens: hasThreshold ? formatTokenCount(tier.min_prompt_tokens!) : '',
+      isWindowed: windowed,
+      utcStart: hhmmText(tier.utc_start),
+      utcEnd: hhmmText(tier.utc_end),
+      rateUnit: isMultiple ? 'multiple' : 'price',
+      prompt: rateText('prompt'),
+      completion: rateText('completion'),
+      cacheRead: rateText('cacheRead'),
+      cacheWrite: rateText('cacheWrite'),
+    });
+  });
+}
+
+/**
+ * Switches how a draft's rates are entered, converting what is typed so the price it describes
+ * does not change. A rate whose base is zero has no multiple and is cleared.
+ */
+export function convertTierDraftUnit(draft: TierDraft, base: RateFields, unit: TierRateUnit): TierDraft {
+  if (draft.rateUnit === unit) return draft;
+  const next: TierDraft = { ...draft, rateUnit: unit };
+  for (const key of RATE_KEYS) {
+    const value = parseRateText(draft[key]);
+    if (value === undefined || Number.isNaN(value)) continue;
+    const from = base[RATE_FIELD[key]];
+    if (unit === 'price') next[key] = numberText(value * from);
+    else next[key] = from > 0 ? numberText(value / from) : '';
+  }
+  return next;
+}
+
+/** A token count as people write it, "272K" for 272,000; any count that is not round stays exact. */
+export function formatTokenCount(tokens: number): string {
+  if (tokens > 0 && tokens % 1_000_000 === 0) return `${tokens / 1_000_000}M`;
+  if (tokens > 0 && tokens % 1_000 === 0) return `${tokens / 1_000}K`;
+  return String(tokens);
+}
+
+/**
+ * A token count as typed: digits with optional separators, or a K/M suffix in decimal thousands -
+ * the unit providers publish context limits in. Undefined when blank, NaN when not a positive
+ * whole number of tokens.
+ */
+export function parseTokenCount(text: string): number | undefined {
+  const trimmed = text.trim().replace(/[,_\s]/g, '');
+  if (trimmed === '') return undefined;
+  const match = /^(\d+(?:\.\d+)?)([kKmM]?)$/.exec(trimmed);
+  if (!match) return Number.NaN;
+  const scale = match[2] === '' ? 1 : match[2].toLowerCase() === 'k' ? 1_000 : 1_000_000;
+  const value = Number(match[1]) * scale;
+  return Number.isInteger(cleanNumber(value)) && value > 0 ? cleanNumber(value) : Number.NaN;
 }
 
 function parseHHMMText(value: string): number | null {
@@ -246,6 +362,18 @@ function parseHHMMText(value: string): number | null {
   return hours * 100 + minutes;
 }
 
+/**
+ * "HH:mm" moved by a number of minutes around the clock face. The editor uses it to show a UTC
+ * window in the console's zone and to read one typed there back to UTC.
+ */
+export function shiftClockText(value: string, offsetMinutes: number): string {
+  const hhmm = parseHHMMText(value);
+  if (hhmm === null) return '';
+  const minute = Math.floor(hhmm / 100) * 60 + (hhmm % 100);
+  const shifted = (((minute + offsetMinutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(shifted / 60)).padStart(2, '0')}:${String(shifted % 60).padStart(2, '0')}`;
+}
+
 /** A non-negative decimal, or undefined when blank; NaN marks a value that is not a number. */
 export function parseRateText(value: string): number | undefined {
   const trimmed = value.trim();
@@ -254,45 +382,109 @@ export function parseRateText(value: string): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
-export type TierDraftError = 'condition' | 'window' | 'rate';
+/** The server's bound on one price's tiers. */
+export const MAX_TIERS = 8;
+
+export type TierDraftError = 'condition' | 'window' | 'rate' | 'base' | 'duplicate';
 
 /**
- * Converts the editor's tiers, refusing what the server would refuse: a tier needs a prompt
- * threshold or a complete, non-empty time window, and every rate it sets must be a non-negative
- * number. The first failing tier is reported by index so the editor can mark it.
+ * Converts the editor's tiers, refusing what the server would refuse and what could never apply:
+ * a long-context tier needs a positive threshold, a window needs a start and a different end,
+ * every rate must be a non-negative number, a multiple needs base rates to multiply, and two tiers
+ * with the same conditions would leave the second unreachable. The first failing tier is reported
+ * by its position in `drafts` so the editor can mark it.
+ *
+ * Long-context tiers are written before time-of-day ones. The server's rule only falls back to
+ * list order between tiers with the same threshold and windowing, which always share a kind, so
+ * the grouping never changes which tier governs a request.
  */
-export function tiersFromDrafts(drafts: readonly TierDraft[]): { tiers: PriceTier[] } | { error: TierDraftError; index: number } {
-  const tiers: PriceTier[] = [];
+export function tiersFromDrafts(
+  drafts: readonly TierDraft[],
+  base: RateFields | null = null,
+): { tiers: PriceTier[] } | { error: TierDraftError; index: number } {
+  const converted: Array<{ kind: TierKind; tier: PriceTier }> = [];
+  const conditions = new Set<string>();
   for (let index = 0; index < drafts.length; index += 1) {
     const draft = drafts[index];
     const tier: PriceTier = {};
-    const threshold = draft.minPromptTokens.trim();
-    if (threshold !== '') {
-      const value = Number(threshold);
-      if (!Number.isInteger(value) || value <= 0) return { error: 'condition', index };
-      tier.min_prompt_tokens = value;
+    if (draft.kind === 'context') {
+      const threshold = parseTokenCount(draft.minPromptTokens);
+      if (threshold === undefined || Number.isNaN(threshold)) return { error: 'condition', index };
+      tier.min_prompt_tokens = threshold;
     }
-    const hasStart = draft.utcStart.trim() !== '';
-    const hasEnd = draft.utcEnd.trim() !== '';
-    if (hasStart || hasEnd) {
+    if (draft.kind === 'window' || draft.isWindowed) {
       const start = parseHHMMText(draft.utcStart);
       const end = parseHHMMText(draft.utcEnd);
       if (start === null || end === null || start === end) return { error: 'window', index };
       tier.utc_start = start;
       tier.utc_end = end;
     }
-    if (tier.min_prompt_tokens === undefined && tier.utc_start === undefined) return { error: 'condition', index };
-    const rates: Array<[keyof PriceTier, string]> = [
-      ['prompt_price_per_1m', draft.prompt], ['completion_price_per_1m', draft.completion],
-      ['cache_read_price_per_1m', draft.cacheRead], ['cache_write_price_per_1m', draft.cacheWrite],
-    ];
-    for (const [field, text] of rates) {
-      const rate = parseRateText(text);
-      if (rate === undefined) continue;
-      if (Number.isNaN(rate)) return { error: 'rate', index };
-      (tier as Record<string, number>)[field] = rate;
+    const condition = `${tier.min_prompt_tokens ?? 0}|${tier.utc_start ?? ''}|${tier.utc_end ?? ''}`;
+    if (conditions.has(condition)) return { error: 'duplicate', index };
+    conditions.add(condition);
+    for (const key of RATE_KEYS) {
+      const value = parseRateText(draft[key]);
+      if (value === undefined) continue;
+      if (Number.isNaN(value)) return { error: 'rate', index };
+      if (draft.rateUnit === 'multiple') {
+        if (!base) return { error: 'base', index };
+        tier[RATE_FIELD[key]] = cleanNumber(value * base[RATE_FIELD[key]]);
+      } else {
+        tier[RATE_FIELD[key]] = value;
+      }
     }
-    tiers.push(tier);
+    converted.push({ kind: draft.kind, tier });
   }
-  return { tiers };
+  return {
+    tiers: [...converted.filter((item) => item.kind === 'context'), ...converted.filter((item) => item.kind === 'window')]
+      .map((item) => item.tier),
+  };
+}
+
+/** One line of a price ladder: when it applies and the four rates a request pays there. */
+export interface PriceScheduleRow {
+  /** -1 for the base rates, otherwise the tier's index in the price's own list. */
+  tierIndex: number;
+  tier: PriceTier | null;
+  rates: RateFields;
+  /** Rates the tier leaves to the base price. */
+  inherited: ReadonlySet<RateKey>;
+  /** For the base row: the lowest always-on long-context threshold, where the base stops applying. */
+  upTo: number | null;
+}
+
+/**
+ * A price laid out as a ladder: the base rates, then long-context tiers from the lowest threshold
+ * up, then time-of-day tiers. It reads what a request pays at each step rather than how the tiers
+ * are stored, which is the question an operator setting a price is asking.
+ */
+export function priceSchedule(price: RateFields, tiers: readonly PriceTier[] | null | undefined): PriceScheduleRow[] {
+  const list = tiers ?? [];
+  const thresholds = list
+    .filter((tier) => (tier.min_prompt_tokens ?? 0) > 0 && !hasTimeWindow(tier))
+    .map((tier) => tier.min_prompt_tokens!);
+  const rows: PriceScheduleRow[] = [{
+    tierIndex: -1,
+    tier: null,
+    rates: { ...price },
+    inherited: new Set(),
+    upTo: thresholds.length > 0 ? Math.min(...thresholds) : null,
+  }];
+  const order = list.map((tier, index) => ({ tier, index })).sort((left, right) => {
+    const leftThreshold = left.tier.min_prompt_tokens ?? 0;
+    const rightThreshold = right.tier.min_prompt_tokens ?? 0;
+    const leftContext = leftThreshold > 0 ? 0 : 1;
+    const rightContext = rightThreshold > 0 ? 0 : 1;
+    return leftContext - rightContext || leftThreshold - rightThreshold || left.index - right.index;
+  });
+  for (const { tier, index } of order) {
+    rows.push({
+      tierIndex: index,
+      tier,
+      rates: tierRates(price, tier),
+      inherited: new Set(RATE_KEYS.filter((key) => tier[RATE_FIELD[key]] === undefined)),
+      upTo: null,
+    });
+  }
+  return rows;
 }

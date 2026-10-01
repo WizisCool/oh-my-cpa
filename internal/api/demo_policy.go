@@ -141,6 +141,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/pricing/models/{model}", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/models/{model}", demoAllow, ""},
 	{http.MethodDelete, "/api/v1/pricing/models/{model}", demoAllow, ""},
+	{http.MethodPost, "/api/v1/pricing/models/{model}/dismiss-candidate", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
 	{http.MethodDelete, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/sync-schedule", demoAllow, ""},

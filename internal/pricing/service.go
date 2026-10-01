@@ -26,6 +26,7 @@ var (
 	// matches: the switch would otherwise silently unprice the model.
 	ErrNoAutomaticMatch = errors.New("no OpenRouter model matches this model automatically")
 	ErrInvalidMode      = errors.New("mode must be auto, linked or custom")
+	ErrInvalidReview    = errors.New("a model and an OpenRouter id are required")
 )
 
 // SyncState is the durable outcome of the last OpenRouter sync.
@@ -68,6 +69,8 @@ type Store interface {
 	ListChannelMultipliers(context.Context) ([]ChannelMultiplier, error)
 	UpsertChannelMultiplier(context.Context, ChannelMultiplier) error
 	DeleteChannelMultiplier(context.Context, string) (bool, error)
+	ListMatchReviews(context.Context) (map[string]string, error)
+	SaveMatchReview(ctx context.Context, model, upstreamID string) error
 }
 
 // SyncResult summarizes one sync run for logs, API and audit. Pruned counts
@@ -769,8 +772,109 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 	if err := s.store.ApplyModelPrice(ctx, row, link); err != nil {
 		return ModelPrice{}, err
 	}
+	s.acknowledgeCandidate(ctx, change.Model, target, change.Mode, link)
 	row.Mode = change.Mode
 	return row, nil
+}
+
+// Candidate kinds: OpenRouter now prices the model by name, or only resembles it.
+const (
+	CandidateAutomatic = "automatic"
+	CandidateSuggested = "suggested"
+)
+
+// Candidate is an OpenRouter model a custom or linked price could follow
+// instead, offered because the operator has not seen it yet.
+type Candidate struct {
+	Model     UpstreamModel `json:"model"`
+	Kind      string        `json:"kind"`
+	MatchKind string        `json:"match_kind,omitempty"`
+}
+
+// candidateFor is what a model priced by the operator could follow now. A
+// custom price is offered its automatic match, or failing that its closest
+// suggestion; a linked price only an automatic match other than its pin, since
+// the operator already chose among the suggestions. Auto rows have none.
+func candidateFor(catalog Catalog, target, mode, link string) (Candidate, bool) {
+	if target == "" || (mode != ModeCustom && mode != ModeLinked) {
+		return Candidate{}, false
+	}
+	if match, ok := catalog.MatchModel(target); ok {
+		if mode == ModeLinked && match.Model.ID == link {
+			return Candidate{}, false
+		}
+		return Candidate{Model: match.Model, Kind: CandidateAutomatic, MatchKind: match.Kind}, true
+	}
+	if mode == ModeCustom {
+		if suggested := catalog.Suggest(target, 1); len(suggested) > 0 {
+			return Candidate{Model: suggested[0], Kind: CandidateSuggested}, true
+		}
+	}
+	return Candidate{}, false
+}
+
+// acknowledgeCandidate records the candidate an operator decided against by
+// choosing their own price, so only a later, different one is offered. It is
+// bookkeeping beside the price write: a failure only means the current
+// candidate is offered once more, so it is logged rather than failing the save.
+func (s *Service) acknowledgeCandidate(ctx context.Context, model, target, mode, link string) {
+	seen := ""
+	if catalog, ok := s.localCatalog(ctx); ok {
+		if candidate, found := candidateFor(catalog, target, mode, link); found {
+			seen = candidate.Model.ID
+		}
+	}
+	if err := s.store.SaveMatchReview(ctx, model, seen); err != nil {
+		s.logger.Warn("pricing match review not recorded", "model", model, "error", err)
+	}
+}
+
+// Candidates lists, for every custom or linked price in the current catalog,
+// an OpenRouter model it could follow that its operator has not seen yet - such
+// as a model OpenRouter started listing after a custom price was set. Read
+// from the stored snapshot only.
+func (s *Service) Candidates(ctx context.Context, prices []ModelPrice) (map[string]Candidate, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("pricing service is not initialized")
+	}
+	result := map[string]Candidate{}
+	catalog, ok := s.localCatalog(ctx)
+	if !ok {
+		return result, nil
+	}
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	links, err := s.store.ListModelLinks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reviews, err := s.store.ListMatchReviews(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, price := range prices {
+		candidate, found := candidateFor(catalog, models[price.Model], price.Mode, links[price.Model])
+		if found && reviews[price.Model] != candidate.Model.ID {
+			result[price.Model] = candidate
+		}
+	}
+	return result, nil
+}
+
+// DismissCandidate records that the operator saw a candidate and kept their
+// own price; a different candidate appearing later is offered again.
+func (s *Service) DismissCandidate(ctx context.Context, model, upstreamID string) error {
+	if s == nil || s.store == nil {
+		return errors.New("pricing service is not initialized")
+	}
+	model = strings.TrimSpace(model)
+	upstreamID = strings.TrimSpace(upstreamID)
+	if model == "" || upstreamID == "" {
+		return ErrInvalidReview
+	}
+	return s.store.SaveMatchReview(ctx, model, upstreamID)
 }
 
 // DeletePrice retires one price and its pin; the next sync may recreate an

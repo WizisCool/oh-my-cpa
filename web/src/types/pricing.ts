@@ -66,8 +66,20 @@ export interface UpstreamModel {
   tiers: PriceTier[] | null;
 }
 
+/**
+ * An OpenRouter model a custom or linked price could follow that the operator has not seen yet -
+ * typically one OpenRouter started listing after the operator set their own price. `automatic`
+ * means auto mode would price the model by it; `suggested` means it only resembles the model.
+ */
+export interface PricingCandidate {
+  model: UpstreamModel;
+  kind: 'automatic' | 'suggested';
+  match_kind?: PricingMatchKind;
+}
+
 export interface PricedModel extends ModelPrice {
   usage_30d: PricingUsage;
+  candidate?: PricingCandidate;
 }
 
 export interface UnpricedModel {
@@ -156,6 +168,8 @@ export interface PricingModelDetail {
   /** What auto mode would price the model at; null when nothing matches automatically. */
   automatic: { model: UpstreamModel; match_kind: PricingMatchKind } | null;
   suggestions: UpstreamModel[];
+  /** The candidate the book offers for this model, if any; absent for auto and unpriced models. */
+  candidate?: PricingCandidate | null;
   versions: PriceVersion[];
   profile: TokenProfile;
 }

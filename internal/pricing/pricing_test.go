@@ -26,10 +26,11 @@ type fakeStore struct {
 	channels   map[string]ChannelMultiplier
 	state      SyncState
 	stateKnown bool
+	reviews    map[string]string
 }
 
 func newFakeStore(models ...string) *fakeStore {
-	store := &fakeStore{models: map[string]string{}, links: map[string]string{}, channels: map[string]ChannelMultiplier{}}
+	store := &fakeStore{models: map[string]string{}, links: map[string]string{}, channels: map[string]ChannelMultiplier{}, reviews: map[string]string{}}
 	for _, model := range models {
 		store.models[model] = model
 	}
@@ -198,6 +199,27 @@ func (s *fakeStore) DeleteChannelMultiplier(_ context.Context, channel string) (
 	_, ok := s.channels[channel]
 	delete(s.channels, channel)
 	return ok, nil
+}
+
+func (s *fakeStore) ListMatchReviews(context.Context) (map[string]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make(map[string]string, len(s.reviews))
+	for model, upstream := range s.reviews {
+		result[model] = upstream
+	}
+	return result, nil
+}
+
+func (s *fakeStore) SaveMatchReview(_ context.Context, model, upstreamID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if upstreamID == "" {
+		delete(s.reviews, model)
+	} else {
+		s.reviews[model] = upstreamID
+	}
+	return nil
 }
 
 func (s *fakeStore) price(model string) (ModelPrice, bool) {
@@ -680,5 +702,108 @@ func TestSuggestionsReuseLocalCatalog(t *testing.T) {
 	second, err := service.Suggestions(context.Background(), "glm-5.3", 3)
 	if err != nil || len(second) != len(first) || second[0].ID != first[0].ID {
 		t.Fatalf("cached suggestions lost: %v %v", second, err)
+	}
+}
+
+// A custom price set while OpenRouter did not list the model is offered the
+// match once a later sync brings it, until the operator acts on it; a price
+// chosen while a match already existed is not questioned.
+func TestCandidatesAnnounceMatchesThatAppearLater(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore("brand-new-model", "claude-opus-5.5")
+	fixture := loadFixtureCatalog(t)
+	fetcher := &fakeFetcher{catalog: fixture}
+	service := NewService(store, fetcher, nil)
+	if _, err := service.SyncOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	custom := ModelPrice{PromptPricePer1M: 1, CompletionPer1M: 2}
+	for _, model := range []string{"brand-new-model", "claude-opus-5.5"} {
+		if _, err := service.SetModelMode(ctx, ModeChange{Model: model, Mode: ModeCustom, Price: custom, Multiplier: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidates := func() map[string]Candidate {
+		t.Helper()
+		prices, err := service.ListPrices(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found, err := service.Candidates(ctx, prices)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found
+	}
+	if found := candidates(); len(found) != 0 {
+		t.Fatalf("a deliberate override or a model OpenRouter does not list was questioned: %+v", found)
+	}
+
+	added := UpstreamModel{ID: "vendor/brand-new-model", CanonicalSlug: "vendor/brand-new-model", Name: "Brand New",
+		PromptPricePer1M: 3, CompletionPer1M: 6, CacheReadPer1M: 3, CacheWritePer1M: 3}
+	fetcher.mu.Lock()
+	fetcher.catalog = NewCatalog(append(append([]UpstreamModel(nil), fixture.Models...), added), fixture.FetchedAt)
+	fetcher.mu.Unlock()
+	if _, err := service.SyncOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if row, _ := store.price("brand-new-model"); row.Source != SourceManual {
+		t.Fatalf("the sync replaced the custom price: %+v", row)
+	}
+	found := candidates()
+	if candidate, ok := found["brand-new-model"]; !ok || candidate.Kind != CandidateAutomatic || candidate.Model.ID != added.ID {
+		t.Fatalf("the new match was not announced: %+v", found)
+	}
+	if _, ok := found["claude-opus-5.5"]; ok {
+		t.Fatalf("an acknowledged match was announced again: %+v", found)
+	}
+
+	if err := service.DismissCandidate(ctx, "brand-new-model", added.ID); err != nil {
+		t.Fatal(err)
+	}
+	if found := candidates(); len(found) != 0 {
+		t.Fatalf("a dismissed match was announced again: %+v", found)
+	}
+	if err := service.DismissCandidate(ctx, "brand-new-model", ""); !errors.Is(err, ErrInvalidReview) {
+		t.Fatalf("an empty dismissal was accepted: %v", err)
+	}
+
+	// Following the match clears the record, so a later custom price starts over.
+	if _, err := service.SetModelMode(ctx, ModeChange{Model: "brand-new-model", Mode: ModeAuto}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.reviews["brand-new-model"]; ok {
+		t.Fatal("an automatic price kept a review record")
+	}
+}
+
+// A linked price is only offered an automatic match other than its pin.
+func TestLinkedCandidatesIgnoreTheirOwnPin(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore("claude-opus-5.5")
+	service := NewService(store, &fakeFetcher{catalog: loadFixtureCatalog(t)}, nil)
+	if _, err := service.SyncOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	match, ok, err := service.AutomaticMatch(ctx, "claude-opus-5.5")
+	if err != nil || !ok {
+		t.Fatalf("fixture lost its match: %v", err)
+	}
+	if _, err := service.SetModelMode(ctx, ModeChange{Model: "claude-opus-5.5", Mode: ModeLinked, UpstreamID: match.Model.ID, Multiplier: 1}); err != nil {
+		t.Fatal(err)
+	}
+	store.reviews = map[string]string{}
+	prices, _ := service.ListPrices(ctx)
+	if found, err := service.Candidates(ctx, prices); err != nil || len(found) != 0 {
+		t.Fatalf("a link to the automatic match was offered itself: %+v, %v", found, err)
+	}
+	if _, err := service.SetModelMode(ctx, ModeChange{Model: "claude-opus-5.5", Mode: ModeLinked, UpstreamID: "anthropic/claude-sonnet-5", Multiplier: 1}); err != nil {
+		t.Fatal(err)
+	}
+	store.reviews = map[string]string{}
+	prices, _ = service.ListPrices(ctx)
+	found, err := service.Candidates(ctx, prices)
+	if err != nil || found["claude-opus-5.5"].Model.ID != match.Model.ID || found["claude-opus-5.5"].Kind != CandidateAutomatic {
+		t.Fatalf("a link away from the automatic match was not offered it: %+v, %v", found, err)
 	}
 }

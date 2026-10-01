@@ -1045,6 +1045,13 @@ export const api = {
     });
   },
 
+  async dismissPricingCandidate(model: string, upstreamId: string): Promise<{ dismissed: boolean }> {
+    return request<{ dismissed: boolean }>(`/pricing/models/${encodeURIComponent(model)}/dismiss-candidate`, {
+      method: 'POST',
+      body: JSON.stringify({ upstream_id: upstreamId }),
+    });
+  },
+
   async deletePricingModel(model: string): Promise<{ deleted: boolean }> {
     return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}`, {
       method: 'DELETE',

@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Collapse, Drawer, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
+import { Button, Collapse, Drawer, Input, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +19,7 @@ import {
   formatUsd,
   modeOf,
   parseRateText,
+  parseTokenCount,
   previewCostUsd,
   rateDelta,
   tierDraftsFrom,
@@ -26,7 +27,7 @@ import {
   type RateFields,
   type TierDraft,
 } from '../../types/pricingDisplay';
-import { RateGrid, TierBadges, TierEditor, UpstreamPicker, UpstreamSummary } from './PricingParts';
+import { PriceSchedule, RateGrid, TierBadges, TieredPricingEditor, UpstreamPicker, UpstreamSummary, describeTier } from './PricingParts';
 import { PRICING_QUERY_KEYS } from './pricingQueries';
 import styles from './Pricing.module.css';
 import { useToast } from '../feedback';
@@ -102,6 +103,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   const currentMode = current ? modeOf(current) : null;
   const automatic = detail.data?.automatic ?? null;
   const suggestions = React.useMemo(() => detail.data?.suggestions ?? [], [detail.data]);
+  const candidate = detail.data?.candidate ?? null;
 
   const [mode, setMode] = React.useState<PricingMode | null>(initialMode ?? null);
   const [linked, setLinked] = React.useState<UpstreamModel | null>(initialUpstream ?? null);
@@ -123,7 +125,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
       setMultiplier(price.price_multiplier || 1);
       if (modeOf(price) === 'custom') {
         setRates(ratesDraftFrom(price));
-        setTierDrafts(tierDraftsFrom(price.tiers));
+        setTierDrafts(tierDraftsFrom(price.tiers, price));
       }
     }
     if (!initialUpstream && startMode === 'linked') {
@@ -148,34 +150,36 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   /** The OpenRouter figures a custom price is compared against, when there are any. */
   const reference: UpstreamModel | null = automatic?.model ?? linked ?? suggestions[0] ?? null;
 
-  const tierResult = React.useMemo(() => tiersFromDrafts(tierDrafts), [tierDrafts]);
   const customRates = React.useMemo(() => ({
     prompt: parseRateText(rates.prompt),
     completion: parseRateText(rates.completion),
     cacheRead: parseRateText(rates.cacheRead),
     cacheWrite: parseRateText(rates.cacheWrite),
   }), [rates]);
-  const isCustomValid = customRates.prompt !== undefined && !Number.isNaN(customRates.prompt)
-    && customRates.completion !== undefined && !Number.isNaN(customRates.completion)
-    && !Number.isNaN(customRates.cacheRead ?? 0) && !Number.isNaN(customRates.cacheWrite ?? 0)
-    && 'tiers' in tierResult;
+  /** The custom base rates as billed, which tier multiples are taken from; null while incomplete. */
+  const baseRates = React.useMemo((): RateFields | null => {
+    const { prompt, completion, cacheRead, cacheWrite } = customRates;
+    if (prompt === undefined || Number.isNaN(prompt) || completion === undefined || Number.isNaN(completion)) return null;
+    if (Number.isNaN(cacheRead ?? 0) || Number.isNaN(cacheWrite ?? 0)) return null;
+    return {
+      prompt_price_per_1m: prompt,
+      completion_price_per_1m: completion,
+      // An empty cache rate is billed at the input rate, the same rule OpenRouter prices follow.
+      cache_read_price_per_1m: cacheRead ?? prompt,
+      cache_write_price_per_1m: cacheWrite ?? prompt,
+    };
+  }, [customRates]);
+  const tierResult = React.useMemo(() => tiersFromDrafts(tierDrafts, baseRates), [tierDrafts, baseRates]);
+  const isCustomValid = baseRates !== null && 'tiers' in tierResult;
 
   /** The price the form describes right now, for the preview; null until it is complete. */
   const draftPrice = React.useMemo((): (RateFields & { price_multiplier: number; tiers: PriceTier[] }) | null => {
     const withMultiplier = (fields: RateFields, tiers: PriceTier[] | null) => ({ ...fields, price_multiplier: multiplier, tiers: tiers ?? [] });
     if (mode === 'auto') return automatic ? withMultiplier(upstreamRates(automatic.model), automatic.model.tiers) : null;
     if (mode === 'linked') return linked ? withMultiplier(upstreamRates(linked), linked.tiers) : null;
-    if (mode === 'custom' && isCustomValid && 'tiers' in tierResult) {
-      return withMultiplier({
-        prompt_price_per_1m: customRates.prompt ?? 0,
-        completion_price_per_1m: customRates.completion ?? 0,
-        // An empty cache rate is billed at the input rate, the same rule OpenRouter prices follow.
-        cache_read_price_per_1m: customRates.cacheRead ?? customRates.prompt ?? 0,
-        cache_write_price_per_1m: customRates.cacheWrite ?? customRates.prompt ?? 0,
-      }, tierResult.tiers);
-    }
+    if (mode === 'custom' && baseRates && 'tiers' in tierResult) return withMultiplier(baseRates, tierResult.tiers);
     return null;
-  }, [mode, automatic, linked, isCustomValid, tierResult, customRates, multiplier]);
+  }, [mode, automatic, linked, tierResult, baseRates, multiplier]);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
@@ -213,6 +217,29 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
     },
     onError: (error) => toast.error(t('pricing.delete_failed', { msg: pricingErrorText(t, error) })),
   });
+
+  const dismissCandidate = useMutation({
+    mutationFn: (upstreamId: string) => api.dismissPricingCandidate(model, upstreamId),
+    onSuccess: () => {
+      toast.info(t('pricing.candidate.dismissed', { model }));
+      invalidate();
+    },
+    onError: (error) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
+  });
+  // The candidate only stays on screen while the draft has not taken it up yet; once the operator
+  // switched to it, the mode's own summary shows the same model and the save answers it.
+  const isCandidateAdopted = candidate !== null && (candidate.kind === 'automatic'
+    ? mode === 'auto'
+    : mode === 'linked' && linked?.id === candidate.model.id);
+  const adoptCandidate = () => {
+    if (!candidate) return;
+    if (candidate.kind === 'automatic') {
+      setMode('auto');
+    } else {
+      setMode('linked');
+      setLinked(candidate.model);
+    }
+  };
 
   const canSave = mode === 'auto' ? automatic !== null : mode === 'linked' ? linked !== null : mode === 'custom' && isCustomValid;
   const profile = detail.data?.profile;
@@ -269,6 +296,32 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
         )
       ) : (
         <div className={styles['drawer-body']}>
+          {candidate && !isCandidateAdopted && (
+            <Notice
+              tone="info"
+              data-testid="pricing-editor-candidate"
+              title={t(candidate.kind === 'automatic' ? 'pricing.candidate.automatic' : 'pricing.candidate.suggested', {
+                id: candidate.model.id,
+                rates: `${formatRatePer1M(candidate.model.prompt_price_per_1m)} / ${formatRatePer1M(candidate.model.completion_price_per_1m)}`,
+              })}
+              description={t(candidate.kind === 'automatic' ? 'pricing.candidate.automatic_hint' : 'pricing.candidate.suggested_hint')}
+              action={(
+                <div className={styles['candidate-actions']}>
+                  <Button size="small" type="primary" onClick={adoptCandidate} data-testid="pricing-editor-candidate-adopt">
+                    {t(candidate.kind === 'automatic' ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
+                  </Button>
+                  <Button
+                    size="small"
+                    loading={dismissCandidate.isPending}
+                    onClick={() => dismissCandidate.mutate(candidate.model.id)}
+                    data-testid="pricing-editor-candidate-dismiss"
+                  >
+                    {t('pricing.candidate.dismiss')}
+                  </Button>
+                </div>
+              )}
+            />
+          )}
           <section className={styles.section}>
             <Segmented<PricingMode>
               block
@@ -279,7 +332,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
                 // the operator edits a price instead of retyping one.
                 if (value === 'custom' && rates.prompt === '' && reference) {
                   setRates(ratesDraftFrom(upstreamRates(reference)));
-                  if (tierDrafts.length === 0) setTierDrafts(tierDraftsFrom(reference.tiers));
+                  if (tierDrafts.length === 0) setTierDrafts(tierDraftsFrom(reference.tiers, upstreamRates(reference)));
                 }
                 if (value === 'linked' && !linked && suggestions[0]) setLinked(suggestions[0]);
               }}
@@ -333,7 +386,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
                 {reference && (
                   <Button size="small" type="link" onClick={() => {
                     setRates(ratesDraftFrom(upstreamRates(reference)));
-                    setTierDrafts(tierDraftsFrom(reference.tiers));
+                    setTierDrafts(tierDraftsFrom(reference.tiers, upstreamRates(reference)));
                   }}
                   >
                     {t('pricing.editor.fill_reference', { id: reference.id })}
@@ -380,24 +433,22 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
                   );
                 })}
               </div>
-              <Collapse
-                ghost
-                size="small"
-                defaultActiveKey={tierDrafts.length > 0 ? ['tiers'] : []}
-                items={[{
-                  key: 'tiers',
-                  label: `${t('pricing.editor.tiers')}${tierDrafts.length > 0 ? ` (${tierDrafts.length})` : ''}`,
-                  children: (
-                    <>
-                      <p className={styles['mode-hint']}>{t('pricing.editor.tiers_hint')}</p>
-                      <TierEditor drafts={tierDrafts} invalidIndex={'error' in tierResult ? tierResult.index : null} onChange={setTierDrafts} />
-                      {'error' in tierResult && (
-                        <p className={styles['field-error']} role="alert">{t(`pricing.editor.tier_error_${tierResult.error}`)}</p>
-                      )}
-                    </>
-                  ),
-                }]}
-              />
+            </section>
+          )}
+
+          {mode === 'custom' && (
+            <TieredPricingEditor
+              drafts={tierDrafts}
+              base={baseRates}
+              invalid={'error' in tierResult ? tierResult : null}
+              onChange={setTierDrafts}
+            />
+          )}
+
+          {mode === 'custom' && draftPrice && draftPrice.tiers.length > 0 && (
+            <section className={styles.section}>
+              <h3>{t('pricing.editor.schedule')}</h3>
+              <PriceSchedule price={draftPrice} tiers={draftPrice.tiers} />
             </section>
           )}
 
@@ -413,26 +464,23 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
                 suffix="×"
                 data-testid="pricing-multiplier"
               />
+              <span className={styles['tier-note']}>{t('pricing.editor.multiplier_hint')}</span>
             </label>
           </section>
 
           <section className={styles.section} data-testid="pricing-preview">
             <h3>{t('pricing.editor.preview')}</h3>
-            {profile && profile.samples > 0 ? (
-              <PreviewRows
-                profile={profile}
-                current={current}
-                next={draftPrice}
-                basis={t('pricing.editor.preview_basis', {
-                  n: profile.samples,
-                  input: formatTokens(profile.input, tokenStyle),
-                  output: formatTokens(profile.output, tokenStyle),
-                  cache: formatTokens(profile.cache_read, tokenStyle),
-                })}
-              />
-            ) : (
-              <p className={styles['mode-hint']}>{t('pricing.editor.preview_none')}</p>
-            )}
+            <PreviewRows
+              profile={profile ?? { samples: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, max_input: 0 }}
+              current={current}
+              next={draftPrice}
+              basis={profile && profile.samples > 0 ? t('pricing.editor.preview_basis', {
+                n: profile.samples,
+                input: formatTokens(profile.input, tokenStyle),
+                output: formatTokens(profile.output, tokenStyle),
+                cache: formatTokens(profile.cache_read, tokenStyle),
+              }) : null}
+            />
           </section>
 
           <Collapse
@@ -455,17 +503,21 @@ type PreviewPrice = RateFields & { price_multiplier: number; tiers?: PriceTier[]
 /**
  * The editor's cost preview: the model's median recent request priced now and after the change,
  * plus the largest recent prompt when it would reach a long-context tier - the request whose
- * price moves most when tiers change.
+ * price moves most when tiers change. Each row names the tier the new price bills it at, and a
+ * request typed by hand can be tried against both prices.
  */
 const PreviewRows: React.FC<{
-  profile: { input: number; output: number; cache_read: number; cache_write: number; max_input: number };
+  profile: { samples: number; input: number; output: number; cache_read: number; cache_write: number; max_input: number };
   current: ModelPrice | null;
   next: PreviewPrice | null;
-  basis: string;
+  basis: string | null;
 }> = ({ profile, current, next, basis }) => {
   useTimeZone();
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
+  const [trialInput, setTrialInput] = React.useState('');
+  const [trialOutput, setTrialOutput] = React.useState('');
+  const hasSamples = profile.samples > 0;
   const typical = { input: profile.input, output: profile.output, cache_read: profile.cache_read, cache_write: profile.cache_write };
   // The largest prompt is scaled from the median's mix, since only its prompt size is sampled.
   const scale = profile.input > 0 ? profile.max_input / profile.input : 1;
@@ -475,39 +527,79 @@ const PreviewRows: React.FC<{
     cache_read: Math.round(profile.cache_read * scale),
     cache_write: Math.round(profile.cache_write * scale),
   };
-  const rows: Array<{ key: string; label: string; tokens: typeof typical }> = [
-    { key: 'typical', label: t('pricing.editor.preview_typical'), tokens: typical },
-  ];
+  const rows: Array<{ key: string; label: string; tokens: typeof typical }> = [];
+  if (hasSamples) rows.push({ key: 'typical', label: t('pricing.editor.preview_typical'), tokens: typical });
   const reachesTier = (price: PreviewPrice | null) => Boolean(price?.tiers?.some((tier) => (tier.min_prompt_tokens ?? 0) > 0 && profile.max_input >= (tier.min_prompt_tokens ?? 0)));
-  if (profile.max_input > profile.input && (reachesTier(next) || reachesTier(current))) {
+  if (hasSamples && profile.max_input > profile.input && (reachesTier(next) || reachesTier(current))) {
     rows.push({ key: 'largest', label: t('pricing.editor.preview_largest', { tokens: formatTokens(profile.max_input, tokenStyle) }), tokens: largest });
   }
-  const cost = (price: PreviewPrice | null, tokens: typeof typical) => (price ? previewCostUsd(price, tokens).usd : null);
+  const trialIn = parseTokenCount(trialInput);
+  const trialOut = parseTokenCount(trialOutput);
+  const isTrialValid = trialIn !== undefined && !Number.isNaN(trialIn) && !Number.isNaN(trialOut ?? 0);
+  if (isTrialValid) {
+    rows.push({
+      key: 'trial',
+      label: t('pricing.editor.calc_row', { input: formatTokens(trialIn, tokenStyle), output: formatTokens(trialOut ?? 0, tokenStyle) }),
+      tokens: { input: trialIn, output: trialOut ?? 0, cache_read: 0, cache_write: 0 },
+    });
+  }
+  const quote = (price: PreviewPrice | null, tokens: typeof typical) => (price ? previewCostUsd(price, tokens) : null);
+  const tierLabel = (price: PreviewPrice, tierIndex: number) => (
+    tierIndex >= 0 && price.tiers ? describeTier(t, price.tiers[tierIndex]) : t('pricing.schedule.base')
+  );
+  const showsTiers = Boolean(next?.tiers?.length);
   return (
     <>
-      <p className={styles['mode-hint']}>{basis}</p>
-      <table className={styles['preview-table']}>
-        <thead>
-          <tr>
-            <th />
-            <th>{t('pricing.editor.preview_current')}</th>
-            <th>{t('pricing.editor.preview_new')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const before = cost(current, row.tokens);
-            const after = cost(next, row.tokens);
-            return (
-              <tr key={row.key}>
-                <th scope="row">{row.label}</th>
-                <td>{before === null ? '—' : formatUsd(before)}</td>
-                <td className={styles['preview-new']}>{after === null ? '—' : formatUsd(after)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {basis && <p className={styles['mode-hint']}>{basis}</p>}
+      {!hasSamples && <p className={styles['mode-hint']}>{t('pricing.editor.preview_none')}</p>}
+      {rows.length > 0 && (
+        <table className={styles['preview-table']}>
+          <thead>
+            <tr>
+              <th />
+              <th>{t('pricing.editor.preview_current')}</th>
+              <th>{t('pricing.editor.preview_new')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const before = quote(current, row.tokens);
+              const after = quote(next, row.tokens);
+              return (
+                <tr key={row.key} data-testid={`pricing-preview-${row.key}`}>
+                  <th scope="row">
+                    {row.label}
+                    {showsTiers && next && after && <span className={styles['preview-tier']}>{tierLabel(next, after.tierIndex)}</span>}
+                  </th>
+                  <td>{before === null ? '—' : formatUsd(before.usd)}</td>
+                  <td className={styles['preview-new']}>{after === null ? '—' : formatUsd(after.usd)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className={styles.calculator}>
+        <span className={styles['calculator-label']}>{t('pricing.editor.calc')}</span>
+        <Input
+          size="small"
+          value={trialInput}
+          onChange={(event) => setTrialInput(event.target.value)}
+          placeholder={t('pricing.editor.calc_input')}
+          aria-label={t('pricing.editor.calc_input')}
+          status={trialIn !== undefined && Number.isNaN(trialIn) ? 'error' : undefined}
+          data-testid="pricing-calc-input"
+        />
+        <Input
+          size="small"
+          value={trialOutput}
+          onChange={(event) => setTrialOutput(event.target.value)}
+          placeholder={t('pricing.editor.calc_output')}
+          aria-label={t('pricing.editor.calc_output')}
+          status={trialOut !== undefined && Number.isNaN(trialOut) ? 'error' : undefined}
+          data-testid="pricing-calc-output"
+        />
+      </div>
     </>
   );
 };

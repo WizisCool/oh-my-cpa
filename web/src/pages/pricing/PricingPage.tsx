@@ -15,7 +15,7 @@ import { RefreshButton } from '../../components/common/RefreshButton';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
 import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
 import { FactList } from '../../components/common/FactList';
-import type { PricedModel, PricingMode, PricingResponse, PricingUsage, UnpricedModel, UpstreamModel } from '../../types/pricing';
+import type { PricedModel, PricingCandidate, PricingMode, PricingResponse, PricingUsage, UnpricedModel, UpstreamModel } from '../../types/pricing';
 import { formatMultiplier, formatRatePer1M, matchesModelSearch, modeOf } from '../../types/pricingDisplay';
 import { useOpenPriceEditor } from '../../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
@@ -34,7 +34,8 @@ import { LoadFailure, Notice, useToast } from '../../components/feedback';
 const PAGE_SIZE = 20;
 
 type PricingTab = 'models' | 'channels';
-type ModelFilter = 'all' | PricingMode | 'unpriced';
+/** `candidates` narrows to custom and linked models OpenRouter has a new price for. */
+type ModelFilter = 'all' | PricingMode | 'unpriced' | 'candidates';
 
 /** A row of the book: a priced model, or a current model with no price yet. */
 type BookRow =
@@ -51,6 +52,7 @@ const MODE_TONES: Record<ModelFilter, StatusTone> = {
   linked: 'success',
   custom: 'accent',
   unpriced: 'warn',
+  candidates: 'accent',
 };
 
 function syncTone(data: PricingResponse | undefined): StatusTone {
@@ -67,6 +69,53 @@ function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
   const success = data.sync.state.last_success_at_ms;
   return success ? t('pricing.sync.synced_ago', { time: formatTimeAgo(success, Date.now(), t) }) : t('pricing.sync.never');
 }
+
+/**
+ * The line a custom or linked row carries when OpenRouter has a price the operator has not answered:
+ * which model, at what list rate, and the two ways to answer it.
+ */
+const CandidateLine: React.FC<{
+  row: PricedModel;
+  candidate: PricingCandidate;
+  pendingAction?: 'adopt' | 'dismiss';
+  onAct: (action: 'adopt' | 'dismiss') => void;
+}> = ({ row, candidate, pendingAction, onAct }) => {
+  const t = useT();
+  const isAutomatic = candidate.kind === 'automatic';
+  const rates = `${formatRatePer1M(candidate.model.prompt_price_per_1m)} / ${formatRatePer1M(candidate.model.completion_price_per_1m)}`;
+  return (
+    <div className={styles.candidate} data-testid="pricing-row-candidate" data-kind={candidate.kind}>
+      <span className={styles['candidate-text']} title={candidate.model.id}>
+        {t(isAutomatic ? 'pricing.candidate.automatic' : 'pricing.candidate.suggested', { id: candidate.model.id, rates })}
+      </span>
+      <span className={styles['candidate-actions']}>
+        <Button
+          size="small"
+          type="link"
+          icon={isAutomatic ? <SyncOutlined /> : <LinkOutlined />}
+          loading={pendingAction === 'adopt'}
+          disabled={pendingAction === 'dismiss'}
+          onClick={() => onAct('adopt')}
+          aria-label={`${t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}: ${row.model}`}
+          data-testid="pricing-candidate-adopt"
+        >
+          {t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
+        </Button>
+        <Button
+          size="small"
+          type="link"
+          loading={pendingAction === 'dismiss'}
+          disabled={pendingAction === 'adopt'}
+          onClick={() => onAct('dismiss')}
+          aria-label={`${t('pricing.candidate.dismiss')}: ${row.model}`}
+          data-testid="pricing-candidate-dismiss"
+        >
+          {t('pricing.candidate.dismiss')}
+        </Button>
+      </span>
+    </div>
+  );
+};
 
 /**
  * The price book. OpenRouter prices every model it can match without the operator doing anything;
@@ -103,6 +152,10 @@ export const PricingPage: React.FC = () => {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
     void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.attention });
+  };
+  const invalidateModel = (model: string) => {
+    invalidate();
+    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.model(model) });
   };
 
   const syncMutation = useMutation({
@@ -141,6 +194,24 @@ export const PricingPage: React.FC = () => {
     onError: (err) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
   });
 
+  // A candidate is answered in its row: follow it (auto mode when it is the automatic match, a
+  // link when it only resembles the model), or ignore it until OpenRouter offers a different one.
+  // Either way the operator's channel multiplier carries over.
+  const candidateMutation = useMutation({
+    mutationFn: async ({ row, candidate, action }: { row: PricedModel; candidate: PricingCandidate; action: 'adopt' | 'dismiss' }): Promise<unknown> => {
+      if (action === 'dismiss') return api.dismissPricingCandidate(row.model, candidate.model.id);
+      return candidate.kind === 'automatic'
+        ? api.updatePricingModel(row.model, { mode: 'auto', price_multiplier: row.price_multiplier })
+        : api.updatePricingModel(row.model, { mode: 'linked', upstream_id: candidate.model.id, price_multiplier: row.price_multiplier });
+    },
+    onSuccess: (_, { row, candidate, action }) => {
+      if (action === 'dismiss') toast.info(t('pricing.candidate.dismissed', { model: row.model }));
+      else toast.success(t(candidate.kind === 'automatic' ? 'pricing.candidate.followed' : 'pricing.adopted', { model: row.model, id: candidate.model.id }));
+      invalidateModel(row.model);
+    },
+    onError: (err) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
+  });
+
   const rows = React.useMemo<BookRow[]>(() => {
     if (!data) return [];
     const priced = data.models.map((model): BookRow => ({ ...model, rowKind: 'priced' }));
@@ -149,15 +220,20 @@ export const PricingPage: React.FC = () => {
   }, [data]);
 
   const counts = React.useMemo(() => {
-    const result: Record<ModelFilter, number> = { all: rows.length, auto: 0, linked: 0, custom: 0, unpriced: 0 };
-    rows.forEach((row) => { result[rowMode(row)] += 1; });
+    const result: Record<ModelFilter, number> = { all: rows.length, auto: 0, linked: 0, custom: 0, unpriced: 0, candidates: 0 };
+    rows.forEach((row) => {
+      result[rowMode(row)] += 1;
+      if (row.rowKind === 'priced' && row.candidate) result.candidates += 1;
+    });
     return result;
   }, [rows]);
 
   const visibleRows = React.useMemo(() => {
     const query = search.trim().toLowerCase();
     return rows.filter((row) => {
-      if (filter !== 'all' && rowMode(row) !== filter) return false;
+      if (filter === 'candidates') {
+        if (row.rowKind !== 'priced' || !row.candidate) return false;
+      } else if (filter !== 'all' && rowMode(row) !== filter) return false;
       if (!query) return true;
       const upstream = row.rowKind === 'priced' ? row.upstream_id : '';
       return matchesModelSearch(query, row.model, upstream);
@@ -198,6 +274,14 @@ export const PricingPage: React.FC = () => {
               </span>
             ) : null}
             {row.rowKind === 'priced' && <TierBadges tiers={row.tiers} />}
+            {row.rowKind === 'priced' && row.candidate && (
+              <CandidateLine
+                row={row}
+                candidate={row.candidate}
+                pendingAction={candidateMutation.isPending && candidateMutation.variables?.row.model === row.model ? candidateMutation.variables.action : undefined}
+                onAct={(action) => row.candidate && candidateMutation.mutate({ row, candidate: row.candidate, action })}
+              />
+            )}
             {row.rowKind === 'unpriced' && row.suggestions[0] && (
               <div className={styles['suggestion']}>
                 <span className={styles['model-sub']} title={row.suggestions[0].id}>
@@ -396,13 +480,13 @@ export const PricingPage: React.FC = () => {
             <Segmented<ModelFilter>
               value={filter}
               onChange={setFilter}
-              options={(['all', 'auto', 'linked', 'custom', 'unpriced'] as const)
+              options={(['all', 'auto', 'linked', 'custom', 'unpriced', 'candidates'] as const)
                 .filter((value) => value === 'all' || value === filter || counts[value] > 0)
                 .map((value) => ({
                   value,
                   label: (
                     <span className={styles['filter-option']}>
-                      {value === 'all' ? t('common.all') : t(`pricing.mode.${value}`)}
+                      {value === 'all' ? t('common.all') : value === 'candidates' ? t('pricing.candidate.filter') : t(`pricing.mode.${value}`)}
                       <span className={styles['filter-count']}>{counts[value]}</span>
                     </span>
                   ),

@@ -214,6 +214,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/pricing/models/{model}", h.getPricingModel)
 				v1.Put("/pricing/models/{model}", h.updatePricingModel)
 				v1.Delete("/pricing/models/{model}", h.deletePricingModel)
+				v1.Post("/pricing/models/{model}/dismiss-candidate", h.dismissPricingCandidate)
 				v1.Put("/pricing/channels/{channel}", h.updatePricingChannel)
 				v1.Delete("/pricing/channels/{channel}", h.deletePricingChannel)
 				v1.Post("/pricing/sync", h.startPricingSync)

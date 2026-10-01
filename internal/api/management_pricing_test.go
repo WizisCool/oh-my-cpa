@@ -30,6 +30,8 @@ type fakePricing struct {
 	started     bool
 	stateErr    error
 	notifyCount atomic.Int32
+	candidates  map[string]pricing.Candidate
+	dismissed   []string
 }
 
 func (f *fakePricing) ListPrices(context.Context) ([]pricing.ModelPrice, error) {
@@ -46,6 +48,23 @@ func (f *fakePricing) AutomaticMatch(context.Context, string) (pricing.Match, bo
 		return pricing.Match{}, false, nil
 	}
 	return pricing.Match{Model: f.suggestions[0], Kind: pricing.MatchExact}, true, nil
+}
+func (f *fakePricing) Candidates(_ context.Context, prices []pricing.ModelPrice) (map[string]pricing.Candidate, error) {
+	result := map[string]pricing.Candidate{}
+	for _, price := range prices {
+		if candidate, ok := f.candidates[price.Model]; ok {
+			result[price.Model] = candidate
+		}
+	}
+	return result, nil
+}
+func (f *fakePricing) DismissCandidate(_ context.Context, model, upstreamID string) error {
+	if model == "" || upstreamID == "" {
+		return pricing.ErrInvalidReview
+	}
+	f.dismissed = append(f.dismissed, model+"="+upstreamID)
+	delete(f.candidates, model)
+	return nil
 }
 func (f *fakePricing) StoredCatalog(context.Context) ([]pricing.UpstreamModel, error) {
 	return f.catalog, nil
@@ -377,5 +396,59 @@ func TestPricingProvidersUseCurrentIdentityOverlays(t *testing.T) {
 	}
 	if len(result.Providers) != 2 || result.Providers[0].Name != "Team Relay" || result.Providers[0].IconID != "DeepSeek" || result.Providers[1].Name != "Team OAuth" || !result.Providers[1].IsOAuth {
 		t.Fatalf("providers: %+v", result.Providers)
+	}
+}
+
+// A custom price carries the OpenRouter model it could now follow, and the
+// operator can dismiss it without touching the price.
+func TestPricingCandidatesAndDismissal(t *testing.T) {
+	newModel := pricing.UpstreamModel{ID: "vendor/brand-new", PromptPricePer1M: 3, CompletionPer1M: 6}
+	fake := &fakePricing{
+		listRows: []pricing.ModelPrice{
+			{Model: "brand-new", PromptPricePer1M: 1, CompletionPer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual, Mode: pricing.ModeCustom},
+			{Model: "steady", PromptPricePer1M: 1, CompletionPer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual, Mode: pricing.ModeCustom},
+		},
+		candidates: map[string]pricing.Candidate{"brand-new": {Model: newModel, Kind: pricing.CandidateAutomatic, MatchKind: pricing.MatchExact}},
+	}
+	client, baseURL := startPricingTestServer(t, fake)
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/pricing")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("pricing status = %d body %s", response.StatusCode, payload)
+	}
+	var body struct {
+		Models []struct {
+			Model     string             `json:"model"`
+			Candidate *pricing.Candidate `json:"candidate"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Models) != 2 || body.Models[0].Candidate == nil || body.Models[0].Candidate.Model.ID != newModel.ID ||
+		body.Models[0].Candidate.Kind != pricing.CandidateAutomatic || body.Models[1].Candidate != nil {
+		t.Fatalf("candidates not projected onto their rows: %s", payload)
+	}
+	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/pricing/models/brand-new")
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"candidate":{"model":{"id":"vendor/brand-new"`) {
+		t.Fatalf("model detail candidate: %d %s", response.StatusCode, payload)
+	}
+
+	dismiss := func(model, body string) (*http.Response, []byte) {
+		return doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/pricing/models/"+model+"/dismiss-candidate", body)
+	}
+	if response, payload := dismiss("brand-new", `{"upstream_id":""}`); response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "pricing_invalid_review") {
+		t.Fatalf("empty dismissal: %d %s", response.StatusCode, payload)
+	}
+	if response, _ := dismiss("brand-new", `{"upstream_id":"vendor/brand-new","extra":1}`); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown field accepted: %d", response.StatusCode)
+	}
+	if response, payload := dismiss("brand-new", `{"upstream_id":"vendor/brand-new"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("dismissal: %d %s", response.StatusCode, payload)
+	}
+	if len(fake.dismissed) != 1 || fake.dismissed[0] != "brand-new=vendor/brand-new" || len(fake.changes) != 0 {
+		t.Fatalf("dismissal routed wrong or changed a price: %+v %+v", fake.dismissed, fake.changes)
+	}
+	if _, payload := getJSON(t, client, baseURL+"/omc/api/v1/pricing"); strings.Contains(string(payload), `"candidate"`) {
+		t.Fatalf("a dismissed candidate is still offered: %s", payload)
 	}
 }
