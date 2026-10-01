@@ -83,7 +83,7 @@
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
     "playwright-core": "1.62.1",
-    "wrangler": "4.135.0",
+    "wrangler": "4.144.0",
     "yaml": "2.9.0"
   },
   "engines": {
