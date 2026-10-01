@@ -136,8 +136,6 @@ jobs:
       # install is the genuinely independent third resource, and it is already
       # overlapped.
       - name: Prepare Chromium and build embedded SPA
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           set -o pipefail
           install_log="$(mktemp)"

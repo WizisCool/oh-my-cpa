@@ -183,6 +183,13 @@ One-time setup, in the Cloudflare console:
    first command it stops with "no built console". Verified in a fresh clone: `pnpm build`
    takes about 37s there.
 
+   The web build states its own Node heap (`--max-old-space-size=4096` in
+   `web/package.json`) because Node sizes the default from the machine's memory. On the
+   build image that default is about 2 GB, and `vite build` peaks near 2.7 GB while
+   rendering chunks, so it aborted with "JavaScript heap out of memory" on some builds
+   and not others. Setting it in the script rather than as a build variable keeps the
+   Cloudflare build, CI and a local build on the same limit.
+
    `pnpm install` is not part of it because Workers Builds installs dependencies itself,
    using the `packageManager` field and `.nvmrc` this repository already pins. No build
    variables are needed for the same reason.
