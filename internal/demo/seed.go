@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
 	"os"
 	"sort"
@@ -299,6 +300,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 
 	random := newDeterministic(0x9E3779B97F4A7C15)
 	events := make([]usage.Event, 0, 4096)
+	session := workSession{}
 	hour := start
 	for !hour.After(now) {
 		// The last bucket is the hour in progress, so its count is scaled by how
@@ -308,9 +310,10 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 		if hour.Equal(now.Truncate(time.Hour)) {
 			fraction = float64(now.Minute()*60+now.Second()) / 3600
 		}
+		session = session.advance(random, profiles, hour, now)
 		count := drawRequestCount(random, requestsPerHour(hour, now)*trafficShape(hour)*daySwing(hour)*fraction)
 		for index := 0; index < count; index++ {
-			profile := pickProfile(random, profiles)
+			profile := session.pickProfile(random, profiles)
 			keyIndex := pickWeighted(random, keyWeights(keys))
 			event := buildEvent(random, profile, credentials, hour, now)
 			event.APIGroupKey = fingerprints[keyIndex]
@@ -326,7 +329,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 	// that do exist were placed at random offsets that may all be older than the window.
 	// It is filled explicitly rather than left to chance, because an empty shortest
 	// window is indistinguishable from a demo that is not working.
-	events = append(events, fillRecentWindow(random, profiles, credentials, fingerprints, keys, events, now)...)
+	events = append(events, fillRecentWindow(random, session, profiles, credentials, fingerprints, keys, events, now)...)
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return 0, 0, 0, fmt.Errorf("seed request history: %w", err)
@@ -374,7 +377,7 @@ const recentWindowFloor = 4
 //
 // It reads what was already generated rather than guessing, so a boot during a busy hour
 // adds nothing: the guarantee is a floor, not a fixed shape.
-func fillRecentWindow(random *deterministic, profiles []modelProfile, credentials map[string]string, fingerprints []string, keys []gatewayKey, events []usage.Event, now time.Time) []usage.Event {
+func fillRecentWindow(random *deterministic, session workSession, profiles []modelProfile, credentials map[string]string, fingerprints []string, keys []gatewayKey, events []usage.Event, now time.Time) []usage.Event {
 	from := now.Add(-recentWindow)
 	existing := 0
 	for _, event := range events {
@@ -392,7 +395,7 @@ func fillRecentWindow(random *deterministic, profiles []modelProfile, credential
 		// a shape instead of one spike at the right edge.
 		offset := time.Duration(float64(recentWindow) * (float64(index) + random.nextFloat()) / float64(missing))
 		at := now.Add(-offset)
-		profile := pickProfile(random, profiles)
+		profile := session.pickProfile(random, profiles)
 		keyIndex := pickWeighted(random, keyWeights(keys))
 		event := buildEventAt(random, profile, credentials, at)
 		event.APIGroupKey = fingerprints[keyIndex]
@@ -489,10 +492,11 @@ func credentialAuthIndexes() map[string]string {
 }
 
 // trafficShape is the multiplier for one hour that is not about history: a
-// working day with a quiet night, and a lighter weekend.
+// working day with a near-silent night, and a lighter weekend. The gateway is one
+// person's, so the night carries only what an unattended job sends.
 func trafficShape(hour time.Time) float64 {
 	local := hour.UTC()
-	diurnal := 0.18 + 0.82*peakWeight(local.Hour())
+	diurnal := 0.04 + 0.96*peakWeight(local.Hour())
 	switch local.Weekday() {
 	case time.Saturday, time.Sunday:
 		diurnal *= 0.45
@@ -504,7 +508,7 @@ func trafficShape(hour time.Time) float64 {
 // working day peaks in the late afternoon UTC, which is where a Europe-based
 // operator's traffic actually peaks.
 func peakWeight(hourOfDay int) float64 {
-	weight := 0.35
+	weight := 0.08
 	switch {
 	case hourOfDay >= 7 && hourOfDay < 12:
 		weight = 0.75 + float64(hourOfDay-7)*0.06
@@ -618,6 +622,101 @@ func min64(left, right int64) int64 {
 		return left
 	}
 	return right
+}
+
+// workSession is the sitting of work an hour belongs to.
+//
+// The gateway is one person's, and a person works on one model at a time: an agent
+// run or an editing session sends almost everything to the model it was started
+// with. Drawing every request from the catalogue independently gave each model the
+// same spikes at the same instants, so the per-model trend read as a tangle of
+// identical lines rather than as one model busy while the others sit low.
+type workSession struct {
+	focus     modelProfile
+	hoursLeft int
+}
+
+// focusShare is the part of a session's requests its own model carries. The rest is
+// the background a personal gateway always has - an editor's completion model, a
+// script on another key - drawn from the whole catalogue, which is also what keeps
+// every configured model in the history.
+const focusShare = 0.85
+
+// advance moves the session on by one hour, starting a new one when the current
+// sitting has run out.
+func (s workSession) advance(random *deterministic, profiles []modelProfile, hour, now time.Time) workSession {
+	if s.hoursLeft > 0 {
+		s.hoursLeft--
+		return s
+	}
+	// One to four hours: long enough that a session reads as a block on the hourly
+	// trend, short enough that a working day holds more than one of them.
+	length := 1 + int(random.nextUint64()%4)
+	return workSession{focus: pickFocus(random, profiles, hour, now), hoursLeft: length - 1}
+}
+
+// pickProfile chooses the model one request of the session went to.
+func (s workSession) pickProfile(random *deterministic, profiles []modelProfile) modelProfile {
+	if s.focus.name != "" && random.nextFloat() < focusShare {
+		return s.focus
+	}
+	return pickProfile(random, profiles)
+}
+
+// focusChoice is one model a period of the history worked on, and how often.
+type focusChoice struct {
+	model  string
+	weight int
+}
+
+// focusEra is the set of models sessions were started with up to a given age.
+type focusEra struct {
+	untilDaysAgo float64
+	choices      []focusChoice
+}
+
+// focusEras is what the operator worked with, newest first. A person's main model
+// changes every few months rather than every hour, so the year-long views show one
+// model handing over to the next instead of the same mix throughout. Each era keeps
+// a dominant model and a heavier one reached for on hard problems.
+func focusEras() []focusEra {
+	return []focusEra{
+		{untilDaysAgo: 45, choices: []focusChoice{
+			{"glm-5.3-flash", 55}, {"claude-opus-5.5", 22}, {"gpt-5.6-luna", 15}, {"deepseek-v4-flash", 8},
+		}},
+		{untilDaysAgo: 160, choices: []focusChoice{
+			{"gpt-5.6-luna", 50}, {"claude-sonnet-5", 25}, {"glm-5.3-flash", 15}, {"kimi-k3", 10},
+		}},
+		{untilDaysAgo: math.MaxFloat64, choices: []focusChoice{
+			{"claude-sonnet-5", 45}, {"gpt-5.6-luna", 30}, {"deepseek-v4-flash", 15}, {"gemini-3.7-flash", 10},
+		}},
+	}
+}
+
+// pickFocus chooses the model a session starting at this hour works on.
+func pickFocus(random *deterministic, profiles []modelProfile, hour, now time.Time) modelProfile {
+	daysAgo := now.Sub(hour).Hours() / 24
+	eras := focusEras()
+	era := eras[len(eras)-1]
+	for _, candidate := range eras {
+		if daysAgo < candidate.untilDaysAgo {
+			era = candidate
+			break
+		}
+	}
+	weights := make([]int, 0, len(era.choices))
+	for _, choice := range era.choices {
+		weights = append(weights, choice.weight)
+	}
+	name := era.choices[pickWeighted(random, weights)].model
+	for _, profile := range profiles {
+		if profile.name == name {
+			return profile
+		}
+	}
+	// An era naming a model the catalogue dropped falls back to the ordinary draw
+	// rather than to an empty profile; the test on the eras keeps this unreached.
+	return pickProfile(random, profiles)
 }
 
 // pickProfile chooses a model in proportion to its configured traffic share.

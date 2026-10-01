@@ -826,3 +826,54 @@ func TestDrawRequestCountKeepsItsMean(t *testing.T) {
 		}
 	}
 }
+
+// An era naming a model the catalogue does not carry would quietly fall back to the
+// catalogue draw, and the history would lose the focus it exists to give.
+func TestFocusErasNameCatalogueModels(t *testing.T) {
+	known := make(map[string]bool)
+	for _, profile := range modelCatalog() {
+		known[profile.name] = true
+	}
+	for _, era := range focusEras() {
+		for _, choice := range era.choices {
+			if !known[choice.model] {
+				t.Errorf("focus era ending %v days ago names %q, which the catalogue does not serve", era.untilDaysAgo, choice.model)
+			}
+		}
+	}
+}
+
+// One person's gateway runs on one model at a time, so a day's traffic is led by a
+// model or two rather than spread evenly across the catalogue: the per-model trend
+// should read as one busy line, not as a tangle of equal ones.
+func TestSeedConcentratesADayOnFewModels(t *testing.T) {
+	ctx := context.Background()
+	repo, now, _ := seededDatabase(t)
+	rows, err := repo.SQL().QueryContext(ctx, `
+		SELECT model, SUM(total_tokens) FROM usage_events
+		WHERE timestamp_ms >= ? GROUP BY model ORDER BY 2 DESC`, now.Add(-24*time.Hour).UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var shares []int64
+	var total int64
+	for rows.Next() {
+		var model string
+		var tokens int64
+		if err := rows.Scan(&model, &tokens); err != nil {
+			t.Fatal(err)
+		}
+		shares = append(shares, tokens)
+		total += tokens
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(shares) < 2 || total == 0 {
+		t.Fatalf("the last day carries %d models, want a leader and a background", len(shares))
+	}
+	if leading := float64(shares[0]+shares[1]) / float64(total); leading < 0.6 {
+		t.Errorf("the two busiest models carry %.0f%% of the last day's tokens, want most of it", leading*100)
+	}
+}
