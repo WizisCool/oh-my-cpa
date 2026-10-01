@@ -92,6 +92,7 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'scroll-smoothing',
       'overlay-back',
       'pricing-request-list',
     ],
@@ -311,7 +312,7 @@ const SCENARIO_PATHS = [
   // dashboard's model panels and the OMC page move together.
   {
     prefix: 'web/src/pages/OmcSettingsPage',
-    scenarios: ['omc-settings'],
+    scenarios: ['omc-settings', 'scroll-smoothing'],
   },
   {
     prefix: 'web/src/types/tokenDisplay',
@@ -337,7 +338,17 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/hooks/usePreference',
-    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions'],
+    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing'],
+  },
+  // The console-wide wheel and keyboard glide. It intercepts every wheel and scrolling key, so the
+  // scenarios that drive the wheel or the keyboard on a scroller are reached as well as its own.
+  {
+    prefix: 'web/src/utils/scrollSmoothing',
+    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap'],
+  },
+  {
+    prefix: 'web/src/hooks/useScrollSmoothing',
+    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap'],
   },
 ];
 

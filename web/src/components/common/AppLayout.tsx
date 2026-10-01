@@ -336,7 +336,7 @@ export const AppLayout: React.FC = () => {
             isLoggingOut={logoutMutation.isPending}
           />
         </header>
-        <Content className="app-content" ref={contentRef}>
+        <Content className="app-content" ref={contentRef} data-scroll-root>
           {/* App-wide in-flight indicator, so no page needs its own spinner swap. */}
           <DataProgress />
           {/* Keyed by pathname so each view cross-fades in instead of hard

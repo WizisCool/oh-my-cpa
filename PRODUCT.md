@@ -93,7 +93,7 @@ web
 - Complete keyboard navigation with high-visibility `:focus-visible` outlines;
 - Strict compliance with WCAG AA (≥ 4.5:1) color contrast; continuous states (such as Cache Rate) are computed in OKLCH color space to guarantee text contrast;
 - Colorblind-safe status indication: All statuses are communicated through paired "status pip + text", never color alone;
-- Full support for `prefers-reduced-motion`, automatically freezing dynamic progress bars, disabling transform animations, and dropping the chart marks' morph — the canvas library reads no such preference, so the switch is the console's own.
+- Full support for `prefers-reduced-motion`, automatically freezing dynamic progress bars, disabling transform animations, and dropping the chart marks' morph — the canvas library reads no such preference, so the switch is the console's own. Wheel and keyboard scrolls glide on every platform (Windows notched wheels and the virtualized request list included) and stay on under reduced motion by default as input rather than decoration; the Smooth scrolling setting can follow the system or turn it off (ADR 0046).
 - Touch accessibility on a coarse pointer: nothing is reachable only by hovering, every control a finger must hit is about 40px after its hit area without the drawn size changing, and every focusable text control is at least 16px so iOS Safari does not zoom the page on focus. Pinch-zoom is never disabled;
 - Every icon-only control carries an accessible name rather than only a tooltip.
 

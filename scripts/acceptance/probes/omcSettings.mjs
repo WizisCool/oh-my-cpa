@@ -111,19 +111,20 @@ export async function omcSettings({ base, page, check, context }) {
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
   //
-  // Six rows include the deployment timezone, token style, language and appearance: the mode
-  // is the setting an operator changes often, and the two palettes are the considered choices behind
-  // it. A single "theme" row could only be one of those.
+  // Seven rows include the deployment timezone, token style, language, scroll smoothing and
+  // appearance: the mode is the setting an operator changes often, and the two palettes are the
+  // considered choices behind it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 6
+    labels.length === 7
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
       && labels.some((label) => /Theme mode|主题模式/.test(label))
       && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
       && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))
-      && labels.some((label) => /Language|界面语言/.test(label)),
+      && labels.some((label) => /Language|界面语言/.test(label))
+      && labels.some((label) => /Smooth scrolling|平滑滚动/.test(label)),
     `labels=${labels.join(' | ')}`,
   );
   // The chart grouping belongs to the panels that plot it, not here: a second control on a settings

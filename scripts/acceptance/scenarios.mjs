@@ -55,6 +55,7 @@ import { phoneListRendering } from './probes/phoneLists.mjs';
 import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } from './probes/pluginManagement.mjs';
 import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/pricingBook.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
+import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
@@ -646,6 +647,25 @@ export const SCENARIOS = [
       ],
     },
     run: requestListInteractions,
+  },
+  {
+    id: 'scroll-smoothing',
+    name: 'a wheel notch glides on an ordinary scroller and on the virtualized request list, as the preference says',
+    options: {
+      viewport: { width: 1280, height: 560 },
+      routes: [
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [
+          (url) => url.pathname.includes('/usage/events'),
+          () => ({ items: interactionRecords, has_more: false, limit: 100 }),
+        ],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+      ],
+    },
+    run: scrollSmoothing,
   },
   {
     id: 'plugin-management',

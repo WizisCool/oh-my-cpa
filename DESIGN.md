@@ -153,7 +153,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 - **Terminal-Flat Structure**: Zero drop shadows (`box-shadow: none`), no rounded bubble aesthetics, crisp 1px borders.
 - **Monospace Everywhere**: Sarasa Mono SC, Berkeley Mono, and IBM Plex Mono stacks across labels, titles, inputs, and tabular numbers.
 - **Quiet Chrome, Loud Data**: Dark charcoal scaffolding ensures that green, amber, red, and blue badges instantly telegraph system health.
-- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them; hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
+- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them, and a JavaScript-only 160ms `scroll` token for wheel notches and scrolling keys gliding to where they would have jumped; hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
 
 ## Colors
 
@@ -265,6 +265,8 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 
 ### Named Rules
 **The Finger Is Not a Cursor Rule.** A control that a finger must reach is drawn where a finger can reach it: never revealed only by a hover, never smaller than 16px of text if it can take focus, and at least ~40px after its hit area if it is small in *both* dimensions. A control that is wide — a labelled button, or any of the console's 32px-tall buttons — is aimable even when it is short, so it keeps its box: requiring 40px of height from every button would assert a change the design system deliberately does not make. Nothing is enlarged unless it cannot be rescued by a hit area — the drawn size is the density and is not the knob. The rule's selector list is a maintenance surface: it must name the console's own dense controls as well as antd's icon-only variant, and a browser probe asserts the slop rather than trusting the list.
+
+**The Glide Rule.** A wheel notch or a scrolling key glides over the `scroll` token (160ms, easeOutCubic) on every platform, the virtualized request list included; trackpads, Apple-platform pixel wheels and touch already glide and are never intercepted. The glide is input following the reader's hand, so it stays on under `prefers-reduced-motion` by default; the **Smooth scrolling** setting (`On` / `Follow system` / `Off`) hands it to the system or turns it off. See `docs/design.md` §7 and ADR 0046.
 
 **The Independent Column Rule.** The sider and the main content area scroll independently with `overscroll-behavior: contain`. Wheel events only affect the container currently beneath the cursor; the page never scrolls globally.
 

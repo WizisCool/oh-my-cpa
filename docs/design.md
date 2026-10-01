@@ -1262,6 +1262,7 @@ fast    50ms    antd motionDurationFast
 base    100ms   antd motionDurationMid and Slow: drawers, modals, route and data transitions
 roll    240ms   the dashboard's KPI readouts and the marks drawn from them (rules 8 and 5)
 float   60ms    popovers and dropdowns — the click already said "open"
+scroll  160ms   a wheel notch or scrolling key gliding to where it would have jumped (easeOutCubic)
 ease    cubic-bezier(0.2, 0, 0, 1)
 ```
 
@@ -1270,7 +1271,8 @@ ease    cubic-bezier(0.2, 0, 0, 1)
 and animation the console owns;
 `scripts/test-theme-presets.ts` parses both and asserts they equal the Ant Design tokens above, so the
 two spellings of one budget cannot drift apart again. `roll` is the only token with an exception
-attached, and it is scoped to the dashboard by rules 5 and 8.
+attached, and it is scoped to the dashboard by rules 5 and 8. `scroll` is a JavaScript-only token
+(`MOTION_SCROLL` in `themeConfig.ts`) for the input glide below; no stylesheet animates a scroll.
 
 ### The budget is enforced, not documented
 
@@ -1438,6 +1440,36 @@ holds the collapse state until it arrives (bounded by a deadline, in case the
 reader interrupts it and it never does). Without that, the early frames — which
 still carry a large `scrollTop` — would re-collapse the header on the first frame
 of the very gesture that was expanding it.
+
+### Wheel and keys glide; a finger is never smoothed
+
+A notched mouse wheel delivers a scroll as 100px jumps, and whether the browser animates them is the
+operating system's call — Windows readers who switch "Animation effects" off get steps, and the
+virtualized request list stepped on every Windows desk because it applies wheel deltas itself. A
+trackpad, a phone and macOS deliver a stream that already glides. So the console smooths the *step*
+and leaves the *stream* alone (`web/src/utils/scrollSmoothing.ts`, ADR 0046):
+
+| Input | Behaviour |
+| --- | --- |
+| Wheel notch (line/page mode, or a pixel-mode notch off Apple platforms) | Glides over `scroll` to exactly where it would have jumped |
+| Arrow keys, Page Up/Down, Space, Home, End outside an editable control or widget | Glide over `scroll` |
+| Trackpad, Apple-platform pixel wheels, touch | Native, never intercepted |
+| Ctrl/⌘, Shift or Alt wheel; horizontal wheel | Native (zoom, sideways scroll) |
+| Programmatic scroll (a correction, `scrollIntoView`) | Native; it also stops any glide on that scroller |
+
+Each notch retargets the glide from where it is, so a turning wheel accelerates rather than queueing;
+the glide follows the nearest scroller under the pointer that can still move, and stops chaining at a
+scroller that contains its overscroll, as the native scroll does. A virtualized list is moved through
+its own wheel handling, one step per frame, because it owns its offset. A component that turns a
+notch into something else — the request list collapsing its header on the first notch — says so with
+`consumeWheel`, since `preventDefault` from a React handler is ignored.
+
+The glide is on by default and is **not** switched off by `prefers-reduced-motion`: it is the
+reader's own input following their hand, as inertial scrolling stays on under Reduce Motion on
+macOS and iOS, and on Windows the reduced-motion signal is the same switch that removed the
+browser's glide. The OMC settings page's **Smooth scrolling** row (`On` / `Follow system` / `Off`,
+the `omc_scroll_smoothing` preference) hands the decision to that signal or turns the glide off.
+The return-to-top gesture above is page-initiated travel and keeps honouring reduced motion.
 
 ### Nothing expensive rides along with the scroll
 

@@ -25,6 +25,8 @@ import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
+import { useScrollSmoothingPreference } from '../hooks/useScrollSmoothing';
+import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '../utils/scrollSmoothing';
 
 
 const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
@@ -89,6 +91,12 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
  * surface is the config panel's, with its different save semantics. The two pages coexist in the
  * sidebar under "Control".
  */
+const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, string> = {
+  on: 'omc.scroll_smoothing_on',
+  system: 'omc.theme_mode_system',
+  off: 'omc.scroll_smoothing_off',
+};
+
 export const OmcSettingsPage: React.FC = () => {
   const t = useT();
   const timezone = useTimeZoneSetting();
@@ -99,6 +107,7 @@ export const OmcSettingsPage: React.FC = () => {
   // and the items do not wrap, so later options paint past the card's edge. Below the console's
   // narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
   const isNarrow = useIsNarrowViewport();
+  const scrollSmoothing = useScrollSmoothingPreference();
 
   // The Chinese scale is words - 万, 亿 - so it is offered only to a Chinese
   // console. The option stays visible and disabled rather than hidden: an
@@ -197,6 +206,20 @@ export const OmcSettingsPage: React.FC = () => {
               // their own here. The endonym is also what keeps this row inside its card on a
               // phone - a translated "Simplified Chinese" measured wider than the track the
               // narrow-layout rule hands this picker.
+            />
+          }
+        />
+        <SettingRow
+          label={t('omc.scroll_smoothing')}
+          description={t('omc.scroll_smoothing_desc')}
+          control={
+            <Segmented
+              value={scrollSmoothing.value}
+              options={SCROLL_SMOOTHING_PREFERENCES.map((value) => ({ value, label: t(SCROLL_SMOOTHING_LABEL_KEYS[value]) }))}
+              onChange={(next) => { void scrollSmoothing.set(next as ScrollSmoothingPreference); }}
+              aria-label={t('omc.scroll_smoothing')}
+              vertical={isNarrow}
+              block={isNarrow}
             />
           }
         />

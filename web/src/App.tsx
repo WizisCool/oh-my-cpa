@@ -40,6 +40,7 @@ const OmcSettingsPage = React.lazy(() => import('./pages/OmcSettingsPage').then(
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
+import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,6 +85,12 @@ export const App: React.FC = () => (
  */
 const TOAST_CONFIG = { placement: 'top', stack: false } as const;
 
+/** Renders nothing; it only switches the console-wide wheel and keyboard glide (`useScrollSmoothing`). */
+const ScrollSmoothingSync: React.FC = () => {
+  useScrollSmoothing();
+  return null;
+};
+
 const ThemedShell: React.FC = () => {
   const { lang } = useI18n();
   const { theme } = useTheme();
@@ -92,6 +99,7 @@ const ThemedShell: React.FC = () => {
     <ConfigProvider locale={ANTD_LOCALES[lang]} theme={antdTheme}>
       <AntdApp notification={TOAST_CONFIG}>
         <ThemeServerSync />
+        <ScrollSmoothingSync />
         <DemoNotice />
         <TokenDisplayProvider>
           <AppRoutes />

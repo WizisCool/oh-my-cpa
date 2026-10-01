@@ -358,8 +358,16 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   session. The keys in use are the dashboard window, the log page's filters,
   the provider icon, display-name and website overrides, the usage-event view
   and column layout, and the console's own display settings — the token unit
-  style (`omc_token_style`) and the model panels' grouping view
-  (`omc_models_view`).
+  style (`omc_token_style`), the model panels' grouping view
+  (`omc_models_view`), the theme (`omc_theme`) and scroll smoothing
+  (`omc_scroll_smoothing`).
+- **Scroll Smoothing**: Whether a wheel notch or a scrolling key glides to its
+  destination instead of jumping — `on` (default), `system` (glide unless the
+  system reports reduced motion) or `off`, stored as `omc_scroll_smoothing`.
+  It smooths only discrete input; trackpads and touch are never intercepted.
+  It is the one motion that does not follow `prefers-reduced-motion` by
+  default, because it is the reader's own input and on Windows that signal is
+  the switch that removes the browser's glide (ADR 0046).
 - **Token Unit Style**: How the console abbreviates token counts — `en-compact`
   (300K, 300M, 1.2B), `zh` (30万, 300万, 12亿) or `full` (300,000,000) — stored as
   the `omc_token_style` preference and applied by one shared frontend layer

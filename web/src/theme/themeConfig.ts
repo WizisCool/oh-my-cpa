@@ -66,6 +66,18 @@ export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0
  */
 export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
+/**
+ * docs/design.md §7's `scroll` token: one wheel notch or scrolling key gliding to where it would have
+ * jumped (`web/src/utils/scrollSmoothing.ts`).
+ *
+ * Long enough that a 100px notch reads as travel rather than a cut, short enough that a turning
+ * wheel never trails the hand: each notch retargets the glide, so the token bounds the lag behind the
+ * last notch, not the length of a scroll. The easing is easeOutCubic, spelled here as its CSS curve,
+ * rather than the console's `ease`: that curve starts at rest, and a glide restarted at every notch
+ * would stall at each one.
+ */
+export const MOTION_SCROLL: MotionToken = { duration: 160, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' };
+
 export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'palette'>): ThemeConfig {
   const dark = resolved.mode === 'dark';
   const t = resolved.palette;

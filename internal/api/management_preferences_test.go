@@ -92,6 +92,11 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("theme status = %d body %s", response.StatusCode, payload)
 	}
 
+	// Scroll smoothing is one of three words; the console parses it and falls back to its default.
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/omc_scroll_smoothing", `"system"`); response.StatusCode != http.StatusOK {
+		t.Fatalf("scroll smoothing status = %d body %s", response.StatusCode, payload)
+	}
+
 	_, payload = getJSON(t, client, base)
 	if !strings.Contains(string(payload), `"dashboard_range":{"preset":"6h"}`) ||
 		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) ||
@@ -101,6 +106,7 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		!strings.Contains(string(payload), `"oauth_management_view_v1":{"density":"compact","pageSize":24}`) ||
 		!strings.Contains(string(payload), `"playground_session":{"client_key_fingerprint":"hmac:playground","model":"gpt-5","turns":[]}`) ||
 		!strings.Contains(string(payload), `"agent_target":{"client_key_fingerprint":"hmac:agent","model":"gpt-5","reasoning_effort":"high"}`) ||
+		!strings.Contains(string(payload), `"omc_scroll_smoothing":"system"`) ||
 		!strings.Contains(string(payload), `"omc_theme":`+themeDocument) {
 		t.Fatalf("stored values did not come back verbatim: %s", payload)
 	}

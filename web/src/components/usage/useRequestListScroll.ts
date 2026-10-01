@@ -3,6 +3,7 @@ import React from 'react';
 import type { ListyRef } from 'antd';
 
 import type { UsageEvent } from '../../types/usageEvents';
+import { consumeWheel } from '../../utils/scrollSmoothing';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../../utils/smoothScroll';
 import { pendingArrivalCount } from './pollingPolicy';
 
@@ -178,8 +179,12 @@ export function useRequestListScroll({
 
       if (!isCollapsed && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
         // First wheel down from top: enter full-screen mode, but freeze scroll at top
-        // so row 1 stays visible in full screen mode!
-        justCollapsedFromTopRef.current = true;
+        // so row 1 stays visible in full screen mode. The notch became the collapse, so the
+        // console-wide glide must not scroll for it; when the glide had taken the notch over, the
+        // list never moved and there is no jump to pin back, and pinning anyway would swallow the
+        // reader's next notch.
+        const wasClaimed = consumeWheel(e.nativeEvent);
+        justCollapsedFromTopRef.current = !wasClaimed;
         setIsCollapsed(true);
         listRef.current?.scrollTo({ top: 0 });
         if (e.cancelable) {
