@@ -409,10 +409,11 @@
   outline-offset: 1px;
 }
 
+/* The thicker border takes its pixel from the padding, so selecting a preset never shifts the row. */
 .tier-preset-active {
+  padding: 0 7px;
   color: var(--fg);
-  border-color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--fg);
+  border: 2px solid var(--fg);
 }
 
 .tier-note {

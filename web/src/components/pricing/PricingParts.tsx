@@ -478,7 +478,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
                     value={draft.minPromptTokens}
                     onChange={(event) => update(draft.key, { minPromptTokens: event.target.value })}
                     placeholder="200K"
-                    suffix="tokens"
+                    suffix={t('pricing.editor.tokens_suffix')}
                     status={threshold !== undefined && Number.isNaN(threshold) ? 'error' : undefined}
                     data-testid="pricing-tier-threshold"
                   />

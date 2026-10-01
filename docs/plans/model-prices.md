@@ -231,7 +231,8 @@ under the model name with "Switch to Auto" (automatic, which keeps the model's
 multiplier) or "Adopt" (a link to the suggestion) and "Ignore", and a "New
 matches" filter counts them; the editor shows the same notice and takes the
 match up into its draft. The agent capability `pricing_list` returns them in
-`candidates`.
+`candidates`, empty when the lookup fails, so the list and the previews that
+read it never fail on an advisory field.
 
 ## Mode changes
 

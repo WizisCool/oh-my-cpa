@@ -197,6 +197,17 @@ check('the price ladder reads from the base up, with inherited rates marked', ()
   assert.equal(priceSchedule(BASE, [{ utc_start: 0, utc_end: 800 }])[0].upTo, null, 'a window alone sets no upper bound');
 });
 
+check('a context tier limited to a window follows the always-on ladder', () => {
+  const rows = priceSchedule(BASE, [
+    { min_prompt_tokens: 500_000, prompt_price_per_1m: 9 },
+    { utc_start: 1600, utc_end: 0, prompt_price_per_1m: 1.5 },
+    { min_prompt_tokens: 128_000, utc_start: 0, utc_end: 800, prompt_price_per_1m: 4 },
+    { min_prompt_tokens: 200_000, prompt_price_per_1m: 6 },
+  ]);
+  assert.deepEqual(rows.map((row) => row.tierIndex), [-1, 3, 0, 2, 1]);
+  assert.equal(rows[0].upTo, 200_000, 'the windowed tier does not cut the base short');
+});
+
 check('the mode falls back from the source when a row carries none', () => {
   assert.equal(modeOf({ source: 'manual', match_kind: '' }), 'custom');
   assert.equal(modeOf({ source: 'openrouter', match_kind: 'linked' }), 'linked');

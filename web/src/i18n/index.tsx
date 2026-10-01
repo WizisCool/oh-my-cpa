@@ -2616,6 +2616,8 @@ const DICT: Record<string, [string, string]> = {
   'pricing.candidate.dismiss': ['忽略', 'Ignore'],
   'pricing.candidate.followed': ['{model} 已改为自动匹配 {id}', '{model} now follows {id} automatically'],
   'pricing.candidate.dismissed': ['已忽略 {model} 的新匹配', 'Ignored the new match for {model}'],
+  'pricing.editor.tokens_suffix': ['Token', 'tokens'],
+  'pricing.candidate.dismiss_failed': ['忽略失败：{msg}', 'Ignore failed: {msg}'],
   'pricing.sync.title': ['价格同步', 'Price sync'],
   'pricing.sync.source_name': ['OpenRouter', 'OpenRouter'],
   'pricing.sync.source': ['价格来源', 'Price source'],

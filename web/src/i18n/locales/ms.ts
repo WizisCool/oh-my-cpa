@@ -2118,6 +2118,8 @@ export const MS: Readonly<Record<string, string>> = {
   "pricing.candidate.dismiss": "Abaikan",
   "pricing.candidate.followed": "{model} kini mengikut {id} secara automatik",
   "pricing.candidate.dismissed": "Padanan baharu untuk {model} diabaikan",
+  "pricing.editor.tokens_suffix": "token",
+  "pricing.candidate.dismiss_failed": "Gagal mengabaikan: {msg}",
   "pricing.sync.title": "Penyegerakan harga",
   "pricing.sync.source_name": "OpenRouter",
   "pricing.sync.source": "Sumber harga",

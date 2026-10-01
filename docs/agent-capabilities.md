@@ -274,7 +274,7 @@ the console itself, and rotate the key if that trust changes.
 
 `pricing_list` includes `providers` for the models in its bounded current page. Each membership carries the configured provider id, family, snapshot name, channel, priority, OAuth marker, a hostname-only endpoint hint and exact model identities. This read uses the stored complete CPA catalog and never retrieves credential secrets. Provider-specific presentation does not create separate prices: `pricing_set` still edits the global model identity, with its existing revision and confirmation policy.
 
-`pricing_list` also returns `candidates`, keyed by model, for the custom and linked prices on its page that OpenRouter now offers a price for and the operator has not answered: `kind` `automatic` (auto mode would match it) or `suggested` (a resemblance), with the OpenRouter model and its rates. An agent acts on one through `pricing_set` (mode `auto`, or `linked` to the candidate's id), which records the answer like a console save; ignoring a candidate is left to the console, because it only silences a prompt and changes no price.
+`pricing_list` also returns `candidates`, keyed by model, for the custom and linked prices on its page that OpenRouter now offers a price for and the operator has not answered: `kind` `automatic` (auto mode would match it) or `suggested` (a resemblance), with the OpenRouter model and its rates; a failed lookup leaves it empty rather than failing the list. An agent acts on one through `pricing_set` (mode `auto`, or `linked` to the candidate's id), which records the answer like a console save; ignoring a candidate is left to the console, because it only silences a prompt and changes no price.
 
 ### Timezone capabilities
 

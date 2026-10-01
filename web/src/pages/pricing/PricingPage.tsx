@@ -209,7 +209,7 @@ export const PricingPage: React.FC = () => {
       else toast.success(t(candidate.kind === 'automatic' ? 'pricing.candidate.followed' : 'pricing.adopted', { model: row.model, id: candidate.model.id }));
       invalidateModel(row.model);
     },
-    onError: (err) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
+    onError: (err, { action }) => toast.error(t(action === 'dismiss' ? 'pricing.candidate.dismiss_failed' : 'pricing.save_failed', { msg: pricingErrorText(t, err) })),
   });
 
   const rows = React.useMemo<BookRow[]>(() => {

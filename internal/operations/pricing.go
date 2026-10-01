@@ -64,9 +64,11 @@ func (s *Service) ListPrices(ctx context.Context, input PriceQuery) (PricePage, 
 		output.Items = filtered[input.Offset:end]
 		output.HasMore = end < len(filtered)
 	}
+	// Candidates are advisory: a failed lookup must not fail the price list, or
+	// the pricing_set and pricing_delete previews that read it.
 	output.Candidates, err = s.Pricing.Candidates(ctx, output.Items)
-	if err != nil {
-		return PricePage{}, err
+	if err != nil || output.Candidates == nil {
+		output.Candidates = map[string]pricing.Candidate{}
 	}
 	output.Providers = []pricing.CatalogProvider{}
 	if s.Repo != nil {

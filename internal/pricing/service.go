@@ -832,7 +832,8 @@ func (s *Service) acknowledgeCandidate(ctx context.Context, model, target, mode,
 // Candidates lists, for every custom or linked price in the current catalog,
 // an OpenRouter model it could follow that its operator has not seen yet - such
 // as a model OpenRouter started listing after a custom price was set. Read
-// from the stored snapshot only.
+// from the stored snapshot only. Candidates are advisory: callers degrade to
+// none on an error instead of failing the read they decorate.
 func (s *Service) Candidates(ctx context.Context, prices []ModelPrice) (map[string]Candidate, error) {
 	if s == nil || s.store == nil {
 		return nil, errors.New("pricing service is not initialized")

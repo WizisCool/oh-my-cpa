@@ -2118,6 +2118,8 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "pricing.candidate.dismiss": "忽略",
   "pricing.candidate.followed": "{model} 已改為自動匹配 {id}",
   "pricing.candidate.dismissed": "已忽略 {model} 的新匹配",
+  "pricing.editor.tokens_suffix": "Token",
+  "pricing.candidate.dismiss_failed": "忽略失敗：{msg}",
   "pricing.sync.title": "價格同步",
   "pricing.sync.source_name": "OpenRouter",
   "pricing.sync.source": "價格來源",

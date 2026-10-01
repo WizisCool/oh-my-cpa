@@ -470,13 +470,15 @@ export function priceSchedule(price: RateFields, tiers: readonly PriceTier[] | n
     inherited: new Set(),
     upTo: thresholds.length > 0 ? Math.min(...thresholds) : null,
   }];
-  const order = list.map((tier, index) => ({ tier, index })).sort((left, right) => {
-    const leftThreshold = left.tier.min_prompt_tokens ?? 0;
-    const rightThreshold = right.tier.min_prompt_tokens ?? 0;
-    const leftContext = leftThreshold > 0 ? 0 : 1;
-    const rightContext = rightThreshold > 0 ? 0 : 1;
-    return leftContext - rightContext || leftThreshold - rightThreshold || left.index - right.index;
-  });
+  // Always-on context tiers form the ladder the base row's `upTo` leads into; a context tier
+  // limited to a window only covers its band part of the day, so it follows them with the
+  // plain time windows instead of sitting between two always-on steps.
+  const group = (tier: PriceTier) => ((tier.min_prompt_tokens ?? 0) > 0 ? (hasTimeWindow(tier) ? 1 : 0) : 2);
+  const order = list.map((tier, index) => ({ tier, index })).sort((left, right) => (
+    group(left.tier) - group(right.tier)
+    || (left.tier.min_prompt_tokens ?? 0) - (right.tier.min_prompt_tokens ?? 0)
+    || left.index - right.index
+  ));
   for (const { tier, index } of order) {
     rows.push({
       tierIndex: index,

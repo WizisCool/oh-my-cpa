@@ -224,7 +224,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
       toast.info(t('pricing.candidate.dismissed', { model }));
       invalidate();
     },
-    onError: (error) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
+    onError: (error) => toast.error(t('pricing.candidate.dismiss_failed', { msg: pricingErrorText(t, error) })),
   });
   // The candidate only stays on screen while the draft has not taken it up yet; once the operator
   // switched to it, the mode's own summary shows the same model and the save answers it.
