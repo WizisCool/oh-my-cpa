@@ -268,11 +268,11 @@ export function useRequestListScroll({
     if (!page) return undefined;
     const touch = installRequestListTouch({
       page,
-      findHolder: (target) => {
-        const host = target instanceof Element ? target.closest('.request-list-host') : null;
-        const inner = host?.querySelector('[class*="-holder-inner"]');
+      findHolder: () => {
+        const inner = page.querySelector('.request-list-host [class*="-holder-inner"]');
         return inner?.parentElement?.parentElement ?? null;
       },
+      isInList: (target) => target instanceof Element && target.closest('.request-list-host') !== null,
       // Synchronously, so the rows under the finger are drawn on the frame the finger moved.
       scrollListTo: (top) => flushSync(() => listRef.current?.scrollTo({ top })),
       isCollapsed: () => isCollapsedRef.current,

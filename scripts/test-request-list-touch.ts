@@ -89,10 +89,16 @@ assert.ok(!isCoasting(COAST_STOP_VELOCITY / 2, 0), 'a coast slower than its stop
 
 // ---- what a drag is for ----
 
-assert.equal(dragIntent({ travelY: -5, isCollapsed: false, isOverList: true }), 'fold', 'a drag up on an unfolded header folds it, over the list');
-assert.equal(dragIntent({ travelY: -5, isCollapsed: false, isOverList: false }), 'fold', 'a drag up on an unfolded header folds it, over the filters');
-assert.equal(dragIntent({ travelY: -5, isCollapsed: true, isOverList: true }), 'drive', 'with the header folded a drag up moves the list');
-assert.equal(dragIntent({ travelY: 5, isCollapsed: false, isOverList: true }), 'drive', 'a drag down moves the list');
-assert.equal(dragIntent({ travelY: 5, isCollapsed: true, isOverList: false }), 'native', 'a drag outside the list is left to the browser');
+const list = { hasList: true };
+assert.equal(dragIntent({ travelY: -5, isCollapsed: false, isOverList: true, ...list }), 'fold', 'a drag up on an unfolded header folds it, over the list');
+assert.equal(dragIntent({ travelY: -5, isCollapsed: false, isOverList: false, ...list }), 'fold', 'a drag up on an unfolded header folds it, over the filters');
+assert.equal(dragIntent({ travelY: -5, isCollapsed: true, isOverList: true, ...list }), 'drive', 'with the header folded a drag up moves the list');
+assert.equal(dragIntent({ travelY: 5, isCollapsed: false, isOverList: true, ...list }), 'drive', 'a drag down moves the list');
+assert.equal(dragIntent({ travelY: 5, isCollapsed: true, isOverList: false, ...list }), 'native', 'a drag outside the list is left to the browser');
+// Loading or empty: a folded header there would have no list to pull it back with.
+const noList = { isOverList: false, hasList: false };
+assert.equal(dragIntent({ travelY: -5, isCollapsed: false, ...noList }), 'native', 'without a list a drag up does not fold the header');
+assert.equal(dragIntent({ travelY: 5, isCollapsed: true, ...noList }), 'pull', 'without a list a folded header unfolds on a pull anywhere');
+assert.equal(dragIntent({ travelY: -5, isCollapsed: true, ...noList }), 'native', 'without a list a drag up on a folded header is left to the browser');
 
 console.log('request list touch: ok');

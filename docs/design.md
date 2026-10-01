@@ -1605,12 +1605,15 @@ move, and that coast kept firing while the finger was still down. The console mo
 - **A flick coasts** at the speed the finger left with, slowing at iOS's normal rate, and a finger
   that rested before lifting does not coast.
 - **A tap on a coasting list only stops it**, as on any native scroller; it does not open the row
-  under it.
+  under it. A tap elsewhere, on the pagination or the back-to-top pill, stops the coast and still
+  acts.
 - **The header folds and unfolds with the wheel's gestures.** The first drag up folds it away and
   leaves row one in place, as the first notch does. A deliberate pull down past the top of the list
   (48px) unfolds it, as the top bounce does; arriving at the top does not. Folding is what makes room
   on a phone, where the unfolded filters take most of the screen; the pull is the only way back to
-  them that a finger has, since the back-to-top pill is not shown at the top.
+  them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
+  or found nothing has no list to pull, so a drag there never folds the header, and a header folded
+  before the list went away unfolds on a 48px pull down anywhere on the page.
 
 ### The phone's navigation is the rail, in a sheet
 

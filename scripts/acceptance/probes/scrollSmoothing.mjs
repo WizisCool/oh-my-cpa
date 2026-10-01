@@ -127,6 +127,33 @@ function describeNotch(samples) {
   };
 }
 
+/**
+ * Opens the request list, marks its virtualized holder for sampling and folds the header with the
+ * first notch, which the list claims (§7 live tail). Returns where to point the wheel and that
+ * first notch.
+ */
+async function openRequestList(page, base) {
+  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+  const hasHolder = await markScroller(page, () => {
+    const root = document.querySelector('.request-list-host') ?? document.body;
+    const holder = [...root.querySelectorAll('*')].find(
+      (node) => node.scrollHeight > node.clientHeight + 1_000 && getComputedStyle(node).overflowY === 'hidden',
+    );
+    holder?.setAttribute('data-probe-scroller', '');
+    return Boolean(holder);
+  });
+  // The wheel points at a row's provider cell, whose hints are native titles. A cell with an antd
+  // tooltip would open it as rows glide under the pointer, and the popup, a portal outside the list,
+  // would take the next notch.
+  const pointAt = async () => {
+    const box = await page.locator('.request-row').nth(2).locator('.req-col-provider').boundingBox();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const foldingNotch = describeNotch(await sampleNotch(page, await pointAt()));
+  return { hasHolder, foldingNotch, listAt: await pointAt() };
+}
+
 export async function scrollSmoothing({ base, page, check }) {
   // ---- an ordinary scroller: the content pane ----
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
@@ -209,6 +236,15 @@ export async function scrollSmoothing({ base, page, check }) {
   await page.evaluate(() => { document.querySelector('[data-probe-scroller]').scrollTop = 0; });
   notch = describeNotch(await sampleNotch(page, paneAt));
   check('Off leaves the native step', notch.intermediateFrames === 0 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+
+  // The request list's own jump, unsmoothed and sampled the same way: the frame a glide must not
+  // start later than.
+  let list = await openRequestList(page, base);
+  const ownJump = describeNotch(await sampleNotch(page, list.listAt));
+  check('Off leaves the request list its own jump', list.hasHolder && ownJump.intermediateFrames === 0 && ownJump.framesBeforeMove !== null, ownJump.detail);
+
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await row.scrollIntoViewIfNeeded();
   await row.getByText('On', { exact: true }).click();
   await until(
     () => page.evaluate(() => fetch('/omc/api/v1/preferences').then((response) => response.json()))
@@ -217,34 +253,20 @@ export async function scrollSmoothing({ base, page, check }) {
   );
 
   // ---- the virtualized request list ----
-  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
-  const hasHolder = await markScroller(page, () => {
-    const root = document.querySelector('.request-list-host') ?? document.body;
-    const holder = [...root.querySelectorAll('*')].find(
-      (node) => node.scrollHeight > node.clientHeight + 1_000 && getComputedStyle(node).overflowY === 'hidden',
-    );
-    holder?.setAttribute('data-probe-scroller', '');
-    return Boolean(holder);
-  });
-  check('the request list has a virtualized holder to drive', hasHolder);
-  const rowBox = await page.locator('.request-row').nth(2).boundingBox();
-  const listAt = { x: rowBox.x + rowBox.width / 2, y: rowBox.y + rowBox.height / 2 };
-
-  // The first notch from the top collapses the header instead of scrolling (§7 live tail); the list
-  // claims that notch, and the glide must respect the claim rather than scroll underneath it.
-  notch = describeNotch(await sampleNotch(page, listAt));
-  check('the first notch collapses the header and leaves row one in place', notch.travelled === 0, notch.detail);
+  // The first notch from the top collapses the header instead of scrolling; the list claims that
+  // notch, and the glide must respect the claim rather than scroll underneath it.
+  list = await openRequestList(page, base);
+  check('the request list has a virtualized holder to drive', list.hasHolder);
+  check('the first notch collapses the header and leaves row one in place', list.foldingNotch.travelled === 0, list.foldingNotch.detail);
   check('the first notch collapsed the header', (await page.locator('.request-collapsible-header.is-collapsed').count()) === 1);
 
-  const nextRow = await page.locator('.request-row').nth(2).boundingBox();
-  notch = describeNotch(await sampleNotch(page, { x: nextRow.x + nextRow.width / 2, y: nextRow.y + nextRow.height / 2 }));
+  notch = describeNotch(await sampleNotch(page, list.listAt));
   check('a notch over the virtualized list glides instead of jumping', notch.intermediateFrames >= 2, notch.detail);
   check('the list lands exactly one notch further', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
-  // The list applies a step on its next frame and shows it on the one after, which is when its own
-  // jump would have shown; a glide that waits for a frame of its own first is a frame of added lag.
-  check('the list starts moving as soon as its own jump would have', notch.framesBeforeMove !== null && notch.framesBeforeMove <= 2, notch.detail);
-  notch = describeNotch(await sampleNotch(page, { x: nextRow.x + nextRow.width / 2, y: nextRow.y + nextRow.height / 2 }));
+  // A glide that waits for a frame of its own before handing the list its first step is a frame of
+  // added lag on every notch.
+  check('the list starts moving as soon as its own jump would have', notch.framesBeforeMove !== null && notch.framesBeforeMove <= ownJump.framesBeforeMove, `${notch.detail} ownJump=${ownJump.framesBeforeMove}`);
+  notch = describeNotch(await sampleNotch(page, list.listAt));
   check('the next notch continues from where the first landed', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
 
   // A turning wheel: notches arrive while the list is still catching up with the glide. The list

@@ -35,12 +35,15 @@ On a phone the request list scrolled badly in three separate ways, all measured 
    the finger moved.
 3. **A release coasts at the speed the finger left with**, measured over the last 100ms and decaying
    at iOS's normal rate (98% of the speed kept per 10ms). A finger that rested before lifting does not
-   coast. A tap on a coasting list stops it and is not delivered as a click, as on a native scroller.
+   coast. A tap on a coasting list stops it and is not delivered as a click, as on a native scroller;
+   a tap outside the list stops the coast and is delivered.
    A wheel, a key, a page change and the return to the top all stop a coast.
 4. **The header folds and unfolds with the wheel's gestures.** A drag up on an unfolded header folds
    it and moves nothing else, wherever it starts, as the first wheel notch does. A pull down of 48px
    past the top of the list unfolds it, as the wheel's top bounce does. One gesture changes the header
-   at most once.
+   at most once. Folding needs the list on the page: a page that is loading or found nothing never
+   folds the header, and a header folded before the list went away unfolds on a 48px pull down
+   anywhere on the page.
 
 The coast is the one place the console imitates platform physics. A native scroller would avoid that,
 but it would need the list to be an ordinary overflowing element. At 100 to 500 rows a page, each a

@@ -77,19 +77,26 @@ export function isCoasting(velocity: number, elapsed: number): boolean {
 }
 
 /**
- * What a vertical drag is for, decided on its first vertical move. An unfolded header is folded by
- * a drag up wherever it starts; any other drag over the list moves the list; anything else is left
- * to the browser.
+ * What a vertical drag is for, decided on its first vertical move.
+ *
+ * While the page shows the list, an unfolded header is folded by a drag up wherever it starts, any
+ * other drag over the list moves the list, and the pull that unfolds the header is a pull past the
+ * list's top. A page that is loading or found nothing has no list to pull, so it never folds the
+ * header, and a header folded before the list went away unfolds on a pull down anywhere on the page.
+ * Anything else is left to the browser.
  */
 export function dragIntent({
   travelY,
   isCollapsed,
   isOverList,
+  hasList,
 }: {
   travelY: number;
   isCollapsed: boolean;
   isOverList: boolean;
-}): 'fold' | 'drive' | 'native' {
+  hasList: boolean;
+}): 'fold' | 'drive' | 'pull' | 'native' {
+  if (!hasList) return isCollapsed && travelY > 0 ? 'pull' : 'native';
   if (!isCollapsed && travelY < 0) return 'fold';
   return isOverList ? 'drive' : 'native';
 }
@@ -98,17 +105,21 @@ interface Gesture {
   startX: number;
   startY: number;
   /** `claimed`: the gesture has folded or unfolded the header and moves nothing else. */
-  intent: 'undecided' | 'fold' | 'drive' | 'native' | 'claimed';
+  intent: 'undecided' | 'fold' | 'drive' | 'pull' | 'native' | 'claimed';
   /** The list's holder when the finger landed on the list. */
   holder: HTMLElement | null;
+  /** Whether the page showed the list when the finger landed. */
+  hasList: boolean;
   startOffset: number;
   samples: TouchSample[];
 }
 
 export interface RequestListTouchOptions {
   page: HTMLElement;
-  /** The virtualized list's scrolling holder, when `target` is inside the list. */
-  findHolder: (target: EventTarget | null) => HTMLElement | null;
+  /** The virtualized list's scrolling holder, when the page shows the list. */
+  findHolder: () => HTMLElement | null;
+  /** Whether `target` is inside the list. */
+  isInList: (target: EventTarget | null) => boolean;
   /** Moves the list to `top` and has it on screen before returning. */
   scrollListTo: (top: number) => void;
   isCollapsed: () => boolean;
@@ -178,18 +189,21 @@ export function installRequestListTouch(options: RequestListTouchOptions): Reque
 
   const handleTouchStart = (event: TouchEvent) => {
     const wasCoasting = stopCoast();
-    shouldSwallowClick = wasCoasting;
+    const pageHolder = options.findHolder();
+    const holder = pageHolder && options.isInList(event.target) ? pageHolder : null;
+    // A tap elsewhere, on the pagination or the back-to-top pill, stops the coast and still acts.
+    shouldSwallowClick = wasCoasting && holder !== null;
     if (event.touches.length !== 1) {
       gesture = null;
       return;
     }
     const touch = event.touches[0];
-    const holder = options.findHolder(event.target);
     gesture = {
       startX: touch.clientX,
       startY: touch.clientY,
       intent: 'undecided',
       holder,
+      hasList: pageHolder !== null,
       startOffset: holder?.scrollTop ?? 0,
       samples: [{ time: event.timeStamp, y: touch.clientY }],
     };
@@ -204,7 +218,12 @@ export function installRequestListTouch(options: RequestListTouchOptions): Reque
     if (gesture.intent === 'undecided') {
       const travelX = touch.clientX - gesture.startX;
       if (Math.abs(travelY) > Math.abs(travelX)) {
-        gesture.intent = dragIntent({ travelY, isCollapsed: options.isCollapsed(), isOverList: gesture.holder !== null });
+        gesture.intent = dragIntent({
+          travelY,
+          isCollapsed: options.isCollapsed(),
+          isOverList: gesture.holder !== null,
+          hasList: gesture.hasList,
+        });
         if (gesture.intent === 'drive') {
           options.onDriveStart();
           gesture.startOffset = gesture.holder!.scrollTop;
@@ -226,6 +245,13 @@ export function installRequestListTouch(options: RequestListTouchOptions): Reque
           options.setCollapsed(true);
         }
         return;
+      case 'pull':
+        claim(event);
+        if (travelY >= UNFOLD_PULL_PX) {
+          gesture.intent = 'claimed';
+          options.setCollapsed(false);
+        }
+        return;
       case 'drive': {
         claim(event);
         const holder = gesture.holder!;
@@ -234,6 +260,8 @@ export function installRequestListTouch(options: RequestListTouchOptions): Reque
         const target = gesture.startOffset - travelY;
         if (options.isCollapsed() && -target >= UNFOLD_PULL_PX) {
           gesture.intent = 'claimed';
+          // One fast move can cross both the rest of the way to the top and the pull.
+          moveList(holder, 0);
           options.setCollapsed(false);
           return;
         }
