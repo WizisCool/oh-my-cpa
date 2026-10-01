@@ -34,12 +34,12 @@ test('every scenario has a stable id and a run function', () => {
   }
 });
 
-test('the four request-records concerns select only their own scenarios', () => {
+test('the five request-records concerns select only their own scenarios', () => {
   // This is the page whose feedback cost the most in practice, so it is the one where
   // narrowing has to actually pay off.
   assert.deepEqual(
     planFor('web/src/pages/UsageEventsPage.tsx').sort(),
-    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'search-dev-server'],
+    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'request-list-touch', 'search-dev-server'],
   );
 });
 

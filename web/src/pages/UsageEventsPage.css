@@ -234,20 +234,25 @@
 }
 
 .request-collapsible-header {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: hidden;
-  /* The advanced filters can wrap into several rows on narrow screens; keep
-     the expanded state from clipping controls before the collapse transition. */
-  max-height: 1200px;
+  /* A one-row grid folds from the header's own height, however many rows the filters wrap
+     into. A max-height has to be set above the tallest header, and the fold then spends most
+     of its duration shrinking space nobody sees before the header starts to move. */
+  display: grid;
+  grid-template-rows: 1fr;
   opacity: 1;
-  transition: max-height var(--motion-base) var(--ease-standard),
+  transition: grid-template-rows var(--motion-base) var(--ease-standard),
               opacity var(--motion-base) var(--ease-standard),
               margin var(--motion-base) var(--ease-standard);
 }
+.request-collapsible-header > .request-header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
 .request-collapsible-header.is-collapsed {
-  max-height: 0;
+  grid-template-rows: 0fr;
   opacity: 0;
   margin-top: -16px;
   margin-bottom: -16px;
@@ -1447,7 +1452,12 @@
   .request-events-page {
     padding: 20px 12px 16px;
     gap: 14px;
-    min-height: 760px;
+  }
+  /* The folded header gives back this page's own gap and leaves 8px of its top padding, so the
+     list does not sit against the top bar. */
+  .request-collapsible-header.is-collapsed {
+    margin-top: -12px;
+    margin-bottom: -14px;
   }
   .request-events-page .terminal-page-head {
     align-items: flex-start;
@@ -1537,6 +1547,25 @@
      this column". The handle also sets `touch-action: none`, which would eat the scroll
      outright rather than merely misinterpret it. */
   .req-col-resizer { display: none; }
+}
+
+/* ── touch: one scroller, nothing to bounce ─────────────────────────────────
+   On a phone, or wherever a finger is the main pointer, the page is exactly the content area
+   and the list is its only scroller. The list scrolls a finger itself, and at either end it
+   hands the drag on to the browser, which used to scroll the page around it and then bounce it
+   (or reload it, pulling down at the top). The page cannot scroll now, and over the list the
+   browser keeps only sideways panning and zoom. A header taller than the room left for the list
+   does not make the page scroll either: the first drag up folds it away (§7). */
+@media (max-width: 640px), (pointer: coarse) {
+  .request-events-page,
+  .request-stream,
+  .request-table-scroll-area,
+  .request-list-host {
+    min-height: 0;
+  }
+  .request-list-host {
+    touch-action: pan-x pinch-zoom;
+  }
 }
 
 /* ── reduced motion ─────────────────────────────────────────────────────────

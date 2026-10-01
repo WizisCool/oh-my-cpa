@@ -93,6 +93,7 @@ const SCENARIO_PATHS = [
       'search-dev-server',
       'request-list-interactions',
       'scroll-smoothing',
+      'request-list-touch',
       'overlay-back',
       'pricing-request-list',
     ],
@@ -104,6 +105,7 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'request-list-touch',
     ],
   },
   // The system page renders a release's Markdown body, which is untrusted remote text. The

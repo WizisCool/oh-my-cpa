@@ -364,7 +364,7 @@ and the places it deliberately differs from the hand-tuned values it replaced.
 - **Scroll Smoothing**: Whether a wheel notch or a scrolling key glides to its
   destination instead of jumping — `on` (default), `system` (glide unless the
   system reports reduced motion) or `off`, stored as `omc_scroll_smoothing`.
-  It smooths only discrete input; trackpads and touch are never intercepted.
+  It smooths only discrete input; trackpads and touch are never glided.
   It is the one motion that does not follow `prefers-reduced-motion` by
   default, because it is the reader's own input and on Windows that signal is
   the switch that removes the browser's glide (ADR 0046).

@@ -56,6 +56,7 @@ import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } fr
 import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/pricingBook.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
+import { requestListTouch } from './probes/requestListTouch.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
@@ -666,6 +667,23 @@ export const SCENARIOS = [
       ],
     },
     run: scrollSmoothing,
+  },
+  {
+    id: 'request-list-touch',
+    name: 'on a phone the request list is the only scroller, and a finger folds and unfolds its header',
+    options: {
+      // A phone short enough that the unfolded header leaves the list less than half the screen.
+      viewport: { width: 390, height: 664 },
+      hasTouch: true,
+      routes: [
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [
+          (url) => url.pathname.includes('/usage/events'),
+          () => ({ items: interactionRecords, has_more: false, limit: 100 }),
+        ],
+      ],
+    },
+    run: requestListTouch,
   },
   {
     id: 'plugin-management',

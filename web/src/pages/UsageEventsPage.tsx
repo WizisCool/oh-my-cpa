@@ -137,6 +137,7 @@ export const UsageEventsPage: React.FC = () => {
   const cursor = cursors.at(-1);
   const liveEdge = useRequestListScroll({ viewScope, cursor });
   const {
+    pageRef,
     listRef,
     isCollapsed,
     isScrolledDown,
@@ -437,154 +438,156 @@ export const UsageEventsPage: React.FC = () => {
 
 
   return (
-    <div className="terminal-page usage-events-page request-events-page">
+    <div ref={pageRef} className="terminal-page usage-events-page request-events-page">
       <div className={`request-collapsible-header ${isCollapsed ? 'is-collapsed' : ''}`}>
-        <header className="terminal-page-head">
-          <div>
-            <h1 className="terminal-title">{t('events.title')}</h1>
-            <p className="request-window">
-              {dayjs(displayWindow.from).format('MM-DD HH:mm')} — {dayjs(displayWindow.to).format('MM-DD HH:mm')}
-            </p>
-          </div>
-          <div className="request-actions">
-            <label className="req-auto-refresh-control" htmlFor="req-auto-refresh">
-              {/* The pulse only appears while the poll is actually running, so it
-                  means "this list is moving" rather than "this page has a
-                  setting". */}
-              {isAutoRefresh && <span className="req-live-pulse-dot" aria-hidden="true" />}
-              <span className="req-auto-refresh-label">{t('events.auto_refresh')}</span>
-              <Switch
-                id="req-auto-refresh"
-                size="small"
-                checked={isAutoRefresh}
-                onChange={toggleAutoRefresh}
-                aria-label={t('events.auto_refresh')}
-              />
-            </label>
-            <Popover
-              trigger="click"
-              title={t('events.ingest_status')}
-              content={
-                <div className="request-ingest">
-                  <Descriptions
-                    size="small"
-                    column={1}
-                    items={[
-                      {
-                        key: 'mode',
-                        label: t('events.collector_mode'),
-                        children: status?.collector?.mode || '—',
-                      },
-                      {
-                        key: 'captured',
-                        label: t('events.captured'),
-                        children: status?.collector?.captured ?? '—',
-                      },
-                      {
-                        key: 'gaps',
-                        label: t('events.coverage_gaps'),
-                        children: status?.collector?.coverage_gaps ?? '—',
-                      },
-                      { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
-                    ]}
-                  />
-                  <p>{t('events.delivery_semantics_hint')}</p>
-                  {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
-                </div>
-              }
-            >
-              <Button type="text">
-                <Badge status={ingestTone} text={t(ingestLabel)} />
-              </Button>
-            </Popover>
-            {hasCustomWidths && (
-              <Button
-                size="small"
-                type="text"
-                className="req-reset-columns-btn"
-                onClick={handleResetAllColumns}
+        <div className="request-header-content">
+          <header className="terminal-page-head">
+            <div>
+              <h1 className="terminal-title">{t('events.title')}</h1>
+              <p className="request-window">
+                {dayjs(displayWindow.from).format('MM-DD HH:mm')} — {dayjs(displayWindow.to).format('MM-DD HH:mm')}
+              </p>
+            </div>
+            <div className="request-actions">
+              <label className="req-auto-refresh-control" htmlFor="req-auto-refresh">
+                {/* The pulse only appears while the poll is actually running, so it
+                    means "this list is moving" rather than "this page has a
+                    setting". */}
+                {isAutoRefresh && <span className="req-live-pulse-dot" aria-hidden="true" />}
+                <span className="req-auto-refresh-label">{t('events.auto_refresh')}</span>
+                <Switch
+                  id="req-auto-refresh"
+                  size="small"
+                  checked={isAutoRefresh}
+                  onChange={toggleAutoRefresh}
+                  aria-label={t('events.auto_refresh')}
+                />
+              </label>
+              <Popover
+                trigger="click"
+                title={t('events.ingest_status')}
+                content={
+                  <div className="request-ingest">
+                    <Descriptions
+                      size="small"
+                      column={1}
+                      items={[
+                        {
+                          key: 'mode',
+                          label: t('events.collector_mode'),
+                          children: status?.collector?.mode || '—',
+                        },
+                        {
+                          key: 'captured',
+                          label: t('events.captured'),
+                          children: status?.collector?.captured ?? '—',
+                        },
+                        {
+                          key: 'gaps',
+                          label: t('events.coverage_gaps'),
+                          children: status?.collector?.coverage_gaps ?? '—',
+                        },
+                        { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
+                      ]}
+                    />
+                    <p>{t('events.delivery_semantics_hint')}</p>
+                    {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
+                  </div>
+                }
               >
-                {t('events.reset_columns')}
-              </Button>
-            )}
-            <Tooltip title={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}>
-              <Button
-                size="small"
-                type="text"
-                className="req-expand-toggle-btn"
-                aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
-                icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-                onClick={handleToggleExpand}
+                <Button type="text">
+                  <Badge status={ingestTone} text={t(ingestLabel)} />
+                </Button>
+              </Popover>
+              {hasCustomWidths && (
+                <Button
+                  size="small"
+                  type="text"
+                  className="req-reset-columns-btn"
+                  onClick={handleResetAllColumns}
+                >
+                  {t('events.reset_columns')}
+                </Button>
+              )}
+              <Tooltip title={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}>
+                <Button
+                  size="small"
+                  type="text"
+                  className="req-expand-toggle-btn"
+                  aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
+                  icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  onClick={handleToggleExpand}
+                />
+              </Tooltip>
+              <RefreshButton
+                isRefreshing={isSyncing || result.isFetching}
+                disabled={isSyncing}
+                onRefresh={handleManualRefresh}
               />
-            </Tooltip>
-            <RefreshButton
-              isRefreshing={isSyncing || result.isFetching}
-              disabled={isSyncing}
-              onRefresh={handleManualRefresh}
+            </div>
+          </header>
+          {rejectedParams.length > 0 && (
+            <Notice
+              tone="warning"
+              title={t('events.rejected_filters', { n: rejectedParams.length })}
+              description={`${rejectedParams.join(', ')} — ${t('events.rejected_filters_hint')}`}
             />
-          </div>
-        </header>
-        {rejectedParams.length > 0 && (
-          <Notice
-            tone="warning"
-            title={t('events.rejected_filters', { n: rejectedParams.length })}
-            description={`${rejectedParams.join(', ')} — ${t('events.rejected_filters_hint')}`}
+          )}
+          {result.isError && (
+            <LoadFailure
+              title={t('events.load_error')}
+              error={result.error}
+              onRetry={() => void result.refetch()}
+            />
+          )}
+          <RequestToolbar
+            search={search}
+            onSearchChange={setSearch}
+            query={query}
+            onTimeWindowChange={setTimeWindow}
+            onResultChange={setResult}
+            committedParams={committedParams}
+            onFilterChange={setFilter}
+            facets={facets.data?.facets}
+            facetsFailed={facets.isError}
+            credentials={credentials}
+            resolveProviderName={providerName}
+            filterCount={filterCount}
+            onOpenFilters={() => setIsFilterDrawerOpen(true)}
+            hasActiveFilter={hasActiveFilter}
+            activeFilterCount={activeFilters.length}
+            onClearFilters={clearFilters}
+            grouping={grouping}
+            onGroupingChange={changeGrouping}
           />
-        )}
-        {result.isError && (
-          <LoadFailure
-            title={t('events.load_error')}
-            error={result.error}
-            onRetry={() => void result.refetch()}
+          <RequestFilterChips
+            committed={committedParams}
+            describe={describeChip}
+            onRemove={removeFilterValue}
+            onClearAll={clearFilters}
           />
-        )}
-        <RequestToolbar
-          search={search}
-          onSearchChange={setSearch}
-          query={query}
-          onTimeWindowChange={setTimeWindow}
-          onResultChange={setResult}
-          committedParams={committedParams}
-          onFilterChange={setFilter}
-          facets={facets.data?.facets}
-          facetsFailed={facets.isError}
-          credentials={credentials}
-          resolveProviderName={providerName}
-          filterCount={filterCount}
-          onOpenFilters={() => setIsFilterDrawerOpen(true)}
-          hasActiveFilter={hasActiveFilter}
-          activeFilterCount={activeFilters.length}
-          onClearFilters={clearFilters}
-          grouping={grouping}
-          onGroupingChange={changeGrouping}
-        />
-        <RequestFilterChips
-          committed={committedParams}
-          describe={describeChip}
-          onRemove={removeFilterValue}
-          onClearAll={clearFilters}
-        />
-        <RequestFilterDrawer
-          open={isFilterDrawerOpen}
-          onClose={() => setIsFilterDrawerOpen(false)}
-          committed={committedView}
-          facets={facets.data?.facets}
-          facetsFailed={facets.isError}
-          credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
-          providerName={providerName}
-          onApply={(next) => {
-            // Apply replaces every filter dimension, so a keystroke queued in the
-            // search box must not land on top of the applied view.
-            resetSearchQueue();
-            commit(next.params, { result: next.result });
-            setIsFilterDrawerOpen(false);
-          }}
-        />
-        {authFiles.isError && (
-          <div className="request-detail-note" role="status">
-            {t('events.credentials_unavailable')}
-          </div>
-        )}
+          <RequestFilterDrawer
+            open={isFilterDrawerOpen}
+            onClose={() => setIsFilterDrawerOpen(false)}
+            committed={committedView}
+            facets={facets.data?.facets}
+            facetsFailed={facets.isError}
+            credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
+            providerName={providerName}
+            onApply={(next) => {
+              // Apply replaces every filter dimension, so a keystroke queued in the
+              // search box must not land on top of the applied view.
+              resetSearchQueue();
+              commit(next.params, { result: next.result });
+              setIsFilterDrawerOpen(false);
+            }}
+          />
+          {authFiles.isError && (
+            <div className="request-detail-note" role="status">
+              {t('events.credentials_unavailable')}
+            </div>
+          )}
+        </div>
       </div>
       <section
         className="request-stream"

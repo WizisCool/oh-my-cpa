@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 
 import type { ListyRef } from 'antd';
 
@@ -6,6 +7,7 @@ import type { UsageEvent } from '../../types/usageEvents';
 import { consumeWheel } from '../../utils/scrollSmoothing';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../../utils/smoothScroll';
 import { pendingArrivalCount } from './pollingPolicy';
+import { installRequestListTouch, type RequestListTouch } from './requestListTouch';
 
 /**
  * Distance from the top at which the list counts as "following the live edge".
@@ -60,6 +62,7 @@ export function useRequestListScroll({
   const heldBoundaryIDRef = React.useRef<number | undefined>(undefined);
 
   // Full-height scroll-down expansion & top-bounce expand mode & back-to-top
+  const pageRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<ListyRef>(null);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isScrolledDown, setIsScrolledDown] = React.useState(false);
@@ -74,6 +77,8 @@ export function useRequestListScroll({
   const lastScrollTopRef = React.useRef(0);
   /** The in-flight return-to-top animation, so a second gesture replaces it. */
   const scrollAnimationRef = React.useRef<ScrollAnimationHandle | null>(null);
+  /** The list under a finger, so a correction or a gesture can stop its coast. */
+  const touchRef = React.useRef<RequestListTouch | null>(null);
   const isNavigatingPageRef = React.useRef(false);
   const justCollapsedFromTopRef = React.useRef(false);
   const pageNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -214,6 +219,7 @@ export function useRequestListScroll({
    * cannot be dragged back by an animation that outlived its click.
    */
   const scrollListToTop = React.useCallback(() => {
+    touchRef.current?.stopCoast();
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = null;
     listRef.current?.scrollTo({ top: 0 });
@@ -233,6 +239,7 @@ export function useRequestListScroll({
     // but the reader clicked "apply", so do not depend on event timing.
     heldBoundaryIDRef.current = undefined;
     setHeldItems(null);
+    touchRef.current?.stopCoast();
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = animateScrollToTop(
       lastScrollTopRef.current,
@@ -248,6 +255,41 @@ export function useRequestListScroll({
     );
     setIsScrolledDown(false);
     setIsCollapsed(false);
+  }, [endReturnToTop]);
+
+  // Touch: the list follows the finger and the header folds and unfolds with the
+  // same gestures as the wheel; see `requestListTouch.ts`. Without the pull a phone
+  // had no way back to the filters but the back-to-top button, which is not shown at
+  // the top.
+  const isCollapsedRef = React.useRef(isCollapsed);
+  isCollapsedRef.current = isCollapsed;
+  React.useEffect(() => {
+    const page = pageRef.current;
+    if (!page) return undefined;
+    const touch = installRequestListTouch({
+      page,
+      findHolder: (target) => {
+        const host = target instanceof Element ? target.closest('.request-list-host') : null;
+        const inner = host?.querySelector('[class*="-holder-inner"]');
+        return inner?.parentElement?.parentElement ?? null;
+      },
+      // Synchronously, so the rows under the finger are drawn on the frame the finger moved.
+      scrollListTo: (top) => flushSync(() => listRef.current?.scrollTo({ top })),
+      isCollapsed: () => isCollapsedRef.current,
+      setCollapsed: setIsCollapsed,
+      isPaused: () => isNavigatingPageRef.current,
+      // A finger on the list during the animated return to the top takes it over.
+      onDriveStart: () => {
+        scrollAnimationRef.current?.cancel();
+        scrollAnimationRef.current = null;
+        endReturnToTop();
+      },
+    });
+    touchRef.current = touch;
+    return () => {
+      touch.dispose();
+      touchRef.current = null;
+    };
   }, [endReturnToTop]);
 
   const handleToggleExpand = React.useCallback(() => {
@@ -309,6 +351,7 @@ export function useRequestListScroll({
   }, []);
 
   return {
+    pageRef,
     listRef,
     isCollapsed,
     isScrolledDown,
