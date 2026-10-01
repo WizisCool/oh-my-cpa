@@ -22,35 +22,6 @@
 import { MOTION_SCROLL } from '../theme/themeConfig';
 import { easeOutCubic } from './smoothScroll';
 
-/** Whether wheel and keyboard scrolls glide: always, unless the system asks for reduced motion, or never. */
-export type ScrollSmoothingPreference = 'on' | 'system' | 'off';
-
-export const SCROLL_SMOOTHING_PREFERENCES: readonly ScrollSmoothingPreference[] = ['on', 'system', 'off'];
-
-export const SCROLL_SMOOTHING_PREFERENCE_KEY = 'omc_scroll_smoothing';
-
-/**
- * On by default, including for a reader whose system reports reduced motion. See ADR 0046: on
- * Windows that report is the "Animation effects" switch, which most readers turn off to make the
- * desktop feel faster, and it is also what disables the browser's own wheel animation. A glide that
- * follows the reader's own wheel is input, not decoration - macOS and iOS keep inertial scrolling
- * under Reduce Motion for the same reason - and `system` is one click away for a reader who wants
- * the operating system's switch to decide.
- */
-export const DEFAULT_SCROLL_SMOOTHING: ScrollSmoothingPreference = 'on';
-
-export function parseScrollSmoothing(raw: unknown): ScrollSmoothingPreference | undefined {
-  return SCROLL_SMOOTHING_PREFERENCES.includes(raw as ScrollSmoothingPreference)
-    ? (raw as ScrollSmoothingPreference)
-    : undefined;
-}
-
-export function isScrollSmoothingActive(preference: ScrollSmoothingPreference, prefersReducedMotion: boolean): boolean {
-  if (preference === 'off') return false;
-  if (preference === 'system') return !prefersReducedMotion;
-  return true;
-}
-
 /** Pixels one line of a line-mode wheel delta (Firefox) moves; Chromium's own line height for wheels. */
 export const WHEEL_LINE_PX = 40;
 

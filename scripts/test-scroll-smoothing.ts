@@ -9,16 +9,14 @@
 import assert from 'node:assert/strict';
 import { MOTION_SCROLL } from '../web/src/theme/themeConfig.ts';
 import {
-  DEFAULT_SCROLL_SMOOTHING,
   glidePosition,
   isDiscreteWheel,
-  isScrollSmoothingActive,
   keyScrollFor,
   pageDistance,
-  parseScrollSmoothing,
   wheelDistance,
   type WheelSample,
 } from '../web/src/utils/scrollSmoothing.ts';
+import { DEFAULT_SCROLL_SMOOTHING, isScrollSmoothingActive, parseScrollSmoothing } from '../web/src/utils/scrollSmoothingPreference.ts';
 
 const notch = (overrides: Partial<WheelSample> = {}): WheelSample => ({
   deltaMode: 0,

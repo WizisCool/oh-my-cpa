@@ -26,7 +26,7 @@ import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
 import { useScrollSmoothingPreference } from '../hooks/useScrollSmoothing';
-import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '../utils/scrollSmoothing';
+import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '../utils/scrollSmoothingPreference';
 
 
 const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
