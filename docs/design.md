@@ -1394,7 +1394,8 @@ download behind a Suspense boundary is a task (`web/src/utils/loadProgress.ts`,
 earns credit toward 85% of its share on an exponential curve, so the bar keeps
 moving while a slow read is outstanding and only a task settling finishes it. It
 never moves backwards. Done, it holds full for one `base` beat and fades over
-another. The fill is a `transform: scaleX()` over a track tinted 18% of the
+another. If reduced motion cancels that completion fade, the finished bar hides
+immediately. The fill is a `transform: scaleX()` over a track tinted 18% of the
 accent, so the reader sees how much is left. The element is a `progressbar` whose
 `aria-valuenow` rounds down in 10-percentage-point steps; only the fully drawn
 bar announces 100%. Changing reduced-motion preference while work is pending

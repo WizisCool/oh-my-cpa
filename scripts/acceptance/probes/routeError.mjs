@@ -210,4 +210,41 @@ export async function routeLazyError(fixtures) {
     new URL(page.url()).pathname === `${new URL(base).pathname}/dashboard` && await page.getByTestId('route-error-message').count() === 0);
   check('shell import errors are the only additional browser exceptions',
     errors.every(message => message.includes('Failed to fetch dynamically imported module')), errors.join(' | '));
+  // The sign-in bar has no query-cache notifications that can incidentally restart its finished loop.
+  const sessionPattern = '**/api/auth/session';
+  const signedOutSession = (route) => route.fulfill({ json: { authenticated: false } });
+  await context.route(sessionPattern, signedOutSession);
+  try {
+    await page.goto(`${base}/dashboard`);
+    await page.locator('.auth-form').waitFor();
+    await page.waitForFunction(() => document.querySelector('.auth-progress')?.hidden);
+    await page.evaluate(async (moduleUrl) => {
+      const { beginProgressTask } = await import(moduleUrl);
+      const progress = document.querySelector('.auth-progress');
+      window.__hasProgressFadeStarted = false;
+      window.__hasProgressFadeCancelled = false;
+      progress.addEventListener('transitionrun', (event) => {
+        if (event.target !== progress || event.propertyName !== 'opacity') return;
+        // Hold the browser's animation clock so emulation cannot race a naturally finished fade.
+        for (const transition of progress.getAnimations()) {
+          if (transition.transitionProperty === 'opacity') transition.pause();
+        }
+        window.__hasProgressFadeStarted = true;
+      }, { once: true });
+      progress.addEventListener('transitioncancel', (event) => {
+        if (event.target === progress && event.propertyName === 'opacity') window.__hasProgressFadeCancelled = true;
+      }, { once: true });
+      window.__settleProgressTask = beginProgressTask();
+    }, `${new URL(base).pathname}/src/utils/progressTasks.ts`);
+    await page.locator('.auth-progress[data-state="running"]').waitFor();
+    await page.evaluate(() => window.__settleProgressTask());
+    await page.waitForFunction(() => window.__hasProgressFadeStarted);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.waitForFunction(() => window.__hasProgressFadeCancelled);
+    check('reduced motion cancels the completion fade and hides the finished progress bar',
+      await page.locator('.auth-progress').evaluate(progress => progress.hidden && !progress.hasAttribute('aria-busy')));
+  } finally {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await context.unroute(sessionPattern, signedOutSession);
+  }
 }

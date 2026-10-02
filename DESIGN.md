@@ -488,7 +488,8 @@ Button feedback and optimistic affordances acknowledge the interaction immediate
 the bar waits 200ms to suppress fast-request flashes. Its accessible percentage
 rounds down in 10-percentage-point steps, reserving 100% for the fully drawn bar.
 Changing reduced-motion preference while work is pending preserves that batch
-and its drawn progress.
+and its drawn progress. Reduced motion removes pending estimates and freezes
+placeholder breathing; cancelling a completion fade hides the finished bar.
 Its track is an 18% accent tint. First loads use the first-party placeholder kit:
 `--border` blocks at the content's geometry (the shell's rail and header, page head,
 list and table rows, dashboard tiles, paragraph bodies), breathing in opacity one

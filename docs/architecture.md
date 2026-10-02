@@ -833,6 +833,10 @@ the router, event-handler exceptions and detached asynchronous failures are not
 caught by this route boundary. Unknown console paths retain their existing
 dashboard redirect.
 
+Completed loading bars hide when their opacity transition ends or is cancelled.
+Their DOM handlers are owned by the progress controller and removed together on
+unmount; changing reduced-motion preference preserves any pending batch.
+
 ### Navigation and calendar render costs
 
 `web/src/routePages.ts` owns the lazy page modules and their shared loaders;

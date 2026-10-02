@@ -239,7 +239,10 @@ the clock, so no test waits on real time. The `route-lazy-error` probe owns the
 browser wiring: the shell placeholder and its
 bar painting while the shell download is held, including a nearly full bar
 that must still announce incomplete work and a live reduced-motion switch that
-must preserve the batch and never reset its drawn progress. Placeholder geometry and the
+must preserve the batch and never reset its drawn progress. It also cancels a
+completed sign-in bar's actual opacity transition with reduced motion, pausing
+its animation clock at `transitionrun` to keep emulation deterministic, and checks
+that the root becomes hidden, independently of query-cache notifications. Placeholder geometry and the
 sign-in surface are covered by the existing route and probe scenarios that load
 those pages, which wait on the rendered content rather than on a spinner.
 

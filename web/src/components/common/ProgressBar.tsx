@@ -79,7 +79,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       draw();
       if (isProgressBatchComplete(batch) && drawn >= 1) {
         // Full, then gone: the stylesheet holds the completed bar for a beat and fades it, and the
-        // fade's end hides it. Reduced motion has no fade to wait for.
+        // fade's end or cancellation hides it. Reduced motion has no fade to wait for.
         root.dataset.state = 'done';
         root.removeAttribute('aria-busy');
         if (isReducedMotion) hide();
@@ -130,17 +130,17 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       }
     };
 
-    const onTransitionEnd = (event: TransitionEvent) => {
+    const onTransitionStop = (event: TransitionEvent) => {
       if (event.target === root && event.propertyName === 'opacity' && root.dataset.state === 'done') hide();
     };
 
     hide();
-    root.addEventListener('transitionend', onTransitionEnd);
+    root.ontransitionend = root.ontransitioncancel = onTransitionStop;
     const unsubscribe = source.subscribe(sync);
     sync();
     return () => {
       unsubscribe();
-      root.removeEventListener('transitionend', onTransitionEnd);
+      root.ontransitionend = root.ontransitioncancel = null;
       window.clearTimeout(showTimer);
       if (frame) cancelAnimationFrame(frame);
     };
