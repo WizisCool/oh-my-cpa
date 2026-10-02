@@ -1,9 +1,10 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Empty, Select, Skeleton, Tooltip, Typography } from 'antd';
+import { Button, Card, Empty, Select, Tooltip, Typography } from 'antd';
 import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
+import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -275,26 +276,27 @@ export const DashboardPage: React.FC = () => {
         </div>
       );
     }
-    // First load: keep the real page frame and fill the tiles with a shimmer,
-    // so nothing swaps in abruptly once data arrives.
+    // First load: keep the real page frame and draw each tile's own readouts - label, number,
+    // sparkline - where they will land, so nothing swaps in abruptly once data arrives.
     return (
       <div className="terminal-page dashboard-page">
         <PageHeader title={t('nav.dashboard')} subtitle={t('dash.loading')} />
-        <div className="dashboard-grid">
+        <LoadingRegion className="dashboard-grid">
           {[0, 1].map((index) => (
             <Card key={`wide-${index}`} className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
-              <Skeleton title={{ width: '40%' }} paragraph={{ rows: 1, width: ['70%'] }} />
-              <div className="tile-skeleton">
-                <Skeleton title={false} paragraph={{ rows: 2, width: ['70%', '55%'] }} />
-              </div>
+              <Placeholder width="28%" row={index} className="placeholder-line is-meta" />
+              <Placeholder width="42%" height={34} row={index + 1} className="tile-placeholder-hero" />
+              <Placeholder width="100%" height={44} row={index + 2} className="tile-placeholder-spark" />
             </Card>
           ))}
           {[0, 1, 2, 3].map((index) => (
             <Card key={`small-${index}`} className="dashboard-tile" styles={{ body: { padding: 20 } }}>
-              <Skeleton title={false} paragraph={{ rows: 3, width: ['50%', '70%', '60%'] }} />
+              <Placeholder width="46%" row={index + 2} className="placeholder-line is-meta" />
+              <Placeholder width="58%" height={24} row={index + 3} className="tile-placeholder-value" />
+              <Placeholder width="72%" row={index + 4} className="placeholder-line is-meta" />
             </Card>
           ))}
-        </div>
+        </LoadingRegion>
       </div>
     );
   }

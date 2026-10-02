@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Checkbox, Empty, Input, InputNumber, Pagination, Segmented, TimePicker, Tooltip } from 'antd';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, SearchOutlined } from '../icons';
@@ -153,8 +154,10 @@ export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggesti
         aria-label={t('pricing.editor.pick_search')}
       />
       <div className={styles['picker-list']} role="listbox" aria-label={t('pricing.editor.pick_title')}>
-        {results.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={isLoading ? t('common.loading') : t('pricing.editor.pick_empty')} />
+        {results.length === 0 && isLoading ? (
+          <ParagraphPlaceholder rows={6} />
+        ) : results.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('pricing.editor.pick_empty')} />
         ) : results.slice((safePage - 1) * pageSize, safePage * pageSize).map((model) => {
           const isSelected = model.id === selectedId;
           return (

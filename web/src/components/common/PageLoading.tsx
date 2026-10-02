@@ -1,6 +1,7 @@
-import { Spin } from 'antd';
+import type { ReactNode } from 'react';
 import clsx from 'clsx';
-import { useT } from '../../i18n';
+import { useProgressTask } from '../../hooks/useProgressTask';
+import { ListPlaceholder, LoadingRegion, PageHeadPlaceholder } from './Placeholder';
 
 export interface PageLoadingProps {
   /** `page` stands in for a whole route; `block` for one list or panel inside a page. */
@@ -9,22 +10,39 @@ export interface PageLoadingProps {
 }
 
 /**
- * The spinner that stands in for content that has not arrived yet.
+ * The placeholder that stands in for content that has not arrived yet.
  *
- * One component so a route's first load, a lazy chunk and a list's first read put the indicator
- * in the same place: centred in the space the content will occupy, so nothing jumps when it lands.
+ * One component so a route's first load, a lazy chunk and a list's first read draw the same frame:
+ * the page head and list rows where the real ones will land, so nothing jumps when they do. The
+ * read it waits on is already counted by the loading bar, so this only draws.
  */
 export function PageLoading({ variant = 'page', className }: PageLoadingProps) {
-  const t = useT();
-  // The status region carries the name: a spinner alone is announced as an unlabelled status.
   return (
-    <div
-      className={clsx(variant === 'page' ? 'page-loading' : 'phone-list-loading', className)}
-      role="status"
-      aria-busy="true"
-      aria-label={t('common.loading')}
-    >
-      <Spin size={variant === 'page' ? 'large' : 'medium'} />
+    <LoadingRegion className={clsx(variant === 'page' ? 'page-loading' : 'block-loading', className)}>
+      {variant === 'page' && <PageHeadPlaceholder />}
+      <ListPlaceholder rows={variant === 'page' ? 6 : 4} isFramed={variant === 'page'} />
+    </LoadingRegion>
+  );
+}
+
+/**
+ * A lazy route's Suspense fallback: the page frame, and its module download counted as work in
+ * flight, because nothing else knows the download is happening.
+ */
+export function RouteLoading() {
+  useProgressTask();
+  return (
+    <div className="terminal-page">
+      <PageLoading />
     </div>
   );
+}
+
+/**
+ * A Suspense fallback inside a page - an editor, a drawer's body: draws the placeholder it is given
+ * and counts the module download as work in flight, as `RouteLoading` does for a whole route.
+ */
+export function SuspenseFallback({ children }: { children: ReactNode }) {
+  useProgressTask();
+  return <>{children}</>;
 }

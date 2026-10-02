@@ -1,5 +1,6 @@
 import React from 'react';
-import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Skeleton, Switch, Tooltip } from 'antd';
+import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Switch, Tooltip } from 'antd';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClearOutlined, PlusOutlined, UndoOutlined } from '../icons';
 import { api, describeError } from '../../api/client';
@@ -219,7 +220,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
           </div>
 
           {!configQuery.isError && (configQuery.isLoading || !draft || seededFor.current !== plugin.id) ? (
-            <Skeleton active paragraph={{ rows: 6 }} />
+            <ParagraphPlaceholder rows={6} />
           ) : configQuery.isError ? (
             <LoadFailure title={t('plugin.config_load_failed')} error={configQuery.error} onRetry={() => void configQuery.refetch()} />
           ) : mode === 'json' ? (

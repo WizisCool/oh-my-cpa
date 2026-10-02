@@ -41,6 +41,7 @@ import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 
 const { Text } = Typography;
 
@@ -95,7 +96,7 @@ const ErrorLogFiles: React.FC = () => {
     placeholderData: keepPreviousData,
   });
 
-  if (query.isPending) return <div className="log-files-state">{t('logs.loading')}</div>;
+  if (query.isPending) return <ParagraphPlaceholder rows={4} className="log-files-state" />;
   if (query.isError) {
     const code = apiErrorCode(query.error);
     return (

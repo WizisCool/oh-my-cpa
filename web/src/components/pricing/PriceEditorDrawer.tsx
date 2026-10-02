@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Collapse, Drawer, Input, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
+import { Button, Collapse, Drawer, Input, InputNumber, Popconfirm, Segmented } from 'antd';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -292,7 +293,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
         detail.isError ? (
           <LoadFailure title={t('pricing.load_error')} error={detail.error} onRetry={() => void detail.refetch()} />
         ) : (
-          <Skeleton active={false} paragraph={{ rows: 8 }} />
+          <ParagraphPlaceholder rows={8} />
         )
       ) : (
         <div className={styles['drawer-body']}>

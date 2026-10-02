@@ -7,10 +7,10 @@ import {
   Empty,
   Listy,
   Popover,
-  Skeleton,
   Switch,
   Tooltip,
 } from 'antd';
+import { TablePlaceholder } from '../components/common/Placeholder';
 import {
   FullscreenExitOutlined,
   FullscreenOutlined,
@@ -611,9 +611,7 @@ export const UsageEventsPage: React.FC = () => {
           <div ref={listHost} className="request-list-host">
             <RequestTooltipLayer hostRef={listHost} />
             {!isQueryEnabled || result.isLoading ? (
-              <div className="request-loading">
-                <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />
-              </div>
+              <TablePlaceholder rows={8} className="request-loading" />
             ) : events.length ? (
               <Listy<UsageEvent>
                 ref={listRef}

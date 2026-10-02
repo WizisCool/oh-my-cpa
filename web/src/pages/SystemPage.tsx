@@ -41,7 +41,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
-import { PageLoading } from '../components/common/PageLoading';
+import { PageLoading, SuspenseFallback } from '../components/common/PageLoading';
 import { StatusLabel } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
@@ -873,7 +873,7 @@ export const SystemPage: React.FC = () => {
         })}
       >
         {changelogProduct && (
-          <React.Suspense fallback={<PageLoading variant="block" />}>
+          <React.Suspense fallback={<SuspenseFallback><PageLoading variant="block" /></SuspenseFallback>}>
             <ProductChangelog product={changelogProduct} />
           </React.Suspense>
         )}

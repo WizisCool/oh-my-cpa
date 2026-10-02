@@ -373,11 +373,11 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Do** give a `:hover` reveal a `@media (hover: none)` counterpart, and express a phone arrangement as a `640px` viewport rule (or a `920px` container query on the box the layout is about) rather than a new magic number.
 - **Do** size focusable text controls at 16px under `(pointer: coarse)`, and give touch-only hit areas to controls whose drawn box stays at its token size.
 - **Do** wire a Drawer or Modal to `useOverlayHistory({ isOpen, onClose })` so the platform's Back dismisses it, and leave Popovers, dropdowns, selects and tooltips out of the history — Back traverses pages, not the toolbar.
-- **Do** delay loading spinners by 200ms (`DataProgress`) to eliminate flicker on fast responses.
+- **Do** let the loading bar measure counted work (queries and module downloads) and wait 200ms before painting, so a fast response never flickers; draw a first load as placeholders at the content's own geometry (`Placeholder.tsx`), never as a centred spinner.
 
 ### Don't:
 - **Don't** add drop shadows (`box-shadow: 0 4px...`) or blurred lighting effects anywhere in the application.
-- **Don't** use decorative gradients, animated skeleton sweeps, or spring/bounce easing curves.
+- **Don't** use decorative gradients, animated skeleton sweeps (antd `Skeleton active`), or spring/bounce easing curves. A placeholder's staggered opacity breath is the one sanctioned first-load motion (ADR 0052).
 - **Don't** use danger red on the cache-rate scale; cache misses are not system execution failures.
 - **Don't** hard-swap an active screen to a blank white canvas during navigation or background polling.
 - **Don't** display duplicated translations side-by-side in the interface.
@@ -477,3 +477,26 @@ On phones actions stack with 44px hit areas, and the copy/detail controls keep t
 same touch floor. Heading focus and localized document title identify the failed
 page for keyboard and screen-reader users. Recovery and diagnostic copy are
 available in Simplified Chinese, Traditional Chinese, English and Malay.
+
+### Loading feedback
+
+The bar under the console header, under the shell placeholder's header and on the
+sign-in card's top edge is one `ProgressBar`: its length is the measured share of
+counted work (a settled task counts in full, a pending one earns capped credit), it
+never moves backwards, and when done it holds full for one `base` beat and fades.
+Its track is an 18% accent tint. First loads use the first-party placeholder kit:
+`--border` blocks at the content's geometry (the shell's rail and header, page head,
+list and table rows, dashboard tiles, paragraph bodies), breathing in opacity one
+`base` apart per row and frozen under reduced motion. See `docs/design.md` §7 and
+ADR 0052.
+
+### Sign-in surface
+
+One 400px card on a static `--border` dot field (24px grid) below a borderless
+header carrying the wordmark and preference menus. The card is a standalone shell:
+6px radius, 1px `--border`, `--surface`, no shadow. It opens with the `›_` prompt
+mark in a 44px `--bg` tile, then the eyebrow, 22px title and subtitle. The form uses
+antd's large controls with a trailing arrow on the primary button, and the footnote
+sits in a `--bg` band with a shield glyph. The session check draws the card's outline
+as placeholders. The session check and the sign-in request draw the measured bar on
+the card's top edge. See `docs/design.md` §9.

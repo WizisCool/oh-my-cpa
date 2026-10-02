@@ -9,8 +9,8 @@ import {
   Pagination,
   Select,
   Space,
-  Spin,
 } from 'antd';
+import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
   BranchesOutlined,
   DownOutlined,
@@ -787,7 +787,9 @@ export const OAuthManagementPage: React.FC = () => {
       )}
 
       {filesQuery.isPending && !filesQuery.data ? (
-        <div className="dashboard-loading"><Spin><div style={{ minHeight: 80, minWidth: 220 }} /></Spin></div>
+        <LoadingRegion>
+          <ListPlaceholder rows={6} isFramed />
+        </LoadingRegion>
       ) : visibleRecords.length === 0 ? (
         <div className={`terminal-panel ${styles.empty}`}>
           <Empty

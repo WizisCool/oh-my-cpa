@@ -564,7 +564,6 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "logs.tail_empty": "暫無新日誌",
   "logs.show_more": "再顯示 {n} 行",
   "logs.jump_latest": "回到最新",
-  "logs.loading": "載入中…",
   "logs.disabled_title": "CPA 未開啟檔案日誌",
   "logs.unsupported_title": "目前 CPA 版本沒有日誌介面",
   "logs.offline_title": "無法連線 CPA",

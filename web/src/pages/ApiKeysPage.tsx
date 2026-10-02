@@ -6,8 +6,8 @@ import {
   Card,
   Input,
   Modal,
-  Skeleton,
 } from 'antd';
+import { PageLoading } from '../components/common/PageLoading';
 import {
   CopyOutlined,
   KeyOutlined,
@@ -459,7 +459,7 @@ export const ApiKeysPage: React.FC = () => {
 
         {configQuery.isPending ? (
           <div className={styles['keys-state']}>
-            <Skeleton active paragraph={{ rows: 4 }} />
+            <PageLoading variant="block" />
           </div>
         ) : configQuery.isError && !configQuery.data ? (
           <div className={styles['keys-state']}>

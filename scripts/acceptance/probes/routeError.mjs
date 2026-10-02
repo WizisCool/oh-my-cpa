@@ -136,8 +136,12 @@ export async function routeLazyError(fixtures) {
   await context.route(shellModulePattern, failShell);
   try {
     await page.goto(`${base}/config`, { waitUntil: 'domcontentloaded' });
-    await page.locator('.page-loading .ant-spin').waitFor();
+    await page.locator('.shell-loading .page-loading').waitFor();
     check('the authenticated shell has a visible loading state', await page.locator('.app-shell').count() === 0);
+    // The held download is work in flight, so the shell's bar paints once the show delay passes.
+    await page.locator('.shell-loading-progress[data-state="running"]').waitFor();
+    check('the held shell download is reported as measured progress',
+      Number(await page.locator('.shell-loading-progress').getAttribute('aria-valuenow')) < 100);
     check('the shell loading state exposes a localized accessible name',
       await page.getByRole('status', { name: 'Loading…', exact: true }).isVisible());
     rejectShell();

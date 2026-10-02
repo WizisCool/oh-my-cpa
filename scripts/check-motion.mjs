@@ -14,7 +14,7 @@
  *      nothing at run time, so the declaration would silently lose its duration. No `var(--motion-*)`
  *      carries a fallback either: a fallback is never applied, and the one that read `50ms` beside a
  *      variable holding `100ms` is exactly how this drift stayed invisible. The exceptions are
- *      indeterminate progress cycles, whose period is not a state transition and has no token.
+ *      indeterminate cycles, whose period is not a state transition and has no token.
  *   2. **No transition on a layout property**, and no `transition: all`, which is every property
  *      including the layout ones. §7 rule 1's list; the exceptions are disclosures and the bar whose
  *      width positions its own label. An exception is keyed by file, selector and property, and it
@@ -79,9 +79,9 @@ const EXCEPTIONS = [
   {
     kind: 'duration',
     file: 'index.css',
-    selector: '.data-progress::after',
+    selector: '.placeholder',
     property: 'animation',
-    why: 'The indeterminate background-refresh bar loops for as long as the request takes; 900ms is its period, not a transition, and §7 handles it by freezing it under reduced motion rather than by shortening it.',
+    why: 'A first-load placeholder breathes for as long as nothing has arrived; 1400ms is the breath\u2019s period, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it (ADR 0052).',
   },
   {
     kind: 'duration',
@@ -95,14 +95,14 @@ const EXCEPTIONS = [
     file: 'index.css',
     selector: '.heatmap-progress::after',
     property: 'animation',
-    why: 'Same treatment as the app-wide progress bar, for the heatmap panel\u2019s own re-read.',
+    why: 'The heatmap panel\u2019s own indeterminate re-read bar: 1200ms is its period, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it.',
   },
   {
     kind: 'duration',
     file: 'index.css',
     selector: '.anticon-spin',
     property: 'animation',
-    why: 'A spinning refresh icon is the same kind of indeterminate loop as the two bars above: 900ms is one rotation, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it.',
+    why: 'A spinning refresh icon is the same kind of indeterminate loop as the heatmap bar above: 900ms is one rotation, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it.',
   },
   {
     kind: 'layout',

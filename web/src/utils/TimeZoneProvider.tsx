@@ -13,7 +13,12 @@ export function useTimeZoneSetting() {
   const server = parseTimeZone(data?.omc_server_timezone) || 'UTC';
   return { ...preference, server };
 }
-export const TimeZoneProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+/**
+ * Holds its children until the console's time zone is configured, so no timestamp is ever painted in
+ * the wrong zone and then corrected. `fallback` is what stands in meanwhile: the wait is a read of
+ * the stored preferences, which a slow deployment can stretch past a frame or two.
+ */
+export const TimeZoneProvider: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ children, fallback = null }) => {
   const { value, server, ready } = useTimeZoneSetting();
   const [isConfigured, setIsConfigured] = React.useState(false);
   React.useLayoutEffect(() => {
@@ -21,5 +26,5 @@ export const TimeZoneProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     configureTimeZone(value, server);
     setIsConfigured(true);
   }, [value, server, ready]);
-  return ready && isConfigured ? <>{children}</> : null;
+  return ready && isConfigured ? <>{children}</> : <>{fallback}</>;
 };

@@ -7,11 +7,12 @@ import {
   Modal,
   Popconfirm,
   Segmented,
-  Skeleton,
   Space,
   Tag,
   Typography,
 } from 'antd';
+import { ParagraphPlaceholder } from '../components/common/Placeholder';
+import { SuspenseFallback } from '../components/common/PageLoading';
 import {
   AppstoreOutlined,
   CodeOutlined,
@@ -288,7 +289,7 @@ export const ConfigPage: React.FC = () => {
 
       {configQuery.isPending && !rawYaml ? (
         <Card size="small" className="config-card">
-          <Skeleton active paragraph={{ rows: 10 }} />
+          <ParagraphPlaceholder rows={10} />
         </Card>
       ) : configQuery.isError && !rawYaml ? (
         <LoadFailure
@@ -416,9 +417,9 @@ export const ConfigPage: React.FC = () => {
           <div className="config-editor-wrap">
             <React.Suspense
               fallback={
-                <div className="config-monaco-loading">
-                  <Skeleton active paragraph={{ rows: 14 }} />
-                </div>
+                <SuspenseFallback>
+                  <ParagraphPlaceholder rows={14} className="config-monaco-loading" />
+                </SuspenseFallback>
               }
             >
               <YamlSourceEditor

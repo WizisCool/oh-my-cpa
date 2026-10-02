@@ -1,5 +1,8 @@
 import React from 'react';
-import { useIsFetching } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useT } from '../../i18n';
+import { mergeProgressSources, progressTasks, type ProgressSource } from '../../utils/progressTasks';
+import { ProgressBar } from './ProgressBar';
 
 // v5 types `meta` through Register, so this declares app-wide query metadata.
 // `silent` is what keeps a background poll from raising the progress bar.
@@ -12,33 +15,35 @@ declare module '@tanstack/react-query' {
 }
 
 /**
- * DataProgress is the app-wide "request in flight" signal: one 2px bar pinned to
- * the top of the scrolling column.
- *
- * It exists so no view ever has to blank, dim or swap itself out to show that
- * data is loading. Being a single composited element, it costs no layout and no
- * repaint of the page beneath it.
- *
- * The 200ms delay suppresses the flash a fast request would otherwise cause:
- * a background refresh that resolves quickly never paints a bar at all.
+ * The queries the bar counts: every one fetching, except the silent polls. Counting a poll would
+ * raise the bar every few seconds, and design.md keeps background refresh invisible.
  */
-const SHOW_DELAY_MS = 200;
+function queryProgressSource(queryClient: QueryClient): ProgressSource {
+  const cache = queryClient.getQueryCache();
+  return {
+    read() {
+      const ids = new Set<string>();
+      for (const query of cache.getAll()) {
+        if (query.state.fetchStatus === 'fetching' && query.meta?.silent !== true) ids.add(`query:${query.queryHash}`);
+      }
+      return ids;
+    },
+    subscribe: (listener) => cache.subscribe(listener),
+  };
+}
 
+/**
+ * DataProgress is the app-wide "work in flight" signal: one 2px bar pinned under the header, whose
+ * length is the share of the page's reads and module downloads that have arrived.
+ *
+ * It exists so no view ever has to blank, dim or swap itself out to show that data is loading.
+ */
 export const DataProgress: React.FC = () => {
-  // Silent polls are in flight too, but counting them would make the bar blink
-  // every few seconds — design.md keeps background refresh invisible.
-  const fetching = useIsFetching({ predicate: (query) => query.meta?.silent !== true });
-  const [isVisible, setIsVisible] = React.useState(false);
-
-  React.useEffect(() => {
-    if (fetching === 0) {
-      setIsVisible(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setIsVisible(true), SHOW_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [fetching]);
-
-  if (!isVisible) return null;
-  return <div className="data-progress" role="progressbar" aria-busy="true" aria-label="loading" />;
+  const t = useT();
+  const queryClient = useQueryClient();
+  const source = React.useMemo(
+    () => mergeProgressSources(queryProgressSource(queryClient), progressTasks),
+    [queryClient],
+  );
+  return <ProgressBar source={source} label={t('common.loading')} className="data-progress" />;
 };

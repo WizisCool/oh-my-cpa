@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
+import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
 import {
   PuzzleOutlined,
   AuditOutlined,
@@ -26,6 +26,7 @@ import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
+import { RouteLoading } from './PageLoading';
 import { CpaUpgradeRequired } from './CpaUpgradeRequired';
 import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -364,7 +365,7 @@ export const AppLayout: React.FC = () => {
           {/* Keyed by pathname so each view cross-fades in instead of hard
               swapping, and the scroll position resets with the new page. */}
           <div key={location.pathname} className={`route-transition${WORKSPACE_ROUTES.has(location.pathname) ? ' workspace-route' : ''}`}>
-            <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
+            <React.Suspense fallback={<RouteLoading />}>
               {isCpaUnsupported ? (
                 <CpaUpgradeRequired />
               ) : isCpaManagementDisabled ? (

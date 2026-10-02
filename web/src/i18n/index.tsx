@@ -757,7 +757,6 @@ const DICT: Record<string, [string, string]> = {
   'logs.tail_empty': ['暂无新日志', 'No log lines yet'],
   'logs.show_more': ['再显示 {n} 行', 'Show {n} more lines'],
   'logs.jump_latest': ['回到最新', 'Back to newest'],
-  'logs.loading': ['加载中…', 'Loading…'],
   'logs.disabled_title': ['CPA 未开启文件日志', 'CPA is not writing a log file'],
   'logs.unsupported_title': ['当前 CPA 版本没有日志接口', 'This CPA build has no log endpoint'],
   'logs.offline_title': ['无法连接 CPA', 'CPA is unreachable'],

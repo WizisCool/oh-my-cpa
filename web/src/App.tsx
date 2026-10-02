@@ -5,7 +5,7 @@ import {
   RouterProvider,
   Navigate,
 } from 'react-router-dom';
-import { App as AntdApp, ConfigProvider, Spin } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import enUS from 'antd/locale/en_US';
 import msMY from 'antd/locale/ms_MY';
 import zhCN from 'antd/locale/zh_CN';
@@ -16,6 +16,9 @@ import { createThemeConfig } from './theme/themeConfig';
 import { AuthGate } from './components/common/AuthGate';
 import { RouteErrorPage } from './components/common/RouteErrorPage';
 import { DemoNotice } from './components/common/DemoNotice';
+// Eager: it stands in for the shell while the shell's own download and the stored preferences are
+// in flight. It reads the locale, so a language change re-renders it rather than recreating the router.
+import { ShellLoading } from './components/common/ShellLoading';
 
 import {
   UsageEventsPage,
@@ -36,7 +39,7 @@ import {
   OmcSettingsPage,
 } from './routePages';
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
-import { I18nProvider, useI18n, useT } from './i18n';
+import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 
@@ -110,23 +113,13 @@ const ThemedShell: React.FC = () => {
   );
 };
 
-// Reading locale in the fallback keeps a language change from recreating the router.
-const AppShellLoading: React.FC = () => {
-  const t = useT();
-  return (
-    <div className="page-loading" role="status" aria-label={t('common.loading')}>
-      <Spin size="large" />
-    </div>
-  );
-};
-
 const AppRoutes: React.FC = () => {
   const config = getAppConfig();
   const router = React.useMemo(() => createBrowserRouter(
     [{
       path: '/',
       element: (
-        <React.Suspense fallback={<AppShellLoading />}>
+        <React.Suspense fallback={<ShellLoading />}>
           <AppLayout />
         </React.Suspense>
       ),
@@ -161,7 +154,7 @@ const AppRoutes: React.FC = () => {
 
   return (
     <AuthGate>
-      <TimeZoneProvider><RouterProvider router={router} /></TimeZoneProvider>
+      <TimeZoneProvider fallback={<ShellLoading />}><RouterProvider router={router} /></TimeZoneProvider>
     </AuthGate>
   );
 };

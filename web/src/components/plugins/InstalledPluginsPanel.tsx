@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Empty, Input, Popconfirm, Skeleton, Switch, Tooltip } from 'antd';
+import { Button, Empty, Input, Popconfirm, Switch, Tooltip } from 'antd';
+import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, SearchOutlined, SettingOutlined, ShopOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
@@ -80,7 +81,7 @@ export function InstalledPluginsPanel({
   });
 
   if (isLoading) {
-    return <Skeleton active paragraph={{ rows: 4 }} className={styles.empty} />;
+    return <PageLoading variant="block" className={styles.empty} />;
   }
 
   if (plugins.length === 0) {

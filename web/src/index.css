@@ -506,8 +506,6 @@ a { color: inherit; }
 /* A switch and the word for its state, side by side in one cell. */
 .switch-status-cell { display: inline-flex; align-items: center; gap: 8px; }
 
-/* A route or a block that has not answered yet: the indicator sits where the content will land. */
-.page-loading { display: flex; justify-content: center; align-items: center; min-height: 40vh; padding: 60px 0; }
 
 .terminal-eyebrow {
   color: var(--muted);
@@ -632,7 +630,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    never becomes a second scroller the reader has to find. */
 .mobile-nav-drawer .app-sider-scroll { overscroll-behavior: contain; }
 .mobile-nav-drawer .app-brand { cursor: default; }
+/* ── sign-in ──────────────────────────────────────────────────────────────
+   One card on a quiet dot field. Everything is the console's own vocabulary - the border step,
+   the surface fill, the accent - so the first screen a reader sees is the console, not a form
+   that happens to precede it. */
 .auth-shell {
+  position: relative;
+  isolation: isolate;
   height: 100vh;
   height: 100dvh;
   display: grid;
@@ -640,15 +644,23 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   background: var(--bg);
   overflow: hidden;
 }
+.auth-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  fill: var(--border);
+  pointer-events: none;
+}
 .auth-header {
   height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 max(24px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-}.auth-brand {
+}
+.auth-brand {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -660,32 +672,46 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   gap: 6px;
 }
 .auth-main {
-  flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
+  padding: 24px 16px 56px;
+}
+/* The modal shell's 6px radius: the card is a standalone shell, not a panel inside a page. */
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+/* The session check and the sign-in request draw on the card's top edge. */
+.auth-progress { position: absolute; inset-inline: 0; top: 0; z-index: 1; }
+.auth-card-body { padding: 32px 32px 28px; }
+.auth-mark {
+  width: 44px;
+  height: 44px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px;
+  gap: 1px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
 }
-.auth-card {
-  width: 100%;
-  max-width: 420px;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-sm) !important;
-  background: var(--surface) !important;
-  box-shadow: none !important;
-  margin: auto;
-}
-.auth-card .ant-card-body {
-  padding: 28px;
-}
+.auth-mark-prompt, .auth-mark-cursor { font-size: 22px; font-weight: 700; line-height: 1; }
+.auth-mark-prompt { color: var(--accent); }
+.auth-mark-cursor { color: var(--fg); }
 .auth-header-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 28px;
 }
 .auth-header-block .terminal-title {
   margin: 0;
@@ -701,29 +727,45 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   line-height: 1.5;
 }
 .auth-alert {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
+.auth-form .ant-form-item { margin-bottom: 20px; }
+.auth-form .ant-form-item .ant-form-item-label { padding-bottom: 8px; }
+.auth-form .ant-form-item .ant-form-item-label > label { font-size: 12px; }
+.auth-submit { font-weight: 600; }
+.auth-placeholder-heading { gap: 12px; padding: 2px 0 4px; }
+.auth-placeholder-heading .placeholder:first-child { height: 8px; }
+.auth-placeholder-heading .placeholder:nth-child(2) { height: 20px; }
+.auth-placeholder-heading .placeholder:nth-child(3) { height: 10px; }
+.auth-placeholder-label { margin: 4px 0 12px; }
+.auth-placeholder-field + .auth-placeholder-field { margin-top: 20px; }
 .auth-footnote {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 32px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
   color: var(--meta);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
+.auth-footnote-icon { flex: none; margin-top: 3px; color: var(--muted); }
 
 @media (max-width: 640px) {
   .auth-header {
     padding: 0 16px 0 12px;
   }
-  .auth-card .ant-card-body {
-    padding: 20px;
-  }
   .auth-main {
-    padding: 20px 12px;
+    padding: 8px 12px 32px;
+  }
+  .auth-card-body {
+    padding: 24px 20px 20px;
+  }
+  .auth-footnote {
+    padding: 12px 20px;
   }
 }
-.dashboard-loading { min-height: 60vh; display: grid; place-items: center; color: var(--muted); }
 .dashboard-page { max-width: 1440px; }
 .terminal-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .dashboard-alert { margin-bottom: 16px; }
@@ -915,7 +957,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .empty-copy { color: var(--muted); font-size: 13px; }
 /* The phone list's first-load indicator, in the space the rows will occupy. Centred because it
    stands in for a block of content rather than sitting beside a label. */
-.phone-list-loading { display: flex; justify-content: center; padding: 40px 0; }
 .runtime-list { margin: 8px 0 0; }
 .runtime-list div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
 .runtime-list dt { color: var(--muted); font-size: 13px; }
@@ -952,7 +993,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .dashboard-tile.is-wide { grid-column: span 2; }
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ant-btn.tile-link { height: auto; padding: 0; font-size: 12px; }
-.tile-skeleton { margin-top: 12px; }
+.tile-placeholder-hero { margin: 14px 0 0; }
+.tile-placeholder-spark { margin-top: 18px; }
+.tile-placeholder-value { margin: 14px 0 12px; }
 .dashboard-key-filter { min-width: 180px; max-width: 240px; }
 .dashboard-key-filter-icon { color: var(--muted); }
 .dashboard-tile .ant-card-body { padding: 20px; height: 100%; display: flex; flex-direction: column; }
@@ -1559,8 +1602,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   border-radius: var(--radius-sm);
 }
 .heatmap-alert { margin-top: 12px; }
-/* A 2px indeterminate bar for a background re-read, matching the app's own `.data-progress`
-   treatment: one composited layer, no layout, no shimmer. */
+/* A 2px indeterminate bar for the panel's own background re-read: one composited layer, no layout,
+   no shimmer. Indeterminate because the panel's one read carries no measure of its own progress. */
 .heatmap-progress { display: block; height: 2px; margin-top: 10px; background: var(--border-soft); overflow: hidden; }
 .heatmap-progress::after { content: ''; display: block; width: 30%; height: 100%; background: var(--accent); animation: heatmap-progress 1.2s linear infinite; }
 @keyframes heatmap-progress { from { transform: translateX(-100%); } to { transform: translateX(433%); } }
@@ -1594,27 +1637,124 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
-/* One thin indeterminate bar beats dimming or replacing a whole view: it is a
-   single composited layer, so it costs nothing while data is in flight. */
+/* ── loading: a measured bar and placeholders where the content will land ──
+   The bar's length is the share of the counted work that has arrived (`loadProgress.ts`); the
+   frame loop writes only the fill's transform, so it never lays out. Its track is a tint of the
+   accent, so the reader sees how much is left as well as how much is done. Done, it holds full for
+   one `base` beat and fades over another. */
+.progress-bar {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transition: opacity var(--motion-base) var(--ease-standard) var(--motion-base);
+}
+.progress-bar[hidden] { display: none; }
+.progress-bar[data-state='running'] { transition: none; }
+.progress-bar[data-state='done'] { opacity: 0; }
+.progress-bar-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+/* Pinned to the top of the scrolling column, directly under the header's rule, and taking no
+   height from the page beneath it. */
 .data-progress {
   position: sticky;
   top: 0;
   z-index: 3;
-  height: 2px;
   margin-bottom: -2px;
+}
+
+/* A first-load placeholder block. The breath is opacity only and staggered one `base` per row, so
+   the wave runs down the frame; ADR 0052 records why this is not §7 rule 3's shimmer. */
+.placeholder {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--border);
+  animation: placeholder-breathe 1400ms var(--ease-standard) infinite alternate both;
+  animation-delay: calc(var(--placeholder-row, 0) * var(--motion-base));
+}
+@keyframes placeholder-breathe {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+.placeholder-lines { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* Line heights are the glyph height of the copy they stand for, centred in its line box. */
+.placeholder-line { height: 10px; }
+.placeholder-line.is-meta { height: 8px; }
+.placeholder-line.is-subtitle { height: 9px; }
+.placeholder-title { height: 18px; }
+.loading-region { min-width: 0; }
+.placeholder-page-head { margin-bottom: 24px; }
+.placeholder-page-head .placeholder-lines { gap: 14px; padding: 5px 0 6px; }
+.placeholder-list { display: flex; flex-direction: column; }
+.placeholder-list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 16px;
+}
+.placeholder-list-row + .placeholder-list-row { border-top: 1px solid var(--border-soft); }
+.placeholder-list-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.placeholder-pill { border-radius: 10px; }
+.block-loading .placeholder-list-row { padding-inline: 0; }
+.placeholder-paragraph { padding: 4px 0; }
+.placeholder-paragraph .placeholder-lines { gap: 14px; }
+.placeholder-table-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 44px;
+  padding: 0 16px;
+}
+.placeholder-table-row + .placeholder-table-row { border-top: 1px solid var(--border-soft); }
+.placeholder-table-cell { flex: 1 1 0; min-width: 0; }
+
+/* The shell's own placeholder, at the geometry `AppLayout` paints: a 236px rail, a 56px header. */
+.shell-loading {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
   overflow: hidden;
-  background: transparent;
+  background: var(--bg);
 }
-.data-progress::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--accent);
-  animation: data-progress-slide 900ms linear infinite;
+.shell-loading-sider { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+.shell-loading-sider .app-brand { cursor: default; }
+/* The rail's rhythm: a 28px group label and 36px items, so each placeholder row sits on the row
+   the real item will occupy. */
+.shell-loading-nav { display: flex; flex-direction: column; gap: 9px; padding: 13px 20px 0; overflow: hidden; }
+.shell-loading-nav-group { display: flex; flex-direction: column; }
+.shell-loading-nav-group > .placeholder { margin: 10px 0; }
+.shell-loading-nav-item { display: flex; align-items: center; gap: 12px; height: 36px; padding-left: 20px; }
+.shell-loading-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.shell-loading-header {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 56px;
+  padding: 0 24px 0 16px;
+  border-bottom: 1px solid var(--border);
 }
-@keyframes data-progress-slide {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
+.shell-loading-crumbs, .shell-loading-actions { display: flex; align-items: center; gap: 14px; }
+.shell-loading-actions { gap: 10px; }
+.shell-loading-progress { position: absolute; inset-inline: 0; bottom: -1px; }
+.shell-loading-content { flex: 1 1 0; min-height: 0; overflow: hidden; }
+@media (max-width: 900px) {
+  .shell-loading { grid-template-columns: minmax(0, 1fr); }
+  .shell-loading-sider { display: none; }
+  .shell-loading-header { padding: 0 16px 0 12px; }
 }
 /* Icon shims (`web/src/components/icons`).
 
@@ -1635,16 +1775,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   line-height: 0;
   vertical-align: -0.125em;
 }
-/* One rotation per 900ms, matching the indeterminate bar above: a spinner's period is
-   not a state transition, so §7 freezes it under reduced motion rather than shortening
-   it. */
+/* One rotation per 900ms: a spinner's period is not a state transition, so §7 freezes it
+   under reduced motion rather than shortening it. */
 .anticon-spin {
   animation: omc-icon-spin 900ms linear infinite;
 }
 @keyframes omc-icon-spin {
   to { transform: rotate(360deg); }
 }
-.tile-skeleton.ant-skeleton { width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   /* antd animates a floating panel in with a zoom (`antZoomBigIn`) and does so under reduced motion
      as well - measured, not assumed. Killing the animation alone is not enough: rc-motion sets the
@@ -1661,8 +1799,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     transform: none !important;
   }
   .route-transition { animation: none; }
-  /* Keep the in-flight signal, drop the movement. */
-  .data-progress::after { animation: none; opacity: 0.6; }
+  /* The bar keeps its measured length and steps with each settled read; the fade is dropped. */
+  .progress-bar { transition: none; }
+  /* A placeholder keeps its place and drops the breath. */
+  .placeholder { animation: none; opacity: 0.7; }
   .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }
   /* The static glyph still reads as "refreshing"; only its rotation is dropped. */
   .anticon-spin { animation: none; }

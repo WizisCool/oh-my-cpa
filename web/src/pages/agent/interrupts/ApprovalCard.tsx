@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Input, Skeleton, Tag } from 'antd';
+import { Button, Input, Tag } from 'antd';
+import { ParagraphPlaceholder } from '../../../components/common/Placeholder';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { Notice } from '../../../components/feedback';
 import { CodeBlock } from '../../../components/workspace/ModelMarkdown';
@@ -37,8 +38,8 @@ export function ApprovalCard({ operation, capability, respond }: ApprovalCardPro
 
   if (!operation) {
     return (
-      <div className={styles['approval']} data-testid="agent-authorization" aria-busy="true">
-        <Skeleton active paragraph={{ rows: 2 }} title={false} />
+      <div className={styles['approval']} data-testid="agent-authorization">
+        <ParagraphPlaceholder rows={2} />
       </div>
     );
   }

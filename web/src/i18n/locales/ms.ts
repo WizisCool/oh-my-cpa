@@ -564,7 +564,6 @@ export const MS: Readonly<Record<string, string>> = {
   "logs.tail_empty": "Tiada baris log lagi",
   "logs.show_more": "Tunjukkan {n} lagi baris",
   "logs.jump_latest": "Kembali ke terbaharu",
-  "logs.loading": "Memuatkan…",
   "logs.disabled_title": "CPA tidak menulis fail log",
   "logs.unsupported_title": "Binaan CPA ini tidak mempunyai titik akhir log",
   "logs.offline_title": "CPA tidak dapat dicapai",

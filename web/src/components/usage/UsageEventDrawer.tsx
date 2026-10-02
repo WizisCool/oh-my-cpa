@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs, Tooltip } from 'antd';
+import { Button, Descriptions, Drawer, Empty, Modal, Tabs, Tooltip } from 'antd';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 import {
   ArrowRightOutlined,
   BlockOutlined,
@@ -221,7 +222,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       closable={{ 'aria-label': t('common.close') }}
     >
       {result.isLoading ? (
-        <Skeleton active={false} paragraph={{ rows: 12 }} />
+        <ParagraphPlaceholder rows={12} />
       ) : result.isError ? (
         <LoadFailure title={t('events.load_error')} error={result.error} onRetry={() => void result.refetch()} />
       ) : event ? (

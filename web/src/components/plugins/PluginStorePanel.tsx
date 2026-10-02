@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Empty, Input, Modal, Radio, Segmented, Skeleton, Tooltip } from 'antd';
+import { Button, Empty, Input, Modal, Radio, Segmented, Tooltip } from 'antd';
+import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DownloadOutlined,
@@ -67,7 +68,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
   };
 
   if (isLoading) {
-    return <Skeleton active paragraph={{ rows: 6 }} className={styles.empty} />;
+    return <PageLoading variant="block" className={styles.empty} />;
   }
 
   const filterLabels: Record<PluginStoreFilter, string> = {

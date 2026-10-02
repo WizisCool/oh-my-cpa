@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Button, Input, Segmented, Spin } from 'antd';
+import { LoadingRegion, Placeholder } from './common/Placeholder';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
@@ -541,9 +542,15 @@ export const CustomIconLibrary: React.FC<Props> = ({
           onRetry={() => void icons.refetch()}
         />
       ) : icons.isPending ? (
-        <div className={styles['loading']}>
-          <Spin />
-        </div>
+        // The library's own tiles - artwork, then name - so the grid lands where it was drawn.
+        <LoadingRegion className={styles['grid']}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className={`${styles['tile']} ${styles['tile-placeholder']}`}>
+              <Placeholder height={88} row={index} />
+              <Placeholder width="64%" row={index} className="placeholder-line" />
+            </div>
+          ))}
+        </LoadingRegion>
       ) : visibleIcons.length === 0 ? (
         <div className={styles['empty']} data-testid="custom-icons-empty">
           <PictureOutlined />

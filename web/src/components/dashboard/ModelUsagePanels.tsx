@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Segmented, Skeleton, Tooltip } from 'antd';
+import { Card, Segmented, Tooltip } from 'antd';
+import { ParagraphPlaceholder } from '../common/Placeholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -114,7 +115,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
         title={<span className="tile-label">{t('dash.models.trend_title')}</span>}
       >
         {!data && !isError ? (
-          <Skeleton active={false} title={false} paragraph={{ rows: 4, width: ['100%', '90%', '95%', '80%'] }} />
+          <ParagraphPlaceholder rows={4} />
         ) : isError && !data ? (
           <ModelPanelsError
             message={error instanceof ApiError ? error.message : t('dash.error_desc')}
@@ -149,7 +150,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
         extra={viewToggle}
       >
         {!data && !isError ? (
-          <Skeleton active={false} title={false} paragraph={{ rows: 4, width: ['100%', '90%', '95%', '80%'] }} />
+          <ParagraphPlaceholder rows={4} />
         ) : isError && !data ? (
           <ModelPanelsError
             message={error instanceof ApiError ? error.message : t('dash.error_desc')}
