@@ -407,23 +407,34 @@ export function useConfigDraft() {
    * source draft is whole text, which the latest document replaces (the dialog
    * offers to copy it first).
    */
-  const reloadAfterConflict = React.useCallback(async () => {
-    setConflictState(null);
+  /**
+   * reloadBaseline replaces the draft with the document CPA stores now, in the
+   * current view. Callers only reach it with a draft that has nothing to lose:
+   * the conflict dialog asked first, and a restore is refused while dirty.
+   */
+  const reloadBaseline = React.useCallback(async () => {
     if (viewModeRef.current === 'visual') {
       await configQuery.refetch();
       return;
     }
+    void queryClient.invalidateQueries({ queryKey: ['management-config'] });
     try {
       const source = await api.getConfigSource();
       adoptBaseline(source.yaml, source.revision, null, false);
     } catch (err) {
       toast.error(t('cfg.source_load_failed', { msg: describeError(err) }));
     }
-  }, [adoptBaseline, configQuery, toast, t]);
+  }, [adoptBaseline, configQuery, queryClient, toast, t]);
+
+  const reloadAfterConflict = React.useCallback(async () => {
+    setConflictState(null);
+    await reloadBaseline();
+  }, [reloadBaseline]);
 
   return {
     storedLayout: configQuery.data?.stored_layout,
     reloadAfterConflict,
+    reloadBaseline,
     editorRef,
     viewMode,
     setViewMode,

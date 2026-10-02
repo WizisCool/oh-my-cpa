@@ -45,7 +45,7 @@ func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
 	if keys == nil {
 		keys = []string{}
 	}
-	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: CLIENT_KEYS_PATH, Value: keys}})
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonClientKeys), []ConfigChange{{Path: CLIENT_KEYS_PATH, Value: keys}})
 }
 
 type OpenAICompatibilityResponse struct {

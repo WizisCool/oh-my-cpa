@@ -171,7 +171,7 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 	if len(rawYAML) > CONFIG_YAML_LIMIT {
 		return errors.New("configuration YAML exceeds 2MB limit")
 	}
-	if err := c.keepLegacyConfig(ctx); err != nil {
+	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigSource)); err != nil {
 		return err
 	}
 	return c.doBody(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", nil)
@@ -212,7 +212,7 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	if len(changes) == 0 {
 		return nil
 	}
-	stored, err := c.keepLegacyConfigStored(ctx)
+	stored, err := c.keepStoredConfig(ctx)
 	if err != nil {
 		return err
 	}

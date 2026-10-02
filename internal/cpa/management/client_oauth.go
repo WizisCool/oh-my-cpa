@@ -229,5 +229,5 @@ func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, al
 	} else {
 		changes = append(changes, ConfigChange{Path: path, Value: aliases})
 	}
-	return c.ApplyConfigChanges(ctx, changes)
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonOAuthAliases), changes)
 }

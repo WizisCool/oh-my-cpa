@@ -48,6 +48,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"client_key_aliases":            nil,
 	"connections":                   nil,
 	"cpa_bindings":                  nil,
+	"cpa_config_backup_settings":    nil,
 	"discovered_resources":          {"details_json"},
 	"error_events":                  {"body"},
 	"ingest_gaps":                   nil,

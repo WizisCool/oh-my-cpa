@@ -69,7 +69,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
-| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the legacy-file backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
+| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
@@ -422,21 +422,41 @@ unknown section or a mistyped value without writing that request; when no earlie
 request in the change set landed, the facade reports `422 config_rejected` with CPA's
 reason in `reason`. Earlier valid requests are not rolled back.
 
-Before any v8 configuration write the client reads the stored file and, when it is not a
-v8 file (`configyaml.IsV8Document`), hands it to the configured `ConfigBackup`
-(`internal/cpa/management/config_backup.go`), because that write makes CPA convert the
-whole file. The API layer stores it encrypted in `cpa_config_backups`
-(`repository.ConfigBackupStore`, the latest `CONFIG_BACKUP_RETENTION`); a write whose
-copy cannot be kept is refused before anything is sent (`503 config_backup_failed`). The
-check reads the stored file before every write rather than remembering a v8 answer,
-because an operator can put a legacy file back at any time; a repeated attempt on the
-same legacy file keeps no second copy. The v8 writes after which CPA itself saves the file
-(`InstallPlugin`, `DeletePlugin`, `PatchAuthFileStatus`) take the same copy first. A
+Before every configuration write the client reads the stored file and hands it, whatever
+its layout (`configyaml.IsV8Document`), to the configured `ConfigBackup`
+(`internal/cpa/management/config_backup.go`), so every operation can be undone (ADR 0051).
+The API layer stores it encrypted in `cpa_config_backups` (`repository.ConfigBackupStore`)
+with its layout and the kind of write it preceded (`management.WithBackupReason`; the
+client method names it, and an outer operation such as a restore keeps its own name). A
+copy identical to the gateway's newest one is not stored twice, so refused retries keep no
+extra copies. v8 copies are kept to the operator's retention
+(`cpa_config_backup_settings`, default `CONFIG_BACKUP_RETENTION_DEFAULT`, between
+`CONFIG_BACKUP_RETENTION_MIN` and `CONFIG_BACKUP_RETENTION_MAX`); pre-v8 copies are kept
+apart (`CONFIG_LEGACY_BACKUP_RETENTION`), so everyday writes never push out the copy taken
+before a conversion. A write whose copy cannot be kept is refused before anything is sent
+(`503 config_backup_failed`); only a v8 file with no store configured is written uncopied.
+The file is read before every write rather than remembered, which also captures an edit
+made outside Oh My CPA since the last one. The v8 writes after which CPA itself saves the
+file (`InstallPlugin`, `DeletePlugin`, `PatchAuthFileStatus`) take the same copy first. A
 change set CPA stops partway through is `ErrConfigPartiallyApplied`
 (`502 config_partially_applied`), and CPA's reason for a refused save has the stored
 document's hidden values removed (`configyaml.ScrubStoredSecrets`).
-`GET /management/config/backups` lists the copies and
-`GET /management/config/backups/{id}` returns one, audited as `config.reveal_backup`.
+
+The backup routes live in `internal/api/management_config_backups.go`:
+`GET /management/config/backups` lists the copies (metadata only) with the retention
+settings; `POST /management/config/backups` keeps the stored file now
+(`config.create_backup`, answering `created: false` when it matches the newest copy);
+`PUT /management/config/backups/settings` sets the retention and prunes at once
+(`config.backup_settings`); `GET /management/config/backups/{id}` returns one document,
+audited fail-closed as `config.reveal_backup`; `DELETE /management/config/backups/{id}`
+removes one (`config.delete_backup`, fail-closed); and
+`POST /management/config/backups/{id}/restore` decrypts a v8 copy and writes it through
+`UpdateConfigYAML` under the provider write gate and `configMu`, without a revision check
+(`config.restore_backup`, fail-closed). The restore's own write keeps the replaced file
+first, so a restore is itself undoable; a pre-v8 copy answers `409 config_backup_legacy`
+because the v8 API refuses its field names. The configuration page's backup dialog
+(`web/src/components/config/ConfigBackupsButton.tsx`) withholds restore while the editor
+is dirty and reloads the editor's baseline afterwards.
 
 ### Provider families are data, not code paths
 
@@ -1638,7 +1658,7 @@ account as the reading it was decided from.
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions`, `pricing_match_reviews` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29. Migration 031 added `pricing_match_reviews` (the OpenRouter model last answered for a custom or linked price); match-review reads and writes refuse to run before migration 31 |
 | Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
-| CPA configuration | `cpa_config_backups` | Encrypted copies of pre-v8 CPA configuration files kept before the write that converts them (migration 030, ADR 0037); the latest ten are kept, and the table is hidden from `database_query` |
+| CPA configuration | `cpa_config_backups`, `cpa_config_backup_settings` | Encrypted copies of the stored CPA configuration file, kept before every configuration write (migration 030, ADR 0037; migration 033 adds each copy's `layout` and `reason` and the single-row retention table, ADR 0051). v8 copies are kept to the operator's retention (default 20, 5–100), pre-v8 copies to the latest ten; `cpa_config_backups` is hidden from `database_query` |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
 
 `GET /management/system` resolves the gateway client once and runs its reads side by side

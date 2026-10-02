@@ -299,7 +299,7 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		writeError(writer, http.StatusInternalServerError, "audit log failure; plugin settings save aborted")
 		return
 	}
-	if err := client.ApplyConfigChanges(request.Context(), changes); err != nil {
+	if err := client.ApplyConfigChanges(management.WithBackupReason(request.Context(), management.BackupReasonPluginSettings), changes); err != nil {
 		_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "failure", configWriteFailureDetail(err, map[string]any{}))
 		if errors.Is(err, management.ErrConfigPartiallyApplied) {
 			h.afterConfigWrite()

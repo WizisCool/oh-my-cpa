@@ -193,6 +193,7 @@ func (c *Client) UpdateConfigAPIKeys(ctx context.Context, family ConfigKeyFamily
 }
 
 func (c *Client) writeKeyGroups(ctx context.Context, path []string, groups []map[string]any) error {
+	ctx = WithBackupReason(ctx, BackupReasonProviderKeys)
 	if len(groups) == 0 {
 		return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Remove: true}})
 	}

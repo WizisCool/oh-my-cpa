@@ -26,6 +26,8 @@ import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
 import { AUDIT_PAGE_SIZE, auditSearchParams, type AuditBucket, type AuditEvent, type AuditFilters, type AuditPage } from '../types/audit';
 import {
   ConfigBackup,
+  ConfigBackupList,
+  ConfigBackupSettings,
   ConfigChange,
   ConfigPatchResponse,
   ConfigScalarsResponse,
@@ -519,12 +521,33 @@ export const api = {
     });
   },
 
-  async listConfigBackups(): Promise<{ backups: ConfigBackup[] }> {
-    return request<{ backups: ConfigBackup[] }>('/management/config/backups', { method: 'GET' });
+  async listConfigBackups(): Promise<ConfigBackupList> {
+    return request<ConfigBackupList>('/management/config/backups', { method: 'GET' });
+  },
+
+  /** `created` is false when the stored file matches the newest copy, which is then returned. */
+  async createConfigBackup(): Promise<{ backup: ConfigBackup; created: boolean }> {
+    return request<{ backup: ConfigBackup; created: boolean }>('/management/config/backups', { method: 'POST' });
+  },
+
+  async updateConfigBackupSettings(retention: number): Promise<{ settings: ConfigBackupSettings }> {
+    return request<{ settings: ConfigBackupSettings }>('/management/config/backups/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ retention }),
+    });
   },
 
   async getConfigBackup(id: number): Promise<{ backup: ConfigBackup; yaml: string }> {
     return request<{ backup: ConfigBackup; yaml: string }>(`/management/config/backups/${id}`, { method: 'GET' });
+  },
+
+  /** The server writes the copy back itself; its content never reaches the browser. */
+  async restoreConfigBackup(id: number): Promise<{ status: string; revision?: string }> {
+    return request<{ status: string; revision?: string }>(`/management/config/backups/${id}/restore`, { method: 'POST' });
+  },
+
+  async deleteConfigBackup(id: number): Promise<{ status: string }> {
+    return request<{ status: string }>(`/management/config/backups/${id}`, { method: 'DELETE' });
   },
 
   /**

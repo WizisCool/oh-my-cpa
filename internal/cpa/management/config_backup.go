@@ -8,22 +8,66 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 )
 
-// ConfigBackup keeps the stored configuration file before the first v8
-// configuration write rewrites it.
+// ConfigBackup keeps the stored configuration file before every write after
+// which CPA saves it, so each operation can be undone.
 //
-// That write is not reversible from CPA: it reformats the whole file, moves every
-// setting, adds defaults and turns sections CPA does not know into comments. The
-// file as it was is only readable before the write, so the copy has to be taken
-// then, and a write that cannot be preceded by one is refused.
+// The copy is the file as stored, read just before the write: that is the only
+// moment the state the operation replaces is readable, and it also captures an
+// edit made outside Oh My CPA since the last write. The first v8 write to a
+// pre-v8 file is not reversible from CPA at all (it reformats the whole file,
+// moves every setting and turns sections CPA does not know into comments), so a
+// write whose copy cannot be kept is refused.
 type ConfigBackup interface {
-	KeepLegacyConfig(ctx context.Context, baseURL, storedYAML string) error
+	KeepConfig(ctx context.Context, snapshot ConfigSnapshot) error
 }
 
-// ErrConfigBackupUnavailable refuses a v8 configuration write to a legacy file
-// when no backup could be kept first.
-var ErrConfigBackupUnavailable = errors.New("the CPA configuration file is in the pre-v8 layout and no backup store is available; refusing to convert it")
+// ConfigSnapshot is the stored file as it was before one write.
+type ConfigSnapshot struct {
+	BaseURL string
+	YAML    string
+	IsV8    bool
+	Reason  string
+}
 
-// WithConfigBackup sets where a legacy file is kept before it is migrated.
+// The kind of write a snapshot was taken before. The console names each one,
+// so a new writer adds its own reason rather than reusing another's.
+const (
+	BackupReasonConfigChanges    = "config_changes"
+	BackupReasonConfigSource     = "config_source"
+	BackupReasonProviderKeys     = "provider_keys"
+	BackupReasonClientKeys       = "client_keys"
+	BackupReasonOAuthAliases     = "oauth_aliases"
+	BackupReasonPluginSettings   = "plugin_settings"
+	BackupReasonPluginInstall    = "plugin_install"
+	BackupReasonPluginDelete     = "plugin_delete"
+	BackupReasonCredentialStatus = "credential_status"
+	BackupReasonRestore          = "restore"
+	BackupReasonManual           = "manual"
+)
+
+type backupReasonKey struct{}
+
+// WithBackupReason names the operation a write belongs to. The outermost name
+// wins, so a caller composing several client methods (a restore replacing the
+// whole document) labels the copy as its own operation, not as the method it
+// happens to call.
+func WithBackupReason(ctx context.Context, reason string) context.Context {
+	if _, ok := ctx.Value(backupReasonKey{}).(string); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, backupReasonKey{}, reason)
+}
+
+func backupReason(ctx context.Context) string {
+	reason, _ := ctx.Value(backupReasonKey{}).(string)
+	return reason
+}
+
+// ErrConfigBackupUnavailable refuses a configuration write when the stored file
+// could not be kept first.
+var ErrConfigBackupUnavailable = errors.New("the CPA configuration file could not be backed up; refusing to write it")
+
+// WithConfigBackup sets where the stored file is kept before each write.
 func (c *Client) WithConfigBackup(backup ConfigBackup) *Client {
 	if c != nil {
 		c.configBackup = backup
@@ -41,35 +85,36 @@ func (c *Client) IsStoredConfigV8(ctx context.Context) (bool, string, error) {
 	isV8, err := configyaml.IsV8Document(stored)
 	if err != nil {
 		// CPA would not have loaded a file it cannot parse, so it is treated as
-		// not yet migrated: keeping a copy costs nothing.
+		// not yet migrated: it cannot be written back through the v8 API.
 		return false, stored, nil
 	}
 	return isV8, stored, nil
 }
 
-// keepLegacyConfig reads the stored file before every v8 write rather than
-// remembering that it was v8: an operator can put a legacy file back at any
-// time, and converting that one without a copy is the loss this guards against.
-// A converted file costs one read per write.
-func (c *Client) keepLegacyConfig(ctx context.Context) error {
-	_, err := c.keepLegacyConfigStored(ctx)
-	return err
-}
-
-// keepLegacyConfigStored is keepLegacyConfig returning the stored document it
-// read, so a write can scrub that document's secrets from CPA's refusal.
-func (c *Client) keepLegacyConfigStored(ctx context.Context) (string, error) {
+// keepStoredConfig reads the stored file before every write rather than
+// trusting an earlier copy: an operator can change the file at any time, and
+// that version is exactly what the write is about to replace. It returns the
+// document it read, so a write can scrub that document's secrets from CPA's
+// refusal.
+//
+// Without a store a v8 file is written uncopied, since nothing CPA does to it
+// is irreversible; a pre-v8 file is not, because its conversion is.
+func (c *Client) keepStoredConfig(ctx context.Context) (string, error) {
 	isV8, stored, err := c.IsStoredConfigV8(ctx)
 	if err != nil {
-		return "", fmt.Errorf("read the stored configuration before converting it: %w", err)
-	}
-	if isV8 {
-		return stored, nil
+		return "", fmt.Errorf("read the stored configuration before writing it: %w", err)
 	}
 	if c.configBackup == nil {
-		return "", ErrConfigBackupUnavailable
+		if isV8 {
+			return stored, nil
+		}
+		return "", fmt.Errorf("%w: the file is in the pre-v8 layout and no backup store is available", ErrConfigBackupUnavailable)
 	}
-	if err := c.configBackup.KeepLegacyConfig(ctx, c.baseURL, stored); err != nil {
+	reason := backupReason(ctx)
+	if reason == "" {
+		reason = BackupReasonConfigChanges
+	}
+	if err := c.configBackup.KeepConfig(ctx, ConfigSnapshot{BaseURL: c.baseURL, YAML: stored, IsV8: isV8, Reason: reason}); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrConfigBackupUnavailable, err)
 	}
 	return stored, nil

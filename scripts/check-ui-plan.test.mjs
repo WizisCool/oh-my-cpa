@@ -301,6 +301,14 @@ test('the config page and its editor select the source-editor scenario only', ()
     assert.equal(ids.has('column-alignment'), false, `${file} renders no request row`);
   }
 });
+test('the backup dialog and the page that raises it select the backup scenario', () => {
+  for (const file of ['web/src/components/config/ConfigBackupsButton.tsx', 'web/src/pages/ConfigPage.tsx']) {
+    assert.equal(new Set(planFor(file)).has('config-backups'), true, `${file} reaches the backup scenario`);
+  }
+  // The schema describes the editor's fields; the dialog reads none of them.
+  assert.equal(new Set(planFor('web/src/types/configSchema.ts')).has('config-backups'), false, 'the schema does not reach the backup scenario');
+});
+
 
 // The key page derives its list by resolving `ALL_CONFIG_FIELDS`'s `apiKeys` field against the
 // document through `getFieldSemanticValue`, and neither lives under that page's own directory - so

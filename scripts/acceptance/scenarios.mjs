@@ -62,6 +62,7 @@ import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCat
 import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
+import { configBackups, configBackupsFixtures } from './probes/configBackups.mjs';
 import {
   alignmentFacets,
   alignmentRecords,
@@ -89,6 +90,7 @@ const auditRequests = [];
 /** The writes the plugin management scenario's page sent, read back by its own checks. */
 const pluginManagementWrites = [];
 const pricingBookWrites = [];
+const configBackupsLog = [];
 
 const routeErrorFixtures = () => [
   [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
@@ -782,5 +784,11 @@ export const SCENARIOS = [
     name: "the YAML source editor's find box is drawn with its loaded icon font",
     options: { routes: configSourceFixtures() },
     run: configSourceEditor,
+  },
+  {
+    id: 'config-backups',
+    name: 'the configuration backup dialog names each copy, saves its retention, and restores through a confirmation stacked above it',
+    options: { routes: configBackupsFixtures(configBackupsLog) },
+    run: (context) => configBackups({ ...context, log: configBackupsLog }),
   },
 ];

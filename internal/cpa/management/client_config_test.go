@@ -56,11 +56,13 @@ func (g *configGateway) sent() []string {
 
 type recordingBackup struct {
 	documents []string
+	snapshots []ConfigSnapshot
 	err       error
 }
 
-func (b *recordingBackup) KeepLegacyConfig(_ context.Context, _ string, storedYAML string) error {
-	b.documents = append(b.documents, storedYAML)
+func (b *recordingBackup) KeepConfig(_ context.Context, snapshot ConfigSnapshot) error {
+	b.documents = append(b.documents, snapshot.YAML)
+	b.snapshots = append(b.snapshots, snapshot)
 	return b.err
 }
 
@@ -187,15 +189,16 @@ func TestApplyConfigChangesReportsAPartialWrite(t *testing.T) {
 	}
 }
 
-func TestALegacyFilePutBackAfterAConversionIsKeptAgain(t *testing.T) {
-	gateway := &configGateway{stored: "config-version: 8\n"}
+func TestEveryWriteKeepsTheStoredFileFirst(t *testing.T) {
+	stored := "config-version: 8\n"
+	gateway := &configGateway{stored: stored}
 	client := newConfigClient(t, gateway)
 	backup := &recordingBackup{}
 	client.WithConfigBackup(backup)
 	if err := client.UpdateConfigScalar(context.Background(), "debug", true); err != nil {
 		t.Fatal(err)
 	}
-	// The operator restores the legacy file right after a write to the v8 one.
+	// The operator puts a legacy file back by hand right after a write to the v8 one.
 	legacy := "port: 8317\ndebug: false\n"
 	gateway.mu.Lock()
 	gateway.stored = legacy
@@ -203,8 +206,39 @@ func TestALegacyFilePutBackAfterAConversionIsKeptAgain(t *testing.T) {
 	if err := client.UpdateConfigScalar(context.Background(), "debug", false); err != nil {
 		t.Fatal(err)
 	}
-	if len(backup.documents) != 1 || backup.documents[0] != legacy {
-		t.Fatalf("backup = %q", backup.documents)
+	if len(backup.snapshots) != 2 {
+		t.Fatalf("snapshots = %+v", backup.snapshots)
+	}
+	if first := backup.snapshots[0]; first.YAML != stored || !first.IsV8 || first.Reason != BackupReasonConfigChanges || first.BaseURL != client.BaseURL() {
+		t.Fatalf("first snapshot = %+v", first)
+	}
+	if second := backup.snapshots[1]; second.YAML != legacy || second.IsV8 {
+		t.Fatalf("second snapshot = %+v", second)
+	}
+}
+
+func TestSnapshotsNameTheOperationTheyPrecede(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n"}
+	client := newConfigClient(t, gateway)
+	backup := &recordingBackup{}
+	client.WithConfigBackup(backup)
+	ctx := context.Background()
+	if err := client.UpdateConfigYAML(ctx, "config-version: 8\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.UpdateClientAPIKeys(ctx, []string{"sk-a"}); err != nil {
+		t.Fatal(err)
+	}
+	// An outer operation keeps its own name over the method it calls.
+	if err := client.UpdateConfigYAML(WithBackupReason(ctx, BackupReasonRestore), "config-version: 8\n"); err != nil {
+		t.Fatal(err)
+	}
+	var reasons []string
+	for _, snapshot := range backup.snapshots {
+		reasons = append(reasons, snapshot.Reason)
+	}
+	if got := strings.Join(reasons, ","); got != "config_source,client_keys,restore" {
+		t.Fatalf("reasons = %s", got)
 	}
 }
 
@@ -222,6 +256,25 @@ func TestFirstV8WriteKeepsTheLegacyFileFirst(t *testing.T) {
 	}
 	if got := gateway.sent(); len(got) != 2 || got[0] != "GET /v0/management/config.yaml" || got[1] != "PATCH /v8/management/config" {
 		t.Fatalf("requests = %v", got)
+	}
+}
+
+func TestAV8FileIsWrittenOnlyAfterItsCopyIsKept(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n"}
+	client := newConfigClient(t, gateway).WithConfigBackup(&recordingBackup{err: errors.New("disk full")})
+	if err := client.UpdateConfigYAML(context.Background(), "config-version: 8\n"); !errors.Is(err, ErrConfigBackupUnavailable) {
+		t.Fatalf("err = %v, want ErrConfigBackupUnavailable", err)
+	}
+	for _, request := range gateway.sent() {
+		if !strings.HasPrefix(request, "GET ") {
+			t.Fatalf("a write was sent without a backup: %v", gateway.sent())
+		}
+	}
+	// Without a store configured at all, nothing CPA does to a v8 file is
+	// irreversible, so the write goes ahead.
+	client.WithConfigBackup(nil)
+	if err := client.UpdateConfigYAML(context.Background(), "config-version: 8\n"); err != nil {
+		t.Fatal(err)
 	}
 }
 

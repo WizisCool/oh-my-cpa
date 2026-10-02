@@ -76,6 +76,7 @@ export const ConfigPage: React.FC = () => {
     getFieldValue,
     storedLayout,
     reloadAfterConflict,
+    reloadBaseline,
     saveMutation,
     showErrorFeedback,
     handleDiscardChanges,
@@ -203,7 +204,7 @@ export const ConfigPage: React.FC = () => {
             />
           )}
 
-          <ConfigBackupsButton />
+          <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
 
           <Button
             size="small"

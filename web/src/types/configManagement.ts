@@ -59,10 +59,42 @@ export interface ConfigSourceSaveResponse {
   size_bytes?: number;
 }
 
-/** A copy of a pre-v8 file, kept before the save that converted it. */
+/** The kind of write a configuration backup was kept before. */
+export type ConfigBackupReason =
+  | 'config_changes'
+  | 'config_source'
+  | 'provider_keys'
+  | 'client_keys'
+  | 'oauth_aliases'
+  | 'plugin_settings'
+  | 'plugin_install'
+  | 'plugin_delete'
+  | 'credential_status'
+  | 'restore'
+  | 'manual'
+  | 'legacy_conversion';
+
+/**
+ * The stored configuration file as it was before one write. Only a `v8` copy
+ * can be restored in place; a `legacy` one is the pre-v8 file, kept for download.
+ */
 export interface ConfigBackup {
   id: number;
   created_at_ms: number;
   revision: string;
   size_bytes: number;
+  layout: 'v8' | 'legacy';
+  reason: ConfigBackupReason | string;
+}
+
+export interface ConfigBackupSettings {
+  retention: number;
+  retention_min: number;
+  retention_max: number;
+  legacy_retention: number;
+}
+
+export interface ConfigBackupList {
+  backups: ConfigBackup[];
+  settings: ConfigBackupSettings;
 }

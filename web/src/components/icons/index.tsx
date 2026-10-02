@@ -118,6 +118,7 @@ export const ReloadOutlined = createIcon(Lucide.RotateCw, 'anticon-reload');
 export const RightOutlined = createIcon(Lucide.ChevronRight, 'anticon-right');
 export const RobotOutlined = createIcon(Lucide.Bot, 'anticon-robot');
 export const RocketOutlined = createIcon(Lucide.Rocket, 'anticon-rocket');
+export const RollbackOutlined = createIcon(Lucide.RotateCcw, 'anticon-rollback');
 export const SafetyCertificateOutlined = createIcon(Lucide.ShieldCheck, 'anticon-safety-certificate');
 export const SaveOutlined = createIcon(Lucide.Save, 'anticon-save');
 export const SearchOutlined = createIcon(Lucide.Search, 'anticon-search');

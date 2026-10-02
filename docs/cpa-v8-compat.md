@@ -348,7 +348,7 @@ rules and an unknown `omc-operator-notes` section.
 | The same save with a stale revision | `409 config_conflict`, nothing written |
 | A change set whose merge carries a mistyped value | `422 config_rejected` with CPA's reason; nothing written, including the set's removal |
 | A removal on the converted file | `200`; the key is gone and CPA reads its default |
-| A later save on the converted file | No second backup |
+| A later save on the converted file | No second copy of the legacy file (measured under ADR 0037; since ADR 0051 each later write also keeps the v8 file it replaces) |
 | `PUT /management/config/source` with a legacy name | `422 config_rejected`: "legacy field debug is not accepted by v8; use observability.logs.debug"; file unchanged |
 
 A change set is sent as one merge for scalars and lists, one `PUT` per map value and one
@@ -370,7 +370,7 @@ model's `input-modalities`, an OAuth alias and a plugin's settings:
 | Disable the OpenAI-compatible provider | `disabled: true`; `support-prompt-cache-key`, `input-modalities` and its key kept, no `auth-index` in the file |
 | Replace, add and empty OAuth aliases | `oauth.model-alias.codex` replaced; `claude` added then removed |
 | Enable a plugin, then replace its settings | `plugins.configs.foo.enabled`, then the whole object; an unknown plugin reads as `plugin_not_found` |
-| Every write after the first | No second backup |
+| Every write after the first | No second copy of the legacy file (measured under ADR 0037; since ADR 0051 each write also keeps the v8 file it replaces) |
 
 ## 5. Detection
 
@@ -395,8 +395,10 @@ Two independent facts, both observed rather than inferred from a version string:
   management-secret setting instead. An undecided probe blocks nothing.
 - **Stored file layout** (`configyaml.IsV8Document` over `GET /v0/management/config.yaml`):
   `v8` when the file carries `config-version: 8` or later, `legacy` otherwise. It decides
-  only whether the next configuration write keeps a backup first, and is exposed as
-  `stored_layout`. It is read again before every configuration write.
+  whether the next configuration write converts the file, and is recorded on the backup
+  that write keeps first: a legacy copy has its own retention and can only be downloaded
+  (ADR 0051). It is exposed as `stored_layout` and read again before every configuration
+  write.
 
 ## 6. Where a setting is written
 
@@ -445,7 +447,8 @@ login providers are served by the same endpoint.
 - the per-family credential lists (`/<family>-api-key`, `/openai-compatibility`), which
   are the only source of each upstream key's `auth-index`: the v8 configuration view is
   the stored document and carries no runtime fields;
-- `/config.yaml`, the file as stored, read before a v8 write to keep a legacy file.
+- `/config.yaml`, the file as stored, read before every v8 configuration write to keep a
+  backup of it.
 
 The RESP usage channel is not part of the Management API and is unchanged.
 
@@ -484,9 +487,10 @@ flows and the contents of usage records were not exercised against a real binary
   written; those saves return `config_partially_applied` without rolling them back.
   Re-check the schema (§10) when moving the pinned version.
 - **The first save converts the file.** Formatting, comments of unmoved keys and unknown
-  sections do not come back from CPA's conversion; the original is in the backup until
-  ten later conversions have pushed it out. Any other v8 configuration writer (CPAMC, a
-  script) converts the file the same way, without OMC's backup.
+  sections do not come back from CPA's conversion; the original is kept as a pre-v8 backup
+  until ten later pre-v8 copies have pushed it out (everyday v8 writes do not count
+  against that). Any other v8 configuration writer (CPAMC, a script) converts the file
+  the same way, without OMC's backup.
 - **A change set is not atomic.** The merge goes first and is where CPA refuses a
   mistyped value; a map value or removal that fails after it leaves the merge applied.
   The save's answer re-reads CPA, so the editor shows what CPA holds.

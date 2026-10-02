@@ -260,7 +260,11 @@ var demoPolicy = []demoPolicyRule{
 
 	// Gateway configuration and credential state.
 	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
-	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "the demo gateway's configuration is never converted, so no backup exists"},
+	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "configuration backups hold the gateway's secrets"},
+	{http.MethodPost, "/api/v1/management/config/backups", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodPut, "/api/v1/management/config/backups/settings", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodDelete, "/api/v1/management/config/backups/{id}", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodPost, "/api/v1/management/config/backups/{id}/restore", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/config/source", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/config/{key}", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPost, "/api/v1/management/api-keys", demoRefuse, "changing gateway key material is disabled"},

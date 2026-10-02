@@ -51,7 +51,7 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 		// Nothing was sent to CPA: the file is unchanged.
 		status = http.StatusServiceUnavailable
 		code = "config_backup_failed"
-		message = "the CPA configuration file could not be backed up before converting it to the v8 layout; nothing was changed"
+		message = "the CPA configuration file could not be backed up before writing it; nothing was changed"
 	} else if errors.Is(err, management.ErrConfigPartiallyApplied) {
 		status = http.StatusBadGateway
 		code = "config_partially_applied"
@@ -127,7 +127,7 @@ func publicCPAErrorMessage(err error) string {
 		return "CPA does not serve its Management API"
 	}
 	if errors.Is(err, management.ErrConfigBackupUnavailable) {
-		return "the CPA configuration file could not be backed up before converting it"
+		return "the CPA configuration file could not be backed up before writing it"
 	}
 	if errors.Is(err, management.ErrConfigPartiallyApplied) {
 		return "CPA applied only part of the configuration change"

@@ -208,7 +208,8 @@ const SCENARIO_PATHS = [
   // The configuration page and the source editor behind it. The planner used to name the page
   // with no scenario at all, because nothing probed it; the source view now does, for the one
   // claim a browser alone can settle - that the editor's widget glyphs are painted with the icon
-  // font its slim build has to register itself.
+  // font its slim build has to register itself. The backup dialog is raised from the page's
+  // toolbar and restores through a confirmation stacked above it, which `config-backups` owns.
   //
   // The key page's own list scenario comes along because this directory is not the config page's
   // alone: the key list is derived by resolving `ALL_CONFIG_FIELDS`'s `apiKeys` field against the
@@ -217,9 +218,9 @@ const SCENARIO_PATHS = [
   // `touch-ergonomics` are deliberately not named: nothing here owns an overlay or a hit target.
   {
     prefix: 'web/src/components/config/',
-    scenarios: ['config-source-editor', 'phone-lists'],
+    scenarios: ['config-source-editor', 'config-backups', 'phone-lists'],
   },
-  { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor'] },
+  { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor', 'config-backups'] },
   { prefix: 'web/src/types/configSchema', scenarios: ['config-source-editor', 'phone-lists'] },
   { prefix: 'web/src/pages/QuickStartPage', scenarios: [] },
   // The key list page: the phone rendering, the touch rules and the modal Back dismissal

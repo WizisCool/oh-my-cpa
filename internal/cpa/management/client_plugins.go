@@ -210,7 +210,7 @@ func (c *Client) SetPluginEnabled(ctx context.Context, id string, enabled bool) 
 	if err := c.requireKnownPlugin(ctx, id, path); err != nil {
 		return err
 	}
-	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: append(path, "enabled"), Value: enabled}})
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonPluginSettings), []ConfigChange{{Path: append(path, "enabled"), Value: enabled}})
 }
 
 // requireKnownPlugin refuses a write for a plugin that is neither installed nor
@@ -279,17 +279,17 @@ func (c *Client) SetPluginConfig(ctx context.Context, id string, config map[stri
 	if err := c.requireKnownPlugin(ctx, id, path); err != nil {
 		return err
 	}
-	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Value: config}})
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonPluginSettings), []ConfigChange{{Path: path, Value: config}})
 }
 
 // DeletePlugin removes a plugin. CPA saves the configuration file in the v8
-// layout when the plugin had settings there, so a legacy file is kept first.
+// layout when the plugin had settings there, so the stored file is kept first.
 func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResult, error) {
 	endpoint, err := pluginEndpoint(id, "")
 	if err != nil {
 		return PluginDeleteResult{}, err
 	}
-	if err := c.keepLegacyConfig(ctx); err != nil {
+	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonPluginDelete)); err != nil {
 		return PluginDeleteResult{}, err
 	}
 	var result PluginDeleteResult
@@ -322,7 +322,7 @@ func (c *Client) PluginStore(ctx context.Context) (PluginStore, error) {
 // InstallPlugin installs or updates a store plugin. The source pins which
 // registry supplies it when several list the same id; an empty version asks
 // for the newest release. CPA records the installed plugin by saving the
-// configuration file in the v8 layout, so a legacy file is kept first.
+// configuration file in the v8 layout, so the stored file is kept first.
 func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string) (PluginInstallResult, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -336,7 +336,7 @@ func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string
 	if version = strings.TrimSpace(version); version != "" {
 		payload["version"] = version
 	}
-	if err := c.keepLegacyConfig(ctx); err != nil {
+	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonPluginInstall)); err != nil {
 		return PluginInstallResult{}, err
 	}
 	var result PluginInstallResult

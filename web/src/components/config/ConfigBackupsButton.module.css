@@ -1,0 +1,49 @@
+/* ConfigBackupsButton.module.css — the configuration backup list and its retention. */
+
+.backups-desc {
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* Retention on the left, the manual copy on the right; a narrow dialog wraps them. */
+.backups-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.backups-retention {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.backups-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.backups-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.backups-layout {
+  margin-inline-end: 0;
+}
+
+.backups-actions {
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.backups-table {
+  min-width: 0;
+}
