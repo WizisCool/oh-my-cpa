@@ -5,7 +5,7 @@ import {
   RouterProvider,
   Navigate,
 } from 'react-router-dom';
-import { App as AntdApp, ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider, Spin } from 'antd';
 import enUS from 'antd/locale/en_US';
 import msMY from 'antd/locale/ms_MY';
 import zhCN from 'antd/locale/zh_CN';
@@ -13,7 +13,6 @@ import zhTW from 'antd/locale/zh_TW';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getAppConfig } from './types/config';
 import { createThemeConfig } from './theme/themeConfig';
-import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
 import { RouteErrorPage } from './components/common/RouteErrorPage';
 import { DemoNotice } from './components/common/DemoNotice';
@@ -40,6 +39,9 @@ import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
+
+// The recovery boundary stays eager even when the authenticated shell cannot be downloaded.
+const AppLayout = React.lazy(() => import('./components/common/AppLayout').then(module => ({ default: module.AppLayout })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,7 +115,11 @@ const AppRoutes: React.FC = () => {
   const router = React.useMemo(() => createBrowserRouter(
     [{
       path: '/',
-      element: <AppLayout />,
+      element: (
+        <React.Suspense fallback={<div className="page-loading"><Spin size="large" /></div>}>
+          <AppLayout />
+        </React.Suspense>
+      ),
       errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <Navigate to="/dashboard" replace /> },

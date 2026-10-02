@@ -105,12 +105,12 @@ function sameColour(left, right) {
   await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-light'));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  // The stored theme is applied during hydration. Waiting for it is the readiness
-  // signal both checks below depend on, and it is stronger than a pause: a
-  // half-hydrated page can show the dark theme with correct geometry.
+  // Theme hydration precedes the lazy shell: geometry needs both the stored theme
+  // and the rendered shell, not the sign-in screen or its in-flight replacement.
   await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-light'), {
     label: 'the stored light theme to be applied after reload',
   });
+  await page.locator('.app-shell .app-content').waitFor();
   const mobileOverflow = await measureStable(
     () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
     { page, label: 'the light-mode mobile overflow measurement' },
@@ -130,6 +130,7 @@ function sameColour(left, right) {
   await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-light'), {
     label: 'the light theme before reading the brand mark',
   });
+  await page.locator('.app-shell .app-brand-logo').first().waitFor();
   const lightMark = await brandMarkState(page);
   check('the brand mark renders in the light theme', lightMark.naturalWidth > 0, `width=${lightMark.naturalWidth}`);
   check('the light wordmark renders near-black ink', lightMark.hasDarkInk, `ink=${lightMark.ink}`);
@@ -148,6 +149,7 @@ function sameColour(left, right) {
   await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-dark'), {
     label: 'the dark theme before reading the brand mark',
   });
+  await page.locator('.app-shell .app-brand-logo').first().waitFor();
   const darkMark = await brandMarkState(page);
   check('the brand mark renders in the dark theme', darkMark.naturalWidth > 0, `width=${darkMark.naturalWidth}`);
   check('the dark wordmark renders near-white ink', darkMark.hasLightInk, `ink=${darkMark.ink}`);

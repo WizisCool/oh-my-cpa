@@ -792,9 +792,12 @@ The root data route in `web/src/App.tsx` provides `RouteErrorPage` as its
 `errorElement`. Descendant render errors, rejected lazy page imports and shell
 render errors bubble to this eagerly imported, full-page fallback, outside
 `AppLayout` but inside the existing theme and language providers. It makes no API
-reads. `web/src/utils/routeErrorDiagnostics.ts` projects a bounded error name,
-message and stack plus route pathname, build version, UTC occurrence time and
-HTTP status for route responses. It never serializes arbitrary thrown objects or
+reads. The authenticated `AppLayout` is loaded lazily inside the root route's
+Suspense boundary, using the existing page-loading indicator while pending. Its
+code is not needed for sign-in or error recovery; a rejected shell import reaches
+the same eager error boundary. `web/src/utils/routeErrorDiagnostics.ts` projects
+a bounded error name, message and stack plus route pathname, build version, UTC
+occurrence time and HTTP status for route responses. It never serializes arbitrary thrown objects or
 response bodies; only a string body or its string `message` field is projected.
 Common credential forms and URL credentials/query/fragment values are removed
 before rendering or copying. Redaction is best-effort rather than a guarantee

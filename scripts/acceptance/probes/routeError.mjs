@@ -121,4 +121,46 @@ export async function routeRenderError(fixtures) {
     await page.locator('.app-shell').count() === 0);
   await context.unroute(shellModulePattern, failShell);
 }
-export const routeLazyError = (fixtures) => checkRouteRecovery(fixtures, 'lazy');
+export async function routeLazyError(fixtures) {
+  await checkRouteRecovery(fixtures, 'lazy');
+  const { base, page, context, check, errors } = fixtures;
+  const reading = READINGS[0];
+  await page.evaluate(({ lang }) => localStorage.setItem('omc-lang', lang), reading);
+  const shellModulePattern = '**/src/components/common/AppLayout.tsx*';
+  let rejectShell;
+  const shellRelease = new Promise(resolve => { rejectShell = resolve; });
+  const failShell = async (route) => {
+    await shellRelease;
+    await route.abort('failed');
+  };
+  await context.route(shellModulePattern, failShell);
+  try {
+    await page.goto(`${base}/config`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.page-loading .ant-spin').waitFor();
+    check('the authenticated shell has a visible loading state', await page.locator('.app-shell').count() === 0);
+    rejectShell();
+    await page.getByTestId('route-error-message').waitFor();
+    check('a failed shell download still shows branded diagnostic recovery',
+      (await page.getByTestId('route-error-message').innerText()).includes('Failed to fetch dynamically imported module') &&
+      await page.getByRole('img', { name: 'Oh My CPA', exact: true }).isVisible() &&
+      await page.locator('.app-shell').count() === 0);
+    await page.evaluate(() => {
+      window.__routeErrorCopied = '';
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.__routeErrorCopied = text; } } });
+    });
+    await page.locator('section .ant-btn').click();
+    check('a failed shell download retains the diagnostic copy action',
+      (await page.evaluate(() => window.__routeErrorCopied)).includes('Failed to fetch dynamically imported module'));
+  } finally {
+    rejectShell();
+    await context.unroute(shellModulePattern, failShell);
+  }
+  const home = page.getByRole('link', { name: reading.home, exact: true });
+  await home.focus();
+  await Promise.all([page.waitForEvent('load'), page.keyboard.press('Enter')]);
+  await page.locator('.app-shell').waitFor();
+  check('full-document dashboard recovery retries the shell download',
+    new URL(page.url()).pathname === `${new URL(base).pathname}/dashboard` && await page.getByTestId('route-error-message').count() === 0);
+  check('shell import errors are the only additional browser exceptions',
+    errors.every(message => message.includes('Failed to fetch dynamically imported module')), errors.join(' | '));
+}
