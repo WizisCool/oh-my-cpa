@@ -184,3 +184,16 @@ test('missing ConfigPage ownership cannot silently disable the editor boundary',
   graph.chunks[2].modules = ['web/src/pages/RenamedConfig.tsx'];
   assert.match(evaluateBundle(analyzeBundle(root, graph, REVISION)).failures.join('\n'), /Missing ConfigPage/);
 });
+
+test('deferred stylesheet references are validated without inflating startup CSS', (context) => {
+  const { root, graph } = fixture(context);
+  const stylesheet = 'assets/page.css';
+  fs.writeFileSync(path.join(root, stylesheet), '.page{opacity:1}');
+  graph.chunks[2].css = [stylesheet];
+  const report = analyzeBundle(root, graph, REVISION);
+  assert.equal(report.metrics.initialCSS.raw, 6);
+  assert.ok(report.files[stylesheet].raw > 0);
+  assert.ok(!report.initialCSS.includes(stylesheet));
+  fs.unlinkSync(path.join(root, stylesheet));
+  assert.throws(() => analyzeBundle(root, graph, REVISION), /Missing built resource: assets\/page\.css/);
+});

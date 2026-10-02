@@ -112,6 +112,9 @@ export function analyzeBundle(distDirectory, graph, revision) {
     for (const imported of [...chunk.imports, ...chunk.dynamicImports]) {
       if (!graph.chunks.some((candidate) => candidate.file === imported)) throw new Error(`Missing imported chunk: ${imported}`);
     }
+    for (const stylesheet of chunk.css) {
+      if (!inventory[stylesheet]) throw new Error(`Missing built resource: ${stylesheet}`);
+    }
   }
   const startup = collectStartupResources(fs.readFileSync(path.join(distDirectory, 'index.html'), 'utf8'));
   const initialFiles = walkStaticGraph(graph.chunks, startup.scripts);

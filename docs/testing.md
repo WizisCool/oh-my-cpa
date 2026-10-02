@@ -276,7 +276,8 @@ membership. Reference artifacts are data, never executed source.
 
 Self-tests are automatically discovered:
 - `scripts/bundle-report.test.mjs`: static closures/cycles, HTML preloads, deferred
-  editor, ownership independent of chunk names, missing/stale resources, size and
+  editor, ownership independent of chunk names, missing/stale resources including
+  deferred CSS, size and
   compression calculations, advisory growth and every hard-ceiling boundary.
 - `scripts/bundle-baseline.test.mjs`: exact SHA/event/conclusion selection, bootstrap
   and explicit references, artifact retrieval and missing/invalid evidence.
