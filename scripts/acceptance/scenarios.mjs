@@ -1,3 +1,4 @@
+import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
 import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
@@ -89,7 +90,25 @@ const auditRequests = [];
 const pluginManagementWrites = [];
 const pricingBookWrites = [];
 
+const routeErrorFixtures = () => [
+  [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+  [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+  [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+];
+
 export const SCENARIOS = [
+  {
+    id: 'route-render-error',
+    name: 'route render failures show branded recovery in every language and theme',
+    options: { routes: routeErrorFixtures() },
+    run: routeRenderError,
+  },
+  {
+    id: 'route-lazy-error',
+    name: 'lazy route failures recover through full-document reload and home navigation',
+    options: { routes: routeErrorFixtures() },
+    run: routeLazyError,
+  },
   {
     id: 'route-preloading',
     name: 'navigation intent preloads code without mounting pages or their reads',

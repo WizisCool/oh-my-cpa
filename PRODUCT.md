@@ -104,3 +104,12 @@ OMC Settings provides a shared IANA timezone selection for timestamps and calend
 ### Custom provider artwork
 
 The existing icon picker includes a deployment-owned custom icon library. Operators import PNG, JPEG, WebP or SVG files, or paste Base64/Data URLs, preview validated artwork, then save and select it. Icons support naming, artwork replacement and deletion; replacement updates all assignments, while confirmed deletion clears all assignments and restores affected providers to their default icons or placeholders. The library persists across devices and restarts, needs no external asset host, and is included in database backups. Static imports are limited to 512 KiB and raster dimensions to 1024 × 1024; the library holds 100 icons. Plugin-owned branding remains authoritative. Agent/MCP support metadata reads and CRUD, with confirmation for deletion and the existing tool-payload bound for imports.
+
+### Console error recovery
+
+Route rendering and lazy page-loading failures show a theme-aware, localized OMC
+recovery page with reload and deployment-relative dashboard actions. The page
+provides bounded, redacted diagnostic messages, expandable stacks and a copyable
+report containing the route, build version, UTC occurrence time and HTTP status
+when available. Redaction covers common credential forms and URL parameters;
+operators must still review diagnostic reports before sharing them.

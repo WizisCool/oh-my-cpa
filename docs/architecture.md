@@ -785,6 +785,28 @@ layout animation are listed in its `EXCEPTIONS` table with a reason each, and a
 stale entry is itself a failure. The budget it enforces is stated in
 `docs/design.md` §7, and the reasoning behind the hover bound is ADR 0009.
 
+
+### Route error recovery
+
+The root data route in `web/src/App.tsx` provides `RouteErrorPage` as its
+`errorElement`. Descendant render errors, rejected lazy page imports and shell
+render errors bubble to this eagerly imported, full-page fallback, outside
+`AppLayout` but inside the existing theme and language providers. It makes no API
+reads. `web/src/utils/routeErrorDiagnostics.ts` projects a bounded error name,
+message and stack plus route pathname, build version, UTC occurrence time and
+HTTP status for route responses. It never serializes arbitrary thrown objects or
+response bodies; only a string body or its string `message` field is projected.
+Common credential forms and URL credentials/query/fragment values are removed
+before rendering or copying. Redaction is best-effort rather than a guarantee
+that arbitrary exception text contains no sensitive content. The existing `CopyButton` uses the
+shared clipboard path and its feedback policy.
+Both recovery actions replace the document: reload retries the current URL, while
+the dashboard anchor includes the runtime base path. Replacing the document also
+clears React's cached rejected lazy imports. Provider/bootstrap failures outside
+the router, event-handler exceptions and detached asynchronous failures are not
+caught by this route boundary. Unknown console paths retain their existing
+dashboard redirect.
+
 ### Navigation and calendar render costs
 
 `web/src/routePages.ts` owns the lazy page modules and their shared loaders. The navigation

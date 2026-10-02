@@ -15,6 +15,7 @@ import { getAppConfig } from './types/config';
 import { createThemeConfig } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
+import { RouteErrorPage } from './components/common/RouteErrorPage';
 import { DemoNotice } from './components/common/DemoNotice';
 
 import {
@@ -113,6 +114,7 @@ const AppRoutes: React.FC = () => {
     [{
       path: '/',
       element: <AppLayout />,
+      errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <Navigate to="/dashboard" replace /> },
         { path: 'dashboard', element: <DashboardPage /> },

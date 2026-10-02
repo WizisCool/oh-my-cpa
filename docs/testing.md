@@ -199,3 +199,19 @@ mutations, because the clock does not publish through the transcript's run hook.
 Image parsing, bounds, MIME consistency, static-format detection and SVG security belong in `internal/iconasset/image_test.go`. Repository tests cover persistence, quota, legacy mapping counts, atomic reference clearing with unrelated assets/preferences preserved, stale/missing deletion guards, deletion-failure rollback and concurrent assignment/deletion; handler tests cover authenticated CRUD, private ETag revalidation, bounded input and metadata projection. Operations tests exercise Agent/MCP declarations and deletion confirmation. The automatically discovered custom-icon logic suite checks reference parsing, search, immutable assignment cleanup, save eligibility and failed-selection policy.
 
 The `custom-icon-library` probe owns file selection, validated preview, Base64 replacement, immediate repaint of a mounted provider, selection failure, invalid-replacement save prevention, retained inputs after save/delete failure, reload persistence, referenced deletion with default restoration, cancellation, reload persistence of resets, full-width empty states, focus restoration the narrow editor/confirmation overlay above the provider drawer and automatic reset of its unsaved icon selection. Provider-console planner rules include it alongside the existing picker scenarios, with pinned union and negative cases. Assertions wait on observable state rather than fixed delays.
+
+### Route error recovery regression coverage
+
+`scripts/test-route-error-diagnostics.ts` owns diagnostic projection, HTTP route
+responses, unknown/cyclic/hostile thrown values, bounded output, credential
+redaction and the copied report's fields. It is automatically discovered.
+The `route-render-error` and `route-lazy-error` probes intercept a real page module
+to cause a render exception or an import failure; the render probe also fails the
+shell to prove the fallback is independent of it. They assert the root route's
+brand, localized title and diagnostic copy in all four languages, light/dark
+rendering, phone overflow and touch-sized controls, heading focus, stack
+expansion, redacted clipboard output, and keyboard-driven full-document reload
+and dashboard navigation under the deployment sub-path. Recovery is observed
+after replacing the failed module with a healthy fixture; no production
+fault-injection route is introduced. These router, focus and document-lifetime
+claims require Chromium.

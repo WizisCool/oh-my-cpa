@@ -1828,3 +1828,23 @@ The Stop button uses the existing `--border` / `--surface` tokens and no shadow,
 ### Custom icon picker
 
 The existing icon modal has Built-in and Custom segments. The built-in catalog keeps its category filters and lazy artwork loading. The library header pairs its title/count with Add icon; editor headers pair Back with the action title. The custom library has name search, full-width empty/search-empty states and artwork cards with separate selection, edit and delete targets. New/edit forms replace the grid within the same modal: a named file/Base64 source sits alongside a specimen preview at 64px and a provider-list preview at 24px, with a single save footer. File imports support a keyboard-accessible choose button and drag/drop; only server-validated artwork enables saving. The preview becomes a compact stacked panel on narrow screens, and the modal body scrolls within the viewport. Saving returns to the library without assigning the icon. Deletion opens a dedicated confirmation view with the artwork, reference count and default-reset impact; Cancel receives initial focus, and confirmed deletion removes the asset and restores every assignment to its default or placeholder. Returning from editing or deletion restores focus to Add icon. In-flight writes prevent dismissal and tab switching. The modal retains its explicit layer above the provider drawer. Existing palette, typography, spacing and motion tokens are unchanged.
+
+
+### Route error recovery surface
+
+`web/src/components/common/RouteErrorPage.tsx` uses the console's theme-aware
+22px wordmark and `StatusLabel` danger pip above a flat Ant Design card. The
+heading reuses `terminal-title`; reading text uses the console's 13px body scale,
+with 12px monospaced diagnostic blocks. Card padding, border, small radius,
+background, foreground ladder and action spacing reuse the current console
+system. The right-aligned primary reload action comes last, after the dashboard
+anchor. There are no error-page-specific palette or token mappings.
+
+`PanelTitle`, `FactList` and `CopyButton` own the diagnostic header, metadata rows
+and copy interaction. Error type, route, build, UTC occurrence time and optional
+HTTP status stay visible alongside the redacted error message; a native details
+control reveals the selectable stack. Code wraps and scrolls within its region.
+On phones actions stack with 44px hit areas, and the copy/detail controls keep the
+same touch floor. Heading focus and localized document title identify the failed
+page for keyboard and screen-reader users. Recovery and diagnostic copy are
+available in Simplified Chinese, Traditional Chinese, English and Malay.

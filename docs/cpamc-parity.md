@@ -142,3 +142,10 @@ write. Recovery retention is bounded and process-local, not a durable workflow q
 ### Custom icon library (OMC extension)
 
 The provider icon picker supports a persistent custom library with file/Base64 import, validated preview, name/artwork editing, confirmed deletion that atomically restores referenced providers to defaults and consistent rendering across provider, request, dashboard and pricing surfaces. This is OMC-owned presentation metadata, not an added CPA management endpoint. Plugin-owned logos remain authoritative.
+
+### Console route recovery
+
+OMC supplies a branded full-page recovery surface for route rendering and lazy
+page-loading failures. It preserves the reading language and theme and offers
+full-document reload and deployment-relative dashboard navigation plus redacted, copyable error diagnostics and expandable stack details.
+This is console-owned UX, not a new CPA facade endpoint.

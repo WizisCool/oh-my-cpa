@@ -1,0 +1,128 @@
+.error-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.error-content {
+  width: min(100%, 720px);
+  min-width: 0;
+}
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.recovery-panel {
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+/* Programmatic heading focus identifies the new page, not an interactive control. */
+.error-title:focus {
+  box-shadow: none !important;
+}
+
+.error-description {
+  margin: 12px 0 0;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.diagnostics {
+  min-width: 0;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.message-label {
+  margin: 16px 0 8px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.diagnostic-code {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stack-details {
+  margin-top: 12px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.stack-details summary {
+  width: fit-content;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.stack-details[open] summary {
+  margin-bottom: 8px;
+}
+
+.recovery-hint {
+  margin: 16px 0 0;
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .error-page {
+    padding: 24px 16px;
+  }
+
+  .recovery-actions {
+    flex-direction: column;
+  }
+
+  .recovery-actions :global(.ant-btn) {
+    width: 100%;
+    min-height: 44px;
+    height: auto;
+    white-space: normal;
+  }
+
+  .diagnostics :global(.panel-title) {
+    flex-wrap: wrap;
+  }
+
+  .diagnostics :global(.panel-title-extra .ant-btn),
+  .stack-details summary {
+    min-height: 44px;
+  }
+}
