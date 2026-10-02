@@ -288,3 +288,9 @@ run cancellation endpoint; a disconnected subscriber does not signal operator in
 approvals, secrets and OAuth continue through their existing server-side handoffs and are never
 automatically decided during recovery. Process restart does not resume uncertain external writes.
 See [ADR 0044](adr/0044-browser-connections-subscribe-to-server-owned-runs.md).
+
+### Custom icon library
+
+`custom_icons_list` is a low-risk read for Agent/MCP, accepting an optional `offset` and returning at most twenty icon metadata records plus `has_more`. It includes names, stable IDs, revisions and stored reference counts, never image bytes. `custom_icon_create` accepts `{name,data}` and `custom_icon_update` accepts `{id,name?,data?}` as low-risk presentation writes. Both reuse the browser import validation and return metadata only. The existing 32 KiB capability input cap still applies; larger artwork must be imported through the browser picker rather than widening the tool envelope.
+
+`custom_icon_delete` accepts `{id}` and is destructive/high-risk on both adapters. Its preview contains the icon ID/name, artwork revision, reference count and `provider_icons: restore_defaults` impact; approval rechecks the artwork revision, removes all current matching overrides and deletes the asset in one transaction. Every successful write invalidates `custom-icons`; deletion additionally invalidates `preferences`. Stable refusals are `custom_icon_invalid_image`, `custom_icon_too_large`, `custom_icon_invalid_name`, `custom_icon_limit`, `custom_icon_not_found`; stale deletion approval returns `resource_conflict`. No artwork is returned in capability output, preview or audit details. Tests exercise both adapters, administrator permissions, refusal, reference-reset confirmation and confirmed deletion.

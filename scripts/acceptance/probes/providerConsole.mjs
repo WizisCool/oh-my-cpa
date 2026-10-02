@@ -290,3 +290,165 @@ export async function providerModelPicker({ base, page, check }) {
     `rows=${JSON.stringify(rows)}`,
   );
 }
+
+export function customIconProbeRoutes() {
+  const icons = new Map();
+  let storedIcons = {};
+  const iconID = '0123456789abcdef0123456789abcdef';
+  let shouldFailAssignment = false;
+  let shouldFailArtworkUpdate = true;
+  let shouldFailDeletion = true;
+  return [
+    [(url, method) => url.pathname.endsWith('/custom-icons/preview') && method === 'POST', (_url, _method, request) => {
+      const { data } = JSON.parse(request.postData());
+      let decoded = Buffer.from(data.includes(',') ? data.split(',')[1] : data, 'base64').toString();
+      if (!decoded.includes('<svg')) return { status: 400, json: { error: 'custom_icon_invalid_image', code: 'custom_icon_invalid_image' } };
+      if (!decoded.includes('xmlns=')) decoded = decoded.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+      return { data_url: `data:image/svg+xml;base64,${Buffer.from(decoded).toString('base64')}`, mime_type: 'image/svg+xml' };
+    }],
+    [(url) => url.pathname.includes('/custom-icons') && !url.pathname.endsWith('/content'), (url, method, request) => {
+      if (method === 'GET') return { icons: [...icons.values()] };
+      const id = method === 'POST' ? iconID : url.pathname.split('/').at(-1);
+      const input = method === 'DELETE' ? {} : JSON.parse(request.postData());
+      if (method === 'DELETE') {
+        if (shouldFailDeletion) { shouldFailDeletion = false; return { status: 500, json: { code: 'internal_error' } }; }
+        icons.delete(id);
+        storedIcons = Object.fromEntries(Object.entries(storedIcons).filter(([, reference]) => reference !== `custom:${id}`));
+        return { status: 204, json: null };
+      }
+      if (method === 'PATCH' && shouldFailArtworkUpdate) { shouldFailArtworkUpdate = false; return { status: 500, json: { code: 'internal_error' } }; }
+      const previous = icons.get(id);
+      const icon = { id, name: input.name ?? previous.name, mime_type: 'image/svg+xml', revision: (previous?.revision ?? 0) + 1, reference_count: previous?.reference_count ?? 0, created_at_ms: 1000, updated_at_ms: 1000 };
+      icons.set(id, icon);
+      return icon;
+    }],
+    [(url, method) => url.pathname.endsWith('/preferences/provider_icons') && method === 'PUT', (_url, _method, request) => {
+      const value = JSON.parse(request.postData());
+      if (Object.values(value).includes(`custom:${iconID}`)) {
+        if (!shouldFailAssignment) { shouldFailAssignment = true; return { status: 500, json: { error: 'custom_icon_not_found', code: 'custom_icon_not_found' } }; }
+        if (icons.has(iconID)) icons.get(iconID).reference_count = 1;
+      } else if (icons.has(iconID)) icons.get(iconID).reference_count = 0;
+      // The shared preference mock owns durable state; this route updates it by its GET projection below.
+      storedIcons = value;
+      return { key: 'provider_icons', value };
+    }],
+    [(url, method) => url.pathname.endsWith('/preferences') && method === 'GET', () => ({ preferences: { provider_icons: storedIcons }, time_zone: { effective_timezone: 'UTC', server_timezone: 'UTC' } })],
+    [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+  ];
+}
+
+export async function customIconLibrary({ base, page, check }) {
+  await page.route('**/omc/api/v1/custom-icons/*/content*', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle r="10" cx="12" cy="12"/></svg>' }));
+  await page.goto(`${base}/ai-providers`, { waitUntil: 'domcontentloaded' });
+  const row = page.locator('.providers-page tbody tr[data-row-key="openai-compat-0"]');
+  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
+  const openPicker = async () => { await row.waitFor({ state: 'visible' }); await row.locator('div[title]').first().click(); await picker.waitFor({ state: 'visible' }); };
+  await openPicker();
+  await picker.getByText('Custom', { exact: true }).click();
+  await picker.getByRole('button', { name: 'Add icon' }).click();
+  await picker.getByLabel('Icon name', { exact: true }).fill('Team Upload');
+  await picker.locator('input[type="file"]').setInputFiles({ name: 'team.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0L24 24"/></svg>') });
+  await picker.locator('img[alt="Validate and preview"]').waitFor({ state: 'visible' });
+  await until(async () => await picker.locator('img[alt="Validate and preview"]').evaluate((image) => image.complete && image.naturalWidth > 0), { label: 'validated preview artwork to paint' });
+  await picker.getByRole('button', { name: 'Save icon', exact: true }).click();
+  const tile = picker.locator('[data-custom-icon-id]');
+  await tile.waitFor({ state: 'visible' });
+  check('a file upload creates a reusable icon without selecting it', await tile.getByText('Team Upload', { exact: true }).isVisible() && !await tile.locator('button[data-icon-id]').getAttribute('aria-pressed').then((value) => value === 'true'));
+  await picker.getByRole('textbox', { name: 'Search icons by name' }).fill('no-such-icon');
+  await picker.getByText('No matching icons', { exact: true }).waitFor({ state: 'visible' });
+  check('name search has a dedicated full-width empty result', await picker.getByTestId('custom-icons-empty').evaluate((element) => element.getBoundingClientRect().width > 500));
+  await picker.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await tile.waitFor({ state: 'visible' });
+  await tile.locator('button[data-icon-id]').click();
+  await picker.getByRole('button', { name: 'Add icon' }).waitFor({ state: 'visible' });
+  check('a failed assignment keeps the picker open', await picker.isVisible());
+  await tile.locator('button[data-icon-id]').click();
+  await picker.waitFor({ state: 'hidden' });
+  await until(async () => (await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'custom provider mark' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openPicker();
+  await tile.waitFor({ state: 'visible' });
+  check('custom selection survives reload and allows referenced deletion', await tile.getByRole('button', { name: 'Delete', exact: true }).isEnabled());
+  const previousURL = await row.locator('img').getAttribute('src');
+  await tile.getByRole('button', { name: 'Edit', exact: true }).click();
+  await picker.getByLabel('Icon name', { exact: true }).fill('Team Replaced');
+  await picker.locator('input[type="file"]').setInputFiles({ name: 'invalid.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('not an image') });
+  await picker.getByText('Choose a valid static image.', { exact: false }).waitFor({ state: 'visible' });
+  check('an invalid replacement cannot be saved as a rename', await picker.getByRole('button', { name: 'Save icon', exact: true }).isDisabled());
+  await picker.getByRole('button', { name: 'Keep current artwork', exact: true }).click();
+  await picker.getByText('Paste Base64', { exact: true }).click();
+  await picker.locator('textarea').fill(Buffer.from('<svg><circle r="5"/></svg>').toString('base64'));
+  await picker.getByRole('button', { name: 'Validate and preview', exact: true }).click();
+  await picker.locator('img[alt="Validate and preview"]').waitFor({ state: 'visible' });
+  await until(async () => await picker.locator('img[alt="Validate and preview"]').evaluate((image) => image.complete && image.naturalWidth > 0), { label: 'validated preview artwork to paint' });
+  await picker.getByRole('button', { name: 'Save icon', exact: true }).click();
+  await picker.getByText('The icon operation failed. Try again.', { exact: true }).waitFor({ state: 'visible' });
+  check('failed saves preserve name and validated artwork for retry', await picker.getByLabel('Icon name', { exact: true }).inputValue() === 'Team Replaced' && await picker.locator('img[alt="Validate and preview"]').isVisible());
+  await picker.getByRole('button', { name: 'Save icon', exact: true }).click();
+  await tile.getByText('Team Replaced', { exact: true }).waitFor({ state: 'visible' });
+  await until(async () => await row.locator('img').getAttribute('src') !== previousURL, { label: 'replacement to repaint the live provider row' });
+  check('Base64 replacement updates a live reference without reselecting it', await row.locator('img').getAttribute('src') !== previousURL);
+  await tile.getByRole('button', { name: 'Delete', exact: true }).click();
+  const confirmation = picker.getByTestId('custom-icon-deletion');
+  await confirmation.waitFor({ state: 'visible' });
+  check('deletion explains reference resets and initially focuses Cancel', await confirmation.getByText(/This icon has 1 references/).isVisible() && await confirmation.getByRole('button', { name: 'Cancel', exact: true }).evaluate((element) => element === document.activeElement));
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await tile.waitFor({ state: 'visible' });
+  check('cancelling deletion preserves the asset and assignments', (await row.locator('img').getAttribute('src')).includes('/custom-icons/'));
+  await tile.getByRole('button', { name: 'Delete', exact: true }).click();
+  await confirmation.getByRole('button', { name: /^Delete/ }).click();
+  await confirmation.getByText('The icon operation failed. Try again.', { exact: true }).waitFor({ state: 'visible' });
+  check('failed deletion retains confirmation and the provider artwork', await confirmation.isVisible() && (await row.locator('img').getAttribute('src')).includes('/custom-icons/'));
+  await confirmation.getByRole('button', { name: /^Delete/ }).click();
+  await tile.waitFor({ state: 'hidden' });
+  await until(async () => !(await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'deleted reference to restore the provider default' });
+  check('referenced deletion restores the live provider default', await tile.count() === 0);
+  const empty = picker.getByTestId('custom-icons-empty');
+  await empty.waitFor({ state: 'visible' });
+  check('the empty state spans the library, rather than one tile', await empty.evaluate((element) => element.getBoundingClientRect().width > 500));
+  await until(async () => await picker.getByRole('button', { name: 'Add icon' }).evaluate((element) => element === document.activeElement), { label: 'focus restoration after deletion' });
+  await page.keyboard.press('Escape');
+  await picker.waitFor({ state: 'hidden' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await row.waitFor({ state: 'visible' });
+  check('reference resets persist after reload', !(await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Add Provider' }).click();
+  const drawer = page.locator('.ant-drawer-open');
+  await drawer.waitFor({ state: 'visible' });
+  await drawer.locator('[title="Change Icon"]').click();
+  await picker.waitFor({ state: 'visible' });
+  await picker.getByText('Custom', { exact: true }).click();
+  const geometry = await picker.evaluate((element) => ({ width: element.getBoundingClientRect().width, viewport: innerWidth }));
+  check('the custom library fits a phone above the provider drawer', geometry.width <= geometry.viewport);
+  await picker.getByRole('button', { name: 'Add icon', exact: true }).click();
+  await picker.getByLabel('Icon name', { exact: true }).waitFor({ state: 'visible' });
+  await picker.getByRole('button', { name: 'Save icon', exact: true }).scrollIntoViewIfNeeded();
+  check('the narrow editor has no horizontal overflow and keeps Save reachable', await picker.evaluate((element) => element.scrollWidth <= element.clientWidth) && await picker.getByRole('button', { name: 'Save icon', exact: true }).isVisible());
+  await picker.getByRole('button', { name: 'Back to icons', exact: true }).click();
+  await until(async () => await picker.getByRole('button', { name: 'Add icon', exact: true }).evaluate((element) => element === document.activeElement), { label: 'focus restoration from the narrow editor' });
+  await page.keyboard.press('Escape');
+  await picker.waitFor({ state: 'hidden' });
+  check('dismissal leaves the underlying provider drawer open', await drawer.isVisible());
+  await drawer.getByRole('button', { name: 'Change Icon', exact: true }).click();
+  await picker.getByText('Custom', { exact: true }).click();
+  await picker.getByRole('button', { name: 'Add icon', exact: true }).click();
+  await picker.getByLabel('Icon name', { exact: true }).fill('Draft Icon');
+  await picker.locator('input[type="file"]').setInputFiles({ name: 'draft.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="8" cx="10" cy="10"/></svg>') });
+  await until(async () => await picker.locator('img[alt="Validate and preview"]').evaluate((image) => image.complete && image.naturalWidth > 0), { label: 'draft artwork preview' });
+  await picker.getByRole('button', { name: 'Save icon', exact: true }).click();
+  await tile.locator('button[data-icon-id]').click();
+  await picker.waitFor({ state: 'hidden' });
+  const draftArtwork = drawer.locator('[title="Change Icon"]');
+  await until(async () => (await draftArtwork.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'custom artwork in the provider draft' });
+  await drawer.getByRole('button', { name: 'Change Icon', exact: true }).click();
+  await tile.getByRole('button', { name: 'Delete', exact: true }).click();
+  await confirmation.waitFor({ state: 'visible' });
+  check('narrow deletion explains the unused draft without overflowing', await confirmation.getByText('This icon is not in use.', { exact: false }).isVisible() && await picker.evaluate((element) => element.scrollWidth <= element.clientWidth));
+  await confirmation.getByRole('button', { name: /^Delete/ }).click();
+  await picker.getByTestId('custom-icons-empty').waitFor({ state: 'visible' });
+  await until(async () => await draftArtwork.locator('img[src*="/custom-icons/"]').count() === 0, { label: 'deleted draft artwork to reset' });
+  check("deletion also clears a provider drawer's unsaved icon selection", await draftArtwork.locator('img[src*="/custom-icons/"]').count() === 0);
+  await page.keyboard.press('Escape');
+  await picker.waitFor({ state: 'hidden' });
+}

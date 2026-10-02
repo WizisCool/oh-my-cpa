@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import {
   pluginOAuthProviderLogos,
+  pluginOwnsProvider,
   type PluginOAuthLogos,
 } from '../types/pluginOAuthProviders';
 
@@ -21,4 +22,9 @@ export function usePluginOAuthLogos(): PluginOAuthLogos {
   });
 
   return useMemo(() => pluginOAuthProviderLogos(data?.plugins), [data]);
+}
+
+export function usePluginProviderOwnership(providerKeys: (string | undefined)[], isEnabled: boolean) {
+  const query = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30000, enabled: isEnabled });
+  return { isOwned: pluginOwnsProvider(query.data?.plugins, providerKeys), isUnknown: isEnabled && !query.data };
 }

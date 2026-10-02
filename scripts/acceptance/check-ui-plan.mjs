@@ -157,11 +157,15 @@ const SCENARIO_PATHS = [
   // prevent, and the reason its own test pins this mapping.
   {
     prefix: 'web/src/components/IconPickerModal',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library'],
+  },
+  {
+    prefix: 'web/src/components/CustomIconLibrary',
+    scenarios: ['custom-icon-library'],
   },
   {
     prefix: 'web/src/pages/ProvidersPage',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'provider-model-picker', 'phone-lists', 'overlay-back'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back'],
   },
   // The provider console's own modules: the list table, the editor drawer, the
   // writes and the icon overlay. The page renders nothing but these, so a change
@@ -169,7 +173,7 @@ const SCENARIO_PATHS = [
   // drawer is one of the two overlays the stacking assertion is about.
   {
     prefix: 'web/src/components/providers/',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'provider-model-picker', 'phone-lists', 'overlay-back'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back'],
   },
   // The unified OAuth workspace owns its density, connection drawer, quota body,
   // task panels and phone reflow. Its scenario is the measured equivalent of the

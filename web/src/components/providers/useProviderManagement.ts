@@ -46,7 +46,7 @@ export function useProviderManagement({
   toast: Toast;
   t: ReturnType<typeof useT>;
   providerIcons: Record<string, string>;
-  writeProviderIcon: (id: string, icon: string) => void;
+  writeProviderIcon: (id: string, icon: string) => Promise<{ ok: boolean }>;
   shiftCachedProviderIcons: (id: string) => void;
   settleProviderRow: (id: string, isEnabled: boolean) => void;
 }) {
@@ -232,15 +232,17 @@ export function useProviderManagement({
     );
   };
 
-  const handleSelectIcon = (selectedIconId: string) => {
+  const handleSelectIcon = async (selectedIconId: string): Promise<boolean> => {
     if (targetProviderForIcon) {
-      writeProviderIcon(targetProviderForIcon.id, selectedIconId);
+      const result = await writeProviderIcon(targetProviderForIcon.id, selectedIconId);
+      if (!result.ok) return false;
       toast.success(t('pro.icon_updated'));
       setTargetProviderForIcon(null);
     } else {
       setFormIcon(selectedIconId);
       setIconManuallySelected(true);
     }
+    return true;
   };
 
   const toggleKeyExpanded = (id: string) => {
@@ -444,9 +446,10 @@ export function useProviderManagement({
     // create stores a positional id server-side, and the table resolves an id
     // key before a name key, so an override stored under the display name alone
     // could be shadowed by whatever id the new row landed on.
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
+      const result = await writeProviderIcon(data.id, variables.icon);
+      if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
       toast.success(t('pro.provider_created'));
-      writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
@@ -459,9 +462,10 @@ export function useProviderManagement({
   const updateProviderMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload; icon: string }) =>
       api.updateManagementProvider(id, payload),
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
+      const result = await writeProviderIcon(data.id, variables.icon);
+      if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
       toast.success(t('pro.provider_updated'));
-      writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
@@ -476,6 +480,7 @@ export function useProviderManagement({
     onSuccess: (_data, id) => {
       toast.success(t('pro.provider_deleted'));
       shiftCachedProviderIcons(id);
+      void queryClient.invalidateQueries({ queryKey: ['custom-icons'] });
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {

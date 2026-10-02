@@ -101,6 +101,13 @@ const (
 // preferences, credential metadata, configuration reads, quota reads and the
 // in-process discovery sweep.
 var demoPolicy = []demoPolicyRule{
+	{http.MethodGet, "/api/v1/custom-icons", demoAllow, ""},
+	{http.MethodGet, "/api/v1/custom-icons/{id}/content", demoAllow, ""},
+	{http.MethodHead, "/api/v1/custom-icons/{id}/content", demoAllow, ""},
+	{http.MethodPost, "/api/v1/custom-icons/preview", demoRefuse, "Custom icon uploads are unavailable in the demo"},
+	{http.MethodPost, "/api/v1/custom-icons", demoRefuse, "Custom icon uploads are unavailable in the demo"},
+	{http.MethodPatch, "/api/v1/custom-icons/{id}", demoRefuse, "Custom icon updates are unavailable in the demo"},
+	{http.MethodDelete, "/api/v1/custom-icons/{id}", demoRefuse, "Custom icon deletion is unavailable in the demo"},
 	// The public surface of the API: the health probe and the session endpoints the
 	// sign-in card uses. They are verdicts on API paths, so they resolve before the
 	// `/api/*` fallback refuses an unclassified one.

@@ -138,3 +138,7 @@ The price book groups models by actual configured API-key and OAuth providers, r
 Agent/Playground browser connection recovery is covered by authenticated server-owned replay
 journals and explicit cancellation (ADR 0044); refresh never repeats a generation or capability
 write. Recovery retention is bounded and process-local, not a durable workflow queue.
+
+### Custom icon library (OMC extension)
+
+The provider icon picker supports a persistent custom library with file/Base64 import, validated preview, name/artwork editing, confirmed deletion that atomically restores referenced providers to defaults and consistent rendering across provider, request, dashboard and pricing surfaces. This is OMC-owned presentation metadata, not an added CPA management endpoint. Plugin-owned logos remain authoritative.

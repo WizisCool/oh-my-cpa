@@ -176,6 +176,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                     <div className="provider-brand-badge">
                       <ProviderBrandIcon
                         iconId={provider.iconId}
+                        providerKeys={[provider.key]}
                         logo={provider.logo}
                         size={20}
                         className="provider-brand-icon"

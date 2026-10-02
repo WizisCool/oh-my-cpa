@@ -118,7 +118,7 @@ mutations, because the clock does not publish through the transcript's run hook.
   a persistent quota report, another refresh replaces it, and its close action removes it. It also
   checks one credential-aware authorization toast for a unique new credential, an ambiguous result
   and a failed credential-list refresh, including the action that reveals the provider collection.
-  Cross-stack OAuth acceptance dismisses the completion toast before exercising drawer reopening,
+  Cross-stack OAuth acceptance dismisses authorization-completion and model-alias save/delete outcome toasts before exercising drawer reopening,
   so the notification cannot cover the close action or consume the bounded success-state window.
 - The `agent-failure` scenario retries a failed capability-directory read without losing the
   composer draft, then checks the refused-message retry and the accepted-run failure surfaces.
@@ -193,3 +193,9 @@ mutations, because the clock does not publish through the transcript's run hook.
   same mounted cell. The cross-page cleanup check uses the shared System fixtures and
   waits for its rendered card before navigating back, so module-cache timing cannot hide
   an incomplete response fixture. These event, portal and virtualizer claims belong in Chromium.
+
+### Custom icon regression coverage
+
+Image parsing, bounds, MIME consistency, static-format detection and SVG security belong in `internal/iconasset/image_test.go`. Repository tests cover persistence, quota, legacy mapping counts, atomic reference clearing with unrelated assets/preferences preserved, stale/missing deletion guards, deletion-failure rollback and concurrent assignment/deletion; handler tests cover authenticated CRUD, private ETag revalidation, bounded input and metadata projection. Operations tests exercise Agent/MCP declarations and deletion confirmation. The automatically discovered custom-icon logic suite checks reference parsing, search, immutable assignment cleanup, save eligibility and failed-selection policy.
+
+The `custom-icon-library` probe owns file selection, validated preview, Base64 replacement, immediate repaint of a mounted provider, selection failure, invalid-replacement save prevention, retained inputs after save/delete failure, reload persistence, referenced deletion with default restoration, cancellation, reload persistence of resets, full-width empty states, focus restoration the narrow editor/confirmation overlay above the provider drawer and automatic reset of its unsaved icon selection. Provider-console planner rules include it alongside the existing picker scenarios, with pinned union and negative cases. Assertions wait on observable state rather than fixed delays.

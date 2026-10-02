@@ -37,7 +37,7 @@ export const ChannelMultipliersPanel: React.FC<{
         const identity = channelIdentity(channel.channel, providers);
         return (
           <div className={styles['model-cell']}>
-            <ProviderBrandIcon iconId={identity.iconId} logo={pluginOAuthLogoFor(pluginLogos, channel.channel)} size={18} />
+            <ProviderBrandIcon iconId={identity.iconId} providerKeys={[channel.channel]} logo={pluginOAuthLogoFor(pluginLogos, channel.channel)} size={18} />
             <div className={styles['model-text']}>
               <span className={styles['model-name']}>{identity.label}</span>
               {identity.label !== channel.channel && <span className={styles['model-sub']}>{channel.channel}</span>}

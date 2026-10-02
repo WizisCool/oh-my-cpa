@@ -16,7 +16,7 @@ records why that trade was taken and what it costs.
 | --- | --- | --- |
 | Console | Cloudflare Static Assets, from `tmp/cloudflare-demo/assets` | The built SPA, with the demonstration's runtime configuration injected and its asset URLs made root-relative |
 | API | `deploy/cloudflare/worker.mjs` | Reads the dataset, re-bases its timestamps and answers; refuses everything that would leave the demonstration |
-| Data | `deploy/cloudflare/data/responses.json` | 107 captured responses, generated from the real handlers |
+| Data | `deploy/cloudflare/data/responses.json` | 109 captured responses, generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
 | Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |
@@ -316,3 +316,7 @@ The generated preferences response includes `time_zone` with the deployment, ove
 Run recovery descriptors (`GET /agent/runs/active`, `GET /playground/runs/active`) are generated
 empty reads in the demo dataset. Live journal subscriptions and cancellation remain refused,
 alongside inference: the public demonstration never starts a background model/workflow task.
+
+### Custom icon reads
+
+The generated dataset includes custom-icon metadata and one deterministic SVG content response from the real validated import path. The Worker serves the same-origin content route directly from that capture; query revision parameters do not change the artwork identity. The selector can browse this fixture without contacting an external asset host. Upload, preview-import, edit and delete requests are refused in both the Go demo policy and the Worker's non-read boundary, and their controls are disabled in demo mode. Regenerate the dataset after changing these responses or the picker reads.

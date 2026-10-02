@@ -262,3 +262,9 @@ Console-authenticated recovery endpoints under the configured API base are
 `GET /agent/runs/active`, `GET /agent/runs/{id}`, `POST /agent/runs/{id}/cancel` and their
 `/playground/runs/` counterparts. Generation POSTs carry `X-OMC-Run-ID`; clients without that header
 keep direct-stream semantics. Recovery does not grant extra capability permissions.
+
+### Custom provider icons
+
+Open the provider icon picker and choose **Custom** to upload a PNG/JPEG/WebP/SVG file or paste Base64 (with or without an image Data URL prefix). Validate the preview, save a name, then select the icon. Saved icons can be renamed or replaced; replacement updates all assignments. Deletion is available even for an icon in use: confirmation shows its reference count, and deleting it automatically restores affected providers to their default icons or placeholders. The deployment stores up to 100 static icons, each at most 512 KiB, with raster dimensions at most 1024 × 1024. Icons persist in SQLite and are covered by the usual database backup; no separate uploads directory or external image service is required. Plugin-owned providers retain their plugin branding. Uploads, edits and deletion are disabled in the public demo.
+
+The authenticated API adds `/custom-icons` (GET/POST), `/custom-icons/preview` (POST), `/custom-icons/{id}` (PATCH/DELETE) and `/custom-icons/{id}/content` (GET/HEAD) below the configured API base. Image content is not included in ordinary list or preference responses.

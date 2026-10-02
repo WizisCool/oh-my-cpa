@@ -174,7 +174,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 3: provider (credential that answered) */}
         <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
-            <ProviderBrandIcon iconId={providerInfo.iconId} logo={providerInfo.logo} size={20} />
+            <ProviderBrandIcon iconId={providerInfo.iconId} providerKeys={[event.provider]} logo={providerInfo.logo} size={20} />
           </div>
           <div className="req-provider-content">
             <div className="req-provider-title-row">

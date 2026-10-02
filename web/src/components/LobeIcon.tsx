@@ -1,3 +1,7 @@
+import { usePluginProviderOwnership } from '../hooks/usePluginOAuthLogos';
+import { api } from '../api/client';
+import { useCustomIcons } from '../hooks/useCustomIcons';
+import { customIconID, resolveProviderArtwork } from '../types/customIcons';
 import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { isRenderableLogoURL } from '../types/pluginOAuthProviders';
@@ -28,6 +32,8 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   variant = 'color',
   loading = 'eager',
 }) => {
+  const customID = customIconID(iconId);
+  if (customID) return <CustomIconImage id={customID} size={size} className={className} style={style} loading={loading} />;
   const metadata = iconId ? TOC_BY_ID.get(iconId) : undefined;
   if (!iconId || !metadata) {
     return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
@@ -74,8 +80,19 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   );
 });
 
+const CustomIconImage: React.FC<LobeIconProps & { id: string }> = ({ id, size, className, style, loading }) => {
+  const { data } = useCustomIcons();
+  const icon = data?.find((item) => item.id === id);
+  const [brokenURL, setBrokenURL] = useState('');
+  const url = icon ? api.customIconURL(id, icon.revision) : '';
+  if (!url || brokenURL === url) return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
+  return <img src={url} width={size} height={size} className={className} style={{ display: 'block', objectFit: 'contain', ...style }} alt="" loading={loading} decoding="async" onError={() => setBrokenURL(url)} />;
+};
+
 export interface ProviderBrandIconProps {
-  /** Brand mark id from the vendored icon catalog. Empty renders a neutral placeholder. */
+  providerKeys?: (string | undefined)[];
+  fallbackIconId?: string;
+  /** Brand mark reference from the vendored catalog or deployment custom icon library. Empty renders a neutral placeholder. */
   iconId?: string;
   /** Logo published by the plugin that owns this provider, when there is one. */
   logo?: string;
@@ -91,7 +108,8 @@ export interface ProviderBrandIconProps {
  * looks like, and installing a plugin cannot update the console's catalog. The
  * catalog mark is the fallback rather than the default, because a plugin logo is a
  * network fetch that can fail or be withdrawn, and a provider row that renders
- * nothing is worse than one rendering the known brand.
+ * nothing is worse than one rendering the known brand. Deployment custom artwork
+ * is never the fallback for a plugin-owned identity, even without a usable logo.
  *
  * It lives beside the catalog renderer rather than in a component of its own for two
  * reasons: they answer the same question, and two modules answering it is how a
@@ -100,12 +118,17 @@ export interface ProviderBrandIconProps {
  * by name (`Lobe icon JS`, derived from this file).
  */
 export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
+  providerKeys = [],
+  fallbackIconId,
   iconId,
   logo,
   size,
   className,
   style,
 }) => {
+  const isCustom = Boolean(customIconID(iconId));
+  const ownership = usePluginProviderOwnership(providerKeys, isCustom && providerKeys.length > 0);
+  const fallback = resolveProviderArtwork(iconId, fallbackIconId, Boolean(logo), ownership.isOwned, ownership.isUnknown);
   const [isLogoBroken, setIsLogoBroken] = useState(false);
 
   // A swapped logo (a plugin upgrade, or a provider whose plugin changed) starts
@@ -134,5 +157,5 @@ export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
     );
   }
 
-  return <LobeIcon iconId={iconId} size={size} className={className} style={style} />;
+  return <LobeIcon iconId={fallback} size={size} className={className} style={style} />;
 };

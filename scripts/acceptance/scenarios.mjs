@@ -57,7 +57,7 @@ import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { requestListTouch } from './probes/requestListTouch.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
-import { iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
+import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
@@ -169,6 +169,12 @@ export const SCENARIOS = [
       ],
     },
     run: providerIconPick,
+  },
+  {
+    id: 'custom-icon-library',
+    name: 'custom icons upload, Base64, replacement, referenced deletion resets and phone overlays',
+    options: { routes: customIconProbeRoutes() },
+    run: customIconLibrary,
   },
   {
     id: 'provider-model-picker',

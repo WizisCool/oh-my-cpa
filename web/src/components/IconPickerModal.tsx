@@ -1,7 +1,12 @@
+import { CustomIconLibrary } from './CustomIconLibrary';
+import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Input, Tag, Empty, theme } from 'antd';
+import { Modal, Input, Tag, Empty, Segmented, theme } from 'antd';
 import { SearchOutlined } from './icons';
-import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
+import {
+  LOBE_ICON_CATALOG,
+  type LobeIconCatalogEntry,
+} from '../types/lobeIconCatalog';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
@@ -26,8 +31,9 @@ const ANTD_CONTAINER_ZINDEX_STEP = 100;
 interface IconPickerModalProps {
   open: boolean;
   currentIcon?: string;
-  onSelect: (iconId: string) => void;
+  onSelect: (iconId: string) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
+  onDeleted?: (id: string) => void;
 }
 
 export const IconPickerModal: React.FC<IconPickerModalProps> = ({
@@ -35,15 +41,37 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   currentIcon,
   onSelect,
   onClose,
+  onDeleted,
 }) => {
   const t = useT();
-  useOverlayHistory({ isOpen: open, onClose });
+  const [isLibraryBusy, setIsLibraryBusy] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
+  useOverlayHistory({
+    isOpen: open,
+    onClose: () => {
+      if (!isSelecting && !isLibraryBusy) onClose();
+    },
+  });
   const { token } = theme.useToken();
   // Derived from the live theme token, so a themed z-index base is respected
   // rather than pinned to today's default of 1000.
   const zIndex = token.zIndexPopupBase + ANTD_CONTAINER_ZINDEX_STEP * 2;
+  const [tab, setTab] = useState<'builtin' | 'custom'>('builtin');
+  useEffect(() => {
+    if (open) setTab(currentIcon?.startsWith('custom:') ? 'custom' : 'builtin');
+  }, [open]);
+  const selectIcon = async (reference: string) => {
+    setIsSelecting(true);
+    try {
+      if (shouldCloseIconPicker(await onSelect(reference))) onClose();
+    } finally {
+      setIsSelecting(false);
+    }
+  };
   const [search, setSearch] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState<'all' | 'provider' | 'model' | 'application'>('all');
+  const [selectedGroup, setSelectedGroup] = useState<
+    'all' | 'provider' | 'model' | 'application'
+  >('all');
   const [visibleIconIds, setVisibleIconIds] = useState<Set<string>>(new Set());
   // The grid node is state rather than a ref, because antd mounts the dialog panel
   // asynchronously and on the very first open the effect below runs while the node
@@ -51,7 +79,10 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   // the dependency list does not change when the node finally appears - so nothing
   // was ever observed and the first open rendered every tile as an empty box.
   const [iconGridNode, setIconGridNode] = useState<HTMLDivElement | null>(null);
-  const attachIconGrid = useCallback((node: HTMLDivElement | null) => setIconGridNode(node), []);
+  const attachIconGrid = useCallback(
+    (node: HTMLDivElement | null) => setIconGridNode(node),
+    [],
+  );
 
   const filteredIcons = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -75,18 +106,22 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       return;
     }
     if (!iconGridNode) return;
-    const observer = new IntersectionObserver((items) => {
-      setVisibleIconIds((previous) => {
-        const next = new Set(previous);
-        for (const item of items) {
-          if (!item.isIntersecting) continue;
-          const iconId = (item.target as HTMLElement).dataset.iconId;
-          if (iconId) next.add(iconId);
-        }
-        return next;
-      });
-    }, { root: iconGridNode, rootMargin: '240px 0px' });
-    for (const node of iconGridNode.querySelectorAll('[data-icon-id]')) observer.observe(node);
+    const observer = new IntersectionObserver(
+      (items) => {
+        setVisibleIconIds((previous) => {
+          const next = new Set(previous);
+          for (const item of items) {
+            if (!item.isIntersecting) continue;
+            const iconId = (item.target as HTMLElement).dataset.iconId;
+            if (iconId) next.add(iconId);
+          }
+          return next;
+        });
+      },
+      { root: iconGridNode, rootMargin: '240px 0px' },
+    );
+    for (const node of iconGridNode.querySelectorAll('[data-icon-id]'))
+      observer.observe(node);
     return () => observer.disconnect();
   }, [filteredIcons, open, iconGridNode]);
 
@@ -106,115 +141,165 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
     <Modal
       title={t('pro.icon_picker_title')}
       open={open}
-      onCancel={onClose}
+      onCancel={() => {
+        if (!isSelecting && !isLibraryBusy) onClose();
+      }}
       footer={null}
       width={720}
+      styles={{
+        body: { maxHeight: 'calc(100dvh - 180px)', overflowY: 'auto' },
+      }}
+      destroyOnHidden
       zIndex={zIndex}
     >
-      <div style={{ marginBottom: 16 }}>
-        <Input
-          prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
-          placeholder={t('pro.search_icon_ph')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          allowClear
-          style={{ marginBottom: 12 }}
-          autoFocus
+      <Segmented
+        style={{ marginBottom: 16 }}
+        value={tab}
+        disabled={isSelecting || isLibraryBusy}
+        options={[
+          { value: 'builtin', label: t('icons.builtin') },
+          { value: 'custom', label: t('icons.custom') },
+        ]}
+        onChange={(value) => setTab(value as 'builtin' | 'custom')}
+      />
+      {tab === 'custom' ? (
+        <CustomIconLibrary
+          currentIcon={currentIcon}
+          onSelect={selectIcon}
+          onDeleted={onDeleted}
+          onBusyChange={setIsLibraryBusy}
+          isSelecting={isSelecting}
         />
+      ) : (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <Input
+              prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
+              placeholder={t('pro.search_icon_ph')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+              style={{ marginBottom: 12 }}
+              autoFocus
+            />
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Tag.CheckableTag
-            checked={selectedGroup === 'all'}
-            onChange={() => setSelectedGroup('all')}
-          >
-            {t('common.all')} ({groupCounts.all})
-          </Tag.CheckableTag>
-          <Tag.CheckableTag
-            checked={selectedGroup === 'provider'}
-            onChange={() => setSelectedGroup('provider')}
-          >
-            {t('pro.group_providers')} ({groupCounts.provider})
-          </Tag.CheckableTag>
-          <Tag.CheckableTag
-            checked={selectedGroup === 'model'}
-            onChange={() => setSelectedGroup('model')}
-          >
-            {t('pro.group_models')} ({groupCounts.model})
-          </Tag.CheckableTag>
-          <Tag.CheckableTag
-            checked={selectedGroup === 'application'}
-            onChange={() => setSelectedGroup('application')}
-          >
-            {t('pro.group_apps')} ({groupCounts.application})
-          </Tag.CheckableTag>
-        </div>
-      </div>
-
-      <div
-        ref={attachIconGrid}
-        style={{
-          maxHeight: 420,
-          overflowY: 'auto',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))',
-          gap: 10,
-          padding: '4px 2px',
-        }}
-      >
-        {filteredIcons.length === 0 ? (
-          <div style={{ gridColumn: '1 / -1', padding: '40px 0' }}>
-            <Empty description={t('pro.no_icons_found')} />
-          </div>
-        ) : (
-          filteredIcons.map((item) => {
-            const isSelected = item.id === currentIcon;
-            return (
-              <div
-                key={item.id}
-                data-icon-id={item.id}
-                onClick={() => {
-                  onSelect(item.id);
-                  onClose();
-                }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '10px 4px',
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
-                  background: isSelected ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))' : 'var(--surface)',
-                  cursor: 'pointer',
-                  transition: 'border-color var(--motion-fast), background-color var(--motion-fast)',
-                  userSelect: 'none',
-                }}
-                title={`${item.fullTitle} (${item.id})`}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Tag.CheckableTag
+                checked={selectedGroup === 'all'}
+                onChange={() => setSelectedGroup('all')}
               >
-                {visibleIconIds.has(item.id)
-                  ? <LobeIcon iconId={item.id} size={28} loading="lazy" />
-                  : <div aria-hidden="true" style={{ width: 28, height: 28 }} />}
-                <div
-                  style={{
-                    fontSize: 11,
-                    textAlign: 'center',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    width: '100%',
-                    padding: '0 4px',
-                    color: isSelected ? 'var(--accent)' : 'var(--fg)',
-                    fontWeight: isSelected ? 600 : 400,
-                  }}
-                >
-                  {item.title || item.id}
-                </div>
+                {t('common.all')} ({groupCounts.all})
+              </Tag.CheckableTag>
+              <Tag.CheckableTag
+                checked={selectedGroup === 'provider'}
+                onChange={() => setSelectedGroup('provider')}
+              >
+                {t('pro.group_providers')} ({groupCounts.provider})
+              </Tag.CheckableTag>
+              <Tag.CheckableTag
+                checked={selectedGroup === 'model'}
+                onChange={() => setSelectedGroup('model')}
+              >
+                {t('pro.group_models')} ({groupCounts.model})
+              </Tag.CheckableTag>
+              <Tag.CheckableTag
+                checked={selectedGroup === 'application'}
+                onChange={() => setSelectedGroup('application')}
+              >
+                {t('pro.group_apps')} ({groupCounts.application})
+              </Tag.CheckableTag>
+            </div>
+          </div>
+
+          <div
+            ref={attachIconGrid}
+            style={{
+              maxHeight: 420,
+              overflowY: 'auto',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))',
+              gap: 10,
+              padding: '4px 2px',
+            }}
+          >
+            {filteredIcons.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', padding: '40px 0' }}>
+                <Empty description={t('pro.no_icons_found')} />
               </div>
-            );
-          })
-        )}
-      </div>
+            ) : (
+              filteredIcons.map((item) => {
+                const isSelected = item.id === currentIcon;
+                return (
+                  <div
+                    key={item.id}
+                    data-icon-id={item.id}
+                    role="button"
+                    tabIndex={isSelecting ? -1 : 0}
+                    aria-pressed={isSelected}
+                    aria-disabled={isSelecting}
+                    onClick={() => {
+                      if (!isSelecting) void selectIcon(item.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        !isSelecting &&
+                        (event.key === 'Enter' || event.key === ' ')
+                      ) {
+                        event.preventDefault();
+                        void selectIcon(item.id);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: '10px 4px',
+                      borderRadius: 'var(--radius-sm, 4px)',
+                      border: isSelected
+                        ? '2px solid var(--accent)'
+                        : '1px solid var(--border)',
+                      background: isSelected
+                        ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))'
+                        : 'var(--surface)',
+                      cursor: 'pointer',
+                      transition:
+                        'border-color var(--motion-fast), background-color var(--motion-fast)',
+                      userSelect: 'none',
+                    }}
+                    title={`${item.fullTitle} (${item.id})`}
+                  >
+                    {visibleIconIds.has(item.id) ? (
+                      <LobeIcon iconId={item.id} size={28} loading="lazy" />
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        style={{ width: 28, height: 28 }}
+                      />
+                    )}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        padding: '0 4px',
+                        color: isSelected ? 'var(--accent)' : 'var(--fg)',
+                        fontWeight: isSelected ? 600 : 400,
+                      }}
+                    >
+                      {item.title || item.id}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
     </Modal>
   );
 };

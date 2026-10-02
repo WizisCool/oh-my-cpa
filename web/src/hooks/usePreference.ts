@@ -1,7 +1,7 @@
 import { useT } from '../i18n';
 import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, describeError } from '../api/client';
+import { api, apiErrorCode, describeError } from '../api/client';
 import { useToast } from '../components/feedback';
 
 export interface Preference<T> {
@@ -79,7 +79,9 @@ export function usePreference<T>(
       .then(() => api.putPreference(key, next))
       .catch((err: unknown) => {
         ok = false;
-        toast.error(describeError(err) === 'invalid_timezone' ? t('omc.timezone_invalid') : describeError(err));
+        const code = apiErrorCode(err) || describeError(err);
+        const iconErrorKey = code === 'custom_icon_not_found' ? 'icons.error_missing' : code === 'custom_icon_invalid_name' ? 'icons.error_name' : undefined;
+        toast.error(code === 'invalid_timezone' ? t('omc.timezone_invalid') : iconErrorKey ? t(iconErrorKey) : describeError(err));
         // Put the control back where it was. Without this the optimistic value
         // stays in the cache while the server still holds the old one, and
         // because these preferences never auto-refetch (`staleTime: Infinity`)

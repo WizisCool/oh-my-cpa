@@ -146,7 +146,7 @@ export function ProviderTable({
                 }
               }}
             >
-              <ProviderBrandIcon iconId={iconId} logo={pluginLogo} size={22} />
+              <ProviderBrandIcon iconId={iconId} logo={pluginLogo} providerKeys={[record.family, record.upstream_name, record.name, record.id]} fallbackIconId={getProviderDefaultIcon(record.family, record.name, record.base_url)} size={22} />
             </div>
             <div className={styles['provider-text']}>
               <div className={styles['provider-name']}>

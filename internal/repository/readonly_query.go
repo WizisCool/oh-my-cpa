@@ -75,6 +75,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 
 // QUERY_HIDDEN_TABLES are never readable, with the reason recorded for the next reviewer.
 var QUERY_HIDDEN_TABLES = map[string]string{
+	"custom_icons":       "operator-uploaded artwork is only returned by the authenticated image endpoint",
 	"agent_documents":    "encrypted agent conversations and pending operations",
 	"cpa_config_backups": "encrypted copies of CPA configuration files, which carry every secret in them",
 	"cpa_instances":      "the encrypted CPA management key",

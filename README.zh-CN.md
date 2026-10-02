@@ -250,3 +250,9 @@ CPA_BASE_URL 与 CPA_API_KEY 占位符，图片内容需要替换为本地图片
 `GET /agent/runs/{id}`、`POST /agent/runs/{id}/cancel`，以及 `/playground/runs/` 下的对应接口。
 控制台生成请求携带 `X-OMC-Run-ID`；未携带该请求头的客户端保持原有直连流式行为。
 连接恢复不改变能力调用的权限与确认规则。
+
+### 自定义提供商图标
+
+打开提供商的图标选择器，切换到**自定义**，即可上传 PNG/JPEG/WebP/SVG 文件或粘贴 Base64（支持完整图片 Data URL 和纯编码）。验证预览后命名保存，再点击图标进行选择。已保存图标可改名或替换，替换会更新所有引用；已被引用的图标也可直接删除：确认时会说明引用数量，删除后相关提供商自动恢复默认图标或占位符。每个部署最多保存 100 张静态图标，每张不超过 512 KiB，位图尺寸不超过 1024 × 1024。图标持久化在 SQLite 中，并随数据库备份恢复，无需独立上传目录或外部图片服务。插件提供商继续使用插件拥有的品牌图标。公共演示中禁止上传、编辑和删除。
+
+配置的 API 基路径下新增 `/custom-icons`（GET/POST）、`/custom-icons/preview`（POST）、`/custom-icons/{id}`（PATCH/DELETE）以及 `/custom-icons/{id}/content`（GET/HEAD），均需要控制台认证。列表和偏好响应不携带图片内容。

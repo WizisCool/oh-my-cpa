@@ -385,6 +385,12 @@ export async function runAuthFilesAcceptance({
       async () => aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled(),
       { detail: async () => `disabled=${await aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled()}` },
     );
+    // The top-centre acknowledgement can cover Close; clicking through it would
+    // hover the toast and suspend expiry. Dismiss the reported outcome explicitly.
+    const aliasSavedToast = page.locator('.omc-toast-success').filter({ hasText: /Model aliases saved and verified by readback|模型别名已保存并完成回读校验/ });
+    await aliasSavedToast.waitFor({ state: 'visible' });
+    await aliasSavedToast.locator('.ant-notification-notice-close').click();
+    await aliasSavedToast.waitFor({ state: 'detached' });
     await aliasDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
     await aliasOpen.click();
@@ -402,6 +408,10 @@ export async function runAuthFilesAcceptance({
       'oauth model alias deletion is persisted and read back',
       async () => (await aliasDrawer.locator('[data-alias-field="alias"]').count()) === 0,
     );
+    const aliasDeletedToast = page.locator('.omc-toast-success').filter({ hasText: /Deleted model aliases for|的模型别名/ });
+    await aliasDeletedToast.waitFor({ state: 'visible' });
+    await aliasDeletedToast.locator('.ant-notification-notice-close').click();
+    await aliasDeletedToast.waitFor({ state: 'detached' });
     await aliasDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
 

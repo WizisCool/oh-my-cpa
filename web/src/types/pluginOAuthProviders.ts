@@ -81,3 +81,9 @@ export function pluginOAuthLogoFor(
   const logo = logos[(providerKey || '').trim().toLowerCase()];
   return typeof logo === 'string' && logo ? logo : undefined;
 }
+
+/** Ownership survives a missing or unusable logo; artwork availability is not identity. */
+export function pluginOwnsProvider(plugins: PluginItem[] | undefined, providerKeys: (string | undefined)[]): boolean {
+  const keys = new Set(providerKeys.filter(Boolean).map((key) => key!.trim().toLowerCase()));
+  return (plugins ?? []).some((plugin) => (plugin.supports_oauth || plugin.oauth_provider) && [plugin.id, plugin.oauth_provider].some((key) => Boolean(key && keys.has(key.trim().toLowerCase()))));
+}

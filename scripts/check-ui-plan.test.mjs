@@ -117,8 +117,8 @@ test('the unified OAuth workspace selects its density scenario and overlay histo
 test('a provider-console change selects only the provider-console scenarios', () => {
   // `phone-lists` is in both: the provider table is one of the surfaces ADR 0012 renders as rows on
   // a phone, so a change to it must run the scenario that reads both of its renderings.
-  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'provider-model-picker', 'overlay-back', 'phone-lists']);
-  assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
+  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists']);
+  assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library']);
   // The page renders the console's own modules rather than carrying them, so a
   // change to one of those has to select the same scenarios the page does - the
   // drawer is one of the two overlays the stacking claim is about, and an
@@ -128,7 +128,7 @@ test('a provider-console change selects only the provider-console scenarios', ()
     'web/src/components/providers/ProviderTable.tsx',
     'web/src/components/providers/useProviderManagement.ts',
   ]) {
-    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'provider-model-picker', 'overlay-back', 'phone-lists'], file);
+    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists'], file);
   }
 });
 
@@ -235,7 +235,7 @@ test('a mixed change unions the narrow plans without widening', () => {
   // Two placed paths union; only an *unplaced* one widens. This is the distinction
   // that keeps a two-page change from running everything.
   assert.deepEqual(plan.ids.sort(), [
-    'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
+    'custom-icon-library', 'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
     'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
     'dashboard-rolling-readouts', 'icon-picker-stacking', 'overlay-back', 'phone-lists',
@@ -323,4 +323,14 @@ test('dependency and build inputs widen the UI plan even with unrelated document
     const expected = ['fixture-scenario'];
     assert.deepEqual(planScenarios([file, 'README.md'], expected).ids, expected);
   }
+});
+
+ test('custom icon editor and picker changes retain custom library coverage', () => {
+  assert.deepEqual(planFor('web/src/components/CustomIconLibrary.tsx'), ['custom-icon-library']);
+  assert.deepEqual(planFor('web/src/components/CustomIconLibrary.module.css'), ['custom-icon-library']);
+  assert.equal(planFor('web/src/components/IconPickerModal.tsx').includes('custom-icon-library'), true);
+  for (const file of ['web/src/hooks/useCustomIcons.ts', 'web/src/types/customIcons.ts']) {
+    assert.deepEqual(planFor(file), ALL, `${file} reaches shared provider renderers`);
+  }
+  assert.equal(planFor('web/src/pages/SystemPage.tsx').includes('custom-icon-library'), false);
 });
