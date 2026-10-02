@@ -86,7 +86,7 @@ Rules:
 - **Inspect the fast plan before broad work.** `pnpm test:fast --plan` shows the files and selected checks without running them. After committing, use `pnpm test:fast --base <ref>` (optionally with `--plan`) to include committed differences; the default base is `HEAD`. Selection unions the checks required by each file, so adding documentation cannot hide a migration or configuration change. Dependency changes widen both static and UI plans.
 - Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` with `scripts/acceptance/ui-impact.mjs` and `scripts/acceptance/probe-impact.mjs` (for UI scenarios); all are pinned by tests asserting they never silently select nothing, and each narrowing rule has a negative case.
 
-CI (`.github/workflows/ci.yml`) runs three jobs in parallel: static gates; the browser job (PRs run `verify:browser:p0`, which contains the smoke path; `master` runs the full `verify:browser`; both then run `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs the complete `check:bundle` gate after building and checks generated-state cleanliness before browser execution; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard).
+CI (`.github/workflows/ci.yml`) runs three jobs in parallel: static gates; the browser job (PRs run `verify:browser:p0`, which contains the smoke path; `master` runs the full `verify:browser`; both then run `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs `check:bundle` after building to enforce loading boundaries and broad anomaly ceilings, reports raw/gzip sizes and exact-base growth, and checks generated-state cleanliness before browser execution. A captured bundle failure still permits production browser/demo evidence, then a mandatory final verdict fails the job; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard).
 
 ---
 
@@ -154,7 +154,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
 | `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check); `--base <ref>` includes committed changes, `--plan` prints without running |
 | `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
-| `pnpm check:bundle` | Check every chunk and aggregate budget against the existing production build |
+| `pnpm check:bundle` | Check production loading boundaries and anomaly ceilings; report raw/gzip sizes and exact-base growth |
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
 | `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
 | `pnpm verify:full` | Everything CI runs, locally: for build, harness or workflow changes and for reproducing CI |
@@ -169,7 +169,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
 | `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; CI's P0 run contains it |
 | `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does |
-| `pnpm verify:e2e` | Build and check all bundle budgets, then run browser acceptance and browser probes |
+| `pnpm verify:e2e` | Build and check loading boundaries/anomaly ceilings, then run browser acceptance and browser probes |
 | `pnpm verify:secrets` | Scan worktree for secrets |
 | `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
 | `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |

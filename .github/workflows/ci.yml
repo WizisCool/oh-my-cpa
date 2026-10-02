@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -136,6 +137,7 @@ jobs:
       # install is the genuinely independent third resource, and it is already
       # overlapped.
       - name: Prepare Chromium and build embedded SPA
+        id: prepare
         run: |
           set -o pipefail
           install_log="$(mktemp)"
@@ -143,9 +145,6 @@ jobs:
           install_pid=$!
           build_status=0
           pnpm build || build_status=$?
-          if [ "${build_status}" -eq 0 ]; then
-            pnpm check:bundle || build_status=$?
-          fi
           go_status=0
           if [ "${build_status}" -eq 0 ]; then
             mkdir -p tmp
@@ -165,6 +164,16 @@ jobs:
             exit "${go_status}"
           fi
           exit "${install_status}"
+
+      # Keep production acceptance observable even when a loading boundary or size
+      # ceiling fails. The final verdict below still makes that failure blocking.
+      - name: Verify loading boundaries and report bundle growth
+        id: bundle
+        continue-on-error: true
+        env:
+          BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm check:bundle
 
       - name: Verify generated state before browser tests
         run: |
@@ -200,6 +209,17 @@ jobs:
       - name: Run the demonstration's browser acceptance
         run: pnpm verify:demo
 
+      - name: Upload bundle report
+        if: always() && steps.prepare.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-report
+          path: |
+            tmp/bundle/report.json
+            tmp/bundle/summary.md
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -214,6 +234,12 @@ jobs:
           git diff --check
           git status --short
           test -z "$(git status --porcelain)"
+
+      - name: Require bundle verification success
+        if: always() && steps.prepare.outcome == 'success'
+        env:
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
+        run: test "${BUNDLE_OUTCOME}" = success
 
   # The browser-only probe catalog: every scenario, on every pull request and on
   # master. It drives the Vite dev server with mocked routes, so it needs neither a

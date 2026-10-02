@@ -341,3 +341,22 @@ and timezone probes; no endpoint, response shape or database policy changed.
 The five rounds reduce render work and improve responsiveness and transfer/query cost without claiming to
 remove every main-thread stall. Follow-up work should retain the same throttle and
 report both first-visible content and meaningful interaction readiness.
+
+## Regression policy after the loading-progress change
+
+ADR 0053 replaces narrow per-chunk quotas with production loading-boundary checks,
+raw/gzip reporting and broad anomaly ceilings. The baseline in
+`scripts/bundle-reference.json` records commit `6e76d9e` with unchanged runtime
+sources, measured by the new graph collector: entry 313.97 KiB, startup JS
+1742.63 KiB raw / 563.77 KiB level-6 gzip estimate, startup CSS 63.30 / 12.26 KiB,
+all JS 10696.46 KiB and distribution 12423.51 KiB. This is a size reference, not
+another browser timing audit. The graph/report metadata stays outside dist.
+
+Startup is the static closure of the HTML module entry and modulepreloads, not
+just the entry file. Page/shell/chart/Markdown/editor modules cannot enter it;
+the configuration route additionally retains its on-demand editor boundary.
+Ordinary growth produces comparison evidence and warnings rather than requiring
+routine quota changes. Absolute ceilings still detect gross expansion; their
+values and the exact-base artifact policy are in `docs/testing.md` and
+`scripts/bundle-report.mjs`. Gzip estimates do not remove CPU costs, and these
+checks do not substitute for the browser timings and profiling methodology above.

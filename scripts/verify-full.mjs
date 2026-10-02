@@ -1,58 +1,42 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runChecks } from './parallel-checks.mjs';
 
-// The pinned toolchain is a precondition for every other gate: the other jobs are
-// run by the toolchain this step validates, so a mismatch must fail before them
-// rather than alongside them.
-if (!await runChecks([
-  { label: 'toolchain', command: 'pnpm', args: ['verify:toolchain:strict'] },
-])) process.exit(1);
+export async function runFullVerification({ execute = runChecks, isSerial = false } = {}) {
+  async function runGroup(checks) {
+    if (!isSerial) return execute(checks);
+    let hasPassed = true;
+    for (const check of checks) {
+      if (!await execute([check])) hasPassed = false;
+    }
+    return hasPassed;
+  }
+  // Build and secret/toolchain correctness remain prerequisites for serving a binary.
+  if (!await runGroup([{ label: 'toolchain', command: 'pnpm', args: ['verify:toolchain:strict'] }])) return false;
+  if (!await runGroup([
+    ...(isSerial ? [
+      { label: 'static-go', command: 'pnpm', args: ['verify:static:go'] },
+      { label: 'static-frontend', command: 'pnpm', args: ['verify:static:frontend'] },
+      { label: 'static-repository', command: 'pnpm', args: ['verify:static:repository'] },
+    ] : [{ label: 'static', command: 'pnpm', args: ['verify:static'] }]),
+    { label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] },
+    { label: 'build', command: 'pnpm', args: ['build'] },
+  ])) return false;
+  if (!await runGroup([{ label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] }])) return false;
 
-// Independent groups. `build` produces the SPA that `bundle-budget` measures and
-// that the browser phase serves; `static` includes the Go tests, which compile the
-// same embedded distribution. They are safe together because the build only writes
-// `internal/web/dist`, and the Go tests read whatever is there - a Go test that
-// depended on the build's output would be reading the previous run's bytes, which
-// is why the Go tests assert only what the committed placeholder also satisfies
-// (`internal/web/placeholder.html`), and never the build itself.
-if (!await runChecks([
-  { label: 'static', command: 'pnpm', args: ['verify:static'] },
-  { label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] },
-  { label: 'build', command: 'pnpm', args: ['build'] },
-])) process.exit(1);
+  // Bundle policy is a separate verdict, not a prerequisite for browser evidence.
+  // Every verdict is retained: a successful browser cannot erase a bundle failure.
+  const hasPassedBundle = await runGroup([{ label: 'bundle', command: 'pnpm', args: ['check:bundle'] }]);
+  const hasPassedBrowser = await runGroup([
+    { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
+    { label: 'probes', command: 'pnpm', args: ['verify:probes'] },
+  ]);
+  // The demo has its own server; keep it out of the CPU-sensitive browser group.
+  const hasPassedDemo = await runGroup([{ label: 'demo', command: 'pnpm', args: ['verify:demo'] }]);
+  return hasPassedBundle && hasPassedBrowser && hasPassedDemo;
+}
 
-if (!await runChecks([
-  { label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] },
-  { label: 'bundle-budget', command: 'pnpm', args: ['check:bundle'] },
-])) process.exit(1);
-
-// The two browser phases run concurrently. They are independent processes with their
-// own Chromium and their own service under test - the probe run drives Vite and mocked
-// routes, the acceptance run drives the built binary, the fake CPA and a seeded SQLite -
-// so neither can observe the other.
-//
-// The demonstration's check is deliberately NOT in this group. It serves the
-// demonstration itself and drives a browser against it, and it was in this group first:
-// while it started a workerd process, on a 4-CPU machine that was enough to starve the
-// suite's CPU-sensitive reads - `adding a payload rule makes the configuration savable`
-// failed there and passed alone. It serves in-process now, which is lighter and was
-// re-measured green beside both phases, but the suite below is documented as sensitive
-// and the separation costs under a minute.
-//
-// Concurrency was rejected once because the acceptance suite failed under the
-// contention. The failures were the suite's own CPU-sensitive reads - a footer read
-// racing a refetch, and a poll wait with three intervals of headroom - and they
-// reproduce on the unmodified baseline. Those are fixed; eight consecutive trials on
-// a 2-CPU constraint now pass concurrently, where the baseline failed two in three.
-//
-// Measured under that same 2-CPU constraint: sequential 81.4s / 81.6s, concurrent
-// 69.5s / 71.7s - about 12 seconds, and the gap is larger on more cores.
-//
-// The demonstration runs last with its own server and content-driven readiness checks.
-if (!await runChecks([
-  { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
-  { label: 'probes', command: 'pnpm', args: ['verify:probes'] },
-])) process.exit(1);
-
-if (!await runChecks([
-  { label: 'demo', command: 'pnpm', args: ['verify:demo'] },
-])) process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.slice(2).some((argument) => argument !== '--serial')) throw new Error('Only --serial is supported');
+  if (!await runFullVerification({ isSerial: process.argv.includes('--serial') })) process.exitCode = 1;
+}

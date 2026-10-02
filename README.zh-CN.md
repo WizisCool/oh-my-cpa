@@ -204,10 +204,10 @@ CPA_BASE_URL 与 CPA_API_KEY 占位符，图片内容需要替换为本地图片
 | `pnpm build` | 构建前端 SPA 并同步到 `internal/web/dist` |
 | `pnpm test:fast` | 默认检查相对 `HEAD` 的改动；`--base <ref>` 包含已提交改动，`--plan` 只显示检查范围 |
 | `pnpm test:self` | 有界并行运行仓库与 Worker 自测，并校验 Demo 数据新鲜度 |
-| `pnpm check:bundle` | 对已有生产构建检查全部分块及总量预算 |
+| `pnpm check:bundle` | 检查生产加载边界与异常体积上限，报告 raw/gzip 大小及精确基线增量 |
 | `pnpm check:ui` | 只运行改动能影响到的浏览器场景（Vite 开发服务器 + mock API；`--plan` 说明选择原因） |
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描；与 `check:ui` 一起构成推送前的检查 |
-| `pnpm verify:full` | 在本地运行 CI 的全部内容：构建、Bundle 预算、浏览器验收、完整探针目录与 Demo |
+| `pnpm verify:full` | 在本地运行 CI 的全部内容：构建、加载边界与体积报告、浏览器验收、完整探针目录与 Demo |
 | `pnpm verify:demo` | Demo 的浏览器验收：每个控制台路由都能渲染（设 `OMCPA_DEMO_URL` 可校验线上部署） |
 | `pnpm demo:generate` | 由真实 handler 重新生成 Demo 的 dataset（加 `--check` 则只校验） |
 | `pnpm check:demo` | Demo 的维护契约：覆盖率、新鲜度与隐私 |

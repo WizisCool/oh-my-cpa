@@ -65,7 +65,7 @@
     "verify:demo:go": "node scripts/demo-smoke.mjs",
     "verify:e2e": "pnpm build && pnpm check:bundle && pnpm verify:browser && pnpm verify:probes",
     "verify:full": "node scripts/verify-full.mjs",
-    "verify:full:serial": "pnpm verify:toolchain:strict && pnpm verify:static:go && pnpm verify:static:frontend && pnpm verify:static:repository && pnpm verify:secrets:worktree && pnpm verify:secrets:history && pnpm build && pnpm check:bundle && pnpm verify:browser && pnpm verify:probes && pnpm verify:demo",
+    "verify:full:serial": "node scripts/verify-full.mjs --serial",
     "verify:live": "node scripts/browser-live-smoke.mjs",
     "verify:probes": "node scripts/browser-probes.mjs",
     "verify:secrets": "pnpm verify:secrets:worktree",

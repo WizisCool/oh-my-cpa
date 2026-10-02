@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "revision": "6e76d9e0c0cd4af4784f386d0d839867d186a56f",
+  "metrics": {
+    "entry": {
+      "raw": 321506,
+      "gzip": 111973
+    },
+    "initialJS": {
+      "raw": 1784456,
+      "gzip": 577299
+    },
+    "initialCSS": {
+      "raw": 64816,
+      "gzip": 12557
+    },
+    "largestJS": {
+      "raw": 2959807,
+      "gzip": 767368
+    },
+    "totalJS": {
+      "raw": 10953172,
+      "gzip": 3302081
+    },
+    "totalDist": {
+      "raw": 12721677,
+      "gzip": 4125395
+    },
+    "lobeSVG": {
+      "raw": 1101437,
+      "gzip": 479765
+    }
+  }
+}

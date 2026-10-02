@@ -73,7 +73,7 @@ run:
 | While editing | `pnpm test:fast` | Only the static checks the changed files need; the frontend type check is incremental. `--plan` prints the selection, `--base <ref>` includes committed changes |
 | While editing UI | `pnpm check:ui` | Only the probe scenarios the change can reach, on the dev server. `--plan` explains the selection; `--scenario <id>` runs one |
 | A feature is complete, and before pushing | `pnpm verify` and `pnpm check:ui` | The full static gates, the worktree secret scan and the affected browser scenarios |
-| Pull request (CI) | automatic | Static gates, secret scans, build and bundle budgets, the P0 cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
+| Pull request (CI) | automatic | Static gates, secret scans, build, loading boundaries and bundle reports, the P0 cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
 | Optional locally | `pnpm verify:full` | Everything CI runs, in one local command. Use it for changes to the build, the browser harness or the workflow, or to reproduce a CI failure |
 | Opt-in | `pnpm verify:demo:go` | The Go binary's own demo mode: a browser against a locally started binary with its own route assertions. It generates the dataset, so it is not part of CI |
 
@@ -248,3 +248,47 @@ those pages, which wait on the rendered content rather than on a spinner.
 
 The motion checker self-test pins the placeholder duration exception without
 waiving the reduced-motion counterpart or durations on unrelated selectors.
+
+## Production loading boundaries and bundle reports
+
+`pnpm build` writes a Rollup ownership/import graph to `tmp/bundle/graph.json`,
+not to the served or embedded distribution. `pnpm check:bundle` checks its chunk
+hashes and dependency edges, then walks the HTML entry/modulepreloads and static
+imports. Pages, authenticated shell, charts, Markdown and Monaco must stay outside
+startup. The configuration page must defer its YAML editor until requested.
+
+The hard size checks are broad anomaly ceilings, not per-chunk feature quotas:
+startup JS 3 MiB raw / 1 MiB gzip; startup CSS 256 / 96 KiB; largest JS 4 MiB raw;
+all JS 16 MiB raw; distribution 20 MiB raw; Lobe SVGs 2 MiB raw. Gzip values are
+level-6 per-file estimates, including binary files in aggregate estimates, not
+actual served bytes or browser-performance measurements. Growth greater than both
+10% and 16 KiB for entry/startup metrics, or 128 KiB for other metrics, is advisory.
+
+CI selects the exact PR base or preceding push revision's successful push report,
+with `scripts/bundle-reference.json` as a one-commit bootstrap. Missing/expired
+artifacts are reported as unavailable, not replaced by a different revision.
+Locally, `BUNDLE_BASE_SHA` defaults to `origin/master`; `BUNDLE_BASELINE` supplies
+a saved report for that exact revision. GitHub retrieval additionally requires
+`GITHUB_REPOSITORY` and `GH_TOKEN`. JSON and Markdown evidence live in `tmp/bundle/`
+and CI retains reports for 30 days. The JSON includes per-file raw/gzip sizes and
+chunk source ownership; the summary identifies the largest JS files and startup
+membership. Reference artifacts are data, never executed source.
+
+Self-tests are automatically discovered:
+- `scripts/bundle-report.test.mjs`: static closures/cycles, HTML preloads, deferred
+  editor, ownership independent of chunk names, missing/stale resources, size and
+  compression calculations, advisory growth and every hard-ceiling boundary.
+- `scripts/bundle-baseline.test.mjs`: exact SHA/event/conclusion selection, bootstrap
+  and explicit references, artifact retrieval and missing/invalid evidence.
+- `scripts/workflow-checks.test.mjs`: independent browser evidence and a mandatory
+  final bundle outcome verdict, retained reports and existing browser/probe gates.
+- `scripts/verify-full.test.mjs`: injected runner failures, prerequisites, all
+  independent evidence and identical serial/parallel gate coverage.
+
+A bundle failure remains blocking, but no longer prevents production browser/demo
+acceptance after a valid build. CI's final verdict reads `steps.bundle.outcome`,
+not its success-shaped conclusion after `continue-on-error`. Full local runners
+likewise return failure after collecting the other verdicts. This preserves the
+failure while making it diagnosable. A secret or build failure still stops serving.
+For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
+`pnpm verify:full`; do not add a browser scenario for a pure graph or runner decision.

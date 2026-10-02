@@ -719,9 +719,9 @@ needs and the selection stays empty. And `execCommand('copy')` answers `true` fo
 empty selection, so the helper checks that the scratch element holds focus and its own
 selection before believing the result.
 
-All page routes are `React.lazy` import boundaries so the entry chunk stays
-small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
-route needs it. Brand/provider marks are copied from the pinned
+All page routes and the authenticated `AppLayout` are `React.lazy` import
+boundaries. `AuthGate`, `ShellLoading` and the route recovery fallback remain
+eager so sign-in and recovery do not wait for authenticated code. Brand/provider marks are copied from the pinned
 `@lobehub/icons-static-svg` package into `web/public/lobe-icons` and referenced
 as SVG URLs. The small catalog used for lookup and grouping is vendored in
 `web/src/generated/lobeIconCatalog.json`; the React icon package is not a
@@ -2180,15 +2180,42 @@ Two constraints keep the preparation step's shape:
   says nothing about the shared libraries.** That is why the OS dependencies are
   still guaranteed on every run, just by probe rather than unconditionally.
 
-`pnpm check:bundle` owns the complete chunk and aggregate budget policy. CI runs
-it immediately after `pnpm build`, before compiling the embedded app, and rejects
-a dirty generated worktree before launching browser suites. Final clean-tree and
-secret checks still run. The local build, E2E and full-gate commands call the same
-checker; standalone browser acceptance does not carry a second entry-only policy.
-Workflow self-tests exercise missing, misordered and non-enforcing gate cases, and
-the probe jobs' structure: shards `1..n` matching the `--shard` denominator, no
-event filter, no fail-fast, retained diagnostics, and an aggregate that fails unless
-every shard succeeded.
+`pnpm check:bundle` owns production loading-boundary verification and size reporting
+(ADR 0053). `web/vite.config.ts` uses `scripts/bundle-graph.mjs` to record Rollup's
+module ownership, static/dynamic import edges and chunk SHA-256 hashes outside the
+served distribution in `tmp/bundle/graph.json`. `scripts/bundle-report.mjs` validates
+the graph against built files and traverses the HTML module entry and modulepreload
+roots, deduplicating static dependencies. It refuses eager page, authenticated shell,
+chart, Markdown and Monaco modules; the configuration route must also defer the YAML
+editor. Renaming a chunk cannot change those ownership checks. Raw and level-6 gzip
+estimates cover the entry, startup JS/CSS, largest JS, all JS, SVGs and distribution.
+Gzip estimates are not HTTP transfer measurements or execution-time guarantees.
+
+Ordinary growth is advisory. Hard anomaly ceilings allow substantial headroom:
+startup JS 3 MiB raw / 1 MiB gzip, startup CSS 256 / 96 KiB, largest JS 4 MiB raw,
+all JS 16 MiB raw, distribution 20 MiB raw and Lobe SVGs 2 MiB raw. Reports retain
+per-file sizes, source ownership and the largest JS files for investigation.
+`scripts/bundle-baseline.mjs` compares only an exact-revision reference: an explicit
+`BUNDLE_BASELINE` file or the successful push CI artifact for `BUNDLE_BASE_SHA`.
+`scripts/bundle-reference.json` bootstraps the pre-policy commit; it is used only
+when its revision matches. Without a valid artifact, the report explicitly marks
+comparison unavailable; ownership checks and anomaly ceilings still execute.
+CI compares PRs with their base SHA and pushes with their preceding SHA, publishes
+`tmp/bundle/report.json` and `tmp/bundle/summary.md` for 30 days and appends the table
+to the job summary. Local runs default to `origin/master`; they do not contact GitHub
+without the repository and token environment.
+
+CI builds the embedded app independently of the bundle verdict and checks generated
+cleanliness before browser execution. A captured bundle failure does not prevent
+production browser/demo evidence, but the final outcome-based verdict still fails
+the required `browser` job. The local `verify:full` and `verify:full:serial` share
+that verdict-preserving orchestration. Static/toolchain, secrets and build failures
+remain prerequisites; browser/probe failures still allow independent demo evidence.
+Standalone browser acceptance has no second bundle policy. Workflow and runner
+self-tests exercise missing, reordered and non-enforcing gates, plus serial/parallel
+failure paths. Probe structure remains shards `1..n` matching the denominator,
+no event filter or fail-fast, retained diagnostics, and an aggregate requiring every
+shard to succeed.
 
 Probe shards need no build and no Go: each installs dependencies and Chromium and
 runs its part of the catalog on its own runner, so the scenarios' timing-sensitive

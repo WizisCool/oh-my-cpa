@@ -6,21 +6,29 @@ import { validateArtifactGates, validateBrowserPhases, validateProbeJobs } from 
 
 const workflow = parse(fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
 
-test('CI enforces the complete artifact gate before paying for browser tests', () => {
+test('CI collects browser evidence after bundle failure and then enforces its verdict', () => {
   assert.doesNotThrow(() => validateArtifactGates(workflow.jobs.browser.steps));
 });
 
-test('missing, late or partial artifact checking is refused', () => {
+test('missing, bypassed or reordered bundle verification is refused', () => {
   for (const mutate of [
-    (steps) => { steps.find((step) => step.name === 'Prepare Chromium and build embedded SPA').run = 'pnpm build\ngo build -trimpath -o tmp/oh-my-cpa-browser'; },
-    (steps) => { steps.find((step) => step.name === 'Prepare Chromium and build embedded SPA').run = 'pnpm check:bundle\npnpm build\ngo build -trimpath -o tmp/oh-my-cpa-browser'; },
-    (steps) => { steps.push(...steps.splice(steps.findIndex((step) => step.name === 'Verify generated state before browser tests'), 1)); },
+    (steps) => { steps.find((step) => step.id === 'prepare').run += '\npnpm check:bundle'; },
+    (steps) => { steps.find((step) => step.id === 'prepare').run = 'go build -trimpath -o tmp/oh-my-cpa-browser\npnpm build'; },
+    (steps) => { delete steps.find((step) => step.id === 'bundle')['continue-on-error']; },
+    (steps) => { steps.find((step) => step.id === 'bundle').run = 'true'; },
+    (steps) => { steps.find((step) => step.id === 'bundle').if = 'false'; },
+    (steps) => { steps.splice(steps.findIndex((step) => step.id === 'bundle'), 1); },
+    (steps) => { steps.find((step) => step.name === 'Require bundle verification success').run = 'true'; },
+    (steps) => { steps.find((step) => step.name === 'Require bundle verification success').if = 'success()'; },
+    (steps) => { steps.find((step) => step.name === 'Require bundle verification success').env.BUNDLE_OUTCOME = '${{ steps.bundle.conclusion }}'; },
+    (steps) => { steps.find((step) => step.name === 'Require bundle verification success')['continue-on-error'] = true; },
+    (steps) => { steps.splice(steps.findIndex((step) => step.name === 'Require bundle verification success'), 1); },
+    (steps) => { steps.find((step) => step.with?.name === 'bundle-report').if = 'success()'; },
     (steps) => { steps.find((step) => step.name === 'Verify generated state before browser tests').run = 'git diff --check'; },
-    (steps) => { steps.find((step) => step.name === 'Verify generated state before browser tests').run = 'git status --porcelain'; },
   ]) {
     const steps = structuredClone(workflow.jobs.browser.steps);
     mutate(steps);
-    assert.throws(() => validateArtifactGates(steps));
+    assert.throws(() => validateArtifactGates(steps), undefined, mutate.toString());
   }
 });
 

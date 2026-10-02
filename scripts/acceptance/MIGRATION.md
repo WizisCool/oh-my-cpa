@@ -54,15 +54,22 @@ choices and matched quota records respectively. Direct workspace, agent-director
 and audit-entry reads are also covered. Server-side refusal, masked-key and
 non-durable-write assertions remain unchanged.
 
-## Artifact budgets
+## Production loading and size verification
 
-The entry-only bundle assertions formerly inside `scripts/browser-acceptance.mjs`
-are enforced by `scripts/check-bundle-budget.mjs` through `pnpm check:bundle`.
-That checker also requires the expected chunks and enforces vendor, editor, icon
-and aggregate budgets. CI, `verify:build`, `verify:e2e`, `verify:full` and its serial
-counterpart invoke it after building, before browsers; standalone browser commands
-exercise behavior rather than a duplicate budget policy. Workflow self-tests guard
-the CI ordering and generated-state rejection.
+`scripts/check-bundle-budget.mjs` owns the production artifact policy through
+`pnpm check:bundle` (ADR 0053). It validates Rollup ownership and static/dynamic
+edges against chunk hashes, enforcing deferred page/shell/chart/Markdown modules
+and the on-demand editor boundary. Raw/gzip metrics and exact-base growth are
+reported; ordinary growth is advisory and broad anomaly ceilings remain blocking.
+This replaces the entry-only and named-chunk quotas, with graph/ceiling self-tests
+preserving their regression-detection intent.
+
+CI, `verify:build`, `verify:e2e`, `verify:full` and its serial counterpart use the
+same checker after building. CI/full local verification preserve its failure
+verdict while still collecting production browser/demo evidence; standalone
+browser commands exercise behavior rather than a duplicate size policy.
+Workflow and injected-runner self-tests guard missing checks, skipped or ignored
+verdicts, evidence retention and build/secret prerequisites.
 
 ## Smoke path inside P0
 
