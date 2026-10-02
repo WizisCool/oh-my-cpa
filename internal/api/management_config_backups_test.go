@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -90,7 +91,7 @@ func TestALegacyConfigBackupIsDownloadOnly(t *testing.T) {
 
 func TestConfigBackupManualCopySettingsAndDeletion(t *testing.T) {
 	fixture := &configFixtureCPA{}
-	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
 	listed := listConfigBackupsForTest(t, client, baseURL)
 	if len(listed.Backups) != 0 || listed.Settings.Retention != 20 || listed.Settings.RetentionMin != 5 || listed.Settings.RetentionMax != 100 {
 		t.Fatalf("initial = %+v", listed)
@@ -121,6 +122,16 @@ func TestConfigBackupManualCopySettingsAndDeletion(t *testing.T) {
 	}
 	if resp, _ := doJSON(t, client, http.MethodDelete, target, ""); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("second delete = %d", resp.StatusCode)
+	}
+	// Each deletion attempt is closed by an outcome, including the one that found nothing.
+	var outcomes []string
+	for _, event := range auditEventsFor(t, repo, context.Background(), 50) {
+		if event.Action == "config.delete_backup" {
+			outcomes = append(outcomes, event.Result)
+		}
+	}
+	if strings.Join(outcomes, ",") != "failure,attempt,success,attempt" {
+		t.Fatalf("delete audit outcomes (newest first) = %v", outcomes)
 	}
 	if listed = listConfigBackupsForTest(t, client, baseURL); len(listed.Backups) != 0 {
 		t.Fatalf("after delete = %+v", listed.Backups)

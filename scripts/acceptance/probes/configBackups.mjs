@@ -6,10 +6,13 @@ import { configSourceFixtures } from './configSourceEditor.mjs';
  *
  * The restore is confirmed in a popover raised from a row inside a modal, so the claim
  * worth a browser is that the confirmation stacks above the dialog and takes the click,
- * and that the write it sends is followed by the editor reloading the document CPA now
+ * and that the write it sends is followed by the editor showing the document CPA now
  * holds. The list's reason labels and the pre-v8 row's withheld restore are read on the
  * way.
  */
+
+const STORED_PORT = 8317;
+const RESTORED_PORT = 9417;
 
 const BACKUPS = {
   backups: [
@@ -21,18 +24,27 @@ const BACKUPS = {
 };
 
 /**
- * The fixtures, with a log of the writes and configuration reads the scenario asserts
- * against. The page itself renders from the source editor's fixtures; only its
- * configuration read is logged, which is how the reload after a restore is seen.
+ * The fixtures, with a log of the writes the scenario asserts against. The page renders
+ * from the source editor's fixtures until a restore lands; after it, the configuration
+ * read answers with a different port, so only an editor that adopted the restored
+ * document shows it.
  */
 export function configBackupsFixtures(log) {
+  let isRestored = false;
   const pageFixtures = configSourceFixtures().map(([matches, respond]) => [matches, (url, method, request) => {
-    if (url.pathname.endsWith('/management/config') && method === 'GET') log.push({ kind: 'config', method });
-    return respond(url, method, request);
+    const answer = respond(url, method, request);
+    if (!isRestored || !url.pathname.endsWith('/management/config') || method !== 'GET') return answer;
+    return {
+      ...answer,
+      scalars: { ...answer.scalars, port: RESTORED_PORT },
+      revision: 'rev-restored',
+      safe_yaml: answer.safe_yaml.replace(`port: ${STORED_PORT}`, `port: ${RESTORED_PORT}`),
+    };
   }]);
   return [
     [(url) => /\/management\/config\/backups\/\d+\/restore$/.test(url.pathname), (url, method) => {
       log.push({ kind: 'restore', method, path: url.pathname });
+      isRestored = true;
       return { status: 'ok', revision: 'rev-restored' };
     }],
     [(url) => url.pathname.endsWith('/management/config/backups/settings'), (url, method, request) => {
@@ -51,6 +63,8 @@ export async function configBackups({ base, page, check, log }) {
   await page.getByRole('button', { name: /^(备份|Backups)$/ }).click();
   const dialog = page.locator('.ant-modal').filter({ has: page.locator('.ant-table') });
   await dialog.waitFor({ state: 'visible', timeout: 10000 });
+  const port = page.locator('#cfg-port');
+  const portBefore = await port.inputValue();
 
   const rows = dialog.locator('.ant-table-tbody tr.ant-table-row');
   await until(async () => (await rows.count()) === 3, { label: 'the three backup rows' });
@@ -77,7 +91,6 @@ export async function configBackups({ base, page, check, log }) {
   );
 
   // ── restore ─────────────────────────────────────────────────────────────────
-  const configReadsBefore = log.filter((entry) => entry.kind === 'config').length;
   await rows.nth(1).getByRole('button', { name: /恢复|Restore/ }).click();
   const confirm = page.locator('.ant-popover .ant-popconfirm-buttons .ant-btn-primary');
   await confirm.waitFor({ state: 'visible', timeout: 10000 });
@@ -98,8 +111,12 @@ export async function configBackups({ base, page, check, log }) {
     JSON.stringify(restore),
   );
   const isReloaded = await until(
-    async () => log.filter((entry) => entry.kind === 'config').length > configReadsBefore,
-    { label: 'the editor reloading after the restore' },
+    async () => (await port.inputValue()) === String(RESTORED_PORT),
+    { label: 'the editor showing the restored document' },
   ).then(() => true, () => false);
-  check('the editor reloads the configuration after a restore', isReloaded, JSON.stringify(log.map((entry) => entry.kind)));
+  check(
+    'the editor shows the restored document after a restore',
+    portBefore === String(STORED_PORT) && isReloaded,
+    JSON.stringify({ before: portBefore, after: await port.inputValue() }),
+  );
 }

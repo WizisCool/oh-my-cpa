@@ -257,6 +257,7 @@ func (h *Handler) deleteConfigBackup(writer http.ResponseWriter, request *http.R
 	}
 	backup, err := h.configBackupStore().Delete(request.Context(), id)
 	if errors.Is(err, repository.ErrNotFound) {
+		_ = h.recordAudit(request, "config.delete_backup", "config", target, "failure", map[string]any{"error": "not found"})
 		writeError(writer, http.StatusNotFound, "configuration backup not found")
 		return
 	}
