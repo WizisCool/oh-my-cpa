@@ -631,12 +631,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .mobile-nav-drawer .app-sider-scroll { overscroll-behavior: contain; }
 .mobile-nav-drawer .app-brand { cursor: default; }
 /* ── sign-in ──────────────────────────────────────────────────────────────
-   One card on a quiet dot field. Everything is the console's own vocabulary - the border step,
-   the surface fill, the accent - so the first screen a reader sees is the console, not a form
-   that happens to precede it. */
+   One centred column on the page itself: no card, no texture, no rule under the header. The
+   wordmark, the title, the field and the button are the whole page. */
 .auth-shell {
-  position: relative;
-  isolation: isolate;
   height: 100vh;
   height: 100dvh;
   display: grid;
@@ -644,87 +641,43 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   background: var(--bg);
   overflow: hidden;
 }
-.auth-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  fill: var(--border);
-  pointer-events: none;
-}
+/* The session check and the sign-in request draw along the page's top edge. Compounded with
+   `.progress-bar` because that rule comes later and would otherwise put the bar back in the flow. */
+.progress-bar.auth-progress { position: fixed; inset-inline: 0; top: 0; z-index: 10; }
 .auth-header {
   height: 56px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 max(24px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
-}
-.auth-brand {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-.auth-header-actions {
-  flex: none;
-  display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  padding: 0 max(24px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
 }
 .auth-main {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
-  padding: 24px 16px 56px;
+  /* The bottom padding is the header's height, so the column centres in the viewport rather
+     than in the space under the header. */
+  padding: 24px 16px 80px;
 }
-/* The modal shell's 6px radius: the card is a standalone shell, not a panel inside a page. */
 .auth-card {
-  position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 360px;
   margin: auto;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
 }
-/* The session check and the sign-in request draw on the card's top edge. */
-.auth-progress { position: absolute; inset-inline: 0; top: 0; z-index: 1; }
-.auth-card-body { padding: 32px 32px 28px; }
-.auth-mark {
-  width: 44px;
-  height: 44px;
+.auth-brand {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 1px;
-  margin-bottom: 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
-.auth-mark-prompt, .auth-mark-cursor { font-size: 22px; font-weight: 700; line-height: 1; }
-.auth-mark-prompt { color: var(--accent); }
-.auth-mark-cursor { color: var(--fg); }
-.auth-header-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   margin-bottom: 28px;
 }
-.auth-header-block .terminal-title {
-  margin: 0;
+.auth-title {
+  margin: 0 0 32px;
+  text-align: center;
   font-size: 22px;
   font-weight: 700;
   line-height: 1.25;
   color: var(--fg);
-}
-.auth-subtitle {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
 }
 .auth-alert {
   margin-bottom: 20px;
@@ -733,37 +686,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .auth-form .ant-form-item .ant-form-item-label { padding-bottom: 8px; }
 .auth-form .ant-form-item .ant-form-item-label > label { font-size: 12px; }
 .auth-submit { font-weight: 600; }
-.auth-placeholder-heading { gap: 12px; padding: 2px 0 4px; }
-.auth-placeholder-heading .placeholder:first-child { height: 8px; }
-.auth-placeholder-heading .placeholder:nth-child(2) { height: 20px; }
-.auth-placeholder-heading .placeholder:nth-child(3) { height: 10px; }
-.auth-placeholder-label { margin: 4px 0 12px; }
+.auth-placeholder-title { height: 20px; margin: 4px auto 52px; }
+.auth-placeholder-label { margin: 4px 0 25px; }
 .auth-placeholder-field + .auth-placeholder-field { margin-top: 20px; }
-.auth-footnote {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px 32px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--meta);
-  font-size: 11px;
-  line-height: 1.6;
-}
-.auth-footnote-icon { flex: none; margin-top: 3px; color: var(--muted); }
 
 @media (max-width: 640px) {
   .auth-header {
     padding: 0 16px 0 12px;
   }
   .auth-main {
-    padding: 8px 12px 32px;
-  }
-  .auth-card-body {
-    padding: 24px 20px 20px;
-  }
-  .auth-footnote {
-    padding: 12px 20px;
+    padding: 8px 20px 56px;
   }
 }
 .dashboard-page { max-width: 1440px; }

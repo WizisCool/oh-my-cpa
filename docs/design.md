@@ -1400,7 +1400,7 @@ accent, so the reader sees how much is left. The element is a `progressbar` whos
 | --- | --- |
 | Under the console header (`DataProgress`) | The page's queries, and route, editor and drawer module downloads |
 | Under the shell placeholder's header (`ShellLoading`) | The stored-preferences read and the shell's own download |
-| The sign-in card's top edge | The session check and the sign-in request |
+| The sign-in page's top edge | The session check and the sign-in request |
 
 **Placeholders are drawn at the content's geometry.** The kit in
 `web/src/components/common/Placeholder.tsx` is the only placeholder vocabulary;
@@ -1877,19 +1877,16 @@ The existing icon modal has Built-in and Custom segments. The built-in catalog k
 
 ### Sign-in surface
 
-`web/src/components/common/AuthGate.tsx` renders one 400px card on a static dot
-field: 1px dots in `--border` on a 24px grid, drawn as an SVG pattern so it
-follows the palette, behind a borderless header that keeps the wordmark and the
-two preference menus. The card is a standalone shell, so it takes the modal
-shell's 6px radius with a 1px `--border` edge on `--surface`, and no shadow. Its
-body (32px padding, 20px on phones) opens with the brand's `›_` prompt mark in a
-44px `--bg` tile (the prompt in `--accent`, the cursor in `--fg`), then the
-eyebrow, the 22px title and its one subtitle line. The form is antd's large size
-(40px field and button), and the full-width primary button carries a trailing
-arrow. The footnote sits in a `--bg` band with a shield glyph. The session check
-draws the card's own outline as placeholders. The session check and the sign-in
-request draw the measured bar on the card's top edge. A refused key stays inline
-as a `Notice`.
+`web/src/components/common/AuthGate.tsx` follows the centred single column most operator consoles
+sign in with (Cloudflare, Vercel, Grafana). It is a 360px column on the page's own `--bg`: no card,
+no texture, and no rule under the 56px header, which holds only the theme and language menus at the
+right. The column holds the 28px wordmark, centred (the page's only drawing of the brand, decorative
+because the title also names the product), the 22px/700 title, centred, the labelled key field and
+a full-width primary button, both at antd's large size (40px). There is no eyebrow, subtitle or
+footnote. The field's label already says what to enter, and §3 rule 2 bars a line that restates it
+or instructs. A refused key stays inline as a `Notice` above the field. The session check draws the
+column's outline as placeholders at the form's own geometry. The session check and the sign-in
+request draw the measured bar along the page's top edge.
 
 ### Route error recovery surface
 

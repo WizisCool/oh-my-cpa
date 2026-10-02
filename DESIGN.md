@@ -481,7 +481,7 @@ available in Simplified Chinese, Traditional Chinese, English and Malay.
 ### Loading feedback
 
 The bar under the console header, under the shell placeholder's header and on the
-sign-in card's top edge is one `ProgressBar`: its length is the measured share of
+sign-in page's top edge is one `ProgressBar`: its length is the measured share of
 counted work (a settled task counts in full, a pending one earns capped credit), it
 never moves backwards, and when done it holds full for one `base` beat and fades.
 Its track is an 18% accent tint. First loads use the first-party placeholder kit:
@@ -492,11 +492,8 @@ ADR 0052.
 
 ### Sign-in surface
 
-One 400px card on a static `--border` dot field (24px grid) below a borderless
-header carrying the wordmark and preference menus. The card is a standalone shell:
-6px radius, 1px `--border`, `--surface`, no shadow. It opens with the `›_` prompt
-mark in a 44px `--bg` tile, then the eyebrow, 22px title and subtitle. The form uses
-antd's large controls with a trailing arrow on the primary button, and the footnote
-sits in a `--bg` band with a shield glyph. The session check draws the card's outline
-as placeholders. The session check and the sign-in request draw the measured bar on
-the card's top edge. See `docs/design.md` §9.
+A centred 360px column on the page's `--bg`, with no card, texture or header rule. It holds the
+centred 28px wordmark, the centred 22px title, the labelled key field and a full-width primary
+button at antd's large size. The theme and language menus sit alone at the top right. There is no
+eyebrow, subtitle or footnote. The session check draws the column's outline as placeholders, and the
+measured bar runs along the page's top edge. See `docs/design.md` §9.

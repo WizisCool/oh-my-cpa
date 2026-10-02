@@ -31,7 +31,7 @@ a page that has stalled, which is the impression the rule was meant to avoid.
    one `base` beat and fades over another. The policy is the pure `web/src/utils/loadProgress.ts`;
    `ProgressBar` draws it.
 2. **The same bar is used wherever work is counted.** Under the console header (`DataProgress`),
-   under the shell placeholder's header, and on the sign-in card's top edge for the session check
+   under the shell placeholder's header, and along the sign-in page's top edge for the session check
    and the sign-in request. A silent poll is still not counted.
 3. **First-load placeholders are first-party and drawn at the content's geometry.** One kit
    (`web/src/components/common/Placeholder.tsx`) replaces antd `Skeleton` and page-level `Spin`:

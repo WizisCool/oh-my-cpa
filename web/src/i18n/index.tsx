@@ -720,20 +720,11 @@ const DICT: Record<string, [string, string]> = {
   'auth.connect_failed': ['无法连接认证服务', 'Cannot reach the auth service'],
   'auth.success': ['登录成功', 'Signed in'],
   'auth.failed': ['登录失败', 'Sign in failed'],
-  'auth.eyebrow': ['访问控制', 'ACCESS CONTROL'],
   'auth.title': ['登录 Oh My CPA', 'Sign in to Oh My CPA'],
-  'auth.subtitle': [
-    '使用 CPA Management Key 继续',
-    'Continue with your CPA management key',
-  ],
   'auth.label': ['Management Key', 'Management key'],
   'auth.required': ['请输入 Management Key', 'Management key is required'],
   'auth.placeholder': ['management.secret-key', 'management.secret-key'],
   'auth.submit': ['登录', 'Sign in'],
-  'auth.footnote': [
-    'Key 仅在服务端校验，不会存储在浏览器中。',
-    'The key is verified server-side and never stored in the browser.',
-  ],
 
   // ── logs ─────────────────────────────────────────────────────────────────
   'logs.tab_tail': ['实时日志', 'Live tail'],
