@@ -96,6 +96,10 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	if err := h.repo.PutPreference(request.Context(), key, string(body)); err != nil {
+		if errors.Is(err, repository.ErrCustomIconMissing) || errors.Is(err, repository.ErrCustomIconName) {
+			writeCustomIconError(writer, err)
+			return
+		}
 		if errors.Is(err, timezone.ErrInvalid) {
 			writeError(writer, http.StatusBadRequest, "invalid_timezone")
 			return

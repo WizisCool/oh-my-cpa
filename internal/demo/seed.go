@@ -3,6 +3,7 @@ package demo
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -117,6 +118,9 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	}
 	stats.Audits = audits
 	if err := seedRollups(ctx, repo); err != nil {
+		return SeedStats{}, err
+	}
+	if err := seedCustomIcon(ctx, repo, now); err != nil {
 		return SeedStats{}, err
 	}
 	stats.DurationMS = time.Since(started).Milliseconds()
@@ -835,4 +839,23 @@ func demoEndpointHost(rawURL string) string {
 		return ""
 	}
 	return endpoint.Hostname()
+}
+
+func seedCustomIcon(ctx context.Context, repo *repository.Repository, now time.Time) error {
+	const identity = "00000000000000000000000000000001"
+	if _, err := repo.GetCustomIcon(ctx, identity); err == nil {
+		return nil
+	} else if !errors.Is(err, repository.ErrCustomIconMissing) {
+		return err
+	}
+	artwork := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#64748b" d="M12 1L23 12L12 23L1 12Z"/></svg>`
+	icon, err := repo.CreateCustomIcon(ctx, "Team Relay", base64.StdEncoding.EncodeToString([]byte(artwork)))
+	if err != nil {
+		return err
+	}
+	_, err = repo.SQL().ExecContext(ctx, `UPDATE custom_icons SET id=?,created_at_ms=?,updated_at_ms=? WHERE id=?`, identity, now.UnixMilli(), now.UnixMilli(), icon.ID)
+	if err != nil {
+		return fmt.Errorf("pin demo custom icon identity: %w", err)
+	}
+	return nil
 }

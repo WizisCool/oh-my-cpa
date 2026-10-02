@@ -425,6 +425,12 @@ export const ProvidersPage: React.FC = () => {
             : formIcon
         }
         onSelect={handleSelectIcon}
+        onDeleted={(id) => {
+          if (formIcon === `custom:${id}`) {
+            setFormIcon(getProviderDefaultIcon(formFamily, formName, formBaseURL));
+            setIconManuallySelected(false);
+          }
+        }}
         onClose={() => {
           setIconPickerOpen(false);
           setTargetProviderForIcon(null);

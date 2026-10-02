@@ -14,8 +14,12 @@ import {
 import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '../icons';
 
 import { useT } from '../../i18n';
+import { useCustomIcons } from '../../hooks/useCustomIcons';
+import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
+import { customIconID } from '../../types/customIcons';
+import { pluginOAuthLogoFor } from '../../types/pluginOAuthProviders';
 import { isDemoMode } from '../../types/demoMode';
-import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { modelOptionsFor } from '../../utils/modelOptions';
 import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFamilies';
@@ -190,6 +194,14 @@ export function ProviderEditorDrawer({
     handleCloseProviderDrawer,
     handleSaveProvider,
   } = editor;
+  const selectedCustomID = customIconID(formIcon);
+  const customIcons = useCustomIcons(providerDrawerOpen && Boolean(selectedCustomID));
+  const pluginLogos = usePluginOAuthLogos();
+  const providerKeys = [formFamily, editingProvider?.upstream_name, formName, editingProvider?.id];
+  const pluginLogo = providerKeys.map((key) => pluginOAuthLogoFor(pluginLogos, key)).find(Boolean);
+  const iconName = selectedCustomID
+    ? customIcons.data?.find((icon) => icon.id === selectedCustomID)?.name ?? t('pro.field_icon')
+    : formIcon;
 
   // The provider editor is the deepest surface on this page, so Back closing it is the
   // difference between abandoning an edit and losing the page it was made on.
@@ -249,11 +261,11 @@ export function ProviderEditorDrawer({
               }}
               title={t('pro.change_icon')}
             >
-              <LobeIcon iconId={formIcon} size={30} />
+              <ProviderBrandIcon iconId={formIcon} logo={pluginLogo} providerKeys={providerKeys} fallbackIconId={getProviderDefaultIcon(formFamily, formName, formBaseURL)} size={30} />
             </div>
             <div className={styles['icon-meta']}>
               <div className={styles['icon-label']}>{t('pro.field_icon')}</div>
-              <div className={styles['icon-name']}>{formIcon}</div>
+              <div className={styles['icon-name']}>{iconName}</div>
             </div>
             <div className={styles['icon-actions']}>
               <Button

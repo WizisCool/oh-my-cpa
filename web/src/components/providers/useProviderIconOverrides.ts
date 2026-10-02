@@ -1,4 +1,5 @@
 import React from 'react';
+import { CUSTOM_ICONS_QUERY_KEY } from '../../types/customIcons';
 
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -56,10 +57,13 @@ export function useProviderIconOverrides() {
    */
   const writeProviderIcon = React.useCallback(
     (id: string, icon: string) => {
-      if (!id) return;
-      setProviderIcons({ ...currentProviderIcons(), [id]: icon });
+      if (!id) return Promise.resolve({ ok: false });
+      return setProviderIcons({ ...currentProviderIcons(), [id]: icon }).then((result) => {
+        if (result.ok) void queryClient.invalidateQueries({ queryKey: CUSTOM_ICONS_QUERY_KEY });
+        return result;
+      });
     },
-    [currentProviderIcons, setProviderIcons],
+    [currentProviderIcons, setProviderIcons, queryClient],
   );
 
   /**

@@ -526,7 +526,7 @@ export const PricingPage: React.FC = () => {
             return (
               <section key={group.id} className={styles['provider-group']} data-testid="pricing-provider-group" aria-label={identity?.label ?? t('pricing.provider.unassigned')}>
                 <header className={styles['provider-heading']}>
-                  {group.provider && <ProviderBrandIcon iconId={identity?.iconId} logo={pluginOAuthLogoFor(pluginLogos, group.provider.family) ?? pluginOAuthLogoFor(pluginLogos, group.provider.name)} size={20} />}
+                  {group.provider && <ProviderBrandIcon iconId={identity?.iconId} providerKeys={[group.provider.family, group.provider.name]} logo={pluginOAuthLogoFor(pluginLogos, group.provider.family) ?? pluginOAuthLogoFor(pluginLogos, group.provider.name)} size={20} />}
                   <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
                   {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
                 </header>

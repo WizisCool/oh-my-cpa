@@ -1,3 +1,4 @@
+import type { CustomIcon } from '../types/customIcons';
 import { getAppConfig } from '../types/config';
 import { isDemoMode } from '../types/demoMode';
 import {
@@ -323,6 +324,25 @@ export interface AuthSession {
 }
 
 export const api = {
+  async getCustomIcons(): Promise<CustomIcon[]> {
+    const response = await request<{ icons: CustomIcon[] }>('/custom-icons');
+    return response.icons;
+  },
+  async previewCustomIcon(data: string): Promise<{ data_url: string; mime_type: string }> {
+    return request('/custom-icons/preview', { method: 'POST', body: JSON.stringify({ data }) });
+  },
+  async createCustomIcon(name: string, data: string): Promise<CustomIcon> {
+    return request('/custom-icons', { method: 'POST', body: JSON.stringify({ name, data }) });
+  },
+  async updateCustomIcon(id: string, changes: { name?: string; data?: string }): Promise<CustomIcon> {
+    return request(`/custom-icons/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });
+  },
+  async deleteCustomIcon(id: string): Promise<void> {
+    return request(`/custom-icons/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  customIconURL(id: string, revision: number): string {
+    return `${getAppConfig().apiBaseUrl}/custom-icons/${encodeURIComponent(id)}/content?revision=${revision}`;
+  },
   async login(password: string): Promise<AuthSession> {
     return request<AuthSession>(authUrl('/login'), {
       method: 'POST',

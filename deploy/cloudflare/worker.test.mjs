@@ -404,3 +404,28 @@ describe('re-basing onto the viewer’s clock', () => {
     assert.equal(moved.items[0].timestamp_ms, REFERENCE_MS + 1000);
   });
 });
+
+describe('the deployment custom icon library', () => {
+  it('serves fixture metadata and SVG content while refusing validation and writes', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const metadata = await worker.fetch(request('/api/v1/custom-icons'), env);
+    assert.equal(metadata.status, 200);
+    const { icons } = await metadata.json();
+    assert.equal(icons.length, 1);
+    assert.equal(icons[0].name, 'Team Relay');
+    assert.equal(icons[0].content, undefined);
+    const content = await worker.fetch(request(`/api/v1/custom-icons/${icons[0].id}/content?revision=1`), env);
+    assert.equal(content.status, 200);
+    assert.match(content.headers.get('Content-Type'), /image\/svg\+xml/);
+    assert.match(await content.text(), /<svg/);
+    for (const [method, path] of [
+      ['POST', '/api/v1/custom-icons/preview'], ['POST', '/api/v1/custom-icons'],
+      ['PATCH', `/api/v1/custom-icons/${icons[0].id}`], ['DELETE', `/api/v1/custom-icons/${icons[0].id}`],
+    ]) {
+      const refused = await worker.fetch(new Request(`https://demo.example${path}`, { method }), env);
+      assert.equal(refused.status, 403);
+      assert.equal((await refused.json()).code, 'demo_operation_refused');
+    }
+  });
+});

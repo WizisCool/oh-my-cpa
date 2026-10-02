@@ -146,6 +146,11 @@ func (r *Repository) putPreferences(ctx context.Context, values map[string]strin
 
 	now := time.Now().UTC().UnixMilli()
 	for key, value := range values {
+		if key == PreferenceProviderIcons {
+			if err := validateCustomIconReferences(ctx, tx, value); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO ui_preferences (pref_key, pref_value, updated_at_ms)
 			VALUES (?, ?, ?)

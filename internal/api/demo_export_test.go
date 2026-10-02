@@ -107,6 +107,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "session", Path: "/api/auth/session"},
 		{Name: "resources", Path: "/api/v1/resources"},
 		{Name: "preferences", Path: "/api/v1/preferences"},
+		{Name: "custom-icons", Path: "/api/v1/custom-icons"},
+		{Name: "custom-icon-content", Path: "/api/v1/custom-icons/00000000000000000000000000000001/content", Route: "/api/v1/custom-icons/{id}/content"},
 		{Name: "overview", Path: "/api/v1/management/overview"},
 		{Name: "system", Path: "/api/v1/management/system"},
 		{Name: "system-releases", Path: "/api/v1/management/system/releases"},
@@ -490,6 +492,16 @@ func demoExportScrub(text string) string {
 	return demoExportFixtureURL.ReplaceAllString(text, "http://127.0.0.1:0")
 }
 
+// Schema property names overlap with runtime measurements; only scalar numbers are measurements.
+func demoExportIsNumber(value any) bool {
+	switch value.(type) {
+	case float64, int, int64:
+		return true
+	default:
+		return false
+	}
+}
+
 // demoExportRebase moves the instants the handler stamped onto the export's reference
 // instant, and leaves the seeded history where it is. Two exports of the same history
 // therefore agree.
@@ -498,7 +510,7 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	case map[string]any:
 		for key, item := range typed {
 			switch {
-			case demoExportMeasuredKeys[key]:
+			case demoExportMeasuredKeys[key] && demoExportIsNumber(item):
 				typed[key] = 0
 			case key == demoExportRequestID:
 				typed[key] = demoExportStableRequestID(requestIDs, item)
@@ -1242,5 +1254,20 @@ func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
 	runtimeFacts := first["runtime"].(map[string]any)
 	if runtimeFacts["go_version"] != demoExportHostKeys["go_version"] || runtimeFacts["os_arch"] != demoExportHostKeys["os_arch"] {
 		t.Fatalf("the exporting host leaked into the dataset: %v", runtimeFacts)
+	}
+}
+
+func TestDemoExportPreservesSchemaProperties(t *testing.T) {
+	value := map[string]any{
+		"latency_ms": float64(17),
+		"properties": map[string]any{"latency_ms": map[string]any{"type": "integer"}, "uptime_ms": true},
+	}
+	result := demoExportRebase(value, 0, map[string]int{}).(map[string]any)
+	if result["latency_ms"] != 0 {
+		t.Fatalf("measurement was not pinned: %v", result)
+	}
+	properties := result["properties"].(map[string]any)
+	if properties["latency_ms"].(map[string]any)["type"] != "integer" || properties["uptime_ms"] != true {
+		t.Fatalf("schema was rewritten: %v", properties)
 	}
 }

@@ -100,3 +100,7 @@ web
 ### Deployment-wide timezone
 
 OMC Settings provides a shared IANA timezone selection for timestamps and calendar-day totals across browsers. The default is the deployment's timezone (`TZ` in Docker); a manual choice persists on the server. The picker identifies the server zone and shows current UTC offsets, including fractional offsets and daylight saving. Historical instants and raw upstream evidence remain unchanged. Agents can read and change the same setting through declared capabilities.
+
+### Custom provider artwork
+
+The existing icon picker includes a deployment-owned custom icon library. Operators import PNG, JPEG, WebP or SVG files, or paste Base64/Data URLs, preview validated artwork, then save and select it. Icons support naming, artwork replacement and deletion; replacement updates all assignments, while confirmed deletion clears all assignments and restores affected providers to their default icons or placeholders. The library persists across devices and restarts, needs no external asset host, and is included in database backups. Static imports are limited to 512 KiB and raster dimensions to 1024 × 1024; the library holds 100 icons. Plugin-owned branding remains authoritative. Agent/MCP support metadata reads and CRUD, with confirmation for deletion and the existing tool-payload bound for imports.
