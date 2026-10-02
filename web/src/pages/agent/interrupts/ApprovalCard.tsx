@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Input, Tag } from 'antd';
-import { ParagraphPlaceholder } from '../../../components/common/Placeholder';
+import { ParagraphPlaceholder } from '../../../components/common/ContentPlaceholder';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { Notice } from '../../../components/feedback';
 import { CodeBlock } from '../../../components/workspace/ModelMarkdown';

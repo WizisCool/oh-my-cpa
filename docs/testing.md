@@ -233,8 +233,15 @@ opening and completion, full credit for a settled task, a pending task's capped
 credit, a late task's own start time, a restarted task counted twice, a fresh
 batch after completion, the 200ms show delay, frame-rate-independent smoothing
 that never moves backwards, and the task registry's single settle and source
-union. It injects the clock, so no test waits on real time. The `route-lazy-error`
-probe owns the browser wiring for one counted task: the shell placeholder and its
-bar painting while the shell download is held. Placeholder geometry and the
+union. Announced percentage tests cover the 95–99% boundary and many settled
+tasks with one pending, reserving 100% for actual drawn completion. It injects
+the clock, so no test waits on real time. The `route-lazy-error` probe owns the
+browser wiring: the shell placeholder and its
+bar painting while the shell download is held, including a nearly full bar
+that must still announce incomplete work and a live reduced-motion switch that
+must preserve the batch and never reset its drawn progress. Placeholder geometry and the
 sign-in surface are covered by the existing route and probe scenarios that load
 those pages, which wait on the rendered content rather than on a spinner.
+
+The motion checker self-test pins the placeholder duration exception without
+waiving the reduced-motion counterpart or durations on unrelated selectors.

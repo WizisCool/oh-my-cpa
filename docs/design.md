@@ -1339,8 +1339,10 @@ Hard rules:
    a canvas mark is redrawn frame by frame instead of being composited, so rule 1 is *not*
    satisfied by these eight marks, and 240ms on surfaces this small is the whole of what the
    exception buys. See ADR 0008.
-6. **Feedback must be immediate.** Optimistic affordances (button `loading`,
-   the progress bar) appear on the interaction itself, not after a transition.
+6. **Acknowledge actions immediately.** Button `loading` and optimistic
+   affordances appear on the interaction itself, not after a transition. The
+   progress bar follows rule 4 instead: it waits 200ms to suppress fast-request
+   flashes.
 7. **A hover lands within the fast token.** A hover is the interface acknowledging the
    pointer, so it must land on the frame the pointer arrives — a transition longer than
    `fast` (50ms) is a drag, not an acknowledgement, and the rule was written after antd's
@@ -1394,7 +1396,9 @@ moving while a slow read is outstanding and only a task settling finishes it. It
 never moves backwards. Done, it holds full for one `base` beat and fades over
 another. The fill is a `transform: scaleX()` over a track tinted 18% of the
 accent, so the reader sees how much is left. The element is a `progressbar` whose
-`aria-valuenow` is announced in tenths.
+`aria-valuenow` rounds down in 10-percentage-point steps; only the fully drawn
+bar announces 100%. Changing reduced-motion preference while work is pending
+preserves that batch and its drawn progress.
 
 | Where | What it counts |
 | --- | --- |
@@ -1403,7 +1407,9 @@ accent, so the reader sees how much is left. The element is a `progressbar` whos
 | The sign-in page's top edge | The session check and the sign-in request |
 
 **Placeholders are drawn at the content's geometry.** The kit in
-`web/src/components/common/Placeholder.tsx` is the only placeholder vocabulary;
+`web/src/components/common/Placeholder.tsx` is the shared placeholder vocabulary;
+`web/src/components/common/ContentPlaceholder.tsx` composes page-only paragraph/table
+shapes behind the route import, keeping them out of the sign-in entry;
 antd `Skeleton` and page-level `Spin` are not used for a first load. Blocks fill
 with `--border`, use `--radius-sm`, and line heights match the glyph height of
 the copy they stand for (title 18px, body 10px, meta 8px).

@@ -11,7 +11,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { ParagraphPlaceholder } from '../components/common/Placeholder';
+import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
 import { SuspenseFallback } from '../components/common/PageLoading';
 import {
   AppstoreOutlined,

@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import {
   advanceDrawnProgress,
   estimateProgress,
+  getProgressPercent,
   isProgressBatchComplete,
   PROGRESS_FLOOR,
   PROGRESS_SHOW_DELAY_MS,
@@ -32,6 +33,9 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const fillRef = React.useRef<HTMLDivElement>(null);
   const isReducedMotion = usePrefersReducedMotion();
+  const motionRef = React.useRef(isReducedMotion);
+  // A live preference changes drawing, not the identity or accounting of the current batch.
+  motionRef.current = isReducedMotion;
 
   React.useEffect(() => {
     const root = rootRef.current;
@@ -49,7 +53,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
     const draw = () => {
       fill.style.transform = `scaleX(${drawn})`;
       // Announced in tenths: a value that changes every frame is noise to assistive technology.
-      const percent = Math.round(drawn * 10) * 10;
+      const percent = getProgressPercent(drawn);
       if (percent !== announced) {
         announced = percent;
         root.setAttribute('aria-valuenow', String(percent));
@@ -61,13 +65,14 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       batch = null;
       drawn = 0;
       root.hidden = true;
-      root.removeAttribute('data-state');
+      delete root.dataset.state;
       root.removeAttribute('aria-busy');
     };
 
     const loop = (now: number) => {
       frame = 0;
       if (!batch || !isPainted) return;
+      const isReducedMotion = motionRef.current;
       const target = estimateProgress(batch, now, !isReducedMotion);
       drawn = isReducedMotion ? Math.max(drawn, target) : advanceDrawnProgress(drawn, target, now - lastFrameAt);
       lastFrameAt = now;
@@ -75,7 +80,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       if (isProgressBatchComplete(batch) && drawn >= 1) {
         // Full, then gone: the stylesheet holds the completed bar for a beat and fades it, and the
         // fade's end hides it. Reduced motion has no fade to wait for.
-        root.setAttribute('data-state', 'done');
+        root.dataset.state = 'done';
         root.removeAttribute('aria-busy');
         if (isReducedMotion) hide();
         return;
@@ -89,7 +94,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
         drawn = PROGRESS_FLOOR;
         root.hidden = false;
       }
-      root.setAttribute('data-state', 'running');
+      root.dataset.state = 'running';
       root.setAttribute('aria-busy', 'true');
       draw();
       lastFrameAt = now;
@@ -101,8 +106,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       const previous = batch;
       batch = reconcileProgressBatch(batch, source.read(), now);
       if (!batch) return;
-      const isFreshBatch = batch !== previous && (!previous || isProgressBatchComplete(previous));
-      if (isFreshBatch && isPainted) {
+      if (isPainted && previous && isProgressBatchComplete(previous) && !isProgressBatchComplete(batch)) {
         // New work while the last batch is still on screen: a new episode starts from the left
         // rather than inheriting a bar that already reads as finished.
         drawn = PROGRESS_FLOOR;
@@ -118,7 +122,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       if (isPainted || shouldShowProgress(batch, now)) {
         paint(now);
       } else if (!showTimer) {
-        const wait = Math.max(0, batch.startedAt + PROGRESS_SHOW_DELAY_MS - now);
+        const wait = batch.startedAt + PROGRESS_SHOW_DELAY_MS - now;
         showTimer = window.setTimeout(() => {
           showTimer = 0;
           if (batch && !isProgressBatchComplete(batch)) paint(performance.now());
@@ -127,7 +131,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
     };
 
     const onTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === root && event.propertyName === 'opacity' && root.getAttribute('data-state') === 'done') hide();
+      if (event.target === root && event.propertyName === 'opacity' && root.dataset.state === 'done') hide();
     };
 
     hide();
@@ -140,7 +144,7 @@ export function ProgressBar({ source, label, className }: ProgressBarProps) {
       window.clearTimeout(showTimer);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [source, isReducedMotion]);
+  }, [source]);
 
   return (
     <div

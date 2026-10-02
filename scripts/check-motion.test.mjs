@@ -180,6 +180,20 @@ test('a duration written with a leading dot is reported as written', (t) => {
   assert.match(problems(projectRoot)[0] ?? '', /raw duration \.15s/);
 });
 
+test('the first-load breath exception does not waive reduced motion or other selectors', (t) => {
+  const breath = `.placeholder { animation: placeholder-breathe 1400ms ease infinite alternate; }
+@keyframes placeholder-breathe { from { opacity: 1; } to { opacity: 0.45; } }
+`;
+  const exception = [{ kind: 'duration', file: 'index.css', selector: '.placeholder', property: 'animation', why: 'First-load breathing period (ADR 0052).' }];
+  const guarded = fixture(t, { 'index.css': breath + `@media (prefers-reduced-motion: reduce) { .placeholder { animation: none; opacity: 0.7; } }` });
+  assert.deepEqual(problems(guarded, exception), []);
+  const unguarded = fixture(t, { 'index.css': breath });
+  assert.match(problems(unguarded, exception).join('\n'), /no `prefers-reduced-motion` counterpart/);
+  const unrelated = fixture(t, { 'index.css': breath + `.other { transition: opacity 1400ms; }
+@media (prefers-reduced-motion: reduce) { .placeholder { animation: none; } }` });
+  assert.match(problems(unrelated, exception).join('\n'), /raw duration 1400ms/);
+});
+
 test('the repository itself is clean', () => {
   // The one assertion that cannot be made about a fixture: the tree this ships with satisfies its own
   // budget. A rule change that breaks the stylesheet is a failure here, where the reason is legible.

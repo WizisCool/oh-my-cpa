@@ -10,7 +10,7 @@ import {
   Switch,
   Tooltip,
 } from 'antd';
-import { TablePlaceholder } from '../components/common/Placeholder';
+import { TablePlaceholder } from '../components/common/ContentPlaceholder';
 import {
   FullscreenExitOutlined,
   FullscreenOutlined,

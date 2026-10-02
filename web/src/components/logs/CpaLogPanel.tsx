@@ -41,7 +41,7 @@ import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
-import { ParagraphPlaceholder } from '../common/Placeholder';
+import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 
 const { Text } = Typography;
 

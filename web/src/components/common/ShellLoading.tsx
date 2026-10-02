@@ -3,8 +3,7 @@ import { useT } from '../../i18n';
 import { useProgressTask } from '../../hooks/useProgressTask';
 import { progressTasks } from '../../utils/progressTasks';
 import { BrandArtwork } from './BrandArtwork';
-import { PageLoading } from './PageLoading';
-import { Placeholder } from './Placeholder';
+import { ListPlaceholder, LoadingRegion, PageHeadPlaceholder, Placeholder } from './Placeholder';
 import { ProgressBar } from './ProgressBar';
 
 // One entry per group the rail carries, with each group's item count, so the placeholder rail is
@@ -46,21 +45,20 @@ export const ShellLoading: React.FC = () => {
       <div className="shell-loading-main">
         <header className="shell-loading-header">
           <span className="shell-loading-crumbs" aria-hidden="true">
-            <Placeholder width={20} height={20} />
-            <Placeholder width={64} className="placeholder-line" />
-            <Placeholder width={88} className="placeholder-line" />
+            {[20, 64, 88].map((width, index) => (
+              <Placeholder key={width} width={width} height={index === 0 ? 20 : 10} />
+            ))}
           </span>
           <span className="shell-loading-actions" aria-hidden="true">
-            <Placeholder width={28} height={28} />
-            <Placeholder width={28} height={28} />
-            <Placeholder width={28} height={28} />
+            {[0, 1, 2].map((index) => <Placeholder key={index} width={28} height={28} />)}
           </span>
           <ProgressBar source={progressTasks} label={t('common.loading')} className="shell-loading-progress" />
         </header>
         <div className="shell-loading-content">
-          <div className="terminal-page">
-            <PageLoading />
-          </div>
+          <LoadingRegion className="terminal-page page-loading">
+            <PageHeadPlaceholder />
+            <ListPlaceholder isFramed />
+          </LoadingRegion>
         </div>
       </div>
     </div>

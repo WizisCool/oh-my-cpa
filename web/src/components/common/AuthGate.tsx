@@ -15,6 +15,14 @@ import { progressTasks } from '../../utils/progressTasks';
 import { ProgressBar } from './ProgressBar';
 import { Placeholder } from './Placeholder';
 
+const AUTH_FIELD_PLACEHOLDER = { height: 40, className: 'auth-placeholder-field' };
+const AUTH_PLACEHOLDERS = [
+  { width: '64%', className: 'auth-placeholder-title' },
+  { width: 112, className: 'placeholder-line is-meta auth-placeholder-label' },
+  AUTH_FIELD_PLACEHOLDER,
+  AUTH_FIELD_PLACEHOLDER,
+];
+
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
   const toast = useToast();
@@ -89,10 +97,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
           {isLoading ? (
             // The column's own outline at its signed-out geometry, so the form lands in place.
             <div role="status" aria-label={t('auth.checking')}>
-              <Placeholder width="64%" className="auth-placeholder-title" />
-              <Placeholder width={112} row={1} className="placeholder-line is-meta auth-placeholder-label" />
-              <Placeholder height={40} row={2} className="auth-placeholder-field" />
-              <Placeholder height={40} row={3} className="auth-placeholder-field" />
+              {AUTH_PLACEHOLDERS.map((placeholder, row) => <Placeholder key={row} {...placeholder} row={row} />)}
             </div>
           ) : (
             <>

@@ -39,7 +39,7 @@ export interface ProgressBatch {
  *
  * Returns `null` while nothing is in flight and nothing was: there is no batch to draw. A batch whose
  * last task just settled is returned with an empty `pending` - that is the completed state, and the
- * caller decides how long to keep showing it before calling `endProgressBatch`.
+ * caller decides how long to keep it painted before discarding the batch.
  */
 export function reconcileProgressBatch(
   batch: ProgressBatch | null,
@@ -108,4 +108,9 @@ export function advanceDrawnProgress(drawn: number, target: number, elapsedMs: n
   const next = drawn + (target - drawn) * step;
   // Snap the last sliver so the completed bar actually reaches its end instead of approaching it forever.
   return target - next < 0.002 ? target : next;
+}
+
+/** Announces whole tenths without letting an unfinished drawn bar report completion. */
+export function getProgressPercent(drawn: number): number {
+  return Math.floor(drawn * 10) * 10;
 }

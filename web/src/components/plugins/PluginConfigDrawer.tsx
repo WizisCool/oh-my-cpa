@@ -1,6 +1,6 @@
 import React from 'react';
 import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Switch, Tooltip } from 'antd';
-import { ParagraphPlaceholder } from '../common/Placeholder';
+import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClearOutlined, PlusOutlined, UndoOutlined } from '../icons';
 import { api, describeError } from '../../api/client';

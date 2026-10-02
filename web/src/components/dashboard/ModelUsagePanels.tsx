@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Segmented, Tooltip } from 'antd';
-import { ParagraphPlaceholder } from '../common/Placeholder';
+import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';

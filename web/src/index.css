@@ -887,8 +887,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .type-list span { border: 1px solid var(--border); padding: 4px 7px; color: var(--muted); font-size: 12px; }
 .type-list b { color: var(--fg); font-weight: 500; }
 .empty-copy { color: var(--muted); font-size: 13px; }
-/* The phone list's first-load indicator, in the space the rows will occupy. Centred because it
-   stands in for a block of content rather than sitting beside a label. */
 .runtime-list { margin: 8px 0 0; }
 .runtime-list div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
 .runtime-list dt { color: var(--muted); font-size: 13px; }

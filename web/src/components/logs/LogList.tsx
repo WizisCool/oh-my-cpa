@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Empty } from 'antd';
 import { useT } from '../../i18n';
-import { ParagraphPlaceholder } from '../common/Placeholder';
+import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 
 /** RENDER_CHUNK is how many matching rows are mounted at a time. */
 const RENDER_CHUNK = 300;

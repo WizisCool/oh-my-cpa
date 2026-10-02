@@ -1,7 +1,8 @@
 import React from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useT } from '../../i18n';
-import { mergeProgressSources, progressTasks, type ProgressSource } from '../../utils/progressTasks';
+import { progressTasks, type ProgressSource } from '../../utils/progressTasks';
+import { mergeProgressSources } from '../../utils/progressSources';
 import { ProgressBar } from './ProgressBar';
 
 // v5 types `meta` through Register, so this declares app-wide query metadata.

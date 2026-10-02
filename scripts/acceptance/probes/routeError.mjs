@@ -126,6 +126,7 @@ export async function routeLazyError(fixtures) {
   const { base, page, context, check, errors } = fixtures;
   const reading = READINGS[0];
   await page.evaluate(({ lang }) => localStorage.setItem('omc-lang', lang), reading);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const shellModulePattern = '**/src/components/common/AppLayout.tsx*';
   let rejectShell;
   const shellRelease = new Promise(resolve => { rejectShell = resolve; });
@@ -142,6 +143,46 @@ export async function routeLazyError(fixtures) {
     await page.locator('.shell-loading-progress[data-state="running"]').waitFor();
     check('the held shell download is reported as measured progress',
       Number(await page.locator('.shell-loading-progress').getAttribute('aria-valuenow')) < 100);
+    // Enough completed work puts the bar past 95%, but the held module still owns the last task.
+    await page.evaluate(async (moduleUrl) => {
+      const { beginProgressTask } = await import(moduleUrl);
+      const settleTasks = Array.from({ length: 19 }, () => beginProgressTask());
+      for (const settleTask of settleTasks) settleTask();
+    }, `${new URL(base).pathname}/src/utils/progressTasks.ts`);
+    await page.waitForFunction(() => {
+      const fill = document.querySelector('.shell-loading-progress .progress-bar-fill');
+      return fill && new DOMMatrix(getComputedStyle(fill).transform).a >= 0.95;
+    });
+    check('the almost-filled bar cannot announce completion while its module is held',
+      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === '90' &&
+      await page.locator('.shell-loading-progress').getAttribute('aria-busy') === 'true');
+    const fill = page.locator('.shell-loading-progress .progress-bar-fill');
+    const beforeMotionChange = await fill.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).a);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    // Sample the bar's next drawing frame, not an arbitrary elapsed duration.
+    const reduced = await fill.evaluate(element => new Promise(resolve => {
+      const sample = () => requestAnimationFrame(() => {
+        // A restarted effect hides the bar; wait for its painted frame instead of reading "none" as 1.
+        if (element.parentElement.hidden) { sample(); return; }
+        resolve({
+          scale: new DOMMatrix(getComputedStyle(element).transform).a,
+          animation: getComputedStyle(document.querySelector('.shell-loading .placeholder')).animationName,
+        });
+      });
+      sample();
+    }));
+    check('reduced motion freezes the placeholder without restarting the counted batch',
+      reduced.scale >= beforeMotionChange && reduced.animation === 'none' &&
+      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === '90', JSON.stringify(reduced));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const resumed = await fill.evaluate(element => new Promise(resolve => {
+      const sample = () => requestAnimationFrame(() => {
+        if (element.parentElement.hidden) { sample(); return; }
+        resolve(new DOMMatrix(getComputedStyle(element).transform).a);
+      });
+      sample();
+    }));
+    check('restoring motion keeps the same batch and never moves progress backwards', resumed >= reduced.scale);
     check('the shell loading state exposes a localized accessible name',
       await page.getByRole('status', { name: 'Loading…', exact: true }).isVisible());
     rejectShell();

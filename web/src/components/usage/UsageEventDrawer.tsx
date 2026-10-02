@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Descriptions, Drawer, Empty, Modal, Tabs, Tooltip } from 'antd';
-import { ParagraphPlaceholder } from '../common/Placeholder';
+import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
   BlockOutlined,

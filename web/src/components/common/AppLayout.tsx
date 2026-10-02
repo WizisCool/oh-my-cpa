@@ -35,7 +35,7 @@ import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
-import { preloadRoute } from '../../routePages';
+import { preloadRoute } from '../../routePreload';
 
 const { Sider, Content } = Layout;
 

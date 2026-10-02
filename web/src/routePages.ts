@@ -1,75 +1,55 @@
 import React from 'react';
 import { createRouteLoader } from './utils/routeLoader';
 
-const loadUsageEventsPage = createRouteLoader(() => import('./pages/UsageEventsPage').then(module => ({ default: module.UsageEventsPage })));
+// Selection is shared by intent preloads and navigation without repeating it in every entry import.
+function createPageLoader<Module, Name extends keyof Module>(importModule: () => Promise<Module>, name: Name) {
+  return createRouteLoader(async () => ({ default: (await importModule())[name] }));
+}
+
+export const loadUsageEventsPage = createPageLoader(() => import('./pages/UsageEventsPage'), 'UsageEventsPage');
 export const UsageEventsPage = React.lazy(loadUsageEventsPage);
 
-const loadPricingPage = createRouteLoader(() => import('./pages/pricing/PricingPage').then(module => ({ default: module.PricingPage })));
+export const loadPricingPage = createPageLoader(() => import('./pages/pricing/PricingPage'), 'PricingPage');
 export const PricingPage = React.lazy(loadPricingPage);
 
-const loadProvidersPage = createRouteLoader(() => import('./pages/ProvidersPage').then(module => ({ default: module.ProvidersPage })));
+export const loadProvidersPage = createPageLoader(() => import('./pages/ProvidersPage'), 'ProvidersPage');
 export const ProvidersPage = React.lazy(loadProvidersPage);
 
-const loadApiKeysPage = createRouteLoader(() => import('./pages/ApiKeysPage').then(module => ({ default: module.ApiKeysPage })));
+export const loadApiKeysPage = createPageLoader(() => import('./pages/ApiKeysPage'), 'ApiKeysPage');
 export const ApiKeysPage = React.lazy(loadApiKeysPage);
 
-const loadDashboardPage = createRouteLoader(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
+export const loadDashboardPage = createPageLoader(() => import('./pages/DashboardPage'), 'DashboardPage');
 export const DashboardPage = React.lazy(loadDashboardPage);
 
-const loadAgentPage = createRouteLoader(() => import('./pages/agent/AgentPage').then(module => ({ default: module.AgentPage })));
+export const loadAgentPage = createPageLoader(() => import('./pages/agent/AgentPage'), 'AgentPage');
 export const AgentPage = React.lazy(loadAgentPage);
 
-const loadPlaygroundPage = createRouteLoader(() => import('./pages/playground/PlaygroundPage').then(module => ({ default: module.PlaygroundPage })));
+export const loadPlaygroundPage = createPageLoader(() => import('./pages/playground/PlaygroundPage'), 'PlaygroundPage');
 export const PlaygroundPage = React.lazy(loadPlaygroundPage);
 
-const loadQuickStartPage = createRouteLoader(() => import('./pages/QuickStartPage').then(module => ({ default: module.QuickStartPage })));
+export const loadQuickStartPage = createPageLoader(() => import('./pages/QuickStartPage'), 'QuickStartPage');
 export const QuickStartPage = React.lazy(loadQuickStartPage);
 
-const loadLogsPage = createRouteLoader(() => import('./pages/LogsPage').then(module => ({ default: module.LogsPage })));
+export const loadLogsPage = createPageLoader(() => import('./pages/LogsPage'), 'LogsPage');
 export const LogsPage = React.lazy(loadLogsPage);
 
-const loadAuditPage = createRouteLoader(() => import('./pages/AuditPage').then(module => ({ default: module.AuditPage })));
+export const loadAuditPage = createPageLoader(() => import('./pages/AuditPage'), 'AuditPage');
 export const AuditPage = React.lazy(loadAuditPage);
 
-const loadConfigPage = createRouteLoader(() => import('./pages/ConfigPage').then(module => ({ default: module.ConfigPage })));
+export const loadConfigPage = createPageLoader(() => import('./pages/ConfigPage'), 'ConfigPage');
 export const ConfigPage = React.lazy(loadConfigPage);
 
-const loadOAuthManagementPage = createRouteLoader(() => import('./pages/oauthManagement/OAuthManagementPage').then(module => ({ default: module.OAuthManagementPage })));
+export const loadOAuthManagementPage = createPageLoader(() => import('./pages/oauthManagement/OAuthManagementPage'), 'OAuthManagementPage');
 export const OAuthManagementPage = React.lazy(loadOAuthManagementPage);
 
-const loadLegacyOAuthManagementRedirect = createRouteLoader(() => import('./pages/LegacyOAuthManagementRedirect').then(module => ({ default: module.LegacyOAuthManagementRedirect })));
+export const loadLegacyOAuthManagementRedirect = createPageLoader(() => import('./pages/LegacyOAuthManagementRedirect'), 'LegacyOAuthManagementRedirect');
 export const LegacyOAuthManagementRedirect = React.lazy(loadLegacyOAuthManagementRedirect);
 
-const loadSystemPage = createRouteLoader(() => import('./pages/SystemPage').then(module => ({ default: module.SystemPage })));
+export const loadSystemPage = createPageLoader(() => import('./pages/SystemPage'), 'SystemPage');
 export const SystemPage = React.lazy(loadSystemPage);
 
-const loadPluginsPage = createRouteLoader(() => import('./pages/PluginsPage').then(module => ({ default: module.PluginsPage })));
+export const loadPluginsPage = createPageLoader(() => import('./pages/PluginsPage'), 'PluginsPage');
 export const PluginsPage = React.lazy(loadPluginsPage);
 
-const loadOmcSettingsPage = createRouteLoader(() => import('./pages/OmcSettingsPage').then(module => ({ default: module.OmcSettingsPage })));
+export const loadOmcSettingsPage = createPageLoader(() => import('./pages/OmcSettingsPage'), 'OmcSettingsPage');
 export const OmcSettingsPage = React.lazy(loadOmcSettingsPage);
-
-const ROUTE_LOADERS: Record<string, () => Promise<unknown>> = {
-  '/usage/events': loadUsageEventsPage,
-  '/pricing': loadPricingPage,
-  '/ai-providers': loadProvidersPage,
-  '/api-keys': loadApiKeysPage,
-  '/dashboard': loadDashboardPage,
-  '/agent': loadAgentPage,
-  '/playground': loadPlaygroundPage,
-  '/quick-start': loadQuickStartPage,
-  '/logs': loadLogsPage,
-  '/audit': loadAuditPage,
-  '/config': loadConfigPage,
-  '/oauth-management': loadOAuthManagementPage,
-  '/auth-files': loadLegacyOAuthManagementRedirect,
-  '/system': loadSystemPage,
-  '/plugins': loadPluginsPage,
-  '/omc-settings': loadOmcSettingsPage,
-};
-
-export function preloadRoute(path: string): void {
-  // Code only: intent must not send authenticated reads or mount a page's effects.
-  const loadRoute = ROUTE_LOADERS[path];
-  if (loadRoute) void loadRoute().catch(() => undefined);
-}

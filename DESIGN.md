@@ -484,11 +484,17 @@ The bar under the console header, under the shell placeholder's header and on th
 sign-in page's top edge is one `ProgressBar`: its length is the measured share of
 counted work (a settled task counts in full, a pending one earns capped credit), it
 never moves backwards, and when done it holds full for one `base` beat and fades.
+Button feedback and optimistic affordances acknowledge the interaction immediately;
+the bar waits 200ms to suppress fast-request flashes. Its accessible percentage
+rounds down in 10-percentage-point steps, reserving 100% for the fully drawn bar.
+Changing reduced-motion preference while work is pending preserves that batch
+and its drawn progress.
 Its track is an 18% accent tint. First loads use the first-party placeholder kit:
 `--border` blocks at the content's geometry (the shell's rail and header, page head,
 list and table rows, dashboard tiles, paragraph bodies), breathing in opacity one
 `base` apart per row and frozen under reduced motion. See `docs/design.md` §7 and
-ADR 0052.
+ADR 0052. Paragraph/table compositions live in `ContentPlaceholder.tsx` behind route
+imports; the shell/sign-in kit stays eager.
 
 ### Sign-in surface
 

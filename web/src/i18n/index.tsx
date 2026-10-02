@@ -160,7 +160,6 @@ const DICT: Record<string, [string, string]> = {
   'agent.status.uncertain': ["结果不确定，请检查资源状态", "Outcome uncertain; inspect the resource"],
   'agent.status.partial': ["部分完成", "Partially completed"],
   'agent.status.interrupted': ["已中断", "Interrupted"],
-  'agent.loading': ["正在加载", "Loading"],
   'agent.private_input': ["安全输入（不发送给模型）", "Private input (not sent to the model)"],
   'agent.oauth': ["在 OAuth 页面完成授权", "Complete authorization on the OAuth page"],
   'agent.approve': ["允许", "Allow"],
@@ -1427,7 +1426,6 @@ const DICT: Record<string, [string, string]> = {
   'cfg.source_editor_loading': ['正在初始化编辑器…', 'Initializing editor…'],
   'cfg.source_dirty': ['已修改 (未保存)', 'Modified (Unsaved)'],
   'cfg.source_clean': ['已同步', 'Synced'],
-  'cfg.source_loading': ['正在加载 YAML 配置文件…', 'Loading YAML configuration…'],
   'cfg.source_save_success': ['配置已成功保存并应用', 'Configuration saved and applied'],
   'cfg.dirty_bar_unsaved': ['有未保存的更改', 'Unsaved changes'],
   'cfg.dirty_bar_discard': ['放弃更改', 'Discard changes'],
@@ -1533,7 +1531,6 @@ const DICT: Record<string, [string, string]> = {
   // ── triage / resources ───────────────────────────────────────────────────
   'tri.error': ['无法从 Oh My CPA 服务获取资源列表', 'Failed to load the resource list from Oh My CPA'],
   'tri.retry_conn': ['重试连接', 'Retry connection'],
-  'tri.loading': ['正在扫描并加载 CPA 资源列表...', 'Scanning and loading CPA resources...'],
   'tri.empty_title': ['尚未发现任何 CPA 接入点', 'No CPA endpoints discovered yet'],
   'tri.empty_desc': [
     '请确保 CPA 实例已正常启动，并配置了正确的 OMCPA_CPA_BASE_URL 与 MANAGEMENT_KEY。',
