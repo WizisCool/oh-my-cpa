@@ -69,6 +69,24 @@ test('credential forms are removed from both visible and copied diagnostics', ()
   assert.ok(diagnostics.message.includes('[REDACTED]'));
 });
 
+test('bracketed relative paths keep their code location but remove query and fragment values', () => {
+  const paths = ['./[id]', '../[provider]/[id].js', '/omc/assets/[chunk].js'];
+  const suffixes = ['?credential=fixture-query#fixture-fragment', '?credential=fixture-query', '#fixture-fragment'];
+  for (const path of paths) {
+    for (const suffix of suffixes) {
+      const message = `Loading ${path}${suffix}`;
+      const stack = `Error: ${message}\n    at renderConfig (${path}${suffix})`;
+      const diagnostics = createRouteErrorDiagnostics({ name: 'Error', message, stack }, CONTEXT);
+      assert.equal(diagnostics.message, `Loading ${path}`);
+      assert.equal(diagnostics.stack, `Error: Loading ${path}\n    at renderConfig (${path})`);
+      const report = formatRouteErrorReport(diagnostics);
+      assert.ok(report.includes(path));
+      assert.ok(!report.includes('fixture-query'));
+      assert.ok(!report.includes('fixture-fragment'));
+    }
+  }
+});
+
 test('route error responses retain HTTP context but never stringify arbitrary response objects', () => {
   const diagnostics = createRouteErrorDiagnostics({ status: 503, statusText: 'Service Unavailable', internal: false, data: { message: 'Service unavailable', secret: 'private-body' } }, CONTEXT);
   assert.equal(diagnostics.status, 503);

@@ -33,7 +33,7 @@ export function redactDiagnosticText(text: string): string {
         return REDACTED_VALUE;
       }
     })
-    .replace(/(^|[\s(])((?:\.?\.?\/)[^\s?#[\]"'<>]*)(?:[?#][^\s)"'<>]*)/gm, '$1$2')
+    .replace(/(^|[\s(])((?:\.?\.?\/)[^\s?#"'<>]*)(?:[?#][^\s)"'<>]*)/gm, '$1$2')
     .replace(/(^[ \t]*(?:authorization|proxy-authorization|cookie|set-cookie)[ \t]*:[ \t]*)[^\r\n]*/gim, `$1${REDACTED_VALUE}`)
     .replace(/\bBearer\s+[^\s,;"'<>]+/gi, `Bearer ${REDACTED_VALUE}`)
     .replace(/(["']?\b[\w-]*(?:key|token|secret|password|passwd|authorization|cookie)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi, `$1${REDACTED_VALUE}`)

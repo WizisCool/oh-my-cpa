@@ -204,7 +204,8 @@ The `custom-icon-library` probe owns file selection, validated preview, Base64 r
 
 `scripts/test-route-error-diagnostics.ts` owns diagnostic projection, HTTP route
 responses, unknown/cyclic/hostile thrown values, bounded output, credential
-redaction and the copied report's fields. It is automatically discovered.
+redaction (including query/fragment removal on bracketed relative paths) and the
+copied report's fields. It is automatically discovered.
 The `route-render-error` and `route-lazy-error` probes intercept a real page module
 to cause a render exception or an import failure; the render probe also fails the
 shell to prove the fallback is independent of it. The lazy-import probe holds
