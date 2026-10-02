@@ -138,6 +138,8 @@ export async function routeLazyError(fixtures) {
     await page.goto(`${base}/config`, { waitUntil: 'domcontentloaded' });
     await page.locator('.page-loading .ant-spin').waitFor();
     check('the authenticated shell has a visible loading state', await page.locator('.app-shell').count() === 0);
+    check('the shell loading state exposes a localized accessible name',
+      await page.getByRole('status', { name: 'Loading…', exact: true }).isVisible());
     rejectShell();
     await page.getByTestId('route-error-message').waitFor();
     check('a failed shell download still shows branded diagnostic recovery',

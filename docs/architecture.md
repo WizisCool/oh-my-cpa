@@ -793,7 +793,9 @@ The root data route in `web/src/App.tsx` provides `RouteErrorPage` as its
 render errors bubble to this eagerly imported, full-page fallback, outside
 `AppLayout` but inside the existing theme and language providers. It makes no API
 reads. The authenticated `AppLayout` is loaded lazily inside the root route's
-Suspense boundary, using the existing page-loading indicator while pending. Its
+Suspense boundary, using the existing page-loading indicator while pending.
+`AppShellLoading` exposes a status role named by the existing `common.loading`
+translation and reads locale independently of router construction. The shell's
 code is not needed for sign-in or error recovery; a rejected shell import reaches
 the same eager error boundary. `web/src/utils/routeErrorDiagnostics.ts` projects
 a bounded error name, message and stack plus route pathname, build version, UTC

@@ -36,7 +36,7 @@ import {
   OmcSettingsPage,
 } from './routePages';
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
-import { I18nProvider, useI18n } from './i18n';
+import { I18nProvider, useI18n, useT } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 
@@ -110,13 +110,23 @@ const ThemedShell: React.FC = () => {
   );
 };
 
+// Reading locale in the fallback keeps a language change from recreating the router.
+const AppShellLoading: React.FC = () => {
+  const t = useT();
+  return (
+    <div className="page-loading" role="status" aria-label={t('common.loading')}>
+      <Spin size="large" />
+    </div>
+  );
+};
+
 const AppRoutes: React.FC = () => {
   const config = getAppConfig();
   const router = React.useMemo(() => createBrowserRouter(
     [{
       path: '/',
       element: (
-        <React.Suspense fallback={<div className="page-loading"><Spin size="large" /></div>}>
+        <React.Suspense fallback={<AppShellLoading />}>
           <AppLayout />
         </React.Suspense>
       ),

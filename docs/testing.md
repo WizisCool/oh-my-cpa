@@ -209,8 +209,9 @@ copied report's fields. It is automatically discovered.
 The `route-render-error` and `route-lazy-error` probes intercept a real page module
 to cause a render exception or an import failure; the render probe also fails the
 shell to prove the fallback is independent of it. The lazy-import probe holds
-and rejects the shell download, checking its loading indicator, diagnostic copy
-and full-document recovery after the shell becomes available. They assert the
+and rejects the shell download, checking its loading indicator and localized
+accessible status name, diagnostic copy and full-document recovery after the
+shell becomes available. They assert the
 root route's brand, localized title and diagnostic copy in all four languages, light/dark
 rendering, phone overflow and touch-sized controls, heading focus, stack
 expansion, redacted clipboard output, and keyboard-driven full-document reload
