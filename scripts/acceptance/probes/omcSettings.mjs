@@ -71,14 +71,15 @@ export async function omcSettings({ base, page, check, context }) {
   // states whose only other signal is an icon, and a screen reader cannot see an icon - so the name states
   // the mode, and this pins that it does.
   const headerActions = [
+    { name: 'GitHub', role: 'link', matcher: /^Open project on GitHub$/ },
     { name: 'Refresh all', matcher: /^Refresh all$/ },
     { name: 'Theme', matcher: /^Theme: (Light|Dark|Follow system)$/ },
     { name: 'Language', matcher: /^Language$/ },
     { name: 'Sign out', matcher: /^Sign out$/ },
   ];
   const unnamedActions = [];
-  for (const { name, matcher } of headerActions) {
-    const action = page.locator('.app-header-actions').getByRole('button', { name: matcher });
+  for (const { name, role = 'button', matcher } of headerActions) {
+    const action = page.locator('.app-header-actions').getByRole(role, { name: matcher });
     if ((await action.count()) !== 1) {
       unnamedActions.push(`${name} (${await action.count()} matches)`);
       continue;
@@ -93,6 +94,28 @@ export async function omcSettings({ base, page, check, context }) {
     await page.mouse.move(2, 2);
   }
   check('every header action names itself on hover', unnamedActions.length === 0, unnamedActions.join(' | '));
+
+  const repositoryLink = page.locator('.app-header-actions').getByRole('link', { name: 'Open project on GitHub', exact: true });
+  const repositoryURL = 'https://github.com/WizisCool/oh-my-cpa';
+  check(
+    'the GitHub mark links to the project with isolated external navigation',
+    await repositoryLink.getAttribute('href') === repositoryURL
+      && await repositoryLink.getAttribute('target') === '_blank'
+      && (await repositoryLink.getAttribute('rel') ?? '').split(/\s+/).includes('noopener')
+      && (await repositoryLink.getAttribute('rel') ?? '').split(/\s+/).includes('noreferrer')
+      && await repositoryLink.locator('svg.anticon-github').count() === 1,
+  );
+  // Intercept the destination so the navigation claim never depends on GitHub availability.
+  await context.route(repositoryURL, (route) => route.fulfill({ contentType: 'text/html', body: '<title>Repository</title>' }));
+  const consoleURL = page.url();
+  const [repositoryPage] = await Promise.all([page.waitForEvent('popup'), repositoryLink.click()]);
+  await repositoryPage.waitForURL(repositoryURL);
+  check(
+    'clicking GitHub opens the repository and preserves the console',
+    page.url() === consoleURL && await repositoryPage.evaluate(() => window.opener === null),
+  );
+  await repositoryPage.close();
+  await context.unroute(repositoryURL);
 
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
@@ -250,6 +273,33 @@ export async function omcSettings({ base, page, check, context }) {
   // apart, and the check passed against the broken one.
   await page.setViewportSize({ width: 320, height: 900 });
   await waitForPickerShape(true);
+  const headerLinkBox = await repositoryLink.boundingBox();
+  check(
+    'the GitHub link stays visible and clickable at 320px',
+    headerLinkBox !== null && headerLinkBox.x >= 0 && headerLinkBox.x + headerLinkBox.width <= 320
+      && await repositoryLink.evaluate((link) => {
+        const box = link.getBoundingClientRect();
+        return link.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      }),
+    JSON.stringify(headerLinkBox),
+  );
+
+  const headerGeometry = await page.locator('.app-header').evaluate((header) => {
+    const buttons = [...header.querySelectorAll('.ant-btn')].map((button) => {
+      const box = button.getBoundingClientRect();
+      return { left: box.left, right: box.right, width: box.width };
+    });
+    const breadcrumb = header.querySelector('.app-breadcrumb').getBoundingClientRect();
+    const actions = header.querySelector('.app-header-actions').getBoundingClientRect();
+    return { buttons, breadcrumbRight: breadcrumb.right, actionsLeft: actions.left };
+  });
+  check(
+    'the narrow header keeps full-size controls separate from its breadcrumb',
+    headerGeometry.buttons.every((button, index, buttons) => button.left >= 0 && button.right <= 320
+      && button.width >= 32 && (index === 0 || button.left >= buttons[index - 1].right))
+      && headerGeometry.breadcrumbRight <= headerGeometry.actionsLeft,
+    JSON.stringify(headerGeometry),
+  );
   const phoneOverflow = await narrowOverflow();
   check(
     'every settings option fits the card on a phone and shows its whole label',
@@ -677,7 +727,7 @@ export async function omcSettings({ base, page, check, context }) {
   const geometryInChinese = await headerActionGeometry();
   check(
     'the header actions are measured before the language switch',
-    geometryInChinese.split(' ').length === 4,
+    geometryInChinese.split(' ').length === 5,
     `geometry=${JSON.stringify(geometryInChinese)}`,
   );
 

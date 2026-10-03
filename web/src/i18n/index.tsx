@@ -609,6 +609,7 @@ const DICT: Record<string, [string, string]> = {
   'header.expand_sidebar': ['展开侧栏', 'Expand sidebar'],
   'header.open_nav': ['打开导航', 'Open navigation'],
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
+  'header.open_repository': ['打开项目 GitHub 仓库', 'Open project on GitHub'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
   'header.theme': ['界面主题', 'Theme'],
   // The mode control's accessible name. Its tooltip is the control's own name and says nothing about the

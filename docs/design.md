@@ -2,7 +2,7 @@
 
 Single source of truth for the visual system. OpenCode-inspired, product-owned:
 interaction patterns and information density draw inspiration from OpenCode's
-minimalist developer console, while brand identity (`›_`), warm terminal palette,
+minimalist developer console, while the brand wordmark, warm terminal palette,
 CPA information architecture, and security boundaries strictly belong to Oh My CPA.
 The palette is declared and derived in code at:
 
@@ -736,7 +736,7 @@ and halo. Ringing the inner field too drew a second rectangle inside the control
 
 ```text
 ┌──────────┬──────────────────────────────────────────┐
-│ brand ›_ │ breadcrumb (Group / Page)   actions ⟳ ◧ ▣ ⇥│ 56px, border-bottom
+│ wordmark │ nav / breadcrumb       GitHub + actions   │ 56px, border-bottom
 │──────────┼──────────────────────────────────────────┤
 │ nav      │                                          │
 │ (groups) │ page content        ← scrolls alone      │
@@ -777,10 +777,10 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Allow a single concise line describing the current target or guiding the next step (e.g. underlined links like `Learn more.` or `Documentation`).
    - Avoid marketing boilerplate or lengthy guides inside UI cards.
 7. **Top Context Slot**
-   - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
-   - The right side houses four fixed-width actions: refresh, the theme mode control, the language menu, and sign out. **The mode control cycles and the language control is a menu**, and that asymmetry is deliberate. The theme was a menu while the console carried six palettes and a toggle could only answer "the other one"; the palettes now belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the whole console as it is picked, so the header's remaining question is light or dark - with follow-the-system as the third state, one icon per state (a sun, a moon, a desktop). The control's tooltip is its own name and deliberately not a sentence about its state; the states are named in words on the settings page's own row. The language stays a menu because four languages, one of which the reader may not read, is exactly the case a list answers: it names every choice by its **endonym** - its own name in its own script, never a translation. The settings page's language picker lists the same endonyms.
-   - **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
-   - Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
+   - The left side hosts the navigation toggle and the current group/page breadcrumb; product artwork belongs to the side rail or the phone navigation sheet;
+   - The right side houses five fixed-width actions: the project GitHub link, refresh, the theme mode control, the language menu, and sign out. **The mode control cycles and the language control is a menu**, and that asymmetry is deliberate. The theme was a menu while the console carried six palettes and a toggle could only answer "the other one"; the palettes now belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the whole console as it is picked, so the header's remaining question is light or dark - with follow-the-system as the third state, one icon per state (a sun, a moon, a desktop). The control's tooltip is its own name and deliberately not a sentence about its state; the states are named in words on the settings page's own row. The language stays a menu because four languages, one of which the reader may not read, is exactly the case a list answers: it names every choice by its **endonym** - its own name in its own script, never a translation. The settings page's language picker lists the same endonyms.
+   - The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; its tooltip and accessible name follow the reading language, and it remains available in the demonstration. **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
+   - On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 8. **Form Workbench & Setting Group Panels**
    - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:

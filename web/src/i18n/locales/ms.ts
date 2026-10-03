@@ -453,6 +453,7 @@ export const MS: Readonly<Record<string, string>> = {
   "header.expand_sidebar": "Kembangkan bar sisi",
   "header.open_nav": "Buka navigasi",
   "header.degraded": "CPA tersedia sebahagiannya",
+  "header.open_repository": "Buka projek di GitHub",
   "header.refresh_all": "Muat semula semua",
   "header.theme": "Tema",
   "header.theme_state": "Tema: {mode}",

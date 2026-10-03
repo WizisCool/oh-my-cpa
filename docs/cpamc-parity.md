@@ -149,3 +149,10 @@ OMC supplies a branded full-page recovery surface for route rendering and lazy
 page-loading failures. It preserves the reading language and theme and offers
 full-document reload and deployment-relative dashboard navigation plus redacted, copyable error diagnostics and expandable stack details.
 This is console-owned UX, not a new CPA facade endpoint.
+
+### Console repository access
+
+The shared header exposes the Oh My CPA GitHub repository through a locally bundled
+mark. The link remains available on desktop, phone and demonstration deployments,
+uses a localized tooltip and accessible name, and opens a separate tab with
+`noopener noreferrer` so the console stays open. It adds no CPA management endpoint.

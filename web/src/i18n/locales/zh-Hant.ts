@@ -453,6 +453,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "header.expand_sidebar": "展開側欄",
   "header.open_nav": "開啟導航",
   "header.degraded": "CPA 部分介面可用",
+  "header.open_repository": "開啟專案 GitHub 儲存庫",
   "header.refresh_all": "重新整理全部",
   "header.theme": "介面主題",
   "header.theme_state": "\u4ecb\u9762\u4e3b\u984c\uff1a{mode}",

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { LogoutOutlined, ReloadOutlined } from '../icons';
+import { GithubOutlined, LogoutOutlined, ReloadOutlined } from '../icons';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -13,7 +13,7 @@ interface HeaderNavProps {
 }
 
 /**
- * The shell's right-hand actions: refresh, theme, language, sign out.
+ * The shell's right-hand actions: repository, refresh, theme, language, sign out.
  *
  * Every one of them is a fixed-width control. Sign out is an icon button rather than a
  * labelled one because its label is the only text here that changes length with the
@@ -53,6 +53,16 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           </span>
         </Tooltip>
       )}
+      <Tooltip title={t('header.open_repository')}>
+        <Button
+          type="text"
+          icon={<GithubOutlined />}
+          href="https://github.com/WizisCool/oh-my-cpa"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={t('header.open_repository')}
+        />
+      </Tooltip>
       <Tooltip title={t('header.refresh_all')}>
         <Button type="text" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
       </Tooltip>

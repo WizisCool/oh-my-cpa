@@ -601,12 +601,15 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-sider { padding-left: env(safe-area-inset-left); }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
-.app-header-actions { gap: 6px; }
-.app-breadcrumb { gap: 0; font-size: 12px; white-space: nowrap; }
+.app-header-actions { gap: 6px; flex-shrink: 0; }
+.app-header-left > .ant-btn { flex-shrink: 0; }
+.app-breadcrumb { gap: 0; min-width: 0; font-size: 12px; white-space: nowrap; }
+.app-breadcrumb ol { min-width: 0; flex-wrap: nowrap; }
+.app-breadcrumb li:last-child { min-width: 0; }
 .app-breadcrumb a { color: var(--fg-2); text-decoration: none; }
 .app-breadcrumb .ant-breadcrumb-link { color: var(--muted); }
 .app-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--fg); }
-.app-breadcrumb-current { color: var(--fg); font-weight: 500; }
+.app-breadcrumb-current { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-weight: 500; }
 .header-logout { color: var(--muted) !important; }
 /* The demonstration's marker. It borrows the credential card's own badge language -
    accent text on the surface with a border edge - rather than introducing a hue, so it
@@ -903,6 +906,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   /* Both breadcrumb rows are hidden rather than the whole list: the current page's own name
      is the one piece of orientation a phone can still use, and it is the *last* item. The
      group is what the sheet's Highlight already carries when the reader went through it. */
+  .app-header { gap: 8px; padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
+  .app-header-actions { gap: 4px; }
   .app-breadcrumb li:not(:last-child) { display: none; }
 }
 
