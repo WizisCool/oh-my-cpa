@@ -12,6 +12,8 @@
  * implementation is most likely to conflate - a rate defaulted to zero would paint the idle row as
  * an outage - so they are asserted to differ from each other and from the healthy row.
  *
+ * A fleet past the panel's preview limit is also asserted to fold behind its toggle.
+ *
  * The row also has to render its numbers at all: a panel that failed to aggregate still paints an
  * empty meter, and a probe that only read colours would call that a pass.
  */
@@ -228,6 +230,58 @@ export async function providerRateMarks({ base, page, check }) {
       `painted=${JSON.stringify(painted)}`,
     );
   }
+
+  await assertProviderFold({ base, page, check });
+}
+
+/** A fleet past the panel's preview limit, so the fold has rows to hide. */
+const FOLD_FLEET_SIZE = 12;
+const FOLD_PREVIEW_LIMIT = 8;
+
+const READ_FOLD = `(() => ({
+  rows: document.querySelectorAll('.provider-row-enhanced').length,
+  toggle: document.querySelector('.provider-list-toggle')?.getAttribute('aria-expanded') ?? null,
+}))()`;
+
+/**
+ * A long fleet folds behind a toggle instead of pushing every panel below it off the page.
+ *
+ * Asserted in the browser because the fold is a rendered property: the aggregation still returns
+ * every row, and only the panel decides how many of them reach the page.
+ */
+async function assertProviderFold({ base, page, check }) {
+  // Page routes outrank the scenario's context routes, so this fleet replaces the six-row one.
+  await page.route('**/omc/api/v1/management/providers**', (route) => route.fulfill({
+    status: 200,
+    json: {
+      providers: Array.from({ length: FOLD_FLEET_SIZE }, (_, i) => ({
+        id: `fold-${i}`, family: 'openai-compatibility', name: `fold-${i}`, upstream_name: `fold-${i}`, disabled: false, key_configured: true,
+      })),
+      total: FOLD_FLEET_SIZE,
+    },
+  }));
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const toggle = page.locator('.provider-list-toggle');
+  await toggle.waitFor({ timeout: 20_000 });
+
+  const folded = await page.evaluate(READ_FOLD);
+  check(
+    'a fleet past the preview limit shows only the preview, behind a collapsed toggle',
+    folded.rows === FOLD_PREVIEW_LIMIT && folded.toggle === 'false',
+    JSON.stringify(folded),
+  );
+
+  await toggle.click();
+  await page.waitForFunction((size) => document.querySelectorAll('.provider-row-enhanced').length === size, FOLD_FLEET_SIZE, { timeout: 5_000 }).catch(() => {});
+  const expanded = await page.evaluate(READ_FOLD);
+  check('the toggle reveals every provider', expanded.rows === FOLD_FLEET_SIZE && expanded.toggle === 'true', JSON.stringify(expanded));
+
+  await toggle.click();
+  await page.waitForFunction((limit) => document.querySelectorAll('.provider-row-enhanced').length === limit, FOLD_PREVIEW_LIMIT, { timeout: 5_000 }).catch(() => {});
+  const refolded = await page.evaluate(READ_FOLD);
+  check('the toggle folds the list again', refolded.rows === FOLD_PREVIEW_LIMIT && refolded.toggle === 'false', JSON.stringify(refolded));
+
+  await page.unroute('**/omc/api/v1/management/providers**');
 }
 
 /**

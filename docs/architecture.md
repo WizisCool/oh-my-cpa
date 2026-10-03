@@ -1339,6 +1339,11 @@ Six properties are load-bearing:
   `credentials.by_type` reports that share as `api_keys` / `api_keys_disabled`. A
   channel row counts and reads only the auth files, a configured family row reads only
   its keys, and a type holding nothing but configured keys has no channel row.
+  Once `credentials` has been read, the tally is the only evidence an OAuth channel
+  exists — an empty `by_type` included. The overview's live `providers[]` bucket counts
+  every key CPA's usage lists under a family's label, API keys among them, so it stands
+  in for a channel row or count only while the auth-file read failed (`credentials` is
+  `null`).
 - **A record that names no index is credited to nobody.** History written before the
   index was captured, and a record whose credential CPA no longer holds — it keeps the index it
   was served under, which no configured provider publishes — count toward no configured provider.
@@ -1352,6 +1357,11 @@ Six properties are load-bearing:
   CPA and stay two rows here; the console must not fold them through a normalizer that strips
   separators to look a label up, and it must keep the label the server folded rather than
   re-deriving it from a display name.
+
+The panel shows the first eight rows of that order and folds the rest behind a
+"show all" toggle, so a fleet of dozens of providers does not push every panel below
+it off the page; the order puts serving channels by volume first, so the fold hides
+the quiet tail.
 
 The provider page reuses this aggregation rather than reimplementing it
 (`providerTrafficById` in `web/src/components/providers/providerOverview.ts`), so the

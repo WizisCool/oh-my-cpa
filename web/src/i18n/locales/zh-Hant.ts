@@ -806,6 +806,8 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "dash.providers_hint": "真實憑據與請求聚合",
   "dash.providers_type_oauth": "OAuth",
   "dash.providers_status_disabled": "已停用",
+  "dash.providers_show_all": "顯示全部 {n} 個供應商",
+  "dash.providers_show_less": "收合",
   "dash.empty_providers": "尚無 provider 流量資料",
   "dash.credentials_n": "{n} 個憑據",
   "dash.health": "憑據健康度",

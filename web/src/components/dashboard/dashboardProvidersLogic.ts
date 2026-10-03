@@ -128,6 +128,8 @@ export interface AggregateProvidersOptions {
   windowCredentials?: WindowCredentialTraffic[];
   configuredProviders?: ProviderItem[];
   customIcons?: Record<string, string>;
+  /** The gateway's per-type credential tally. `undefined` means it could not be read; an empty
+   *  list is a reading, and says the gateway holds no auth-file credential at all. */
   authFilesByType?: ManagementOverviewTypeCount[];
   pluginOAuthIds?: Set<string>;
   pluginLogos?: PluginOAuthLogos;
@@ -159,11 +161,15 @@ export function aggregateProviders({
   windowCredentials = [],
   configuredProviders = [],
   customIcons = {},
-  authFilesByType = [],
+  authFilesByType: authFilesTally,
   pluginOAuthIds,
   pluginLogos = {},
 }: AggregateProvidersOptions): AggregatedProvider[] {
   const result: AggregatedProvider[] = [];
+  // Once the tally has been read it is the only evidence an OAuth channel exists: the live
+  // overview counts every key CPA's usage lists under a family's label, API keys included.
+  const hasCredentialTally = authFilesTally !== undefined;
+  const authFilesByType = authFilesTally ?? [];
   const claimedKeys = new Set<string>();
 
   // The plugin that registers a provider is the authority on its artwork, so its
@@ -325,13 +331,11 @@ export function aggregateProviders({
   const credsMap = new Map<string, number>();
   const authFileCredsMap = new Map<string, { count: number; disabled: number }>();
   const apiKeyCredsMap = new Map<string, { count: number; disabled: number }>();
-  const typesWithAPIKeyShare = new Set<string>();
   for (const item of authFilesByType) {
     if (!item.type || item.count <= 0) continue;
     const key = normalizeProviderKey(item.type);
     const apiKeys = item.api_keys ?? 0;
     const apiKeysDisabled = item.api_keys_disabled ?? 0;
-    if (item.api_keys !== undefined) typesWithAPIKeyShare.add(key);
     const files = { count: item.count - apiKeys, disabled: (item.disabled || 0) - apiKeysDisabled };
     if (files.count > 0) {
       credsMap.set(key, files.count);
@@ -342,13 +346,13 @@ export function aggregateProviders({
       item.api_keys === undefined ? { count: item.count, disabled: item.disabled || 0 } : { count: apiKeys, disabled: apiKeysDisabled },
     );
   }
-  for (const op of overviewProviders) {
-    if (op.credentials > 0) {
-      const key = normalizeProviderKey(op.id);
-      // The live count mixes in API keys; once the tally has split a type, it is
-      // the only source for that type's auth-file count.
-      if (!credsMap.has(key) && !typesWithAPIKeyShare.has(key)) {
-        credsMap.set(key, op.credentials);
+  // The live count mixes in API keys, so it stands in for an auth-file count only
+  // while the tally itself is unknown.
+  if (!hasCredentialTally) {
+    for (const op of overviewProviders) {
+      if (op.credentials > 0) {
+        const key = normalizeProviderKey(op.id);
+        if (!credsMap.has(key)) credsMap.set(key, op.credentials);
       }
     }
   }
@@ -559,10 +563,12 @@ export function aggregateProviders({
 
     const normId = normalizeProviderKey(op.id);
     const isOAuth = isOAuthChannel(op.id, undefined, pluginOAuthIds);
-    // The live bucket counts API keys and auth files alike. When the tally says the
-    // type holds no auth file, it is the configured API keys the rows above
-    // already present, not an OAuth channel.
-    if (isOAuth && typesWithAPIKeyShare.has(normId) && !authFileCredsMap.has(normId)) continue;
+    // The live bucket counts API keys and auth files alike. A channel with auth files
+    // already has its row from the tally, so an OAuth bucket left over here is the
+    // configured API keys the rows above present - 13 Codex API keys and no OAuth
+    // account must not read as a Codex OAuth channel holding 13 credentials. Only a
+    // missing tally leaves the bucket as the best evidence there is.
+    if (isOAuth && hasCredentialTally) continue;
     const meta = isOAuth ? OAUTH_CHANNEL_META[normId] : undefined;
     const name = isOAuth && meta ? meta.name : capitalize(op.id);
     const defaultIcon = isOAuth && meta ? meta.iconId : getProviderDefaultIcon(normId, op.id);

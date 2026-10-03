@@ -1022,6 +1022,8 @@ const DICT: Record<string, [string, string]> = {
   'dash.providers_hint': ['真实凭据与请求聚合', 'Live credentials and request totals'],
   'dash.providers_type_oauth': ['OAuth', 'OAuth'],
   'dash.providers_status_disabled': ['已停用', 'Disabled'],
+  'dash.providers_show_all': ['显示全部 {n} 个供应商', 'Show all {n} providers'],
+  'dash.providers_show_less': ['收起', 'Show less'],
   'dash.empty_providers': ['尚无 provider 流量数据', 'No provider traffic yet'],
   'dash.credentials_n': ['{n} 个凭据', '{n} credentials'],
   'dash.health': ['凭据健康度', 'Credential health'],

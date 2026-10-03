@@ -570,6 +570,24 @@ assert.equal(allKeysOff.find((row) => row.providerId === 'codex-0')?.disabled, t
 assert.equal(allKeysOff.find((row) => row.key === 'oauth:codex')?.disabled, false, 'the enabled file keeps the channel on');
 console.log('✓ Configured API keys stay out of the OAuth channel row');
 
+// Test 7f: an empty tally is a reading, not a missing one
+//
+// With 13 Codex API keys and no OAuth account the gateway's tally is empty while the live overview
+// still counts 13 keys under `codex`. Falling back to that bucket made a Codex OAuth row holding 13
+// credentials; a type absent from a non-empty tally must not borrow the bucket either.
+const thirteenCodexKeys = Array.from({ length: 13 }, (_, i) => codexFamilyRow(`codex-${i}`, `Key ${i}`, `key-${i}`));
+const codexKeyBucket = [{ id: 'codex', credentials: 13, success: 40, failure: 2, total: 42, success_rate: 95.2, buckets: [] }];
+for (const tally of [[], [{ type: 'antigravity', count: 1, disabled: 0, api_keys: 0, api_keys_disabled: 0 }]]) {
+  const rows = aggregateProviders({
+    overviewProviders: codexKeyBucket,
+    authFilesByType: tally,
+    configuredProviders: thirteenCodexKeys,
+  });
+  assert.equal(rows.find((row) => row.id === 'codex' && row.kind === 'oauth'), undefined, 'API keys alone make no Codex OAuth row');
+  assert.equal(rows.filter((row) => row.providerId?.startsWith('codex-')).length, 13, 'each configured key keeps its own row');
+}
+console.log('✓ An empty credential tally makes no OAuth row from the API-key bucket');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

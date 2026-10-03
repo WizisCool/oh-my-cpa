@@ -806,6 +806,8 @@ export const MS: Readonly<Record<string, string>> = {
   "dash.providers_hint": "Kredensial langsung dan jumlah permintaan",
   "dash.providers_type_oauth": "OAuth",
   "dash.providers_status_disabled": "Dilumpuhkan",
+  "dash.providers_show_all": "Tunjuk semua {n} pembekal",
+  "dash.providers_show_less": "Tunjuk kurang",
   "dash.empty_providers": "Tiada trafik pembekal lagi",
   "dash.credentials_n": "{n} kredensial",
   "dash.health": "Kesihatan kredensial",

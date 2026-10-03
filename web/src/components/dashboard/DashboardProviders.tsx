@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Empty, Tag } from 'antd';
-import { RightOutlined } from '../icons';
+import { DownOutlined, RightOutlined, UpOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
@@ -18,6 +18,14 @@ import {
 import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
+
+/**
+ * Rows the panel shows before it folds the rest behind a toggle. The list is sorted with the
+ * channels that serve, by volume, first, so the fold hides the quiet tail rather than a sample;
+ * without it an operator with dozens of providers scrolled past the whole list to reach the
+ * panels below it.
+ */
+const PROVIDER_PREVIEW_LIMIT = 8;
 
 function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -58,6 +66,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 }) => {
   const t = useT();
   const navigate = useNavigate();
+  const [isExpanded, setIsExpanded] = useState(false);
   const sliding = range ? isSlidingRange(range) : true;
 
   // Custom provider icon overrides
@@ -111,7 +120,8 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 
   const configuredProviders = providersData?.providers || [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];
-  const authFilesByType = overview.credentials?.by_type || [];
+  // `undefined` while the auth-file read failed: an empty list would claim no OAuth credentials.
+  const authFilesByType = overview.credentials ? (overview.credentials.by_type ?? []) : undefined;
   // If the windowed query failed with partial errors, avoid fabricating zero traffic and fall back to overview
   const windowProviders = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.providers;
   const windowCredentials = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.credentials;
@@ -129,6 +139,9 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
       pluginLogos,
     });
   }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
+
+  const isFoldable = aggregated.length > PROVIDER_PREVIEW_LIMIT;
+  const visibleProviders = isFoldable && !isExpanded ? aggregated.slice(0, PROVIDER_PREVIEW_LIMIT) : aggregated;
 
   const handleRowClick = (provider: AggregatedProvider) => {
     if (provider.kind === 'oauth') {
@@ -151,7 +164,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('dash.empty_providers')} />
         ) : (
           <div className="provider-list-items">
-            {aggregated.map((provider) => {
+            {visibleProviders.map((provider) => {
               const isOAuth = provider.kind === 'oauth';
               // The rate's band colour is carried by the number as well as by the meter, because a
               // meter's fill *is* the rate: at a measured 0% it has no width, and without the number
@@ -232,6 +245,19 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
               );
             })}
           </div>
+        )}
+        {isFoldable && (
+          <button
+            type="button"
+            className="provider-list-toggle"
+            aria-expanded={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+          >
+            {isExpanded ? <UpOutlined aria-hidden="true" /> : <DownOutlined aria-hidden="true" />}
+            {isExpanded
+              ? t('dash.providers_show_less')
+              : t('dash.providers_show_all', { n: aggregated.length })}
+          </button>
         )}
       </div>
     </section>
