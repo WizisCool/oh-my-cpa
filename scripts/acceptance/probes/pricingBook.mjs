@@ -252,6 +252,11 @@ export async function pricingBook({ base, page, check, writes }) {
 
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.terminal-page-actions').getByRole('button', { name: 'More', exact: true }).click();
+  const syncLabel = page.locator('.action-menu-content:visible .action-menu-label').filter({ hasText: 'Price sync' });
+  check('phone tools name the price synchronization group', await isTrue(async () => syncLabel.isVisible(), 'the translated price sync title'));
+  await page.keyboard.press('Escape');
+  await page.locator('.action-menu-content:visible').waitFor({ state: 'hidden' });
   check('phone books keep the same page size', await isTrue(async () => (await list.locator('[data-testid="phone-row"]').count()) === 20, 'phone rows'));
   check('phone pagination uses a read-only page indicator', (await pagination.locator('input').count()) === 0 && (await pagination.locator('.ant-pagination-simple-pager').count()) === 1);
   check('phone pagination has reachable touch controls', await isTrue(async () => pagination.locator('.ant-pagination-next').evaluate((element) => {

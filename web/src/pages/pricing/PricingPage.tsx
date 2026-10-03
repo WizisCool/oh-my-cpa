@@ -458,7 +458,7 @@ export const PricingPage: React.FC = () => {
             ]} />
             <ActionMenu>
               <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
-              <span className="action-menu-label"><StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel></span>
+              <span className="action-menu-label">{t('pricing.sync.title')}: <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel></span>
               {syncPopover}
             </ActionMenu>
           </>

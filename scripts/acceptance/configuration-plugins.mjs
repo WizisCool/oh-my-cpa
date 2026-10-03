@@ -1,3 +1,5 @@
+import { until } from './harness.mjs';
+
 /**
  * Configuration and plugin release acceptance: payload-rule structure, source
  * editing, the plugin store/settings, system and quick-start routes, and the
@@ -117,16 +119,21 @@ export async function runConfigurationPluginsAcceptance({
     // Only built-artifact acceptance can catch worker asset paths or chunk loading defects.
     try {
       await page.locator('.monaco-editor .view-lines').first().waitFor({ state: 'visible' });
+      // The native provider and serializer fallback have different flow delimiter spacing.
+      await page.locator('.monaco-editor .view-lines').first().click();
+      await page.keyboard.press('Control+Home');
+      await page.keyboard.insertText('native-format-proof: [1,2,3]\n');
       await sourceToolbar.getByRole('button', { name: /^(格式化|Format)$/ }).click();
       await page.locator('.omc-toast').filter({ hasText: /YAML 已格式化|YAML formatted/ }).waitFor({ state: 'visible' });
-      check('the built YAML worker formats a source document', true);
+      await until(async () => (await page.locator('.monaco-editor .view-lines').innerText()).replaceAll('\u00a0', ' ').includes('native-format-proof: [1, 2, 3]'), { label: 'built native YAML worker formatting, not serializer fallback' });
+      check('the built YAML worker formats a source document without relying on fallback', true);
       const discard = page.locator('.config-dirty-btn-discard');
       if (await discard.isVisible()) {
         await discard.click();
         await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
       }
     } catch (error) {
-      check('the built YAML worker formats a source document', false, error instanceof Error ? error.message : String(error));
+      check('the built YAML worker formats a source document without relying on fallback', false, error instanceof Error ? error.message : String(error));
     }
     // Return to the visual view so the rest of the audit starts from the same
     // place it did before this section ran.

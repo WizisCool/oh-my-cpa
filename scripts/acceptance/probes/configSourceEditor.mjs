@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { until } from '../harness.mjs';
+import { probeRoot } from '../probe.mjs';
 
 /**
  * The YAML source editor's widgets, and the icon font they are drawn with.
@@ -302,15 +305,22 @@ async function configSourceMobile({ base, page, check }) {
   await confirmSave();
   await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
   check('one confirmed phone save writes the draft and adopts its baseline', writes.length === 3 && writes[2].yaml.includes('successful-mobile-save') && await page.locator('.ant-modal:visible').count() === 0);
+  // Flow delimiter spacing distinguishes the worker's provider from the serializer fallback.
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('native-format-proof: [1,2,3]\n');
   await page.getByRole('button', { name: 'Source tools', exact: true }).click();
   await page.locator('.action-menu-content:visible').getByRole('button', { name: 'Format', exact: true }).click();
-  await until(async () => await page.locator('.config-dirty-bar').count() === 1, { label: 'YAML formatter changes indentation' });
+  await until(async () => (await page.locator('.view-lines').innerText()).replaceAll('\u00a0', ' ').includes('native-format-proof: [1, 2, 3]'), { label: 'native YAML worker formatting, not serializer fallback' });
+  check('phone formatting requires the native YAML worker result', true);
   check('format remains reachable from phone tools', await page.locator('.monaco-editor').count() === 1);
   await page.locator('.config-dirty-btn-discard').click();
   await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
   await page.locator('.action-menu-content:visible').waitFor({ state: 'hidden' });
   await until(async () => await page.locator('.omc-toast:visible').count() === 0, { label: 'source feedback settles before capture' });
-  await page.screenshot({ path: 'tmp/mobile-config-source.png' });
+  const screenshotPath = path.join(probeRoot, 'tmp', 'mobile-config-source.png');
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  await page.screenshot({ path: screenshotPath });
   await page.setViewportSize({ width: 844, height: 390 });
   check('manual wrap survives a landscape rotation', await wrap.getAttribute('aria-pressed') === 'false');
 }

@@ -321,6 +321,10 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   viewport bounds, invalid input, revision conflict, failed saves and single successful confirmation.
   `scripts/acceptance/configuration-plugins.mjs` also formats a document from the built SPA to
   exercise production worker asset paths and RPC, complementing the dev-server source scenario.
+  Both require native flow-sequence delimiter spacing, which the serializer fallback cannot produce;
+  a toast or dirty state alone does not establish worker health. The source screenshot uses a
+  repository-root absolute path under `tmp/`, independent of the caller's working directory.
+  `pricing-book` also checks the translated synchronization group title in phone tools.
   Existing list/touch assertions remain; `config-backups` also exercises the phone menu-owned
   dialog, local table scrolling and Back closure.
 - Automated visible-viewport simulation does not certify iPhone keyboard/selection behaviour. Manual
