@@ -41,8 +41,8 @@ shape the product never emits. The captured Agent session is the same console DT
 excludes private model history, queued model calls and raw database-query results.
 
 The export is reproducible: two runs over unchanged code are byte-identical, on any
-machine and at any time. That is what makes `--check` meaningful, and it needed four
-things to be true rather than approximately true.
+machine and at any time. That is what makes `--check` meaningful: the following
+invariants must hold rather than approximately hold.
 
 - **The window is closed, on a fixed instant in the past.** A `preset` resolves against
   the wall clock, so two exports a minute apart disagree; and the server clamps a
@@ -61,6 +61,11 @@ things to be true rather than approximately true.
   instead. A zero instant means "never" and is not shifted, by the export or by the Worker.
   `TestDemoExportRebaseIsIndependentOfTheExportClock` exports the same body at two
   different clocks and requires identical output.
+- **Process starts share a fixed synthetic age.** Nonzero `started_at_ms` readings in
+  system runtime and service logs use the instant two hours before the reference.
+  The Worker preserves that age when rebasing, so both pages agree and never show a
+  future start. Unstarted maintenance jobs keep zero. `TestDemoExportStartTimesUseReferenceClock`
+  covers different export clocks, both JSON numeric decoding modes, and schema properties.
 
 ## Why it does not go stale
 

@@ -459,7 +459,6 @@ var demoExportMeasuredKeys = map[string]bool{
 	"rss_mb":        true,
 	"num_cpu":       true,
 	"memory_mb":     true,
-	"started_at_ms": true,
 }
 
 // demoExportHostKeys are runtime facts about the machine that ran the export. They
@@ -510,6 +509,14 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	case map[string]any:
 		for key, item := range typed {
 			switch {
+			case key == "started_at_ms":
+				// Process starts share one synthetic age so rebasing never puts a
+				// service in the future. An unstarted job still has no start instant.
+				if startedAt, isNumber := demoExportNumericMillis(item); isNumber && startedAt > 0 {
+					typed[key] = demoExportReference.Add(-2 * time.Hour).UnixMilli()
+				} else {
+					typed[key] = demoExportRebase(item, deltaMS, requestIDs)
+				}
 			case demoExportMeasuredKeys[key] && demoExportIsNumber(item):
 				typed[key] = 0
 			case key == demoExportRequestID:
@@ -693,6 +700,10 @@ func demoExportNormaliseDayBoundary(owner map[string]any, key string, item any) 
 // demoExportNumericMillis reads an epoch instant held as a JSON number.
 func demoExportNumericMillis(item any) (float64, bool) {
 	switch number := item.(type) {
+	case int:
+		return float64(number), true
+	case int64:
+		return float64(number), true
 	case float64:
 		return number, true
 	case json.Number:
@@ -1254,6 +1265,51 @@ func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
 	runtimeFacts := first["runtime"].(map[string]any)
 	if runtimeFacts["go_version"] != demoExportHostKeys["go_version"] || runtimeFacts["os_arch"] != demoExportHostKeys["os_arch"] {
 		t.Fatalf("the exporting host leaked into the dataset: %v", runtimeFacts)
+	}
+}
+
+func TestDemoExportStartTimesUseReferenceClock(t *testing.T) {
+	var firstExport []byte
+	for _, elapsed := range []time.Duration{90 * 24 * time.Hour, 180 * 24 * time.Hour} {
+		exportedAt := demoExportReference.Add(elapsed)
+		body := fmt.Sprintf(`{"runtime":{"started_at_ms":%d},"service_logs":{"started_at_ms":%d},"maintenance":{"started_at_ms":0},"properties":{"started_at_ms":{"type":"integer","minimum":0}}}`, exportedAt.UnixMilli(), exportedAt.Add(-time.Second).UnixMilli())
+		for _, shouldUseNumber := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/use-number=%t", elapsed, shouldUseNumber), func(t *testing.T) {
+				decoder := json.NewDecoder(strings.NewReader(body))
+				if shouldUseNumber {
+					decoder.UseNumber()
+				}
+				var decoded any
+				if err := decoder.Decode(&decoded); err != nil {
+					t.Fatal(err)
+				}
+				rebased := demoExportRebase(decoded, demoExportReference.Sub(exportedAt).Milliseconds(), map[string]int{}).(map[string]any)
+				want := demoExportReference.Add(-2 * time.Hour).UnixMilli()
+				for _, name := range []string{"runtime", "service_logs"} {
+					startedAt, isNumber := demoExportNumericMillis(rebased[name].(map[string]any)["started_at_ms"])
+					if !isNumber || startedAt != float64(want) {
+						t.Errorf("%s starts at %v, want fixed past instant %d", name, startedAt, want)
+					}
+				}
+				maintenance := rebased["maintenance"].(map[string]any)
+				if startedAt, isNumber := demoExportNumericMillis(maintenance["started_at_ms"]); !isNumber || startedAt != 0 {
+					t.Errorf("an unstarted job acquired a start time: %v", maintenance)
+				}
+				property := rebased["properties"].(map[string]any)["started_at_ms"].(map[string]any)
+				if property["type"] != "integer" {
+					t.Errorf("schema property changed: %v", property)
+				}
+				encoded, err := json.Marshal(rebased)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if firstExport == nil {
+					firstExport = encoded
+				} else if string(encoded) != string(firstExport) {
+					t.Errorf("process start times vary by clock or decoder:\n%s\n%s", firstExport, encoded)
+				}
+			})
+		}
 	}
 }
 
