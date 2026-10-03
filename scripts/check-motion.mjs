@@ -79,6 +79,13 @@ const EXCEPTIONS = [
   {
     kind: 'duration',
     file: 'index.css',
+    selector: '.progress-bar-activity-mark',
+    property: 'animation',
+    why: 'The 1200ms cycle reports pending activity independently of the rough fill, not a state transition; reduced motion removes it (ADR 0054).',
+  },
+  {
+    kind: 'duration',
+    file: 'index.css',
     selector: '.placeholder',
     property: 'animation',
     why: 'A first-load placeholder breathes for as long as nothing has arrived; 1400ms is the breath\u2019s period, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it (ADR 0052).',

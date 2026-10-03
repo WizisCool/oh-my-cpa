@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import {
   advanceDrawnProgress,
   estimateProgress,
-  getProgressPercent,
   isProgressBatchComplete,
   PENDING_CREDIT_CAP,
   PROGRESS_FLOOR,
@@ -33,7 +32,7 @@ test('no work in flight is no batch, and the first task opens one at its start t
   assert.equal(batch.settled, 0);
 });
 
-test('each settled task counts in full and the bar reports the measured share', () => {
+test('each settled task counts in full and the unestimated share counts only settled tasks', () => {
   const batch = replay([[0, ids('a', 'b', 'c', 'd')], [100, ids('c', 'd')]])!;
   assert.equal(batch.started, 4);
   assert.equal(batch.settled, 2);
@@ -118,25 +117,14 @@ test('progress tasks publish their start and settle once, and merged sources rea
 });
 
 
-test('announced tenths reserve 100 percent for a fully drawn bar', () => {
-  for (const drawn of [0.94, 0.95, 0.98, 0.999999]) {
-    assert.equal(getProgressPercent(drawn), 90, `unfinished at ${drawn}`);
-  }
-  assert.equal(getProgressPercent(0), 0);
-  assert.equal(getProgressPercent(0.1), 10);
-  assert.equal(getProgressPercent(1), 100);
-});
-
-test('many settled tasks cannot announce completion while the final task is pending', () => {
+test('many settled tasks cannot fill the bar while the final task is pending', () => {
   const tasks = Array.from({ length: 20 }, (_, index) => `query:${index}`);
   const pending = replay([[0, ids(...tasks)], [100, ids(tasks[19])]])!;
   const target = estimateProgress(pending, 10000);
   const drawn = advanceDrawnProgress(PROGRESS_FLOOR, target, 10000);
   assert.ok(drawn >= 0.95 && drawn < 1);
-  assert.equal(getProgressPercent(drawn), 90);
 
   const complete = reconcileProgressBatch(pending, ids(), 10001)!;
   const finished = advanceDrawnProgress(drawn, estimateProgress(complete, 10001), 10000);
   assert.equal(finished, 1);
-  assert.equal(getProgressPercent(finished), 100);
 });

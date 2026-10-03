@@ -1286,8 +1286,8 @@ things that were once true. Two kinds exist. A `layout` exception waives rule 1 
 where a reflow is the point and the alternative is an accordion that snaps open. A `duration`
 exception waives the token requirement for a loop whose period is how long one cycle takes rather
 than a transition between two states: the heatmap's re-read bar, the icon spinner, the Agent's
-running pip and the first-load placeholders' breath. §7 handles those by freezing them under reduced
-motion rather than by shortening them.
+running pip, the loading bar's waiting activity and the first-load placeholders' breath. §7 handles
+those by freezing or removing them under reduced motion rather than by shortening them.
 `scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
@@ -1375,7 +1375,7 @@ custom range changes, manual refresh and background refetch.
 | --- | --- |
 | Route change | Content sits in a keyed `.route-transition` that fades in over 100ms with a 3px rise, and the scroll position resets with the new page. |
 | Query key change (preset, range, filter) | `placeholderData: keepPreviousData` — the previous result stays on screen while the next one loads. |
-| Any request in flight | The app-wide 2px `.data-progress` bar, painted after a 200ms delay, whose length is the measured share of counted work done (below). Regions are never dimmed or unmounted. |
+| Any request in flight | The app-wide 2px `.data-progress` bar, painted after a 200ms delay, whose fill hints at counted work and whose short activity marker reports waiting (below). Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with placeholders drawn at the content's geometry, not a bare full-page spinner swap. |
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
 | Auto-refresh poll | The view does not move, though a reading and a mark may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". Two things may move: a dashboard KPI number rolling to its new value, and any dashboard chart mark morphing to its own new revision - the six KPI sparklines, and the model trend and usage ring, which re-read on their own endpoint rather than on the tiles' (rules 8 and 5). |
@@ -1384,22 +1384,36 @@ custom range changes, manual refresh and background refetch.
 steps only when a task settles) and freezes the placeholders' breath, but the
 no-blank rule still applies — fall back to a static loading state.
 
-### Loading feedback: a measured bar and placeholders where content lands
+### Loading feedback: rough progress, waiting activity and content-shaped placeholders
 
-See ADR 0052 for the decision and its trade-offs.
+ADRs 0052 and 0054 record the task accounting, placeholder treatment and separate activity signal.
 
-**The bar measures counted work.** Every non-silent query and every module
+**The fill hints at progress; the marker reports waiting.** Every non-silent query and every module
 download behind a Suspense boundary is a task (`web/src/utils/loadProgress.ts`,
-`web/src/utils/progressTasks.ts`). A settled task counts in full; a pending task
-earns credit toward 85% of its share on an exponential curve, so the bar keeps
-moving while a slow read is outstanding and only a task settling finishes it. It
-never moves backwards. Done, it holds full for one `base` beat and fades over
-another. If reduced motion cancels that completion fade, the finished bar hides
-immediately. The fill is a `transform: scaleX()` over a track tinted 18% of the
-accent, so the reader sees how much is left. The element is a `progressbar` whose
-`aria-valuenow` rounds down in 10-percentage-point steps; only the fully drawn
-bar announces 100%. Changing reduced-motion preference while work is pending
-preserves that batch and its drawn progress.
+`web/src/utils/progressTasks.ts`). A settled task counts in full; a pending task earns capped
+exponential credit toward 85% of its share. This is a rough estimate, not a measurable remaining
+duration or byte percentage. The fill never moves backwards, including when new work joins.
+
+The 2px track keeps its 18% accent tint. Its fill uses the accent at 65% opacity. Inside the fill's
+front edge, a clipped activity window is at most 64px and 16% of the track width; its solid accent
+segment is at most 16px and 25% of that window. The segment travels on a 1200ms linear CSS cycle,
+fading in and out at the wrap. It keeps moving when the estimated fill holds. It signals a pending
+client wait, not an upstream heartbeat or additional completed work. Only transforms and opacity
+animate; there are no per-frame React renders or layout measurements.
+
+`web/src/utils/progressController.ts` owns the clock-injected lifecycle. Source notifications do
+not reset the drawing clock or restart the activity cycle. The bar waits 200ms before painting.
+When the last task settles, activity stops and the fill closes within one resolved `--motion-base`
+beat, then holds full for one `base` beat and fades over another. Content does not wait for this
+animation. Settlement includes failures and cancellation; the bar ending is not a success verdict.
+
+The localized `progressbar` omits `aria-valuenow`: assistive technology must not announce an estimate
+as a measured percentage. `aria-busy` remains true only while counted tasks are pending. Reduced
+motion removes the activity loop and pending credit, stops drawing frames and updates from task
+events; switching it live preserves the batch and never moves the fill backwards. A completed bar
+hides immediately on that switch, including a cancelled fade. Hidden documents suspend drawing,
+the show timer and activity; pending work resumes from its actual state, while completed work is
+retired without a replay. Neither palette derivation nor theme token mapping changes.
 
 | Where | What it counts |
 | --- | --- |
@@ -1893,7 +1907,7 @@ a full-width primary button, both at antd's large size (40px). There is no eyebr
 footnote. The field's label already says what to enter, and §3 rule 2 bars a line that restates it
 or instructs. A refused key stays inline as a `Notice` above the field. The session check draws the
 column's outline as placeholders at the form's own geometry. The session check and the sign-in
-request draw the measured bar along the page's top edge.
+request draw the rough-progress bar with its waiting activity along the page's top edge.
 
 ### Route error recovery surface
 

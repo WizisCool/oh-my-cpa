@@ -214,7 +214,7 @@ The `route-render-error` and `route-lazy-error` probes intercept a real page mod
 to cause a render exception or an import failure; the render probe also fails the
 shell to prove the fallback is independent of it. The lazy-import probe holds
 and rejects the shell download, checking its placeholder, localized accessible
-status name and the measured bar reporting the held download as unfinished, diagnostic copy and full-document recovery after the
+status name and the rough-progress bar reporting the held download as unfinished, diagnostic copy and full-document recovery after the
 shell becomes available. They assert the
 root route's brand, localized title and diagnostic copy in all four languages, light/dark
 rendering, phone overflow and touch-sized controls, heading focus, stack
@@ -228,26 +228,29 @@ before measuring geometry and SVG fills, because the shell download can complete
 
 ### Loading feedback regression coverage
 
-`scripts/test-load-progress.ts` owns the loading bar's policy (ADR 0052): batch
-opening and completion, full credit for a settled task, a pending task's capped
-credit, a late task's own start time, a restarted task counted twice, a fresh
-batch after completion, the 200ms show delay, frame-rate-independent smoothing
-that never moves backwards, and the task registry's single settle and source
-union. Announced percentage tests cover the 95–99% boundary and many settled
-tasks with one pending, reserving 100% for actual drawn completion. It injects
-the clock, so no test waits on real time. The `route-lazy-error` probe owns the
-browser wiring: the shell placeholder and its
-bar painting while the shell download is held, including a nearly full bar
-that must still announce incomplete work and a live reduced-motion switch that
-must preserve the batch and never reset its drawn progress. It also cancels a
-completed sign-in bar's actual opacity transition with reduced motion, pausing
-its animation clock at `transitionrun` to keep emulation deterministic, and checks
-that the root becomes hidden, independently of query-cache notifications. Placeholder geometry and the
-sign-in surface are covered by the existing route and probe scenarios that load
-those pages, which wait on the rendered content rather than on a spinner.
+`scripts/test-load-progress.ts` owns task accounting and rough estimation (ADRs 0052 and 0054):
+batch opening/completion, full settled credit, capped pending credit, late/restarted tasks, the
+200ms show delay, frame-rate-independent monotonic smoothing, the final-pending-task boundary,
+and registry/source merging. `scripts/test-progress-controller.ts` injects the clock, render and
+scheduler to own invisible fast batches, frequent notifications without clock resets, late work
+holding progress, one-base-beat completion, new episodes during completion/fading, event-only
+reduced motion, live preference switches, hidden/resumed documents and disposal. No test waits
+on wall-clock time.
 
-The motion checker self-test pins the placeholder duration exception without
-waiving the reduced-motion counterpart or durations on unrelated selectors.
+The existing `route-lazy-error` probe owns real browser wiring. Its helper in
+`scripts/acceptance/probes/loadingProgress.mjs` holds genuine tasks and samples the real CSS
+activity animation with a controlled animation clock: movement during a held fill, invisible
+wrap, clipping at the rough frontier, 2px/64px/16%/16px geometry, theme color and opacity,
+root/animation identity, layout stability and omitted numeric accessibility claims. It exercises
+shell, sign-in and console bars at desktop and phone widths, and the sign-in theme control selects
+light and dark. A held real dashboard refresh checks query-driven activity and retention of data. The probe retains held-module failure/recovery, live reduced-motion batch preservation
+and freezing of both placeholder and activity animation, plus cancellation of a completed
+sign-in bar's actual opacity fade. Assertions observe state or animation frames, never fixed waits.
+Existing page scenarios retain their coverage of silent polls and placeholder geometry.
+
+The motion checker self-test pins the local waiting-activity duration exception in both
+directions, including its reduced-motion requirement and rejection of unrelated raw durations.
+Placeholder breathing's existing exception remains independently pinned.
 
 ## Production loading boundaries and bundle reports
 

@@ -194,6 +194,17 @@ test('the first-load breath exception does not waive reduced motion or other sel
   assert.match(problems(unrelated, exception).join('\n'), /raw duration 1400ms/);
 });
 
+test('the progress activity exception stays local and still requires reduced motion', (t) => {
+  const activity = `.progress-bar-activity-mark { animation: progress-activity 1200ms linear infinite; }
+@keyframes progress-activity { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(400%); opacity: 0; } }
+`;
+  const exception = [{ kind: 'duration', file: 'index.css', selector: '.progress-bar-activity-mark', property: 'animation', why: 'Waiting activity cycle (ADR 0054).' }];
+  const reduced = `@media (prefers-reduced-motion: reduce) { .progress-bar-activity-mark { animation: none; opacity: 0; } }`;
+  assert.deepEqual(problems(fixture(t, { 'index.css': activity + reduced }), exception), []);
+  assert.match(problems(fixture(t, { 'index.css': activity }), exception).join('\n'), /no `prefers-reduced-motion` counterpart/);
+  assert.match(problems(fixture(t, { 'index.css': activity + reduced + `.other { transition: opacity 1200ms; }` }), exception).join('\n'), /raw duration 1200ms/);
+});
+
 test('the repository itself is clean', () => {
   // The one assertion that cannot be made about a fixture: the tree this ships with satisfies its own
   // budget. A rule change that breaks the stylesheet is a failure here, where the reason is legible.

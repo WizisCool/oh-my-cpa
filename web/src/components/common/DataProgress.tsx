@@ -35,7 +35,7 @@ function queryProgressSource(queryClient: QueryClient): ProgressSource {
 
 /**
  * DataProgress is the app-wide "work in flight" signal: one 2px bar pinned under the header, whose
- * length is the share of the page's reads and module downloads that have arrived.
+ * length hints at the page's reads and module downloads, while a moving marker signals waiting.
  *
  * It exists so no view ever has to blank, dim or swap itself out to show that data is loading.
  */

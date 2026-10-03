@@ -1567,11 +1567,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
-/* ── loading: a measured bar and placeholders where the content will land ──
-   The bar's length is the share of the counted work that has arrived (`loadProgress.ts`); the
-   frame loop writes only the fill's transform, so it never lays out. Its track is a tint of the
-   accent, so the reader sees how much is left as well as how much is done. Done, it holds full for
-   one `base` beat and fades over another. */
+/* ── loading: rough progress plus independent waiting activity ────────────
+   Task counts and capped pending credit drive the fill, not a measurable remaining duration.
+   The short activity window stays inside its front edge and keeps moving when that estimate holds.
+   Completion closes within one base beat, then holds and fades; CSS owns the activity cycle. */
 .progress-bar {
   position: relative;
   height: 2px;
@@ -1581,16 +1580,43 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   transition: opacity var(--motion-base) var(--ease-standard) var(--motion-base);
 }
 .progress-bar[hidden] { display: none; }
-.progress-bar[data-state='running'] { transition: none; }
+.progress-bar[data-state='running'], .progress-bar[data-state='finishing'] { transition: none; }
 .progress-bar[data-state='done'] { opacity: 0; }
 .progress-bar-fill {
   position: absolute;
   inset: 0;
   background: var(--accent);
+  opacity: 0.65;
   transform: scaleX(0);
   transform-origin: left center;
   will-change: transform;
 }
+.progress-bar-activity {
+  position: absolute;
+  inset: 0;
+  transform: translateX(0);
+  will-change: transform;
+}
+.progress-bar-activity-window {
+  position: absolute;
+  right: 100%;
+  width: min(64px, 16%);
+  height: 100%;
+  overflow: hidden;
+}
+.progress-bar-activity-mark {
+  width: min(16px, 25%);
+  height: 100%;
+  background: var(--accent);
+  animation: progress-activity 1200ms linear infinite;
+}
+@keyframes progress-activity {
+  0% { transform: translateX(-100%); opacity: 0; }
+  20%, 80% { opacity: 1; }
+  100% { transform: translateX(400%); opacity: 0; }
+}
+.progress-bar:not([data-state='running']) .progress-bar-activity-mark { animation: none; opacity: 0; }
+.progress-bar[data-paused] .progress-bar-activity-mark { animation-play-state: paused; }
 /* Pinned to the top of the scrolling column, directly under the header's rule, and taking no
    height from the page beneath it. */
 .data-progress {
@@ -1729,8 +1755,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     transform: none !important;
   }
   .route-transition { animation: none; }
-  /* The bar keeps its measured length and steps with each settled read; the fade is dropped. */
+  /* Rough progress updates on task events only; waiting activity and the completion fade are removed. */
   .progress-bar { transition: none; }
+  .progress-bar-activity-mark { animation: none; opacity: 0; }
   /* A placeholder keeps its place and drops the breath. */
   .placeholder { animation: none; opacity: 0.7; }
   .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }

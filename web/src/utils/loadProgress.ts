@@ -1,16 +1,14 @@
 /**
- * The model behind the console's loading bar: how far along the work in flight is.
+ * The rough-progress model behind the console's loading bar.
  *
- * The bar reports work the console can count - queries and module downloads - rather than looping on
- * a timer, so its length is an answer to "how much of what I asked for has arrived". Each piece of
- * work is a task with an id; the bar's batch starts when the first task starts and ends when the last
- * one settles. A settled task counts in full. A pending task's own duration is unknown (a response
- * carries no total), so it earns credit on an exponential curve that approaches, and never reaches,
- * `PENDING_CREDIT_CAP` of its share: the bar keeps visibly moving while a slow read is outstanding,
- * yet only a task actually settling can carry it the rest of the way.
+ * The console counts queries and module waits rather than inventing a known remaining duration.
+ * Each task has an id; a batch opens when the first starts and ends when the last settles. Settled
+ * work counts in full; pending work earns exponential credit capped at `PENDING_CREDIT_CAP` of its
+ * share. Only settlement earns the remaining credit. Independent CSS activity reports waiting even
+ * when the estimate holds at its cap or a larger denominator keeps it below the drawn frontier.
  *
- * Pure and clock-injected, so the policy is tested without a browser; `ProgressBar` owns the frame
- * loop and the DOM.
+ * Pure and clock-injected, so the policy is tested without a browser; `progressController` owns the frame
+ * clock and lifecycle; `ProgressBar` owns the DOM and CSS activity marker.
  */
 
 /** The work must still be in flight after this long before the bar paints (design.md §7 rule 4). */
@@ -72,7 +70,7 @@ export function isProgressBatchComplete(batch: ProgressBatch): boolean {
 }
 
 /**
- * The share of the batch's work done, in [0, 1].
+ * The batch's estimated share, in [0, 1], including partial credit for pending work.
  *
  * `shouldEstimate` is false under reduced motion: the pending tasks' credit is the bar moving without
  * anything having happened, so a reader who asked for less motion sees only real steps - a task
@@ -106,11 +104,6 @@ export function advanceDrawnProgress(drawn: number, target: number, elapsedMs: n
   if (target <= drawn) return drawn;
   const step = 1 - Math.exp(-Math.max(0, elapsedMs) / PROGRESS_SMOOTHING_TAU_MS);
   const next = drawn + (target - drawn) * step;
-  // Snap the last sliver so the completed bar actually reaches its end instead of approaching it forever.
+  // Snap tiny gaps rather than leaving the drawn fill asymptotically short of its target.
   return target - next < 0.002 ? target : next;
-}
-
-/** Announces whole tenths without letting an unfinished drawn bar report completion. */
-export function getProgressPercent(drawn: number): number {
-  return Math.floor(drawn * 10) * 10;
 }

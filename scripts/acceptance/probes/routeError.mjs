@@ -1,3 +1,5 @@
+import { checkWaitingActivity } from './loadingProgress.mjs';
+
 const FAILURE_MARKER = 'Cannot read properties of undefined (reading model)';
 const PRIVATE_MARKER = 'fixture-private123456';
 const RECOVERY_MARKER = 'route-error-fixture-recovered';
@@ -141,8 +143,8 @@ export async function routeLazyError(fixtures) {
     check('the authenticated shell has a visible loading state', await page.locator('.app-shell').count() === 0);
     // The held download is work in flight, so the shell's bar paints once the show delay passes.
     await page.locator('.shell-loading-progress[data-state="running"]').waitFor();
-    check('the held shell download is reported as measured progress',
-      Number(await page.locator('.shell-loading-progress').getAttribute('aria-valuenow')) < 100);
+    check('the held shell download exposes waiting without an estimated accessible percentage',
+      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === null);
     // Enough completed work puts the bar past 95%, but the held module still owns the last task.
     await page.evaluate(async (moduleUrl) => {
       const { beginProgressTask } = await import(moduleUrl);
@@ -154,8 +156,9 @@ export async function routeLazyError(fixtures) {
       return fill && new DOMMatrix(getComputedStyle(fill).transform).a >= 0.95;
     });
     check('the almost-filled bar cannot announce completion while its module is held',
-      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === '90' &&
+      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === null &&
       await page.locator('.shell-loading-progress').getAttribute('aria-busy') === 'true');
+    await checkWaitingActivity(fixtures, '.shell-loading-progress');
     const fill = page.locator('.shell-loading-progress .progress-bar-fill');
     const beforeMotionChange = await fill.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).a);
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -167,13 +170,14 @@ export async function routeLazyError(fixtures) {
         resolve({
           scale: new DOMMatrix(getComputedStyle(element).transform).a,
           animation: getComputedStyle(document.querySelector('.shell-loading .placeholder')).animationName,
+          activity: getComputedStyle(document.querySelector('.shell-loading-progress .progress-bar-activity-mark')).animationName,
         });
       });
       sample();
     }));
     check('reduced motion freezes the placeholder without restarting the counted batch',
-      reduced.scale >= beforeMotionChange && reduced.animation === 'none' &&
-      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === '90', JSON.stringify(reduced));
+      reduced.scale >= beforeMotionChange && reduced.animation === 'none' && reduced.activity === 'none' &&
+      await page.locator('.shell-loading-progress').getAttribute('aria-valuenow') === null, JSON.stringify(reduced));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     const resumed = await fill.evaluate(element => new Promise(resolve => {
       const sample = () => requestAnimationFrame(() => {
@@ -237,6 +241,7 @@ export async function routeLazyError(fixtures) {
       window.__settleProgressTask = beginProgressTask();
     }, `${new URL(base).pathname}/src/utils/progressTasks.ts`);
     await page.locator('.auth-progress[data-state="running"]').waitFor();
+    await checkWaitingActivity(fixtures, '.auth-progress', { shouldChangeTheme: true });
     await page.evaluate(() => window.__settleProgressTask());
     await page.waitForFunction(() => window.__hasProgressFadeStarted);
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -247,4 +252,37 @@ export async function routeLazyError(fixtures) {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await context.unroute(sessionPattern, signedOutSession);
   }
+  await page.goto(`${base}/dashboard`);
+  await page.locator('.dashboard-page').waitFor();
+  await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).waitFor();
+  const dashboardPattern = '**/api/v1/management/dashboard?*';
+  let releaseDashboard;
+  let observeDashboard;
+  const dashboardRelease = new Promise(resolve => { releaseDashboard = resolve; });
+  const dashboardObserved = new Promise(resolve => { observeDashboard = resolve; });
+  const holdDashboard = async (route) => {
+    observeDashboard();
+    await dashboardRelease;
+    await route.fallback();
+  };
+  await context.route(dashboardPattern, holdDashboard);
+  try {
+    await page.getByText('98.70%', { exact: true }).first().waitFor();
+    await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).click();
+    await dashboardObserved;
+    await page.locator('.data-progress[data-state="running"]').waitFor();
+    check('a real non-silent dashboard refresh keeps its data while reporting waiting',
+      await page.getByText('98.70%', { exact: true }).first().isVisible() &&
+      await page.locator('.dashboard-page .placeholder').count() === 0);
+    await checkWaitingActivity(fixtures, '.data-progress');
+    releaseDashboard();
+    await page.waitForFunction(() => document.querySelector('.data-progress')?.hidden);
+    check('the real query settlement retires console activity independently of its page',
+      await page.locator('.data-progress').getAttribute('aria-busy') === null &&
+      await page.locator('.dashboard-page').isVisible());
+  } finally {
+    releaseDashboard();
+    await context.unroute(dashboardPattern, holdDashboard);
+  }
+
 }
