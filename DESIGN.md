@@ -260,7 +260,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 - **Pinch-zoom is never disabled.** `maximum-scale=1` and `user-scalable=no` are absent on purpose.
 - **A page never moves sideways.** The content pane scrolls vertically only on a phone; a code block, a wide table, the heatmap, and a strip of choices that cannot wrap (price-book filters, configuration section nav) swipe inside their own frames with `overscroll-behavior-x: contain`. The conversation transcript clips horizontally as a backstop, and its capability steps are bounded by the column.
 - **The composer starts at one line.** It grows to ten lines on desktop, with the action in its foot. Below 640px it grows to five lines with the action beside the input, and keeps a foot row only for a control that needs one. User message text has no paragraph margins inside its padded bubble.
-- **The source editor is a phone surface too.** The configuration page's YAML editor stays editable at 640px and below, with the editor's own options rather than stylesheet rules (Monaco draws on a canvas-backed view): `fontSize` 16 with a 24px line height, `wordWrap: 'on'` so a long line does not force horizontal scrolling on the surface least able to perform it, and the minimap off. Its height is a `dvh` clamp so the on-screen keyboard cannot resize it under the caret.
+- **The source editor is a phone surface too.** Monaco owns text/widget geometry through its API. At 640px and below use 16px text / 24px lines, a two-character number gutter, no folding/decorations/minimap/overview ruler, and `wrappingIndent: 'none'`. Wrapping defaults on for phones and off for desktop; a visible manual choice lasts for the source session. Find/wrap/focus are direct; format/copy/statistics use tools. The same Monaco instance enters a focused region bounded by `visualViewport`, with dirty-only measured actions and Back/focus restoration. See the content-first phone contract below.
 - **The viewport is not a fixed rectangle.** `viewport-fit=cover` is declared so `env(safe-area-inset-*)` resolves, and the insets go on chrome that touches a screen edge — never on a scroll container. Heights that decide how much data fits use `dvh`, not `vh`, because the mobile URL bar changes `100vh` continuously. `touch-action: manipulation` goes on controls, not on the page.
 
 ### Named Rules
@@ -568,3 +568,24 @@ age. Each summary uses at most two paired facts, with labels beside values rathe
 separate metric grids. Positive ingestion backlog and collection gaps appear as warning
 readings; healthy zero values do not consume space. Missing observations remain explicit.
 The version card retains the compact comparison and separate change-log action above.
+
+## Content-first phone console (ADR 0055)
+
+- Phone breakpoint: 640px; navigation sheet: 900px. One-row header: navigation, ellipsised page
+  name, refresh, More. Click-open theme/language/repository/sign-out tools show selected preferences,
+  use 44px rows and dismiss with Back/Escape. Demo mode retains its marker and restrictions.
+- Page titles: 18px; horizontal content padding: 12px; compact gaps/padding: existing 8/12/16px
+  scale. `PageHeader.mobileActions` chooses primary phone actions explicitly. Secondary tools use
+  `ActionMenu`; additional provider/audit filters use `FilterDisclosure` with selected-state summary.
+  Desktop actions, row-list rendering and request/conversation scrolling are unchanged. The phone conversation frame follows usable viewport height so input and Send stay above the keyboard.
+- Configuration: non-sticky status/mode/tools row, search on its own row, locally scrolling categories,
+  retained group headings/descriptions. Only dirty drafts show the measured-height bottom save/discard
+  bar; content reserves its space. Save validation and a single confirmation remain shared.
+- YAML: 16px text / 24px line height, two-character line-number gutter, no folding/decorations/minimap/
+  overview ruler/indent guides, `wrappingIndent: none`. Phone default wrap is on, desktop off; manual
+  choice lasts for the source session and survives rotation/focus. Find/wrap/focus are direct actions;
+  format/copy/statistics use tools. Desktop shortcut hints stay desktop-only.
+- Focused editing keeps the same Monaco DOM/model, undo stack, selection and scroll. Its fixed region
+  follows the visible viewport (keyboard resize/caret pan); dirty actions fit inside it. Background
+  siblings are inert while dialog portals remain active. Nested overlays close before focus on Back,
+  and exit restores entry-button focus. Palette/font/token derivation stays unchanged.

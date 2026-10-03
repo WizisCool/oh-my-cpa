@@ -80,7 +80,7 @@ export const CORE_TOKEN_KEYS: readonly (keyof ThemeCore)[] = [
  * The complete palette every consumer reads. Downstream surfaces - Ant Design's tokens,
  * the stylesheet's custom properties, the chart runtime, the Monaco editor and the brand
  * artwork - take this object and nothing else, so a palette is resolved once and never
- * re-derived per surface.
+ * re-derived per surface. Phone density changes layout, never this colour contract.
  */
 export interface ThemePalette extends ThemeCore {
   borderSoft: string;

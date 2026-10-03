@@ -15,6 +15,8 @@ import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
 import { SuspenseFallback } from '../components/common/PageLoading';
 import {
   AppstoreOutlined,
+  ArrowLeftOutlined,
+  FullscreenOutlined,
   CodeOutlined,
   CopyOutlined,
   FormatPainterOutlined,
@@ -31,6 +33,11 @@ import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { useConfigDraft } from '../components/config/useConfigDraft';
 import { ConfigBackupsButton } from '../components/config/ConfigBackupsButton';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
+import { useVisibleViewport } from '../hooks/useVisibleViewport';
+import { useFocusedRegion } from '../hooks/useFocusedRegion';
+import { resolveSourceWrap, type SourceWrap } from '../components/config/sourceWrap';
+import { ActionMenu } from '../components/common/ActionMenu';
 import {
   renderGroupPanel,
   sectionIcon,
@@ -60,6 +67,16 @@ export const ConfigPage: React.FC = () => {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const draft = useConfigDraft();
+  const isPhone = useIsPhoneViewport();
+  const [isSourceFocused, setIsSourceFocused] = React.useState(false);
+  const [wordWrapOverride, setWordWrapOverride] = React.useState<SourceWrap | null>(null);
+  const configRef = React.useRef<HTMLDivElement>(null);
+  const sourceRef = React.useRef<HTMLDivElement>(null);
+  const sourceFocusTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const visibleViewport = useVisibleViewport(isPhone || isSourceFocused);
+  useFocusedRegion(isSourceFocused, sourceRef);
+  useOverlayHistory({ isOpen: isSourceFocused, onClose: () => setIsSourceFocused(false) });
+
   const {
     editorRef,
     viewMode,
@@ -88,6 +105,40 @@ export const ConfigPage: React.FC = () => {
     requestSaveConfirmation,
     handleViewModeChange,
   } = draft;
+
+  const measureSourceHeight = React.useCallback(() => {
+    const source = sourceRef.current;
+    if (!source || !isPhone || isSourceFocused) return;
+    const dirtyHeight = Number.parseFloat(configRef.current?.style.getPropertyValue('--config-dirty-height') ?? '0') || 0;
+    const availableHeight = visibleViewport.height - Math.max(0, source.getBoundingClientRect().top - visibleViewport.top) - dirtyHeight - 24;
+    source.style.setProperty('--source-available-height', `${Math.max(240, availableHeight)}px`);
+  }, [isPhone, isSourceFocused, visibleViewport]);
+  React.useLayoutEffect(() => {
+    measureSourceHeight();
+    const toolbar = configRef.current?.querySelector('.config-toolbar');
+    if (!toolbar || !isPhone || viewMode !== 'source') return;
+    const observer = new ResizeObserver(measureSourceHeight);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [measureSourceHeight, viewMode, isPhone]);
+
+  const updateDirtyHeight = React.useCallback((height: number) => {
+    configRef.current?.style.setProperty('--config-dirty-height', `${height}px`);
+    measureSourceHeight();
+  }, [measureSourceHeight]);
+  const wordWrap = resolveSourceWrap(isPhone, wordWrapOverride);
+  React.useEffect(() => {
+    if (viewMode !== 'source') {
+      setIsSourceFocused(false);
+      setWordWrapOverride(null);
+    }
+  }, [viewMode]);
+  const wasSourceFocused = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (isSourceFocused) editorRef.current?.focus();
+    else if (wasSourceFocused.current) sourceFocusTriggerRef.current?.focus({ preventScroll: true });
+    wasSourceFocused.current = isSourceFocused;
+  }, [isSourceFocused, editorRef]);
 
   // The revision-conflict dialog is a decision the operator must make before the draft can be
   // saved, so Back dismissing it is the same as its own Cancel: the draft is untouched and the
@@ -163,99 +214,143 @@ export const ConfigPage: React.FC = () => {
     t,
   };
 
+  const sourceTools = (
+    <>
+      <Button
+        size="small"
+        icon={<FormatPainterOutlined />}
+        disabled={!rawYaml}
+        onClick={() => {
+          if (!editorRef.current) return;
+          editorRef.current.formatDocument()
+            .then(() => toast.success(t('cfg.source_format_success')))
+            .catch((error: unknown) => {
+              const reason = error instanceof Error ? error.message : '';
+              toast.error(reason ? `${t('cfg.source_format_error')}: ${reason}` : t('cfg.source_format_error'));
+            });
+        }}
+      >
+        {t('cfg.source_format')}
+      </Button>
+      <Button
+        size="small"
+        icon={<CopyOutlined />}
+        disabled={!rawYaml}
+        onClick={async () => {
+          if (await copyText(rawYaml)) {
+            toast.success(t('cfg.source_copy_success'));
+            return;
+          }
+          toast.error(t('cfg.copy_failed'));
+        }}
+      >
+        {t('cfg.source_copy')}
+      </Button>
+    </>
+  );
   return (
-    <div className="terminal-page config-page">
-      {/* Full-width sticky toolbar: the action group is pushed to the viewport's
-          right edge so it lines up with the global header. */}
-      <div className="config-toolbar">
-        <div className="config-toolbar-left">
-          <h1 className="terminal-title">{t('nav.config')}</h1>
-          {configQuery.isPending && !rawYaml ? (
-            <Tag className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_loading') })}</Tag>
-          ) : configQuery.isError && !rawYaml ? (
-            <Tag color="error" className="config-sync-badge">{t('cfg.status_error')}</Tag>
-          ) : configQuery.isError && rawYaml ? (
-            <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
-          ) : isDirty ? (
-            <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
-          ) : (
-            <Tag color="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
-          )}
-          <Segmented
-            size="small"
-            value={viewMode}
-            onChange={(val) => void handleViewModeChange(val as 'visual' | 'source')}
-            options={[
-              { value: 'visual', label: t('cfg.mode_visual'), icon: <AppstoreOutlined /> },
-              { value: 'source', label: t('cfg.mode_source'), icon: <CodeOutlined /> },
-            ]}
-          />
-        </div>
-
-        <div className="config-toolbar-actions">
-          {viewMode === 'visual' && (
-            <Input
+    <div ref={configRef} className={`terminal-page config-page${isDirty ? ' has-dirty-bar' : ''}`}>
+      {/* Desktop tools align with the shell; phones reserve the top for status and mode. */}
+      {isPhone ? (
+        <div className="config-toolbar config-toolbar-phone">
+          <div className="config-toolbar-left">
+            <h1 className="sr-only">{t('nav.config')}</h1>
+            <span className="config-phone-status" role="status">
+              {configQuery.isError ? t('cfg.status_error') : configQuery.isPending && !rawYaml ? t('cfg.status_loading') : isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
+            </span>
+            <Segmented
               size="small"
-              className="config-search-input"
-              prefix={<SearchOutlined />}
-              allowClear
-              placeholder={t('cfg.search_placeholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={viewMode}
+              onChange={(value) => void handleViewModeChange(value as 'visual' | 'source')}
+              options={[
+                { value: 'visual', label: t('cfg.mode_visual'), icon: <AppstoreOutlined /> },
+                { value: 'source', label: t('cfg.mode_source'), icon: <CodeOutlined /> },
+              ]}
             />
+            <ActionMenu label={t('cfg.tools')}>
+              <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
+              <Button size="small" icon={<ReloadOutlined />} disabled={isDirty || configQuery.isFetching} onClick={() => void configQuery.refetch()}>
+                {t('cfg.reload')}
+              </Button>
+              <span className="action-menu-label">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: isDirty ? t('cfg.source_dirty') : t('cfg.source_clean') })}</span>
+            </ActionMenu>
+          </div>
+          {viewMode === 'visual' && (
+            <Input size="small" className="config-search-input" prefix={<SearchOutlined />} allowClear
+              placeholder={t('cfg.search_placeholder')} aria-label={t('cfg.search_placeholder')}
+              value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
           )}
+        </div>
+      ) : (
+        <div className="config-toolbar">
+          <div className="config-toolbar-left">
+            <h1 className="terminal-title">{t('nav.config')}</h1>
+            {configQuery.isPending && !rawYaml ? (
+              <Tag className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_loading') })}</Tag>
+            ) : configQuery.isError && !rawYaml ? (
+              <Tag color="error" className="config-sync-badge">{t('cfg.status_error')}</Tag>
+            ) : configQuery.isError && rawYaml ? (
+              <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
+            ) : isDirty ? (
+              <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
+            ) : (
+              <Tag color="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
+            )}
+            <Segmented
+              size="small"
+              value={viewMode}
+              onChange={(val) => void handleViewModeChange(val as 'visual' | 'source')}
+              options={[
+                { value: 'visual', label: t('cfg.mode_visual'), icon: <AppstoreOutlined /> },
+                { value: 'source', label: t('cfg.mode_source'), icon: <CodeOutlined /> },
+              ]}
+            />
+          </div>
 
-          <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
+          <div className="config-toolbar-actions">
+            {viewMode === 'visual' && (
+              <Input
+                size="small"
+                className="config-search-input"
+                prefix={<SearchOutlined />}
+                allowClear
+                placeholder={t('cfg.search_placeholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            )}
 
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={() => void configQuery.refetch()}
-            loading={configQuery.isFetching}
-            disabled={isDirty}
-          >
-            {t('cfg.reload')}
-          </Button>
+            <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
 
-          {/* Discard needs no confirmation: it is the non-destructive direction. */}
-          {isDirty && (
             <Button
               size="small"
-              icon={<UndoOutlined />}
-              disabled={saveMutation.isPending}
-              onClick={handleDiscardChanges}
+              icon={<ReloadOutlined />}
+              onClick={() => void configQuery.refetch()}
+              loading={configQuery.isFetching}
+              disabled={isDirty}
             >
-              {t('cfg.dirty_bar_discard')}
+              {t('cfg.reload')}
             </Button>
-          )}
 
-          {/* Save. Blocking validation errors are reported by saveConfig itself,
-              so that branch does not confirm first: there is nothing to confirm
-              when the save cannot proceed. A valid document goes through the
-              popconfirm and then straight to saveConfig - the bottom bar owns
-              that confirmation, so it must not ask a second time through the
-              global modal the keyboard path uses. */}
-          {hasConfigErrors ? (
-            <Button
-              size="small"
-              type="primary"
-              icon={<SaveOutlined />}
-              loading={saveMutation.isPending}
-              disabled={!isDirty || isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={saveConfig}
-            >
-              {t('cfg.source_save')}
-            </Button>
-          ) : (
-            <Popconfirm
-              title={t('cfg.source_save_confirm')}
-              description={t('cfg.source_save_confirm_desc')}
-              onConfirm={saveConfig}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
-              disabled={!isDirty || saveMutation.isPending || isDemo}
-            >
+            {/* Discard needs no confirmation: it is the non-destructive direction. */}
+            {isDirty && (
+              <Button
+                size="small"
+                icon={<UndoOutlined />}
+                disabled={saveMutation.isPending}
+                onClick={handleDiscardChanges}
+              >
+                {t('cfg.dirty_bar_discard')}
+              </Button>
+            )}
+
+            {/* Save. Blocking validation errors are reported by saveConfig itself,
+                so that branch does not confirm first: there is nothing to confirm
+                when the save cannot proceed. A valid document goes through the
+                popconfirm and then straight to saveConfig - the bottom bar owns
+                that confirmation, so it must not ask a second time through the
+                global modal the keyboard path uses. */}
+            {hasConfigErrors ? (
               <Button
                 size="small"
                 type="primary"
@@ -263,13 +358,34 @@ export const ConfigPage: React.FC = () => {
                 loading={saveMutation.isPending}
                 disabled={!isDirty || isDemo}
                 title={isDemo ? t('demo.blocked') : undefined}
+                onClick={saveConfig}
               >
                 {t('cfg.source_save')}
               </Button>
-            </Popconfirm>
-          )}
+            ) : (
+              <Popconfirm
+                title={t('cfg.source_save_confirm')}
+                description={t('cfg.source_save_confirm_desc')}
+                onConfirm={saveConfig}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                disabled={!isDirty || saveMutation.isPending || isDemo}
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={saveMutation.isPending}
+                  disabled={!isDirty || isDemo}
+                  title={isDemo ? t('demo.blocked') : undefined}
+                >
+                  {t('cfg.source_save')}
+                </Button>
+              </Popconfirm>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {storedLayout === 'legacy' && (
         <Notice tone="info" title={t('cfg.stored_layout_legacy')} className="config-notice" />
@@ -327,7 +443,7 @@ export const ConfigPage: React.FC = () => {
 
           {/* Right: Focused Settings Group Canvas (max-width: 920px) */}
           <main className="config-main">
-            <div className="config-section-header">
+            <div className={`config-section-header${isPhone && !searchQuery ? ' config-section-header-phone' : ''}`}>
               <h2 className="config-section-title">
                 {searchQuery
                   ? t('cfg.search_results', { n: totalSearchMatches, q: searchQuery })
@@ -353,9 +469,16 @@ export const ConfigPage: React.FC = () => {
         </div>
       ) : (
         /* ── Source Mode: YAML Editor ───────────────────────────────────── */
-        <div className="config-source-container">
+        <div
+          ref={sourceRef}
+          className={`config-source-container${isSourceFocused ? ' is-focused' : ''}`}
+          role={isSourceFocused ? 'dialog' : undefined}
+          aria-modal={isSourceFocused ? true : undefined}
+          aria-label={isSourceFocused ? t('cfg.source_focus') : undefined}
+          style={isSourceFocused ? { top: visibleViewport.top, height: visibleViewport.height } : undefined}
+        >
           <div className="config-source-toolbar">
-            <Space size={12}>
+            {!isPhone && !isSourceFocused && <Space size={12}>
               <Tag color={isDirty ? 'warning' : 'success'}>
                 {isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
               </Tag>
@@ -364,8 +487,9 @@ export const ConfigPage: React.FC = () => {
                   {(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}
                 </Text>
               )}
-            </Space>
-            <Space size={8}>
+            </Space>}
+            <div className="config-source-actions">
+              {isSourceFocused && <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setIsSourceFocused(false)}>{t('cfg.source_return')}</Button>}
               <Button
                 size="small"
                 icon={<SearchOutlined />}
@@ -374,44 +498,19 @@ export const ConfigPage: React.FC = () => {
               >
                 {t('cfg.source_find')}
               </Button>
-              <Button
-                size="small"
-                icon={<FormatPainterOutlined />}
-                disabled={!rawYaml}
-                onClick={() => {
-                  if (!editorRef.current) return;
-                  editorRef.current
-                    .formatDocument()
-                    .then(() => {
-                      toast.success(t('cfg.source_format_success'));
-                    })
-                    .catch((err: unknown) => {
-                      const errMsg = err instanceof Error ? err.message : '';
-                      toast.error(
-                        errMsg
-                          ? `${t('cfg.source_format_error')}: ${errMsg}`
-                          : t('cfg.source_format_error')
-                      );
-                    });
-                }}
-              >
-                {t('cfg.source_format')}
+              <Button size="small" aria-pressed={wordWrap === 'on'} onClick={() => setWordWrapOverride(wordWrap === 'on' ? 'off' : 'on')}>
+                {t('cfg.source_wrap')}
               </Button>
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                disabled={!rawYaml}
-                onClick={async () => {
-                  if (await copyText(rawYaml)) {
-                    toast.success(t('cfg.source_copy_success'));
-                    return;
-                  }
-                  toast.error(t('cfg.copy_failed'));
-                }}
-              >
-                {t('cfg.source_copy')}
-              </Button>
-            </Space>
+              {!isSourceFocused && <Button ref={sourceFocusTriggerRef} size="small" icon={<FullscreenOutlined />} onClick={() => setIsSourceFocused(true)}>
+                {t('cfg.source_focus')}
+              </Button>}
+              {isPhone || isSourceFocused ? (
+                <ActionMenu label={t('cfg.source_tools')}>
+                  {sourceTools}
+                  <span className="action-menu-label">{(new Blob([rawYaml]).size / 1024).toFixed(1)} KB · {t('cfg.lines_count', { n: rawYaml.split('\n').length })}</span>
+                </ActionMenu>
+              ) : sourceTools}
+            </div>
           </div>
 
           <div className="config-editor-wrap">
@@ -432,6 +531,7 @@ export const ConfigPage: React.FC = () => {
                     // user is still editing invalid YAML
                   }
                 }}
+                wordWrap={wordWrap}
                 onSave={requestSaveConfirmation}
                 theme={theme}
                 editorRef={editorRef}
@@ -453,6 +553,9 @@ export const ConfigPage: React.FC = () => {
           than the confirming entry point: chaining the two produced a popconfirm
           followed by a second global modal asking the same question. */}
       <ConfigDirtyBar
+        container={isSourceFocused ? sourceRef.current : undefined}
+        onHeightChange={updateDirtyHeight}
+        viewportBottom={isPhone && !isSourceFocused ? visibleViewport.bottom : 0}
         isDirty={isDirty}
         isSaving={saveMutation.isPending}
         yamlError={hasYamlErrors}

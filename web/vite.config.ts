@@ -36,6 +36,22 @@ export default defineConfig(({ command }) => ({
       },
     ],
   },
+  // The worker imports CommonJS dependencies that the page's entry graph never visits.
+  // Prebundle its dependency graph so development workers are as offline-safe as built ones.
+  optimizeDeps: {
+    include: [
+      'monaco-yaml > @vscode/l10n',
+      'monaco-yaml > jsonc-parser',
+      'monaco-yaml > monaco-worker-manager/worker',
+      'monaco-yaml > path-browserify',
+      'monaco-yaml > prettier/plugins/estree',
+      'monaco-yaml > prettier/plugins/yaml',
+      'monaco-yaml > prettier/standalone',
+      'monaco-yaml > vscode-languageserver-textdocument',
+      'monaco-yaml > vscode-languageserver-types',
+      'monaco-yaml > vscode-uri',
+    ],
+  },
   server: {
     port: 5173,
     // Bind all network interfaces (0.0.0.0) so LAN and Tailscale devices can access

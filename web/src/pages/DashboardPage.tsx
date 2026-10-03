@@ -1,3 +1,4 @@
+import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -305,6 +306,26 @@ export const DashboardPage: React.FC = () => {
     <div className="terminal-page dashboard-page">
       <PageHeader
         title={t('nav.dashboard')}
+        mobileActions={(
+          <>
+            <TimeRangeControl range={range} onChange={applyRange} />
+            <ActionMenu>
+              <Button icon={<HistoryOutlined />} onClick={handleDrillDown}>{t('nav.usage_events')}</Button>
+              <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
+            </ActionMenu>
+            {clientKeyOptions.length > 0 && (
+              <Select
+                allowClear
+                className="dashboard-key-filter"
+                placeholder={t('dash.filter_by_key')}
+                value={selectedApiKey}
+                onChange={setSelectedApiKey}
+                options={clientKeyOptions}
+                prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
+              />
+            )}
+          </>
+        )}
         actions={(
           <>
             <TimeRangeControl range={range} onChange={applyRange} />

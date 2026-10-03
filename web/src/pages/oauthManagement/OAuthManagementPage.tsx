@@ -1,3 +1,4 @@
+import { ActionMenu } from '../../components/common/ActionMenu';
 import React from 'react';
 import { useBlocker, useSearchParams } from 'react-router-dom';
 import {
@@ -508,22 +509,31 @@ export const OAuthManagementPage: React.FC = () => {
 
   return (
     <div className={`terminal-page oauth-management-page ${styles.page}`}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = '';
+          actions.upload(files);
+        }}
+      />
       <PageHeader
         title={t('nav.auth_files')}
+        mobileActions={(
+          <>
+            <ActionMenu>
+              <Button icon={<UploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()}>{t('af.upload')}</Button>
+              <Button icon={<BranchesOutlined />} disabled={actions.isOperating} onClick={() => setIsAliasOpen(true)} data-testid="oauth-management-model-alias-open">{t('af.alias_open')}</Button>
+            </ActionMenu>
+            <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
+          </>
+        )}
         actions={(
           <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              multiple
-              hidden
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = '';
-                actions.upload(files);
-              }}
-            />
             <Button
               icon={<UploadOutlined />}
               disabled={isDemo || actions.isOperating}

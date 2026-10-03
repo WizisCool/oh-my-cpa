@@ -36,7 +36,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createProbeChecker, runProbes } from './acceptance/probe.mjs';
+import { createProbeChecker } from './acceptance/probe.mjs';
+import { runProbeBatches } from './acceptance/probe-batches.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
 import { buildImporterGraph, isCatalogAdditionOnly, isManifestScriptsOnly, readAtRef } from './acceptance/ui-impact.mjs';
@@ -175,8 +176,9 @@ console.log(`Reason: ${selectionReason}\n`);
 // The runner reports one line per failure with the scenario's own name alongside it,
 // so a focused run is as diagnostic as a full one without printing every pass.
 const startedAt = Date.now();
-const { passed, failures: runFailures } = await runProbes({
+const { passed, failures: runFailures } = await runProbeBatches({
   port: PORT,
+  batchCount: selected.length === SCENARIOS.length ? 3 : 1,
   scenarios: selected.map((scenario) => ({ ...scenario, check })),
 });
 for (const failure of runFailures) check(`scenario ${failure} completed`, false);

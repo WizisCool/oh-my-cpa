@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
+import YamlWorker from 'monaco-yaml/yaml.worker.js?worker';
 import 'monaco-editor/esm/vs/features/find/register.js';
 // The slim editor build registers no icon font of its own: every widget glyph (find, folding,
 // suggest) is a codicon, and without this the widgets render empty boxes.
@@ -23,10 +24,7 @@ if (typeof window !== 'undefined') {
   window.MonacoEnvironment = {
     getWorker(_moduleId: unknown, label: string) {
       if (label === 'yaml') {
-        return new Worker(
-          new URL('monaco-yaml/yaml.worker.js', import.meta.url),
-          { type: 'module' }
-        );
+        return new YamlWorker();
       }
       return new Worker(
         new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
@@ -57,7 +55,20 @@ function ensureMonacoConfigured() {
   monaco.languages.setLanguageConfiguration('yaml', yamlConf);
 
   if (!monacoYamlInstance) {
-    monacoYamlInstance = configureMonacoYaml(monaco, {
+    monacoYamlInstance = configureMonacoYaml({
+      ...monaco,
+      editor: {
+        ...monaco.editor,
+        createWebWorker: ({ createData }: { createData?: unknown }) => {
+          const worker = new YamlWorker();
+          // monaco-worker-manager still uses the two-stage legacy bootstrap. Deliver its
+          // startup signal and settings before Monaco 0.56 starts the worker RPC protocol.
+          worker.postMessage(null);
+          worker.postMessage(createData);
+          return monaco.editor.createWebWorker({ worker });
+        },
+      },
+    }, {
       enableSchemaRequest: false, // Strict offline: no external network schema fetching
       validate: false,
       format: { enable: true },
@@ -252,6 +263,7 @@ export interface YamlSourceEditorProps {
   onChange: (value: string) => void;
   loadingText: string;
   onSave?: () => void;
+  wordWrap?: 'on' | 'off';
   theme: Pick<ResolvedPalette, 'id' | 'mode' | 'palette'>;
   editorRef?: React.MutableRefObject<YamlSourceEditorRef | null>;
 }
@@ -261,6 +273,7 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
   onChange,
   loadingText,
   onSave,
+  wordWrap,
   theme,
   editorRef,
 }) => {
@@ -268,8 +281,8 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
   // The hook is read here rather than the options below being styled by CSS, because these are the
-  // editor's own options: Monaco draws its content on a canvas-backed view, so a stylesheet cannot
-  // wrap it or turn off its minimap.
+  // editor's own options: Monaco owns wrapping and gutters internally, so CSS cannot configure
+  // those behaviours or turn off its minimap.
   const isNarrowEditor = useIsPhoneViewport();
 
   // Registered in a layout effect rather than at module load: the palette in force is only known
@@ -382,7 +395,10 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
           detectIndentation: false,
           automaticLayout: true,
           scrollBeyondLastLine: false,
-          wordWrap: isNarrowEditor ? 'on' : 'off',
+          wordWrap: wordWrap ?? (isNarrowEditor ? 'on' : 'off'),
+          wrappingIndent: isNarrowEditor ? 'none' : 'same',
+          glyphMargin: false,
+          lineDecorationsWidth: isNarrowEditor ? 0 : 10,
           minimap: {
             enabled: !isNarrowEditor,
             side: 'right',
@@ -393,17 +409,17 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
             maxColumn: 100,
           },
           lineNumbers: 'on',
-          lineNumbersMinChars: 4,
-          folding: true,
+          lineNumbersMinChars: isNarrowEditor ? 2 : 4,
+          folding: !isNarrowEditor,
           renderWhitespace: 'selection',
           renderLineHighlight: 'line',
-          overviewRulerLanes: 2,
+          overviewRulerLanes: isNarrowEditor ? 0 : 2,
           overviewRulerBorder: false,
-          hideCursorInOverviewRuler: false,
+          hideCursorInOverviewRuler: isNarrowEditor,
           bracketPairColorization: { enabled: true },
           guides: {
-            indentation: true,
-            bracketPairs: true,
+            indentation: !isNarrowEditor,
+            bracketPairs: !isNarrowEditor,
           },
           scrollbar: {
             vertical: 'visible',

@@ -59,9 +59,10 @@ const DASHBOARD_SCENARIOS = [
   'dashboard-heatmap-pruned',
   'dashboard-heatmap-error',
   'provider-rate-marks',
+  'mobile-console',
 ];
 
-const AGENT_SCENARIOS = ['agent', 'agent-question', 'agent-live', 'agent-views', 'agent-failure', 'agent-stream', 'agent-narrow'];
+const AGENT_SCENARIOS = ['agent', 'agent-question', 'agent-live', 'agent-views', 'agent-failure', 'agent-stream', 'agent-narrow', 'mobile-console'];
 
 /**
  * A source path maps to the scenarios it can affect.
@@ -72,7 +73,7 @@ const AGENT_SCENARIOS = ['agent', 'agent-question', 'agent-live', 'agent-views',
  */
 const SCENARIO_PATHS = [
   { prefix: 'web/src/pages/agent/', scenarios: AGENT_SCENARIOS },
-  { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow'] },
+  { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow', 'mobile-console'] },
   // The run protocol, stream reader and exports: the Agent runs on all of it, and the Playground
   // reads its stream and writes its export with the same modules.
   { prefix: 'web/src/agent/', scenarios: [...AGENT_SCENARIOS, 'playground', 'playground-narrow'] },
@@ -83,7 +84,7 @@ const SCENARIO_PATHS = [
   // in this one page, so they move together.
   {
     prefix: 'web/src/components/usage/requestColumns',
-    scenarios: ['column-alignment', 'request-list-interactions'],
+    scenarios: ['column-alignment', 'request-list-interactions', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/usage/',
@@ -96,6 +97,7 @@ const SCENARIO_PATHS = [
       'request-list-touch',
       'overlay-back',
       'pricing-request-list',
+      'mobile-console',
     ],
   },
   {
@@ -106,6 +108,7 @@ const SCENARIO_PATHS = [
       'search-dev-server',
       'request-list-interactions',
       'request-list-touch',
+      'mobile-console',
     ],
   },
   // The system page renders a release's Markdown body, which is untrusted remote text. The
@@ -114,7 +117,7 @@ const SCENARIO_PATHS = [
   // body names. A change to the page, or to the Markdown renderer it imports, moves that claim.
   {
     prefix: 'web/src/pages/SystemPage',
-    scenarios: ['system-information', 'system-information-narrow'],
+    scenarios: ['system-information', 'system-information-narrow', 'mobile-console'],
   },
   // The overlay history layer and everything it is wired into. Named as one rule because the
   // claim is about the layer plus a representative overlay of each kind: the navigation sheet
@@ -122,32 +125,32 @@ const SCENARIO_PATHS = [
   // provider editor. A change to the hook itself moves all of them.
   {
     prefix: 'web/src/hooks/useOverlayHistory',
-    scenarios: ['overlay-back'],
+    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/overlayHistory',
-    scenarios: ['overlay-back'],
+    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console'],
   },
   // The console's global stylesheet is already a shared path, and the touch rules live in it, so
   // any change to the shell selects the touch scenario too. Named here rather than folded into
   // SHELL_PATHS because it is about the rules those files carry, not about every scenario.
   {
     prefix: 'web/src/hooks/useIsPhoneViewport',
-    scenarios: ['phone-lists', 'touch-ergonomics'],
+    scenarios: ['phone-lists', 'touch-ergonomics', 'agent-narrow', 'playground-narrow', 'config-source-editor', 'config-backups', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/common/PhoneRow',
-    scenarios: ['phone-lists', 'touch-ergonomics'],
+    scenarios: ['phone-lists', 'touch-ergonomics', 'mobile-console'],
   },
   // The list surfaces whose phone rendering ADR 0012 introduced, and the shared pieces that
   // rendering is derived from: a change to either reaches every one of them.
   {
     prefix: 'web/src/components/common/phoneRowFields',
-    scenarios: ['phone-lists'],
+    scenarios: ['phone-lists', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/keys/',
-    scenarios: ['phone-lists'],
+    scenarios: ['phone-lists', 'mobile-console'],
   },
   // The provider console and its icon picker: the drawer/modal stacking assertion
   // is about those two overlays specifically, picking a mark from the picker is the
@@ -165,7 +168,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/pages/ProvidersPage',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back', 'mobile-console'],
   },
   // The provider console's own modules: the list table, the editor drawer, the
   // writes and the icon overlay. The page renders nothing but these, so a change
@@ -173,112 +176,108 @@ const SCENARIO_PATHS = [
   // drawer is one of the two overlays the stacking assertion is about.
   {
     prefix: 'web/src/components/providers/',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'phone-lists', 'overlay-back', 'mobile-console'],
   },
   // The unified OAuth workspace owns its density, connection drawer, quota body,
   // task panels and phone reflow. Its scenario is the measured equivalent of the
   // three retired pages' UI claims; overlay-back covers the shared history layer.
   {
     prefix: 'web/src/pages/oauthManagement/',
-    scenarios: ['oauth-management', 'overlay-back'],
+    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/oauthProviderLogic',
-    scenarios: ['oauth-management', 'overlay-back'],
+    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/LegacyOAuthManagementRedirect',
-    scenarios: ['oauth-management', 'overlay-back'],
+    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/authFiles/',
-    scenarios: ['oauth-management', 'overlay-back'],
+    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/quota/',
-    scenarios: ['oauth-management', 'overlay-back'],
+    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
   },
   // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
   // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a
   // rule they fall through to "an unrecognised frontend path widens the plan", which is safe but
   // runs every scenario for a one-line change to a page a single scenario covers.
-  // Routed pages no probe loads. Their behaviour is covered by the cross-stack acceptance
-  // run and the logic suites; every probe scenario would observe nothing of them, so
-  // naming them with no scenario is what keeps an edit from running the whole catalog.
   // The configuration page and the source editor behind it. The planner used to name the page
   // with no scenario at all, because nothing probed it; the source view now does, for the one
-  // claim a browser alone can settle - that the editor's widget glyphs are painted with the icon
-  // font its slim build has to register itself. The backup dialog is raised from the page's
+  // claims that need a browser: widget glyph paint, focused editing, draft continuity and save decisions. The backup dialog is raised from the page's
   // toolbar and restores through a confirmation stacked above it, which `config-backups` owns.
   //
   // The key page's own list scenario comes along because this directory is not the config page's
   // alone: the key list is derived by resolving `ALL_CONFIG_FIELDS`'s `apiKeys` field against the
   // document through `getFieldSemanticValue`, so a change to the draft layer or the schema can
   // empty that page's table without touching a file under `pages/ApiKeysPage/`. `overlay-back` and
-  // `touch-ergonomics` are deliberately not named: nothing here owns an overlay or a hit target.
+  // `touch-ergonomics` remain separately scoped; the source scenario owns focused editing overlays.
   {
     prefix: 'web/src/components/config/',
-    scenarios: ['config-source-editor', 'config-backups', 'phone-lists'],
+    scenarios: ['config-source-editor', 'config-backups', 'phone-lists', 'mobile-console'],
   },
-  { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor', 'config-backups'] },
-  { prefix: 'web/src/types/configSchema', scenarios: ['config-source-editor', 'phone-lists'] },
-  { prefix: 'web/src/pages/QuickStartPage', scenarios: [] },
+  { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor', 'config-backups', 'mobile-console'] },
+  { prefix: 'web/src/types/configSchema', scenarios: ['config-source-editor', 'phone-lists', 'mobile-console'] },
+  { prefix: 'web/src/pages/QuickStartPage', scenarios: ['mobile-console'] },
   // The key list page: the phone rendering, the touch rules and the modal Back dismissal
   // each load `/api-keys`.
-  { prefix: 'web/src/pages/ApiKeysPage', scenarios: ['phone-lists', 'touch-ergonomics', 'overlay-back'] },
+  { prefix: 'web/src/pages/ApiKeysPage', scenarios: ['phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console'] },
   {
     prefix: 'web/src/pages/PluginsPage',
-    scenarios: ['plugin-management', 'plugin-management-narrow'],
+    scenarios: ['plugin-management', 'plugin-management-narrow', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/plugins/',
-    scenarios: ['plugin-management', 'plugin-management-narrow'],
+    scenarios: ['plugin-management', 'plugin-management-narrow', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/pricing/',
-    scenarios: ['phone-lists', 'pricing-book'],
+    scenarios: ['phone-lists', 'pricing-book', 'mobile-console'],
   },
   // The shared pricing layer: the editor drawer every cost surface opens, and the breakdown the
   // request drawer shows. The request list is the surface that opens it without the book.
   {
     prefix: 'web/src/components/pricing/',
-    scenarios: ['pricing-book', 'pricing-request-list'],
+    scenarios: ['pricing-book', 'pricing-request-list', 'mobile-console'],
   },
   {
     prefix: 'web/src/types/pricing',
-    scenarios: ['phone-lists', 'pricing-book', 'pricing-request-list'],
+    scenarios: ['phone-lists', 'pricing-book', 'pricing-request-list', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/LogsPage',
-    scenarios: ['phone-lists', 'logs-sources'],
+    scenarios: ['phone-lists', 'logs-sources', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/logs/',
-    scenarios: ['phone-lists', 'logs-sources'],
+    scenarios: ['phone-lists', 'logs-sources', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/useServiceLogTail',
-    scenarios: ['logs-sources'],
+    scenarios: ['logs-sources', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/useLogTail',
-    scenarios: ['logs-sources', 'phone-lists'],
+    scenarios: ['logs-sources', 'phone-lists', 'mobile-console'],
   },
   {
     prefix: 'web/src/types/audit',
-    scenarios: ['audit-trail', 'audit-trail-narrow'],
+    scenarios: ['audit-trail', 'audit-trail-narrow', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/AuditPage',
-    scenarios: ['logs-sources', 'audit-trail', 'audit-trail-narrow'],
+    scenarios: ['logs-sources', 'audit-trail', 'audit-trail-narrow', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/audit/',
-    scenarios: ['audit-trail', 'audit-trail-narrow'],
+    scenarios: ['audit-trail', 'audit-trail-narrow', 'mobile-console'],
   },
   {
     prefix: 'web/src/types/logs',
-    scenarios: ['logs-sources', 'phone-lists'],
+    scenarios: ['logs-sources', 'phone-lists', 'mobile-console'],
   },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,
@@ -289,7 +288,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/charts/chartMotion',
-    scenarios: ['dashboard-charts', 'dashboard-chart-motion'],
+    scenarios: ['dashboard-charts', 'dashboard-chart-motion', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/usePrefersReducedMotion',
@@ -301,7 +300,7 @@ const SCENARIO_PATHS = [
     // ring - whose chrome ink is asserted in both themes - and the marks' shared palette. A chart file
     // that only one panel imports still selects both, because which file a mark's ink comes from is not
     // something this planner can see; over-selecting is the side this file is required to err on.
-    scenarios: ['dashboard-charts', 'dashboard-model-panels'],
+    scenarios: ['dashboard-charts', 'dashboard-model-panels', 'mobile-console'],
   },
   // The dashboard's own panels. Both scenarios read the page, so a panel change
   // reaches both: the heatmap is a sibling of the tiles, not a child of a chart.
@@ -311,7 +310,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/types/tokenHeatmap',
-    scenarios: ['dashboard-heatmap', 'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-heatmap-error'],
+    scenarios: ['dashboard-heatmap', 'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-heatmap-error', 'mobile-console'],
   },
   // The OMC settings page and the preference layer behind it. The page is what the scenario loads,
   // so a change to the page, its controls or the shared token-display layer reaches it; the token
@@ -319,7 +318,7 @@ const SCENARIO_PATHS = [
   // dashboard's model panels and the OMC page move together.
   {
     prefix: 'web/src/pages/OmcSettingsPage',
-    scenarios: ['omc-settings', 'scroll-smoothing'],
+    scenarios: ['omc-settings', 'scroll-smoothing', 'mobile-console'],
   },
   {
     prefix: 'web/src/types/tokenDisplay',
@@ -333,6 +332,7 @@ const SCENARIO_PATHS = [
     scenarios: [
       ...DASHBOARD_SCENARIOS,
       'omc-settings', 'column-alignment', 'request-list-interactions',
+      'mobile-console',
     ],
   },
   {
@@ -341,21 +341,21 @@ const SCENARIO_PATHS = [
     // scenario - which reads the same tiles back when it asserts the unit style they print in - are
     // what a change here can reach.
     prefix: 'web/src/types/rollingNumber',
-    scenarios: ['omc-settings', ...DASHBOARD_SCENARIOS],
+    scenarios: ['omc-settings', ...DASHBOARD_SCENARIOS, 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/usePreference',
-    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing'],
+    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing', 'mobile-console'],
   },
   // The console-wide wheel and keyboard glide. It intercepts every wheel and scrolling key, so the
   // scenarios that drive the wheel or the keyboard on a scroller are reached as well as its own.
   {
     prefix: 'web/src/utils/scrollSmoothing',
-    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap'],
+    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/useScrollSmoothing',
-    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap'],
+    scenarios: ['scroll-smoothing', 'request-list-interactions', 'pricing-book', 'dashboard-heatmap', 'mobile-console'],
   },
 ];
 

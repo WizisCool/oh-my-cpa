@@ -7,19 +7,21 @@
  * run if someone remembered the command. A probe that guards a real invariant but
  * never runs in the gate is a comment with a `pnpm` script attached.
  *
- * They now share one server and one browser through `acceptance/probe.mjs`, and the
+ * Each batch now shares one server and one browser through `acceptance/probe.mjs`, and the
  * scenarios themselves live in `acceptance/scenarios.mjs` as data. That split is
  * what lets `pnpm check:ui` run the relevant subset against the dev server during
  * development without this file's release-gate framing getting in the way.
  *
  * Run it with `pnpm verify:probes`; it is also part of `pnpm verify:full`. CI runs
  * it as `pnpm verify:probes --shard i/n`, one disjoint, weight-balanced part of the
- * catalog per job (see `acceptance/probe-shards.mjs`).
+ * catalog per job (see `acceptance/probe-shards.mjs`). Complete local catalogs execute those
+ * partitions sequentially, keeping the same watchdog and retaining every scenario verdict.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createProbeChecker, runProbes } from './acceptance/probe.mjs';
+import { createProbeChecker } from './acceptance/probe.mjs';
+import { runProbeBatches } from './acceptance/probe-batches.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { parseShard, selectShard } from './acceptance/probe-shards.mjs';
 
@@ -46,7 +48,7 @@ if (shard) {
 
 const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
 const startedAt = Date.now();
-const { passed, failures: runFailures } = await runProbes({ port: PORT, scenarios });
+const { passed, failures: runFailures } = await runProbeBatches({ port: PORT, scenarios, batchCount: shard ? 1 : 3 });
 
 // A scenario that threw rather than asserted is reported through the same channel as
 // a failed check, so the exit code reflects it either way.

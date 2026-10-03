@@ -1,6 +1,8 @@
 import React from 'react';
 import { Drawer, Tabs } from 'antd';
 import { clsx } from 'clsx';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useResizablePanel } from './useResizablePanel';
@@ -54,6 +56,17 @@ export interface WorkspaceLayoutProps {
  */
 export function WorkspaceLayout({ testId, title, target, actions, notices, aside, children }: WorkspaceLayoutProps) {
   const isNarrow = useIsNarrowViewport();
+  const isPhone = useIsPhoneViewport();
+  const visibleViewport = useVisibleViewport(isPhone);
+  const workspaceRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    // Preserve transcript scroll ownership while keeping the composer above a software keyboard.
+    workspace.style.maxHeight = isPhone
+      ? `${Math.max(0, visibleViewport.top + visibleViewport.height - workspace.getBoundingClientRect().top)}px`
+      : '';
+  }, [isPhone, visibleViewport]);
   const panel = useResizablePanel({
     defaultWidth: aside.defaultWidth ?? 380,
     minWidth: aside.minWidth ?? 300,
@@ -74,7 +87,7 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
   );
 
   return (
-    <div className={styles['workspace']} data-testid={testId}>
+    <div ref={workspaceRef} className={styles['workspace']} data-testid={testId}>
       <header className={styles['head']}>
         <h1 className={clsx('terminal-title', styles['title'])}>{title}</h1>
         <div className={styles['target']}>{target}</div>

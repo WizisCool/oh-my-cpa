@@ -28,6 +28,7 @@ const REGISTRY = 'scripts/acceptance/scenarios.mjs';
 
 export const PROBE_RUNNERS = [
   'scripts/acceptance/probe.mjs',
+  'scripts/acceptance/probe-batches.mjs',
   'scripts/browser-probes.mjs',
   'scripts/check-ui.mjs',
 ];

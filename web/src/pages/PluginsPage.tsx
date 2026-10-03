@@ -1,3 +1,4 @@
+import { ActionMenu } from '../components/common/ActionMenu';
 import React from 'react';
 import { Button, Card, Segmented } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -113,6 +114,15 @@ export const PluginsPage: React.FC = () => {
     <div className="terminal-page terminal-page-stack plugins-page">
       <PageHeader
         title={t('nav.plugins')}
+        mobileActions={(
+          <>
+            <Segmented className="plugins-tabs" value={tab} onChange={(value) => selectTab(value as PluginTab)} options={[
+              { value: 'installed', label: t('plugin.tab_installed', { n: plugins.length }) },
+              { value: 'store', label: t('plugin.tab_store') }, { value: 'settings', label: t('plugin.tab_settings') },
+            ]} />
+            <ActionMenu><RefreshButton onRefresh={refresh} isRefreshing={isRefreshing} /></ActionMenu>
+          </>
+        )}
         actions={(
           <>
             <Segmented

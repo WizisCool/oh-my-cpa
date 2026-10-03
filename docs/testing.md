@@ -93,6 +93,13 @@ How `check:ui` chooses scenarios (`scripts/acceptance/check-ui-plan.mjs`):
 - A probe module or registry edit selects the scenarios that use it
   (`scripts/acceptance/probe-impact.mjs`); an edit to the probe runner selects all.
 
+Complete local catalogs in `check:ui` and unsharded `verify:probes` reuse the existing three-way
+partition as sequential batches through `scripts/acceptance/probe-batches.mjs`. Every selected
+scenario runs exactly once; batches do not overlap browsers, keep the existing 480-second watchdog,
+aggregate failures and preserve earlier failure artifacts. Explicit CI shards and focused UI runs
+keep one runner invocation. `scripts/probe-batches.test.mjs` pins coverage, order, cleanup ownership,
+sequential execution and failure retention without starting a browser.
+
 Never add a skip switch or narrow a planner rule to make a slow run go away. If the
 selection is wider than the change warrants, add a path rule or a scenario mapping,
 with a test in `scripts/ui-impact.test.mjs` or `scripts/check-ui-plan.test.mjs`.
@@ -296,3 +303,26 @@ likewise return failure after collecting the other verdicts. This preserves the
 failure while making it diagnosable. A secret or build failure still stops serving.
 For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
 `pnpm verify:full`; do not add a browser scenario for a pure graph or runner decision.
+
+### Mobile console and focused YAML coverage
+
+- `scripts/test-source-wrap.ts` pins phone/desktop defaults and manual-choice precedence.
+- `scripts/test-visible-viewport.ts` tests usable bounds, keyboard/caret panning, invalid/absent
+  readings, overscroll and pinch-zoom fallback as pure logic, automatically discovered.
+- `mobile-console` navigates all 15 live console routes through the phone navigation at
+  320/375/390px, waits for each route's own content, and measures content/header
+  overflow and reachable header tools, then checks selected preference state, 44px menu rows,
+  Back/focus restoration, 640/641 and 900/901 boundaries, desktop and landscape, plus simulated
+  keyboard bounds and Send hit-testing for both conversation workspaces. Each mounted route is
+  resized across the three phone widths without repeating navigation. Direct route mappings retain
+  the sweep (including Quick Start); planner tests pin positive and negative cases.
+- `config-source-editor` owns real Monaco widgets, font/gutter/wrapping, long URLs and indentation,
+  phone find, in-place focused editing, draft/undo/focus continuity, nested Back, simulated keyboard
+  viewport bounds, invalid input, revision conflict, failed saves and single successful confirmation.
+  `scripts/acceptance/configuration-plugins.mjs` also formats a document from the built SPA to
+  exercise production worker asset paths and RPC, complementing the dev-server source scenario.
+  Existing list/touch assertions remain; `config-backups` also exercises the phone menu-owned
+  dialog, local table scrolling and Back closure.
+- Automated visible-viewport simulation does not certify iPhone keyboard/selection behaviour. Manual
+  Safari acceptance must additionally exercise address-bar collapse, software keyboard, long-press
+  selection and caret movement in normal and focused editing; record that evidence separately.

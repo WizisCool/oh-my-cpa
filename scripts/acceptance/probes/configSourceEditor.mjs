@@ -18,6 +18,10 @@ import { until } from '../harness.mjs';
 
 const CONFIG_YAML = [
   '# gateway',
+  'plugins:',
+  '    store:',
+  '        sources:',
+  '            - match: https://raw.githubusercontent.com/example/long-plugin-repository-with-a-deep-path/refs/heads/main/plugin/metadata/registry.yaml',
   'server:',
   '    port: 8317',
   '    trusted-proxies:',
@@ -171,4 +175,142 @@ export async function configSourceEditor({ base, page, check }) {
       && font.buttonFamily.split(',')[0].replace(/^["']|["']$/g, '').trim() === 'codicon',
     JSON.stringify(font),
   );
+  await configSourceMobile({ base, page, check });
+}
+
+async function configSourceMobile({ base, page, check }) {
+  await page.locator('.monaco-editor .find-widget.visible .codicon-widget-close').click();
+  await page.locator('.monaco-editor .find-widget.visible').waitFor({ state: 'hidden' });
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await until(async () => await page.locator('.config-source-actions button').filter({ hasText: /^Wrap$/ }).getAttribute('aria-pressed') === 'true', { label: 'phone default wrap' });
+    const geometry = await page.evaluate(() => ({
+      overflow: document.querySelector('.app-content').scrollWidth - document.querySelector('.app-content').clientWidth,
+      gutter: document.querySelector('.monaco-editor .margin').getBoundingClientRect().width,
+      fontSize: getComputedStyle(document.querySelector('.monaco-editor .view-lines')).fontSize,
+    }));
+    check(`source reading uses a compact gutter and 16px text at ${width}px`, geometry.overflow <= 1 && geometry.gutter < 48 && geometry.fontSize === '16px', JSON.stringify(geometry));
+    check('desktop shortcut guidance is not shown on phones', !await page.locator('.config-source-hint').isVisible());
+    check('a clean phone document has no duplicate save surface', await page.locator('.config-dirty-bar').count() === 0 && await page.locator('.config-toolbar').getByRole('button', { name: /Save/ }).count() === 0);
+  }
+
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  const find = page.locator('.monaco-editor .find-widget.visible');
+  await find.waitFor({ state: 'visible' });
+  check('phone find is reachable without a keyboard shortcut', await find.locator('.codicon-widget-close').isVisible());
+  await find.locator('.codicon-widget-close').click();
+  await find.waitFor({ state: 'hidden' });
+  const wrap = page.getByRole('button', { name: 'Wrap', exact: true });
+  await wrap.click();
+  check('wrap can be disabled without widening the page', await wrap.getAttribute('aria-pressed') === 'false' && await page.locator('.app-content').evaluate((pane) => pane.scrollWidth <= pane.clientWidth + 1));
+  await until(async () => await page.locator('.monaco-editor .view-lines').evaluate((lines) => lines.getBoundingClientRect().width > lines.closest('.monaco-editor').getBoundingClientRect().width), { label: 'unwrapped URL scrolls inside the editor' });
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('# mobile-draft ');
+  await page.locator('.config-dirty-bar').waitFor({ state: 'visible' });
+  await page.evaluate(() => { window.editorBeforeFocus = document.querySelector('.monaco-editor'); });
+  await page.getByRole('button', { name: 'Focus editor', exact: true }).click();
+  const focusRegion = page.locator('.config-source-container.is-focused');
+  await focusRegion.waitFor({ state: 'visible' });
+  check('focus editing preserves the editor and the draft', await page.evaluate(() => window.editorBeforeFocus === document.querySelector('.monaco-editor')) && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
+  check('focus editing isolates background controls', await page.locator('.app-header').evaluate((header) => Boolean(header.closest('[inert]'))));
+  check('manual wrapping survives focus editing', await wrap.getAttribute('aria-pressed') === 'false');
+
+  // An injected visual viewport represents keyboard resize and caret pan, not a time delay.
+  await page.evaluate(() => {
+    const visible = window.visualViewport;
+    window.originalViewportDescriptors = {
+      height: Object.getOwnPropertyDescriptor(visible, 'height'),
+      offsetTop: Object.getOwnPropertyDescriptor(visible, 'offsetTop'),
+    };
+    Object.defineProperties(visible, { height: { configurable: true, value: 420 }, offsetTop: { configurable: true, value: 30 } });
+    visible.dispatchEvent(new Event('resize'));
+  });
+  await until(async () => await focusRegion.evaluate((region) => Math.round(region.getBoundingClientRect().height) === 420), { label: 'focused workspace fits keyboard viewport' });
+  const keyboardGeometry = await focusRegion.evaluate((region) => {
+    const box = region.getBoundingClientRect();
+    const bar = region.querySelector('.config-dirty-bar').getBoundingClientRect();
+    const editor = region.querySelector('.config-editor-wrap').getBoundingClientRect();
+    return { top: box.top, bottom: box.bottom, barBottom: bar.bottom, editorBottom: editor.bottom, barTop: bar.top };
+  });
+  check('the keyboard viewport bounds editor and dirty actions', keyboardGeometry.top === 30 && keyboardGeometry.bottom === 450 && keyboardGeometry.barBottom <= 450 && keyboardGeometry.editorBottom <= keyboardGeometry.barTop, JSON.stringify(keyboardGeometry));
+  await page.evaluate(() => {
+    const visible = window.visualViewport;
+    for (const key of ['height', 'offsetTop']) {
+      if (window.originalViewportDescriptors[key]) Object.defineProperty(visible, key, window.originalViewportDescriptors[key]);
+      else delete visible[key];
+    }
+    visible.dispatchEvent(new Event('resize'));
+  });
+
+  let responseMode = 'conflict';
+  const writes = [];
+  await page.route('**/management/config/source', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    const body = route.request().postDataJSON();
+    writes.push(body);
+    const status = responseMode === 'conflict' ? 409 : responseMode === 'failure' ? 503 : 200;
+    const response = responseMode === 'conflict' ? { code: 'config_conflict', current_revision: 'newer-revision' }
+      : responseMode === 'failure' ? { code: 'config_backup_failed', error: 'Fixture backup unavailable' }
+      : { yaml: body.yaml, revision: 'saved-mobile-revision' };
+    await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(response) });
+  });
+  const save = page.locator('.config-dirty-btn-save');
+  const confirmSave = async () => {
+    await save.click();
+    await page.locator('.ant-popconfirm:visible').getByRole('button', { name: 'Confirm', exact: true }).click();
+  };
+  await confirmSave();
+  await page.locator('.ant-modal:visible').waitFor({ state: 'visible' });
+  check('revision conflict opens above focus editing and preserves its draft', writes.length === 1 && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
+  await page.goBack();
+  await page.locator('.ant-modal:visible').waitFor({ state: 'hidden' });
+  check('Back closes the conflict before the focused workspace', await focusRegion.isVisible());
+
+  responseMode = 'failure';
+  await confirmSave();
+  await until(async () => writes.length === 2 && await save.isEnabled(), { label: 'failed save settles' });
+  check('a failed save keeps the draft and its single action surface', (await page.locator('.view-lines').innerText()).includes('mobile-draft') && await page.locator('.config-dirty-bar').count() === 1);
+
+  await page.goBack();
+  await focusRegion.waitFor({ state: 'hidden' });
+  check('Back exits focus editing without leaving source or losing its draft', page.url().endsWith('/config') && (await page.locator('.view-lines').innerText()).includes('mobile-draft'));
+  check('focus returns to the focused-edit trigger', await page.getByRole('button', { name: 'Focus editor', exact: true }).evaluate((button) => button === document.activeElement));
+  await page.locator('.monaco-editor .view-lines').click();
+  const draftBeforeUndo = await page.locator('.view-lines').innerText();
+  await page.keyboard.press('Control+z');
+  await until(async () => (await page.locator('.view-lines').innerText()) !== draftBeforeUndo, { label: 'undo across focused editing' });
+  check('the undo stack survives both focus transitions', await page.locator('.config-dirty-bar').count() === 1);
+  await page.keyboard.press('Control+Shift+z');
+  await until(async () => (await page.locator('.view-lines').innerText()) === draftBeforeUndo, { label: 'redo across focused editing' });
+  check('redo recovers the same pre-focus edit', true);
+  await page.locator('.config-dirty-btn-discard').click();
+  await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('invalid: [');
+  await save.waitFor({ state: 'visible' });
+  await save.click();
+  check('invalid YAML never writes or asks for a save confirmation', writes.length === 2 && await page.locator('.ant-popconfirm:visible').count() === 0);
+  await page.locator('.config-dirty-btn-discard').click();
+  await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('# successful-mobile-save ');
+  await save.waitFor({ state: 'visible' });
+  responseMode = 'success';
+  await confirmSave();
+  await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+  check('one confirmed phone save writes the draft and adopts its baseline', writes.length === 3 && writes[2].yaml.includes('successful-mobile-save') && await page.locator('.ant-modal:visible').count() === 0);
+  await page.getByRole('button', { name: 'Source tools', exact: true }).click();
+  await page.locator('.action-menu-content:visible').getByRole('button', { name: 'Format', exact: true }).click();
+  await until(async () => await page.locator('.config-dirty-bar').count() === 1, { label: 'YAML formatter changes indentation' });
+  check('format remains reachable from phone tools', await page.locator('.monaco-editor').count() === 1);
+  await page.locator('.config-dirty-btn-discard').click();
+  await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+  await page.locator('.action-menu-content:visible').waitFor({ state: 'hidden' });
+  await until(async () => await page.locator('.omc-toast:visible').count() === 0, { label: 'source feedback settles before capture' });
+  await page.screenshot({ path: 'tmp/mobile-config-source.png' });
+  await page.setViewportSize({ width: 844, height: 390 });
+  check('manual wrap survives a landscape rotation', await wrap.getAttribute('aria-pressed') === 'false');
 }

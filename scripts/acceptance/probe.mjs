@@ -33,7 +33,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
  * 290-301s when `verify:full` runs it alongside the browser acceptance, and a 300s ceiling sat inside
  * that spread and failed the gate at random - the same failure an earlier 150s ceiling produced
  * when the suite measured ~150s. The watchdog exists to stop a hang, not to enforce a speed budget,
- * so the margin is wide enough that only a stuck run reaches it.
+ * so the margin is wide enough that only a stuck run reaches it. Complete local catalogs reuse
+ * the CI partition in sequential batches, each retaining this ceiling as the catalog grows.
  */
 const DEFAULT_WATCHDOG_MS = 480_000;
 
@@ -353,7 +354,7 @@ async function writeProbeDiagnostics(page, errors, trail, scenarioName) {
  * Each scenario gets a fresh context and a fresh page error listener, so one
  * scenario's runtime errors cannot be attributed to another.
  */
-export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS }) {
+export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS, shouldResetDiagnostics = true }) {
   let watchdog;
 
   let server;
@@ -391,11 +392,9 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
   watchdog.unref();
 
   try {
-    // Evidence from an earlier run would be indistinguishable from this run's, and a reader who
-    // opens the directory after a failure must see only what just failed. Cleared before the
-    // server and the browser start, so a run that fails to start does not leave the previous
-    // run's evidence behind for someone to read as this one's.
-    fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
+    // Reset before the first batch starts so startup failures cannot expose stale evidence.
+    // Later batches retain artifacts from this same invocation rather than erasing its failures.
+    if (shouldResetDiagnostics) fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
 
     const started = await startVite(port);
     server = started.server;

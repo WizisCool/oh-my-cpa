@@ -289,3 +289,8 @@ a.usage-unpriced:hover {
     line-height: 40px;
   }
 }
+
+:global(.action-menu-content) > .sync-popover {
+  width: 100%;
+  max-width: 100%;
+}

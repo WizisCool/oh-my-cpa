@@ -273,16 +273,22 @@ export async function omcSettings({ base, page, check, context }) {
   // apart, and the check passed against the broken one.
   await page.setViewportSize({ width: 320, height: 900 });
   await waitForPickerShape(true);
-  const headerLinkBox = await repositoryLink.boundingBox();
+  const phoneTools = page.getByRole('button', { name: 'Console tools', exact: true });
+  await phoneTools.click();
+  const phoneRepositoryLink = page.locator('.action-menu-content:visible').getByRole('link', { name: 'Open project on GitHub', exact: true });
+  const headerLinkBox = await phoneRepositoryLink.boundingBox();
   check(
-    'the GitHub link stays visible and clickable at 320px',
+    'the phone tools keep the GitHub link visible and clickable at 320px',
     headerLinkBox !== null && headerLinkBox.x >= 0 && headerLinkBox.x + headerLinkBox.width <= 320
-      && await repositoryLink.evaluate((link) => {
+      && await phoneRepositoryLink.evaluate((link) => {
         const box = link.getBoundingClientRect();
         return link.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
       }),
     JSON.stringify(headerLinkBox),
   );
+
+  await page.keyboard.press('Escape');
+  await page.locator('.action-menu-content:visible').waitFor({ state: 'hidden' });
 
   const headerGeometry = await page.locator('.app-header').evaluate((header) => {
     const buttons = [...header.querySelectorAll('.ant-btn')].map((button) => {

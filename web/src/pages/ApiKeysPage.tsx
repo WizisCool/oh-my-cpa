@@ -1,3 +1,4 @@
+import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -400,6 +401,12 @@ export const ApiKeysPage: React.FC = () => {
     <div className="terminal-page terminal-page-stack keys-page">
       <PageHeader
         title={t('keys.title')}
+        mobileActions={(
+          <>
+            <ActionMenu><RefreshButton isRefreshing={configQuery.isFetching || keysQuery.isFetching || usageQuery.isFetching} onRefresh={refreshAll} /></ActionMenu>
+            <Button type="primary" icon={<PlusOutlined />} disabled={isDemo || !apiKeysField || !serverDoc} title={isDemo ? t('demo.blocked') : undefined} onClick={openAddEditor}>{t('cfg.api_keys_add')}</Button>
+          </>
+        )}
         actions={(
           <>
             <RefreshButton

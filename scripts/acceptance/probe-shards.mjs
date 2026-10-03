@@ -1,8 +1,8 @@
 /**
  * Splits the probe catalog into balanced, disjoint shards.
  *
- * The catalog runs serially in one browser, so its wall clock is the sum of its
- * scenarios - about five minutes, dominated by a handful of long ones. CI runs each
+ * Each catalog partition runs serially in one browser, so its wall clock is the sum of its
+ * scenarios, dominated by a handful of long ones. CI runs each
  * shard as its own job on its own runner, which keeps the scenarios' timing-sensitive
  * assertions free of the CPU contention that running them side by side in one
  * process would add.
@@ -18,6 +18,7 @@
  * never drops one. A weight for a scenario that no longer exists fails the self-test.
  */
 export const PROBE_WEIGHTS = {
+  'mobile-console': 47,
   agent: 11,
   'agent-question': 5,
   'agent-live': 5,

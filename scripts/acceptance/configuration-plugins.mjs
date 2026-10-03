@@ -114,6 +114,20 @@ export async function runConfigurationPluginsAcceptance({
       'source mode opens without re-authentication',
       (await sourceToolbar.locator('.ant-tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
     );
+    // Only built-artifact acceptance can catch worker asset paths or chunk loading defects.
+    try {
+      await page.locator('.monaco-editor .view-lines').first().waitFor({ state: 'visible' });
+      await sourceToolbar.getByRole('button', { name: /^(格式化|Format)$/ }).click();
+      await page.locator('.omc-toast').filter({ hasText: /YAML 已格式化|YAML formatted/ }).waitFor({ state: 'visible' });
+      check('the built YAML worker formats a source document', true);
+      const discard = page.locator('.config-dirty-btn-discard');
+      if (await discard.isVisible()) {
+        await discard.click();
+        await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+      }
+    } catch (error) {
+      check('the built YAML worker formats a source document', false, error instanceof Error ? error.message : String(error));
+    }
     // Return to the visual view so the rest of the audit starts from the same
     // place it did before this section ran.
     const visualSegment = page.locator('.ant-segmented-item').filter({ hasText: /可视化|Visual/ });

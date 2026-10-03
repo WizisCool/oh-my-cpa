@@ -1,3 +1,4 @@
+import { mobileConsole } from './probes/mobileConsole.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
 import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
@@ -96,6 +97,55 @@ const routeErrorFixtures = () => [
   [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
   [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
   [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+];
+
+// Shared list data keeps the phone sweep on the same wire shapes as the list scenario.
+const PHONE_LIST_ROUTES = [
+  [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
+    keys: [
+      { index: 0, key: 'omc-fixture-key-aaaaaaaaaaaaaaaa', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1', length: 30, alias: 'Primary caller', alias_version: 1 },
+      { index: 1, key: 'omc-fixture-key-bbbbbbbbbbbbbbbb', fingerprint: 'fp-2', usage_fingerprint: 'ufp-2', length: 30, alias_version: 0 },
+    ],
+    total: 2,
+  })],
+  [(url) => url.pathname.endsWith('/management/client-key-usage'), () => ({
+    window: { from: Date.now() - 86_400_000, to: Date.now() },
+    usage: [
+      { key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 },
+      { key_fingerprint: 'ufp-2', requests: 12, failed: 0, total_tokens: 4_000, last_used_ms: Date.now() - 3_600_000 },
+    ],
+  })],
+  [(url) => url.pathname.endsWith('/management/config'), () => ({
+    scalars: {},
+    supported_keys: [],
+    revision: 'fixture-r1',
+    safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n    - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
+  })],
+  [(url) => url.pathname.endsWith('/management/providers'), () => ({
+    providers: [
+      pickerProvider,
+      {
+        id: 'claude-0',
+        family: 'claude',
+        name: 'Claude relay',
+        protocol: 'Anthropic Messages',
+        base_url: 'https://relay.example.test',
+        disabled: true,
+        key_configured: true,
+        models: [],
+      },
+    ],
+    total: 2,
+  })],
+  ...pricingFixtures([]),
+  [(url) => url.pathname.endsWith('/management/request-error-logs'), () => ({
+    files: [
+      { name: 'errors-2026-09-19.log', size: 262144, modified: Math.floor(Date.now() / 1000) - 600 },
+      { name: 'errors-2026-09-18.log', size: 1048576, modified: Math.floor(Date.now() / 1000) - 86_400 },
+    ],
+  })],
+  [(url) => url.pathname.endsWith('/management/logs'), () => ({ lines: [], latest_after: 0, next_cursor: '', cursor_reset: false, limit: 2000 })],
+  [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
 ];
 
 export const SCENARIOS = [
@@ -601,53 +651,7 @@ export const SCENARIOS = [
     name: 'a list renders rows on a phone and a table on a desktop',
     options: {
       viewport: { width: 1440, height: 900 },
-      routes: [
-        [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
-          keys: [
-            { index: 0, key: 'omc-fixture-key-aaaaaaaaaaaaaaaa', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1', length: 30, alias: 'Primary caller', alias_version: 1 },
-            { index: 1, key: 'omc-fixture-key-bbbbbbbbbbbbbbbb', fingerprint: 'fp-2', usage_fingerprint: 'ufp-2', length: 30, alias_version: 0 },
-          ],
-          total: 2,
-        })],
-        [(url) => url.pathname.endsWith('/management/client-key-usage'), () => ({
-          window: { from: Date.now() - 86_400_000, to: Date.now() },
-          usage: [
-            { key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 },
-            { key_fingerprint: 'ufp-2', requests: 12, failed: 0, total_tokens: 4_000, last_used_ms: Date.now() - 3_600_000 },
-          ],
-        })],
-        [(url) => url.pathname.endsWith('/management/config'), () => ({
-          scalars: {},
-          supported_keys: [],
-          revision: 'fixture-r1',
-          safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n    - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
-        })],
-        [(url) => url.pathname.endsWith('/management/providers'), () => ({
-          providers: [
-            pickerProvider,
-            {
-              id: 'claude-0',
-              family: 'claude',
-              name: 'Claude relay',
-              protocol: 'Anthropic Messages',
-              base_url: 'https://relay.example.test',
-              disabled: true,
-              key_configured: true,
-              models: [],
-            },
-          ],
-          total: 2,
-        })],
-        ...pricingFixtures([]),
-        [(url) => url.pathname.endsWith('/management/request-error-logs'), () => ({
-          files: [
-            { name: 'errors-2026-09-19.log', size: 262144, modified: Math.floor(Date.now() / 1000) - 600 },
-            { name: 'errors-2026-09-18.log', size: 1048576, modified: Math.floor(Date.now() / 1000) - 86_400 },
-          ],
-        })],
-        [(url) => url.pathname.endsWith('/management/logs'), () => ({ lines: [], latest_after: 0, next_cursor: '', cursor_reset: false, limit: 2000 })],
-        [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
-      ],
+      routes: PHONE_LIST_ROUTES,
     },
     run: phoneListRendering,
   },
@@ -781,8 +785,8 @@ export const SCENARIOS = [
   },
   {
     id: 'config-source-editor',
-    name: "the YAML source editor's find box is drawn with its loaded icon font",
-    options: { routes: configSourceFixtures() },
+    name: "the YAML editor paints its widgets and preserves mobile drafts, focus and save decisions",
+    options: { routes: configSourceFixtures(), hasTouch: true },
     run: configSourceEditor,
   },
   {
@@ -790,5 +794,27 @@ export const SCENARIOS = [
     name: 'the configuration backup dialog names each copy, saves its retention, and restores through a confirmation stacked above it',
     options: { routes: configBackupsFixtures(configBackupsLog) },
     run: (context) => configBackups({ ...context, log: configBackupsLog }),
+  },
+  {
+    id: 'mobile-console',
+    name: 'every console route fits phones and the shared tools follow native Back',
+    options: {
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      routes: [
+        ...PHONE_LIST_ROUTES,
+        ...agentFixtures(), ...playgroundFixtures(), ...logsFixtures([]),
+        ...pricingFixtures([]), ...systemFixtures(), ...pluginManagementFixtures([]),
+        ...oauthManagementProbeRoutes(), ...configSourceFixtures(),
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: interactionRecords, has_more: false, limit: 100 })],
+        [(url) => url.pathname.endsWith('/usage/ingest-status'), () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } })],
+      ],
+    },
+    run: mobileConsole,
   },
 ];

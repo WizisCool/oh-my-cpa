@@ -119,4 +119,27 @@ export async function configBackups({ base, page, check, log }) {
     portBefore === String(STORED_PORT) && isReloaded,
     JSON.stringify({ before: portBefore, after: await port.inputValue() }),
   );
+
+  await page.locator('.ant-modal:visible').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('.ant-modal:visible').waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const tools = page.locator('.config-toolbar').getByRole('button', { name: 'Configuration tools', exact: true });
+  await tools.click();
+  await page.locator('.action-menu-content:visible').getByRole('button', { name: 'Backups', exact: true }).click();
+  const phoneDialog = page.locator('.ant-modal:visible');
+  await phoneDialog.waitFor({ state: 'visible' });
+  await page.locator('.action-menu-content:visible').waitFor({ state: 'hidden' });
+  const phoneGeometry = await phoneDialog.evaluate((dialog) => {
+    const close = dialog.querySelector('.ant-modal-close');
+    const box = close.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const table = dialog.querySelector('.ant-table-body');
+    return { width: dialog.getBoundingClientRect().width, isCloseHit: Boolean(hit && close.contains(hit)), canScrollTable: table.scrollWidth > table.clientWidth };
+  });
+  check('phone backups stay mounted after tools close and remain locally scrollable', phoneGeometry.width <= 390 && phoneGeometry.isCloseHit && phoneGeometry.canScrollTable, JSON.stringify(phoneGeometry));
+  await page.goBack();
+  await phoneDialog.waitFor({ state: 'hidden' });
+  await until(async () => await tools.evaluate((button) => button === document.activeElement), { label: 'backup closure restores visible phone tools focus' });
+  check('Back dismisses phone backups without leaving the draft page', page.url().endsWith('/config') && await tools.getAttribute('aria-expanded') === 'false');
+
 }

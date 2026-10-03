@@ -39,7 +39,7 @@ test('the five request-records concerns select only their own scenarios', () => 
   // narrowing has to actually pay off.
   assert.deepEqual(
     planFor('web/src/pages/UsageEventsPage.tsx').sort(),
-    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'request-list-touch', 'search-dev-server'],
+    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'request-list-touch', 'search-dev-server', 'mobile-console'].sort(),
   );
 });
 
@@ -49,7 +49,7 @@ test('a dashboard change selects every dashboard scenario', () => {
     'dashboard-charts', 'provider-rate-marks', 'dashboard-chart-motion', 'dashboard-rolling-readouts',
     'dashboard-model-panels', 'dashboard-model-panels-states', 'dashboard-model-panels-failure',
     'dashboard-model-panels-empty', 'dashboard-heatmap', 'dashboard-heatmap-pruned',
-    'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
+    'dashboard-heatmap-mobile', 'dashboard-heatmap-error', 'mobile-console',
   ];
   assert.deepEqual(planFor('web/src/pages/DashboardPage.tsx'), all);
   assert.deepEqual(planFor('web/src/components/dashboard/TokenHeatmap.tsx'), all);
@@ -62,7 +62,7 @@ test('a dashboard change selects every dashboard scenario', () => {
   // breaks the narrow viewport.
   assert.deepEqual(
     planFor('web/src/types/tokenHeatmap.ts'),
-    ['dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error'],
+    ['dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error', 'mobile-console'],
   );
 });
 
@@ -98,26 +98,26 @@ test('the shared token layer selects every surface that renders it', () => {
 test('the unified OAuth workspace selects its density scenario and overlay history', () => {
   assert.deepEqual(
     planFor('web/src/pages/oauthManagement/OAuthManagementPage.tsx'),
-    ['oauth-management', 'overlay-back'],
+    ['oauth-management', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/components/authFiles/AuthFileDetailDrawer.tsx'),
-    ['oauth-management', 'overlay-back'],
+    ['oauth-management', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/pages/quota/CredentialQuotaBody.tsx'),
-    ['oauth-management', 'overlay-back'],
+    ['oauth-management', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/pages/LegacyOAuthManagementRedirect.tsx'),
-    ['oauth-management', 'overlay-back'],
+    ['oauth-management', 'overlay-back', 'mobile-console'],
   );
 });
 
 test('a provider-console change selects only the provider-console scenarios', () => {
   // `phone-lists` is in both: the provider table is one of the surfaces ADR 0012 renders as rows on
   // a phone, so a change to it must run the scenario that reads both of its renderings.
-  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists']);
+  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists', 'mobile-console']);
   assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library']);
   // The page renders the console's own modules rather than carrying them, so a
   // change to one of those has to select the same scenarios the page does - the
@@ -128,7 +128,7 @@ test('a provider-console change selects only the provider-console scenarios', ()
     'web/src/components/providers/ProviderTable.tsx',
     'web/src/components/providers/useProviderManagement.ts',
   ]) {
-    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists'], file);
+    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'custom-icon-library', 'provider-model-picker', 'overlay-back', 'phone-lists', 'mobile-console'], file);
   }
 });
 
@@ -238,7 +238,7 @@ test('a mixed change unions the narrow plans without widening', () => {
     'custom-icon-library', 'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
     'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
-    'dashboard-rolling-readouts', 'icon-picker-stacking', 'overlay-back', 'phone-lists',
+    'dashboard-rolling-readouts', 'icon-picker-stacking', 'mobile-console', 'overlay-back', 'phone-lists',
     'provider-icon-pick', 'provider-model-picker', 'provider-rate-marks',
   ]);
 });
@@ -265,7 +265,7 @@ test('no scenario id is selected by a path that cannot affect it', () => {
 });
 
 test('playground source selects its desktop and phone acceptance', () => {
-  assert.deepEqual(planFor('web/src/pages/playground/PlaygroundPage.tsx'), ['playground', 'playground-narrow']);
+  assert.deepEqual(planFor('web/src/pages/playground/PlaygroundPage.tsx'), ['playground', 'playground-narrow', 'mobile-console']);
 });
 
 test('the Agent run layer selects every Agent scenario and the Playground that shares it', () => {
@@ -341,4 +341,29 @@ test('dependency and build inputs widen the UI plan even with unrelated document
     assert.deepEqual(planFor(file), ALL, `${file} reaches shared provider renderers`);
   }
   assert.equal(planFor('web/src/pages/SystemPage.tsx').includes('custom-icon-library'), false);
+});
+
+// The route sweep must follow every page it actually loads, independently of shell changes.
+test('the mobile sweep follows console routes and excludes unrelated backend changes', () => {
+  for (const file of ['web/src/pages/QuickStartPage.tsx', 'web/src/pages/ConfigPage.tsx',
+    'web/src/pages/DashboardPage.tsx', 'web/src/pages/ProvidersPage.tsx',
+    'web/src/pages/pricing/PricingPage.tsx', 'web/src/pages/PluginsPage.tsx',
+    'web/src/pages/oauthManagement/OAuthManagementPage.tsx', 'web/src/pages/ApiKeysPage.tsx',
+    'web/src/pages/agent/AgentPage.tsx', 'web/src/pages/playground/PlaygroundPage.tsx',
+    'web/src/pages/LogsPage.tsx', 'web/src/pages/UsageEventsPage.tsx']) {
+    assert.ok(planFor(file).includes('mobile-console'), file);
+  }
+  assert.ok(!planFor('internal/api/handler.go').includes('mobile-console'));
+});
+
+test('phone source editing and backup dialogs are selected by shared overlay and viewport hooks', () => {
+  for (const file of ['web/src/hooks/useOverlayHistory.ts', 'web/src/hooks/overlayHistory.ts']) {
+    assert.deepEqual(planFor(file), ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console']);
+  }
+  assert.deepEqual(planFor('web/src/hooks/useIsPhoneViewport.ts'), [
+    'agent-narrow', 'playground-narrow', 'touch-ergonomics', 'phone-lists',
+    'config-source-editor', 'config-backups', 'mobile-console',
+  ]);
+  // A source-only decision must not schedule unrelated conversation checks.
+  assert.deepEqual(planFor('web/src/components/config/sourceWrap.ts'), ['phone-lists', 'config-source-editor', 'config-backups', 'mobile-console']);
 });

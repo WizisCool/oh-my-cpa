@@ -1221,6 +1221,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    `contents` form that shares tracks by dissolving the row also dissolves those: the row's own gap
    stops applying, leaving the swatch against the name, and the separator withdraws into the column
    gaps so it is drawn in fragments. */
+@container modelusage (max-width: 500px) {
+  .model-usage-list {
+    min-width: 0;
+    grid-template-columns: 8px minmax(0, 1fr) minmax(56px, max-content) max-content minmax(42px, max-content);
+  }
+}
 .model-usage-row {
   display: grid;
   grid-template-columns: subgrid;
@@ -3443,3 +3449,113 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* A conversation workspace (Playground, Agent) owns its scroll columns within the shell. */
 .workspace-route { height: 100%; min-height: 0; }
+
+/* Content-first phone tools share the existing spacing and surface tokens. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.action-menu-content {
+  display: flex;
+  flex-direction: column;
+  width: min(260px, calc(100vw - 40px));
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 4px;
+}
+.action-menu-content .ant-btn {
+  min-height: 44px;
+  height: auto;
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: start;
+}
+.action-menu-content > .ant-btn[aria-pressed="true"] {
+  background: var(--selected-inset);
+  font-weight: 600;
+}
+.action-menu-label { padding: 4px 12px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.config-source-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.config-source-container.is-focused {
+  position: fixed;
+  inset-inline: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 12px);
+  background: var(--bg);
+  box-sizing: border-box;
+}
+.config-source-container.is-focused .config-source-toolbar { flex: none; }
+.config-source-container.is-focused .config-editor-wrap { flex: 1; min-height: 0; }
+.config-source-container.is-focused .config-monaco-shell { height: 100%; min-height: 0; }
+.config-source-container.is-focused .config-source-hint { display: none; }
+.config-dirty-bar-portal.is-contained {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 640px) {
+  .terminal-page { padding: 12px 12px 24px; }
+  .terminal-page-head { gap: 8px 12px; margin-bottom: 12px; align-items: center; }
+  .terminal-page-stack { gap: 12px; }
+  .terminal-page-stack > .terminal-page-head { margin-bottom: 0; }
+  .terminal-title, .config-toolbar-left .terminal-title { font-size: 18px; }
+  .terminal-subtitle { margin-top: 4px; overflow-wrap: anywhere; }
+  .terminal-page-actions { min-width: 0; max-width: 100%; gap: 8px; }
+  .app-header-actions { gap: 8px; }
+  .app-header-actions > .ant-btn { min-width: 40px; min-height: 40px; }
+  .app-header-left { flex: 1; }
+  .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-grid { gap: 12px; margin-bottom: 16px; }
+  .dashboard-tile .ant-card-body { padding: 12px; }
+  .dashboard-lower { gap: 12px; }
+  .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
+  .logs-toolbar { gap: 8px; margin-bottom: 12px; }
+  .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
+  .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
+  .config-phone-status { font-size: 12px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+  .config-toolbar-phone .ant-segmented { flex-shrink: 0; }
+  .config-workbench { gap: 12px; }
+  .config-nav-btn { padding: 10px 8px; min-height: 44px; }
+  .config-section-header-phone { display: none; }
+  .settings-stack { gap: 12px; }
+  .settings-group-head, .settings-group-body { padding: 12px; }
+  .settings-group-head { gap: 8px; }
+  .settings-form-grid { gap: 12px; }
+  .settings-toggle-row { gap: 8px; padding-block: 12px; }
+  .config-source-container { gap: 8px; }
+  .config-source-toolbar { padding: 4px 0; border: 0; background: transparent; gap: 8px; }
+  .config-source-actions { gap: 4px; width: 100%; }
+  .config-source-actions > .ant-btn { padding-inline: 8px; min-height: 40px; }
+  .config-monaco-shell { height: var(--source-available-height, 440px); }
+  .config-monaco-loading { min-height: 0; height: 100%; padding: 12px; }
+  .config-source-hint { display: none; }
+  .config-page.has-dirty-bar { padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 24px) !important; }
+  .config-dirty-bar-portal { inset-inline: 0; padding-inline: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .config-dirty-bar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .config-dirty-bar-left { gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .config-dirty-bar-actions { margin-inline-start: auto; }
+  .config-dirty-bar-actions .ant-btn { min-height: 40px; }
+  .ant-modal .ant-modal-title { overflow-wrap: anywhere; }
+  .ant-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .ant-modal .ant-modal-footer > .ant-btn { margin-inline-start: 0; min-height: 40px; }
+  .ant-drawer .ant-drawer-body { min-width: 0; }
+}
+.phone-filter-disclosure { width: 100%; min-width: 0; }
+.phone-filter-disclosure > summary { min-height: 44px; cursor: pointer; padding-block: 10px; color: var(--fg-2); }
+.phone-filter-current { margin-inline-start: 8px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.phone-filter-content { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; }
+.phone-filter-content > .ant-select { width: 100%; min-width: 0; }

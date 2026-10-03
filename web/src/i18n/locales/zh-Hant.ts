@@ -4,6 +4,14 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "mobile.filters": "篩選",
+  "header.tools": "控制台工具",
+  "cfg.source_tools": "原始碼工具",
+  "cfg.tools": "設定工具",
+  "cfg.source_wrap": "換行",
+  "cfg.source_focus": "專注編輯",
+  "cfg.source_return": "返回",
+
   "route_error.diagnostics": "錯誤診斷",
   "route_error.copy": "複製診斷資訊",
   "route_error.type": "錯誤類型",

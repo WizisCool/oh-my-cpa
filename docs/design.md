@@ -1769,20 +1769,52 @@ the label as well would trade the console's density for a zoom that is already p
 Pinch-zoom is never disabled. `maximum-scale=1` and `user-scalable=no` are absent on purpose,
 because double-tap and pinch zoom are how a reader enlarges a dense table.
 
+### Content-first phone tools
+
+At `640px` and below the shell header is one row: navigation, the ellipsised current page name,
+refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
+repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
+44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
+modal gives focus to that modal. The `900px` navigation-sheet breakpoint is unchanged.
+
+`PageHeader.mobileActions` explicitly chooses primary phone actions and an `ActionMenu` for secondary
+tools; desktop `actions` stay unchanged. The phone title is 18px, content has 12px horizontal padding,
+and page/header/card gaps use the existing 8/12/16px scale. Additional provider and audit filters use
+`FilterDisclosure`, whose summary keeps the selected state visible. Existing responsive row lists,
+request-list inertia and conversation scroll ownership remain unchanged. The shared conversation frame bounds its phone height to the usable viewport, keeping input and Send above the software keyboard.
+
+The phone configuration toolbar is not sticky: status and mode share one row, visual search has its
+own row, and backup/reload live in the tools menu. Category navigation retains local horizontal
+scrolling. Group titles and descriptions remain; the redundant category heading is omitted. Only a
+dirty draft shows the bottom `ConfigDirtyBar`; its measured height reserves content space so the
+last field remains reachable. Validation, single confirmation and revision conflict behaviour remain
+owned by the draft/save flow.
+
 ### The source editor is a phone surface too
 
-The configuration page's YAML editor stays editable on a phone, and the options it needs there are
-the editor's own rather than the stylesheet's - Monaco draws its content on a canvas-backed view, so
-no rule can wrap it or turn off its minimap:
+Monaco renders text and widgets with DOM and owns wrapping, gutter and scrolling geometry itself.
+Configure those options through the editor API rather than trying to force them with CSS.
 
 | Option | On a phone | Why |
 | --- | --- | --- |
-| `fontSize` / `lineHeight` | 16 / 24, against 13 / 21 on a desktop pointer | 13px is below the focus floor for readability as much as for zoom, and a line of YAML at 13px in a 390px column is a third of the width it needs |
-| `wordWrap` | `on` | `off` forces horizontal scrolling on the surface least able to perform it, and the reader's alternative - pinch-zooming a code block - loses the line numbers |
-| `minimap` | disabled | It is decoration standing in a column that is already the whole width of the screen |
+| `fontSize` / `lineHeight` | 16 / 24; desktop 13 / 21 | Legibility and the iOS input focus floor |
+| `wordWrap` | `on` by default; visible toggle | Long URLs and indentation must remain readable; disabling it scrolls only the editor |
+| `lineNumbersMinChars` | 2 | Keep line identity without a desktop-width gutter |
+| Folding, decorations, minimap, overview ruler and indent guides | disabled | Preserve the narrow text column |
+| `wrappingIndent` | `none` | Continuations must not inherit a deeply indented column |
 
-The editor's height is a `dvh` clamp, so the on-screen keyboard does not resize it under the caret
-while it is being typed into.
+Find, wrap and focused editing are direct actions. Format, copy and statistics live in the phone
+source tools menu; desktop shortcuts remain on desktop. A manual wrap choice lasts for the source
+session, including rotation and focus changes; leaving Source resets it. Without a manual choice,
+the default follows the current phone breakpoint.
+
+Focused editing fixes the **same source container** inside the usable viewport rather than mounting
+another editor. Draft, undo stack, selection and scroll survive entry and exit. Background application
+siblings become inert; body-level dialog portals remain usable. Back exits focus after closing any
+inner menu, confirmation or conflict dialog. The entry button regains focus after exit.
+`useVisibleViewport` follows keyboard resize and caret panning through `visualViewport` resize/scroll,
+with layout viewport fallback and pinch-zoom left to the browser. The editor and dirty actions fit
+inside those bounds; their observers/listeners are effect-owned and cleaned under StrictMode.
 
 ### The viewport is not a fixed rectangle
 

@@ -1,3 +1,4 @@
+import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
@@ -450,6 +451,18 @@ export const PricingPage: React.FC = () => {
       <PageHeader
         title={t('pricing.title')}
         subtitle={subtitle}
+        mobileActions={(
+          <>
+            <Segmented value={tab} onChange={(value) => selectTab(value as PricingTab)} options={[
+              { value: 'models', label: t('pricing.tab.models') }, { value: 'channels', label: t('pricing.tab.channels') },
+            ]} />
+            <ActionMenu>
+              <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
+              <span className="action-menu-label"><StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel></span>
+              {syncPopover}
+            </ActionMenu>
+          </>
+        )}
         actions={(
           <>
             <Segmented

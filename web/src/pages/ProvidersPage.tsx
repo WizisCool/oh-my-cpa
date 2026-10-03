@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../components/common/FilterDisclosure';
+import { ActionMenu } from '../components/common/ActionMenu';
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Input, Select } from 'antd';
@@ -232,6 +234,12 @@ export const ProvidersPage: React.FC = () => {
       <PageHeader
         title={t('pro.title')}
         subtitle={subtitle}
+        mobileActions={(
+          <>
+            <ActionMenu><RefreshButton onRefresh={() => { void refetchProviders(); void trafficQuery.refetch(); }} isRefreshing={providersFetching || trafficQuery.isFetching} /></ActionMenu>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>{t('pro.add_provider')}</Button>
+          </>
+        )}
         actions={(
           <>
             <RefreshButton
@@ -280,30 +288,32 @@ export const ProvidersPage: React.FC = () => {
             value={filters.search}
             onChange={(event) => updateFilters({ search: event.target.value })}
           />
-          <Select
-            className={styles['provider-family-filter']}
-            value={filters.family}
-            aria-label={t('pro.family_filter')}
-            popupMatchSelectWidth={false}
-            onChange={(family: string) => updateFilters({ family })}
-            options={[
-              { value: 'all', label: t('pro.family_all') },
-              ...familyOptions.map((family) => ({
-                value: family,
-                label: (
-                  <span className={styles['family-option']}>
-                    <span>{familyDisplayNames[family] ?? family}</span>
-                    <span className={styles['family-count']}>{overview.familyCounts[family] ?? 0}</span>
-                  </span>
-                ),
-              })),
-            ]}
-          />
-          {isFiltered && (
-            <Button type="link" size="small" onClick={() => setFilters(DEFAULT_PROVIDER_FILTERS)}>
-              {t('pro.clear_filters')}
-            </Button>
-          )}
+          <FilterDisclosure activeLabel={filters.family !== 'all' ? familyDisplayNames[filters.family] ?? filters.family : undefined}>
+            <Select
+              className={styles['provider-family-filter']}
+              value={filters.family}
+              aria-label={t('pro.family_filter')}
+              popupMatchSelectWidth={false}
+              onChange={(family: string) => updateFilters({ family })}
+              options={[
+                { value: 'all', label: t('pro.family_all') },
+                ...familyOptions.map((family) => ({
+                  value: family,
+                  label: (
+                    <span className={styles['family-option']}>
+                      <span>{familyDisplayNames[family] ?? family}</span>
+                      <span className={styles['family-count']}>{overview.familyCounts[family] ?? 0}</span>
+                    </span>
+                  ),
+                })),
+              ]}
+            />
+            {isFiltered && (
+              <Button type="link" size="small" onClick={() => setFilters(DEFAULT_PROVIDER_FILTERS)}>
+                {t('pro.clear_filters')}
+              </Button>
+            )}
+          </FilterDisclosure>
           {/* The window's totals over every configured provider, whatever the filters show: the
               line answers "how busy is the gateway's provider pool", not "how busy is this view". */}
           <div className={styles['window-summary']} data-testid="provider-window-summary">

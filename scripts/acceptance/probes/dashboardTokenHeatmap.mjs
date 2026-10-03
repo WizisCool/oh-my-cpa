@@ -970,10 +970,13 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
     container.scrollLeft = Math.floor(container.scrollLeft / 2);
     return container.scrollLeft;
   });
+  await page.locator('.terminal-page-actions').getByRole('button', { name: 'More', exact: true }).click();
   const refreshed = page.waitForResponse((response) => response.url().includes('/dashboard/token-heatmap') && response.request().method() === 'GET');
-  await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).click();
-  await refreshed;
-  await page.locator('.dashboard-page button[aria-busy="false"]').waitFor();
+  await Promise.all([
+    refreshed,
+    page.locator('.action-menu-content:visible').getByRole('button', { name: 'Refresh all', exact: true }).click(),
+  ]);
+  await page.locator('.action-menu-content button[aria-busy="false"]').waitFor({ state: 'attached' });
   check("a refresh preserves the phone reader's chosen week",
     await page.locator('.heatmap-scroll').evaluate((container) => container.scrollLeft) === retainedScroll,
     `expected=${retainedScroll}`);

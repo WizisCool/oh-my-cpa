@@ -4,6 +4,14 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "mobile.filters": "Penapis",
+  "header.tools": "Alat konsol",
+  "cfg.source_tools": "Alat sumber",
+  "cfg.tools": "Alat konfigurasi",
+  "cfg.source_wrap": "Balut baris",
+  "cfg.source_focus": "Fokus editor",
+  "cfg.source_return": "Kembali",
+
   "route_error.diagnostics": "Diagnostik ralat",
   "route_error.copy": "Salin diagnostik",
   "route_error.type": "Jenis ralat",

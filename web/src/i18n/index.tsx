@@ -611,6 +611,13 @@ const DICT: Record<string, [string, string]> = {
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
   'header.open_repository': ['打开项目 GitHub 仓库', 'Open project on GitHub'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
+  'mobile.filters': ['筛选', 'Filters'],
+  'header.tools': ['控制台工具', 'Console tools'],
+  'cfg.source_tools': ['源码工具', 'Source tools'],
+  'cfg.tools': ['配置工具', 'Configuration tools'],
+  'cfg.source_wrap': ['换行', 'Wrap'],
+  'cfg.source_focus': ['专注编辑', 'Focus editor'],
+  'cfg.source_return': ['返回', 'Return'],
   'header.theme': ['界面主题', 'Theme'],
   // The mode control's accessible name. Its tooltip is the control's own name and says nothing about the
   // state - the icon carries that - so the name states the mode for readers who cannot see the icon.

@@ -1082,6 +1082,8 @@
 }
 
 @media (max-width: 640px) {
+  .head { gap: 8px 12px; min-height: 0; padding: 8px 12px; }
+
   .key-select {
     flex-basis: 42%;
   }

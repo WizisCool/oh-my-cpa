@@ -57,7 +57,7 @@ test('dynamic imports are edges and an unresolved local import is reported', () 
 
 test('a helper selects the scenarios of the pages that import it', () => {
   const plan = planScenarios(['web/src/utils/format.ts'], ALL, impactOf(CONSOLE));
-  assert.deepEqual(new Set(plan.ids), new Set(['system-information', 'system-information-narrow', 'phone-lists', 'touch-ergonomics', 'overlay-back']));
+  assert.deepEqual(new Set(plan.ids), new Set(['system-information', 'system-information-narrow', 'phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console']));
 });
 
 test('reaching the shared layer or an unnamed routed page still selects everything', () => {
@@ -189,4 +189,24 @@ test('the real registry can be attributed', () => {
   });
   assert.equal(result.all, undefined, result.all);
   assert.equal(result.ids.size, 0);
+});
+
+test('the real phone sweep and unrelated probes retain separate attribution', () => {
+  const acceptanceFiles = fs.readdirSync('scripts/acceptance/probes').filter((file) => file.endsWith('.mjs'))
+    .map((file) => `scripts/acceptance/probes/${file}`);
+  acceptanceFiles.push('scripts/acceptance/scenarios.mjs', 'scripts/acceptance/probe.mjs',
+    'scripts/acceptance/probe-batches.mjs', 'scripts/acceptance/probe-shards.mjs');
+  const read = (file) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+  const options = { readBase: read, readCurrent: read, acceptanceFiles };
+  assert.ok(planProbeChange(['scripts/acceptance/probe-batches.mjs'], options).all,
+    'batch orchestration is part of the runner, so it cannot silently narrow coverage');
+  const sweep = planProbeChange(['scripts/acceptance/probes/mobileConsole.mjs'], options);
+  assert.equal(sweep.all, undefined);
+  assert.deepEqual([...sweep.ids], ['mobile-console']);
+  const source = planProbeChange(['scripts/acceptance/probes/configSourceEditor.mjs'], options);
+  assert.equal(source.all, undefined);
+  assert.deepEqual(new Set(source.ids), new Set(['route-preloading', 'config-source-editor', 'config-backups', 'mobile-console']));
+  const settings = planProbeChange(['scripts/acceptance/probes/omcSettings.mjs'], options);
+  assert.equal(settings.all, undefined);
+  assert.deepEqual([...settings.ids], ['omc-settings']);
 });

@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../common/FilterDisclosure';
+import { ActionMenu } from '../common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Input, Segmented, Select, Tooltip } from 'antd';
@@ -326,6 +328,12 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
     <>
       <PageHeader
         title={title}
+        mobileActions={(
+          <>
+            <ActionMenu><RefreshButton label={t('common.refresh')} isRefreshing={(query.isFetching && !query.isFetchingNextPage) || summary.isFetching} onRefresh={refresh} /></ActionMenu>
+            <Button icon={<DownloadOutlined />} loading={isExporting} onClick={() => void onExport()}>{t('audit.export')}</Button>
+          </>
+        )}
         actions={(
           <>
             <RefreshButton
@@ -367,48 +375,53 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
         />
-        <Select
-          className={styles['audit-category']}
-          value={category ?? 'all'}
-          aria-label={t('audit.all_categories')}
-          popupMatchSelectWidth={false}
-          options={[
-            { value: 'all', label: t('audit.all_categories') },
-            ...Object.keys(AUDIT_CATEGORIES).map((name) => ({
-              value: name,
-              label: (
-                <span className={styles['category-option']}>
-                  <span>{t(`audit.cat.${name}`)}</span>
-                  {hasCounts && <span className={styles['category-count']}>{facets.categories[name] ?? 0}</span>}
-                </span>
-              ),
-            })),
-          ]}
-          onChange={(value: string) => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
-        />
-        {/* A phone has no width for four segments beside the category, so the range is the
-            same choice as a select sharing that row. */}
-        {isPhone ? (
+        <FilterDisclosure activeLabel={[
+          category ? t(`audit.cat.${category}`) : '',
+          filters.range !== 'all' ? t(`audit.range_${filters.range}`) : '',
+        ].filter(Boolean).join(' · ')}>
           <Select
-            className={styles['audit-range']}
-            value={filters.range}
-            aria-label={t('audit.range_label')}
-            options={RANGES.map((range) => ({ value: range, label: t(range === 'all' ? 'audit.range_all_time' : `audit.range_${range}`) }))}
-            onChange={(value: AuditRange) => update({ range: value })}
+            className={styles['audit-category']}
+            value={category ?? 'all'}
+            aria-label={t('audit.all_categories')}
+            popupMatchSelectWidth={false}
+            options={[
+              { value: 'all', label: t('audit.all_categories') },
+              ...Object.keys(AUDIT_CATEGORIES).map((name) => ({
+                value: name,
+                label: (
+                  <span className={styles['category-option']}>
+                    <span>{t(`audit.cat.${name}`)}</span>
+                    {hasCounts && <span className={styles['category-count']}>{facets.categories[name] ?? 0}</span>}
+                  </span>
+                ),
+              })),
+            ]}
+            onChange={(value: string) => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
           />
-        ) : (
-          <Segmented
-            value={filters.range}
-            aria-label={t('audit.range_label')}
-            options={RANGES.map((range) => ({ value: range, label: t(`audit.range_${range}`) }))}
-            onChange={(value) => update({ range: value as AuditRange })}
-          />
-        )}
-        {isFiltered && (
-          <Button type="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
-            {t('audit.clear_filters')}
-          </Button>
-        )}
+          {/* A phone has no width for four segments beside the category, so the range is the
+              same choice as a select sharing that row. */}
+          {isPhone ? (
+            <Select
+              className={styles['audit-range']}
+              value={filters.range}
+              aria-label={t('audit.range_label')}
+              options={RANGES.map((range) => ({ value: range, label: t(range === 'all' ? 'audit.range_all_time' : `audit.range_${range}`) }))}
+              onChange={(value: AuditRange) => update({ range: value })}
+            />
+          ) : (
+            <Segmented
+              value={filters.range}
+              aria-label={t('audit.range_label')}
+              options={RANGES.map((range) => ({ value: range, label: t(`audit.range_${range}`) }))}
+              onChange={(value) => update({ range: value as AuditRange })}
+            />
+          )}
+          {isFiltered && (
+            <Button type="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
+              {t('audit.clear_filters')}
+            </Button>
+          )}
+        </FilterDisclosure>
       </div>
 
       {isBlocked && (

@@ -8,7 +8,8 @@ import type { ResolvedPalette, ThemePalette } from './palette';
  * This module computes nothing about colour. A palette is resolved once in `palette.ts`, and this
  * is one of the surfaces that reads it - the same way the chart runtime, the Monaco editor and the
  * brand artwork do. That separation is why a custom palette reaches every one of those surfaces
- * without any of them knowing custom palettes exist.
+ * without any of them knowing custom palettes exist. Phone layouts use the existing spacing scale
+ * in CSS; shared component tokens keep their desktop sizes.
  */
 
 const monoFont = [
