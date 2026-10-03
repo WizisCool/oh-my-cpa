@@ -17,7 +17,7 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   LinkOutlined,
-  RightOutlined,
+  FileTextOutlined,
   CloudDownloadOutlined,
   CompressOutlined,
   ClearOutlined,
@@ -45,6 +45,7 @@ import { PageLoading, SuspenseFallback } from '../components/common/PageLoading'
 import { StatusLabel } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
+import { deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
 import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 
@@ -59,49 +60,22 @@ interface ProductBlockProps {
   productTitle: string;
   version: SystemProductVersion;
   onOpenChangelog: () => void;
+  isChecking: boolean;
 }
 
 const ProductBlock: React.FC<ProductBlockProps> = ({
   productTitle,
   version,
   onOpenChangelog,
+  isChecking,
 }) => {
   useTimeZone();
   const t = useT();
 
-  const renderStateBadge = () => {
-    switch (version.state) {
-      case 'update_available':
-        return (
-          <StatusLabel tone="accent">
-            {t('sys.update_available', { version: version.latest_version || '' })}
-          </StatusLabel>
-        );
-      case 'up_to_date':
-        return <StatusLabel tone="success">{t('sys.is_latest')}</StatusLabel>;
-      case 'update_ahead':
-        return <StatusLabel tone="neutral">{t('sys.update_ahead')}</StatusLabel>;
-      case 'indeterminate':
-      default: {
-        let reasonLabel = t('sys.indeterminate');
-        if (version.reason === 'running_version_not_comparable') {
-          reasonLabel = t('sys.reason_running_not_comparable');
-        } else if (version.reason === 'newest_release_not_comparable') {
-          reasonLabel = t('sys.reason_latest_not_comparable');
-        } else if (version.reason === 'no_releases_published') {
-          reasonLabel = t('sys.reason_no_releases');
-        } else if (version.reason === 'not_checked_yet') {
-          reasonLabel = t('sys.reason_not_checked');
-        }
-        return <StatusLabel tone="neutral">{reasonLabel}</StatusLabel>;
-      }
-    }
-  };
-
-  const hasNewer = version.state === 'update_available' || (version.merge_count > 0);
+  const presentation = deriveVersionPresentation(version, isChecking);
 
   return (
-    <div className={styles['product-block']}>
+    <section className={styles['product-block']} aria-label={productTitle} data-testid={`sys-product-${version.product}`}>
       <div className={styles['product-header']} data-testid="sys-product-header">
         <div className={styles['product-identity']}>
           <div className={styles['product-title']}>{productTitle}</div>
@@ -114,61 +88,57 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             {version.repository} <LinkOutlined />
           </a>
         </div>
-        <div className={styles['product-badge']}>{renderStateBadge()}</div>
+        <div className={styles['product-badge']} role="status">
+          <StatusLabel tone={presentation.tone}>{t(presentation.statusKey)}</StatusLabel>
+        </div>
       </div>
 
-      {/* Running and published side by side on one line, with the change log beside them: the
-          pair is one comparison, and the log is what explains the difference between them. */}
       <div className={styles['version-row']} data-testid="sys-version-row">
-        <span className={styles['version-pair']}>
-          <span className={styles['version-label']}>{t('sys.current_version')}</span>
-          <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
-        </span>
-        {version.latest_version && (
-          <span className={styles['version-pair']}>
+        <div className={styles['version-comparison']} data-testid="sys-version-comparison">
+          <div className={styles['version-pair']}>
+            <span className={styles['version-label']}>{t('sys.current_version')}</span>
+            <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
+          </div>
+          <div className={styles['version-pair']} data-testid="sys-latest-release">
             <span className={styles['version-label']}>{t('sys.latest_version')}</span>
-            <span className={styles['version-value']}>{version.latest_version}</span>
-          </span>
-        )}
-        {hasNewer && (
+            <span className={`${styles['version-value']} ${version.state === 'update_available' ? styles['version-target'] : ''}`}>
+              {version.latest_version || '—'}
+            </span>
+          </div>
+        </div>
+        {presentation.hasChangelog && (
           <Button
-            type="link"
+            type="text"
             size="small"
-            className={styles['changelog-toggle']}
-            icon={<RightOutlined />}
-            iconPlacement="end"
+            className={styles['changelog-trigger']}
+            icon={<FileTextOutlined />}
+            aria-label={t('sys.open_changelog', { product: productTitle, count: version.merge_count })}
             onClick={onOpenChangelog}
           >
-            {t('sys.view_changelog', { count: version.merge_count || 1 })}
+            <span>{t('sys.changelog_action')}</span>
+            <span className={styles['changelog-count']} aria-hidden="true">{version.merge_count}</span>
           </Button>
         )}
       </div>
 
-      {/* No routine "last checked" readout: it is the same timestamp on every card and it
-          answered a question nobody asked. What remains is the one state a reader cannot infer
-          from the card - that no release notes were retrieved, which is normal after a restart
-          and would otherwise look like an empty change log.
-          It is suppressed while a check error is shown: the notes are missing because that
-          check failed, and a second sentence about missing notes beside the real reason would
-          send the reader looking for a retrieval problem instead of a feed problem. */}
-      {!version.notes_available && !version.check_error && (
-        <div className={styles['product-meta']}>
-          <Text type="secondary">{t('sys.notes_not_held')}</Text>
-        </div>
+      {presentation.detailKey && <div className={styles['version-detail']}>{t(presentation.detailKey)}</div>}
+      {presentation.shouldShowNotesNotice && (
+        <div className={styles['version-detail']}>{t('sys.notes_not_held')}</div>
       )}
 
       {version.check_error && (
         <Notice
           tone="warning"
           className={styles['check-alert']}
-          title={t('sys.last_check_failed', {
+          title={t(version.checked_at_ms ? 'sys.check_failed_cached' : 'sys.check_failed')}
+          description={<>{t('sys.last_check_failed', {
             time: version.attempted_at_ms ? dayjs(version.attempted_at_ms).format('YYYY-MM-DD HH:mm:ss') : '—',
             msg: version.check_error,
-          })}
+          })}{version.checked_at_ms && <div>{t('sys.last_successful_check', { time: dayjs(version.checked_at_ms).format('YYYY-MM-DD HH:mm:ss') })}</div>}</>}
         />
       )}
 
-    </div>
+    </section>
   );
 };
 
@@ -181,6 +151,8 @@ export const SystemPage: React.FC = () => {
 
   const [downloadingDiag, setDownloadingDiag] = useState(false);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
+  const updateCheckInFlightRef = useRef(false);
   // The action currently being submitted, so only its own button spins.
   const [submittingAction, setSubmittingAction] = useState<'checkpoint' | 'vacuum' | null>(null);
   // Polling follows the job the server reports, not the request that started it: a
@@ -229,6 +201,7 @@ export const SystemPage: React.FC = () => {
     queryKey: ['management-system-info'],
     queryFn: api.getSystemInfo,
     staleTime: 15000,
+    refetchInterval: (query) => query.state.data?.omc_version.checking || query.state.data?.cpa_version.checking ? 2000 : false,
   });
 
   // The process the state below belongs to. Job ids come from a counter that starts again with every
@@ -359,25 +332,41 @@ export const SystemPage: React.FC = () => {
     }
   }, [maintenanceData, queryClient, toast, t]);
 
-  const handleCheckUpdates = async () => {
+  const handleCheckUpdates = async (shouldNotify = true) => {
+    // A ref closes the gap before React paints the disabled button, including a mount check
+    // racing a click. Both checks share the same feed budget.
+    if (updateCheckInFlightRef.current) return;
+    updateCheckInFlightRef.current = true;
     setIsCheckingUpdates(true);
+    setUpdateCheckError(null);
     try {
       const outcome = await api.checkUpdates();
-      // The feed is a shared per-address budget, so a check inside the floor is answered from
-      // the stored index. Saying "already up to date" there would claim a check that did not
-      // happen; saying when the stored answer is from is the honest report.
-      if (outcome.served_from_cache) {
-        toast.info(t('sys.check_updates_cached'));
-      } else {
-        toast.success(t('sys.check_updates_success'));
+      queryClient.setQueryData<SystemInfoResponse>(['management-system-info'], (previous) => previous ? {
+        ...previous, omc_version: outcome.omc_version, cpa_version: outcome.cpa_version,
+      } : previous);
+      if (shouldNotify) {
+        const summary = summarizeUpdateCheck([outcome.omc_version, outcome.cpa_version], outcome.served_from_cache);
+        if (summary.kind === 'failed' || summary.kind === 'partial') {
+          const products = summary.failedProducts.map((product) => t(product === 'omc' ? 'sys.omc_version' : 'sys.cpa_version')).join(', ');
+          toast.warning(t(outcome.served_from_cache ? 'sys.check_updates_cached_failed' : 'sys.check_updates_failed', { products }));
+        } else if (summary.kind === 'cached') {
+          toast.info(t('sys.check_updates_cached'));
+        } else if (summary.kind === 'checking') {
+          toast.info(t('sys.checking_updates'));
+        } else {
+          toast.success(t('sys.check_updates_success'));
+        }
       }
-      await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
-      await queryClient.invalidateQueries({ queryKey: ['management-system-releases'] });
-    } catch (err: unknown) {
-      const msg = describeError(err);
-      toast.error(t('sys.last_check_failed', { time: dayjs().format('HH:mm:ss'), msg }));
-      await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
+    } catch (error: unknown) {
+      const detail = describeError(error);
+      setUpdateCheckError(detail);
+      if (shouldNotify) toast.error(t('sys.check_failed'));
     } finally {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['management-system-info'] }),
+        queryClient.invalidateQueries({ queryKey: ['management-system-releases'] }),
+      ]);
+      updateCheckInFlightRef.current = false;
       setIsCheckingUpdates(false);
     }
   };
@@ -398,7 +387,7 @@ export const SystemPage: React.FC = () => {
     if (!sysInfo || hasMountedCheckRef.current) return;
     hasMountedCheckRef.current = true;
     if (!isDemo && sysInfo.update_check_on_page_load) {
-      void handleCheckUpdates();
+      void handleCheckUpdates(false);
     }
   }, [isDemo, sysInfo]);
 
@@ -512,11 +501,11 @@ export const SystemPage: React.FC = () => {
                 type="link"
                 size="small"
                 icon={<CloudDownloadOutlined />}
-                loading={isCheckingUpdates}
+                loading={isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
                 // The demonstration refuses this route on the server, so the control is
                 // disabled rather than offered: a button whose only outcome is a refusal
                 // teaches the reader something untrue about the product.
-                disabled={isDemo || isCheckingUpdates}
+                disabled={isDemo || isCheckingUpdates || Boolean(sysInfo?.omc_version.checking || sysInfo?.cpa_version.checking)}
                 title={isDemo ? t('demo.blocked') : undefined}
                 onClick={() => void handleCheckUpdates()}
               >
@@ -525,16 +514,19 @@ export const SystemPage: React.FC = () => {
             </div>
           }
         >
+          {updateCheckError && <Notice tone="warning" title={t('sys.check_failed')} description={updateCheckError} />}
           {sysInfo && (
             <>
               <ProductBlock
                 productTitle={t('sys.omc_version')}
                 version={sysInfo.omc_version}
+                isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('omc')}
               />
               <ProductBlock
                 productTitle={t('sys.cpa_version')}
                 version={sysInfo.cpa_version}
+                isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('cpa')}
               />
             </>
@@ -543,79 +535,75 @@ export const SystemPage: React.FC = () => {
 
         {/* Card 2: Maintenance & Diagnostics */}
         <Card
-          className={styles['system-card']}
+          className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-maintenance"
-          title={<PanelTitle icon={<SafetyCertificateOutlined />}>{t('sys.maintenance_card')}</PanelTitle>}
+          title={(
+            <PanelTitle
+              icon={<SafetyCertificateOutlined />}
+            >
+              {t('sys.maintenance_card')}
+            </PanelTitle>
+          )}
         >
-          {/* Each action with what it does, in the card rather than in a tooltip: these rewrite
-              the database file, and what an operator is about to run should be readable before
-              the pointer reaches it. */}
           <div className={styles['maintenance-actions']}>
             <div className={styles['maintenance-action']}>
-              <div className={styles['maintenance-action-copy']}>
-                <div className={styles['maintenance-action-title']}>{t('sys.action_checkpoint')}</div>
-                <div className={styles['maintenance-action-desc']}>
-                  {t('sys.checkpoint_desc')}
-                  {sysInfo?.database.files.wal_exists && (
-                    <span className={styles['maintenance-action-fact']}>
-                      {t('sys.wal_size', { size: formatBytes(sysInfo.database.files.wal_bytes) })}
-                    </span>
-                  )}
-                </div>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.action_checkpoint_short')}</div>
+                <Button
+                  icon={<ClearOutlined />}
+                  aria-label={t('sys.action_checkpoint')}
+                  loading={
+                    submittingAction === 'checkpoint' ||
+                    (effectiveMaintenance?.running &&
+                      (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
+                  }
+                  disabled={isDemo || isMaintenanceActive}
+                  onClick={() => void handleRunCheckpoint()}
+                >
+                  {t('sys.action_run')}
+                </Button>
               </div>
-              <Button
-                icon={<ClearOutlined />}
-                aria-label={t('sys.action_checkpoint')}
-                loading={
-                  submittingAction === 'checkpoint' ||
-                  (effectiveMaintenance?.running &&
-                    (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
-                }
-                disabled={isDemo || isMaintenanceActive}
-                onClick={() => void handleRunCheckpoint()}
-              >
-                {t('sys.action_run')}
-              </Button>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.checkpoint_desc')}</div>
             </div>
 
             <div className={styles['maintenance-action']}>
-              <div className={styles['maintenance-action-copy']}>
-                <div className={styles['maintenance-action-title']}>{t('sys.action_vacuum')}</div>
-                <div className={styles['maintenance-action-desc']}>
-                  {effectiveAdmission && !effectiveAdmission.allowed
-                    ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
-                    : t('sys.vacuum_desc')}
-                </div>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.action_vacuum_short')}</div>
+                <Button
+                  icon={<CompressOutlined />}
+                  aria-label={t('sys.action_vacuum')}
+                  loading={
+                    submittingAction === 'vacuum' ||
+                    (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
+                  }
+                  disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
+                  onClick={() => setIsVacuumModalOpen(true)}
+                >
+                  {t('sys.action_run')}
+                </Button>
               </div>
-              <Button
-                icon={<CompressOutlined />}
-                aria-label={t('sys.action_vacuum')}
-                loading={
-                  submittingAction === 'vacuum' ||
-                  (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
-                }
-                disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
-                onClick={() => setIsVacuumModalOpen(true)}
-              >
-                {t('sys.action_run')}
-              </Button>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">
+                {effectiveAdmission && !effectiveAdmission.allowed
+                  ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
+                  : t('sys.vacuum_desc')}
+              </div>
             </div>
 
             <div className={styles['maintenance-action']}>
-              <div className={styles['maintenance-action-copy']}>
-                <div className={styles['maintenance-action-title']}>{t('sys.download_diag')}</div>
-                <div className={styles['maintenance-action-desc']}>{t('sys.diag_desc')}</div>
+              <div className={styles['maintenance-action-head']} data-testid="sys-maintenance-action-head">
+                <div className={styles['maintenance-action-title']}>{t('sys.diagnostics_bundle')}</div>
+                <Button
+                  icon={<DownloadOutlined />}
+                  aria-label={t('sys.download_diag')}
+                  loading={downloadingDiag}
+                  disabled={isDemo}
+                  title={isDemo ? t('demo.blocked') : undefined}
+                  onClick={() => void handleDownloadDiagnostics()}
+                >
+                  {t('sys.action_download')}
+                </Button>
               </div>
-              <Button
-                icon={<DownloadOutlined />}
-                aria-label={t('sys.download_diag')}
-                loading={downloadingDiag}
-                disabled={isDemo}
-                title={isDemo ? t('demo.blocked') : undefined}
-                onClick={() => void handleDownloadDiagnostics()}
-              >
-                {t('sys.action_download')}
-              </Button>
+              <div className={styles['maintenance-action-desc']} data-testid="sys-maintenance-description">{t('sys.diag_desc')}</div>
             </div>
           </div>
 
@@ -710,9 +698,15 @@ export const SystemPage: React.FC = () => {
 
         {/* Card 3: SQLite Storage */}
         <Card
-          className={styles['system-card']}
+          className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-storage"
-          title={<PanelTitle icon={<DatabaseOutlined />}>{t('sys.storage_card')}</PanelTitle>}
+          title={(
+            <PanelTitle
+              icon={<DatabaseOutlined />}
+            >
+              {t('sys.storage_card')}
+            </PanelTitle>
+          )}
         >
           {sysInfo && (
             <>
@@ -724,31 +718,21 @@ export const SystemPage: React.FC = () => {
               </div>
 
               <FactList
-                className={styles['storage-files']}
-                testId="sys-storage-file-list"
-                facts={([
-                  ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
-                  ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
-                  ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
-                ] as const).map(([key, label, exists, bytes]) => ({
-                  key,
-                  label,
-                  value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
-                  testId: 'sys-storage-file-row',
-                }))}
-              />
-
-              {/* What the file is, rather than how it is organised internally: the
-                  observed journal mode, the schema generation, and the space in use. Page
-                  geometry, free pages and the connection's own settings are in the
-                  redacted diagnostics bundle for anyone who needs them. */}
-              <FactList
-                emphasis="quiet"
-                testId="sys-storage-facts"
+                className={styles['storage-readings']}
+                testId="sys-storage-readings"
                 facts={[
+                  ...([
+                    ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
+                    ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
+                    ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
+                  ] as const).map(([key, label, exists, bytes]) => ({
+                    key,
+                    label,
+                    value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
+                    testId: 'sys-storage-file-row',
+                  })),
                   { key: 'journal', label: t('sys.journal_mode'), value: (sysInfo.database.journal_mode || '—').toUpperCase(), testId: 'sys-storage-fact-row' },
                   { key: 'schema', label: t('sys.schema_version'), value: `v${sysInfo.database.schema_version}`, testId: 'sys-storage-fact-row' },
-                  { key: 'used', label: t('sys.used_bytes'), value: formatBytes(sysInfo.database.used_bytes), testId: 'sys-storage-fact-row' },
                 ]}
               />
 
@@ -758,101 +742,94 @@ export const SystemPage: React.FC = () => {
 
         {/* Card 4: Component Topology & Health */}
         <Card
-          className={styles['system-card']}
+          className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-health"
-          title={<PanelTitle icon={<CloudServerOutlined />}>{t('sys.topology_card')}</PanelTitle>}
+          title={(
+            <PanelTitle
+              icon={<CloudServerOutlined />}
+            >
+              {t('sys.topology_card')}
+            </PanelTitle>
+          )}
         >
-          <div className={styles['component-list']}>
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
-                <div className={styles['component-meta']}>{sysInfo?.cpa.endpoint_masked}</div>
-                {sysInfo && (
-                  <div className={styles['component-meta']}>
-                    {t('sys.gateway_counts', {
-                      credentials: sysInfo.data_volumes.credentials ?? '—',
-                      providers: sysInfo.data_volumes.providers ?? '—',
-                      plugins: sysInfo.data_volumes.plugins ?? '—',
-                    })}
-                  </div>
-                )}
-              </div>
-              {sysInfo?.cpa.status === 'connected' ? (
-                <StatusLabel tone="success">
-                  {sysInfo.cpa.latency_ms > 0
-                    ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                    : t('shell.connected')}
-                </StatusLabel>
-              ) : (
-                <StatusLabel tone="danger">{t('shell.offline')}</StatusLabel>
-              )}
-            </div>
-
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_omc')}</div>
-                {sysInfo && (
-                  <div className={styles['component-meta']}>
-                    {t('sys.omc_runtime', {
-                      ago: formatTimeAgo(sysInfo.runtime.started_at_ms, Date.now(), t),
-                      mem: Math.round(sysInfo.runtime.alloc_mb),
-                      platform: sysInfo.runtime.os_arch,
-                    })}
-                  </div>
-                )}
-              </div>
-              <StatusLabel tone="success">{t('sys.omc_running')}</StatusLabel>
-            </div>
-
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_db')}</div>
-                <div className={styles['component-meta']}>
-                  {t('sys.db_mode', {
-                    mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
-                  })}
+          {sysInfo && (
+            <div className={styles['component-list']}>
+              <div className={styles['component-row']}>
+                <div className={styles['component-head']} data-testid="sys-component-head">
+                  <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
+                  <StatusLabel tone={sysInfo.cpa.status === 'connected' ? 'success' : 'danger'}>
+                    {sysInfo.cpa.status === 'connected'
+                      ? sysInfo.cpa.latency_ms > 0
+                        ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
+                        : t('shell.connected')
+                      : t('shell.offline')}
+                  </StatusLabel>
                 </div>
-                {/* What the file holds, so its size on the storage card can be read against the
-                    records behind it. */}
-                {sysInfo && (
-                  <div className={styles['component-meta']} data-testid="sys-db-records">
-                    {t('sys.db_records', {
-                      usage: sysInfo.data_volumes.usage_events.toLocaleString(),
-                      audit: sysInfo.data_volumes.audit_events.toLocaleString(),
-                    })}
-                    {sysInfo.data_volumes.first_event_ms
-                      ? ` · ${t('sys.db_records_since', { date: dayjs(sysInfo.data_volumes.first_event_ms).format('YYYY-MM-DD') })}`
-                      : ''}
-                    {sysInfo.data_volumes.inbox_pending > 0
-                      ? ` · ${t('sys.records_pending_n', { n: sysInfo.data_volumes.inbox_pending.toLocaleString() })}`
-                      : ''}
-                  </div>
-                )}
+                <FactList
+                  className={styles['component-facts']}
+                  emphasis="quiet"
+                  testId="sys-component-facts"
+                  facts={[
+                    { key: 'credentials', label: t('sys.fact_credentials'), value: sysInfo.data_volumes.credentials ?? '—' },
+                  ]}
+                />
               </div>
-              {sysInfo?.database.status === 'ok' ? (
-                <StatusLabel tone="success">{t('inst.db_ok')}</StatusLabel>
-              ) : (
-                <StatusLabel tone="danger">{t('inst.db_error')}</StatusLabel>
-              )}
-            </div>
 
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_collector')}</div>
-                <div className={styles['component-meta']}>
-                  {t('sys.collector_mode', {
-                    mode: sysInfo?.collector.mode || 'auto',
-                    gaps: sysInfo?.collector.gap_count || 0,
-                  })}
+              <div className={styles['component-row']}>
+                <div className={styles['component-head']} data-testid="sys-component-head">
+                  <div className={styles['component-name']}>{t('sys.component_omc')}</div>
+                  <StatusLabel tone="success">{t('sys.omc_running')}</StatusLabel>
+                </div>
+                <FactList
+                  className={styles['component-facts']}
+                  emphasis="quiet"
+                  testId="sys-component-facts"
+                  facts={[
+                    { key: 'started', label: t('sys.fact_started'), value: formatTimeAgo(sysInfo.runtime.started_at_ms, Date.now(), t) },
+                    { key: 'memory', label: t('sys.fact_memory'), value: `${Math.round(sysInfo.runtime.alloc_mb)} MB` },
+                  ]}
+                />
+              </div>
+
+              <div className={styles['component-row']}>
+                <div className={styles['component-head']} data-testid="sys-component-head">
+                  <div className={styles['component-name']}>{t('sys.component_db')}</div>
+                  <StatusLabel tone={sysInfo.database.status === 'ok' ? 'success' : 'danger'}>
+                    {sysInfo.database.status === 'ok' ? t('sys.database_ready') : t('inst.db_error')}
+                  </StatusLabel>
+                </div>
+                <div data-testid="sys-db-records">
+                  <FactList
+                    className={styles['component-facts']}
+                    emphasis="quiet"
+                    testId="sys-component-facts"
+                    facts={[
+                      { key: 'usage', label: t('sys.fact_requests'), value: sysInfo.data_volumes.usage_events.toLocaleString() },
+                      ...(sysInfo.data_volumes.inbox_pending > 0 ? [{ key: 'pending', label: t('sys.fact_pending'), value: <StatusLabel tone="warn">{sysInfo.data_volumes.inbox_pending.toLocaleString()}</StatusLabel>, testId: 'sys-health-pending' }] : []),
+                    ]}
+                  />
                 </div>
               </div>
-              <StatusLabel tone={sysInfo?.collector.status === 'active' ? 'success' : 'neutral'}>
-                {sysInfo?.collector.status === 'active'
-                  ? t('sys.collector_status_active')
-                  : t('sys.collector_status_disabled')}
-              </StatusLabel>
+
+              <div className={styles['component-row']}>
+                <div className={styles['component-head']} data-testid="sys-component-head">
+                  <div className={styles['component-name']}>{t('sys.component_collector')}</div>
+                  <StatusLabel tone={sysInfo.collector.status === 'active' ? 'success' : 'neutral'}>
+                    {sysInfo.collector.status === 'active' ? t('sys.collector_status_active') : t('sys.collector_status_disabled')}
+                  </StatusLabel>
+                </div>
+                <FactList
+                  className={styles['component-facts']}
+                  emphasis="quiet"
+                  testId="sys-component-facts"
+                  facts={[
+                    { key: 'latest', label: t('sys.fact_last_usage'), value: sysInfo.data_volumes.last_event_ms ? formatTimeAgo(sysInfo.data_volumes.last_event_ms, Date.now(), t) : '—' },
+                    ...(sysInfo.collector.gap_count > 0 ? [{ key: 'gaps', label: t('sys.fact_gaps'), value: <StatusLabel tone="warn">{sysInfo.collector.gap_count.toLocaleString()}</StatusLabel>, testId: 'sys-health-gaps' }] : []),
+                  ]}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       </div>
 

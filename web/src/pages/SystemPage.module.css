@@ -28,12 +28,12 @@
 .product-block {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 4px 0 16px;
+  gap: 14px;
+  padding: 0 0 20px;
 }
 
 .product-block + .product-block {
-  padding-top: 16px;
+  padding-top: 20px;
   border-top: 1px solid var(--border-soft);
 }
 
@@ -70,25 +70,6 @@
   max-width: 100%;
 }
 
-.product-block :global(.ant-tag) {
-  white-space: normal;
-  height: auto;
-  min-height: 22px;
-  line-height: 1.4;
-  padding-top: 2px;
-  padding-bottom: 2px;
-  word-break: break-word;
-}
-
-.product-meta {
-  font-size: 12px;
-  color: var(--meta);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .repo-link {
   color: var(--fg-2);
   font-family: var(--font-mono, monospace);
@@ -106,60 +87,112 @@
 
 .version-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
-  gap: 6px 20px;
-  font-size: 13px;
+  gap: 8px 24px;
 }
 
-.version-pair {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
+/* Bound the comparison independently of the card width so the two readings stay close.
+   The log is a separate row action; it must not change either version's alignment. */
+.version-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  flex: 1 1 260px;
+  max-width: 320px;
   min-width: 0;
 }
 
+.version-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.version-pair + .version-pair {
+  border-inline-start: 1px solid var(--border-soft);
+  padding-inline-start: 24px;
+}
+
 .version-value {
-  padding: 1px 6px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xs);
-  background: var(--hover-inset);
   color: var(--fg);
   font-family: var(--font-mono, monospace);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.version-target {
+  color: var(--accent);
+}
+
+.version-detail {
+  color: var(--fg-2);
   font-size: 12px;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
-/* On a phone the running and latest versions stack. Two labels and two values in one row left
-   the newest version reading as a wrapped fragment beside the running one, and the pair is a
-   comparison rather than a line of prose - it reads better as two labelled rows than as four
-   items sharing one. */
-@media (max-width: 640px) {
-  .version-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .changelog-toggle {
-    margin-left: 0;
-  }
-
-  /* An action's name and description take the row and its button drops below them, so a
-     long Malay description never squeezes the control off the screen. */
-  .maintenance-action {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .maintenance-action :global(.ant-btn) {
-    align-self: flex-start;
-  }
+.changelog-trigger {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  max-width: 100%;
+  min-height: 32px;
+  height: auto;
+  padding: 4px 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
 }
 
-.changelog-toggle {
-  margin-left: auto;
-  padding-inline: 0;
+.changelog-count {
+  color: var(--meta);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Label/value rows preserve long build tags on phones. The action keeps a whole line of
+   its own instead of shrinking either readout or splitting its label to fit beside it. */
+@media (max-width: 640px) {
+  .version-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .version-comparison {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    flex: none;
+    max-width: none;
+    width: 100%;
+  }
+
+  .version-pair {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .version-pair + .version-pair {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+  }
+
+  .version-label {
+    flex-shrink: 0;
+  }
+
+  .changelog-trigger {
+    align-self: flex-end;
+  }
+
 }
 
 .changelog-panel {
@@ -301,47 +334,74 @@
   display: inline-block;
 }
 
-/* Storage Card Styles */
+/* Long localized titles wrap without competing with card content. */
+.detail-card :global(.panel-title) {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.detail-card :global(.panel-title-main) {
+  flex: 1;
+  align-items: flex-start;
+}
+
+.detail-card :global(.panel-title-icon) {
+  flex: 0 0 auto;
+}
+
+.detail-card :global(.panel-title-text) {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 .storage-headline {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding-bottom: 16px;
+  margin-bottom: 4px;
   border-bottom: 1px solid var(--border-soft);
 }
 
 .storage-headline-label {
-  font-size: 11px;
-  color: var(--meta);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: var(--fg-2);
 }
 
 .storage-total-num {
-  font-family: var(--font-mono, monospace);
-  font-size: 28px;
-  font-weight: 700;
   color: var(--fg);
-  line-height: 1.1;
+  font-family: var(--font-mono, monospace);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
-/* Maintenance Card Styles */
+.storage-readings :global(.fact-list-row) {
+  padding-block: 12px;
+}
+
+.storage-readings :global(dd) {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+}
 
 .maintenance-actions {
   display: flex;
   flex-direction: column;
-  margin-bottom: 12px;
+  flex: 1;
 }
 
 .maintenance-action {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  padding-block: 16px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -350,46 +410,40 @@
 }
 
 .maintenance-action:last-child {
+  padding-bottom: 0;
   border-bottom: 0;
 }
 
-.maintenance-action-copy {
+.maintenance-action-head {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .maintenance-action-title {
   color: var(--fg);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .maintenance-action-desc {
-  color: var(--meta);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.maintenance-action-fact {
-  display: block;
   color: var(--fg-2);
-  font-family: var(--font-mono, monospace);
-  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
-.maintenance-action :global(.ant-btn) {
-  flex: none;
+.maintenance-action-head > :global(.ant-btn) {
+  flex: 0 0 auto;
 }
-
 
 .maintenance-box {
-  padding: 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  margin-bottom: 16px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -509,7 +563,7 @@
 /* ── shared readings ─────────────────────────────────────────────────────── */
 
 .version-label {
-  color: var(--meta);
+  color: var(--fg-2);
   font-size: 12px;
 }
 
@@ -531,11 +585,7 @@
   font-size: 12px;
 }
 
-.storage-files {
-  margin-bottom: 16px;
-}
-
-/* The component rows: what the component is on the left, its state on the right. */
+/* Each component has one verdict and one short operational summary. */
 .component-list {
   display: flex;
   flex-direction: column;
@@ -543,10 +593,9 @@
 
 .component-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 14px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -559,20 +608,52 @@
   border-bottom: 0;
 }
 
-.component-identity {
+.component-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   min-width: 0;
 }
 
 .component-name {
   color: var(--fg);
+  font-size: 14px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.component-meta {
-  margin-top: 2px;
-  color: var(--meta);
-  font-size: 12px;
+.component-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+}
+
+.component-facts :global(.fact-list-row) {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  border-bottom: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.component-facts :global(dt) {
+  color: var(--fg-2);
+  font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.component-facts :global(dd) {
+  max-width: 100%;
+  color: var(--fg-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: start;
 }
 
 .outcome-success { color: var(--success); }

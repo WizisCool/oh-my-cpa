@@ -77,7 +77,10 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   suffixed build version such as `v0.1.0-dev` or `v0.1.0-demo` yields `indeterminate`
   and carries a **reason**: a development build, nothing published, or a release tag
   that is not a version. Reporting such a build as "up to date" would assert something
-  the compared data does not support.
+  the compared data does not support. An empty release feed is established only
+  by a successful check; a failed first attempt remains `not_checked_yet`, with its
+  failure reported separately. An HTTP-successful check response can contain a failure
+  for either product, so its transport status is not an update-check verdict.
 - **Release Record**: One published version of a product - its tag, name, publication
   time, and whether it was published as a prerelease. Records are the index the console
   stores. They are replaced as a unit per product each time a feed is read, so a

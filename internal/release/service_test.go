@@ -1229,3 +1229,40 @@ func TestASlowFetchStillRecordsItsOutcome(t *testing.T) {
 		t.Fatalf("stored latest tag = %q, want v7.3.11: the snapshot write was expired by the fetch", state.LatestTag)
 	}
 }
+
+func TestFirstFailedCheckDoesNotClaimNoReleases(t *testing.T) {
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusBadGateway)
+	})
+	ctx := context.Background()
+	if _, err := service.CheckNow(ctx, ProductOMC); err == nil {
+		t.Fatal("expected the feed to fail")
+	}
+	status, err := service.Status(ctx, ProductOMC, "v0.1.0-dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Comparison.State != UpdateIndeterminate || status.Comparison.Why != ReasonNoData {
+		t.Fatalf("a failed first attempt cannot establish an empty feed: %+v", status.Comparison)
+	}
+	if status.AttemptedAtMS == nil || status.CheckedAtMS != nil || status.CheckError == "" {
+		t.Fatalf("expected attempted but never successfully checked: %+v", status)
+	}
+}
+
+func TestSuccessfulEmptyFeedEstablishesNoReleases(t *testing.T) {
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writeJSON(t, writer, []Release{})
+	})
+	ctx := context.Background()
+	if _, err := service.CheckNow(ctx, ProductOMC); err != nil {
+		t.Fatal(err)
+	}
+	status, err := service.Status(ctx, ProductOMC, "v0.1.0-dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Comparison.Why != ReasonNoReleases || status.CheckedAtMS == nil || status.CheckError != "" {
+		t.Fatalf("expected a successfully observed empty feed: %+v", status)
+	}
+}

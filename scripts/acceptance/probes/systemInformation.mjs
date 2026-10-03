@@ -349,11 +349,13 @@ export async function systemInformationPage({ base, page, check }) {
     'no per-file breakdown was rendered',
   );
 
+  await verifySystemOverview({ page, check });
+
   const fileRowCount = await page.locator('[data-testid="sys-storage-file-row"]').count();
   check('storage card renders 3 file breakdown rows', fileRowCount === 3, `found ${fileRowCount}`);
 
   const factRowCount = await page.locator('[data-testid="sys-storage-fact-row"]').count();
-  check('storage card renders 3 secondary fact rows', factRowCount === 3, `found ${factRowCount}`);
+  check('storage card keeps just journal and schema metadata', factRowCount === 2, `found ${factRowCount}`);
 
   // Assert storage card internal row alignment and bounds
   const storageCardLayout = await page.evaluate(() => {
@@ -384,7 +386,8 @@ export async function systemInformationPage({ base, page, check }) {
       if (children.length >= 2) {
         const leftBox = children[0].getBoundingClientRect();
         const rightBox = children[1].getBoundingClientRect();
-        if (leftBox.right > rightBox.left + 1) {
+        if (Math.min(leftBox.right, rightBox.right) - Math.max(leftBox.left, rightBox.left) > 1 &&
+            Math.min(leftBox.bottom, rightBox.bottom) - Math.max(leftBox.top, rightBox.top) > 1) {
           errors.push(`fact row label and value overlap: "${children[0].textContent}" over "${children[1].textContent}"`);
         }
         if (rightBox.right > cardBox.right + 2) {
@@ -401,6 +404,8 @@ export async function systemInformationPage({ base, page, check }) {
     storageCardLayout.found && storageCardLayout.errors.length === 0,
     storageCardLayout.errors.join(' | '),
   );
+
+  await verifyVersionCheckFeedback({ page, base, check });
 
   // ── the retained terminal job is not resurrected by a reload ────────────────
   // The server keeps its last job in process memory for the life of the process, and the page
@@ -1045,7 +1050,7 @@ export async function systemInformationPage({ base, page, check }) {
     const colRightDiff = Math.abs(c2.left - c4.left);
     const widthDiff = Math.abs(c1.width - c2.width);
 
-    // Maintenance card must be at bottom right (c4).
+    // Maintenance sits beside versions in the first row.
     const isMaintenanceSecond = /Maintenance|Penyelenggaraan|维护|維護/i.test(c2.title);
 
     return {
@@ -1083,6 +1088,7 @@ export async function systemInformationPage({ base, page, check }) {
     gridGeometry.isMaintenanceSecond,
     `second card title: ${gridGeometry.boxes?.[1]?.title}`,
   );
+  await verifySystemHealthAnomalies({ base, page, check });
 }
 
 
@@ -1130,6 +1136,8 @@ export async function systemInformationNarrow({ base, page, check }) {
     { label: 'the settled system version layout', timeoutMs: 15_000 },
   );
 
+  await verifySystemOverview({ page, check });
+
   const result = await page.evaluate(() => {
     const doc = document.documentElement;
     const overlapping = [];
@@ -1139,7 +1147,7 @@ export async function systemInformationNarrow({ base, page, check }) {
     // build time, so a selector naming one matches nothing and the whole probe passes on an
     // empty set. That is how this check was initially vacuous.
     const rows = document.querySelectorAll(
-      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"], [data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"]',
+      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"], [data-testid="sys-version-comparison"], [data-testid="sys-latest-release"], [data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"], [data-testid="sys-maintenance-action-head"], [data-testid="sys-component-head"], [data-testid="sys-component-facts"]',
     );
     const collapsed = [];
     for (const row of rows) {
@@ -1171,7 +1179,27 @@ export async function systemInformationNarrow({ base, page, check }) {
         }
       }
     }
+    const changelogControls = Array.from(document.querySelectorAll('[data-testid^="sys-product-"] button'));
+    const areChangelogControlsContained = changelogControls.length === 2 && changelogControls.every((control) => {
+      const versionRow = control.closest('[data-testid="sys-version-row"]');
+      const comparison = versionRow?.querySelector('[data-testid="sys-version-comparison"]');
+      if (!comparison || comparison.contains(control)) return false;
+      const rowBox = versionRow.getBoundingClientRect();
+      const controlBox = control.getBoundingClientRect();
+      const product = control.closest('section').getAttribute('aria-label');
+      return controlBox.left >= rowBox.left - 1 && controlBox.right <= rowBox.right + 1 && controlBox.height >= 28 && control.getAttribute('aria-label')?.includes(product);
+    });
+    const componentFacts = Array.from(document.querySelectorAll('[data-testid="sys-component-facts"]'));
+    const hasStructuredComponentFacts = componentFacts.length === 4 && componentFacts.every((facts) =>
+      facts.tagName === 'DL' && facts.querySelectorAll('dt').length >= 1 && facts.querySelectorAll('dd').length === facts.querySelectorAll('dt').length);
+    const detailTitles = Array.from(document.querySelectorAll('[data-testid="sys-card-maintenance"] .panel-title-text, [data-testid="sys-card-storage"] .panel-title-text, [data-testid="sys-card-health"] .panel-title-text'));
+    const areDetailTitlesReadable = detailTitles.length === 3 && detailTitles.every((title) => title.scrollWidth <= title.clientWidth + 1);
+    const hasMaintenanceActionHeads = document.querySelectorAll('[data-testid="sys-maintenance-action-head"]').length === 3;
     return {
+      hasStructuredComponentFacts,
+      areDetailTitlesReadable,
+      hasMaintenanceActionHeads,
+      areChangelogControlsContained,
       overlapping: overlapping.slice(0, 3),
       collapsed: collapsed.slice(0, 3),
       measuredRows: rows.length,
@@ -1197,6 +1225,10 @@ export async function systemInformationNarrow({ base, page, check }) {
     result.collapsed.length === 0,
     result.collapsed.join(' | '),
   );
+  check('change-log controls have their own space beside the comparison, a product name and an aimable hit area at 320px', result.areChangelogControlsContained);
+  check('all four components expose paired labelled facts at 320px', result.hasStructuredComponentFacts);
+  check('detail card titles remain fully readable at 320px', result.areDetailTitlesReadable);
+  check('maintenance actions have three dedicated title/control rows at 320px', result.hasMaintenanceActionHeads);
   check('the page does not scroll sideways at 320px', !result.scrolls);
   check('every card still renders at 320px', result.cards === 4, `${result.cards} cards`);
 
@@ -1236,14 +1268,168 @@ export async function systemInformationNarrow({ base, page, check }) {
       return box.top >= boxes[i - 1].bottom - 1;
     });
     const scrolls = document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
-    return { correctlyStacked, scrolls, boxes };
+    const comparisons = Array.from(document.querySelectorAll('[data-testid="sys-version-comparison"]'));
+    const hasCompactComparisons = comparisons.length === 2 && comparisons.every((comparison) => {
+      const comparisonBox = comparison.getBoundingClientRect();
+      const control = comparison.parentElement.querySelector('button');
+      return comparisonBox.width <= 321 && (!control || control.getBoundingClientRect().left >= comparisonBox.right + 23);
+    });
+    return { correctlyStacked, scrolls, boxes, hasCompactComparisons };
   });
 
+  check('version readings stay compact with separate trailing action space at 800px', intermediateResult.hasCompactComparisons);
   check(
     'cards stack vertically in a single column at 800px (below 900px breakpoint)',
     intermediateResult.correctlyStacked,
     `boxes: ${JSON.stringify(intermediateResult.boxes)}`,
   );
   check('the page does not scroll sideways at 800px', !intermediateResult.scrolls);
+  await page.setViewportSize({ width: 320, height: 1000 });
+  await verifySystemHealthAnomalies({ base, page, check });
 }
 
+
+async function verifyVersionCheckFeedback({ page, base, check }) {
+  const fixture = systemFixtures().find(([matches]) => matches(new URL('http://probe/omc/api/v1/management/system')));
+  let body = fixture[1]();
+  body.update_check_on_page_load = true;
+  body.omc_version = {
+    ...body.omc_version, latest_version: '', reason: 'no_releases_published', merge_count: 0, notes_available: false,
+  };
+  const initialGateway = { ...body.cpa_version };
+  let checkCount = 0;
+  let releaseCheck;
+  const pendingCheck = new Promise((resolve) => { releaseCheck = resolve; });
+  const systemHandler = async (route) => route.fulfill({ status: 200, json: body });
+  const checkHandler = async (route) => {
+    checkCount += 1;
+    if (checkCount === 1) await pendingCheck;
+    body.cpa_version = {
+      ...initialGateway, check_error: 'release feed unavailable', attempted_at_ms: 1790018000000,
+    };
+    await route.fulfill({ status: 200, json: {
+      omc_version: body.omc_version, cpa_version: body.cpa_version, served_from_cache: checkCount > 1,
+    } });
+  };
+  await page.route('**/omc/api/v1/management/system', systemHandler);
+  await page.route('**/omc/api/v1/management/system/check-updates', checkHandler);
+  try {
+    await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
+    await until(async () => checkCount === 1, { label: 'the automatic version check' });
+    const checkButton = page.locator('[data-testid="sys-card-versions"]').getByRole('button', { name: /Checking|正在检查/ });
+    await checkButton.waitFor({ state: 'visible' });
+    check('an automatic check disables the shared control while its response is held', await checkButton.isDisabled());
+    check('both product statuses show the pending check', await page.locator('[data-testid^="sys-product-"] [role="status"]').filter({ hasText: /Checking|正在检查/ }).count() === 2);
+    releaseCheck();
+    await until(async () => (await page.locator('[data-testid="sys-product-cpa"]').innerText()).includes('release feed unavailable') && await checkButton.count() === 0, { label: 'the per-product failure reading' });
+    check('automatic checks report their state inline without a toast', await page.locator('.omc-toast-success, .omc-toast-warning, .omc-toast-error, .omc-toast-info').count() === 0);
+    check('StrictMode issues one automatic version check', checkCount === 1, `count=${checkCount}`);
+    const emptyProduct = page.locator('[data-testid="sys-product-omc"]');
+    check('an empty release feed has no unrelated notes warning or changelog control',
+      !/Release notes unavailable|未获取到更新日志/.test(await emptyProduct.innerText()) && await emptyProduct.getByRole('button').count() === 0);
+    check('each product offers its repository as the single external link',
+      await emptyProduct.getByRole('link').count() === 1 &&
+      await emptyProduct.getByRole('link').getAttribute('href') === 'https://github.com/WizisCool/oh-my-cpa' &&
+      await page.locator('[data-testid="sys-product-cpa"]').getByRole('link').count() === 1);
+    const gatewayText = await page.locator('[data-testid="sys-product-cpa"]').innerText();
+    check('a failed feed preserves both versions and identifies the age of the stored result',
+      gatewayText.includes('7.3.5') && gatewayText.includes('v7.3.7') && /Last successful check|上次成功检查/.test(gatewayText));
+    await page.locator('[data-testid="sys-card-versions"]').getByRole('button', { name: /Check for Updates|检查更新/ }).click();
+    await until(async () => await page.locator('.omc-toast-warning').count() > 0, { label: 'the manual partial-failure toast' });
+    check('a cached partial failure is a warning rather than a successful check',
+      checkCount === 2 && await page.locator('.omc-toast-success').count() === 0 && (await page.locator('.omc-toast-warning').innerText()).includes('CLIProxyAPI') && /cached|缓存/.test(await page.locator('.omc-toast-warning').innerText()));
+  } finally {
+    releaseCheck();
+    await page.unroute('**/omc/api/v1/management/system', systemHandler);
+    await page.unroute('**/omc/api/v1/management/system/check-updates', checkHandler);
+    await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-testid="sys-product-cpa"]').waitFor({ state: 'visible' });
+  }
+}
+
+async function verifySystemOverview({ page, check }) {
+  check('system information is immediately readable without detail controls', await page.locator('[data-testid^="sys-details-"]').count() === 0);
+  check('short maintenance explanations are visible by default', await page.locator('[data-testid="sys-maintenance-description"]:visible').count() === 3);
+  check('storage shows only two compact metadata readings', await page.locator('[data-testid="sys-storage-fact-row"]:visible').count() === 2);
+  const areStorageReadingsAligned = await page.locator('[data-testid="sys-card-storage"]').evaluate((card) => {
+    const rows = Array.from(card.querySelectorAll('[data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"]'));
+    if (rows.length !== 5) return false;
+    const firstLabel = rows[0].querySelector('dt').getBoundingClientRect();
+    const firstValue = rows[0].querySelector('dd').getBoundingClientRect();
+    return rows.every((row) => {
+      const label = row.querySelector('dt').getBoundingClientRect();
+      const value = row.querySelector('dd').getBoundingClientRect();
+      return Math.abs(label.left - firstLabel.left) <= 1 && Math.abs(value.right - firstValue.right) <= 1;
+    });
+  });
+  check('all five storage readings share the same label and value columns', areStorageReadingsAligned);
+  check('all four component verdicts and readings are visible by default', await page.locator('[data-testid="sys-component-head"]:visible').count() === 4 && await page.locator('[data-testid="sys-component-facts"]:visible').count() === 4);
+  const componentLayout = await page.locator('[data-testid="sys-component-facts"]').evaluateAll((lists) => lists.length === 4 && lists.every((list) => {
+    const style = getComputedStyle(list);
+    const readings = Array.from(list.children);
+    return style.display === 'flex' && readings.length <= 2 && readings.every((reading) => {
+      const label = reading.querySelector('dt');
+      const value = reading.querySelector('dd');
+      if (!label || !value) return false;
+      const labelBox = label.getBoundingClientRect();
+      const valueBox = value.getBoundingClientRect();
+      return labelBox.right <= valueBox.left && Math.abs(labelBox.top - valueBox.top) < 4;
+    });
+  }));
+  check('component summaries keep at most two inline label/value pairs per row', componentLayout);
+  check('healthy components do not spend space on zero-valued anomaly readings', await page.locator('[data-testid="sys-health-pending"], [data-testid="sys-health-gaps"]').count() === 0);
+  const maintenanceStyle = await page.evaluate(() => {
+    const reference = document.querySelector('.terminal-page-actions .ant-btn');
+    const actions = Array.from(document.querySelectorAll('[data-testid="sys-maintenance-action-head"] button'));
+    if (!reference || actions.length !== 3) return false;
+    const referenceStyle = getComputedStyle(reference);
+    return actions.every((action) => {
+      const actionStyle = getComputedStyle(action);
+      return action.classList.contains('ant-btn-default') && ['fontSize', 'borderRadius', 'borderTopWidth', 'borderTopStyle', 'borderTopColor', 'backgroundColor'].every((property) => actionStyle[property] === referenceStyle[property]) && action.getBoundingClientRect().height === reference.getBoundingClientRect().height;
+    });
+  });
+  check('maintenance actions use the same standard button tokens as page refresh', maintenanceStyle);
+}
+
+async function verifySystemHealthAnomalies({ base, page, check }) {
+  const systemReading = systemFixtures()[0][1]();
+  const systemHandler = (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ...systemReading,
+      update_check_on_page_load: false,
+      cpa: { ...systemReading.cpa, status: 'disconnected' },
+      database: { ...systemReading.database, status: 'error' },
+      collector: { ...systemReading.collector, status: 'disabled', gap_count: 3 },
+      data_volumes: { ...systemReading.data_volumes, credentials: null, last_event_ms: null, inbox_pending: 12 },
+    }),
+  });
+  await page.route('**/omc/api/v1/management/system', systemHandler);
+  try {
+    await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-testid="sys-health-pending"]').waitFor({ state: 'visible' });
+    check('positive ingestion backlog and collection gaps remain directly visible',
+      (await page.locator('[data-testid="sys-health-pending"] dd').innerText()).includes('12') &&
+      (await page.locator('[data-testid="sys-health-gaps"] dd').innerText()).includes('3'));
+    check('nonzero ingestion anomalies retain semantic warning styling', await page.locator('[data-testid="sys-health-pending"] .status-label.is-warn, [data-testid="sys-health-gaps"] .status-label.is-warn').count() === 2);
+    const heads = page.locator('[data-testid="sys-component-head"]');
+    check('gateway and database failures retain their explicit danger verdicts',
+      await heads.nth(0).locator('.status-label.is-danger').count() === 1 &&
+      await heads.nth(2).locator('.status-label.is-danger').count() === 1);
+    check('a disabled collector retains its independent status', await heads.nth(3).locator('.status-label.is-neutral').count() === 1);
+    check('missing credential and usage observations are not fabricated',
+      await page.locator('[data-testid="sys-component-facts"]').nth(0).locator('dd').innerText() === '—' &&
+      await page.locator('[data-testid="sys-component-facts"]').nth(3).locator('dd').first().innerText() === '—');
+    const isContained = await page.locator('[data-testid="sys-card-health"]').evaluate((card) => {
+      const cardBox = card.getBoundingClientRect();
+      return Array.from(card.querySelectorAll('.fact-list-row')).every((reading) => {
+        const labelBox = reading.querySelector('dt').getBoundingClientRect();
+        const valueBox = reading.querySelector('dd').getBoundingClientRect();
+        return labelBox.right <= valueBox.left + 1 && valueBox.right <= cardBox.right && labelBox.left >= cardBox.left;
+      });
+    });
+    check('health anomaly summaries fit without overlapping or overflowing', isContained);
+  } finally {
+    await page.unroute('**/omc/api/v1/management/system', systemHandler);
+  }
+}

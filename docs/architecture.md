@@ -1764,6 +1764,15 @@ floor is measured from the last attempt rather than the last success, because a 
 is when an operator reloads most and re-learning the same error would spend the budget twice.
 The six-hour sweep is exempt by construction: it is far outside any floor.
 
+The page applies the returned product DTOs to its query cache before refreshing the system
+reading and any open change log. The page-private presentation rules live in
+`web/src/pages/SystemPage/versionPresentation.ts`, with pure-function regression coverage. Manual checks classify each product's `check_error` before
+reporting success or a cached answer; one failed product never becomes a success toast just
+because the route returned HTTP 200. Automatic page-load checks report through the product
+rows without toasts. A local in-flight guard prevents a mount check and a click from submitting
+together. An observed background `checking` state is polled every two seconds until settled;
+this re-reads local status and does not spend another release-feed request.
+
 ### The release check does not store release notes
 
 A release's Markdown body is held in process memory and nowhere else. The index —
@@ -1777,7 +1786,11 @@ trusted while the process still holds the body the validator describes, so store
 ETags are cleared at start-up and the first check after a restart is unconditional.
 And a failed check never clears the stored index or the last-success time: the page
 keeps the previous answer and reports the failure with its reason and the time of the
-attempt, rather than going blank or presenting stale data as current. The routine
+attempt, rather than going blank or presenting stale data as current. A failed attempt
+without any prior success cannot establish that a repository has no releases: that verdict
+requires `last_success_at_ms`. Until then the comparison carries `not_checked_yet` and the
+failure is reported separately. When an index is retained, the failure notice includes the
+last successful check time so the reader can judge its age. The routine
 "last checked" readout was deliberately dropped from the cards - it was the same
 timestamp on every one of them - so staleness is now something the page states when a
 check fails rather than a number a reader has to interpret.

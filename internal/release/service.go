@@ -496,7 +496,8 @@ func (s *Service) comparisonFor(ctx context.Context, productKey, runningVersion 
 	}
 	comparison := CompareVersions(runningVersion, latest)
 	if comparison.State == UpdateIndeterminate && comparison.Why == ReasonNoReleases {
-		if state.LastAttemptAtMS == nil {
+		// A failed first attempt observes no feed, so it cannot establish an empty one.
+		if state.LastSuccessAtMS == nil {
 			comparison.Why = ReasonNoData
 		}
 	}

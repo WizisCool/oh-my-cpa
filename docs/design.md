@@ -1927,3 +1927,53 @@ On phones actions stack with 44px hit areas, and the copy/detail controls keep t
 same touch floor. Heading focus and localized document title identify the failed
 page for keyboard and screen-reader users. Recovery and diagnostic copy are
 available in Simplified Chinese, Traditional Chinese, English and Malay.
+
+### System version comparison
+
+The Versions & Updates card keeps two product rows separated by a single rule. Each row
+places product identity and its repository beside a concise semantic status. Below it,
+the running and latest published versions form a compact comparison, bounded to 320px
+with a quiet vertical divider. The release tag appears in the comparison, not again in
+the status. Existing `--fg` and `--fg-2` tokens carry versions and labels; only a known
+update target uses `--accent`. On narrow screens the comparison becomes two label/value
+rows, with long build tags wrapping within their own column.
+
+The change-log action occupies its own trailing space alongside the comparison. It is a
+32px-high text button with a document icon, a localized label and a muted actual release
+count; its accessible name identifies both product and count. On phones it follows the
+comparison on a separate line, keeping both readings aligned and the action label intact.
+The action appears only for actual entries; the repository link stays with the product
+identity. Long comparison explanations belong below the readings rather than in the
+status slot. A missing-notes hint belongs only to a known change-log range; an empty or
+unchecked feed does not acquire a second warning about notes. A failed check retains the
+readings and shows its reason and, when available, the last successful check time.
+The log remains a Drawer and remote images remain links, never automatically fetched media.
+These are page-level arrangements using the existing visual tokens, not new theme mappings.
+
+### System information status cards
+
+Maintenance, storage and component health present their selected readings immediately.
+Card titles wrap on narrow screens, and these arrangements use the existing theme tokens
+and system response without additional API requests.
+
+Maintenance pairs three short action names with one-sentence explanations and the
+console's standard outlined antd buttons. Button dimensions, typography, border,
+background and interaction states inherit the shared configuration. Admission refusals
+replace the ordinary explanation; running, failed and partial outcomes remain explicit.
+VACUUM requires confirmation of the exclusive write gate and measured disk requirements.
+Completed outcomes are independently dismissible; running work is not.
+
+Storage prioritizes the total physical footprint above one shared label/value list.
+The three measured file sizes, journal mode and schema generation share identical label
+and right-aligned value columns at every viewport. Missing files read "not present"
+rather than zero. Physical footprint is not
+repeated as allocated pages or record counts; internal geometry, reusable pages and
+connection settings belong in the sanitized diagnostics bundle.
+
+Component health has four divided rows, each with a component name, semantic status and
+one short inline operational summary. The gateway shows its credential count, Oh My CPA
+its start age and memory, SQLite its request count, and the collector the latest usage
+age. Each summary uses at most two paired facts, with labels beside values rather than
+separate metric grids. Positive ingestion backlog and collection gaps appear as warning
+readings; healthy zero values do not consume space. Missing observations remain explicit.
+The version card retains the compact comparison and separate change-log action above.
