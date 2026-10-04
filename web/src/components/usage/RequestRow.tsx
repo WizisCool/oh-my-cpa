@@ -20,6 +20,7 @@ import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import {
   eventCacheRate,
   eventTokensPerSecond,
+  tpsCalculationHintKey,
   formatEventDuration,
   hasMeasurableTTFT,
   isNonStreamingEvent,
@@ -61,7 +62,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     const openPriceEditor = useOpenPriceEditor();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
-    const { style: tokenStyle } = useTokenDisplayStyle();
+    const { style: tokenStyle, tpsMode } = useTokenDisplayStyle();
 
     const providerInfo = resolveProviderInfo(
       event,
@@ -95,7 +96,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         } as React.CSSProperties)
       : undefined;
 
-    const tpsInfo = eventTokensPerSecond(event);
+    const tpsInfo = eventTokensPerSecond(event, tpsMode);
 
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
@@ -257,15 +258,13 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 6: generation speed in tokens per second */}
+        {/* Column 6: output tokens per second */}
         <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
-          {tpsInfo.tps !== null ? (
+          {tpsInfo.basis !== null ? (
             <RequestTooltip
               title={
-                tpsInfo.hasTTFT
-                  ? `${t('events.tps_hint_ttft')} (${tpsInfo.formatted})`
-                  : `${t('events.tps_hint_total')} (${tpsInfo.formatted})`
+                `${t(tpsCalculationHintKey(tpsInfo.basis))} (${tpsInfo.formatted})`
               }
             >
               <span className="req-tps-val">{tpsInfo.formatted}</span>

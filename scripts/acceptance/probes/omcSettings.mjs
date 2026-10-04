@@ -14,12 +14,16 @@ import { sleep } from '../probe.mjs';
 export async function omcSettings({ base, page, check, context }) {
   const writes = [];
   const preferences = {};
+  let shouldRejectTpsWrite = false;
   await page.route('**/omc/api/**/preferences', (route) => route.fulfill({
     json: { preferences, time_zone: { server_timezone: 'Asia/Kuala_Lumpur' } },
   }));
   await page.route('**/omc/api/**/preferences/*', async (route) => {
     if (route.request().method() === 'PUT') {
       const key = new URL(route.request().url()).pathname.split('/').pop();
+      if (key === 'omc_tps_calculation_mode' && shouldRejectTpsWrite) {
+        return route.fulfill({ status: 503, json: { error: 'write_busy' } });
+      }
       writes.push({ key, body: route.request().postData() });
       preferences[key] = JSON.parse(route.request().postData());
     }
@@ -28,6 +32,31 @@ export async function omcSettings({ base, page, check, context }) {
 
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+
+  const tpsRow = page.locator('.settings-toggle-row').filter({ hasText: 'TPS calculation mode' });
+  const excludeTps = tpsRow.getByRole('radio', { name: 'Exclude first-token latency', exact: true });
+  const includeTps = tpsRow.getByRole('radio', { name: 'Include first-token latency', exact: true });
+  await until(() => excludeTps.isChecked(), { label: 'the default TPS mode' });
+  check('TPS defaults to excluding first-token latency', await excludeTps.isChecked());
+  await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Include first-token latency' }).click();
+  await until(() => preferences.omc_tps_calculation_mode === 'include_ttft', { label: 'the TPS mode write' });
+  check('TPS mode persists through the shared preference API', writes.some(write => write.key === 'omc_tps_calculation_mode' && write.body === '"include_ttft"'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => includeTps.isChecked(), { label: 'the TPS mode after reload' });
+  check('a reloaded settings page reads the saved TPS mode', await includeTps.isChecked());
+  shouldRejectTpsWrite = true;
+  const rejectedWrite = page.waitForResponse(response => response.url().endsWith('/preferences/omc_tps_calculation_mode') && response.status() === 503);
+  await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
+  await rejectedWrite;
+  await until(() => includeTps.isChecked(), { label: 'the TPS control to roll back after refusal' });
+  check('a refused TPS write restores the saved selection', await includeTps.isChecked() && preferences.omc_tps_calculation_mode === 'include_ttft');
+  shouldRejectTpsWrite = false;
+  await page.setViewportSize({ width: 320, height: 800 });
+  await until(() => tpsRow.locator('.ant-segmented-vertical').count(), { label: 'the phone TPS picker' });
+  check('the phone TPS choices fit without horizontal overflow', await tpsRow.evaluate(row => row.scrollWidth <= row.clientWidth + 1));
+  await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
+  await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the restored default TPS mode' });
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   const timezone = page.getByRole('combobox', { name: 'Time zone', exact: true });
   const timezoneControl = page.locator('.ant-select').filter({ has: timezone });
@@ -134,15 +163,16 @@ export async function omcSettings({ base, page, check, context }) {
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
   //
-  // Seven rows include the deployment timezone, token style, language, scroll smoothing and
+  // Eight rows include the deployment timezone, token style, TPS mode, language, scroll smoothing and
   // appearance: the mode is the setting an operator changes often, and the two palettes are the
   // considered choices behind it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 7
+    labels.length === 8
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
+      && labels.some((label) => /TPS calculation mode|TPS 计算方式/.test(label))
       && labels.some((label) => /Theme mode|主题模式/.test(label))
       && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
       && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))

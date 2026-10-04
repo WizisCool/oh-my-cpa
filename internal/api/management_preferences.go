@@ -29,6 +29,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceOAuthManagementView: true,
 	repository.PreferenceTimezone:            true,
 	repository.PreferenceTokenStyle:          true,
+	repository.PreferenceTpsCalculationMode:  true,
 	repository.PreferenceModelView:           true,
 	repository.PreferenceTheme:               true,
 	repository.PreferenceScrollSmoothing:     true,

@@ -282,6 +282,20 @@ the console itself, and rotate the key if that trust changes.
 
 `timezone_get` is a low-risk read returning the optional manual override, deployment timezone and effective IANA timezone. `timezone_set` is a low-risk write accepting `{ "timezone": "Asia/Kuala_Lumpur" }`; an empty string restores the deployment timezone. Both are available to Agent and MCP administrators under the existing capability policy. The write shares the preference repository's validation and commit-before-publication rule, returns `invalid_timezone` for an invalid name, and invalidates `preferences` and `timezone` readers. No secret or OAuth handoff is involved. Tests cover validated writes, reads through both adapters and refusal without changing the runtime calendar.
 
+### TPS calculation capabilities
+
+`tps_calculation_get` is a low-risk read returning `{ "mode": "exclude_ttft" }` or
+`{ "mode": "include_ttft" }`. Missing or unsupported stored preferences resolve to
+`exclude_ttft`. `tps_calculation_set` is a low-risk write accepting the same mode
+shape, rejects unsupported or absent mode values with `invalid_parameters`, and
+returns the saved mode. Both are available to Agent and MCP administrators under
+the existing policy. The write shares the console's `omc_tps_calculation_mode`
+preference and invalidates `preferences`; no secret or OAuth handoff is involved.
+It changes request-record and Playground TPS readouts, not original timings or usage.
+Exclusion subtracts measurable first-token latency and otherwise uses total latency;
+inclusion always uses total latency. Tests cover both adapters, shared preference
+reads/writes, defaults, invalid values and administrator refusal.
+
 ### Browser connection recovery
 
 Managed Agent execution belongs to the server, not a socket. Console refresh or network recovery

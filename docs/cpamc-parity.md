@@ -134,6 +134,7 @@ matching, independent OAuth sessions and contextual provider aliases are retaine
 The price book groups models by actual configured API-key and OAuth providers, reuses their names/icons, and offers provider and price-mode filters, separator-tolerant search and 20-row pagination. Provider groups sort by routing priority; model names use stable case-aware natural ordering. Shared model memberships edit one global price, and unpriced models offer suggestions in place. The OpenRouter picker paginates its entire searchable catalog.
 
 | Deployment timezone | OMC Settings | OMC preferences | Covered | Server-default IANA timezone with persistent manual override, current UTC-offset labels, timezone-aware console timestamps and natural-day aggregation; Agent/MCP read and write capabilities share validation. |
+| TPS calculation mode | OMC Settings, request records, Playground | OMC preferences; Agent/MCP | Covered | Deployment-wide inclusion/exclusion of first-token latency, exclusion by default, total-latency fallback for missing or collapsed measurements, and historical readout recalculation without rewriting usage. |
 
 Agent/Playground browser connection recovery is covered by authenticated server-owned replay
 journals and explicit cancellation (ADR 0044); refresh never repeats a generation or capability

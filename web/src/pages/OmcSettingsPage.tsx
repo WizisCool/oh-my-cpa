@@ -22,6 +22,7 @@ import { THEME_MODE_PREFERENCES, resolveModePreference, type ThemeModePreference
 import { ThemeSwatch } from '../components/common/ThemeSwatch';
 import { LanguageFlag } from '../components/common/LanguageFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
+import type { TpsCalculationMode } from '../types/tpsCalculation';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
@@ -101,7 +102,7 @@ export const OmcSettingsPage: React.FC = () => {
   const t = useT();
   const timezone = useTimeZoneSetting();
   const { lang, setLang } = useI18n();
-  const { style, setStyle } = useTokenDisplayStyle();
+  const { style, setStyle, tpsMode, setTpsMode } = useTokenDisplayStyle();
   const { modePreference, setModePreference, systemMode, previewMode, themeMode } = useTheme();
   // A multi-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
   // and the items do not wrap, so later options paint past the card's edge. Below the console's
@@ -145,6 +146,23 @@ export const OmcSettingsPage: React.FC = () => {
               options={tokenStyleOptions}
               onChange={(next) => setStyle(next as TokenNumberStyle)}
               aria-label={t('omc.token_style')}
+              vertical={isNarrow}
+              block={isNarrow}
+            />
+          }
+        />
+        <SettingRow
+          label={t('omc.tps_calculation_mode')}
+          description={t('omc.tps_calculation_desc')}
+          control={
+            <Segmented
+              value={tpsMode}
+              options={[
+                { value: 'exclude_ttft', label: t('omc.tps_exclude_ttft') },
+                { value: 'include_ttft', label: t('omc.tps_include_ttft') },
+              ]}
+              onChange={(next) => setTpsMode(next as TpsCalculationMode)}
+              aria-label={t('omc.tps_calculation_mode')}
               vertical={isNarrow}
               block={isNarrow}
             />

@@ -173,3 +173,26 @@ func TestTimezonePreferenceControlsCalendarAndMetadata(t *testing.T) {
 		t.Fatal(heatmap.Timezone)
 	}
 }
+
+func TestTpsCalculationPreferenceRoundTrip(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	base := baseURL + "/omc/api/v1/preferences"
+	for _, mode := range []string{"exclude_ttft", "include_ttft"} {
+		body := `"` + mode + `"`
+		response, payload := doJSON(t, client, http.MethodPut, base+"/omc_tps_calculation_mode", body)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("write: status=%d body=%s", response.StatusCode, payload)
+		}
+		stored, isStored, err := repo.GetPreference(context.Background(), "omc_tps_calculation_mode")
+		if err != nil || !isStored || stored != body {
+			t.Fatalf("stored=%s found=%t err=%v", stored, isStored, err)
+		}
+		response, payload = getJSON(t, client, base)
+		var listed struct {
+			Preferences map[string]json.RawMessage `json:"preferences"`
+		}
+		if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &listed) != nil || string(listed.Preferences["omc_tps_calculation_mode"]) != body {
+			t.Fatalf("read: status=%d body=%s", response.StatusCode, payload)
+		}
+	}
+}

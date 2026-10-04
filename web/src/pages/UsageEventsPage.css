@@ -854,7 +854,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Column 6: TPS (Generation Speed) */
+/* Column 6: TPS (Output Token Rate) */
 .req-col-tps {
   justify-content: center;
 }

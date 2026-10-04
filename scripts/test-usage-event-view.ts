@@ -1153,7 +1153,7 @@ const tpsExact = eventTokensPerSecond({
   tokens: { total: 20000, input: 9079, output: 10921, reasoning: 500, cached: 0, cache_read: 0, cache_creation: 0 },
 });
 assert.equal(tpsExact.formatted, '109.21 t/s');
-assert.equal(tpsExact.hasTTFT, true);
+assert.equal(tpsExact.basis, 'exclude_ttft');
 
 // Fallback without TTFT: output = 500, latency = 2500 ms -> 200.00 t/s
 const tpsNoTTFT = eventTokensPerSecond({
@@ -1162,20 +1162,20 @@ const tpsNoTTFT = eventTokensPerSecond({
   tokens: { total: 1000, input: 500, output: 500, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
 });
 assert.equal(tpsNoTTFT.formatted, '200.00 t/s');
-assert.equal(tpsNoTTFT.hasTTFT, false);
+assert.equal(tpsNoTTFT.basis, 'fallback_total');
 
 // The 50ms generation-window floor, asserted on both sides of the boundary. This is the rule
 // that stops a collapsed first-token measurement from being divided into: at 49ms the residual
-// is not a generation window and the end-to-end average is reported instead, at 50ms it is.
+// is not a measurable residual window and the end-to-end average is reported instead, at 50ms it is.
 // The reported 4913 tok/s defect lived exactly here, so the boundary is pinned rather than
 // left to whichever value a fixture happened to use.
 const boundaryTokens = { total: 200, input: 100, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 };
 const belowFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1049, ttft_ms: 1000, tokens: boundaryTokens });
-assert.equal(belowFloor.hasTTFT, false, 'a 49ms residual is not a generation window');
+assert.equal(belowFloor.basis, 'fallback_total', 'a 49ms residual does not support subtraction');
 assert.equal(belowFloor.formatted, '95.33 t/s', 'the end-to-end average: 100 * 1000 / 1049');
 const atFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1050, ttft_ms: 1000, tokens: boundaryTokens });
-assert.equal(atFloor.hasTTFT, true, 'a 50ms residual is a generation window');
-assert.equal(atFloor.formatted, '2000.00 t/s', 'the generation-phase rate: 100 * 1000 / 50');
+assert.equal(atFloor.basis, 'exclude_ttft', 'a 50ms residual supports subtraction');
+assert.equal(atFloor.formatted, '2000.00 t/s', 'the first-token-excluded rate: 100 * 1000 / 50');
 assert.equal(MIN_STREAMING_GENERATION_WINDOW_MS, 50, 'the floor the cases above assume');
 
 // Invalid TTFT (ttft >= latency) falls back safely to total latency rather than division by zero / negative
@@ -1186,7 +1186,7 @@ const tpsInvalidTTFT = eventTokensPerSecond({
   tokens: { total: 500, input: 400, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
 });
 assert.equal(tpsInvalidTTFT.formatted, '50.00 t/s');
-assert.equal(tpsInvalidTTFT.hasTTFT, false);
+assert.equal(tpsInvalidTTFT.basis, 'fallback_total');
 
 // Event 749a21af root-cause test:
 // output = 13066, latency = 61275, ttft = 61258 (non-streaming, collapsed 17ms window)
@@ -1199,7 +1199,7 @@ const tps749a21afExplicitNonStream = eventTokensPerSecond({
   tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
 });
 assert.equal(tps749a21afExplicitNonStream.formatted, '213.24 t/s');
-assert.equal(tps749a21afExplicitNonStream.hasTTFT, false);
+assert.equal(tps749a21afExplicitNonStream.basis, 'fallback_total');
 
 // Historical legacy record with stream=null / omitted and collapsed window (17ms < 50ms):
 const tps749a21afLegacy = eventTokensPerSecond({
@@ -1209,9 +1209,9 @@ const tps749a21afLegacy = eventTokensPerSecond({
   tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
 });
 assert.equal(tps749a21afLegacy.formatted, '213.24 t/s');
-assert.equal(tps749a21afLegacy.hasTTFT, false);
+assert.equal(tps749a21afLegacy.basis, 'fallback_total');
 
-// Explicit streaming with stream=true: uses generation-phase calculation
+// Explicit streaming with stream=true: uses first-token-excluded calculation
 const tpsStreamingExplicit = eventTokensPerSecond({
   generate: true,
   stream: true,
@@ -1220,11 +1220,11 @@ const tpsStreamingExplicit = eventTokensPerSecond({
   tokens: { total: 1000, input: 200, output: 800, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
 });
 assert.equal(tpsStreamingExplicit.formatted, '100.00 t/s'); // 800 * 1000 / 8000
-assert.equal(tpsStreamingExplicit.hasTTFT, true);
+assert.equal(tpsStreamingExplicit.basis, 'exclude_ttft');
 
 // Event b561ad87 (Codex OAuth):
 // Client sent stream=false, but upstream CodexExecutor captured genuine ttft_ms=4423,
-// latency=31251, with generation window 26828ms. TTFT IS measurable and generation rate is 52.18 t/s.
+// latency=31251, with measurable residual window 26828ms. TTFT IS measurable and first-token-excluded rate is 52.18 t/s.
 const tpsB561ad87 = eventTokensPerSecond({
   generate: true,
   stream: false,
@@ -1233,7 +1233,7 @@ const tpsB561ad87 = eventTokensPerSecond({
   tokens: { total: 13508, input: 12108, output: 1400, reasoning: 135, cached: 2816, cache_read: 2816, cache_creation: 0 },
 });
 assert.equal(tpsB561ad87.formatted, '52.18 t/s'); // 1400 * 1000 / 26828 = 52.18
-assert.equal(tpsB561ad87.hasTTFT, true);
+assert.equal(tpsB561ad87.basis, 'exclude_ttft');
 
 // hasMeasurableTTFT tests
 assert.equal(hasMeasurableTTFT(undefined), false);
@@ -1251,7 +1251,7 @@ assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); 
 assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
 assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
 
-console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback end-to-end average, edge boundaries');
+console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-to-end average, edge boundaries');
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');

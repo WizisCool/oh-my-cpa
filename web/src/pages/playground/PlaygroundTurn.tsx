@@ -11,7 +11,7 @@ import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { eventTokensPerSecond } from '../../types/usageEventMetrics';
+import { eventTokensPerSecond, tpsCalculationHintKey } from '../../types/usageEventMetrics';
 import { effectiveModel, extractThinking, turnTone } from './state';
 import type { Turn } from './state';
 import { playgroundErrorKey } from './errors';
@@ -176,7 +176,7 @@ const AssistantContent = React.memo(function AssistantContent({ turn, isLast, ca
 
 function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenRequests }: AssistantContentProps) {
   const { t } = useI18n();
-  const { style: tokenStyle } = useTokenDisplayStyle();
+  const { style: tokenStyle, tpsMode } = useTokenDisplayStyle();
   const rate = eventTokensPerSecond({
     generate: true,
     latency_ms: turn.durationMS,
@@ -191,7 +191,7 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
       cache_creation: 0,
     },
     stream: true,
-  });
+  }, tpsMode);
   const milliseconds = (value: number) => `${Math.max(0, value).toLocaleString()} ms`;
 
   return (
@@ -211,8 +211,8 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
           <span className={workspace['metric']}><DatabaseOutlined aria-hidden="true" />{formatTokens(turn.usage.total_tokens, tokenStyle)}</span>
         </Tooltip>
       )}
-      {rate.tps !== null && (
-        <Tooltip title={`${t(rate.hasTTFT ? 'events.tps_hint_ttft' : 'events.tps_hint_total')} (${rate.formatted})`}>
+      {rate.basis !== null && (
+        <Tooltip title={`${t(tpsCalculationHintKey(rate.basis))} (${rate.formatted})`}>
           <span className={workspace['metric']}><ThunderboltOutlined aria-hidden="true" />{rate.formatted}</span>
         </Tooltip>
       )}

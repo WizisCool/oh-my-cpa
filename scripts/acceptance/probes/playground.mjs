@@ -18,6 +18,7 @@ export async function playground({ base, page, check, context }) {
   });
   const calls = [];
   let mode = 'success';
+  let hasMeasurableTiming = false;
   let cancelled = false;
   let releaseCancelled;
   const cancelledRequest = new Promise(resolve => { releaseCancelled = resolve; });
@@ -39,7 +40,7 @@ export async function playground({ base, page, check, context }) {
       frame('meta', { model: 'vision-alias', started_at_ms: Date.now() }) +
       (mode === 'error' ? '' : frame('request', { request_id: '0000002a' })) + frame('delta', { content: answer }) +
       (mode === 'error' ? frame('error', { code: 'upstream_rejected', upstream_status: 400 }) :
-        frame('usage', { usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } }) + frame('done', { finish_reason: 'stop', first_content_ms: 42, duration_ms: 90 })) });
+        frame('usage', { usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } }) + frame('done', { finish_reason: 'stop', first_content_ms: hasMeasurableTiming ? 1000 : 42, duration_ms: hasMeasurableTiming ? 2000 : 90 })) });
   });
   await page.goto(`${base}/playground`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="playground-page"]').waitFor();
@@ -129,9 +130,33 @@ export async function playground({ base, page, check, context }) {
   });
   check('a turn CPA never named offers no request link', await viewRequest(page.locator('[data-testid="playground-answer"]').last()).isDisabled());
   check('multi-turn request contains the completed assistant answer', calls[1].messages.length === 3 && calls[1].messages[1].role === 'assistant', JSON.stringify(calls[1].messages));
+  hasMeasurableTiming = true;
   mode = 'success'; await regenerate.click();
   await until(() => calls.length === 3, { label: 'the regenerate to reach the upstream' });
   check('regenerating reuses the same request instead of appending a partial answer', JSON.stringify(calls[2]) === JSON.stringify(calls[1]), 'request snapshot equality');
+  await until(async () => (await transcript.innerText()).includes('8.00 t/s'), { label: 'the measurable TPS result' });
+  // Match this request's observed output and timing exactly, independently of unrelated list fixtures.
+  await page.route('**/api/**/usage/events?*', route => route.fulfill({ json: {
+    items: [{ id: 1, event_key: 'tps-fixture', request_id: '0000002a', timestamp_ms: Date.now(),
+      provider: 'openai', model: 'vision-alias', failed: false, generate: true, stream: true,
+      latency_ms: 2000, ttft_ms: 1000, tokens: { input: 12, output: 8, total: 20, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+      source: 'hmac:tps-fixture', auth_index: 'credential-fixture', api_group_key: 'hmac:tps-fixture', executor_type: 'openai' }],
+    has_more: false, limit: 50,
+  } }));
+  for (const [label, expected] of [['Include first-token latency', '4.00 t/s'], ['Exclude first-token latency', '8.00 t/s']]) {
+    await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+    const tpsRow = page.locator('.settings-toggle-row').filter({ hasText: 'TPS calculation mode' });
+    const write = page.waitForResponse(response => response.url().endsWith('/preferences/omc_tps_calculation_mode') && response.request().method() === 'PUT');
+    await tpsRow.locator('.ant-segmented-item').filter({ hasText: label }).click();
+    await write;
+    await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+    await until(async () => (await page.locator('.req-tps-val').first().innerText()) === expected, { label: 'the request record TPS mode' });
+    check(`request records honor ${label}`, (await page.locator('.req-tps-val').first().innerText()) === expected);
+    await page.goto(`${base}/playground`, { waitUntil: 'domcontentloaded' });
+    await until(async () => (await transcript.innerText()).includes(expected), { label: 'the restored Playground TPS mode' });
+    check(`historical Playground answers honor ${label} without inference`, (await transcript.innerText()).includes(expected) && calls.length === 3);
+  }
+
   await until(async () => await page.getByRole('button', { name: 'Edit and resend', exact: true }).isEnabled(), { label: 'the last message to become editable' });
   // Editing the last message asks the same request again with different words: the edited text
   // replaces the question and its answer rather than adding a turn.

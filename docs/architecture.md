@@ -1444,22 +1444,38 @@ and `NULL` for historical rows where the flag was not captured.
 The flag is operational metadata, not a sufficient classifier for TTFT validity.
 An upstream executor can capture a real first-token event even when the client
 requested `stream: false`, while an apparently streaming request can still receive
-its whole payload in one chunk. Throughput therefore keys on the observed residual
-window rather than the recorded mode:
+its whole payload in one chunk. `eventTokensPerSecond` in
+`web/src/types/usageEventMetrics.ts` derives output-token rates using the deployment's
+`omc_tps_calculation_mode` preference:
 
-- When `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms,
-  defined in `web/src/types/usageEventMetrics.ts`), `ttft_ms` is treated as a genuine
-  generation boundary and TPS is `output_tokens * 1000 / (latency_ms - ttft_ms)`.
-- When TTFT is missing or the residual window is collapsed, the response was not
-  observed progressively enough to isolate generation. TPS falls back to
-  `output_tokens * 1000 / latency_ms`, and presentation omits TTFT and uses a
-  single total-duration bar in the drawer waterfall. This prevents timer artifacts
-  such as 768,588 t/s on a 13k-token response.
+- `exclude_ttft` (default): subtract a finite positive `ttft_ms` only when it is below
+  total latency and `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms).
+  TPS is then `output_tokens * 1000 / (latency_ms - ttft_ms)`. Otherwise use
+  `output_tokens * 1000 / latency_ms` and identify the result as a fallback.
+- `include_ttft`: always use `output_tokens * 1000 / latency_ms`, even when TTFT is
+  measurable. This does not hide or invalidate the independent TTFT readout.
+- Non-generation records, non-positive or non-finite output tokens, and invalid total
+  latency have no TPS. Remaining elapsed time can include server-side tool calls;
+  the subtraction is not a measurement of pure generation time.
+
+`TokenDisplayProvider` owns the setting through the existing optimistic, per-key
+serialized preference hook. OMC Settings, request rows and Playground footers share
+one value; changing it recalculates historical readouts without touching stored observations.
+The calculation result exposes `basis` (`exclude_ttft`, `include_ttft`, `fallback_total`,
+or `null`) so both surfaces select the same accurate formula tooltip. The closed preference
+API allowlist accepts the new key using its existing JSON-document contract. Missing or
+unsupported values resolve to `exclude_ttft`; no migration is needed.
+
+`internal/operations/tps_calculation.go` registers `tps_calculation_get` and
+`tps_calculation_set` for both Agent and MCP administrators. The low-risk write validates
+its two mode values, returns `invalid_parameters` otherwise, persists through the same
+repository and invalidates `preferences`. Reads return the effective mode using
+`internal/repository/tps_calculation.go`.
 
 The request list and detail drawer show a non-stream badge when an explicit
 `stream: false` record has no measurable TTFT or when the observed residual window
 collapsed. Historical records (`stream IS NULL`) use the same residual-window
-heuristic, preserving genuine legacy generation rates without inferring a
+heuristic, preserving genuine legacy first-token observations without inferring a
 first-token boundary from a completion-only measurement.
 
 ### 6.1 The request-record filter vocabulary
@@ -2535,7 +2551,7 @@ console does not model pass through untouched. `user_agent` is a transport heade
 body field, so it is resolved here (the operator's value, else `Oh-My-CPA/<build version>`) and
 refused when it is not a header value; a non-streaming body is refused by name, because this
 route projects allowlisted SSE events. TPS in the turn footer comes from the same
-`eventTokensPerSecond` helper the request records use, so the two cannot disagree.
+`eventTokensPerSecond` helper and global TPS calculation preference the request records use, so the two cannot disagree.
 
 Request inspection substitutes image summaries at any depth (a valid custom body may replace
 `messages` with the string-content form) and omits `user_agent` from the body preview, since it

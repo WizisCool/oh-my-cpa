@@ -22,17 +22,18 @@ const (
 	PreferenceUsageEventsColumns  = "usage_events_columns"
 	PreferenceOAuthManagementView = "oauth_management_view_v1"
 
-	// PreferenceTokenStyle, PreferenceModelView, PreferenceTheme and PreferenceScrollSmoothing
+	// PreferenceTokenStyle, PreferenceTpsCalculationMode, PreferenceModelView, PreferenceTheme and PreferenceScrollSmoothing
 	// are Oh My CPA's own display settings: how token counts are abbreviated across the
-	// console, how the dashboard's model panels group their series (by call point or by
+	// console, how TPS accounts for first-token latency, how the dashboard's model panels group their series (by call point or by
 	// upstream model), which palette each theme mode uses along with any palette the operator
 	// authored, and whether wheel and keyboard scrolls glide. They
 	// are preferences rather than configuration because they describe how the operator reads
 	// the console, not how anything is served.
-	PreferenceTokenStyle      = "omc_token_style"
-	PreferenceModelView       = "omc_models_view"
-	PreferenceTheme           = "omc_theme"
-	PreferenceScrollSmoothing = "omc_scroll_smoothing"
+	PreferenceTokenStyle         = "omc_token_style"
+	PreferenceTpsCalculationMode = "omc_tps_calculation_mode"
+	PreferenceModelView          = "omc_models_view"
+	PreferenceTheme              = "omc_theme"
+	PreferenceScrollSmoothing    = "omc_scroll_smoothing"
 
 	// PreferencePlaygroundSession persists the single latest playground session:
 	// the target key's usage fingerprint and call point, the generation parameters

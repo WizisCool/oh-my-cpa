@@ -1,4 +1,5 @@
 import React from 'react';
+import { DEFAULT_TPS_CALCULATION_MODE, TPS_CALCULATION_PREFERENCE, parseTpsCalculationMode, type TpsCalculationMode } from './tpsCalculation';
 import { usePreference } from '../hooks/usePreference';
 import { useI18n } from '../i18n';
 import {
@@ -25,6 +26,8 @@ interface TokenDisplayContextValue {
   style: TokenNumberStyle;
   /** How the model panels group their series. */
   modelView: ModelChartView;
+  tpsMode: TpsCalculationMode;
+  setTpsMode: (mode: TpsCalculationMode) => void;
   setStyle: (style: TokenNumberStyle) => void;
   setModelView: (view: ModelChartView) => void;
 }
@@ -32,12 +35,14 @@ interface TokenDisplayContextValue {
 const TokenDisplayContext = React.createContext<TokenDisplayContextValue>({
   style: DEFAULT_TOKEN_NUMBER_STYLE,
   modelView: DEFAULT_MODEL_CHART_VIEW,
+  tpsMode: DEFAULT_TPS_CALCULATION_MODE,
+  setTpsMode: () => undefined,
   setStyle: () => undefined,
   setModelView: () => undefined,
 });
 
 /**
- * TokenDisplayProvider owns the two console-wide display settings through the
+ * TokenDisplayProvider owns the console-wide token display settings through the
  * server-stored preference flow, so a choice follows the deployment across
  * browsers like every other console setting.
  *
@@ -52,9 +57,12 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // note on render loops.
   const parseStyle = React.useRef(parseTokenNumberStyle).current;
   const parseView = React.useRef(parseModelChartView).current;
+  const parseTpsMode = React.useRef(parseTpsCalculationMode).current;
 
   const stylePref = usePreference<TokenNumberStyle>(TOKEN_STYLE_PREFERENCE, DEFAULT_TOKEN_NUMBER_STYLE, parseStyle);
   const viewPref = usePreference<ModelChartView>(MODEL_VIEW_PREFERENCE, DEFAULT_MODEL_CHART_VIEW, parseView);
+
+  const tpsPref = usePreference<TpsCalculationMode>(TPS_CALCULATION_PREFERENCE, DEFAULT_TPS_CALCULATION_MODE, parseTpsMode);
 
   // The language rule lives here and only here: every surface reads the resolved
   // value, so a Chinese-only unit can never reach a non-Chinese reading even if a
@@ -68,10 +76,12 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
     () => ({
       style,
       modelView: viewPref.value,
+      tpsMode: tpsPref.value,
+      setTpsMode: tpsPref.set,
       setStyle: stylePref.set,
       setModelView: viewPref.set,
     }),
-    [style, stylePref.set, viewPref.value, viewPref.set],
+    [style, stylePref.set, viewPref.value, viewPref.set, tpsPref.value, tpsPref.set],
   );
 
   return <TokenDisplayContext.Provider value={value}>{children}</TokenDisplayContext.Provider>;

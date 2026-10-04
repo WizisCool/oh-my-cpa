@@ -1,3 +1,4 @@
+import { DEFAULT_TPS_CALCULATION_MODE, type TpsCalculationMode } from './tpsCalculation';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -98,15 +99,22 @@ export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateRes
   return { rate, cached, hasData: true };
 }
 
+export type TpsCalculationBasis = TpsCalculationMode | 'fallback_total';
+
+export function tpsCalculationHintKey(basis: TpsCalculationBasis) {
+  return basis === 'exclude_ttft' ? 'events.tps_hint_ttft'
+    : basis === 'include_ttft' ? 'events.tps_hint_total' : 'events.tps_hint_fallback';
+}
+
 export interface EventTokensPerSecondResult {
   tps: number | null;
   formatted: string;
-  hasTTFT: boolean;
+  basis: TpsCalculationBasis | null;
 }
 
 /**
- * Minimum duration in milliseconds between request start and completion required
- * to consider the generation phase measurable. When latency_ms - ttft_ms < 50ms,
+ * Minimum residual duration in milliseconds after the first token required
+ * to consider that boundary measurable. When latency_ms - ttft_ms < 50ms,
  * TTFT has collapsed onto the total response duration (the proxy observed the whole
  * response in a single chunk rather than a progressive first-token arrival).
  */
@@ -116,7 +124,7 @@ export const MIN_STREAMING_GENERATION_WINDOW_MS = 50;
  * hasMeasurableTTFT determines whether a usage record carries a genuine, non-collapsed
  * time-to-first-token measurement:
  * - Requires ttft_ms > 0 and latency_ms > 0 with ttft_ms < latency_ms
- * - Requires a generation window (latency_ms - ttft_ms) of at least 50 ms. When the remainder
+ * - Requires a residual window (latency_ms - ttft_ms) of at least 50 ms. When the remainder
  *   is below this threshold, the proxy observed the whole payload at completion rather than
  *   a progressive stream (e.g. non-streaming requests without upstream chunking).
  */
@@ -144,8 +152,8 @@ export function hasMeasurableTTFT(
  *
  * `stream: false` alone is not enough to classify TTFT as unusable. CPA can capture a
  * genuine upstream token boundary even when the client requested a non-streamed response,
- * so a measurable residual window keeps both the TTFT readout and the generation-phase
- * metric. The badge is therefore gated on hasMeasurableTTFT as well as the recorded mode.
+ * so a measurable residual window keeps the TTFT readout independently of the selected
+ * TPS calculation mode. The badge is therefore gated on hasMeasurableTTFT as well as the recorded mode.
  */
 export function isNonStreamingEvent(
   event?: Partial<Pick<UsageEvent, 'stream' | 'latency_ms' | 'ttft_ms'>>,
@@ -166,54 +174,25 @@ export function isNonStreamingEvent(
 }
 
 /**
- * eventTokensPerSecond estimates output generation throughput in tokens per second:
- * - When the residual window is measurable (latency_ms - ttft_ms >= 50ms, see hasMeasurableTTFT):
- *   output * 1000 / (latency_ms - ttft_ms), the generation-phase rate
- * - Fallback for a collapsed or missing TTFT: output * 1000 / latency_ms (end-to-end average)
- * - Returns formatted string (e.g. "109.21 t/s") or "—" when not measurable (non-generation, zero output, invalid latency).
- *
- * The recorded `stream` flag deliberately does not select the formula: it is the client's
- * request intent, not what the proxy observed. A `stream: false` call can still carry a
- * genuine first-token time when the upstream streams internally (e.g. OAuth Codex), and a
- * `stream: true` call can still collapse when the upstream delivers one chunk. The flag is
- * accepted in the event shape so callers can pass whole records; only the residual window
- * decides.
+ * The selected denominator changes only this derived readout, never the timing observations.
+ * A collapsed first-token boundary cannot support subtraction, so exclusion falls back to
+ * total latency. The residual may include server-side tools; it is not pure generation time.
+ * Client streaming intent does not establish whether the observed boundary is measurable.
  */
 export function eventTokensPerSecond(
   event?: Partial<Pick<UsageEvent, 'generate' | 'latency_ms' | 'ttft_ms' | 'tokens' | 'stream'>>,
+  mode: TpsCalculationMode = DEFAULT_TPS_CALCULATION_MODE,
 ): EventTokensPerSecondResult {
-  if (!event || event.generate === false) {
-    return { tps: null, formatted: '—', hasTTFT: false };
-  }
-  const output = Number(event.tokens?.output);
-  if (!Number.isFinite(output) || output <= 0) {
-    return { tps: null, formatted: '—', hasTTFT: false };
-  }
-  const latency = Number(event.latency_ms);
-  if (!Number.isFinite(latency) || latency <= 0) {
-    return { tps: null, formatted: '—', hasTTFT: false };
+  const output = Number(event?.tokens?.output);
+  const latency = Number(event?.latency_ms);
+  if (!event || event.generate === false || !Number.isFinite(output) || output <= 0 ||
+      !Number.isFinite(latency) || latency <= 0) {
+    return { tps: null, formatted: '—', basis: null };
   }
 
-  let durationMs: number;
-  let hasTTFT = false;
-
-  if (hasMeasurableTTFT(event)) {
-    const ttft = Number(event.ttft_ms);
-    durationMs = latency - ttft;
-    hasTTFT = true;
-  } else {
-    durationMs = latency;
-    hasTTFT = false;
-  }
-
-  if (durationMs <= 0) {
-    return { tps: null, formatted: '—', hasTTFT: false };
-  }
-
+  const basis: TpsCalculationBasis = mode === 'include_ttft' ? 'include_ttft'
+    : hasMeasurableTTFT(event) ? 'exclude_ttft' : 'fallback_total';
+  const durationMs = basis === 'exclude_ttft' ? latency - Number(event.ttft_ms) : latency;
   const tps = (output * 1000) / durationMs;
-  return {
-    tps,
-    formatted: `${tps.toFixed(2)} t/s`,
-    hasTTFT,
-  };
+  return { tps, formatted: `${tps.toFixed(2)} t/s`, basis };
 }
