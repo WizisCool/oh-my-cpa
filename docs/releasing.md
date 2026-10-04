@@ -42,9 +42,10 @@ maintainers with repository rules; a version tag is a publishing authority.
 
 ## Prepare and publish
 
-1. Change both package versions together, update versioned download examples
-   for the intended stable version while retaining `latest` Compose defaults, and document user-visible changes. Keep lockfile
-   metadata consistent if a package update requires it.
+1. Change both package versions together and document user-visible changes. The
+   install guides download from `releases/latest/download/` and Compose defaults to
+   the `latest` image, so neither needs a version bump. Keep lockfile metadata
+   consistent if a package update requires it.
 2. Run `pnpm test:fast`, `pnpm verify` and `pnpm check:ui`; run `pnpm verify:full`
    for build/workflow changes. Review secrets and changes, then merge through the
    normal protected pull-request checks.

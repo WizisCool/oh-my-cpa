@@ -124,78 +124,72 @@ MCP · 可视化 · 管理
 
 ## 安装
 
-OMC 连接 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 及以上**。
-可以使用已有网关，也可以用 Compose 启动新的 CPA。CPA 管理密钥同时是 OMC 的登录密码。
+OMC 搭配 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) v8 及以上使用，
+登录密码就是 CPA 的管理密钥。只需要 Docker。
 
-### Docker Compose（推荐）
+### 还没有 CPA
 
-直接拉取 Docker Hub 镜像 **`wiziscool/oh-my-cpa:latest`**（`amd64` / `arm64`），
-无需源码构建或安装开发工具链。在**新目录**中启动 CPA 和 OMC，默认只绑定本机端口：
+一次把 CPA 和 OMC 都装上：
 
 ```bash
-mkdir -p oh-my-cpa/deploy oh-my-cpa/cpa/{auths,logs,plugins} oh-my-cpa/oh-my-cpa-data
-cd oh-my-cpa
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.full.yml -o deploy/compose.full.yml
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/cpa.config.example.yaml -o cpa/config.yaml
+mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data,cpa/auths,cpa/logs,cpa/plugins} && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o deploy/compose.full.yml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o cpa/config.yaml
 sudo chown 10001:10001 oh-my-cpa-data
-sudo chmod 700 oh-my-cpa-data
 
-umask 077
 cat > deploy/.env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-OMCPA_PUBLIC_URL=http://127.0.0.1:8080
-TZ=UTC
 EOF
+chmod 600 deploy/.env
 
-docker compose --env-file deploy/.env -f deploy/compose.full.yml pull
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d
+docker compose -f deploy/compose.full.yml up -d
 ```
 
-打开 **`http://127.0.0.1:8080/omc/`**，使用 `deploy/.env` 中的
-`CPA_MANAGEMENT_KEY` 登录。调用模型前，在控制台配置提供商凭据与客户端密钥。
-部署在远程服务器时，使用 SSH 隧道或你已有的 HTTPS 入口访问。
+打开 **`http://127.0.0.1:8080/omc/`**，用 `deploy/.env` 里的 `CPA_MANAGEMENT_KEY` 登录，
+然后在控制台里添加提供商和客户端密钥。
 
-**已经有 CPA 或其他管理面板？** 使用
-[`deploy/compose.omc.yml`](deploy/compose.omc.yml) 只安装 OMC，保留已有服务，
-并确认由谁采集用量。详见[安装指南](docs/install.md#docker-compose-beside-an-existing-cpa)。
+### 已经在用 CPA
 
-### Let your agent install it
-
-把下面的提示交给 Claude Code、Codex、Cursor 或其他编码 Agent：
-
-```text
-按照以下指南安装和配置 Oh My CPA：
-https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
-先检查我已有的 CPA、OMC、管理面板、网络和用量采集器。
-选择适合现有环境的安装方式，保留已有服务、配置和密钥。
-```
-
-[Agent 安装指南](docs/install-for-agents.md) 覆盖全新部署、已有 CPA、其他管理面板、
-直接访问、已有 HTTPS 入口、原生构建与升级；要求验证成功后才能报告完成。
-
-### 从源码构建
-
-需要 Go 1.25+、Node.js 22+、pnpm 11+，以及已运行的 CPA：
+只装 OMC，不动你现有的 CPA：
 
 ```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
-cd oh-my-cpa
-pnpm install --frozen-lockfile
-cp .env.example .env
-# Configure the master key and the existing CPA management key privately in .env.
-pnpm build
-go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
-./bin/oh-my-cpa
+mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data} && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o deploy/compose.omc.yml
+sudo chown 10001:10001 oh-my-cpa-data
+
+cat > deploy/.env <<EOF
+OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
+OMCPA_CPA_MANAGEMENT_KEY=your-cpa-management-key
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 deploy/.env
+
+docker compose -f deploy/compose.omc.yml up -d
 ```
 
-打开 **`http://127.0.0.1:8080/omc/`**。
+执行最后一条命令前，先把 `deploy/.env` 里的管理密钥换成你自己的：要填明文，
+不是 CPA `config.yaml` 里的哈希。CPA 跑在 Docker 里，或者 OMC 连不上它，
+看[连接已有的 CPA](docs/install.md#reaching-your-cpa)。
+
+**从别的用量统计工具换过来？** CPA 的每条用量记录只会交给一个读取方。
+停掉原来的统计工具，OMC 就从那一刻开始记录；想两边都留着，就设
+`OMCPA_USAGE_INGEST_MODE=off`，只用 OMC 做管理。其他管理面板可以照常保留，互不冲突。
+
+### 让 Agent 帮你安装
+
+把下面这段交给 Claude Code、Codex、Cursor 或其他编码 Agent。
+它会先看你机器上已有什么，再从上面两种方式里选一种：
+
+```text
+按照这份指南帮我安装 Oh My CPA：
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+```
 
 > [!IMPORTANT]
-> 备份 `OMCPA_MASTER_KEY`，它用于解密数据库中的数据。每个本地磁盘数据目录只运行一个副本，
-> 每个 CPA 用量队列只允许一个采集器。若已有其他服务采集用量，设置
-> `OMCPA_USAGE_INGEST_MODE=off`。验证与升级见[安装指南](docs/install.md)，
-> 标签驱动的发布流程见[发行指南](docs/releasing.md)。
+> 备份 `deploy/.env`。`OMCPA_MASTER_KEY` 是数据库的加密密钥，丢了数据就读不出来。
+
+远程服务器、HTTPS、源码构建、升级和排障见[安装指南](docs/install.md)（英文）。
 
 ## 智能体与 MCP
 

@@ -131,83 +131,75 @@ or system, each with three built-in palettes and one you colour yourself.
 
 ## Install
 
-OMC connects to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0+**.
-Use your existing gateway, or start a new one with Compose. Its management key is also
-OMC's sign-in password.
+OMC runs beside [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) v8 or later,
+and you sign in with CPA's management key. All you need is Docker.
 
-### Docker Compose (recommended)
+### I don't have CPA yet
 
-Pull **`wiziscool/oh-my-cpa:latest`** from Docker Hub (`amd64` / `arm64`). No source
-build or toolchain required. In a **new directory**, start CPA and OMC with direct
-loopback ports:
+This starts CPA and OMC together:
 
 ```bash
-mkdir -p oh-my-cpa/deploy oh-my-cpa/cpa/{auths,logs,plugins} oh-my-cpa/oh-my-cpa-data
-cd oh-my-cpa
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.full.yml -o deploy/compose.full.yml
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/cpa.config.example.yaml -o cpa/config.yaml
+mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data,cpa/auths,cpa/logs,cpa/plugins} && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o deploy/compose.full.yml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o cpa/config.yaml
 sudo chown 10001:10001 oh-my-cpa-data
-sudo chmod 700 oh-my-cpa-data
 
-umask 077
 cat > deploy/.env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-OMCPA_PUBLIC_URL=http://127.0.0.1:8080
-TZ=UTC
 EOF
+chmod 600 deploy/.env
 
-docker compose --env-file deploy/.env -f deploy/compose.full.yml pull
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d
+docker compose -f deploy/compose.full.yml up -d
 ```
 
-Open **`http://127.0.0.1:8080/omc/`** and sign in with `CPA_MANAGEMENT_KEY` from
-`deploy/.env`. Configure provider credentials and client keys in the console before
-making requests. On a remote server, use an SSH tunnel or your existing HTTPS ingress.
+Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` from
+`deploy/.env`. Then add your providers and client keys in the console.
 
-**Already have CPA or another management panel?** Add only OMC with
-[`deploy/compose.omc.yml`](deploy/compose.omc.yml); preserve existing services, and
-choose the usage collector deliberately. Follow the
-[installation guide](docs/install.md#docker-compose-beside-an-existing-cpa).
+### I already run CPA
+
+This adds OMC and leaves your CPA alone:
+
+```bash
+mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data} && cd oh-my-cpa
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o deploy/compose.omc.yml
+sudo chown 10001:10001 oh-my-cpa-data
+
+cat > deploy/.env <<EOF
+OMCPA_CPA_BASE_URL=http://host.docker.internal:8317
+OMCPA_CPA_MANAGEMENT_KEY=your-cpa-management-key
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 deploy/.env
+
+docker compose -f deploy/compose.omc.yml up -d
+```
+
+Put your real management key in `deploy/.env` before the last command: the plaintext
+one, not the hash in CPA's `config.yaml`. If CPA runs in Docker, or OMC cannot reach it,
+see [reaching your CPA](docs/install.md#reaching-your-cpa).
+
+**Switching from another usage tracker?** CPA hands each usage record to one reader
+only. Stop the old tracker and OMC records from then on, or keep it and set
+`OMCPA_USAGE_INGEST_MODE=off` to use OMC for management alone. Other management panels
+can stay; they don't conflict.
 
 ### Let your agent install it
 
-Paste this into Claude Code, Codex, Cursor or any coding agent:
+Paste this into Claude Code, Codex, Cursor or any coding agent. It looks at what you
+already run and picks one of the paths above:
 
 ```text
-Install and configure Oh My CPA by following the instructions here:
+Install Oh My CPA for me by following
 https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
-Inspect my existing CPA, OMC, management panels, networking and usage collector first.
-Choose the appropriate installation path and preserve existing services and secrets.
 ```
-
-The [agent guide](docs/install-for-agents.md) covers new stacks, existing CPA, other
-panels, direct access, existing HTTPS ingress, native builds and upgrades. It requires
-verification before reporting success.
-
-### From source
-
-Requires Go 1.25+, Node.js 22+ and pnpm 11+, plus a running CPA:
-
-```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
-cd oh-my-cpa
-pnpm install --frozen-lockfile
-cp .env.example .env
-# Configure the master key and the existing CPA management key privately in .env.
-pnpm build
-go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
-./bin/oh-my-cpa
-```
-
-Open **`http://127.0.0.1:8080/omc/`**.
 
 > [!IMPORTANT]
-> Back up `OMCPA_MASTER_KEY`: it decrypts what the database stores. Keep one replica per
-> local-disk data directory and one collector per CPA usage queue. Set
-> `OMCPA_USAGE_INGEST_MODE=off` if another service already collects usage.
-> See [installation](docs/install.md) for verification/upgrades and
-> [release publishing](docs/releasing.md) for the tag-driven workflow.
+> Back up `deploy/.env`. `OMCPA_MASTER_KEY` encrypts the database, and without it the
+> data cannot be read.
+
+Remote servers, HTTPS, building from source, upgrades and troubleshooting are in the
+[installation guide](docs/install.md).
 
 ## Agents and MCP
 
@@ -324,7 +316,7 @@ The full reference, with deployment constraints and operational notes, is
 | | |
 | --- | --- |
 | [`docs/install.md`](docs/install.md) | Installation, verification, upgrades, troubleshooting |
-| [`docs/install-for-agents.md`](docs/install-for-agents.md) | The same, written for a coding agent to follow |
+| [`docs/install-for-agents.md`](docs/install-for-agents.md) | The same install, as steps for a coding agent |
 | [`docs/releasing.md`](docs/releasing.md) | Tag-triggered Docker Hub and GitHub releases |
 | [`docs/operations.md`](docs/operations.md) | Settings reference and operational notes |
 | [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | Backup, restore and master-key runbook |
