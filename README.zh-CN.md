@@ -149,9 +149,48 @@ docker compose -f deploy/compose.full.yml up -d
 打开 **`http://127.0.0.1:8080/omc/`**，用 `deploy/.env` 里的 `CPA_MANAGEMENT_KEY` 登录，
 然后在控制台里添加提供商和客户端密钥。
 
-### 已经在用 CPA
+### CPA 是用 Docker Compose 部署的
 
-只装 OMC，不动你现有的 CPA：
+直接把 OMC 加进你现有的编排文件。把下面这段贴到 `services:` 下面，和 CPA 服务并列：
+
+```yaml
+  oh-my-cpa:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
+      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
+      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
+      OMCPA_DATA_DIR: /data
+    volumes:
+      - oh-my-cpa-data:/data
+
+volumes:
+  oh-my-cpa-data:
+```
+
+然后在同一个目录下，往 `.env` 里加两个密钥，启动新服务：
+
+```bash
+cat >> .env <<EOF
+OMCPA_CPA_MANAGEMENT_KEY=your-cpa-management-key
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 .env
+
+docker compose up -d oh-my-cpa
+```
+
+执行最后一条命令前，先把 `.env` 里的管理密钥换成你自己的：要填明文，
+不是 CPA `config.yaml` 里的哈希。`cli-proxy-api` 是 CPA 官方编排文件里的服务名，
+你的不一样就改掉。CPA 容器不会重启，它的配置和密钥也都不会变。
+打开 **`http://127.0.0.1:8080/omc/`**。
+
+### CPA 是用其他方式部署的
+
+OMC 用自己的编排文件单独运行，不动你现有的 CPA：
 
 ```bash
 mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data} && cd oh-my-cpa
@@ -169,7 +208,7 @@ docker compose -f deploy/compose.omc.yml up -d
 ```
 
 执行最后一条命令前，先把 `deploy/.env` 里的管理密钥换成你自己的：要填明文，
-不是 CPA `config.yaml` 里的哈希。CPA 跑在 Docker 里，或者 OMC 连不上它，
+不是 CPA `config.yaml` 里的哈希。OMC 连不上 CPA 的话，
 看[连接已有的 CPA](docs/install.md#reaching-your-cpa)。
 
 **从别的用量统计工具换过来？** CPA 的每条用量记录只会交给一个读取方。
@@ -187,7 +226,7 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-ag
 ```
 
 > [!IMPORTANT]
-> 备份 `deploy/.env`。`OMCPA_MASTER_KEY` 是数据库的加密密钥，丢了数据就读不出来。
+> 备份刚写好的 `.env` 文件。`OMCPA_MASTER_KEY` 是数据库的加密密钥，丢了数据就读不出来。
 
 远程服务器、HTTPS、源码构建、升级和排障见[安装指南](docs/install.md)（英文）。
 
