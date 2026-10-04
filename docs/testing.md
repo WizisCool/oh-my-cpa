@@ -40,6 +40,10 @@ Rules that keep the suite fast and honest:
   After changing the viewport, wait for responsive controls to adopt their target state
   and call `settleLayout(page)` before measuring geometry. A viewport acknowledgement
   can precede React's breakpoint update and ResizeObserver-driven layout.
+  Third-party widgets can schedule further work: a visible popup may still be in its
+  alignment prepare step, and matching editor/shell widths may both belong to the old
+  desktop layout. Wait for the widget's preparation state or its render surface to
+  adopt the current viewport before reading the final geometry assertion.
 - **Make time injectable in Go.** A duration a test has to wait out belongs in the
   component's config with a production default, as `ingest.Config.ReadinessGrace` is,
   so the test can set it to milliseconds.

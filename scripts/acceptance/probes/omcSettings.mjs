@@ -68,6 +68,10 @@ export async function omcSettings({ base, page, check, context }) {
     (await timezoneControl.innerText()).includes('Asia/Kuala_Lumpur') && (await timezoneControl.innerText()).includes('UTC+8') && (await timezoneControl.innerText()).includes('Server time zone'));
   await timezone.click();
   const popup = page.locator('.ant-select-dropdown:visible');
+  // Reduced motion hides the animation, not rc-trigger's async prepare/align steps.
+  await until(() => popup.evaluate(node => ['appear', 'enter'].some(phase => node.classList.contains(`ant-slide-up-${phase}-active`))),
+    { label: 'the timezone popup alignment prepare to complete' });
+  await settleLayout(page);
   const timezoneLayout = await popup.evaluate(node => ({
     width: node.getBoundingClientRect().width,
     overflowingLabels: [...node.querySelectorAll('.ant-select-item-option-content')]
