@@ -39,6 +39,9 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   useTimeZone();
   const t = useT();
   const windows = orderQuotaWindows(item.windows ?? []);
+  // The explanation is printed once under the list rather than as a tooltip per window: a phone
+  // has no hover, and the caveat matters most to the reader who cannot reach one.
+  const hasCapacityReading = windows.some((window) => window.usage || window.capacity);
   const availableCredits = item.reset_credits?.available_count ?? 0;
   const applicableCredits = item.reset_credits?.applicable_available_count ?? 0;
   const creditRows = (item.reset_credits?.credits ?? [])
@@ -81,6 +84,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           resetAtMS={window.reset_at_ms}
           resetLabel={window.reset_label}
           resetAccuracy={window.reset_accuracy}
+          capacity={window}
         />,
       );
       if (group) lastGroup = group;
@@ -214,7 +218,9 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             </div>
           )}
         </div>
-
+        {hasCapacityReading && (
+          <div className={styles['capacity-hint']} data-quota-capacity-hint="true">{t('quota.capacity_hint')}</div>
+        )}
       </div>
 
       {hasDiagnostics && (

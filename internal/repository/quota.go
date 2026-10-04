@@ -343,3 +343,31 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 
 	return result, rows.Err()
 }
+
+// CredentialWindowUsage is the traffic recorded for one credential in a range.
+type CredentialWindowUsage struct {
+	Requests       int64
+	PricedRequests int64
+	Tokens         int64
+	CostNanos      int64
+}
+
+// QueryCredentialWindowUsage sums the requests a credential served in
+// [fromMS, toMS). It spans every instance, as quota observations do: both are
+// keyed by the credential's auth index alone.
+func (r *Repository) QueryCredentialWindowUsage(ctx context.Context, authIndex string, fromMS, toMS int64) (CredentialWindowUsage, error) {
+	var usage CredentialWindowUsage
+	if r == nil || r.SQL() == nil {
+		return usage, errors.New("repository is not initialized")
+	}
+	err := r.SQL().QueryRowContext(ctx, `
+		SELECT COUNT(1), COALESCE(SUM(cost_nanos IS NOT NULL), 0),
+		       COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_nanos), 0)
+		FROM usage_events
+		WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+	`, strings.TrimSpace(authIndex), fromMS, toMS).Scan(&usage.Requests, &usage.PricedRequests, &usage.Tokens, &usage.CostNanos)
+	if err != nil {
+		return usage, fmt.Errorf("query credential window usage: %w", err)
+	}
+	return usage, nil
+}

@@ -132,6 +132,58 @@
   text-overflow: ellipsis;
 }
 
+/* Recorded usage sits at the start and the estimate at the end; on a narrow Drawer the two
+   wrap onto their own lines instead of truncating a figure. */
+.capacity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.capacity-part {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 5px;
+  min-width: 0;
+}
+
+.capacity-part-end {
+  margin-left: auto;
+  text-align: right;
+}
+
+.capacity-label,
+.capacity-note,
+.capacity-error {
+  color: var(--meta);
+}
+
+.capacity-value {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity-value-strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.capacity-error {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--meta);
+}
+
 .rec-banner {
   background: var(--hover-inset);
   border: 1px solid var(--border);
@@ -366,7 +418,28 @@
   border-radius: 2px !important;
 }
 
+.window-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The estimate keeps its width and the countdown gives way: a clipped figure reads as a
+   different, smaller number, while a clipped countdown still has its tooltip. */
+.window-capacity {
+  flex: none;
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .window-reset {
+  min-width: 0;
   color: var(--meta);
   font-family: var(--font-mono);
   font-size: 10px;

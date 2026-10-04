@@ -1707,6 +1707,22 @@ still describes. The console renders a snapshot as a `≥` bound with an unverif
 marker and never as a countdown, so a stale claim cannot read as a verified
 renewal date.
 
+A window's **Estimated Window Capacity** (`CONTEXT.md`) is joined when a quota is
+read, not when it is observed. `Handler.attachWindowCapacity` in `internal/api`
+runs on the overview, the credential detail, every refresh response and the agent's
+quota capabilities: for each window `quota.SupportsWindowCapacity` accepts, it sums
+the credential's `usage_events` over `quota.WindowCycleRange` with
+`Repository.QueryCredentialWindowUsage` (served by the `auth_index, timestamp_ms`
+index), reads the credential's snapshot history for an earlier, higher reading in
+the same cycle (`quota.PeakUsedPercent`), and lets `quota.EstimateWindowCapacity`
+decide between an estimate and a `capacity_unavailable` reason. The three fields
+(`usage`, `capacity`, `capacity_unavailable`) are never written to
+`quota_snapshots`: the join runs after a snapshot is persisted and on a copy of
+the window slice, so requests ingested after an observation are still counted the
+next time it is read. `internal/quota` stays free of the repository; the
+arithmetic is pure and the API layer supplies its inputs
+(ADR 0058).
+
 Codex reset-credit redemption is offered in the credential Drawer's Quota tab and never
 from a list row, because it spends an irreversible entitlement; it is offered whenever the
 credential's available credit count is positive. Upstream's `applicable_available_count` is not the

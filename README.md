@@ -238,7 +238,7 @@ so connect only agents you would trust with the console.
 <summary><b>Gateway & providers</b></summary>
 
 - **AI providers**: Codex, Claude, Gemini, Meta Muse, xAI, Vertex AI, Gemini Interactions, DeepSeek and OpenAI-compatible services, each with credentials, models, priority, weight, proxy and an enable switch the gateway actually enforces.
-- **OAuth management**: sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse; manage auth files, model lists, aliases and quota per credential.
+- **OAuth management**: sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse; manage auth files, model lists, aliases and quota per credential, with an estimate of what each Codex and Claude quota window is worth.
 - **Client keys**: create, name and revoke gateway API keys. Names appear in request records and filters.
 - **Model catalog**: pull model lists straight from upstream providers.
 - **Playground**: test any routed model with text and images, streamed multi-turn answers and request diagnostics.

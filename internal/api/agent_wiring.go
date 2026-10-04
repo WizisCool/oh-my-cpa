@@ -216,6 +216,7 @@ func (h *Handler) operationsService() *operations.Service {
 						return operations.Quota{}, err
 					}
 				}
+				h.attachWindowCapacity(ctx, value, time.Now().UnixMilli())
 				return operations.SafeQuota(value), nil
 			}
 		}

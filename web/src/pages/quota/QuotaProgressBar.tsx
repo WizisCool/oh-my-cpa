@@ -3,6 +3,9 @@ import { Progress } from 'antd';
 import { useT } from '../../i18n';
 import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
 import { quotaRemainingStroke } from './quotaThresholds';
+import { describeQuotaCapacity } from './quotaCapacity';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import type { QuotaWindow } from '../../types/quota';
 import styles from './QuotaPresentation.module.css';
 
 interface QuotaProgressBarProps {
@@ -17,6 +20,8 @@ interface QuotaProgressBarProps {
   resetAccuracy?: 'exact' | 'derived' | 'approximate';
   height?: number;
   showPercent?: boolean;
+  /** The window's recorded usage and estimated capacity, when the estimate applies to it. */
+  capacity?: Pick<QuotaWindow, 'usage' | 'capacity' | 'capacity_unavailable'>;
 }
 
 export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
@@ -31,8 +36,11 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   resetAccuracy = 'exact',
   height = 8,
   showPercent = true,
+  capacity,
 }) => {
   const t = useT();
+  const { style: tokenStyle } = useTokenDisplayStyle();
+  const capacityReading = capacity ? describeQuotaCapacity(capacity, tokenStyle, t) : null;
 
   // A credential may report only usage; derive the remaining share from it
   // rather than showing no bar at all. The colour rule is shared with the list row's bars.
@@ -90,6 +98,29 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           aria-label={resolvedLabel || t('quota.col_windows')}
         />
       </div>
+
+      {capacityReading && (
+        <div
+          className={styles['capacity-row']}
+          data-quota-capacity={capacityReading.estimate ? 'estimated' : 'withheld'}
+        >
+          {capacityReading.recorded && (
+            <span className={styles['capacity-part']}>
+              <span className={styles['capacity-label']}>{t('quota.capacity_recorded')}</span>
+              <span className={styles['capacity-value']}>{capacityReading.recorded}</span>
+            </span>
+          )}
+          {capacityReading.estimate ? (
+            <span className={`${styles['capacity-part']} ${styles['capacity-part-end']}`}>
+              <span className={styles['capacity-label']}>{t('quota.capacity_estimate')}</span>
+              <span className={`${styles['capacity-value']} ${styles['capacity-value-strong']}`}>{capacityReading.estimate}</span>
+              <span className={styles['capacity-error']}>{capacityReading.error}</span>
+            </span>
+          ) : capacityReading.note && (
+            <span className={`${styles['capacity-note']} ${styles['capacity-part-end']}`}>{capacityReading.note}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

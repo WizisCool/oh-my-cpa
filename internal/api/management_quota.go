@@ -94,6 +94,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		if h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 			_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 		}
+		h.attachWindowCapacity(ctx, refreshed, time.Now().UnixMilli())
 
 		_ = h.recordAudit(request, "quota.refresh", "quota", targetIndex, "success", map[string]any{
 			"status": refreshed.Status,
@@ -147,6 +148,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 	out := make([]*quota.NormalizedQuota, 0, len(results))
 	for _, r := range results {
 		if r != nil {
+			h.attachWindowCapacity(ctx, r, time.Now().UnixMilli())
 			out = append(out, r)
 		}
 	}
@@ -415,6 +417,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	}
 
 	quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
+	h.attachWindowCapacity(ctx, &normalized, nowMS)
 
 	var history []repository.QuotaSnapshotRecord
 	if h.repo != nil {
@@ -540,6 +543,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		}
 
 		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
+		h.attachWindowCapacity(ctx, &normalized, nowMS)
 
 		switch normalized.Status {
 		case "healthy":

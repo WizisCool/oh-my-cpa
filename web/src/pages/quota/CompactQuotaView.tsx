@@ -14,6 +14,8 @@ import {
 import { quotaRemainingStroke } from './quotaThresholds';
 import { orderQuotaWindows, pickCompactQuotaWindows, quotaWindowKindOf } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
+import { compactQuotaCapacity } from './quotaCapacity';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import styles from './QuotaPresentation.module.css';
 
 interface CompactQuotaViewProps {
@@ -42,6 +44,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
   nowMS,
 }) => {
   const t = useT();
+  const { style: tokenStyle } = useTokenDisplayStyle();
   const windows = pickCompactQuotaWindows(orderQuotaWindows(item.windows ?? []));
   const planText = item.plan?.plan_label;
   const isCooling = item.active_cooldown?.is_active;
@@ -80,6 +83,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
           {windows.map((window) => {
             const remaining = quotaRemainingPercent(window);
             const kind = quotaWindowKindOf(window);
+            const capacityText = compactQuotaCapacity(window, tokenStyle, t);
             return (
               <div
                 className={styles.window}
@@ -101,9 +105,20 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
                     size={{ height: 4 }}
                   />
                 </div>
-                <span className={styles['window-reset']} title={quotaResetText(window, nowMS, t)}>
-                  {quotaResetCountdown(window, nowMS, t)}
-                </span>
+                <div className={styles['window-foot']}>
+                  <span className={styles['window-reset']} title={quotaResetText(window, nowMS, t)}>
+                    {quotaResetCountdown(window, nowMS, t)}
+                  </span>
+                  {capacityText && (
+                    <span
+                      className={styles['window-capacity']}
+                      data-quota-compact-capacity="true"
+                      title={`${t('quota.capacity_estimate')} ${capacityText}`}
+                    >
+                      {capacityText}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

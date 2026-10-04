@@ -358,6 +358,25 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   reports no usage, or, when every window reports usage below 100 because
   upstream rounds, the most used one. Pinning every window would show the weekly
   quota as spent whenever the 5-hour window runs out.
+- **Estimated Window Capacity**: What a whole Quota Window is worth, read as the
+  usage this deployment recorded for the credential in the window's current
+  cycle divided by the share upstream reports as used. It is the size of the
+  window at 100%, not a projection of what will have been used when it ends.
+  The recorded usage runs from the cycle start (reset instant minus period) to
+  the moment the share was observed, never to "now", so numerator and
+  denominator describe the same interval. Cost is the sum of Request Cost
+  Snapshots, so a later price change never rewrites an estimate, and Unpriced
+  Usage withholds the dollar figure rather than understating it. An estimate is
+  withheld, with a stated reason, when the cycle boundary is not exact or
+  derived, the window has expired or its reading is stale, the used share is
+  below 5%, nothing was recorded, or an earlier reading in the same cycle was
+  higher (the counter was reset part-way). Upstream reports whole points, so
+  every estimate carries the relative error half a point puts on it. It applies
+  to the Codex and Claude windows every request draws on (5-hour and weekly);
+  a model- or feature-scoped window meters only part of the traffic. Usage that
+  never passed through the gateway is not counted, and the figure moves with
+  the mix of models, so it is a reading for the operator and never an input to
+  routing or to a credential's status.
 - **Preference**: Console state stored server-side rather than in the browser,
   so it follows the deployment across devices, browsers, incognito windows, and
   cleared browser storage rather than binding to a single client instance.

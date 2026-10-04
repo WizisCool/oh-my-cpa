@@ -15,6 +15,14 @@ type QuotaWindow struct {
 	ResetLabel       string   `json:"reset_label,omitempty"`
 	PeriodHours      *float64 `json:"period_hours,omitempty"`
 	ResetAccuracy    string   `json:"reset_accuracy,omitempty"` // "exact", "derived", "approximate"
+
+	// The three fields below are joined from recorded usage when a quota is
+	// read and are never part of a stored snapshot: usage keeps arriving after
+	// an observation, and a persisted figure would freeze whatever had been
+	// ingested at that moment.
+	Usage               *WindowUsage    `json:"usage,omitempty"`
+	Capacity            *WindowCapacity `json:"capacity,omitempty"`
+	CapacityUnavailable string          `json:"capacity_unavailable,omitempty"` // a CapacityReason* value
 }
 
 // QuotaExtraUsage represents paid extra usage credits (e.g. Claude Extra Usage).
