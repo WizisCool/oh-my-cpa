@@ -156,9 +156,49 @@ docker compose -f deploy/compose.full.yml up -d
 Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` from
 `deploy/.env`. Then add your providers and client keys in the console.
 
-### I already run CPA
+### My CPA runs in Docker Compose
 
-This adds OMC and leaves your CPA alone:
+Add OMC to the Compose file you already have. Paste this under `services:`, next to
+your CPA service:
+
+```yaml
+  oh-my-cpa:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
+      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
+      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
+      OMCPA_DATA_DIR: /data
+    volumes:
+      - oh-my-cpa-data:/data
+
+volumes:
+  oh-my-cpa-data:
+```
+
+Then, in the same directory, add two keys to `.env` and start the new service:
+
+```bash
+cat >> .env <<EOF
+OMCPA_CPA_MANAGEMENT_KEY=your-cpa-management-key
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 .env
+
+docker compose up -d oh-my-cpa
+```
+
+Put your real management key in `.env` before the last command: the plaintext one, not
+the hash in CPA's `config.yaml`. `cli-proxy-api` is the service name in CPA's own
+Compose file; change it if yours differs. The CPA container is not restarted and none of
+its settings or keys change. Open **`http://127.0.0.1:8080/omc/`**.
+
+### My CPA runs some other way
+
+This runs OMC from its own Compose file and leaves your CPA alone:
 
 ```bash
 mkdir -p oh-my-cpa/{deploy,oh-my-cpa-data} && cd oh-my-cpa
@@ -176,8 +216,8 @@ docker compose -f deploy/compose.omc.yml up -d
 ```
 
 Put your real management key in `deploy/.env` before the last command: the plaintext
-one, not the hash in CPA's `config.yaml`. If CPA runs in Docker, or OMC cannot reach it,
-see [reaching your CPA](docs/install.md#reaching-your-cpa).
+one, not the hash in CPA's `config.yaml`. If OMC cannot reach CPA, see
+[reaching your CPA](docs/install.md#reaching-your-cpa).
 
 **Switching from another usage tracker?** CPA hands each usage record to one reader
 only. Stop the old tracker and OMC records from then on, or keep it and set
@@ -195,7 +235,7 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-ag
 ```
 
 > [!IMPORTANT]
-> Back up `deploy/.env`. `OMCPA_MASTER_KEY` encrypts the database, and without it the
+> Back up the `.env` file you just wrote. `OMCPA_MASTER_KEY` encrypts the database, and without it the
 > data cannot be read.
 
 Remote servers, HTTPS, building from source, upgrades and troubleshooting are in the

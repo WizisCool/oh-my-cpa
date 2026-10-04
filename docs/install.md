@@ -9,8 +9,9 @@ Pick the line that describes you:
 | You have | Do this |
 | --- | --- |
 | Nothing yet | [Install CPA and OMC together](#install-cpa-and-omc-together) |
-| CPA | [Add OMC to an existing CPA](#add-omc-to-an-existing-cpa) |
-| CPA and another panel or usage tracker | The same, then read [switching from another tool](#switching-from-another-tool) |
+| CPA, deployed with Docker Compose | [Add OMC to CPA's Compose file](#add-omc-to-cpas-compose-file) |
+| CPA, deployed some other way | [Add OMC to an existing CPA](#add-omc-to-an-existing-cpa) |
+| CPA and another panel or usage tracker | Either of those, then read [switching from another tool](#switching-from-another-tool) |
 | A coding agent you would rather hand this to | Give it [`docs/install-for-agents.md`](install-for-agents.md) |
 | No Docker, or a CPA that only listens on `127.0.0.1` | [Build from source](#from-source) |
 
@@ -42,6 +43,65 @@ before sending requests. CPA itself listens on `127.0.0.1:8317`.
 
 The `chown` is there because the OMC container runs as user `10001` and writes its
 database to `oh-my-cpa-data`.
+
+## Add OMC to CPA's Compose file
+
+If CPA already runs from a Compose file, OMC can be one more service in it. Paste this
+under `services:`, next to your CPA service:
+
+```yaml
+  oh-my-cpa:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OMCPA_CPA_BASE_URL: http://cli-proxy-api:8317
+      OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?}
+      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?}
+      OMCPA_DATA_DIR: /data
+    volumes:
+      - oh-my-cpa-data:/data
+
+volumes:
+  oh-my-cpa-data:
+```
+
+If the file already has a top-level `volumes:` key, add `oh-my-cpa-data:` under it
+instead of repeating the key. Then, in the directory that holds the Compose file:
+
+```bash
+cat >> .env <<EOF
+OMCPA_CPA_MANAGEMENT_KEY=your-cpa-management-key
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+EOF
+chmod 600 .env
+
+docker compose up -d oh-my-cpa
+```
+
+Put your real management key in `.env` before the last command. It is the plaintext
+key you type to sign in, not the bcrypt hash CPA stores in `config.yaml`. Open
+**`http://127.0.0.1:8080/omc/`**.
+
+What this does and does not touch:
+
+- `docker compose up -d oh-my-cpa` creates the OMC container only. The CPA container
+  keeps running; it is not recreated or restarted, and its configuration, keys and
+  volumes are unchanged.
+- `cli-proxy-api` is the service name in CPA's own Compose file. If yours is different,
+  use that name in `OMCPA_CPA_BASE_URL`. Two services in one file share a network, so
+  the name is all OMC needs.
+- OMC's database lives in the `oh-my-cpa-data` Docker volume, which needs no `chown`.
+- `>>` appends to `.env` and creates it if it is missing, so existing lines stay.
+- Other settings go in the `environment:` block under the names in
+  `docs/operations.md`, for example `TZ` to match CPA's time zone.
+
+CPA sees OMC as a remote client. If the console reports that it cannot connect, read
+the note on `management.allow-remote` under [reaching your CPA](#reaching-your-cpa);
+that is the one case where CPA's configuration has to change.
+
+To upgrade later: `docker compose pull oh-my-cpa && docker compose up -d oh-my-cpa`.
 
 ## Add OMC to an existing CPA
 
@@ -78,7 +138,7 @@ OMC runs in a container, so the URL has to work from inside that container.
 | Your CPA | Set in `deploy/.env` |
 | --- | --- |
 | Runs on the same machine, listening on all interfaces | `OMCPA_CPA_BASE_URL=http://host.docker.internal:8317` (the default above) |
-| Runs in Docker | `OMCPA_NETWORK_NAME=<CPA's network>`, `OMCPA_NETWORK_EXTERNAL=true`, `OMCPA_CPA_BASE_URL=http://<CPA's container name>:8317` |
+| Runs in Docker, and you want OMC in a separate Compose file | `OMCPA_NETWORK_NAME=<CPA's network>`, `OMCPA_NETWORK_EXTERNAL=true`, `OMCPA_CPA_BASE_URL=http://<CPA's container name>:8317` |
 | Runs on another machine | Its private or HTTPS address |
 | Listens on `127.0.0.1` only | A container cannot reach it. [Build from source](#from-source) and run OMC on the host |
 
@@ -118,7 +178,7 @@ password is CPA's administrator key.
 
 ## Settings
 
-Compose reads `deploy/.env`, which sits next to the Compose file. Relative paths are
+These are the variables the two Compose files in `deploy/` accept. Compose reads `deploy/.env`, which sits next to the Compose file. Relative paths are
 resolved from the `deploy` directory.
 
 | Variable | Default | Purpose |
@@ -193,7 +253,8 @@ CPA.
 ## Upgrading
 
 Back up `deploy/.env` and `oh-my-cpa-data` first (`docs/ops/sqlite-operations.md`),
-then pull the new image. Use `compose.omc.yml` if that is what you installed with.
+then pull the new image. Use `compose.omc.yml` if that is what you installed with; if
+OMC is a service in CPA's own Compose file, the command is in that section.
 
 ```bash
 docker compose -f deploy/compose.full.yml pull oh-my-cpa
