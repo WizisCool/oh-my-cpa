@@ -37,6 +37,9 @@ Rules that keep the suite fast and honest:
   a route you hold and release), an element state, `until(...)` from
   `scripts/acceptance/harness.mjs`, a Go channel, or an injected interval or clock.
   `scripts/fixed-waits.test.mjs` fails when a fixed wait is added.
+  After changing the viewport, wait for responsive controls to adopt their target state
+  and call `settleLayout(page)` before measuring geometry. A viewport acknowledgement
+  can precede React's breakpoint update and ResizeObserver-driven layout.
 - **Make time injectable in Go.** A duration a test has to wait out belongs in the
   component's config with a production default, as `ingest.Config.ReadinessGrace` is,
   so the test can set it to milliseconds.

@@ -57,6 +57,9 @@ export async function omcSettings({ base, page, check, context }) {
   await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
   await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the restored default TPS mode' });
   await page.setViewportSize({ width: 1440, height: 900 });
+  // The viewport acknowledgement can precede React's breakpoint update and the select's resize.
+  await until(async () => await tpsRow.locator('.ant-segmented-vertical').count() === 0, { label: 'the desktop TPS picker' });
+  await settleLayout(page);
 
   const timezone = page.getByRole('combobox', { name: 'Time zone', exact: true });
   const timezoneControl = page.locator('.ant-select').filter({ has: timezone });
@@ -64,10 +67,15 @@ export async function omcSettings({ base, page, check, context }) {
     (await timezoneControl.innerText()).includes('Asia/Kuala_Lumpur') && (await timezoneControl.innerText()).includes('UTC+8') && (await timezoneControl.innerText()).includes('Server time zone'));
   await timezone.click();
   const popup = page.locator('.ant-select-dropdown:visible');
-  check('timezone popup keeps complete zone labels readable', await popup.evaluate((node) => {
-    return node.getBoundingClientRect().width >= 400 && [...node.querySelectorAll('.ant-select-item-option-content')]
-      .every((item) => item.scrollWidth <= item.clientWidth + 1);
+  const timezoneLayout = await popup.evaluate(node => ({
+    width: node.getBoundingClientRect().width,
+    overflowingLabels: [...node.querySelectorAll('.ant-select-item-option-content')]
+      .filter(item => item.scrollWidth > item.clientWidth + 1)
+      .map(item => ({ text: item.textContent, scrollWidth: item.scrollWidth, clientWidth: item.clientWidth })),
   }));
+  check('timezone popup keeps complete zone labels readable',
+    timezoneLayout.width >= 400 && timezoneLayout.overflowingLabels.length === 0,
+    JSON.stringify(timezoneLayout));
   check('timezone list mounts only its visible options', await popup.locator('.ant-select-item-option').count() < 20);
   const scrollHost = popup.locator('.ant-select-dropdown-list-holder');
   const firstZone = await popup.locator('.ant-select-item-option').first().innerText();
