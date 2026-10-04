@@ -382,7 +382,8 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
 ### Quota capacity coverage
 
 - `internal/quota/capacity_scope_test.go` owns complete family/exact identity matching,
-  dated model releases and fail-closed aliases/groups. `internal/quota/capacity_history_test.go`
+  dated model releases and fail-closed aliases/groups. `internal/quota/capacity_test.go`
+  pins provider/scope eligibility, including Antigravity group windows. `internal/quota/capacity_history_test.go`
   owns adjacent-cycle selection, final-reading precedence and reset/period/scope refusals.
 - `internal/repository/quota_test.go` pins half-open aggregates and served-model precedence.
   `internal/api/management_quota_capacity_test.go` owns current-vs-previous provenance,
@@ -391,8 +392,10 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   incomplete-history evidence surviving retention until a scheduled reset.
 - `scripts/test-quota-capacity.ts` owns historical labels and unavailable copy selection;
   the existing `oauth-management` probe owns current/previous rendering and wrapping at
-  desktop and 320/375px. This extends the existing scenario without a new runner or list.
-- `internal/demo/quota_test.go` pins real normalized observations in the seeded demo.
+  desktop and 320/375px, including long token-only previous-cycle estimates in full-digit
+  style constrained to their own compact window. This extends the existing scenario without a new runner or list.
+- `internal/demo/quota_test.go` pins real normalized observations in the seeded demo
+  and credential-specific snapshot/marshal errors that preserve their underlying causes.
   `internal/api/demo_export_test.go` checks scoped and previous-cycle examples from the
   generated handlers, the injected quota clock and preserved half-open usage bounds;
   calendar-day normalization must not erase quota usage ends. Runtime numeric

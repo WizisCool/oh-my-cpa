@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
 
 const files = Array.from({ length: 12 }, (_, index) => {
   // auth-12 is the reset-credit credential, and it is Codex: the redemption action exists
@@ -382,8 +382,65 @@ export async function oauthManagement({ base, page, check }) {
       (await page.locator('.oauth-management-page .ant-select').count()) >= 3,
     );
   }
+  await verifyFullTokenCapacity({ base, page, check });
   await verifyAuthorizationOutcomes({ base, page, check });
   await verifyWorkspaceScale({ base, page, check });
+}
+
+
+async function verifyFullTokenCapacity({ base, page, check }) {
+  const tokenQuota = structuredClone(quota);
+  const previousWindow = tokenQuota[0].windows[1];
+  previousWindow.capacity.tokens = 123_456_789_012_345;
+  delete previousWindow.capacity.cost_nanos;
+  const quotaPattern = '**/api/v1/management/quota';
+  const quotaHandler = (route) => route.fulfill({ json: { quotas: tokenQuota, total: tokenQuota.length } });
+  await page.route(quotaPattern, quotaHandler);
+  const setTokenStyle = (style) => page.evaluate(async (value) => {
+    const response = await fetch('/omc/api/v1/preferences/omc_token_style', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value),
+    });
+    if (!response.ok) throw new Error('Token style preference write failed');
+  }, style);
+  try {
+    await setTokenStyle('full');
+    for (const width of [1440, 375, 320]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+      await page.goto(`${base}/oauth-management?density=compact`, { waitUntil: 'domcontentloaded' });
+      const previousEstimate = page.locator('[data-auth-index="auth-01"] [data-quota-compact-window="weekly"] [data-quota-compact-capacity]');
+      await until(async () => (await previousEstimate.innerText()) === 'Prev ≈123,456,789,012,345 tokens', {
+        label: 'the previous-cycle token estimate in full-digit style',
+      });
+      await until(async () => page.getByTestId('oauth-credential-record').first().evaluate((element) => {
+        return getComputedStyle(element).gridTemplateColumns.split(' ').length === (window.innerWidth <= 640 ? 1 : 6);
+      }), { label: 'the credential row to adopt the target viewport' });
+      await settleLayout(page);
+      const geometry = await previousEstimate.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const windowBounds = element.closest('[data-quota-compact-window]').getBoundingClientRect();
+        const textRange = document.createRange();
+        textRange.selectNodeContents(element);
+        const fragments = [...textRange.getClientRects()];
+        return {
+          text: element.textContent,
+          isContained: bounds.width > 0 && bounds.left >= windowBounds.left - 1 && bounds.right <= windowBounds.right + 1
+            && element.scrollWidth <= element.clientWidth + 1
+            && fragments.every((fragment) => fragment.left >= windowBounds.left - 1 && fragment.right <= windowBounds.right + 1),
+          overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+        };
+      });
+      check(
+        `the full-digit previous-cycle token estimate stays readable within its window at ${width}px`,
+        geometry.text === 'Prev ≈123,456,789,012,345 tokens' && geometry.isContained && geometry.overflow === 0,
+        JSON.stringify(geometry),
+      );
+    }
+  } finally {
+    await page.unroute(quotaPattern, quotaHandler);
+    await setTokenStyle('en-compact');
+  }
 }
 
 export const oauthManagementFixtures = {

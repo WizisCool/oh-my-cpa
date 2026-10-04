@@ -420,22 +420,25 @@
 
 .window-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
 }
 
-/* The estimate keeps its width and the countdown gives way: a clipped figure reads as a
-   different, smaller number, while a clipped countdown still has its tooltip. */
+/* A clipped figure reads as a different, smaller number. Long full-digit estimates
+   must wrap within their own window, while short readings retain the single-line footer. */
 .window-capacity {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--fg-2);
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .window-reset {
