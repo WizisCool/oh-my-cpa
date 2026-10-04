@@ -148,7 +148,7 @@ docker compose -f deploy/compose.full.yml start oh-my-cpa
   ```
 - Or via container exec:
   ```bash
-  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - "http://oh-my-cpa:8080${BASE_PATH}/api/healthz" | jq .
+  docker compose -f deploy/compose.full.yml exec oh-my-cpa wget -q -O - "http://127.0.0.1:8080${BASE_PATH}/api/healthz" | jq .
   ```
 
 Confirm the JSON response reports `"database_status": "ok"` and `"status": "ok"` (or `"degraded"` if CPA is temporarily offline).
