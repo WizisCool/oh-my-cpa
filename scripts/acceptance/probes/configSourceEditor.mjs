@@ -187,14 +187,17 @@ async function configSourceMobile({ base, page, check }) {
   for (const width of [320, 375, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await until(async () => await page.locator('.config-source-actions button').filter({ hasText: /^Wrap$/ }).getAttribute('aria-pressed') === 'true', { label: 'phone default wrap' });
-    // Equal stale desktop widths are not a phone layout; Monaco must resize its render surface too.
+    // Monaco resizes in two steps: its layout pass sizes the editor and its overflow guard at
+    // once, and a later render pass sizes the layers inside them. Between the two the editor
+    // already measures phone-wide while the closed find box still sits at its desktop offset and
+    // widens the page, so the layer that only the render pass writes is the one to wait for.
     await until(async () => page.locator('.monaco-editor').evaluate((editor) => {
       const shell = editor.closest('.config-monaco-shell');
-      const renderSurface = editor.querySelector('.overflow-guard');
+      const renderedLayer = editor.querySelector('.overflow-guard > .overlayWidgets');
       return shell.clientWidth > 0 && shell.clientWidth <= window.innerWidth
         && Math.abs(editor.clientWidth - shell.clientWidth) <= 1
-        && renderSurface !== null && Math.abs(renderSurface.clientWidth - editor.clientWidth) <= 1;
-    }), { label: `the YAML editor resized to the ${width}px phone layout` });
+        && renderedLayer !== null && Math.abs(renderedLayer.clientWidth - editor.clientWidth) <= 1;
+    }), { label: `the YAML editor rendered the ${width}px phone layout` });
     await settleLayout(page);
     const geometry = await page.evaluate(() => ({
       overflow: document.querySelector('.app-content').scrollWidth - document.querySelector('.app-content').clientWidth,

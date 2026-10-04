@@ -339,8 +339,9 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
 - `config-source-editor` owns real Monaco widgets, font/gutter/wrapping, long URLs and indentation,
   phone find, in-place focused editing, draft/undo/focus continuity, nested Back, simulated keyboard
   viewport bounds, invalid input, revision conflict, failed saves and single successful confirmation.
-  Phone geometry is measured after Monaco matches its resized shell; React option changes alone
-  do not certify that its asynchronous automatic layout has completed.
+  Phone geometry is measured after Monaco's render pass has resized the layers inside the editor.
+  Neither React option changes nor the editor's own box certify that: its layout pass sizes the
+  box first, and until the render pass follows the closed find box keeps its desktop offset.
   `scripts/acceptance/configuration-plugins.mjs` also formats a document from the built SPA to
   exercise production worker asset paths and RPC, complementing the dev-server source scenario.
   Both require native flow-sequence delimiter spacing, which the serializer fallback cannot produce;
