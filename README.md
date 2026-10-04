@@ -6,11 +6,9 @@
   <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA" width="340">
 </picture>
 
-### The self-hosted console for CLIProxyAPI
+### Manage APIs and OAuth in one place. Visualize requests, cost and usage.
 
-**Manage providers and credentials, watch every request, and know what it cost.**
-
-One binary · Embedded console · Local SQLite · Works offline
+MCP · Visualization · Management
 
 <br />
 

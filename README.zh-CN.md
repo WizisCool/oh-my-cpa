@@ -6,11 +6,9 @@
   <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA" width="340">
 </picture>
 
-### 面向 CLIProxyAPI 的自托管控制台
+### 集中管理 API 与 OAuth，可视化观测请求、成本、用量
 
-**管理提供商与凭据，看清每一次请求，算清每一笔费用。**
-
-单二进制 · 内嵌控制台 · 本地 SQLite · 可离线运行
+MCP · 可视化 · 管理
 
 <br />
 
