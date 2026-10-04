@@ -59,7 +59,7 @@ const BASELINE = {
   'scripts/acceptance/usage-events/filterPanel.mjs': 1,
   'scripts/acceptance/usage-events/searchAndRejections.mjs': 1,
   'scripts/browser-acceptance.mjs': 2,
-  'scripts/browser-live-smoke.mjs': 23,
+  'scripts/browser-live-smoke.mjs': 22,
   // Browser test code that the scan set did not reach until the pattern widened: it drives
   // Playwright, and the `hasDemoContent` it exports runs in the page.
   'scripts/demo-readiness.mjs': 1,

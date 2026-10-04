@@ -231,7 +231,7 @@ export async function filterPanelSection(context) {
   // Return to the window the rest of the audit expects before it continues.
   await clickSettled('.req-time-button', 'the time-range control');
   await page
-    .locator('.ant-dropdown-menu-item')
+    .locator('.time-range-option')
     .filter({ hasText: /1h/ })
     .first()
     .click();

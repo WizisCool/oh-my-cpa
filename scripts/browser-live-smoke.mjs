@@ -167,13 +167,7 @@ async function main() {
   for (const preset of ['近 1 小时', '近 7 天', '近 24 小时']) {
     await page.locator('.range-trigger').click();
     await page.waitForTimeout(250);
-    // The panel opens on whichever tab owns the current window, so a stored
-    // The custom range lands on the Custom tab. Reach the quick list the way a
-    // user would.
-    const quickTab = page.locator('.ant-tabs-tab', { hasText: '最近' });
-    if (await quickTab.count()) await quickTab.click();
-    await page.waitForTimeout(200);
-    const option = page.locator('.range-option', { hasText: preset });
+    const option = page.locator('.time-range-option', { hasText: preset });
     if (await option.count()) {
       await option.first().click();
       await page.waitForTimeout(450);

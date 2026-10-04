@@ -934,34 +934,68 @@ the default duration. Lifetime changes do not change the entry/exit motion budge
 
 ### Time range control
 
-One button names the window (`Last 1 hour`, or `08-11 – open-ended`); the rest lives
-in its popover. **Presets** lists the quick windows and nothing else — no secondary
-column repeating the span each one resolves to. **Custom** is antd's own range
-picker: its panel, its two-month calendar, nothing wrapped around it. Wrapping a
-date picker in a draft state and a second Apply control means two opinions about
-when a date is "chosen", and users feel the disagreement.
+One button names the window (`Last 1 hour`, or `08-11 – open-ended`); the rest lives on one
+surface it opens. The dashboard and the request list share the control
+(`web/src/components/common/timeRange/`) and differ only in what a custom range resolves to.
 
-The picker stays day-granular on purpose. `showTime` collapses antd's range panel
-to one calendar plus time columns — the least legible thing in the component —
-and it keeps OK disabled until the end field has a value, which makes an empty
-end impossible. Without it, `allowEmpty` works the way the antd docs advertise:
-**leave the end empty and the range runs open-ended**. A picked end means *through*
-that day, so `08-09 → 08-21` really includes the 21st.
+**The surface opens on the presets alone, and the custom range is one level down.** A short
+list of relative windows is what the reader wants almost every time; a calendar they did not
+ask for is a screenful of attention spent on nothing. The list's last row, set apart by a
+rule and carrying a caret, opens the custom range beside the list; pressing it again folds
+it away. It opens there directly only when the committed window is already a custom one,
+because a reader reopening that window came to adjust it.
+
+A preset is a complete answer and applies on the press. A custom range is two presses on
+the calendar and, on the request list, two times - so it is staged and committed with
+**Apply**. Committing each press would query a half-chosen window and move the data under
+the pointer.
+
+**The calendar is drawn inline, in the console's own tokens.** It is part of the picker's own panel rather than a second floating layer: a calendar that
+floats beside the panel that asked for it reads as two controls and cannot become a sheet. Days sit on a seven-column grid with no column gap, so a range is one
+unbroken band per week: the band is a 16% mix of `--accent`, the two picked days are filled
+`--accent` with `--accent-on` text, today carries a 1px `--border` ring and the accent as its
+text colour, and days after today are disabled, because every window ends at or before now.
+The grid is always six weeks tall, so stepping a month never moves the controls beneath it.
+Two months are shown on a desktop, where a range across a month boundary is the common
+custom case, and one in the sheet. While the end is still to be picked, the hovered day
+previews the band, and the field the next press will set carries the accent border.
+
+**Two presses make a range; a third starts a new one.** A press before the start swaps the
+ends, so the order never matters, and a single press followed by Apply is that one day.
+**Until now** leaves the end open: the calendar then only moves the start.
+
+| Page | Granularity | A picked end means |
+| --- | --- | --- |
+| Dashboard | Day | *Through* that day, so `08-09 → 08-21` includes the 21st |
+| Request list | Minute (`HH:mm`, 24-hour, typed) | Through that minute, and never past now |
+
+The time is a typed field rather than the browser's own time control, which follows the
+browser locale into a 12-hour clock while every other time in the console is 24-hour. The
+panel names the console's zone offset beside Apply, because the dates are civil dates in that
+zone and not in the browser's.
+
+**Below the 900px breakpoint the surface is a bottom sheet.** A popover anchored to a toolbar
+button has neither the width for a calendar nor a thumb's reach. The sheet shows one level at
+a time - the presets, or the custom range under a row that leads back to them - draws days
+at 40px and preset rows at 44px, puts Cancel and Apply at full width along the bottom edge,
+and is a Drawer-class overlay: the platform's Back dismisses it (§8).
 
 Three kinds of window, and only the first two move:
 
 | Chosen | Behaviour |
 | --- | --- |
 | Preset (Last N) | Sliding: re-resolved against `now` on every poll, so the newest bucket keeps appearing. |
-| Custom, end left empty | Growing (open-ended): fixed start, end tracks `now`. Polled like a preset. |
+| Custom, **Until now** | Growing (open-ended): fixed start, end tracks `now`. Polled like a preset. |
 | Custom, closed range | Frozen: shown exactly as picked, never polled. |
 
 The choice is stored on the server, not in the browser: a reload, a service
 restart and a container rebuild must all bring back the window the operator was
 looking at. A date picker that is not in use never sits in the toolbar.
 
-The selected row is marked the way a TUI marks it — a 2px accent inset rule and
-the text weight, not a filled block. Polling is paced to the resolution being
+The selected preset is marked the way the side rail marks its page — a straight 2px
+accent rule on a square edge and the text weight, not a filled block. A closed custom
+range turns the trigger's border and text to the accent: it is a fixed fact, and must
+not be taken for a window that is still moving. Polling is paced to the resolution being
 served — `bucket / 12`, clamped to 5s–120s — because refreshing faster than the
 grid can change costs queries and buys nothing. There is no "live" switch: the
 shortest preset **is** live. It is fifteen minutes at one bucket per minute, so

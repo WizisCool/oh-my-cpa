@@ -57,7 +57,7 @@ export async function refreshAndLayoutSection(context) {
     });
     check(`request records ${width}px header actions stay in view`, actionsFit <= 1, `rightOverhang=${actionsFit}`);
 
-    // The panel and the time dialog are the two surfaces that only exist while
+    // The panel and the time range picker are the two surfaces that only exist while
     // open, so the closed-page overflow check above cannot see them.
     await page.locator('.req-more-filters').click();
     await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
@@ -106,34 +106,30 @@ export async function refreshAndLayoutSection(context) {
     await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
 
     await clickSettled('.req-time-button', 'the time-range control');
-    // The trigger opens the preset menu; the absolute dialog is a menu item, so a
-    // click on the trigger alone never opens it.
-    await page
-      .locator('.ant-dropdown-menu-item')
-      .filter({ hasText: /自定义时间|Custom range/ })
-      .first()
-      .click();
-    await page.locator('.req-time-modal').waitFor({ state: 'visible', timeout: 10000 });
-    const modalOnScreen = () =>
+    // The picker is a popover beside the trigger, or a bottom sheet below the narrow
+    // breakpoint. Its widest state is the custom range, so that is the one measured:
+    // either way it must sit inside the viewport, calendar included.
+    await page.locator('.time-range-custom-toggle').click();
+    await page.locator('.time-range-day').first().waitFor({ state: 'visible', timeout: 10000 });
+    const pickerOnScreen = () =>
       page.evaluate(() => {
-        const dialog = document.querySelector('.req-time-modal');
-        if (!dialog) return 'no dialog';
-        const box = dialog.getBoundingClientRect();
+        const panel = document.querySelector('.time-range-panel');
+        if (!panel) return 'no panel';
+        const box = panel.getBoundingClientRect();
         if (box.left < -1 || box.right > window.innerWidth + 1) {
           return `left=${Math.round(box.left)} right=${Math.round(box.right)} viewport=${window.innerWidth}`;
         }
         return true;
       });
-    // Same shape as the drawer above: the dialog scales into place, so the
-    // placement assertion waits for it rather than sampling a fixed pause after
-    // it became nominally visible.
+    // The surface animates into place, so the placement assertion waits for it rather
+    // than sampling a fixed pause after it became nominally visible.
     await checkEventually(
-      `custom time dialog stays on screen at ${width}px`,
-      async () => (await modalOnScreen()) === true,
-      { detail: async () => String(await modalOnScreen()) },
+      `time range picker stays on screen at ${width}px`,
+      async () => (await pickerOnScreen()) === true,
+      { detail: async () => String(await pickerOnScreen()) },
     );
     await page.keyboard.press('Escape');
-    await page.locator('.req-time-modal').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    await page.locator('.time-range-panel').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   // The detail drawer's copy control sits inside a container that traps focus, which

@@ -853,7 +853,7 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
   // A panel wired to a fixed span would keep painting the same series as the operator changes the
   // window, which is invisible from a single-window assertion.
   await page.locator('.range-trigger').click();
-  const option = page.locator('.range-option', { hasText: /Last 7 days|近 7 天/ });
+  const option = page.locator('.time-range-option', { hasText: /Last 7 days|近 7 天/ });
   await option.click();
   await until(async () => calls.some((search) => search.includes('preset=7d')), {
     label: 'the model panels to re-read for the new window',

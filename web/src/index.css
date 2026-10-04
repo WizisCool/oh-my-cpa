@@ -197,7 +197,7 @@ body {
 button, input, textarea, select { font: inherit; }
 a { color: inherit; }
 
-.ant-layout, .ant-card, .ant-drawer-content, .ant-modal-content, .ant-popover-inner,
+.ant-layout, .ant-card, .ant-drawer-content, .ant-modal-content, .ant-popover-container,
 .ant-dropdown-menu, .ant-select-dropdown, .ant-picker-dropdown .ant-picker-panel-container,
 .ant-notification-notice {
   box-shadow: none !important;
@@ -207,7 +207,7 @@ a { color: inherit; }
    border is the only thing that tells a menu apart from what it floats over —
    design.md puts all structure in borders, so this is the rule doing its job
    rather than a decoration added on top. */
-.ant-popover-inner, .ant-dropdown-menu, .ant-select-dropdown,
+.ant-popover-container, .ant-dropdown-menu, .ant-select-dropdown,
 .ant-picker-dropdown .ant-picker-panel-container, .ant-modal-content,
 .ant-notification-notice {
   border: 1px solid var(--border);
@@ -1008,33 +1008,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .chart-slot svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 
-/* ── range control: one button, one popover, two modes ────────────────────── */
-.range-trigger { min-width: 138px; justify-content: space-between; gap: 10px; color: var(--fg-2); }
-.range-trigger-caret { color: var(--meta); font-size: 10px; }
-.range-panel { width: 168px; }
-/* The custom tab hosts antd's range input, which needs its real width; the
-   calendar it opens belongs to the viewport, not to this panel. */
-.range-panel.is-wide { width: 248px; }
-.range-panel .ant-tabs-nav { margin-bottom: 6px; }
-.range-panel .ant-tabs-tab { padding: 4px 2px; font-size: 12px; }
-.range-options { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
-.range-option {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--fg-2);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-.range-option:hover { background: var(--hover-inset); color: var(--fg); }
-/* The selected row is marked the way a TUI marks it — a rule and the weight,
-   not a filled block. */
-.range-option.is-active { color: var(--fg); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+/* The dashboard's window picker keeps one width across presets, so the header's other
+   actions do not shift when the window is changed. */
+.range-trigger { min-width: 138px; }
 .dashboard-secondary { margin-bottom: 32px; }
 .dashboard-footnote {
   display: flex;

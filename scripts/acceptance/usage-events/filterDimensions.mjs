@@ -15,30 +15,45 @@ export async function filterDimensionsSection(context) {
 
 
   // Every preset is listed exactly once, including whichever is selected, is pinned
-  // by `presetMenuKeys` in the policy suite. What is left here is the wiring the
-  // pure test cannot see: that the menu is built from that policy at all, and that a
-  // preset chosen from it reaches the URL.
+  // by `presetKeys` in the policy suite. What is left here is the wiring the
+  // pure test cannot see: that the list is built from that policy at all, and that a
+  // preset chosen from it reaches the URL, and that a custom range picked on the
+  // calendar does too.
   await page.goto(`${appURL}/usage/events?preset=7d`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
   await clickSettled('.req-time-button', 'the time-range control');
-  const presetItems = await page.locator('.ant-dropdown-menu-item').allInnerTexts();
-  await page.keyboard.press('Escape');
-  await page
-    .locator('.ant-dropdown:visible')
-    .waitFor({ state: 'hidden', timeout: 5000 })
-    .catch(() => {});
+  await page.locator('.time-range-option').first().waitFor({ state: 'visible', timeout: 10000 });
+  const presetItems = await page.locator('.time-range-option').allInnerTexts();
   check(
-    'the window menu lists every preset and not just the unselected ones',
+    'the window picker lists every preset and not just the unselected ones',
     ['15m', '1h', '6h', '24h', '7d', '30d', '90d'].every(
       (preset) => presetItems.filter((text) => text.includes(preset)).length === 1,
     ),
     `items=${presetItems.join('|')}`,
   );
   check(
-    'the preset menu is rendered from the same policy the tests assert',
-    presetItems.filter((text) => /自定义时间|Custom range/.test(text)).length === 1,
+    'the selected preset is marked rather than removed',
+    (await page.locator('.time-range-option.is-active').allInnerTexts()).join('|').includes('7d'),
     `items=${presetItems.join('|')}`,
   );
+  // Two presses and Apply commit an absolute window. The two latest selectable days are
+  // used because days after today cannot be picked.
+  // The calendar is one level down: the picker opens on the presets alone.
+  check('the calendar stays closed until it is asked for', (await page.locator('.time-range-day').count()) === 0);
+  await page.locator('.time-range-custom-toggle').click();
+  const selectableDays = page.locator('.time-range-day:not(:disabled)');
+  await selectableDays.last().waitFor({ state: 'visible', timeout: 10000 });
+  const dayCount = await selectableDays.count();
+  await selectableDays.nth(Math.max(0, dayCount - 2)).click();
+  await selectableDays.nth(dayCount - 1).click();
+  check('a half-picked range is not committed', filterSuffix().includes('preset=7d'), `url=${filterSuffix()}`);
+  await page.locator('[data-testid="time-range-apply"]').click();
+  await checkEventually(
+    'a custom range reaches the URL as an absolute window',
+    async () => /from=\d+/.test(filterSuffix()) && /to=\d+/.test(filterSuffix()) && !filterSuffix().includes('preset='),
+    { detail: async () => `url=${filterSuffix()}` },
+  );
+  await page.locator('.time-range-panel').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
 
   // A cost filter is carried as exactly one parameter, and clearing filters must
   // keep the window and page size - in the URL and in what is saved for next time.

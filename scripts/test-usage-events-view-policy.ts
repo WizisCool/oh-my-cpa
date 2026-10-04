@@ -32,12 +32,9 @@ import {
   shouldPoll,
 } from '../web/src/components/usage/pollingPolicy.ts';
 import {
-  presetMenuKeys,
+  presetKeys,
   QUICK_PRESETS,
-  rangeErrorKey,
-  selectedPresetKeys,
   splitPresets,
-  validateAbsoluteRange,
 } from '../web/src/components/usage/timeRangePolicy.ts';
 import {
   REFRESH_READS,
@@ -460,12 +457,12 @@ test('the arrival count is reported only while the reader is holding rows', () =
 
 test('every configured preset appears exactly once, whichever one is selected', () => {
   // The regression: filtering the selected value out of its own group removed the
-  // current choice from the menu, so the operator could not see or return to it.
-  const keys = presetMenuKeys();
+  // current choice from the list, so the operator could not see or return to it.
+  const keys = presetKeys();
   assert.equal(new Set(keys).size, keys.length, 'no preset is offered twice');
   assert.equal(keys.length, Object.keys(EVENT_PRESETS).length, 'no preset is missing');
   for (const preset of Object.keys(EVENT_PRESETS)) {
-    assert.ok(keys.includes(`preset:${preset}`), `${preset} is offered`);
+    assert.ok(keys.includes(preset), `${preset} is offered`);
   }
 });
 
@@ -474,46 +471,6 @@ test('the quick group and the rest partition the presets without overlap', () =>
   assert.deepEqual(quick, QUICK_PRESETS.filter((value) => value in EVENT_PRESETS));
   assert.equal(quick.some((value) => slow.includes(value)), false);
   assert.equal(quick.length + slow.length, Object.keys(EVENT_PRESETS).length);
-});
-
-test('the menu marks the committed window, absolute or preset', () => {
-  assert.deepEqual(selectedPresetKeys(false, '1h'), ['preset:1h']);
-  assert.deepEqual(selectedPresetKeys(true, '1h'), ['absolute']);
-});
-
-test('a complete past range can be applied', () => {
-  const now = 1_000_000;
-  assert.deepEqual(validateAbsoluteRange([now - 60_000, now - 1_000], now), {
-    isValid: true,
-    errorKey: undefined,
-  });
-});
-
-test('an unfinished range blocks Apply without being reported as an error', () => {
-  const now = 1_000_000;
-  assert.equal(validateAbsoluteRange([null, now], now).errorKey, 'incomplete');
-  assert.equal(validateAbsoluteRange([now - 1, null], now).isValid, false);
-});
-
-test('a reversed or equal range is refused', () => {
-  const now = 1_000_000;
-  assert.equal(validateAbsoluteRange([now - 1_000, now - 60_000], now).errorKey, 'reversed');
-  // Equal ends would be rejected by the server as a malformed window, so they are
-  // refused here rather than sent as a request that cannot succeed.
-  assert.equal(validateAbsoluteRange([now - 1_000, now - 1_000], now).errorKey, 'reversed');
-});
-
-test('a range reaching past now is refused', () => {
-  const now = 1_000_000;
-  assert.equal(validateAbsoluteRange([now - 1_000, now + 1], now).errorKey, 'future');
-  assert.equal(validateAbsoluteRange([now + 1, now + 1_000], now).errorKey, 'future');
-});
-
-test('the validation outcome maps to the message key the picker renders', () => {
-  assert.equal(rangeErrorKey('reversed'), 'events.range_reversed');
-  assert.equal(rangeErrorKey('future'), 'events.range_in_future');
-  // Incomplete is not an error message: the operator has not finished choosing.
-  assert.equal(rangeErrorKey('incomplete'), undefined);
 });
 
 // ---------------------------------------------------------------------------

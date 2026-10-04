@@ -1,6 +1,6 @@
 import { parseLogLine } from '../web/src/types/logs.ts';
 import assert from 'node:assert/strict';
-import dayjs, { configureTimeZone, formatGatewayTimestamp, getTimeZone, parseTimeZone, pickerInstant, formatTimeZoneOffset, timeZoneOptions } from '../web/src/utils/time.ts';
+import dayjs, { configureTimeZone, formatGatewayTimestamp, getTimeZone, parseTimeZone, formatTimeZoneOffset, timeZoneOptions } from '../web/src/utils/time.ts';
 import { dayKey } from '../web/src/types/audit.ts';
 import { localDayOf } from '../web/src/types/tokenHeatmap.ts';
 import { formatGmtOffsetLabel, formatShortDateTime } from '../web/src/pages/quota/quotaFormat.ts';
@@ -22,9 +22,6 @@ assert.equal(formatGatewayTimestamp('2026-01-01T18:45:00Z'), '2026-01-01 13:45:0
 assert.equal(formatGatewayTimestamp('not a timestamp'), 'not a timestamp');
 assert.equal(dayjs('2026-03-08').endOf('day').valueOf() - dayjs('2026-03-08').startOf('day').valueOf() + 1, 23 * 3600000);
 assert.equal(dayjs('2026-11-01').endOf('day').valueOf() - dayjs('2026-11-01').startOf('day').valueOf() + 1, 25 * 3600000);
-// Date pickers can retain the previous date's offset after changing calendar fields.
-const picked = dayjs('2026-03-07 12:00').date(8);
-assert.equal(pickerInstant(picked), Date.parse('2026-03-08T16:00:00Z'));
 assert.equal(dayjs('15:30', 'HH:mm').format('HH:mm'), '15:30');
 assert.equal(parseTimeZone('Invalid/Timezone'), undefined);
 assert.throws(() => configureTimeZone('Invalid/Timezone'));

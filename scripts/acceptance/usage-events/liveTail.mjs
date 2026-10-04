@@ -178,7 +178,7 @@ export async function liveTailSection(context) {
   // filters, then reopen the bare route.
   await clickSettled('.req-time-button', 'the time-range control');
   await page
-    .locator('.ant-dropdown-menu-item')
+    .locator('.time-range-option')
     .filter({ hasText: /24h/ })
     .first()
     .click();

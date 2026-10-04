@@ -311,6 +311,19 @@ failure while making it diagnosable. A secret or build failure still stops servi
 For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
 `pnpm verify:full`; do not add a browser scenario for a pure graph or runner decision.
 
+### Time range picker regression coverage
+
+- `scripts/test-time-range-draft.ts` pins the picker's rules as pure logic, automatically
+  discovered: the six-week grid, the two-press range and its restart, inclusive ends at day and
+  minute granularity, the offset in force on the picked date across a DST change, the three
+  refusals (incomplete, reversed, future) and the round trip from a committed window back to
+  its draft.
+- `scripts/test-usage-events-view-policy.ts` pins that every request-list preset is listed once.
+- The request-list acceptance sections cover the wiring only: the picker stays inside the
+  viewport as a popover and as a sheet with its custom range open, the calendar stays closed
+  until it is asked for, a preset and a custom range each reach the URL, and a half-picked
+  range does not.
+
 ### Mobile console and focused YAML coverage
 
 - `scripts/test-source-wrap.ts` pins phone/desktop defaults and manual-choice precedence.

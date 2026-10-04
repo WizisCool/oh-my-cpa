@@ -41,10 +41,6 @@ zonedDate.unix = (seconds: number) => dayjs.unix(seconds).tz(effectiveTimezone);
 export default zonedDate;
 export type { Dayjs } from 'dayjs';
 
-// Pickers edit wall-clock fields; resolve their final fields again to account for DST changes.
-export function pickerInstant(value: dayjs.Dayjs): number {
-  return dayjs.tz(value.format('YYYY-MM-DD HH:mm:ss.SSS'), effectiveTimezone).valueOf();
-}
 export function formatGatewayTimestamp(value: string): string {
   try {
     const instant = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? dayjs(value) : dayjs.tz(value, serverTimezone);

@@ -1,0 +1,212 @@
+/* ── time range picker: one button, one surface ─────────────────────────────── */
+.time-range-trigger {
+  max-width: 260px;
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+.time-range-trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time-range-trigger-caret { flex: none; color: var(--meta); font-size: 10px; }
+.time-range-trigger.is-frozen { border-color: var(--accent); color: var(--accent); }
+
+/* The panel draws its own padding so the preset rail can run the popover's full height. */
+.time-range-popover .ant-popover-container { padding: 0; }
+
+.time-range-panel {
+  --time-range-cell: 32px;
+  --time-range-band: color-mix(in srgb, var(--accent) 16%, transparent);
+  display: flex;
+  align-items: stretch;
+  font-size: 12px;
+}
+
+/* ── presets ── */
+.time-range-rail { display: flex; flex: none; flex-direction: column; width: 148px; padding: 8px; }
+.time-range-presets { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+/* The custom range is a different kind of answer from the presets above it, so a rule sets it
+   apart; its caret says the row opens something rather than applying. */
+.time-range-option.time-range-custom-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  position: relative;
+}
+.time-range-custom-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -3px 0 auto;
+  border-top: 1px solid var(--border-soft);
+}
+.time-range-custom-caret { color: var(--meta); font-size: 10px; }
+.time-range-custom-toggle[aria-expanded="true"] { background: var(--hover-inset); color: var(--fg); }
+.time-range-panel[data-mode="custom"] > .time-range-rail { border-right: 1px solid var(--border); }
+.time-range-option {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.time-range-option:hover { background: var(--hover-inset); color: var(--fg); }
+.time-range-option:focus-visible,
+.time-range-day:focus-visible,
+.time-range-month-step:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* The selected row is marked the way the side rail marks its page: a straight 2px rule and
+   the weight, not a filled block. The rule's side has no radius - an inset shadow follows
+   the corner, and a rounded one bends the rule into a bracket. */
+.time-range-option.is-active {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.time-range-option.is-active:focus-visible { box-shadow: inset 2px 0 0 var(--accent), var(--focus-ring); }
+
+/* ── custom range ── */
+.time-range-custom { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 12px; }
+.time-range-calendar { display: flex; gap: 20px; }
+.time-range-month { flex: 1 1 0; min-width: 0; }
+.time-range-month-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.time-range-month-title { color: var(--fg); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.time-range-month-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.time-range-month-step:hover:not(:disabled) { background: var(--hover-inset); color: var(--fg); }
+.time-range-month-step:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.5; }
+.time-range-month-step.is-spacer { visibility: hidden; }
+
+.time-range-weekdays,
+.time-range-days { display: grid; grid-template-columns: repeat(7, minmax(var(--time-range-cell), 1fr)); }
+.time-range-weekdays { margin-bottom: 2px; color: var(--meta); font-size: 11px; text-align: center; }
+.time-range-weekdays > span { line-height: 24px; }
+/* Rows are separated and columns are not, so a range reads as one unbroken band per week. */
+.time-range-days { row-gap: 2px; }
+.time-range-day,
+.time-range-day-gap { height: var(--time-range-cell); }
+.time-range-day {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.time-range-day:hover:not(:disabled) { background: var(--hover-inset); color: var(--fg); }
+.time-range-day:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.45; }
+.time-range-day.is-today { color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+.time-range-day.is-in-range,
+.time-range-day.is-in-range:hover:not(:disabled) { border-radius: 0; background: var(--time-range-band); color: var(--fg); }
+.time-range-day.is-range-start { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
+.time-range-day.is-range-end { border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.time-range-day.is-picked,
+.time-range-day.is-picked:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  box-shadow: none;
+}
+.time-range-day.is-picked:focus-visible { box-shadow: 0 0 0 1px var(--elevated), 0 0 0 3px var(--accent); }
+
+/* ── the two ends, as picked ── */
+.time-range-fields { display: flex; align-items: stretch; gap: 8px; }
+.time-range-fields-arrow { align-self: center; color: var(--meta); }
+.time-range-field {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+/* The end the next press on the calendar will set. */
+.time-range-field.is-next { border-color: var(--accent); }
+.time-range-field-label { flex: 1 0 100%; color: var(--meta); font-size: 11px; }
+.time-range-field-value { color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.time-range-field-value.is-empty { color: var(--meta); }
+.time-range-time {
+  width: 5ch;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.time-range-time:focus { outline: none; color: var(--accent); }
+.time-range-time::placeholder { color: var(--meta); }
+
+/* The line is always present so an error appearing does not move Apply under the pointer. */
+.time-range-error { min-height: 18px; margin: 0; color: var(--danger); line-height: 18px; }
+.time-range-footer { display: flex; align-items: center; gap: 12px; }
+.time-range-open-end { font-size: 12px; }
+.time-range-zone { color: var(--meta); font-size: 11px; }
+.time-range-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* ── narrow viewports: a bottom sheet ── */
+.time-range-sheet .ant-drawer-body {
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.time-range-panel.is-sheet {
+  /* A day is small in both dimensions, so in the sheet the cell is drawn at touch size. Seven
+     of them still fit the 320px floor inside the sheet's gutters. */
+  --time-range-cell: 40px;
+  flex-direction: column;
+  gap: 12px;
+  /* On a tablet the sheet is wider than a calendar should be drawn. */
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  font-size: 14px;
+}
+.time-range-panel.is-sheet .time-range-rail { width: auto; padding: 0; }
+.time-range-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  cursor: pointer;
+}
+.time-range-panel.is-sheet .time-range-option { min-height: 44px; padding: 10px 12px; }
+.time-range-panel.is-sheet .time-range-custom { padding: 0; }
+.time-range-panel.is-sheet .time-range-month-step { width: 44px; height: 36px; }
+.time-range-panel.is-sheet .time-range-footer { flex-wrap: wrap; }
+.time-range-panel.is-sheet .time-range-actions { flex: 1 0 100%; }
+.time-range-panel.is-sheet .time-range-actions > .ant-btn { flex: 1 1 0; height: 40px; }
