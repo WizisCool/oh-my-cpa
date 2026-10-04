@@ -39,6 +39,9 @@ export const DOCUMENTS = [
   { file: 'docs/design.md' },
   { file: 'docs/cpamc-parity.md' },
   { file: 'docs/cpa-v8-compat.md' },
+  { file: 'docs/install.md' },
+  { file: 'docs/install-for-agents.md' },
+  { file: 'docs/operations.md' },
   { file: 'docs/ops/sqlite-operations.md' },
   { file: 'docs/ops/cloudflare-demo.md' },
   { file: 'docs/plans/model-prices.md' },
@@ -87,6 +90,7 @@ export const RETIRED_REFERENCES = [
  */
 export const EXPECTED_ABSENT_PATHS = [
   { path: '.env', reason: "the operator's dotenv file is created from .env.example and gitignored, so it never exists in a fresh clone" },
+  { path: 'deploy/.env', reason: "the Compose environment file the installation guide has the operator create; it holds secrets and is gitignored" },
   { path: 'cpa/', reason: 'the CLIProxyAPI directory is user-supplied and gitignored' },
   { path: 'cpa/cli-proxy-api', reason: 'the CLIProxyAPI binary is user-supplied and gitignored' },
   { path: 'cpa/cli-proxy-api.exe', reason: 'the CLIProxyAPI binary is user-supplied and gitignored' },

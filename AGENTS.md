@@ -29,7 +29,10 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | `docs/design.md` | Source of truth for visual system and the derived palette; `DESIGN.md` is its design-tool summary | Changes to palettes or their derivation, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/palette.ts`, `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
 | `DESIGN.md` | Brand design system summary (for design tooling) | Same as `docs/design.md`; both must stay strictly synchronized |
 | `PRODUCT.md` | Product positioning, capability matrix, constraints | Capability additions or removals, constraint shifts, target audience or positioning adjustments |
-| `README.md` / `README.zh-CN.md` | User and operator landing page (English and Simplified Chinese) | Command, environment variable, default value, endpoint, deployment topology, or security boundary changes |
+| `README.md` / `README.zh-CN.md` | Landing page (English and Simplified Chinese): what the product is, how to install it, where the documentation lives. Kept short on purpose; operational detail belongs in `docs/operations.md` | Capability additions or removals a newcomer should see, install steps, the essential-settings table, the demo address, or the documentation index |
+| `docs/install.md` / `docs/install-for-agents.md` | Installation for a person, and the same steps as a runbook a coding agent follows | Compose files, `Dockerfile`, required environment variables, build commands, health endpoint or toolchain version changes; keep the two in step |
+| `docs/operations.md` | Settings reference, deployment constraints and operational notes | Environment variable, default value, endpoint, deployment topology, or security boundary changes |
+| `docs/images/readme/` | The screenshots both READMEs embed, generated from demo mode | A pictured page changes how it looks: regenerate with `pnpm build && pnpm readme:screenshots` and commit the images |
 | `docs/adr/NNNN-*.md` | Important and irreversible architectural decisions | When a decision involves real trade-offs, **add a new** ADR; do not rewrite accepted ADRs (supersede them with a new ADR) |
 | `docs/cpamc-parity.md` | Parity matrix against CPAMC | Changing an item from "planned/in-progress" to "covered"; interface capability or page wiring changes; newly identified gaps |
 | `docs/ops/sqlite-operations.md` | Backup, restore, master key governance, migration gates | Migration or backup strategy, retention period, backup count, related environment variable default changes |
@@ -177,6 +180,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm check:motion` | Enforce §7's motion budget: every duration is a `--motion-*` token, no transition animates a layout property, every keyframe honours `prefers-reduced-motion`, and hovers stay within `fast` (`pnpm test:motion` self-test) |
 | `pnpm check:feedback` | Enforce the feedback surfaces (ADR 0045): antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs are used only inside `web/src/components/feedback/` (`pnpm test:feedback` self-test) |
 | `pnpm lint:antd` | Check antd usage and accessibility rules |
+| `pnpm readme:screenshots` | Regenerate the README screenshots under `docs/images/readme/` from demo mode (requires `pnpm build` first; outside every gate) |
 
 ---
 

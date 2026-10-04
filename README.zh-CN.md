@@ -3,258 +3,346 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/brand/omc-wordmark-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="web/src/assets/brand/omc-wordmark-light.svg">
-  <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA Logo" width="360">
+  <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA" width="340">
 </picture>
 
-# Oh-My-CPA
+### 面向 CLIProxyAPI 的自托管控制台
 
-### 面向 CLIProxyAPI 的 Web 管理控制台与用量观测中心
+**管理提供商与凭据，看清每一次请求，算清每一笔费用。**
+
+单二进制 · 内嵌控制台 · 本地 SQLite · 可离线运行
 
 <br />
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/WizisCool/oh-my-cpa?style=flat&label=stars)](https://github.com/WizisCool/oh-my-cpa/stargazers)
+[![Release](https://img.shields.io/github/v/release/WizisCool/oh-my-cpa?label=release)](https://github.com/WizisCool/oh-my-cpa/releases)
 [![CI](https://github.com/WizisCool/oh-my-cpa/actions/workflows/ci.yml/badge.svg)](https://github.com/WizisCool/oh-my-cpa/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
-[![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org)
+[![Stars](https://img.shields.io/github/stars/WizisCool/oh-my-cpa?style=flat&label=stars)](https://github.com/WizisCool/oh-my-cpa/stargazers)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![CLIProxyAPI](https://img.shields.io/badge/CLIProxyAPI-v8+-4f46e5?style=flat)](https://github.com/router-for-me/CLIProxyAPI)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](LICENSE)
 
 <br />
 
-[English](README.md) · **简体中文**
+**[在线演示](https://omc-demo.junze.dev)** ·
+[安装](#安装) ·
+[交给 Agent](#让-agent-帮你安装) ·
+[文档](#文档) ·
+[English](README.md)
+
+<br />
+
+<a href="https://omc-demo.junze.dev">
+  <img src="docs/images/readme/hero-split.zh.webp" alt="Oh My CPA 仪表盘，左半为浅色主题，右半为深色主题" width="100%">
+</a>
 
 </div>
 
----
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）负责协议适配、凭据执行与请求代理。
+**Oh My CPA** 是它旁边的控制面：一个用来运营网关的 Web 控制台，以及网关自身并不保存的用量记录。
+它以单个 Go 二进制交付，内嵌 React 控制台，数据存放在本地 SQLite，无需 CDN、无需外部数据库，也没有第二套密码。
 
-> [!IMPORTANT]
-> **Oh My CPA 处于活跃开发阶段。** 核心功能已可用于日常代理管理与用量观测，多实例支持、容器镜像与部分高级管理功能仍在持续完善中。
+<table>
+<tr>
+<td width="25%" valign="top">
 
-Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) 的自托管控制面。本项目提供 Web 仪表盘、请求浏览器、凭据管理、模型定价与配置编辑，采用 Go 模块化单体架构，内嵌 React 前端产物，并使用本地 SQLite 存储，单二进制开箱即用，零外部 CDN 依赖。
+### 观测
 
-## 在线体验
+实时仪表盘、全年 Token 热力图，以及可多维筛选的请求记录：耗时、首字延迟、Token 与费用一目了然。
 
-**[omc-demo.junze.dev](https://omc-demo.junze.dev)** —— 运行在内置样例数据上的控制台。
+</td>
+<td width="25%" valign="top">
 
-无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、14 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：凭据下载、请求日志、插件执行与网关配置写入都会被拒绝，控制台也会明确告知。
+### 管理
 
-Demo 展示的是控制台，而不是在运行产品本身：前端与二进制内嵌的是同一份构建产物，其 API 由真实 Go handler 生成的 dataset 提供 —— 因此每个响应都具备自托管部署所产生的形状，但其后没有网关、数据库或采集管道，写操作会被直接拒绝而非模拟。原因见 `docs/architecture.md` §13 与 [ADR 0021](docs/adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)。
+提供商、OAuth 登录、客户端密钥、配额、插件，以及 CPA 的 `config.yaml`，表单或 YAML 两种方式均可编辑。
 
-想在本地运行该 dataset 的来源 —— 即用于生成它的 Go 二进制 demo 模式：
+</td>
+<td width="25%" valign="top">
+
+### 计费
+
+每条请求在完成时锁定费用。价格来自 OpenRouter 或由你自定义，历史账目不会随调价漂移。
+
+</td>
+<td width="25%" valign="top">
+
+### 自动化
+
+内置智能体与 MCP 服务通过声明式能力操作控制台，所有变更都需经你批准。
+
+</td>
+</tr>
+</table>
+
+## 在线演示
+
+**[omc-demo.junze.dev](https://omc-demo.junze.dev)**：无需账号、无需密钥、无需安装。
+
+它与二进制内嵌的是同一套控制台，运行在一份样例数据上：跨 8 个提供商、14 个模型的一年流量。
+其 API 响应由真实的 Go handler 生成，因此每个页面都与自托管部署的形态一致；写操作、凭据下载与模型推理会被拒绝。
+
+## 界面截图
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/usage-events-dark.zh.webp">
+  <img src="docs/images/readme/usage-events-light.zh.webp" alt="请求记录：每条请求的耗时、Token 与费用">
+</picture>
+<p align="center"><b>请求记录</b><br />按模型、提供商、密钥、状态与费用筛选每一条请求</p>
+</td>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/pricing-dark.zh.webp">
+  <img src="docs/images/readme/pricing-light.zh.webp" alt="按提供商分组的模型价目表">
+</picture>
+<p align="center"><b>费用与用量</b><br />自动匹配 OpenRouter 价格，也可自定义覆盖</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/oauth-management-dark.zh.webp">
+  <img src="docs/images/readme/oauth-management-light.zh.webp" alt="OAuth 凭据及其状态与配额">
+</picture>
+<p align="center"><b>OAuth 管理</b><br />登录、查看配额、配置凭据，集中在一处完成</p>
+</td>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/ai-providers-dark.zh.webp">
+  <img src="docs/images/readme/ai-providers-light.zh.webp" alt="AI 提供商列表、启停开关与流量">
+</picture>
+<p align="center"><b>AI 提供商</b><br />端点、模型、优先级，以及在网关层真正生效的启停开关</p>
+</td>
+</tr>
+</table>
+
+以上截图会跟随你的 GitHub 主题切换。控制台本身也一样：浅色、深色或跟随系统，每种模式各有三套内置配色，还可以自定义一套。
+
+<div align="center">
+  <img src="docs/images/readme/mobile.zh.webp" alt="手机上的仪表盘、请求记录与 OAuth 管理" width="88%">
+  <p><b>手机上同样好用。</b>每个页面都为窄屏重新排版。</p>
+</div>
+
+## 安装
+
+你需要一个正在运行的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 或更高版本**及其管理密钥；
+也可以让全栈 Compose 文件替你启动一个。管理密钥同时就是控制台的登录密码。
+
+### Docker Compose（推荐）
+
+一个文件启动 CPA、Oh My CPA 与自动签发 HTTPS 证书的 Caddy：
 
 ```bash
-pnpm build
-OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
+git clone https://github.com/WizisCool/oh-my-cpa.git
+cd oh-my-cpa
+
+mkdir -p cpa oh-my-cpa-data
+curl -fsSL https://raw.githubusercontent.com/router-for-me/CLIProxyAPI/main/config.example.yaml -o cpa/config.yaml
+sudo chown 10001:10001 oh-my-cpa-data
+
+cat > deploy/.env <<EOF
+CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
+OMCPA_MASTER_KEY=$(openssl rand -hex 32)
+DOMAIN=localhost
+OMCPA_PUBLIC_URL=https://localhost
+EOF
+
+docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --build
 ```
 
-它会以站点根路径（而不是 `/omc`）启动，并展示与本页相同的样例数据。
+打开 **`https://localhost/omc/`**，用 `deploy/.env` 中的 `CPA_MANAGEMENT_KEY` 登录。
+部署到公网时，把 `DOMAIN` 与 `OMCPA_PUBLIC_URL` 改成你的域名，Caddy 会自动申请证书。
+
+已经在运行 CPA？[`deploy/compose.omc.yml`](deploy/compose.omc.yml) 只启动控制台，
+详见[安装指南](docs/install.md#docker-compose-beside-an-existing-cpa)。
+
+### 从源码构建
+
+需要 Go 1.25+、Node.js 22+ 与 pnpm 11+。
+
+```bash
+git clone https://github.com/WizisCool/oh-my-cpa.git
+cd oh-my-cpa
+pnpm install --frozen-lockfile
+
+cp .env.example .env    # 设置 OMCPA_MASTER_KEY 与 OMCPA_CPA_MANAGEMENT_KEY
+
+pnpm build
+go build -o bin/oh-my-cpa ./cmd/oh-my-cpa
+./bin/oh-my-cpa
+```
+
+打开 **`http://127.0.0.1:8080/omc/`**。
+
+### 让 Agent 帮你安装
+
+把下面这段话粘贴给 Claude Code、Codex、Cursor 或任意编码 Agent：
+
+```text
+Install and configure Oh My CPA by following the instructions here:
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+```
+
+[Agent 安装指南](docs/install-for-agents.md)会告诉 Agent 如何检查机器环境、选择安装路径、
+避免在输出中泄露密钥，并在汇报之前验证安装结果。
+
+> [!IMPORTANT]
+> 请备份 `OMCPA_MASTER_KEY`：数据库中的加密内容靠它解密。每个数据目录只运行一个副本，
+> 且必须位于本地磁盘；同一个 CPA 的用量队列只能有一个采集器读取。
+> 验证、升级与排障见[安装指南](docs/install.md)。
+
+## 智能体与 MCP
+
+**在控制台里。** `/agent` 页面让一个已经通过 CPA 路由的模型回答问题并操作控制台：
+用量与请求分析、提供商、OAuth、配额、客户端密钥、配置与定价。读操作直接执行；
+变更在服务端预备好之后，等你点一次「允许」或「拒绝」。密钥、令牌与 OAuth 授权不会进入模型上下文。
+
+**在你自己的 Agent 里。** 同一套能力也通过二进制自带的 MCP 服务提供：
+
+```json
+{
+  "mcpServers": {
+    "oh-my-cpa": {
+      "command": "/path/to/oh-my-cpa",
+      "args": ["mcp"],
+      "env": {
+        "OMCPA_SERVER_URL": "https://cpa.example.com/omc",
+        "OMCPA_CPA_MANAGEMENT_KEY": "<你的 CPA 管理密钥>"
+      }
+    }
+  }
+}
+```
+
+外部 Agent 可以读取状态、预备一项操作，但不能批准它、提交密钥或完成 OAuth 登录。
+管理密钥等同于管理员权限，请只接入你愿意把控制台交给它的 Agent。
+契约见 [`docs/agent-capabilities.md`](docs/agent-capabilities.md)。
 
 ## 功能特性
 
-### 网关与 Provider 管理
-- **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、Meta Muse、xAI、Vertex AI、Gemini Interactions、DeepSeek 及 OpenAI 兼容服务的凭据与端点。config API-key 家族（claude、codex、gemini、meta、xai、vertex、interactions）的管理方式完全一致：凭据、模型、priority/weight、代理以及网关级启停开关。
-- **协议级启停控制**：通过 `excluded-models: ['*']` 实现网关协议层有效阻断，防止流量误路由至已停用凭据。
-- **模型目录自动拉取**：直连上游提供商获取最新可用模型列表。模型拉取要求 HTTPS，仅 localhost、回环或私有 IP 字面量可使用 HTTP，并拒绝跨源重定向。
-- **客户端 Key 别名管理**：创建、查看与删除代理客户端 API Key。支持为 Key 设置可读别名，别名自动呈现在请求记录、详情抽屉与筛选标签中。
-- **OAuth 管理**：以凭据为中心统一承载登录、认证文件管理、安全字段配置、模型列表、Provider 别名以及配额读取与操作。可在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；若重定向回调地址在本机无法打开，可粘贴完整回调 URL 完成授权；设备码流程会显示需要确认的授权码。集合始终保留所有认证文件条目，配额只在唯一且精确的 auth index 上关联。列表以概览展示凭据状态和主要配额窗口；详情抽屉以「配额」「配置」「模型」标签页分开任务，配额页完整展示所有窗口、积分到期时间、冷却与诊断。
+<details open>
+<summary><b>网关与提供商</b></summary>
 
-### 用量观测与请求浏览器
-- **用量趋势仪表盘**：按相对预设窗口（15m / 1h / 6h / 24h / 7d / 30d / 90d）或自定义日历区间展示请求量、Token 吞吐、缓存命中率与估算费用，并提供全年贡献图式 Token 热力图，按天展示 Token 用量；点击某天可查看当日请求次数与 Token 用量，并跳转到当天的请求记录。
-- **模型级用量面板**：Token 趋势与模型用量环形图按调用点（模型别名）或上游模型两种口径统计，展示 Top 5 模型/调用点的分组费用与占比；口径选择作为控制台偏好随部署持久化。
-- **Token 计量单位切换**：全局统一切换数字缩写风格（英文 K/M/B 或中文万/亿），适用于仪表盘、其 Token 活动提示、请求记录与详情抽屉；缩写值始终保留精确数值。
-- **OMC 设置中心**：随部署存储的 Token 计量单位，与界面主题及语言快捷切换聚合于一处。主题分为浅色、暗色与跟随系统三种模式，每种模式各配一套内置配色（暗色为 OMC Dark / Midnight / Forest，浅色为 OMC Light / Porcelain / Sandstone），或由你自行调整九个颜色令牌生成一套自定义配色，支持一键重置与逐令牌实时对比度提示；模型面板的统计口径留在其自身面板上。
-- **TPS 计算方式**：在「OMC 设置 → 显示」中统一选择请求记录和 Playground 的 TPS 是否包含首字延迟。默认排除首字延迟；无法有效扣除或剩余窗口不足 50 ms 时回退到总耗时。包含首字延迟时始终按总耗时计算。偏好 `omc_tps_calculation_mode`（`exclude_ttft` / `include_ttft`）保存在服务端，也可由 Agent/MCP 读取和修改，不改变历史计时与用量。
-- **多维分面请求浏览器**：按模型、Provider、客户端 Key 别名、状态、费用及延迟进行多选分面筛选与全文搜索。
-- **单请求详情与延迟分析**：展示总耗时、首字生成延迟（TTFT）、分项 Token 计数，并支持下载单请求原始日志。
-- **流式采集与后台拉取**：基于 RESP 订阅或 HTTP 轮询采集用量事件，队列空闲时自动指数退避。
-- **日志与操作审计**：增量尾随网关运行日志并下载错误日志文件；无需进入容器即可查看 Oh My CPA 自身最近的服务日志。操作审计是独立页面：可读的操作列表配合按结果统计的计数、每条记录的详情抽屉，支持类别、结果、文本和时间范围筛选（筛选保存在 URL 中），并可导出 JSON。
+- **AI 提供商**：Codex、Claude、Gemini、Meta Muse、xAI、Vertex AI、Gemini Interactions、DeepSeek 及 OpenAI 兼容服务，统一管理凭据、模型、优先级、权重、代理，以及在网关层真正生效的启停开关。
+- **OAuth 管理**：在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；按凭据管理认证文件、模型列表、别名与配额。
+- **客户端密钥**：创建、命名与吊销网关 API Key，名称会出现在请求记录与筛选项中。
+- **模型目录**：直接从上游提供商拉取模型列表。
+- **操练场**：用文本与图片调试任意已路由的模型，支持流式多轮对话与请求诊断。
+- **插件**：已安装插件、插件商店与类型化配置表单集中在一个页面。
 
-### 模型定价与成本核算
-- **请求时价格快照**：每条请求在完成写入时通过不可变价格版本锁定费用（ADR 0003），后续调整单价绝不篡改历史成本数据。
-- **OpenRouter 价目表**：从 OpenRouter 公开模型列表（`openrouter.ai`，无需密钥）为网关提供的每个模型自动定价，采用确定性匹配，支持长上下文分档与分时段价格；模型按实际接入提供商分组，沿用别名和图标，按优先级与模型名称排序，每页最多 20 项；未定价模型可在行内采纳匹配建议。
-- **关联与自定义价格**：可把模型关联到指定的 OpenRouter 模型，或按模型自定义费率；在价目表中设置，或直接在请求列表、请求详情和仪表盘中就地设置。上下文分段与时段计费可按基础价倍数（或指定价格）填写，提供 `200K` 等门槛预设、按本地时区填写时段、各档价格总览，以及任意请求大小的试算。若 OpenRouter 之后收录了你手动定价的模型，价目表会提示新匹配，可一键改为自动匹配或忽略。
-- **渠道倍率**：按 CPA 提供商缩放其应答的每个请求（例如中转站按 3 折），与价格一样按请求锁定；每个请求的详情会逐项说明费用构成。
+</details>
 
-### 配置编辑与系统安全
-- **双模式配置编辑**：提供结构化表单配置面板与内嵌 Monaco YAML 源码编辑器（保留原始注释与未知字段，本地加载零 CDN）。
-- **配置自动备份**：每次改写 CPA 的 `config.yaml` 之前（保存设置或源码、编辑提供商或客户端密钥、安装插件、启停凭据等），Oh My CPA 都会自动加密保存当时的文件。配置页的「备份」对话框按时间列出每份备份及其对应的操作，可将 v8 格式的备份恢复到网关（恢复前会先备份当前文件，因此恢复也能撤销），也可下载或删除任一份（v8 之前格式的备份仅供下载），也可以随时手动备份。保留份数可自定义（默认 20，范围 5–100）。
-- **插件管理**：一个页面、三个标签——已安装插件（运行状态、启用开关、配置、卸载）、以卡片展示的插件商店（图标、作者、标签、介绍、GitHub 与主页链接、官方/第三方标识，可安装或更新到指定版本），以及插件系统自身的设置（总开关、第三方插件源、插件商店认证规则）。插件声明的配置项以类型化表单编辑，并可切换到同一份配置的 JSON 视图。
-- **智能体查询结果**：只读 SQL 的原始结果和模型内部历史不会进入智能体会话响应或运行快照，也不提供原始结果预览；查询仍可供所选模型分析，最终回答和明确生成的图表、表格可以引用查询数据。
-- **静态加密存储**：CPA 管理密钥与原始用量消息在 SQLite 中采用 AES-GCM 加密存储。
-- **安全审计日志**：下载认证文件、导出请求日志、查看或修改 YAML 源码、下载、恢复或删除配置备份、显式查看客户端或提供商密钥等敏感操作强制写入追加式审计日志；审计写入失败时拒绝该操作。
-- **Demo 模式**：`OMCPA_DEMO_MODE`（默认 `false`）让控制台改用内置样例数据，而不是真实 CPA，因此无需管理密钥、也无需任何提供商凭据。它的存储不持久——数据库在每次启动时删除重建；同时服务端会拒绝登录流程、凭据搬运、插件执行、网关配置写入，以及任何会离开本进程的操作。它同时也是公开 Demo 数据的生成来源，因此即便公开部署已不再运行该二进制，该模式仍在使用；`OMCPA_PUBLIC_URL` 用于声明该部署的对外源，因为已没有任何平台会自动提供它。
-- **完全离线运行**：前端产物完整内嵌进 Go 二进制，生产环境无需 Node.js 运行时或外部网络 CDN。插件在外部发布的 Logo 由服务端拉取并内联，浏览器依旧只加载二进制自身提供的资源；在完全断网的部署中该拉取会失败，控制台改用内置的品牌图标。
-- **版本检查**：「系统信息」页面展示 Oh My CPA 与网关各自的运行版本和已发布版本，并跨版本融合展示变更日志。它只从 `api.github.com` 读取发布元数据（主机固定，不接受任意 URL），并像价格同步一样遵循 `HTTP_PROXY`/`HTTPS_PROXY`。后台巡检每六小时一次；打开页面和点击「检查更新」也会检查，但受每产品十五分钟的地板限制——在地板内会直接使用已缓存的索引，并在提示中说明，因为该接口是与地址共享的配额。两个开关回答两个不同的问题：`OMCPA_UPDATE_CHECK_ENABLED=false` 关闭离线部署的后台巡检，页面仍会使用上次成功检查的结果（检查失败时会说明原因与尝试时间）；`OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` 则进一步关闭打开页面时自动执行的检查，适合完全断网或测试环境，因为浏览页面并不是操作者主动提问。「检查更新」按钮在两种设置下都可用；`OMCPA_OMC_REPO` 与 `OMCPA_CPA_REPO`（`owner/name`）可指向 fork。GitHub 未鉴权配额为每小时 60 次（按发起方地址计），被限流时页面会说明原因。变更日志正文只保存在内存中，因此重启后页面仍会列出各版本并链接到上游，但正文需重新检查后才可见（见 `docs/architecture.md` §10）。
-- **数据库维护**：同一页面可以截断 WAL 或重建数据库，前者运行时会拒绝后者。两者都会等待正在进行的写入，而不是打断它们；当文件系统缺少 SQLite 文档所述的空间（最多为数据库文件的两倍）时，重建会在开始前被拒绝。维护任务不会跨越进程重启。在主机上执行同样的操作见 `docs/ops/sqlite-operations.md` §6。
+<details>
+<summary><b>用量观测</b></summary>
 
-## 架构一览
+- **仪表盘**：请求量、Token 吞吐、缓存命中率与费用，支持 15 分钟到 90 天的预设窗口或任意自定义区间，并提供全年 Token 热力图。
+- **模型面板**：Token 趋势与用量环形图，可按调用点或上游模型统计，并展示费用占比。
+- **请求记录**：多选分面筛选与全文搜索；详情抽屉展示耗时、首字延迟、Token 明细与单请求原始日志。
+- **后台采集**：无论是否打开浏览器，用量都会通过流式订阅或轮询持续入库。
+- **日志与审计**：尾随网关日志、查看控制台自身的服务日志，并浏览带筛选与 JSON 导出的追加式操作审计。
+
+</details>
+
+<details>
+<summary><b>定价与成本</b></summary>
+
+- **请求时价格快照**：请求完成时通过不可变价格版本锁定费用。
+- **OpenRouter 价目表**：依据 OpenRouter 公开列表为网关提供的每个模型定价，支持长上下文分档与分时段价格。
+- **关联与自定义价格**：把模型关联到指定的 OpenRouter 条目，或自行设置费率，附带分档预设与试算器。
+- **渠道倍率**：按提供商缩放其应答的全部请求，例如按 3 折计费的中转站。
+
+</details>
+
+<details>
+<summary><b>配置与安全</b></summary>
+
+- **双模式配置编辑**：结构化表单，或保留注释的 Monaco YAML 编辑器。
+- **配置自动备份**：每次改写 `config.yaml` 之前自动保存一份加密副本，可在控制台恢复。
+- **静态加密**：已存储的凭据与原始用量消息采用 AES-GCM 加密。
+- **敏感操作审计**：查看密钥、下载认证文件、导出日志等操作都会写入审计日志，写入失败则拒绝执行。
+- **为离线而设计**：所有资源都在二进制内，无需访问任何 CDN。
+- **按你的习惯来**：四种界面语言、可自定义配色的浅色与深色主题、部署时区，以及 K/M/B 或 万/亿 数字单位。
+
+</details>
+
+## 架构
 
 ```text
 浏览器 ──▶ 反向代理 (Caddy / Nginx) ──▶ Oh My CPA (:8080)
                                            ├─ 内嵌 React SPA (/omc/)
-                                           ├─ 本地 SQLite WAL (/data)
-                                           └─ 采集循环 ──▶ CLIProxyAPI (:8317)
+                                           ├─ SQLite WAL (/data)
+                                           └─ 用量采集器 ──▶ CLIProxyAPI (:8317)
 ```
 
-- **单二进制运行**：React SPA 构建产物直接内嵌进 Go 可执行文件（`internal/web/dist`）。
-- **单副本持久化**：采用 SQLite WAL 模式，固定单连接池，数据目录仅允许单一实例挂载写入。
-- **内置压缩**：内嵌文本资源和普通 API JSON 支持协商 gzip，无需配置反向代理压缩；事件流和下载响应保持原样。
-- **子路径原生支持**：默认挂载于 `/omc`（可通过 `OMCPA_BASE_PATH` 自定义）。
+- **单二进制**：React 控制台内嵌在 Go 可执行文件中。
+- **单副本**：SQLite WAL 模式，每个数据目录只允许一个进程。
+- **原生支持子路径**：默认挂载在 `/omc`（`OMCPA_BASE_PATH`），可与 CPA 共用同一个主机名。
+- **白名单门面**：控制台从不透传 CPA 的原始响应，也不代理任意 URL。
 
-## 快速上手
+模块划分、数据流与不变量见 [`docs/architecture.md`](docs/architecture.md)。
 
-### 前置条件
+## 配置
 
-- 已启动的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 或更高版本**及其明文管理密钥（`management.secret-key`）
-- Go 1.25+（构建工具链锁定 `1.27.1`）
-- Node.js 22+ & pnpm 11+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `OMCPA_CPA_BASE_URL` | 必填 | CPA 的地址 |
+| `OMCPA_CPA_MANAGEMENT_KEY` | 必填 | CPA 管理密钥，同时是控制台登录密码 |
+| `OMCPA_MASTER_KEY` | 必填 | 静态加密密钥（`openssl rand -hex 32`） |
+| `OMCPA_BASE_PATH` | `/omc` | 控制台挂载的子路径 |
+| `OMCPA_DATA_DIR` | `./data` | SQLite 数据库所在目录 |
+| `OMCPA_PUBLIC_URL` | 未设置 | 浏览器访问的地址；为 `https://` 时会话 Cookie 带 `Secure` 标记 |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | 已有其他服务采集该 CPA 的用量时设为 `off` |
+| `TZ` | 系统时区 | 服务器日历；请与 CPA 保持一致 |
 
-### 从源码运行
+完整的配置参考、部署约束与运维须知见 [`docs/operations.md`](docs/operations.md)。
 
-1. **克隆仓库并安装依赖**：
-   ```bash
-   git clone https://github.com/WizisCool/oh-my-cpa.git
-   cd oh-my-cpa
-   pnpm install --frozen-lockfile
-   ```
+## 文档
 
-2. **配置环境变量**：
-   ```bash
-   cp .env.example .env
-   ```
-   编辑 `.env`，设置 `OMCPA_MASTER_KEY`（32 字节十六进制随机密钥，如 `openssl rand -hex 32`）与 `OMCPA_CPA_MANAGEMENT_KEY`（CPA 密钥明文）。若 CPA 运行在另一台主机，请同时修改 `OMCPA_CPA_BASE_URL` 与 `OMCPA_CPA_USAGE_ADDR`。
+除本页外，技术文档均以英文撰写。
 
-3. **构建前端并启动**：
-   ```bash
-   pnpm build
-   go run ./cmd/oh-my-cpa
-   ```
+| | |
+| --- | --- |
+| [`docs/install.md`](docs/install.md) | 安装、验证、升级与排障 |
+| [`docs/install-for-agents.md`](docs/install-for-agents.md) | 写给编码 Agent 执行的安装指南 |
+| [`docs/operations.md`](docs/operations.md) | 配置参考与运维须知 |
+| [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | 备份、恢复与主密钥管理手册 |
+| [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | 智能体能力契约与 MCP 桥接 |
+| [`docs/architecture.md`](docs/architecture.md) | 模块边界、数据流与不变量 |
+| [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) | CPA v8 基线与配置字段迁移对照 |
+| [`docs/cpamc-parity.md`](docs/cpamc-parity.md) | 与官方 CPA 管理中心的功能对位 |
+| [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | 领域术语 · 视觉系统 |
+| [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) | 在线演示的部署方式 |
 
-4. **访问控制台**：
-   在浏览器中打开 **`http://127.0.0.1:8080/omc/`**，输入 CPA 管理密钥即可登录。
+## 开发
 
-<details>
-<summary><strong>开发模式（热重载）</strong></summary>
-
-<br />
-
-安装 [Air](https://github.com/air-verse/air) 实现 Go 热重载：
 ```bash
-go install github.com/air-verse/air@latest
-pnpm dev
+pnpm install --frozen-lockfile
+cp .env.example .env
+pnpm dev          # Air + Vite 热重载，地址 http://127.0.0.1:5173/omc/
 ```
-打开 **`http://127.0.0.1:5173/omc/`**。Vite 提供前端 HMR 并将 `/omc/api/*` 请求代理至 Go 后端（`:8080`）。
-
-</details>
-
-## 部署说明
-
-### 在线 Demo（Cloudflare Workers）
-
-公开 Demo 是同一套控制台以静态资源方式托管，其 API 由 Worker 应答；将 Worker 与本仓库连接后，推送到 `master` 即会自动更新。它通过 Cloudflare 的 Git 集成部署，该集成自行管理构建令牌，因此仓库中不保存任何部署密钥。Worker 的配置是 `deploy/cloudflare/wrangler.jsonc`，完整步骤（含一次性控制台操作）见 [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md)。
-
-API 的数据由真实 Go handler 生成，而非手工编写，因此所提供的响应具备产品实际产生的形状。`pnpm demo:generate` 用于刷新，`pnpm check:demo` 会在其落后于代码时失败，`pnpm verify:demo` 则用真实浏览器逐一验证每个控制台路由。
-
-### Docker（筹备中）
-
-> 容器镜像打包与自动化发布（`ghcr.io` / Docker Hub）目前正在筹备中。
->
-> 现阶段推荐通过源码或编译后的二进制运行。仓库中提供了早期预览 Compose 模板：
-> - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
-> - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
->
-> 完整栈默认固定 CPA `v8.0.2`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。控制台要求 CPA v8.0.0 或更高版本，并使用其 v8 管理接口；连接到 v8 以下的网关时会拒绝服务，各页面改为显示升级指引。CPA v8 可以原样读取现有的 v7 `config.yaml`，因此升级 CPA 不需要改配置。控制台第一次保存配置时会把这类文件转换为 v8 格式，转换前会加密保存原文件副本，可在配置页下载（见 `docs/cpa-v8-compat.md`）。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
-
-## 运维须知
-
-- **单采集器约束**：CPA 用量队列为破坏性消费，同一 CPA 实例只能有一个采集器读取。若已有外部服务采集用量，请设为 `OMCPA_USAGE_INGEST_MODE=off`。
-- **单副本约束**：SQLite WAL 要求独占写入，仅允许单一实例挂载数据目录，严禁挂载于 NFS/CIFS 等网络分布式文件系统上并发运行。
-- **主密钥备份**：`OMCPA_MASTER_KEY` 用于解密已存储的凭据与用量载荷。请务必离线安全备份；若遗失，数据库加密内容将永久不可恢复。
-- **网络安全边界**：切勿将 CPA 管理端口暴露到公网。保持 CPA 在内网或本地回环中运行，并通过 HTTPS 反向代理访问 Oh My CPA。
-- **反向代理头信任**：`OMCPA_TRUSTED_PROXY_CIDRS` 用逗号分隔可信反向代理的 CIDR；仓库自带的 Compose 文件默认信任 Docker 的 `172.16.0.0/12` 网段。客户端直连时请不要设置，严禁填写公网网段。
-
-### 操练场
-
-从“运行 → 操练场”进入，选择现有客户端密钥和 `/v1/models` 返回的 CPA 调用点，即可调试文本、图片和多轮对话。
-密钥列表仅显示名称与掩码，真实密钥由 OMC 服务端使用，模型执行和路由仍由 CPA 负责。
-没有密钥时先到密钥管理创建；不需要新增环境变量或数据库迁移。
-
-页面使用现有管理员会话访问 `GET <base>/api/v1/playground/models` 和
-`POST <base>/api/v1/playground/chat`。真实调用计入所选密钥用量，
-停止不保证退还已消耗配额。最近一次对话、参数与所附图片会作为一项服务端偏好保存，刷新后可从原处继续；
-新建对话会丢弃已保存的对话轮次，体积过大而无法保存的图片内容不会被存入。保存的调试目标是密钥的用量指纹而非密钥本身，
-已删除的密钥或已下线的调用点不会被重新选中。CPA 与上游仍适用各自的日志策略。图片支持 PNG/JPEG/WebP，每轮最多四张，每张不超过
-5 MiB 和 4000 万像素，含历史的完整请求不超过 32 MiB。
-
-参数面板可设置系统提示词、推理强度、Temperature、Top P、最大输出 Token、User-Agent 与自定义请求体（JSON）。
-User-Agent 默认使用当前构建自身的版本号，并作为请求头发送，使上游能识别调用方构建版本。
-自定义请求体优先级最高：其中的键会覆盖面板参数，面板未建模的参数原样透传；
-但最终请求体在发送前仍会校验，因此自定义请求体无法绕过图片与参数限制。
-本页读取流式回答，因此非流式请求体会被拒绝。
-
-调试面板提供请求快照、安全响应事件、耗时和已报告的 Token 用量。cURL 使用
-CPA_BASE_URL 与 CPA_API_KEY 占位符，图片内容需要替换为本地图片的 Data URL。
-反向代理应关闭响应缓冲，读取超时须大于 15 秒心跳间隔；单次流最多运行十分钟，
-上游首响应和空闲超时均为 120 秒，普通管理接口超时保持不变。公共演示仅展示页面和
-模型目录，不执行真实推理。
-
-## 开发者常用命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `pnpm dev` | 启动 Air + Vite 本地开发环境 |
-| `pnpm build` | 构建前端 SPA 并同步到 `internal/web/dist` |
-| `pnpm test:fast` | 默认检查相对 `HEAD` 的改动；`--base <ref>` 包含已提交改动，`--plan` 只显示检查范围 |
-| `pnpm test:self` | 有界并行运行仓库与 Worker 自测，并校验 Demo 数据新鲜度 |
-| `pnpm check:bundle` | 检查生产加载边界与异常体积上限，报告 raw/gzip 大小及精确基线增量 |
-| `pnpm check:ui` | 只运行改动能影响到的浏览器场景（Vite 开发服务器 + mock API；`--plan` 说明选择原因） |
-| `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描；与 `check:ui` 一起构成推送前的检查 |
-| `pnpm verify:full` | 在本地运行 CI 的全部内容：构建、加载边界与体积报告、浏览器验收、完整探针目录与 Demo |
-| `pnpm verify:demo` | Demo 的浏览器验收：每个控制台路由都能渲染（设 `OMCPA_DEMO_URL` 可校验线上部署） |
-| `pnpm demo:generate` | 由真实 handler 重新生成 Demo 的 dataset（加 `--check` 则只校验） |
-| `pnpm check:demo` | Demo 的维护契约：覆盖率、新鲜度与隐私 |
-| `pnpm dev:demo` | 用 Wrangler 在本地运行 Demo（需先执行 `pnpm build:demo`） |
+| `pnpm test:fast` | 只运行工作区改动影响到的检查 |
+| `pnpm check:ui` | 只运行改动能触及的浏览器场景 |
+| `pnpm verify` | 推送前运行的静态门禁 |
+| `pnpm verify:full` | 在本地运行 CI 的全部内容 |
+| `pnpm readme:screenshots` | 用演示模式重新生成本页截图 |
+
+环境搭建与验证流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；
+[`AGENTS.md`](AGENTS.md) 是编码 Agent 在本仓库中遵循的契约。
 
 ## 贡献与安全
 
-- **参与贡献**：请参阅 [`CONTRIBUTING.md`](CONTRIBUTING.md) 了解本地开发环境搭建、分层验证门禁与代码规范。
-- **安全政策**：关于安全漏洞披露流程与系统安全边界，请参阅 [`SECURITY.md`](SECURITY.md)。
+欢迎提交 Issue 与 Pull Request，请先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+安全漏洞请按 [`SECURITY.md`](SECURITY.md) 的说明私下报告，不要公开提 Issue。
 
-## 文档索引
+## 致谢
 
-- [`CONTEXT.md`](CONTEXT.md) — 核心领域术语、时间窗口与价格快照规则
-- [`docs/architecture.md`](docs/architecture.md) — 模块架构图、数据流与系统不变量
-- [`docs/design.md`](docs/design.md) — 视觉设计系统与主题 Token
-- [`docs/agent-capabilities.md`](docs/agent-capabilities.md) — 智能体能力契约、权限、确认流程与 MCP 桥接
-- [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
-- [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — 在线 Demo 的部署手册与人工步骤
-- [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵
-- [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) — CPA v8 基线：接口路由、配置字段迁移对照表、探测机制与实测记录
-- [`AGENTS.md`](AGENTS.md) — 开发者与 AI Agent 协作契约与文档同步规范
+Oh My CPA 的存在离不开 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)，最难的部分由它完成。
 
 ## 开源协议
 
-本项目采用 [MIT License](LICENSE)。
-
-### 时区
-
-在部署环境中设置 `TZ=Asia/Kuala_Lumpur`（或其他 IANA 时区）。提供的 Compose 文件会将 `TZ` 同时传入 OMC 和 CPA，默认为 `UTC`。单独运行容器时可传入 `-e TZ=Asia/Kuala_Lumpur`；原生部署未指定时使用操作系统时区。
-
-在 **OMC 设置 → 时区** 中，默认自动选中服务器时区并标注“服务器时区”，每个选项显示当前 UTC 偏移。手动选择会保存在服务器上；重新选择服务器时区即可恢复部署默认值。时间显示、日历选择、自然日统计和 OMC 服务日志统一使用此设置，不会改写历史时间戳。请保持 CPA 与 OMC 的部署时区一致，以正确解释 CPA 日志中不带偏移量的时间。原始日志下载和明确采用 UTC 的定价分时规则保留原有语义。
-
-### 智能体与操练场的连接恢复
-
-弱网、断网或刷新页面后，会重新连接原有后台任务，而不是重新提交模型请求或工作流。
-“停止”会明确取消后台任务；仅关闭页面不会取消。最近完成的回放日志保留 15 分钟，
-直到被后续任务替换或 OMC 重启。智能体保留权威会话，操练场将恢复的结果写入现有
-最新会话偏好；未在日志过期前恢复的操练场结果可能无法取回。
-
-已登录控制台可使用配置 API 基路径下的 `GET /agent/runs/active`、
-`GET /agent/runs/{id}`、`POST /agent/runs/{id}/cancel`，以及 `/playground/runs/` 下的对应接口。
-控制台生成请求携带 `X-OMC-Run-ID`；未携带该请求头的客户端保持原有直连流式行为。
-连接恢复不改变能力调用的权限与确认规则。
-
-### 自定义提供商图标
-
-打开提供商的图标选择器，切换到**自定义**，即可上传 PNG/JPEG/WebP/SVG 文件或粘贴 Base64（支持完整图片 Data URL 和纯编码）。验证预览后命名保存，再点击图标进行选择。已保存图标可改名或替换，替换会更新所有引用；已被引用的图标也可直接删除：确认时会说明引用数量，删除后相关提供商自动恢复默认图标或占位符。每个部署最多保存 100 张静态图标，每张不超过 512 KiB，位图尺寸不超过 1024 × 1024。图标持久化在 SQLite 中，并随数据库备份恢复，无需独立上传目录或外部图片服务。插件提供商继续使用插件拥有的品牌图标。公共演示中禁止上传、编辑和删除。
-
-配置的 API 基路径下新增 `/custom-icons`（GET/POST）、`/custom-icons/preview`（POST）、`/custom-icons/{id}`（PATCH/DELETE）以及 `/custom-icons/{id}/content`（GET/HEAD），均需要控制台认证。列表和偏好响应不携带图片内容。
+[MIT](LICENSE)
