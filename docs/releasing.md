@@ -113,3 +113,9 @@ check appear fresh. See `docs/operations.md` and ADR 0019.
 
 Release actions use immutable upstream commit revisions, and checkout credentials
 are not persisted. GitHub release commands receive their job-scoped token explicitly.
+
+The verification runner installs and launch-probes Chromium after package installation
+and before `pnpm verify:full`, using the same provisioner as CI. If a runner-only
+workflow repair is needed before publication, merge the repair and dispatch from
+`master` with the original tag. This changes orchestration, not the tagged image
+source; application changes still require a new version.

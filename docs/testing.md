@@ -63,7 +63,8 @@ Rules that keep the suite fast and honest:
 
 `scripts/release-plan.test.mjs` tests tag/package validation, image identity, numeric
 latest selection, backports, immutable action revisions, checkout credential isolation
-and the parsed release-job ordering, including negative
+and browser provisioning before the full release gates, plus parsed release-job
+ordering, including negative
 mutations. `scripts/deployment.test.mjs` parses the shipped Compose topology and tests
 `latest` image defaults, loopback bindings, image-only installs, collection/proxy settings and gateway bootstrap
 configuration. Both are automatically discovered repository self-tests.
@@ -78,7 +79,9 @@ replace those tests.
 isolated containers/volumes, waits on health-status events, and tests the actual image's
 non-root/read-only runtime, SQLite writes, normalized base paths, sign-in, embedded SPA
 and running-version endpoints. It is not part of `test:fast` or ordinary static gates.
-Release verification runs `pnpm verify:full` before this additional container check.
+Release verification provisions and launch-probes Chromium with
+`scripts/install-chromium.mjs`, then runs `pnpm verify:full` before this additional
+container check. Dependency installation alone does not install the browser binary.
 
 ## 2. Registering a new test
 

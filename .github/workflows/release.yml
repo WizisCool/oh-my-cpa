@@ -53,6 +53,8 @@ jobs:
           node scripts/release-plan.mjs
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
+      - name: Install and probe Chromium
+        run: node scripts/install-chromium.mjs
       - name: Verify every release gate
         run: pnpm verify:full
       - name: Require clean generated state

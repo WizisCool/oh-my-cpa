@@ -42,7 +42,11 @@ export function validateReleaseWorkflow(workflow) {
     }
   }
   const verify = workflow.jobs.verify;
-  assert.ok(verify.steps.some(step => step.run?.includes('pnpm verify:full')));
+  const installIndex = verify.steps.findIndex(step => step.run === 'pnpm install --frozen-lockfile');
+  const chromiumIndex = verify.steps.findIndex(step => step.run === 'node scripts/install-chromium.mjs');
+  const gatesIndex = verify.steps.findIndex(step => step.run === 'pnpm verify:full');
+  assert.ok(installIndex >= 0 && chromiumIndex > installIndex && gatesIndex > chromiumIndex,
+    'Fresh release runners must provision a launchable browser before running all gates');
   const publish = workflow.jobs.publish;
   assert.equal(publish.needs, 'verify');
   const smokeIndex = publish.steps.findIndex(step => step.run?.includes('scripts/docker-smoke.mjs'));
@@ -72,6 +76,13 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   const unqueued = structuredClone(workflow);
   delete unqueued.concurrency.queue;
   assert.throws(() => validateReleaseWorkflow(unqueued));
+  const missingBrowser = structuredClone(workflow);
+  missingBrowser.jobs.verify.steps = missingBrowser.jobs.verify.steps.filter(step => step.run !== 'node scripts/install-chromium.mjs');
+  assert.throws(() => validateReleaseWorkflow(missingBrowser));
+  const lateBrowser = structuredClone(workflow);
+  lateBrowser.jobs.verify.steps.push(lateBrowser.jobs.verify.steps.splice(
+    lateBrowser.jobs.verify.steps.findIndex(step => step.run === 'node scripts/install-chromium.mjs'), 1)[0]);
+  assert.throws(() => validateReleaseWorkflow(lateBrowser));
   const mutable = structuredClone(workflow);
   mutable.jobs.verify.steps[0].uses = 'actions/checkout@v7';
   assert.throws(() => validateReleaseWorkflow(mutable));
