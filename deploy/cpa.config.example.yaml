@@ -1,0 +1,22 @@
+# Starter configuration for a new CPA v8 instance; never replace an existing gateway config.
+config-version: 8
+server:
+  host: ""
+  port: 8317
+management:
+  # Only the private Compose network and loopback-published port can reach this listener.
+  allow-remote: true
+  # The Compose MANAGEMENT_PASSWORD environment variable supplies the administrator key.
+  secret-key: ""
+  disable-control-panel: true
+access:
+  api-keys: []
+oauth:
+  auth-dir: /root/.cli-proxy-api
+observability:
+  usage:
+    usage-statistics-enabled: true
+    redis-usage-queue-retention-seconds: 60
+plugins:
+  enabled: false
+  dir: /CLIProxyAPI/plugins

@@ -74,10 +74,9 @@ MCP · 可视化 · 管理
 
 ## 在线演示
 
-**[omc-demo.junze.dev](https://omc-demo.junze.dev)**：无需账号、无需密钥、无需安装。
-
-它与二进制内嵌的是同一套控制台，运行在一份样例数据上：跨 8 个提供商、14 个模型的一年流量。
-其 API 响应由真实的 Go handler 生成，因此每个页面都与自托管部署的形态一致；写操作、凭据下载与模型推理会被拒绝。
+> [!TIP]
+> **[体验 Oh My CPA →](https://omc-demo.junze.dev)**
+> 用示例数据体验控制台。
 
 ## 界面截图
 
@@ -125,71 +124,78 @@ MCP · 可视化 · 管理
 
 ## 安装
 
-你需要一个正在运行的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 或更高版本**及其管理密钥；
-也可以让全栈 Compose 文件替你启动一个。管理密钥同时就是控制台的登录密码。
+OMC 连接 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 及以上**。
+可以使用已有网关，也可以用 Compose 启动新的 CPA。CPA 管理密钥同时是 OMC 的登录密码。
 
 ### Docker Compose（推荐）
 
-一个文件启动 CPA、Oh My CPA 与自动签发 HTTPS 证书的 Caddy：
+直接拉取 Docker Hub 镜像 **`wiziscool/oh-my-cpa:v0.1.0`**（`amd64` / `arm64`），
+无需源码构建或安装开发工具链。在**新目录**中启动 CPA 和 OMC，默认只绑定本机端口：
 
 ```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
+mkdir -p oh-my-cpa/deploy oh-my-cpa/cpa/{auths,logs,plugins} oh-my-cpa/oh-my-cpa-data
 cd oh-my-cpa
-
-mkdir -p cpa oh-my-cpa-data
-curl -fsSL https://raw.githubusercontent.com/router-for-me/CLIProxyAPI/main/config.example.yaml -o cpa/config.yaml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.full.yml -o deploy/compose.full.yml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/cpa.config.example.yaml -o cpa/config.yaml
 sudo chown 10001:10001 oh-my-cpa-data
+sudo chmod 700 oh-my-cpa-data
 
+umask 077
 cat > deploy/.env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-DOMAIN=localhost
-OMCPA_PUBLIC_URL=https://localhost
+OMCPA_PUBLIC_URL=http://127.0.0.1:8080
+TZ=UTC
 EOF
 
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --build
+docker compose --env-file deploy/.env -f deploy/compose.full.yml pull
+docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d
 ```
 
-打开 **`https://localhost/omc/`**，用 `deploy/.env` 中的 `CPA_MANAGEMENT_KEY` 登录。
-部署到公网时，把 `DOMAIN` 与 `OMCPA_PUBLIC_URL` 改成你的域名，Caddy 会自动申请证书。
+打开 **`http://127.0.0.1:8080/omc/`**，使用 `deploy/.env` 中的
+`CPA_MANAGEMENT_KEY` 登录。调用模型前，在控制台配置提供商凭据与客户端密钥。
+部署在远程服务器时，使用 SSH 隧道或你已有的 HTTPS 入口访问。
 
-已经在运行 CPA？[`deploy/compose.omc.yml`](deploy/compose.omc.yml) 只启动控制台，
-详见[安装指南](docs/install.md#docker-compose-beside-an-existing-cpa)。
+**已经有 CPA 或其他管理面板？** 使用
+[`deploy/compose.omc.yml`](deploy/compose.omc.yml) 只安装 OMC，保留已有服务，
+并确认由谁采集用量。详见[安装指南](docs/install.md#docker-compose-beside-an-existing-cpa)。
+
+### Let your agent install it
+
+把下面的提示交给 Claude Code、Codex、Cursor 或其他编码 Agent：
+
+```text
+按照以下指南安装和配置 Oh My CPA：
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+先检查我已有的 CPA、OMC、管理面板、网络和用量采集器。
+选择适合现有环境的安装方式，保留已有服务、配置和密钥。
+```
+
+[Agent 安装指南](docs/install-for-agents.md) 覆盖全新部署、已有 CPA、其他管理面板、
+直接访问、已有 HTTPS 入口、原生构建与升级；要求验证成功后才能报告完成。
 
 ### 从源码构建
 
-需要 Go 1.25+、Node.js 22+ 与 pnpm 11+。
+需要 Go 1.25+、Node.js 22+、pnpm 11+，以及已运行的 CPA：
 
 ```bash
 git clone https://github.com/WizisCool/oh-my-cpa.git
 cd oh-my-cpa
 pnpm install --frozen-lockfile
-
-cp .env.example .env    # 设置 OMCPA_MASTER_KEY 与 OMCPA_CPA_MANAGEMENT_KEY
-
+cp .env.example .env
+# Configure the master key and the existing CPA management key privately in .env.
 pnpm build
-go build -o bin/oh-my-cpa ./cmd/oh-my-cpa
+go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
 ./bin/oh-my-cpa
 ```
 
 打开 **`http://127.0.0.1:8080/omc/`**。
 
-### 让 Agent 帮你安装
-
-把下面这段话粘贴给 Claude Code、Codex、Cursor 或任意编码 Agent：
-
-```text
-Install and configure Oh My CPA by following the instructions here:
-https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
-```
-
-[Agent 安装指南](docs/install-for-agents.md)会告诉 Agent 如何检查机器环境、选择安装路径、
-避免在输出中泄露密钥，并在汇报之前验证安装结果。
-
 > [!IMPORTANT]
-> 请备份 `OMCPA_MASTER_KEY`：数据库中的加密内容靠它解密。每个数据目录只运行一个副本，
-> 且必须位于本地磁盘；同一个 CPA 的用量队列只能有一个采集器读取。
-> 验证、升级与排障见[安装指南](docs/install.md)。
+> 备份 `OMCPA_MASTER_KEY`，它用于解密数据库中的数据。每个本地磁盘数据目录只运行一个副本，
+> 每个 CPA 用量队列只允许一个采集器。若已有其他服务采集用量，设置
+> `OMCPA_USAGE_INGEST_MODE=off`。验证与升级见[安装指南](docs/install.md)，
+> 标签驱动的发布流程见[发行指南](docs/releasing.md)。
 
 ## 智能体与 MCP
 
@@ -268,7 +274,7 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-ag
 ## 架构
 
 ```text
-浏览器 ──▶ 反向代理 (Caddy / Nginx) ──▶ Oh My CPA (:8080)
+浏览器 ──▶ 直接访问 / 已有 HTTPS 入口 ──▶ Oh My CPA (:8080)
                                            ├─ 内嵌 React SPA (/omc/)
                                            ├─ SQLite WAL (/data)
                                            └─ 用量采集器 ──▶ CLIProxyAPI (:8317)
@@ -304,6 +310,7 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-ag
 | --- | --- |
 | [`docs/install.md`](docs/install.md) | 安装、验证、升级与排障 |
 | [`docs/install-for-agents.md`](docs/install-for-agents.md) | 写给编码 Agent 执行的安装指南 |
+| [`docs/releasing.md`](docs/releasing.md) | Docker Hub 镜像与 GitHub 标签发布流程 |
 | [`docs/operations.md`](docs/operations.md) | 配置参考与运维须知 |
 | [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | 备份、恢复与主密钥管理手册 |
 | [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | 智能体能力契约与 MCP 桥接 |
@@ -340,6 +347,8 @@ pnpm dev          # Air + Vite 热重载，地址 http://127.0.0.1:5173/omc/
 ## 致谢
 
 Oh My CPA 的存在离不开 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)，最难的部分由它完成。
+
+也感谢 [Linux.do 社区](https://linux.do)。
 
 ## 开源协议
 

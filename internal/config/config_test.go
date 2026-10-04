@@ -318,3 +318,25 @@ func TestReleaseCheckConfigReportsAMalformedSwitch(t *testing.T) {
 		t.Fatalf("fork override = %q, want someone/fork", cfg.Release.CPARepository)
 	}
 }
+
+func TestLoadUsesBuildVersionUnlessOperatorOverridesIt(t *testing.T) {
+	clearConfigEnv(t)
+	previousVersion := BuildVersion
+	BuildVersion = "v0.1.0"
+	t.Cleanup(func() { BuildVersion = previousVersion })
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Version != "v0.1.0" {
+		t.Fatalf("version = %q, want embedded release", loaded.Version)
+	}
+	t.Setenv("OMCPA_VERSION", "v0.2.0-fork")
+	loaded, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Version != "v0.2.0-fork" {
+		t.Fatalf("version = %q, want operator override", loaded.Version)
+	}
+}

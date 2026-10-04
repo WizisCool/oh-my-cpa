@@ -1,29 +1,27 @@
-.git
-.gitignore
-node_modules
+# Only build inputs may enter a remote builder; local secrets and agent state never do.
+**
+!Dockerfile
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!go.mod
+!go.sum
+!web/
+!web/**
+!scripts/
+!scripts/**
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!migrations/
+!migrations/**
+!deploy/
+!deploy/base-path.sh
+!deploy/healthcheck.sh
 **/node_modules
-.pnpm-store
-web/dist
 **/dist
-internal/web/dist/*
-!internal/web/dist/
-!internal/web/dist/index.html
-*.db
-*.db-shm
-*.db-wal
-.smoke-data
-/cpa/
-oh-my-cpa-data
-caddy-data
-caddy-config
-
-# A developer's own environment file, if one exists locally: it carries their master
-# key and their CPA credentials, and nothing in an image needs it. The server reads
-# configuration from the environment, which the platform supplies.
-.env
-# Test and browser-acceptance output. It is hundreds of megabytes of screenshots and
-# traces, none of which is build input, and every byte of it has to be uploaded to a
-# remote builder before the build can start.
-tmp
-# Agent session state, for the same reason.
-.pi
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+web/public/lobe-icons

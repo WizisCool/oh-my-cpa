@@ -1,9 +1,6 @@
 services:
   oh-my-cpa:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: ${OMCPA_IMAGE:-oh-my-cpa:local}
+    image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:v0.1.0}
     container_name: ${OMCPA_CONTAINER_NAME:-oh-my-cpa}
     user: "10001:10001"
     read_only: true
@@ -12,7 +9,7 @@ services:
     cap_drop:
       - ALL
     ports:
-      - "${OMCPA_BIND:-127.0.0.1:8080}:8080"
+      - ${OMCPA_BIND:-127.0.0.1:8080}:8080
     environment:
       TZ: ${TZ:-UTC}
       OMCPA_LISTEN_ADDR: ":8080"
@@ -22,15 +19,17 @@ services:
       OMCPA_CPA_USAGE_ADDR: ${OMCPA_CPA_USAGE_ADDR:-}
       OMCPA_CPA_MANAGEMENT_KEY: ${OMCPA_CPA_MANAGEMENT_KEY:?set OMCPA_CPA_MANAGEMENT_KEY}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?set OMCPA_MASTER_KEY}
-      OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:?set OMCPA_PUBLIC_URL}
+      OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:-http://127.0.0.1:8080}
+      OMCPA_TRUSTED_PROXY_CIDRS: ${OMCPA_TRUSTED_PROXY_CIDRS:-}
+      OMCPA_USAGE_INGEST_MODE: ${OMCPA_USAGE_INGEST_MODE:-auto}
+      OMCPA_UPDATE_CHECK_ENABLED: ${OMCPA_UPDATE_CHECK_ENABLED:-true}
+      OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: ${OMCPA_UPDATE_CHECK_ON_PAGE_LOAD:-true}
     volumes:
       - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
-      # Used by the healthcheck below to build the URL the server actually serves.
-      - ./base-path.sh:/usr/local/bin/omc-base-path:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080$(sh /usr/local/bin/omc-base-path)/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
     restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:host-gateway
+networks:
+  default:
+    name: ${OMCPA_NETWORK_NAME:-oh-my-cpa-standalone}
+    external: ${OMCPA_NETWORK_EXTERNAL:-false}

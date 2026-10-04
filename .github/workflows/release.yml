@@ -1,0 +1,175 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable version tag to publish or resume
+        required: true
+        type: string
+permissions:
+  contents: read
+# Serialize releases so a backport cannot race a newer latest pointer.
+concurrency:
+  group: docker-hub-release
+  queue: max
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      revision: ${{ steps.plan.outputs.revision }}
+      image: ${{ steps.plan.outputs.image }}
+      tags: ${{ steps.plan.outputs.version_tags }}
+      is_latest: ${{ steps.plan.outputs.is_latest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.1
+          cache: true
+      - name: Validate release identity and latest policy
+        id: plan
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_IMAGE: wiziscool/oh-my-cpa
+          RELEASE_INDEX: /tmp/omc-releases.json
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git describe --tags --exact-match)" = "$RELEASE_TAG"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
+          node scripts/release-plan.mjs
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - run: pnpm install --frozen-lockfile
+      - name: Verify every release gate
+        run: pnpm verify:full
+      - name: Require clean generated state
+        run: test -z "$(git status --porcelain)"
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build native acceptance image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: oh-my-cpa:release-test
+          build-args: |
+            VERSION=${{ needs.verify.outputs.tag }}
+            REVISION=${{ needs.verify.outputs.revision }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify packaged image, permissions, base paths and running version
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: node scripts/docker-smoke.mjs oh-my-cpa:release-test
+      - name: Sign in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: wiziscool
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push multi-platform release
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ needs.verify.outputs.tags }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.tag }}
+            REVISION=${{ needs.verify.outputs.revision }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+  release:
+    needs: [verify, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+      - name: Publish installation assets and release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_IMAGE: ${{ needs.verify.outputs.image }}
+          RELEASE_DIGEST: ${{ needs.publish.outputs.digest }}
+          RELEASE_INDEX: /tmp/omc-releases.json
+        run: |
+          # Recompute at publication: retries can run after a newer release completed.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
+          IS_LATEST=$(node scripts/release-plan.mjs | jq -r .isLatest)
+          printf 'Docker Hub: `%s:%s`\n\nMulti-platform digest: `%s@%s`\n\nPlatforms: `linux/amd64`, `linux/arm64`.\n\nSee [installation](https://github.com/%s/blob/%s/docs/install.md) and the [agent guide](https://github.com/%s/blob/%s/docs/install-for-agents.md).\n' \
+            "$RELEASE_IMAGE" "$RELEASE_TAG" "$RELEASE_IMAGE" "$RELEASE_DIGEST" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$GITHUB_REPOSITORY" "$RELEASE_TAG" > /tmp/release-notes.md
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" deploy/compose.full.yml deploy/compose.omc.yml deploy/cpa.config.example.yaml --clobber
+          else
+            gh release create "$RELEASE_TAG" deploy/compose.full.yml deploy/compose.omc.yml deploy/cpa.config.example.yaml \
+              --verify-tag --title "$RELEASE_TAG" --notes-file /tmp/release-notes.md \
+              --generate-notes --latest="$IS_LATEST"
+          fi
+  promote:
+    needs: [verify, publish, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+      - name: Recheck newest stable release before moving Docker latest
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_IMAGE: ${{ needs.verify.outputs.image }}
+          RELEASE_INDEX: /tmp/omc-releases.json
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
+          node scripts/release-plan.mjs
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: steps.plan.outputs.is_latest == 'true'
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: steps.plan.outputs.is_latest == 'true'
+        with:
+          username: wiziscool
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Promote the verified immutable digest
+        if: steps.plan.outputs.is_latest == 'true'
+        env:
+          RELEASE_IMAGE: ${{ needs.verify.outputs.image }}
+          RELEASE_DIGEST: ${{ needs.publish.outputs.digest }}
+        run: docker buildx imagetools create --tag "$RELEASE_IMAGE:latest" "$RELEASE_IMAGE@$RELEASE_DIGEST"

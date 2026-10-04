@@ -7,7 +7,7 @@ decisions behind the shape below are recorded in `docs/adr/`.
 ## 1. Runtime shape
 
 ```text
-browser ──▶ reverse proxy or Vite ──▶ Go process (one binary)
+browser ──▶ direct listener, existing HTTPS ingress or Vite ──▶ Go process (one binary)
                                         ├─ chi router under the base path
                                         ├─ embedded React SPA (internal/web/dist)
                                         ├─ SQLite (WAL, one connection)
@@ -29,6 +29,30 @@ The React bundle is built into `internal/web/dist` and embedded with
 `go:embed`, so a deployment has no CDN or static-file dependency. Everything the
 browser can reach is a handwritten JSON endpoint; there is no generic pass
 through to CPA.
+
+### Image distribution and release flow
+
+`Dockerfile` builds the embedded frontend on the builder platform, cross-compiles Go
+for the target architecture and injects `internal/config.BuildVersion` from the release
+tag. The final Alpine image runs as uid/gid `10001:10001` with `/data` as its only
+persistent writable directory. Its own `deploy/healthcheck.sh` normalizes the prefix
+through `deploy/base-path.sh`; `degraded` is process readiness, not gateway connectivity.
+
+Docker Hub distributes `wiziscool/oh-my-cpa` for amd64 and arm64. The full Compose
+file pulls CPA and OMC with loopback host ports; OMC-only Compose attaches to a fresh
+or explicitly selected external network. Neither builds locally or installs a proxy.
+`deploy/cpa.config.example.yaml` is solely for fresh gateways; existing installations
+retain their configuration, panels and collection ownership. See `docs/install.md`.
+
+`.github/workflows/release.yml` validates a stable version tag against both package
+versions, clears the full verification and packaged-image smoke gates, pushes images,
+then publishes GitHub Release notes and installation assets before promoting Docker
+latest to the immutable digest. Publication and promotion recheck the stable index
+so retrying an old run cannot regress either latest pointer. Only the release job has
+repository write permission. `scripts/release-plan.mjs` prevents backports from moving
+latest backwards. GitHub Releases remain the source of version observations; Docker
+Hub is the distribution source. `docs/releasing.md` records the maintainer workflow
+and ADR 0056 the publication ordering and immutable version identity.
 
 ### Demo mode is the same process with the gateway replaced
 

@@ -2,13 +2,8 @@
 # Prints the canonical base path for the console, or exits non-zero when the
 # configured value is one the application refuses.
 #
-# The application normalises OMCPA_BASE_PATH itself (internal/config
-# NormalizeBasePath accepts "omc", "/omc/" and "/" as the same setting). Anything
-# that composes a URL or a proxy matcher from the raw value has to agree with it,
-# because a raw value means two different prefixes to two components: `omc` or
-# `/omc/` build a Caddy path matcher that never matches a real request, and a
-# healthcheck URL that cannot be fetched. This script is the single place that
-# mapping is written down for the deployment files.
+# Image health probes must use the same prefix as internal/config.NormalizeBasePath.
+# Normalise before composing their URL, including the supported root path.
 #
 # An empty result means the site root, which is what the application serves when
 # OMCPA_BASE_PATH is "/".

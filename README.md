@@ -80,13 +80,9 @@ Changes wait for your approval.
 
 ## Live demo
 
-**[omc-demo.junze.dev](https://omc-demo.junze.dev)**: no account, no key, nothing to
-install.
-
-It is the same console the binary embeds, served over a sample dataset: a year of
-traffic across eight providers and fourteen models. Its API responses are generated from
-the real Go handlers, so every page has the shape a self-hosted install produces, while
-writes, credential downloads and inference are refused.
+> [!TIP]
+> **[Try Oh My CPA →](https://omc-demo.junze.dev)**
+> Explore the console with sample data.
 
 ## Screenshots
 
@@ -135,56 +131,44 @@ or system, each with three built-in palettes and one you colour yourself.
 
 ## Install
 
-You need a running [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
-**v8.0.0 or later** and its management key, or let the full-stack Compose file start one
-for you. The management key is also the console's sign-in password.
+OMC connects to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0+**.
+Use your existing gateway, or start a new one with Compose. Its management key is also
+OMC's sign-in password.
 
 ### Docker Compose (recommended)
 
-CPA, Oh My CPA and Caddy with automatic HTTPS, from one file:
+Pull **`wiziscool/oh-my-cpa:v0.1.0`** from Docker Hub (`amd64` / `arm64`). No source
+build or toolchain required. In a **new directory**, start CPA and OMC with direct
+loopback ports:
 
 ```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
+mkdir -p oh-my-cpa/deploy oh-my-cpa/cpa/{auths,logs,plugins} oh-my-cpa/oh-my-cpa-data
 cd oh-my-cpa
-
-mkdir -p cpa oh-my-cpa-data
-curl -fsSL https://raw.githubusercontent.com/router-for-me/CLIProxyAPI/main/config.example.yaml -o cpa/config.yaml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.full.yml -o deploy/compose.full.yml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/cpa.config.example.yaml -o cpa/config.yaml
 sudo chown 10001:10001 oh-my-cpa-data
+sudo chmod 700 oh-my-cpa-data
 
+umask 077
 cat > deploy/.env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-DOMAIN=localhost
-OMCPA_PUBLIC_URL=https://localhost
+OMCPA_PUBLIC_URL=http://127.0.0.1:8080
+TZ=UTC
 EOF
 
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --build
+docker compose --env-file deploy/.env -f deploy/compose.full.yml pull
+docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d
 ```
 
-Open **`https://localhost/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` from
-`deploy/.env`. For a public host, set `DOMAIN` and `OMCPA_PUBLIC_URL` to your domain and
-Caddy obtains the certificate.
+Open **`http://127.0.0.1:8080/omc/`** and sign in with `CPA_MANAGEMENT_KEY` from
+`deploy/.env`. Configure provider credentials and client keys in the console before
+making requests. On a remote server, use an SSH tunnel or your existing HTTPS ingress.
 
-Already running CPA? [`deploy/compose.omc.yml`](deploy/compose.omc.yml) starts only the
-console; see the [installation guide](docs/install.md#docker-compose-beside-an-existing-cpa).
-
-### From source
-
-Requires Go 1.25+, Node.js 22+ and pnpm 11+.
-
-```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
-cd oh-my-cpa
-pnpm install --frozen-lockfile
-
-cp .env.example .env    # set OMCPA_MASTER_KEY and OMCPA_CPA_MANAGEMENT_KEY
-
-pnpm build
-go build -o bin/oh-my-cpa ./cmd/oh-my-cpa
-./bin/oh-my-cpa
-```
-
-Open **`http://127.0.0.1:8080/omc/`**.
+**Already have CPA or another management panel?** Add only OMC with
+[`deploy/compose.omc.yml`](deploy/compose.omc.yml); preserve existing services, and
+choose the usage collector deliberately. Follow the
+[installation guide](docs/install.md#docker-compose-beside-an-existing-cpa).
 
 ### Let your agent install it
 
@@ -193,17 +177,37 @@ Paste this into Claude Code, Codex, Cursor or any coding agent:
 ```text
 Install and configure Oh My CPA by following the instructions here:
 https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+Inspect my existing CPA, OMC, management panels, networking and usage collector first.
+Choose the appropriate installation path and preserve existing services and secrets.
 ```
 
-The [agent guide](docs/install-for-agents.md) tells the agent how to inspect the
-machine, choose a path, keep secrets out of its output, and verify the result before it
-reports back.
+The [agent guide](docs/install-for-agents.md) covers new stacks, existing CPA, other
+panels, direct access, existing HTTPS ingress, native builds and upgrades. It requires
+verification before reporting success.
+
+### From source
+
+Requires Go 1.25+, Node.js 22+ and pnpm 11+, plus a running CPA:
+
+```bash
+git clone https://github.com/WizisCool/oh-my-cpa.git
+cd oh-my-cpa
+pnpm install --frozen-lockfile
+cp .env.example .env
+# Configure the master key and the existing CPA management key privately in .env.
+pnpm build
+go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
+./bin/oh-my-cpa
+```
+
+Open **`http://127.0.0.1:8080/omc/`**.
 
 > [!IMPORTANT]
-> Back up `OMCPA_MASTER_KEY`: it decrypts what the database stores. Run one replica per
-> data directory, on a local disk, and let only one collector read a CPA's usage queue.
-> The [installation guide](docs/install.md) covers verification, upgrades and
-> troubleshooting.
+> Back up `OMCPA_MASTER_KEY`: it decrypts what the database stores. Keep one replica per
+> local-disk data directory and one collector per CPA usage queue. Set
+> `OMCPA_USAGE_INGEST_MODE=off` if another service already collects usage.
+> See [installation](docs/install.md) for verification/upgrades and
+> [release publishing](docs/releasing.md) for the tag-driven workflow.
 
 ## Agents and MCP
 
@@ -286,7 +290,7 @@ so connect only agents you would trust with the console.
 ## Architecture
 
 ```text
-Browser ──▶ Reverse proxy (Caddy / Nginx) ──▶ Oh My CPA (:8080)
+Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (:8080)
                                                  ├─ Embedded React SPA (/omc/)
                                                  ├─ SQLite WAL (/data)
                                                  └─ Usage collector ──▶ CLIProxyAPI (:8317)
@@ -321,6 +325,7 @@ The full reference, with deployment constraints and operational notes, is
 | --- | --- |
 | [`docs/install.md`](docs/install.md) | Installation, verification, upgrades, troubleshooting |
 | [`docs/install-for-agents.md`](docs/install-for-agents.md) | The same, written for a coding agent to follow |
+| [`docs/releasing.md`](docs/releasing.md) | Tag-triggered Docker Hub and GitHub releases |
 | [`docs/operations.md`](docs/operations.md) | Settings reference and operational notes |
 | [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) | Backup, restore and master-key runbook |
 | [`docs/agent-capabilities.md`](docs/agent-capabilities.md) | Agent capability contract and the MCP bridge |
@@ -359,6 +364,8 @@ public issue.
 
 Oh My CPA exists because of [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI),
 which does the hard part.
+
+Thanks also to the [Linux.do community](https://linux.do).
 
 ## License
 

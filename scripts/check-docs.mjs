@@ -40,6 +40,7 @@ export const DOCUMENTS = [
   { file: 'docs/cpamc-parity.md' },
   { file: 'docs/cpa-v8-compat.md' },
   { file: 'docs/install.md' },
+  { file: 'docs/releasing.md' },
   { file: 'docs/install-for-agents.md' },
   { file: 'docs/operations.md' },
   { file: 'docs/ops/sqlite-operations.md' },
@@ -56,6 +57,10 @@ export const DOCUMENTS = [
 /** References that have already gone stale at least once. Each entry is
  * evidence for a future reviewer: the reason explains what replaced it. */
 export const RETIRED_REFERENCES = [
+  {
+    pattern: /deploy\/(?:Caddyfile(?:\.root)?|caddy-entrypoint\.sh)/,
+    reason: 'image-based Compose uses direct listeners; bundled reverse-proxy templates and their entrypoint were retired',
+  },
   { pattern: /run-browser-release\.mjs|verify:browser:release/, reason: 'CI runs the probe catalog as its own sharded job; the combined release orchestrator was removed (ADR 0032)' },
   { pattern: /docs\/DESIGN\.md/, reason: 'the visual-system source of truth is docs/design.md (lowercase)' },
   { pattern: /cli-proxy-api-management-center\.html/, reason: 'the prototype HTML is not part of this repository' },

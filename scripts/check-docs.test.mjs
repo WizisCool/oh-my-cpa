@@ -99,3 +99,11 @@ test('command exits non-zero when a reference is stale', (t) => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /MISSING-PATH/);
 });
+
+test('retired deployment templates fail documentation checks, while direct deployment remains valid', (t) => {
+  const projectRoot = fixture(t, 'Use `deploy/Caddyfile`, `deploy/Caddyfile.root` or `deploy/caddy-entrypoint.sh`.');
+  const findings = checkDocument({ file: 'checked.md' }, { projectRoot });
+  assert.equal(findings.filter(finding => finding.kind === 'retired-reference').length, 3);
+  const validRoot = fixture(t, 'Use `deploy/compose.full.yml` and `deploy/healthcheck.sh`.', ['deploy/compose.full.yml', 'deploy/healthcheck.sh']);
+  assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot: validRoot }), []);
+});

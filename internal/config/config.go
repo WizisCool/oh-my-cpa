@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// BuildVersion is injected by release builds; untagged source builds remain incomparable.
+var BuildVersion = "v0.1.0-dev"
+
 // Config contains process configuration. Secrets are read once at startup and
 // are never included in API responses.
 type Config struct {
@@ -261,7 +264,7 @@ func Load() (Config, error) {
 		DatabasePath:      databasePath,
 		MasterKey:         masterKey,
 		PublicURL:         publicURL,
-		Version:           envOr("OMCPA_VERSION", "v0.1.0-dev"),
+		Version:           envOr("OMCPA_VERSION", BuildVersion),
 		RequestTimeout:    timeout,
 		TLSSkipVerify:     tlsSkipVerify,
 		TrustedProxyCIDRs: trustedProxyCIDRs,

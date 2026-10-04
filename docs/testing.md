@@ -59,6 +59,26 @@ Rules that keep the suite fast and honest:
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
+### Container and release acceptance
+
+`scripts/release-plan.test.mjs` tests tag/package validation, image identity, numeric
+latest selection, backports and the parsed release-job ordering, including negative
+mutations. `scripts/deployment.test.mjs` parses the shipped Compose topology and tests
+loopback defaults, image-only installs, collection/proxy settings and gateway bootstrap
+configuration. Both are automatically discovered repository self-tests.
+
+`internal/config/config_test.go` pins embedded build-version fallback and operator
+precedence. Existing `internal/release` tests own version ordering, GitHub-feed/cache/
+rate-limit behavior and failed-check retention; packaged version assertions do not
+replace those tests.
+
+`scripts/docker-smoke.mjs` is opt-in locally and required before image publication in
+`.github/workflows/release.yml`. It needs Docker and a built native image, creates only
+isolated containers/volumes, waits on health-status events, and tests the actual image's
+non-root/read-only runtime, SQLite writes, normalized base paths, sign-in, embedded SPA
+and running-version endpoints. It is not part of `test:fast` or ordinary static gates.
+Release verification runs `pnpm verify:full` before this additional container check.
+
 ## 2. Registering a new test
 
 Discovery is automatic wherever it can be, so a test cannot be written and then never

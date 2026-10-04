@@ -24,6 +24,7 @@ a message naming the variable.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `OMCPA_VERSION` | embedded stable tag; `v0.1.0-dev` for untagged source builds | Optional display/User-Agent version override; does not change the installed build |
 | `OMCPA_LISTEN_ADDR` | `:8080` | Listen address |
 | `OMCPA_BASE_PATH` | `/omc` | Sub-path the console is served under. `omc`, `/omc/` and `/omc` are equivalent; `/` serves it at the root |
 | `OMCPA_DATA_DIR` | `./data` | Directory holding `oh-my-cpa.db`. Local disk only |
@@ -71,11 +72,12 @@ The MCP bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL` and
   (NFS/CIFS).
 - **Master key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and
   payloads. Back it up securely.
-- **Network security**: Keep CPA on a private network or loopback interface, and serve
-  Oh My CPA over HTTPS.
+- **Network security**: Keep CPA on a private network or loopback interface. The supplied
+  Compose files publish CPA and OMC only on loopback; use direct local access or an SSH
+  tunnel. Public access requires HTTPS through operator-owned infrastructure.
 - **Reverse proxy headers**: Set `OMCPA_TRUSTED_PROXY_CIDRS` to the CIDRs of reverse
-  proxies whose forwarding headers may be trusted (`deploy/compose.full.yml` trusts
-  Docker's `172.16.0.0/12` network). Leave it unset when clients connect directly;
+  proxies whose forwarding headers may be trusted. Both Compose files default to an
+  empty trust list. Name only actual proxy peers; leave it unset for direct clients;
   never trust a public range.
 - **Gateway version**: The console requires CPA v8.0.0 or later and speaks its v8
   Management API; a gateway older than v8 is refused and every page shows upgrade
@@ -83,9 +85,16 @@ The MCP bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL` and
   CPA needs no configuration change. The console's first configuration save converts
   such a file to the v8 layout, after keeping an encrypted copy of the original that the
   configuration page offers for download (see `docs/cpa-v8-compat.md`).
-- **Base path behind the bundled Caddy**: Caddy routes the console under
-  `OMCPA_BASE_PATH` and everything else to CPA, so `/` makes the console take the whole
-  host with CPA no longer reachable through the proxy.
+- **Base path**: Direct OMC serving supports `/omc` or `/`. An operator-owned proxy
+  must preserve the prefix; CPA keeps its separate port regardless of OMC's base path.
+- **Container image**: Compose pulls `wiziscool/oh-my-cpa:v0.1.0` from Docker Hub by
+  default. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
+  OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,
+  includes its own health probe and needs no mounted deployment scripts. A health
+  result of `degraded` keeps the container healthy but does not establish CPA access.
+- **Existing CPA and panels**: OMC-only Compose can attach to an existing external
+  Docker network. It does not replace the gateway or other panels; collection ownership
+  must be resolved separately. See `docs/install.md` and `docs/install-for-agents.md`.
 
 ## Time zone
 

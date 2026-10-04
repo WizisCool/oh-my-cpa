@@ -1,123 +1,163 @@
 # Installation
 
-Oh My CPA is one Go binary with the console embedded. It sits beside a running
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) and signs you in with
-CPA's own management key.
+Oh My CPA (OMC) is an embedded console and SQLite database in one Go binary. It
+connects to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) **v8.0.0
+or later**, using the gateway's plaintext management key as its sign-in password.
+The published image is **`wiziscool/oh-my-cpa`** on Docker Hub, with `linux/amd64` and
+`linux/arm64` variants. The first stable version is **`v0.1.0`**.
 
-Pick one path:
-
-| Path | Use it when |
+| Installation | Choose it when |
 | --- | --- |
-| [Docker Compose, full stack](#docker-compose-full-stack) | You want CPA, Oh My CPA and HTTPS from one command |
-| [Docker Compose, beside an existing CPA](#docker-compose-beside-an-existing-cpa) | CPA already runs and you only add the console |
-| [From source](#from-source) | You want a native binary, or you are developing |
-| [Let an agent do it](install-for-agents.md) | You would rather hand the steps to a coding agent |
+| [Docker Compose, full stack](#docker-compose-full-stack) | Neither CPA nor OMC is installed |
+| [Docker Compose, beside an existing CPA](#docker-compose-beside-an-existing-cpa) | CPA already runs, with or without another management panel |
+| [Let your agent install it](install-for-agents.md) | A coding agent should inventory your environment and select the safe path |
+| [From source](#from-source) | You need a native process, are developing, or CPA is accessible only on the host loopback |
 
-To look before installing, open the [live demo](https://omc-demo.junze.dev).
-
-## Requirements
-
-- CLIProxyAPI **v8.0.0 or later**. An older gateway is refused and every page shows
-  upgrade guidance instead. CPA v8 reads an existing v7 `config.yaml` unchanged; see
-  `docs/cpa-v8-compat.md`.
-- The gateway's **plaintext management key**. It is both what Oh My CPA uses to reach
-  CPA and the password you type into the console; there is no second account.
-- For Docker: Docker Engine with the Compose plugin.
-- For source builds: Go 1.25+ (CI pins `1.27.1`), Node.js 22+, pnpm 11+.
-
-Two values are yours to generate and keep:
-
-| Value | What it is | How to make one |
-| --- | --- | --- |
-| `OMCPA_MASTER_KEY` | Encrypts stored credentials and raw usage messages at rest. Losing it makes that data unreadable | `openssl rand -hex 32` |
-| CPA management key | The gateway's administrator secret | `openssl rand -hex 24`, or the one your CPA already has |
+The [live demo](https://omc-demo.junze.dev) needs no installation. Docker deployments
+need Docker Engine and the Compose plugin, not Go, Node.js, pnpm or a repository clone.
+Source builds need Go 1.25+, Node.js 22+ and pnpm 11+; CI pins Go 1.27.1,
+Node.js 22.23.2 and pnpm 11.19.0.
 
 ## Docker Compose, full stack
 
-`deploy/compose.full.yml` runs CPA, Oh My CPA and Caddy on one private network. Caddy
-serves the console under `/omc` and passes everything else to CPA, so one host name
-carries both the gateway API and its console. The image is built from this repository.
+`deploy/compose.full.yml` pulls CPA and OMC images. It publishes CPA on
+`127.0.0.1:8317` and OMC on `127.0.0.1:8080`; the two containers communicate on a
+private network. Install into a **new directory**; the commands below must not replace
+an existing gateway configuration or environment file.
 
 ```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
+mkdir -p oh-my-cpa/deploy oh-my-cpa/cpa/{auths,logs,plugins} oh-my-cpa/oh-my-cpa-data
 cd oh-my-cpa
-
-# 1. CPA's configuration. Start from the gateway's own example file.
-mkdir -p cpa
-curl -fsSL https://raw.githubusercontent.com/router-for-me/CLIProxyAPI/main/config.example.yaml \
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.full.yml \
+  -o deploy/compose.full.yml
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/cpa.config.example.yaml \
   -o cpa/config.yaml
-
-# 2. The data directory. The container runs as uid 10001 and must be able to write it.
-mkdir -p oh-my-cpa-data
 sudo chown 10001:10001 oh-my-cpa-data
+sudo chmod 700 oh-my-cpa-data
 
-# 3. Secrets and the address you will open.
-cat > deploy/.env <<EOF
+umask 077
+cat > deploy/.env <<EOF_ENV
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-DOMAIN=localhost
-OMCPA_PUBLIC_URL=https://localhost
-EOF
+OMCPA_PUBLIC_URL=http://127.0.0.1:8080
+TZ=UTC
+EOF_ENV
 
-# 4. Build and start.
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --build
+docker compose --env-file deploy/.env -f deploy/compose.full.yml pull
+docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d
 ```
 
-Open `https://localhost/omc/` and sign in with the `CPA_MANAGEMENT_KEY` from
-`deploy/.env`. On `localhost` Caddy issues a certificate from its own local authority,
-so the browser asks you to accept it once.
+Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY`
+stored in `deploy/.env`. The starter CPA configuration enables usage statistics and
+starts with no client API keys or provider credentials. Add those in the console
+before making model requests. No TLS or DNS setup is required for loopback access.
 
-For a public host, set `DOMAIN=cpa.example.com` and
-`OMCPA_PUBLIC_URL=https://cpa.example.com`, point the DNS record at the machine, and
-leave ports 80 and 443 reachable: Caddy obtains the certificate itself.
+On a remote server, keep these binds and use an SSH tunnel (choose an unused local port):
 
-What the stack reads from `deploy/.env`:
+```bash
+ssh -L 18080:127.0.0.1:8080 user@server
+```
+
+Open `http://127.0.0.1:18080/omc/`. The default `OMCPA_PUBLIC_URL` is used to choose
+cookie security, not to enforce the tunnel's local port.
+
+### Compose settings
+
+Both Compose files read `deploy/.env` when passed with `--env-file`. Relative bind
+paths are resolved from the Compose file's directory, not your current shell directory.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CPA_MANAGEMENT_KEY` | required | Handed to CPA as its management key, and to Oh My CPA to reach it |
-| `OMCPA_MASTER_KEY` | required | At-rest encryption key |
-| `OMCPA_PUBLIC_URL` | required | The address browsers use. An `https://` value marks the session cookie `Secure` |
-| `DOMAIN` | `localhost` | Host name Caddy serves |
-| `OMCPA_BASE_PATH` | `/omc` | Console sub-path. `/` gives the console the whole host, and CPA is then not reachable through the proxy |
-| `CPA_IMAGE` | `eceasy/cli-proxy-api:v8.0.2` | Gateway image |
-| `HTTP_BIND` / `HTTPS_BIND` | `0.0.0.0:80` / `0.0.0.0:443` | Where Caddy listens |
-| `TZ` | `UTC` | Calendar shared by CPA and Oh My CPA; keep them equal |
-| `CPA_CONFIG_PATH`, `CPA_AUTH_PATH`, `CPA_LOG_PATH`, `CPA_PLUGIN_PATH` | under `cpa/` | Gateway state on the host |
-| `OMCPA_DATA_PATH` | `oh-my-cpa-data/` | SQLite database on the host |
+| `OMCPA_IMAGE` | `wiziscool/oh-my-cpa:v0.1.0` | Pin a released tag or digest; `latest` is a moving stable alias |
+| `OMCPA_MASTER_KEY` | required | At-rest encryption key: `openssl rand -hex 32`; back it up separately |
+| `CPA_MANAGEMENT_KEY` | required in full stack | New gateway's administrator key, passed to both services |
+| `OMCPA_PUBLIC_URL` | `http://127.0.0.1:8080` | Browser origin; use `https://` only when browsers actually use TLS |
+| `OMCPA_BASE_PATH` | `/omc` | Console prefix; `/` serves OMC at the host root |
+| `OMCPA_BIND` | `127.0.0.1:8080` | Console host bind; change it when this port is occupied |
+| `CPA_BIND` | `127.0.0.1:8317` | Gateway host bind, full stack only |
+| `CPA_IMAGE` | `eceasy/cli-proxy-api:v8.0.2` | Gateway version, full stack only; update separately from OMC |
+| `TZ` | `UTC` | Shared calendar; match the existing CPA when adding OMC |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | Set `off` if another process drains this CPA's destructive usage queue |
+| `OMCPA_TRUSTED_PROXY_CIDRS` | empty | Exact trusted proxy peers; leave empty for direct clients |
+| `OMCPA_DATA_PATH` | `../oh-my-cpa-data` | OMC data directory, relative to the Compose file |
+| `CPA_CONFIG_PATH`, `CPA_AUTH_PATH`, `CPA_LOG_PATH`, `CPA_PLUGIN_PATH` | under `../cpa/` | Gateway state, full stack only |
+| `OMCPA_NETWORK_NAME` | `oh-my-cpa` / `oh-my-cpa-standalone` | Full-stack / OMC-only Docker network name |
+| `OMCPA_NETWORK_EXTERNAL` | `false` | OMC-only: `true` attaches to an existing Docker network |
+| `OMCPA_UPDATE_CHECK_ENABLED` / `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD` | `true` | Periodic / page-open update checks; set both false for offline operation |
 
 ## Docker Compose, beside an existing CPA
 
-`deploy/compose.omc.yml` runs only Oh My CPA and publishes it on `127.0.0.1:8080`.
+Use **`deploy/compose.omc.yml`**, which starts only OMC. Keep the existing CPA's
+configuration, volumes, version, keys, ports and management panel intact.
 
 ```bash
-git clone https://github.com/WizisCool/oh-my-cpa.git
+mkdir -p oh-my-cpa/deploy oh-my-cpa/oh-my-cpa-data
 cd oh-my-cpa
-
-mkdir -p oh-my-cpa-data
+curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/download/v0.1.0/compose.omc.yml \
+  -o deploy/compose.omc.yml
 sudo chown 10001:10001 oh-my-cpa-data
-
-cat > deploy/.env <<EOF
-OMCPA_CPA_BASE_URL=http://cpa.internal:8317
-OMCPA_CPA_MANAGEMENT_KEY=<your CPA management key>
+sudo chmod 700 oh-my-cpa-data
+umask 077
+cat > deploy/.env <<EOF_ENV
+OMCPA_CPA_BASE_URL=http://your-cpa-host:8317
+OMCPA_CPA_MANAGEMENT_KEY=replace-with-your-existing-plaintext-management-key
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
 OMCPA_PUBLIC_URL=http://127.0.0.1:8080
-EOF
-
-docker compose --env-file deploy/.env -f deploy/compose.omc.yml up -d --build
+TZ=UTC
+EOF_ENV
 ```
 
-Open `http://127.0.0.1:8080/omc/`.
+Replace the CPA URL and management key privately in the file, then:
 
-`OMCPA_CPA_BASE_URL` must be an address the **container** can reach. Inside a container
-`127.0.0.1` is the container itself, so a CPA bound to the host's loopback is not
-reachable that way: use the host's LAN address, a shared Docker network, or the
-full-stack file. `OMCPA_CPA_USAGE_ADDR` (`host:port`) defaults to the host and port of
-`OMCPA_CPA_BASE_URL`.
+```bash
+docker compose --env-file deploy/.env -f deploy/compose.omc.yml pull
+docker compose --env-file deploy/.env -f deploy/compose.omc.yml up -d
+```
 
-Put your own reverse proxy in front for HTTPS (`deploy/nginx.conf` is a starting point),
-then set `OMCPA_PUBLIC_URL` to the HTTPS address and `OMCPA_TRUSTED_PROXY_CIDRS` to the
-proxy's network.
+Open `http://127.0.0.1:8080/omc/`. The key must be the **plaintext secret**, not the
+bcrypt hash CPA writes to its configuration. Keep `OMCPA_MASTER_KEY` unchanged when
+an OMC data directory already exists.
+
+### Reaching an existing gateway
+
+The URL must be reachable **from OMC's container**, not just from your shell.
+
+| Existing CPA | Connection |
+| --- | --- |
+| Container on a user-defined network | Set `OMCPA_NETWORK_NAME` to that network, `OMCPA_NETWORK_EXTERNAL=true`, and `OMCPA_CPA_BASE_URL=http://<CPA network alias>:8317` |
+| Host process listening on a reachable host interface | Use `http://host.docker.internal:8317`; the Compose file supplies the host-gateway mapping. Check firewall and management allow-remote rules |
+| Host process bound only to `127.0.0.1` | Use a native OMC source build, or explicitly approve Linux host networking with a loopback OMC listen address. Host-gateway mapping does not make a loopback-only listener reachable |
+| Remote gateway | Use its private reachable URL or HTTPS endpoint; do not publish the management port just to install OMC |
+
+Management requests from a sibling container are remote requests to CPA. If they are
+refused, ask the owner before changing CPA's v8 `management.allow-remote` (legacy:
+`remote-management.allow-remote`). Changing it expands a security boundary; keep the
+listener on a private network. `OMCPA_CPA_USAGE_ADDR` can override the derived RESP
+address, but CPA v8 deployments normally fall back to HTTP polling in `auto` mode.
+
+### Other management panels
+
+Another panel can coexist with OMC: both administer the same CPA state. They do not
+share OMC's database or naming preferences. Inspect whether that panel or any exporter
+consumes the usage queue. If it does, leave it running and set
+`OMCPA_USAGE_INGEST_MODE=off` in `deploy/.env`; OMC can manage CPA but will not capture
+new request records. Reassign collection only with explicit approval. Coordinate
+configuration edits between panels; do not disable or uninstall one as an installation step.
+
+### Existing HTTPS or private-network access
+
+An existing proxy can forward to OMC's loopback/private listener, preserving the entire
+configured base path. Set `OMCPA_PUBLIC_URL` to the actual browser origin and
+`OMCPA_TRUSTED_PROXY_CIDRS` only to the proxy's real peers. The project does not install
+or manage that proxy. A public HTTP listener would carry an administrator credential
+without TLS: keep loopback/SSH access, or configure HTTPS with your own infrastructure.
+Changing OMC to `/` does not affect CPA's separately published API port.
+
+## Let your agent install it
+
+Give your coding agent [`docs/install-for-agents.md`](install-for-agents.md). It begins
+with inventory, chooses a topology and asks before altering any existing service,
+exposing a port, changing collection ownership or installing system software.
 
 ## From source
 
@@ -125,57 +165,64 @@ proxy's network.
 git clone https://github.com/WizisCool/oh-my-cpa.git
 cd oh-my-cpa
 pnpm install --frozen-lockfile
-
 cp .env.example .env
-# Edit .env: OMCPA_MASTER_KEY (openssl rand -hex 32) and OMCPA_CPA_MANAGEMENT_KEY.
-# If CPA is not on 127.0.0.1:8317, also OMCPA_CPA_BASE_URL and OMCPA_CPA_USAGE_ADDR.
+```
 
-pnpm build                                   # builds the console into internal/web/dist
-go build -o bin/oh-my-cpa ./cmd/oh-my-cpa    # one binary, console embedded
+Edit `.env` privately: set `OMCPA_MASTER_KEY`, `OMCPA_CPA_MANAGEMENT_KEY` and a reachable
+`OMCPA_CPA_BASE_URL`. If the gateway is remote, also set `OMCPA_CPA_USAGE_ADDR` or
+leave it empty to derive it from the URL. Then:
+
+```bash
+pnpm build
+go build -trimpath -o bin/oh-my-cpa ./cmd/oh-my-cpa
 ./bin/oh-my-cpa
 ```
 
-Open `http://127.0.0.1:8080/omc/` and sign in with the CPA management key.
-
-The binary reads `.env` from the working directory as a convenience; real environment
-variables win, and `OMCPA_ENV_FILE` names a different file. For a service manager, set
-the variables in the unit and point `OMCPA_DATA_DIR` at a directory on a local disk.
-
-For development with hot reload, see [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+Open `http://127.0.0.1:8080/omc/`. This is a foreground process; use your existing service
+manager for persistence. Real environment variables override `.env`; `OMCPA_ENV_FILE`
+selects another file. Set a loopback `OMCPA_LISTEN_ADDR` and local-disk `OMCPA_DATA_DIR`.
+Untagged source builds identify as `v0.1.0-dev`; official release builds inject the exact
+version into the binary. `OMCPA_VERSION` is an explicit override, not an upgrade mechanism.
+For hot reload, see [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Verify the install
 
 ```bash
-curl -s http://127.0.0.1:8080/omc/api/healthz
+docker compose --env-file deploy/.env -f deploy/compose.full.yml ps
+curl -fsS http://127.0.0.1:8080/omc/api/healthz
 ```
 
-A working install answers `"status":"ok"` with `"cpa_connected":true` and
-`"database_status":"ok"`. `"degraded"` means the console is up but cannot reach CPA:
-check `OMCPA_CPA_BASE_URL` and the management key.
+Use `compose.omc.yml` for OMC-only installs and the normalized path/port you selected.
+Success requires `status: ok`, `database_status: ok`, `cpa_connected: true` and a
+supported `cpa_management_api`. Image health accepts `degraded` because restarting OMC
+cannot fix an unreachable gateway; **healthy container does not establish CPA connectivity**.
+Sign in and verify the System Information page names the running image tag, then check
+provider discovery. Send a real model request only with approval; it may cost money.
 
-| Symptom | Cause |
+| Symptom | Check |
 | --- | --- |
-| The container restarts with `unable to open database file` | The data directory is not writable by uid 10001 |
-| Sign-in succeeds but the next page asks again | `OMCPA_PUBLIC_URL` is `https://` while you browse over plain HTTP, so the `Secure` cookie is dropped |
-| Every page shows upgrade guidance | The gateway is older than CPA v8.0.0 |
-| The dashboard stays empty while traffic flows | Another collector is draining CPA's usage queue; only one may read it |
+| Permission denied or unable to open database | Bind directory ownership `10001:10001`, mode `700`, local disk |
+| `degraded` health | Container reachability, management key, CPA management access rules |
+| Sign-in repeats | `https://` public URL while browsing plain HTTP, so `Secure` cookies are dropped |
+| Upgrade guidance | CPA must be v8.0.0 or later |
+| Empty request records | Collection ownership and CPA usage-statistics setting |
+| Wrong running version | Selected image tag/digest and any `OMCPA_VERSION` override; source `.env` defaults are development-only |
+| Port conflict | Choose an unused `OMCPA_BIND`/`CPA_BIND` and update the browser URL |
 
-## After installing
-
-- **Back up `OMCPA_MASTER_KEY`** somewhere other than the data directory.
-- **Run one replica per data directory**, on a local filesystem. SQLite WAL does not
-  tolerate NFS or CIFS.
-- **Keep CPA off the public internet**, or behind the same proxy as the console.
-- Backups, restores and upgrades: `docs/ops/sqlite-operations.md`.
-- Every setting and the operational notes: `docs/operations.md`.
+Back up the master key and data directory; one OMC replica per data directory, on local
+disk, and one collector per CPA. See `docs/ops/sqlite-operations.md`.
 
 ## Upgrading
 
+Back up first. Set `OMCPA_IMAGE=wiziscool/oh-my-cpa:vX.Y.Z` in `deploy/.env` to the
+chosen published version; keep the same data directory and master key.
+
 ```bash
-git pull
-docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --build
+docker compose --env-file deploy/.env -f deploy/compose.full.yml pull oh-my-cpa
+docker compose --env-file deploy/.env -f deploy/compose.full.yml up -d --no-deps oh-my-cpa
 ```
 
-For a source install, `git pull`, then repeat `pnpm install --frozen-lockfile`,
-`pnpm build` and `go build`. Migrations are forward-only and run at start-up; take a
-backup first (`docs/ops/sqlite-operations.md`).
+This updates only OMC, not CPA. Use the OMC-only file if that is your deployment.
+Repeat health, sign-in and running-version checks. Database migrations are forward-only;
+do not run an older image against a migrated database. Restore a compatible backup when
+rolling back. Tag publishing and release verification are documented in `docs/releasing.md`.
