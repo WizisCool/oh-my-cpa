@@ -20,7 +20,8 @@ Node.js 22.23.2 and pnpm 11.19.0.
 
 ## Docker Compose, full stack
 
-`deploy/compose.full.yml` pulls CPA and OMC images. It publishes CPA on
+`deploy/compose.full.yml` pulls CPA and OMC images using `:latest` by default.
+Override `CPA_IMAGE` or `OMCPA_IMAGE` to pin a tested version or digest. It publishes CPA on
 `127.0.0.1:8317` and OMC on `127.0.0.1:8080`; the two containers communicate on a
 private network. Install into a **new directory**; the commands below must not replace
 an existing gateway configuration or environment file.
@@ -68,14 +69,14 @@ paths are resolved from the Compose file's directory, not your current shell dir
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OMCPA_IMAGE` | `wiziscool/oh-my-cpa:v0.1.0` | Pin a released tag or digest; `latest` is a moving stable alias |
+| `OMCPA_IMAGE` | `wiziscool/oh-my-cpa:latest` | Moving stable alias; override with a released tag or digest to pin |
 | `OMCPA_MASTER_KEY` | required | At-rest encryption key: `openssl rand -hex 32`; back it up separately |
 | `CPA_MANAGEMENT_KEY` | required in full stack | New gateway's administrator key, passed to both services |
 | `OMCPA_PUBLIC_URL` | `http://127.0.0.1:8080` | Browser origin; use `https://` only when browsers actually use TLS |
 | `OMCPA_BASE_PATH` | `/omc` | Console prefix; `/` serves OMC at the host root |
 | `OMCPA_BIND` | `127.0.0.1:8080` | Console host bind; change it when this port is occupied |
 | `CPA_BIND` | `127.0.0.1:8317` | Gateway host bind, full stack only |
-| `CPA_IMAGE` | `eceasy/cli-proxy-api:v8.0.2` | Gateway version, full stack only; update separately from OMC |
+| `CPA_IMAGE` | `eceasy/cli-proxy-api:latest` | Moving gateway alias, full stack only; pin or update separately from OMC |
 | `TZ` | `UTC` | Shared calendar; match the existing CPA when adding OMC |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | Set `off` if another process drains this CPA's destructive usage queue |
 | `OMCPA_TRUSTED_PROXY_CIDRS` | empty | Exact trusted proxy peers; leave empty for direct clients |

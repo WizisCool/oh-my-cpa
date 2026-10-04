@@ -62,9 +62,10 @@ Rules that keep the suite fast and honest:
 ### Container and release acceptance
 
 `scripts/release-plan.test.mjs` tests tag/package validation, image identity, numeric
-latest selection, backports and the parsed release-job ordering, including negative
+latest selection, backports, immutable action revisions, checkout credential isolation
+and the parsed release-job ordering, including negative
 mutations. `scripts/deployment.test.mjs` parses the shipped Compose topology and tests
-loopback defaults, image-only installs, collection/proxy settings and gateway bootstrap
+`latest` image defaults, loopback bindings, image-only installs, collection/proxy settings and gateway bootstrap
 configuration. Both are automatically discovered repository self-tests.
 
 `internal/config/config_test.go` pins embedded build-version fallback and operator

@@ -34,14 +34,16 @@ maintainers with repository rules; a version tag is a publishing authority.
   override; the Compose files do not override the embedded version.
 - Docker version aliases are `v0.1.0` and `0.1.0`; `latest` advances only for the
   numerically newest stable release. A backport never moves either Docker `latest`
-  or GitHub's latest pointer backwards. Operators should pin a version or digest.
+  or GitHub's latest pointer backwards. Compose defaults to `latest` for both
+  OMC and CPA. Operators can override
+  `OMCPA_IMAGE` and `CPA_IMAGE` with a tested version or digest for controlled upgrades.
 - Publish a new version for changed application content. Do not move a published tag
   or intentionally rebuild its identity with different source.
 
 ## Prepare and publish
 
-1. Change both package versions together, synchronize deployment defaults and examples
-   to the intended stable version, and document user-visible changes. Keep lockfile
+1. Change both package versions together, update versioned download examples
+   for the intended stable version while retaining `latest` Compose defaults, and document user-visible changes. Keep lockfile
    metadata consistent if a package update requires it.
 2. Run `pnpm test:fast`, `pnpm verify` and `pnpm check:ui`; run `pnpm verify:full`
    for build/workflow changes. Review secrets and changes, then merge through the
@@ -108,3 +110,6 @@ request. Its per-product 15-minute attempt floor, six-hour sweep, offline switch
 ETag/body lifetime and source restrictions are unchanged. An install may show cached
 results until the floor elapses; do not bypass it to make an immediate post-release
 check appear fresh. See `docs/operations.md` and ADR 0019.
+
+Release actions use immutable upstream commit revisions, and checkout credentials
+are not persisted. GitHub release commands receive their job-scoped token explicitly.

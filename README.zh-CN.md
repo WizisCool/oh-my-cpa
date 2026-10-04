@@ -129,7 +129,7 @@ OMC 连接 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 
 
 ### Docker Compose（推荐）
 
-直接拉取 Docker Hub 镜像 **`wiziscool/oh-my-cpa:v0.1.0`**（`amd64` / `arm64`），
+直接拉取 Docker Hub 镜像 **`wiziscool/oh-my-cpa:latest`**（`amd64` / `arm64`），
 无需源码构建或安装开发工具链。在**新目录**中启动 CPA 和 OMC，默认只绑定本机端口：
 
 ```bash

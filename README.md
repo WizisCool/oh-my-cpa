@@ -137,7 +137,7 @@ OMC's sign-in password.
 
 ### Docker Compose (recommended)
 
-Pull **`wiziscool/oh-my-cpa:v0.1.0`** from Docker Hub (`amd64` / `arm64`). No source
+Pull **`wiziscool/oh-my-cpa:latest`** from Docker Hub (`amd64` / `arm64`). No source
 build or toolchain required. In a **new directory**, start CPA and OMC with direct
 loopback ports:
 

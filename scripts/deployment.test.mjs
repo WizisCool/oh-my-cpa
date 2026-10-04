@@ -11,7 +11,7 @@ function validateTopology(document, isFullStack) {
   assert.deepEqual(Object.keys(document.services).sort(), isFullStack ? ['cpa', 'oh-my-cpa'] : ['oh-my-cpa']);
   const console = document.services['oh-my-cpa'];
   assert.equal(console.build, undefined);
-  assert.equal(console.image, '${OMCPA_IMAGE:-wiziscool/oh-my-cpa:v0.1.0}');
+  assert.equal(console.image, '${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}');
   assert.deepEqual(console.ports, ['${OMCPA_BIND:-127.0.0.1:8080}:8080']);
   assert.equal(console.read_only, true);
   assert.equal(console.user, '10001:10001');
@@ -21,6 +21,7 @@ function validateTopology(document, isFullStack) {
   assert.equal(console.healthcheck, undefined, 'The image owns its canonical health probe');
   assert.equal(console.volumes.length, 1, 'Installers must not need to mount helper scripts');
   if (isFullStack) {
+    assert.equal(document.services.cpa.image, '${CPA_IMAGE:-eceasy/cli-proxy-api:latest}');
     assert.deepEqual(document.services.cpa.ports, ['${CPA_BIND:-127.0.0.1:8317}:8317']);
     assert.equal(console.depends_on.cpa.condition, 'service_healthy');
   } else {
@@ -29,12 +30,17 @@ function validateTopology(document, isFullStack) {
   }
 }
 
-test('Compose files install versioned images through loopback and preserve collection choice', () => {
+test('Compose files install latest images through loopback and preserve collection choice', () => {
   validateTopology(readDeployment('compose.full.yml'), true);
   validateTopology(readDeployment('compose.omc.yml'), false);
   const broken = readDeployment('compose.full.yml');
   broken.services['oh-my-cpa'].ports = ['0.0.0.0:8080:8080'];
   assert.throws(() => validateTopology(broken, true));
+  for (const service of ['oh-my-cpa', 'cpa']) {
+    const pinned = readDeployment('compose.full.yml');
+    pinned.services[service].image = pinned.services[service].image.replace(':latest', ':v0.1.0');
+    assert.throws(() => validateTopology(pinned, true));
+  }
 });
 test('new gateway bootstrap uses v8, enables usage and has no reusable client secret', () => {
   const config = readDeployment('cpa.config.example.yaml');

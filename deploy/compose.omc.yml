@@ -1,6 +1,6 @@
 services:
   oh-my-cpa:
-    image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:v0.1.0}
+    image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}
     container_name: ${OMCPA_CONTAINER_NAME:-oh-my-cpa}
     user: "10001:10001"
     read_only: true

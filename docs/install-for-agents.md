@@ -1,8 +1,8 @@
 # Install Oh My CPA (instructions for a coding agent)
 
 Install Oh My CPA (OMC) for the person you are working with. Start with inventory,
-not a predetermined stack. Use the versioned Docker Hub image
-**`wiziscool/oh-my-cpa:v0.1.0`** for Docker deployments. Its amd64 and arm64 variants
+not a predetermined stack. Use the Docker Hub image
+**`wiziscool/oh-my-cpa:latest`** for Docker deployments. Its amd64 and arm64 variants
 contain the console, binary and health probe: installing it needs no source build.
 The human guide is `docs/install.md`; release maintenance is `docs/releasing.md`.
 
@@ -214,7 +214,8 @@ Success requires `database_status: ok`, `cpa_connected: true`, supported CPA man
 and `status: ok`. Container health accepts `degraded` for gateway failures; a healthy
 container alone is not a successful connected installation. Verify sign-in, the System
 Information running version, provider discovery and the configured collection mode.
-In the first stable image, the version must be `v0.1.0`, not `v0.1.0-dev`.
+Confirm that the reported version matches the resolved image's OCI version label.
+The `latest` alias moves with stable releases; the first stable image reports `v0.1.0`.
 
 If traffic is already flowing and OMC owns collection, verify records arrive without
 sending a new paid request. Ask before a real provider call. With ingest off, report

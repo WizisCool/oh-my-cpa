@@ -35,6 +35,12 @@ export function validateReleaseWorkflow(workflow) {
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
   assert.equal(workflow.concurrency.queue, 'max');
   assert.equal(workflow.permissions.contents, 'read');
+  for (const job of Object.values(workflow.jobs)) {
+    for (const step of job.steps.filter(step => step.uses)) {
+      assert.match(step.uses, /@[a-f0-9]{40}$/, 'Release actions use immutable revisions');
+      if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
+    }
+  }
   const verify = workflow.jobs.verify;
   assert.ok(verify.steps.some(step => step.run?.includes('pnpm verify:full')));
   const publish = workflow.jobs.publish;
@@ -66,4 +72,10 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   const unqueued = structuredClone(workflow);
   delete unqueued.concurrency.queue;
   assert.throws(() => validateReleaseWorkflow(unqueued));
+  const mutable = structuredClone(workflow);
+  mutable.jobs.verify.steps[0].uses = 'actions/checkout@v7';
+  assert.throws(() => validateReleaseWorkflow(mutable));
+  const persisted = structuredClone(workflow);
+  persisted.jobs.release.steps[0].with['persist-credentials'] = true;
+  assert.throws(() => validateReleaseWorkflow(persisted));
 });
