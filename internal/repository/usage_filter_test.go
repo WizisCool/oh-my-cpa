@@ -648,3 +648,46 @@ func TestUsageEventSearchColumnsAreRealColumns(t *testing.T) {
 		}
 	}
 }
+
+// The served-model filter has three populations, not two: a record whose
+// upstream reported no model is neither substituted nor matched, and counting it
+// as matched would present "unknown" as a verified answer.
+func TestUsageEventServedModelFilter(t *testing.T) {
+	repo := usageTestRepository(t)
+	at := time.Now().UTC()
+	events := []usage.Event{
+		{InstanceID: "default", EventKey: "substituted", Model: "gpt-5", Generate: true,
+			TimestampMS: at.UnixMilli(), ResponseModel: "gpt-5-mini", ModelSubstituted: true},
+		{InstanceID: "default", EventKey: "matched", Model: "gpt-5", Generate: true,
+			TimestampMS: at.Add(time.Second).UnixMilli(), ResponseModel: "gpt-5-2026-08-07"},
+		{InstanceID: "default", EventKey: "unknown", Model: "gpt-5", Generate: true,
+			TimestampMS: at.Add(2 * time.Second).UnixMilli()},
+	}
+	if _, err := repo.InsertUsageEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+	window := UsageEventFilter{InstanceID: "default", FromMS: at.Add(-time.Hour).UnixMilli(), ToMS: at.Add(time.Minute).UnixMilli()}
+
+	filter := window
+	filter.ServedModel = ServedModelSubstituted
+	if keys := listFilterEventKeys(t, repo, filter); len(keys) != 1 || !containsKeys(keys, "substituted") {
+		t.Fatalf("substituted = %v", keys)
+	}
+	filter = window
+	filter.ServedModel = ServedModelMatched
+	if keys := listFilterEventKeys(t, repo, filter); len(keys) != 1 || !containsKeys(keys, "matched") {
+		t.Fatalf("matched = %v", keys)
+	}
+	// The search box reaches the served model, so the name an upstream answered
+	// with finds its requests even though no request asked for it.
+	filter = window
+	filter.Search = "gpt-5-mini"
+	if keys := listFilterEventKeys(t, repo, filter); len(keys) != 1 || !containsKeys(keys, "substituted") {
+		t.Fatalf("search by served model = %v", keys)
+	}
+	filter = window
+	filter.ServedModel = "maybe"
+	if _, err := repo.ListUsageEvents(context.Background(), filter); !errors.Is(err, ErrUsageFilterInvalid) {
+		t.Fatalf("unknown served model state error = %v", err)
+	}
+}

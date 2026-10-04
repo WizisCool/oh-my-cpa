@@ -2001,6 +2001,22 @@ const DICT: Record<string, [string, string]> = {
   'events.group_routing': ['来源与路由', 'Source & routing'],
   'events.group_performance': ['性能', 'Performance'],
   'events.group_cost': ['费用', 'Cost'],
+  'events.served_model': ['实际模型', 'Served model'],
+  'events.served_model_unknown': ['上游未报告', 'Not reported by the upstream'],
+  'events.served_substituted': ['与请求不同', 'Substituted'],
+  'events.served_matched': ['与请求一致', 'As requested'],
+  'events.served_substituted_hint': [
+    '上游报告的模型与请求的模型不同。同一模型的日期快照或 -latest 别名不算不同。',
+    'The upstream reported a different model than the one requested. A dated snapshot or a -latest alias of the same model does not count.',
+  ],
+  'events.served_matched_hint': [
+    '上游报告了模型，且与请求一致。上游未报告模型的请求不在其中。',
+    'The upstream reported the requested model. Requests whose upstream reported no model are not included.',
+  ],
+  'events.served_model_differs': [
+    '上游实际返回的模型是 {served}，与请求的模型不同',
+    'The upstream served {served}, not the requested model',
+  ],
   'events.cost_state': ['费用状态', 'Cost state'],
   'events.cost_any': ['全部', 'Any'],
   // The Segmented option label and its explanation are separate strings: the
@@ -2170,6 +2186,7 @@ const DICT: Record<string, [string, string]> = {
   'events.filter_chip_cost_min': ['费用 ≥ {val}', 'Cost ≥ {val}'],
   'events.filter_chip_cost_max': ['费用 ≤ {val}', 'Cost ≤ {val}'],
   'events.filter_chip_cost_state': ['费用: {val}', 'Cost: {val}'],
+  'events.filter_chip_served_model': ['实际模型: {val}', 'Served model: {val}'],
   'events.prev_item': ['上一条', 'Previous'],
   'events.next_item': ['下一条', 'Next'],
   'events.record_nav': ['第 {current} / {total} 条', '{current} of {total}'],

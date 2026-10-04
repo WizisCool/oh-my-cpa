@@ -40,6 +40,15 @@ const (
 	CostStateUnpriced = "unpriced"
 )
 
+// Served model vocabulary: whether the model the upstream reported serving is
+// the one the request named. Records whose upstream reported nothing belong to
+// neither state, so "matched" is a positive statement and not "not flagged".
+const (
+	ServedModelAny         = ""
+	ServedModelSubstituted = "substituted"
+	ServedModelMatched     = "matched"
+)
+
 // MaxUsageEventFilterValues bounds how many values one multi-select dimension
 // may carry. The filter panel never approaches it; the cap exists so a
 // hand-written URL cannot turn into a several-thousand-term IN list.
@@ -118,6 +127,10 @@ type UsageEventFilter struct {
 	// CostState narrows by price availability (CostStatePriced/Unpriced).
 	CostState string
 
+	// ServedModel narrows by whether the upstream served the requested model
+	// (ServedModelSubstituted/Matched).
+	ServedModel string
+
 	// SinceID asks for a count of matching records ingested after this row id,
 	// reported as ArrivedCount. It does not change which rows are returned.
 	// Zero means "not requested".
@@ -153,22 +166,26 @@ type UsageEventRow struct {
 	// APIKeyMask is the display-only mask of the client key. It is empty for
 	// records ingested before the mask column existed: the request record keeps
 	// only the fingerprint, which cannot be turned back into a readable mask.
-	APIKeyMask          string           `json:"api_key_mask,omitempty"`
-	Source              string           `json:"source"`
-	Model               string           `json:"model"`
-	ModelAlias          *string          `json:"model_alias,omitempty"`
-	ReasoningEffort     string           `json:"reasoning_effort,omitempty"`
-	ServiceTier         string           `json:"service_tier,omitempty"`
-	ResponseServiceTier string           `json:"response_service_tier,omitempty"`
-	Failed              bool             `json:"failed"`
-	Generate            bool             `json:"generate"`
-	Stream              *bool            `json:"stream,omitempty"`
-	LatencyMS           int64            `json:"latency_ms"`
-	TTFTMS              *int64           `json:"ttft_ms,omitempty"`
-	ClientIP            *string          `json:"client_ip,omitempty"`
-	XForwardedFor       *string          `json:"x_forwarded_for,omitempty"`
-	UserAgent           *string          `json:"user_agent,omitempty"`
-	Tokens              usage.TokenStats `json:"tokens"`
+	APIKeyMask          string  `json:"api_key_mask,omitempty"`
+	Source              string  `json:"source"`
+	Model               string  `json:"model"`
+	ModelAlias          *string `json:"model_alias,omitempty"`
+	ReasoningEffort     string  `json:"reasoning_effort,omitempty"`
+	ServiceTier         string  `json:"service_tier,omitempty"`
+	ResponseServiceTier string  `json:"response_service_tier,omitempty"`
+	// ResponseModel is the model the upstream reported having served; empty when
+	// it reported none or the record predates the column.
+	ResponseModel    string           `json:"response_model,omitempty"`
+	ModelSubstituted bool             `json:"model_substituted,omitempty"`
+	Failed           bool             `json:"failed"`
+	Generate         bool             `json:"generate"`
+	Stream           *bool            `json:"stream,omitempty"`
+	LatencyMS        int64            `json:"latency_ms"`
+	TTFTMS           *int64           `json:"ttft_ms,omitempty"`
+	ClientIP         *string          `json:"client_ip,omitempty"`
+	XForwardedFor    *string          `json:"x_forwarded_for,omitempty"`
+	UserAgent        *string          `json:"user_agent,omitempty"`
+	Tokens           usage.TokenStats `json:"tokens"`
 	// ResourceID and ResourceName join the event back to the user-owned Oh My
 	// CPA resource record, which is what turns a raw request into something a
 	// user recognises. Both are null until the credential is triaged.
@@ -290,7 +307,8 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
-		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id
+		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
+		       e.response_model, e.model_substituted
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -326,7 +344,8 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID); errScan != nil {
+			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
+			&row.ResponseModel, &row.ModelSubstituted); errScan != nil {
 			return page, fmt.Errorf("scan usage event: %w", errScan)
 		}
 		row.Failed = failed == 1
@@ -385,7 +404,8 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
-		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id
+		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
+		       e.response_model, e.model_substituted
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -403,7 +423,8 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID)
+		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
+		&row.ResponseModel, &row.ModelSubstituted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -679,6 +700,7 @@ var usageEventSearchColumns = []string{
 	"e.request_id",
 	"e.model",
 	"e.model_alias",
+	"e.response_model",
 	"e.provider",
 	"e.executor_type",
 	"e.source",
@@ -854,6 +876,16 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		where = append(where, `e.cost_nanos IS NULL`)
 	default:
 		return nil, nil, fmt.Errorf("%w: unknown cost state %q", ErrUsageFilterInvalid, filter.CostState)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filter.ServedModel)) {
+	case ServedModelAny:
+	case ServedModelSubstituted:
+		where = append(where, `e.model_substituted = 1`)
+	case ServedModelMatched:
+		where = append(where, `e.model_substituted = 0 AND e.response_model <> ''`)
+	default:
+		return nil, nil, fmt.Errorf("%w: unknown served model state %q", ErrUsageFilterInvalid, filter.ServedModel)
 	}
 
 	switch strings.ToLower(strings.TrimSpace(filter.Result)) {

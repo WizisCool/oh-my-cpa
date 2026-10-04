@@ -133,6 +133,7 @@ export const TagOutlined = createIcon(Lucide.Tag, 'anticon-tag');
 export const ThunderboltFilled = createIcon(Lucide.Zap, 'anticon-thunderbolt');
 export const ThunderboltOutlined = createIcon(Lucide.Zap, 'anticon-thunderbolt');
 export const UndoOutlined = createIcon(Lucide.Undo2, 'anticon-undo');
+export const SwapOutlined = createIcon(Lucide.ArrowLeftRight, 'anticon-swap');
 export const UpOutlined = createIcon(Lucide.ChevronUp, 'anticon-up');
 export const UploadOutlined = createIcon(Lucide.Upload, 'anticon-upload');
 export const VerticalAlignTopOutlined = createIcon(Lucide.ArrowUpToLine, 'anticon-vertical-align-top');

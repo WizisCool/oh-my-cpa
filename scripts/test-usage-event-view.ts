@@ -147,7 +147,7 @@ const everyFilter = [
   'auth_type=oauth&reasoning=high&service_tier=flex&model_alias=fast',
   'q=codex&ua=codex-cli&endpoint=%2Fv1%2Fresponses&request_id=req-1',
   'latency_min=100&latency_max=60000&tokens_min=0&tokens_max=500000',
-  'cost_min=0.000001&cost_max=12.5&cost=unpriced',
+  'cost_min=0.000001&cost_max=12.5&cost=unpriced&served=substituted',
 ].join('&');
 const everyQuery = read(everyFilter);
 const everyParams = new URLSearchParams(usageEventParams(everyQuery));
@@ -156,6 +156,12 @@ assert.deepEqual(everyAgain, everyQuery);
 assert.equal(everyAgain.ranges?.tokens?.min, 0, 'a bound of zero is a bound, not an absent one');
 assert.equal(everyAgain.ranges?.cost?.min, '0.000001', 'a cost bound keeps its decimal text');
 assert.equal(everyAgain.cost, 'unpriced');
+assert.equal(everyAgain.served, 'substituted');
+// An unknown served state is dropped from the query and reported, never sent on
+// as a filter the server would refuse.
+assert.equal(read('served=maybe').served, undefined);
+assert.deepEqual(rejectedEventParams(new URLSearchParams('served=maybe')), ['served']);
+assert.deepEqual(rejectedEventParams(new URLSearchParams('served=matched')), []);
 
 // A reversed range cannot match any record, so it is dropped instead of being
 // forwarded as a filter that renders a guaranteed-empty list.
@@ -630,6 +636,7 @@ assert.equal(hasExplicitEventQuery(new URLSearchParams('limit=250')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('request_id=abc')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('latency_min=100')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('cost=unpriced')), true);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('served=substituted')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('q=needle')), true);
 
 console.log('PASS usage event view preference: parsing, validation, field whitelisting, URL precedence helpers');
@@ -808,6 +815,7 @@ const loadedView = {
     cost_min: ['0.000001'],
     cost_max: ['12.5'],
     cost: ['unpriced'],
+    served: ['substituted'],
   },
 };
 const loaded = draftFromView(loadedView);
@@ -820,6 +828,7 @@ assert.equal(loaded.ranges.latency?.max, 60000);
 assert.equal(loaded.ranges.tokens?.min, 0);
 assert.equal(loaded.ranges.cost?.min, '0.000001');
 assert.equal(loaded.cost, 'unpriced');
+assert.equal(loaded.served, 'substituted');
 assert.equal(loaded.result, 'failed');
 assert.deepEqual(draftToView(loaded), loadedView, 'a draft round trips through the view unchanged');
 assert.deepEqual(validateFilterDraft(loaded), {}, 'a loaded view is valid');

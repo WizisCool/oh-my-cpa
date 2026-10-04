@@ -127,6 +127,7 @@ type Payload struct {
 	ReasoningEffort     string          `json:"reasoning_effort"`
 	ServiceTier         string          `json:"service_tier"`
 	ResponseServiceTier string          `json:"response_service_tier,omitempty"`
+	ResponseModel       string          `json:"response_model,omitempty"`
 	AccountingVersion   int             `json:"accounting_version"`
 	ResponseHeaders     json.RawMessage `json:"response_headers,omitempty"`
 }
@@ -153,6 +154,13 @@ type Event struct {
 	ReasoningEffort     string
 	ServiceTier         string
 	ResponseServiceTier string
+	// ResponseModel is the model the upstream reported having served. Empty
+	// means unknown, never "same as requested": not every upstream declares one.
+	ResponseModel string
+	// ModelSubstituted records that ResponseModel names a different model than
+	// the request did. It is decided here, once, so the stored verdict cannot
+	// drift from the rule that produced it.
+	ModelSubstituted    bool
 	ExecutorType        string
 	TimestampMS         int64
 	Source              string
@@ -237,6 +245,8 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		CacheCreationTokens: nonNegative(payload.Tokens.CacheCreationTokens),
 		TotalTokens:         totalTokens(payload.Tokens),
 	}
+	event.ResponseModel = boundedSafe(payload.ResponseModel, 256)
+	event.ModelSubstituted = isServedModelSubstituted(event.Model, event.ModelAlias, event.ResponseModel)
 	return event, nil
 }
 

@@ -57,6 +57,15 @@ export interface UsageEvent {
   reasoning_effort?: string;
   service_tier?: string;
   response_service_tier?: string;
+  /** The model the upstream reported having served. Absent when it reported
+   *  none or the record predates the field, which is "unknown" and never a claim
+   *  that the requested model ran. */
+  response_model?: string;
+  /** Set when `response_model` names a different model than the request did. The
+   *  server decides it at ingestion: a dated snapshot or a "-latest" alias of the
+   *  requested model is the same model, so comparing the two strings here would
+   *  flag requests the server does not. */
+  model_substituted?: boolean;
   failed: boolean;
   generate: boolean;
   /** Whether the request was streamed (SSE/chunked). Null/absent for historical rows. */
@@ -238,6 +247,15 @@ export type UsageResultFilter = 'all' | 'success' | 'failed';
  *  permanent property of the record and not a state it later leaves. */
 export type UsageCostFilter = 'all' | 'priced' | 'unpriced';
 
+/** Whether the upstream served the model the request named. A record whose
+ *  upstream reported no model is in neither state, so "matched" is a positive
+ *  statement rather than "not flagged". */
+export type UsageServedFilter = 'all' | 'substituted' | 'matched';
+
+export function isUsageServedState(value: unknown): value is Exclude<UsageServedFilter, 'all'> {
+  return value === 'substituted' || value === 'matched';
+}
+
 /** Dimensions whose several selected values mean "any of these" (OR). Two
  *  different dimensions still mean AND, which is what makes the panel narrow as
  *  the operator adds a filter and widen as they remove one. */
@@ -411,6 +429,7 @@ export interface UsageEventQuery {
   to?: number;
   result?: UsageResultFilter;
   cost?: UsageCostFilter;
+  served?: UsageServedFilter;
   /** Repeated-parameter dimensions, OR within each list. */
   filters?: Partial<Record<UsageMultiFilterKey, string[]>>;
   /** Literal substring dimensions. */
@@ -469,6 +488,7 @@ export function usageEventParams(query: UsageEventQuery): string {
   }
   assign('result', query.result);
   assign('cost', query.cost);
+  if (isUsageServedState(query.served)) assign('served', query.served);
   assign('cursor', query.cursor);
   assign('limit', query.limit);
   assign('since', query.since);

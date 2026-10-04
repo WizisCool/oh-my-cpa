@@ -1,6 +1,12 @@
 import React from 'react';
 import { Button, Drawer, Input, InputNumber, Segmented, Select, Tooltip } from 'antd';
-import type { UsageCostFilter, UsageFacetValue, UsageFacets, UsageResultFilter } from '../../types/usageEvents';
+import type {
+  UsageCostFilter,
+  UsageFacetValue,
+  UsageFacets,
+  UsageResultFilter,
+  UsageServedFilter,
+} from '../../types/usageEvents';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
 import { ResultMarker } from './ResultMarker';
 import type { EventFilterKey } from '../../types/usageEventQuery';
@@ -415,6 +421,38 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           )}
           {REQUEST_FACETS.map(multiRow)}
           {ALIAS_FACETS.map(multiRow)}
+          {row(
+            'events.served_model',
+            'req-served-segmented',
+            <Segmented
+              id="req-served-segmented"
+              aria-label={t('events.served_model')}
+              value={draft.served}
+              onChange={(value) => setDraft((prev) => ({ ...prev, served: value as UsageServedFilter }))}
+              options={[
+                { value: 'all', label: t('events.filter_all') },
+                // Both states are statements about what the upstream reported, so
+                // each says which records it leaves out: a request whose upstream
+                // named no model is in neither.
+                {
+                  value: 'substituted',
+                  label: (
+                    <Tooltip title={t('events.served_substituted_hint')}>
+                      <span>{t('events.served_substituted')}</span>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  value: 'matched',
+                  label: (
+                    <Tooltip title={t('events.served_matched_hint')}>
+                      <span>{t('events.served_matched')}</span>
+                    </Tooltip>
+                  ),
+                },
+              ]}
+            />,
+          )}
         </>
       )}
 

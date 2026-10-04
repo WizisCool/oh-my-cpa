@@ -393,6 +393,20 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   Chinese, and the option is shown disabled there. The stored value itself is
   never rewritten, so returning the console to Chinese restores the operator's own
   choice. `full` is language-neutral and reads the same in every language.
+- **Served Model**: The model an upstream reported having served for one request,
+  as CPA v8 publishes it in the usage record (`response_model`) and Oh My CPA
+  stores it beside the requested model. It is an upstream's own statement, not a
+  measurement: it shows rerouting, a canary under a new name and which snapshot
+  an alias resolved to, and it cannot show a model whose quality changed under
+  an unchanged name. Unknown is a distinct state - an upstream that declared no
+  model, or a record ingested before the field was stored - and is never read as
+  "served as requested". A request is **substituted** when the Served Model
+  names a different model than both the upstream model name and the alias the
+  client asked for; a dated snapshot, a `-latest` alias, a provider prefix and a
+  thinking suffix of the same model are not substitutions. The verdict is decided
+  once at ingestion (`internal/usage/served_model.go`, following CPA's own
+  substitution rule) and stored, so the list, the filter and the detail view
+  agree on it.
 - **Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the upstream model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' call view one

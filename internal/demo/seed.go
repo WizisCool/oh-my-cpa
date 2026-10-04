@@ -334,6 +334,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 	// It is filled explicitly rather than left to chance, because an empty shortest
 	// window is indistinguishable from a demo that is not working.
 	events = append(events, fillRecentWindow(random, session, profiles, credentials, fingerprints, keys, events, now)...)
+	events = append(events, recentSubstitutions(random, profiles, credentials, fingerprints, keys, now)...)
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return 0, 0, 0, fmt.Errorf("seed request history: %w", err)
@@ -406,6 +407,43 @@ func fillRecentWindow(random *deterministic, session workSession, profiles []mod
 		event.APIGroupLabel = "api_key"
 		event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
 		added = append(added, event)
+	}
+	return added
+}
+
+// recentSubstitutionsPerModel is how many substituted requests each affected model
+// carries in the newest part of the history.
+const recentSubstitutionsPerModel = 2
+
+// recentSubstitutions places requests an upstream answered as another model among
+// the newest rows of the history.
+//
+// The affected models carry little traffic, so the substituted share of an
+// ordinary draw almost never lands on the first page of the request list, and a
+// visitor would have to know which filter to set before seeing one. These are
+// placed explicitly, minutes apart, so the list shows them between ordinary rows.
+func recentSubstitutions(random *deterministic, profiles []modelProfile, credentials map[string]string, fingerprints []string, keys []gatewayKey, now time.Time) []usage.Event {
+	added := make([]usage.Event, 0, recentSubstitutionsPerModel*2)
+	for _, profile := range profiles {
+		if profile.servedAs == "" {
+			continue
+		}
+		for placed := 0; placed < recentSubstitutionsPerModel; {
+			at := now.Add(-time.Duration(len(added)*4+2)*time.Minute - time.Duration(random.nextFloat()*float64(time.Minute)))
+			event := buildEventAt(random, profile, credentials, at)
+			// A failed request has no served model to show; draw again.
+			if event.Failed {
+				continue
+			}
+			keyIndex := pickWeighted(random, keyWeights(keys))
+			event.APIGroupKey = fingerprints[keyIndex]
+			event.APIGroupLabel = "api_key"
+			event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
+			event.ResponseModel = profile.servedAs
+			event.ModelSubstituted = usage.IsModelSubstituted(event.Model, event.ResponseModel)
+			added = append(added, event)
+			placed++
+		}
 	}
 	return added
 }
@@ -604,6 +642,16 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 		TotalTokens:         input + output,
 		ExecutorType:        "gateway",
 		ServiceTier:         "default",
+	}
+	// An upstream reports the model it served only when it answered. The
+	// substituted share is derived from the latency already drawn, so adding it
+	// leaves every other generated value where it was.
+	if !failed {
+		event.ResponseModel = profile.name
+		if profile.servedAs != "" && latency%4 == 0 {
+			event.ResponseModel = profile.servedAs
+		}
+		event.ModelSubstituted = usage.IsModelSubstituted(event.Model, event.ResponseModel)
 	}
 	// A reasoning model's traces are what make the request detail panel readable,
 	// so the effort is recorded for the models that actually think.

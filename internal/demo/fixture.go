@@ -254,6 +254,11 @@ func gatewayKeyCatalog() []gatewayKey {
 type modelProfile struct {
 	name     string
 	provider string
+	// servedAs is the model this one's upstream occasionally answers with
+	// instead, so the request list has substitutions to show: a subscription
+	// routing a frontier model to a cheaper sibling, and a canary build answering
+	// under its own name. Empty for a model that is always served as requested.
+	servedAs string
 	// weight is the share of requests this model carries relative to its peers.
 	weight int
 	// authType is what CPA records for the credential that answered.
@@ -322,7 +327,7 @@ func modelCatalog() []modelProfile {
 		// The two Gemini rows keep a credential-based provider because the OAuth surfaces -
 		// the quota panel and the sign-in list - need credentials of their own to render,
 		// and a catalogue of API keys alone would leave those pages empty.
-		{name: "gemini-3.8-flash", provider: "antigravity", weight: 3, authType: "oauth", endpoint: "/v1beta/models",
+		{name: "gemini-3.8-flash-high", servedAs: "gemini-3.8-flash-n", provider: "antigravity", weight: 3, authType: "oauth", endpoint: "/v1beta/models",
 			inputMean: 14200, outputMean: 1380, reasonShare: 0.3, cacheRead: 0.49, cacheCreate: 0.04,
 			latencyMS: 2700, ttftRatio: 0.28, failureRate: 0.009},
 		{name: "gemini-3.7-flash", provider: "gemini", weight: 2, authType: "oauth", endpoint: "/v1beta/models",
@@ -330,7 +335,7 @@ func modelCatalog() []modelProfile {
 			latencyMS: 1800, ttftRatio: 0.33, failureRate: 0.007},
 		// A reasoning model on a subscription, so the request list shows a long-thinking
 		// row beside the fast ones and the cost column has a high-priced entry to report.
-		{name: "gpt-6-astra", provider: "codex", weight: 1, authType: "oauth", endpoint: "/v1/responses",
+		{name: "gpt-6-astra", servedAs: "gpt-6-luna", provider: "codex", weight: 1, authType: "oauth", endpoint: "/v1/responses",
 			inputMean: 21400, outputMean: 3860, reasonShare: 0.7, cacheRead: 0.57, cacheCreate: 0.11,
 			latencyMS: 16400, ttftRatio: 0.2, failureRate: 0.016},
 	}
@@ -347,9 +352,11 @@ var openRouterSnapshot []byte
 
 // linkedModels are served models an operator pinned to a chosen OpenRouter model.
 // DeepSeek's endpoint serves the July snapshot, which the automatic match would not
-// pick over the undated id, so the price follows the pin.
+// pick over the undated id, so the price follows the pin. Antigravity names a
+// reasoning tier in the model id, which no OpenRouter entry carries.
 var linkedModels = map[string]string{
-	"deepseek-v4-flash": "deepseek/deepseek-v4-flash-0731",
+	"deepseek-v4-flash":     "deepseek/deepseek-v4-flash-0731",
+	"gemini-3.8-flash-high": "google/gemini-3.8-flash",
 }
 
 // unpricedCatalogModels are models the gateway offers that no price covers yet. They

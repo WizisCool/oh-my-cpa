@@ -20,6 +20,10 @@ export const alignmentRecords = (() => {
     timestamp_ms: now - index * 1000,
     provider: LONG_PROVIDER,
     model: LONG_MODEL,
+    // A substitution adds a line to the model cell, and the served name can be
+    // as long as the requested one, so it has to truncate inside the same track.
+    response_model: `${LONG_MODEL}-substituted`,
+    model_substituted: true,
     failed: index % 5 === 0,
     latency_ms: 1200 + index * 37,
     ttft_ms: 120,
@@ -144,6 +148,9 @@ export async function columnAlignment({ base, page, check }) {
     return { ok: offenders.length === 0, offenders: offenders.slice(0, 6) };
   });
   check('no text cell content spills outside its column', overflow.ok, JSON.stringify(overflow.offenders));
+  const servedLine = page.locator('.request-row').first().locator('[data-testid="request-served-model"]');
+  check('a substituted request names the served model in its row',
+    (await servedLine.count()) === 1 && (await servedLine.innerText()).includes('-substituted'));
 
   // 2. The long values must actually be truncating rather than expanding the
   //    column: an ellipsised element's scrollWidth exceeds its clientWidth.

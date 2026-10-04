@@ -10,7 +10,8 @@ import (
 
 // rawCommandCodePayload is one CPA usage record as the queue published it, kept
 // in the shape the gateway actually emits: an endpoint that is a request line, a
-// client address, a forwarded chain, and both service tiers. Every value is
+// client address, a forwarded chain, both service tiers, and a served model that
+// differs from the requested one. Every value is
 // deliberately synthetic - documentation-range addresses (RFC 5737) and made-up
 // identifiers - so the test never carries a real capture's addresses or indexes.
 const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",` +
@@ -19,7 +20,7 @@ const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",`
 	`"executor_type":"OpenAICompatExecutor","failed":false,"generate":true,"latency_ms":3614,` +
 	`"model":"fixture-vendor/fixture-model","provider":"openai-compatible-fixture vendor",` +
 	`"reasoning_effort":"high","request_id":"fixture-request-1","service_tier":"auto",` +
-	`"response_service_tier":"default","x_forwarded_for":"198.51.100.7, 203.0.113.9",` +
+	`"response_service_tier":"default","response_model":"fixture-model-mini","x_forwarded_for":"198.51.100.7, 203.0.113.9",` +
 	`"tokens":{"total_tokens":5}}`
 
 // TestRequestMetadataSurvivesIngestAndPersistence walks a raw payload through
@@ -71,6 +72,11 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	if row.ResponseServiceTier != "default" {
 		t.Fatalf("stored response tier = %q, want default", row.ResponseServiceTier)
 	}
+	// The served model and the verdict about it travel together on both
+	// projections: the list flags the row, the detail explains it.
+	if row.ResponseModel != "fixture-model-mini" || !row.ModelSubstituted {
+		t.Fatalf("stored served model = %q substituted = %v", row.ResponseModel, row.ModelSubstituted)
+	}
 
 	detail, err := repo.GetUsageEvent(context.Background(), row.ID)
 	if err != nil {
@@ -90,6 +96,9 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	}
 	if detail.ResponseServiceTier != "default" || detail.ServiceTier != "auto" {
 		t.Fatalf("detail tiers = %q/%q", detail.ServiceTier, detail.ResponseServiceTier)
+	}
+	if detail.ResponseModel != "fixture-model-mini" || !detail.ModelSubstituted {
+		t.Fatalf("detail served model = %q substituted = %v", detail.ResponseModel, detail.ModelSubstituted)
 	}
 }
 
@@ -145,6 +154,9 @@ func TestCommitUsageDecodedKeepsRequestMetadata(t *testing.T) {
 	}
 	if row.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("stored endpoint = %q", row.Endpoint)
+	}
+	if row.ResponseModel != "fixture-model-mini" || !row.ModelSubstituted {
+		t.Fatalf("stored served model = %q substituted = %v", row.ResponseModel, row.ModelSubstituted)
 	}
 }
 

@@ -51,6 +51,7 @@ func TestUsageEventsRejectMalformedFilters(t *testing.T) {
 		"tokens_min=900&tokens_max=100":     "must not be greater",
 		"cost_min=2&cost_max=1":             "must not be greater",
 		"cost=maybe":                        "cost must be one of",
+		"served=maybe":                      "served must be one of",
 		"q=" + strings.Repeat("x", 300):     "at most",
 		"model=" + strings.Repeat("m", 300): "at most",
 	} {
@@ -205,6 +206,8 @@ func TestUsageEventsRangeFiltersAndCostConversion(t *testing.T) {
 		{Event: filterEventFor("failed", now.Add(-time.Minute), func(e *usage.Event) {
 			e.LatencyMS = 100
 			e.Failed = true
+			e.ResponseModel = "gpt-5-mini"
+			e.ModelSubstituted = true
 		})},
 	})
 
@@ -244,6 +247,9 @@ func TestUsageEventsRangeFiltersAndCostConversion(t *testing.T) {
 	}
 	if got := ids("result=failed"); len(got) != 1 || got[0] != "failed" {
 		t.Fatalf("result filter = %v", got)
+	}
+	if got := ids("served=substituted"); len(got) != 1 || got[0] != "failed" {
+		t.Fatalf("served model filter = %v", got)
 	}
 	// Every record was priced before an explicit cost filter is applied, so
 	// "unpriced" is the empty set and "all" is everything.

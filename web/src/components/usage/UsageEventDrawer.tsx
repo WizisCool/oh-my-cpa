@@ -8,6 +8,7 @@ import {
   CopyOutlined,
   DownloadOutlined,
   DownOutlined,
+  SwapOutlined,
   UpOutlined,
 } from '../icons';
 import { useQuery } from '@tanstack/react-query';
@@ -370,6 +371,24 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       fields([
                         [t('events.col_model'), value(event.model)],
                         [t('events.model_alias'), value(event.model_alias)],
+                        [
+                          t('events.served_model'),
+                          event.response_model ? (
+                            <span className="request-served-model" data-testid="detail-served-model">
+                              <span>{event.response_model}</span>
+                              {event.model_substituted && (
+                                <Tooltip title={t('events.served_substituted_hint')}>
+                                  <span className="request-served-flag">
+                                    <SwapOutlined aria-hidden />
+                                    {t('events.served_substituted')}
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="terminal-muted">{t('events.served_model_unknown')}</span>
+                          ),
+                        ],
                         [t('events.reasoning_effort'), value(event.reasoning_effort)],
                         [t('events.service_tier'), value(event.service_tier)],
                         [t('events.response_tier'), value(event.response_service_tier)],

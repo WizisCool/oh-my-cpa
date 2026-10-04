@@ -63,12 +63,16 @@ type usageEventResponse struct {
 	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
 	ServiceTier         string `json:"service_tier,omitempty"`
 	ResponseServiceTier string `json:"response_service_tier,omitempty"`
-	Failed              bool   `json:"failed"`
-	Generate            bool   `json:"generate"`
-	Stream              *bool  `json:"stream,omitempty"`
-	LatencyMS           int64  `json:"latency_ms"`
-	TTFTMS              *int64 `json:"ttft_ms,omitempty"`
-	Tokens              struct {
+	// ResponseModel is the model the upstream reported having served. Absent
+	// when it reported none, which is not a claim that the request's model ran.
+	ResponseModel    string `json:"response_model,omitempty"`
+	ModelSubstituted bool   `json:"model_substituted,omitempty"`
+	Failed           bool   `json:"failed"`
+	Generate         bool   `json:"generate"`
+	Stream           *bool  `json:"stream,omitempty"`
+	LatencyMS        int64  `json:"latency_ms"`
+	TTFTMS           *int64 `json:"ttft_ms,omitempty"`
+	Tokens           struct {
 		Input         int64 `json:"input"`
 		Output        int64 `json:"output"`
 		Reasoning     int64 `json:"reasoning"`
@@ -108,6 +112,8 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.ReasoningEffort = row.ReasoningEffort
 	item.ServiceTier = row.ServiceTier
 	item.ResponseServiceTier = row.ResponseServiceTier
+	item.ResponseModel = row.ResponseModel
+	item.ModelSubstituted = row.ModelSubstituted
 	item.Failed = row.Failed
 	item.Generate = row.Generate
 	item.Stream = row.Stream
@@ -303,12 +309,13 @@ func usageEventRangeValid(key string, min, max *int64) error {
 func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) (repository.UsageEventFilter, error) {
 	query := request.URL.Query()
 	filter := repository.UsageEventFilter{
-		InstanceID: defaultInstanceID(),
-		FromMS:     window.FromMS,
-		ToMS:       window.ToMS,
-		Result:     strings.ToLower(strings.TrimSpace(query.Get("result"))),
-		CostState:  strings.ToLower(strings.TrimSpace(query.Get("cost"))),
-		Cursor:     query.Get("cursor"),
+		InstanceID:  defaultInstanceID(),
+		FromMS:      window.FromMS,
+		ToMS:        window.ToMS,
+		Result:      strings.ToLower(strings.TrimSpace(query.Get("result"))),
+		CostState:   strings.ToLower(strings.TrimSpace(query.Get("cost"))),
+		ServedModel: strings.ToLower(strings.TrimSpace(query.Get("served"))),
+		Cursor:      query.Get("cursor"),
 	}
 	multi := []struct {
 		key    string
@@ -423,6 +430,10 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	}
 	if !validCostState(filter.CostState) {
 		writeError(writer, http.StatusBadRequest, "cost must be one of priced or unpriced")
+		return
+	}
+	if !validServedModel(filter.ServedModel) {
+		writeError(writer, http.StatusBadRequest, "served must be one of substituted or matched")
 		return
 	}
 	if err := repository.ValidUsageCursor(filter.Cursor); err != nil {
@@ -597,6 +608,8 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"reasoning_effort":      item.ReasoningEffort,
 		"service_tier":          item.ServiceTier,
 		"response_service_tier": item.ResponseServiceTier,
+		"response_model":        item.ResponseModel,
+		"model_substituted":     item.ModelSubstituted,
 		"failed":                item.Failed,
 		"generate":              item.Generate,
 		"stream":                item.Stream,
@@ -727,6 +740,16 @@ func (h *Handler) attachFacetAliases(request *http.Request, facets *repository.U
 func validEventResult(value string) bool {
 	switch value {
 	case "", repository.ResultAll, repository.ResultSuccess, repository.ResultFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+// validServedModel mirrors the repository's accepted served-model vocabulary.
+func validServedModel(value string) bool {
+	switch value {
+	case repository.ServedModelAny, repository.ServedModelSubstituted, repository.ServedModelMatched:
 		return true
 	default:
 		return false

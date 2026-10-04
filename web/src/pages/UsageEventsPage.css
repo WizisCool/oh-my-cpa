@@ -825,6 +825,25 @@
   color: var(--fg);
   border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
+.req-model-served {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--warn);
+  overflow: hidden;
+}
+.req-model-served-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.req-model-served-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .req-model-sub {
   display: flex;
   align-items: center;
@@ -1379,6 +1398,23 @@
   font-size: 12px;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.request-served-model {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.request-served-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
 }
 .request-detail .ant-descriptions-view table {
   table-layout: fixed;

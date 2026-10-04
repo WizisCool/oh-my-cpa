@@ -545,6 +545,7 @@ const chipBase = {
   ],
   resolveProviderName: (value: string) => (value === 'codex-0' ? 'My Codex Line' : value),
   costLabels: { priced: 'Priced', unpriced: 'Unpriced' },
+  servedLabels: { substituted: 'Substituted', matched: 'As requested' },
 };
 
 test('a credential chip shows the file name rather than the stored fingerprint', () => {
@@ -564,6 +565,11 @@ test('a caller chip prefers the alias, then the mask, then the raw fingerprint',
 test('a provider chip is labelled with the operator name while filtering on the stored key', () => {
   assert.equal(chipDisplayValue({ ...chipBase, key: 'provider', value: 'codex-0' }), 'My Codex Line');
   assert.equal(chipDisplayValue({ ...chipBase, key: 'provider', value: 'claude' }), 'claude');
+});
+
+test('the served-model state is named in the reader language', () => {
+  assert.equal(chipDisplayValue({ ...chipBase, key: 'served', value: 'substituted' }), 'Substituted');
+  assert.equal(chipDisplayValue({ ...chipBase, key: 'served', value: 'matched' }), 'As requested');
 });
 
 test('the cost state is named in the reader language, and cost bounds carry their sign', () => {

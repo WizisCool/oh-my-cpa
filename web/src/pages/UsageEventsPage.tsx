@@ -314,6 +314,7 @@ export const UsageEventsPage: React.FC = () => {
     cost_min: 'events.filter_chip_cost_min',
     cost_max: 'events.filter_chip_cost_max',
     cost: 'events.filter_chip_cost_state',
+    served: 'events.filter_chip_served_model',
   };
 
   const describeChip = React.useCallback(
@@ -333,6 +334,10 @@ export const UsageEventsPage: React.FC = () => {
         costLabels: {
           priced: t('events.cost_priced'),
           unpriced: t('events.cost_unpriced_short'),
+        },
+        servedLabels: {
+          substituted: t('events.served_substituted'),
+          matched: t('events.served_matched'),
         },
       });
       return { label: t(chipLabels[key], { val: shown }) };

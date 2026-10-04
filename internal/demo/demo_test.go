@@ -877,3 +877,31 @@ func TestSeedConcentratesADayOnFewModels(t *testing.T) {
 		t.Errorf("the two busiest models carry %.0f%% of the last day's tokens, want most of it", leading*100)
 	}
 }
+
+// The request list can only show a substitution if one is among its newest rows,
+// and the models that carry them see too little traffic for chance to put one there.
+func TestRecentSubstitutionsCoverEverySubstitutedModel(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	keys := gatewayKeyCatalog()
+	fingerprints := make([]string, len(keys))
+	events := recentSubstitutions(newDeterministic(1), modelCatalog(), credentialAuthIndexes(), fingerprints, keys, now)
+
+	served := map[string]string{}
+	for _, event := range events {
+		if !event.ModelSubstituted || event.Failed {
+			t.Fatalf("request for %q served as %q is not a substitution", event.Model, event.ResponseModel)
+		}
+		if age := now.Sub(time.UnixMilli(event.TimestampMS)); age < 0 || age > time.Hour {
+			t.Fatalf("request for %q is %s old, outside the newest rows", event.Model, age)
+		}
+		served[event.Model] = event.ResponseModel
+	}
+	for _, profile := range modelCatalog() {
+		if profile.servedAs != "" && served[profile.name] != profile.servedAs {
+			t.Fatalf("model %q has no recent request served as %q", profile.name, profile.servedAs)
+		}
+	}
+	if len(served) == 0 {
+		t.Fatal("the catalogue names no substituted model")
+	}
+}

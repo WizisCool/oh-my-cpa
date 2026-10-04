@@ -32,6 +32,8 @@ export interface ChipDisplayInput {
   resolveProviderName: (value: string) => string;
   /** The dictionary's names for the two cost states. */
   costLabels: { priced: string; unpriced: string };
+  /** The dictionary's names for the two served-model states. */
+  servedLabels: { substituted: string; matched: string };
 }
 
 /**
@@ -48,6 +50,7 @@ export function chipDisplayValue({
   callerFacets,
   resolveProviderName,
   costLabels,
+  servedLabels,
 }: ChipDisplayInput): string {
   if (key === 'auth_index') return credentialNames.get(value) || value;
   if (key === 'api_key') {
@@ -57,6 +60,7 @@ export function chipDisplayValue({
   }
   if (key === 'provider') return resolveProviderName(value);
   if (key === 'cost') return value === 'priced' ? costLabels.priced : costLabels.unpriced;
+  if (key === 'served') return value === 'matched' ? servedLabels.matched : servedLabels.substituted;
   if (key.endsWith('_min') || key.endsWith('_max')) {
     // Cost bounds are nano-dollars on the wire and are shown in dollars, so the
     // sign is added here rather than stored.

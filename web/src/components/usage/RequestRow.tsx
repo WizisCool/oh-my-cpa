@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
-import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined } from '../icons';
+import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -229,6 +229,19 @@ export const RequestRow = React.memo<RequestRowProps>(
               </span>
             )}
           </div>
+          {/* Only a substitution earns a line: a served model that is the
+              requested one, or its dated snapshot, is the expected case and stays
+              in the detail drawer. */}
+          {event.model_substituted && event.response_model && (
+            <RequestTooltip
+              title={t('events.served_model_differs', { served: event.response_model })}
+            >
+              <span className="req-model-served" data-testid="request-served-model">
+                <SwapOutlined className="req-model-served-icon" aria-hidden />
+                <span className="req-model-served-name">{event.response_model}</span>
+              </span>
+            </RequestTooltip>
+          )}
           {/* The requested service tier ("auto") is not a model fact operators
               scan for; the alias and the tier stay in the detail drawer. */}
           <span className="req-model-sub">

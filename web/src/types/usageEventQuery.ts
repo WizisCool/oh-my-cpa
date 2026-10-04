@@ -6,6 +6,7 @@ import {
   compareCostBounds,
   formatUsageRangeBound,
   isCostRange,
+  isUsageServedState,
   parseUsageRangeBound,
   usageRangeParamKey,
 } from './usageEvents';
@@ -47,6 +48,7 @@ export const EVENT_FILTER_KEYS = [
     usageRangeParamKey(range, 'max'),
   ]),
   'cost',
+  'served',
 ] as const;
 
 export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
@@ -79,6 +81,8 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
     limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 500) : 100,
   };
   if (cost === 'priced' || cost === 'unpriced') query.cost = cost;
+  const served = params.get('served');
+  if (isUsageServedState(served)) query.served = served;
 
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
@@ -158,6 +162,7 @@ export function queryToFilterParams(query: UsageEventQuery): Partial<Record<Even
       result[usageRangeParamKey(range, 'max')] = [formatUsageRangeBound(bounds.max)];
   }
   if (query.cost === 'priced' || query.cost === 'unpriced') result.cost = [query.cost];
+  if (isUsageServedState(query.served)) result.served = [query.served];
   return result;
 }
 
@@ -211,6 +216,10 @@ export function rejectedEventParams(params: URLSearchParams): string[] {
     if (key === 'cost') {
       const value = raw.trim();
       if (value !== 'priced' && value !== 'unpriced') rejected.push(key);
+      continue;
+    }
+    if (key === 'served') {
+      if (!isUsageServedState(raw.trim())) rejected.push(key);
       continue;
     }
     // Every other dimension is a literal string, so it is unusable only when it is
