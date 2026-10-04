@@ -157,6 +157,12 @@ async function main() {
   try {
     browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    // Arrive as a returning visitor who changed the theme on an earlier visit. A console that
+    // pushed that unsaved choice on load would be refused by the Worker on every page, and the
+    // refusal is an API error this run already fails on.
+    await context.addInitScript(() => {
+      window.localStorage.setItem('omc-theme', JSON.stringify({ mode: 'light', dirty: true }));
+    });
     const page = await context.newPage();
     page.on('console', (message) => {
       if (message.type() === 'error') consoleErrors.push(message.text());

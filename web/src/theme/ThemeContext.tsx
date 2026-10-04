@@ -24,6 +24,7 @@ import {
 import { themePaletteCssVariables } from './themeConfig';
 import { usePreference } from '../hooks/usePreference';
 import { parseThemePreferences, THEME_PREFERENCE_KEY } from './themePreference';
+import { isDemoMode } from '../types/demoMode';
 
 export interface ThemeContextValue {
   /** The preference as stored, without any in-progress edit. */
@@ -367,6 +368,12 @@ export const ThemeServerSync: React.FC = () => {
   const isBlocked = React.useRef(false);
   const latest = React.useRef(preferences);
   latest.current = preferences;
+  // A demonstration has no deployment to agree with: its visitors share one server, which either
+  // refuses the write (the public demo) or would hand one visitor's theme to the next. The theme
+  // therefore stays in this browser, and nothing is pushed or adopted. Pushing anyway left a
+  // visitor who had changed the theme once marked dirty for good, so every later page load
+  // repeated the refused write and opened with its error toast.
+  const isBrowserOnly = isDemoMode();
 
   /**
    * Writes the preference and clears the flag only when the deployment has accepted it.
@@ -387,7 +394,7 @@ export const ThemeServerSync: React.FC = () => {
 
 
   React.useEffect(() => {
-    if (!ready) return;
+    if (!ready || isBrowserOnly) return;
     if (!settled.current) {
       settled.current = true;
       // Recorded whether or not this settles by pushing. Nothing before this point is a change this session
@@ -413,7 +420,7 @@ export const ThemeServerSync: React.FC = () => {
     isBlocked.current = false;
     pushedRevision.current = revision;
     push(latest.current);
-  }, [adoptServerPreferences, bootstrap.isDirty, push, ready, revision, stored]);
+  }, [adoptServerPreferences, bootstrap.isDirty, isBrowserOnly, push, ready, revision, stored]);
 
   React.useEffect(() => {
     if (!ready || !settled.current) return;
