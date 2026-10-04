@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -94,7 +93,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		if h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 			_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 		}
-		h.attachWindowCapacity(ctx, refreshed, time.Now().UnixMilli())
+		h.attachWindowCapacity(ctx, refreshed, h.now().UnixMilli())
 
 		_ = h.recordAudit(request, "quota.refresh", "quota", targetIndex, "success", map[string]any{
 			"status": refreshed.Status,
@@ -148,7 +147,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 	out := make([]*quota.NormalizedQuota, 0, len(results))
 	for _, r := range results {
 		if r != nil {
-			h.attachWindowCapacity(ctx, r, time.Now().UnixMilli())
+			h.attachWindowCapacity(ctx, r, h.now().UnixMilli())
 			out = append(out, r)
 		}
 	}
@@ -198,12 +197,41 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 }
 
 func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.NormalizedQuota) error {
-	if h.repo == nil || q == nil {
+	if h.repo == nil || q == nil || q.Disabled || q.Error != "" || q.Status == "stale" || q.Status == "error" {
 		return nil
 	}
+	// Carry observed reset evidence through the existing JSON snapshots, so a
+	// tainted cycle stays tainted after earlier readings fall out of retention.
+	var history []quota.ObservedWindows
+	hasIncompleteHistory := false
+	for _, window := range q.Windows {
+		if !quota.SupportsWindowCapacity(q.Provider, window) {
+			continue
+		}
+		var err error
+		history, err = h.loadObservedWindows(ctx, q.AuthIndex, q.Provider)
+		if err != nil {
+			hasIncompleteHistory = true
+			if h.logger != nil {
+				h.logger.Warn("quota capacity history unavailable while saving observation", "provider", q.Provider, "error", err)
+			}
+		}
+		break
+	}
+	windows := append([]quota.QuotaWindow(nil), q.Windows...)
+	for i := range windows {
+		window := &windows[i]
+		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
+		fromMS, toMS, reason := quota.WindowCycleRange(*window, q.ObservedAtMS, q.ObservedAtMS)
+		if reason == "" && quota.SupportsWindowCapacity(q.Provider, *window) {
+			window.HasIncompleteHistory = hasIncompleteHistory || quota.HasIncompleteWindowHistory(*window, history, fromMS, toMS)
+			window.HasMidCycleReset = quota.HasWindowCycleReset(*window, history, fromMS, toMS)
+		}
+	}
+	q.Windows = windows
 	winJSON := "[]"
 	if len(q.Windows) > 0 {
-		if b, err := json.Marshal(q.Windows); err == nil {
+		if b, err := json.Marshal(windows); err == nil {
 			winJSON = string(b)
 		}
 	}
@@ -367,7 +395,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		return
 	}
 
-	nowMS := time.Now().UnixMilli()
+	nowMS := h.now().UnixMilli()
 	stdProvider := quota.DetectProvider(targetFile.Type, targetFile.Provider)
 	caps := quota.CapabilitiesForProvider(stdProvider)
 
@@ -456,7 +484,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		fileMap[authIndex] = file
 	}
 
-	nowMS := time.Now().UnixMilli()
+	nowMS := h.now().UnixMilli()
 	var latestSnapshots map[string]repository.QuotaSnapshotRecord
 	var activeCooldowns map[string]repository.ActiveCooldownRecord
 

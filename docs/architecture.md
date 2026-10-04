@@ -1707,21 +1707,50 @@ still describes. The console renders a snapshot as a `≥` bound with an unverif
 marker and never as a countdown, so a stale claim cannot read as a verified
 renewal date.
 
-A window's **Estimated Window Capacity** (`CONTEXT.md`) is joined when a quota is
-read, not when it is observed. `Handler.attachWindowCapacity` in `internal/api`
-runs on the overview, the credential detail, every refresh response and the agent's
-quota capabilities: for each window `quota.SupportsWindowCapacity` accepts, it sums
-the credential's `usage_events` over `quota.WindowCycleRange` with
-`Repository.QueryCredentialWindowUsage` (served by the `auth_index, timestamp_ms`
-index), reads the credential's snapshot history for an earlier, higher reading in
-the same cycle (`quota.PeakUsedPercent`), and lets `quota.EstimateWindowCapacity`
-decide between an estimate and a `capacity_unavailable` reason. The three fields
-(`usage`, `capacity`, `capacity_unavailable`) are never written to
-`quota_snapshots`: the join runs after a snapshot is persisted and on a copy of
-the window slice, so requests ingested after an observation are still counted the
-next time it is read. `internal/quota` stays free of the repository; the
-arithmetic is pure and the API layer supplies its inputs
-(ADR 0058).
+A window's **Estimated Window Capacity** and **Previous-Cycle Capacity Reference**
+(`CONTEXT.md`) are joined on read by `Handler.attachWindowCapacity` in `internal/api`,
+for the overview, credential detail, refresh responses and Agent/MCP quota outputs.
+`internal/quota` holds pure range, scope, reset-evidence, previous-observation and
+arithmetic functions; `internal/repository` supplies usage and retained observations.
+
+Global usage is summed through `QueryCredentialWindowUsage`; scoped usage is grouped
+by `COALESCE(NULLIF(response_model, ''), model)` through
+`QueryCredentialModelWindowUsage`, then matched by `SelectWindowUsage`. Both queries
+use the credential/time index and half-open bounds ending at the reading. Claude
+family windows use canonical family identities; exact model windows tolerate dated
+releases using the same identity rule as served-model observability. Antigravity
+normalizes only reviewed exact group names to `model_families`; an unrecognized
+period remains unknown rather than defaulting to a daily cycle. Fixed period labels
+are matched exactly; a calendar month is not treated as thirty days. Unresolved aliases
+or scope metadata withhold the whole scoped reading. No live CPA model/alias reads
+are introduced: today's routing cannot explain a historical alias reliably.
+
+History is read once per eligible credential, in deterministic observation/insertion
+order. `HasWindowCycleReset` detects drops throughout the sequence and premature
+boundary replacements, not only a peak above the current percentage. Before a
+successful observation is persisted, its reset evidence is carried in the existing
+`windows_json` as `has_mid_cycle_reset`; evidence survives retention and clears only
+with the next scheduled cycle. Failed or disabled refreshes retain the prior
+observation time and are not persisted, including failures masked by cooldown status.
+Corrupt/unreadable history and failed usage queries yield explicit unavailable reasons.
+A failed history read still permits saving the fresh observation, carrying a sticky
+`has_incomplete_history` marker for that cycle rather than inventing reset evidence.
+The marker prevents estimates and references until the next scheduled cycle.
+
+A fresh current cycle with `low_usage`, `no_traffic` or `no_reading` may use
+`PreviousWindowObservation` to select the final retained observation of its immediately
+preceding scheduled cycle. Scope and period must match, its reset must meet the current
+start within one second, and the preceding cycle must have no retained reset evidence.
+The previous estimate is recalculated from its own locked usage range and marked
+`basis: previous_cycle`, with `observed_at_ms`, `from_ms` and `reset_at_ms`. Current
+`usage` and `capacity_unavailable` remain current; stale, expired, reset or unresolved
+cycles never invoke the fallback. It is a historical estimate, not an actual total.
+
+Read-time `usage`, `capacity` and `capacity_unavailable` are stripped before snapshot
+storage, and joins operate on a copied slice. Late-ingested events inside an observation
+range therefore revise both current estimates and historical references on the next
+read. Reset detection is limited to observed/retained evidence, not a complete upstream
+lifecycle. There are no new tables, migrations or routing inputs (ADR 0058 and ADR 0059).
 
 Codex reset-credit redemption is offered in the credential Drawer's Quota tab and never
 from a list row, because it spends an irreversible entitlement; it is offered whenever the

@@ -26,6 +26,9 @@ export function formatCapacityError(errorPercent: number): string {
 }
 
 const REASON_KEYS: Record<QuotaCapacityUnavailableReason, string | null> = {
+  scope_unknown: 'quota.capacity_reason_scope_unknown',
+  history_unavailable: 'quota.capacity_reason_history_unavailable',
+  usage_unavailable: 'quota.capacity_reason_usage_unavailable',
   boundary_unknown: 'quota.capacity_reason_boundary_unknown',
   expired: 'quota.capacity_reason_expired',
   stale: 'quota.capacity_reason_stale',
@@ -39,6 +42,8 @@ const REASON_KEYS: Record<QuotaCapacityUnavailableReason, string | null> = {
 export interface QuotaCapacityReading {
   /** What was recorded in the cycle, e.g. "$1.20 · 480K tokens"; null when nothing was. */
   recorded: string | null;
+  /** A historical reference is never labelled as the current cycle's capacity. */
+  basis: string | null;
   /** The estimate, e.g. "≈ $24 · 9.6M tokens"; null when it is withheld. */
   estimate: string | null;
   /** The estimate's uncertainty, e.g. "±10%". */
@@ -83,11 +88,12 @@ export function describeQuotaCapacity(
     error = formatCapacityError(capacity.error_percent);
   }
 
-  const reasonKey = !capacity && reason ? REASON_KEYS[reason] : null;
+  const basis = capacity?.basis === 'previous_cycle' ? t('quota.capacity_previous') : null;
+  const reasonKey = (!capacity || basis) && reason ? REASON_KEYS[reason] : null;
   const note = reasonKey ? t(reasonKey) : null;
 
   if (!recorded && !estimate && !note) return null;
-  return { recorded, estimate, error, note };
+  return { recorded, estimate, error, note, basis };
 }
 
 /**
@@ -97,8 +103,9 @@ export function describeQuotaCapacity(
 export function compactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
   const { capacity } = window;
   if (!capacity) return null;
+  const prefix = capacity.basis === 'previous_cycle' ? `${t('quota.capacity_previous_short')} ` : '';
   if (capacity.cost_nanos != null) {
-    return `≈${formatEstimatedUsd(capacity.cost_nanos / 1_000_000_000, capacity.error_percent)}`;
+    return `${prefix}≈${formatEstimatedUsd(capacity.cost_nanos / 1_000_000_000, capacity.error_percent)}`;
   }
-  return `≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
+  return `${prefix}≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
 }

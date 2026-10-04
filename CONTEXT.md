@@ -358,25 +358,29 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   reports no usage, or, when every window reports usage below 100 because
   upstream rounds, the most used one. Pinning every window would show the weekly
   quota as spent whenever the 5-hour window runs out.
-- **Estimated Window Capacity**: What a whole Quota Window is worth, read as the
-  usage this deployment recorded for the credential in the window's current
-  cycle divided by the share upstream reports as used. It is the size of the
-  window at 100%, not a projection of what will have been used when it ends.
-  The recorded usage runs from the cycle start (reset instant minus period) to
-  the moment the share was observed, never to "now", so numerator and
-  denominator describe the same interval. Cost is the sum of Request Cost
-  Snapshots, so a later price change never rewrites an estimate, and Unpriced
-  Usage withholds the dollar figure rather than understating it. An estimate is
-  withheld, with a stated reason, when the cycle boundary is not exact or
-  derived, the window has expired or its reading is stale, the used share is
-  below 5%, nothing was recorded, or an earlier reading in the same cycle was
-  higher (the counter was reset part-way). Upstream reports whole points, so
-  every estimate carries the relative error half a point puts on it. It applies
-  to the Codex and Claude windows every request draws on (5-hour and weekly);
-  a model- or feature-scoped window meters only part of the traffic. Usage that
-  never passed through the gateway is not counted, and the figure moves with
-  the mix of models, so it is a reading for the operator and never an input to
-  routing or to a credential's status.
+- **Estimated Window Capacity**: What a whole Quota Window is worth: usage this
+  deployment recorded in the indicated cycle and metered model scope divided by
+  the share upstream reports as used. It is capacity at 100%, not a forecast of
+  consumption when the window ends. Usage stops at the observation, and cost uses
+  Request Cost Snapshots. Below 5% consumption no current-cycle estimate is given;
+  dollar estimates additionally require at least 95% of recorded requests to be
+  priced. Unknown boundaries, expired or failed readings, unresolved model scopes,
+  unavailable evidence and observed mid-cycle resets also withhold estimates.
+  The rounding allowance covers half a percentage point, not statistical confidence.
+  Codex and Claude global windows, model-metered windows and reviewed Antigravity
+  groups can be estimated. An opaque historical alias without an identifiable served
+  model makes a scoped estimate unavailable; it is never treated as zero usage.
+  Unrecorded traffic is invisible, late-arriving recorded events can revise an
+  estimate, and the figure varies with model mix. It never feeds routing or status.
+- **Previous-Cycle Capacity Reference**: The last retained valid capacity estimate
+  from the immediately preceding scheduled cycle, offered when a fresh current
+  cycle has too little usage, no recorded traffic or no used-share reading. It is
+  explicitly labelled as historical and carries its observation and cycle bounds;
+  it is neither current capacity nor the previous cycle's actual total consumption.
+  A changed scope or period, a missing adjacent cycle or an observed early reset
+  makes the reference unavailable. Detected reset evidence and failed history-read
+  evidence remain attached to subsequent observations of that cycle even after the original readings expire.
+  An evidence failure withholds estimates but does not block saving a fresh reading.
 - **Preference**: Console state stored server-side rather than in the browser,
   so it follows the deployment across devices, browsers, incognito windows, and
   cleared browser storage rather than binding to a single client instance.

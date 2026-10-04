@@ -364,3 +364,42 @@ func TestQueryCredentialWindowUsage(t *testing.T) {
 		t.Fatalf("empty usage = %+v, want zero", empty)
 	}
 }
+
+func TestQueryCredentialModelWindowUsagePrefersServedIdentity(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	for _, row := range []struct {
+		key, requested, served string
+		atMS                   int64
+	}{
+		{"alias", "fast", "claude-sonnet-4-5", 1000},
+		{"substitution", "claude-sonnet-4-5", "claude-opus-4-1", 1500},
+		{"canonical", "gemini-3-pro", "", 1500},
+		{"unknown-alias", "fast", "", 1500},
+		{"outside", "fast", "claude-sonnet-4-5", 2000},
+	} {
+		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events(instance_id,event_key,api_group_key,auth_index,timestamp_ms,created_at_ms,model,response_model,total_tokens,cost_nanos) VALUES('default',?,'group','auth-1',?,?,?, ?,100,1000)`, row.key, row.atMS, row.atMS, row.requested, row.served); err != nil {
+			t.Fatal(err)
+		}
+	}
+	groups, err := repo.QueryCredentialModelWindowUsage(ctx, "auth-1", 1000, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 4 {
+		t.Fatalf("groups=%+v", groups)
+	}
+	for _, group := range groups {
+		if group.Requests != 1 || group.Tokens != 100 || group.CostNanos != 1000 {
+			t.Fatalf("identity or range corrupted: %+v", group)
+		}
+	}
+}
+
+func TestQueryCredentialModelWindowUsageRejectsUninitializedRepository(t *testing.T) {
+	for _, repo := range []*Repository{nil, {}} {
+		if _, err := repo.QueryCredentialModelWindowUsage(context.Background(), "credential", 1, 2); err == nil {
+			t.Fatal("uninitialized repository accepted")
+		}
+	}
+}

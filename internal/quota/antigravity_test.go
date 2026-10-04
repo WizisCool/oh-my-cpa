@@ -111,3 +111,26 @@ func TestParseAntigravityUsageOrdersFiveHourFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestAntigravityCapacityScopeAndUnknownPeriod(t *testing.T) {
+	windows, err := ParseAntigravityUsage([]byte(`{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"five","window":"5h","remainingFraction":0.8,"resetTime":"2026-01-01T17:00:00Z"}]},{"displayName":"Gemini and future models","buckets":[{"bucketId":"future","window":"unreported","remainingFraction":0.8,"resetTime":"2026-01-01T17:00:00Z"}]}]}`), 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(windows) != 2 || len(windows[0].ModelFamilies) != 1 || windows[0].ModelFamilies[0] != "gemini" || len(windows[1].ModelFamilies) != 0 || *windows[1].PeriodHours != 0 {
+		t.Fatalf("scope or period guessed: %+v", windows)
+	}
+}
+
+func TestAntigravityPeriodsRequireCompleteFixedDuration(t *testing.T) {
+	for _, label := range []string{"15h", "25 hours", "biweekly", "2 weeks", "monthly", "1m", "month", "unknown"} {
+		if hours := parseAntigravityWindowHours(label); hours != 0 {
+			t.Errorf("unreviewed period %q guessed as %v hours", label, hours)
+		}
+	}
+	for label, expected := range map[string]float64{"5h": 5, "daily": 24, "weekly": 168, "30d": 720} {
+		if hours := parseAntigravityWindowHours(label); hours != expected {
+			t.Errorf("period %q=%v, want %v", label, hours, expected)
+		}
+	}
+}

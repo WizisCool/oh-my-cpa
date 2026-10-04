@@ -33,20 +33,21 @@ type RawAntigravityPayload struct {
 }
 
 func parseAntigravityWindowHours(window string) float64 {
-	w := strings.ToLower(strings.TrimSpace(window))
-	if strings.Contains(w, "5h") || (strings.Contains(w, "5") && strings.Contains(w, "hour")) {
+	// A substring such as "week" also matches "biweekly"; guessing a shorter
+	// period would mix unrelated traffic into the new capacity numerator.
+	switch strings.ToLower(strings.TrimSpace(window)) {
+	case "5h", "5 hour", "5 hours", "five_hour", "five-hour":
 		return 5
-	}
-	if strings.Contains(w, "24h") || strings.Contains(w, "1d") || strings.Contains(w, "day") || strings.Contains(w, "daily") {
+	case "24h", "24 hours", "1d", "day", "daily":
 		return 24
-	}
-	if strings.Contains(w, "7d") || strings.Contains(w, "1w") || strings.Contains(w, "week") {
+	case "7d", "7 days", "1w", "week", "weekly":
 		return 168
-	}
-	if strings.Contains(w, "30d") || strings.Contains(w, "1m") || strings.Contains(w, "month") {
+	case "30d", "30 days":
 		return 720
+	default:
+		// A calendar month is not a fixed 30-day duration.
+		return 0
 	}
-	return 24
 }
 
 func translateAntigravityBucketLabel(groupName, bucketName string) string {
@@ -171,6 +172,7 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 				ID:               fmt.Sprintf("ag_%s_%s", gName, bucketID),
 				Label:            fullLabel,
 				Scope:            "group",
+				ModelFamilies:    AntigravityModelFamilies(gName),
 				UsedPercent:      usedPercent,
 				RemainingPercent: remainingPercent,
 				ResetAtMS:        resetAtMS,

@@ -48,6 +48,7 @@ test('an estimated window reads recorded usage and the estimate with its uncerta
     estimate: '≈ $24.00 · quota.capacity_tokens(9.6M)',
     error: '±10%',
     note: null,
+    basis: null,
   });
 });
 
@@ -73,6 +74,7 @@ test('a withheld estimate keeps the recorded usage and says why', () => {
     estimate: null,
     error: null,
     note: 'quota.capacity_reason_low_usage',
+    basis: null,
   });
 });
 
@@ -92,4 +94,21 @@ test('the list row carries the estimate alone, and nothing when it is withheld',
     '≈quota.capacity_tokens(9.6M)',
   );
   assert.equal(compactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
+});
+
+test('a previous-cycle estimate labels its basis and preserves the current refusal', () => {
+  const window = { usage, capacity: { basis: 'previous_cycle' as const, tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 2, observed_at_ms: 1 }, capacity_unavailable: 'low_usage' as const };
+  const reading = describeQuotaCapacity(window, 'en-compact', t);
+  assert.equal(reading?.basis, 'quota.capacity_previous');
+  assert.equal(reading?.note, 'quota.capacity_reason_low_usage');
+  assert.equal(reading?.recorded, '$1.20 · quota.capacity_tokens(480K)');
+  assert.equal(compactQuotaCapacity(window, 'en-compact', t), 'quota.capacity_previous_short ≈$24.00');
+});
+
+test('scope and data failures explain why no estimate is shown', () => {
+  for (const reason of ['scope_unknown', 'history_unavailable', 'usage_unavailable'] as const) {
+    const reading = describeQuotaCapacity({ capacity_unavailable: reason }, 'en-compact', t);
+    assert.equal(reading?.note, `quota.capacity_reason_${reason}`);
+    assert.equal(reading?.estimate, null);
+  }
 });

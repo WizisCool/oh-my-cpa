@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
 func (h *Handler) clearQuotaCooldown(ctx context.Context, client *management.Client, authIndex string, action string, audit providerAudit) (map[string]any, error) {
@@ -85,7 +85,7 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 	if refreshed != nil && h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 	}
-	h.attachWindowCapacity(ctx, refreshed, time.Now().UnixMilli())
+	h.attachWindowCapacity(ctx, refreshed, h.now().UnixMilli())
 
 	_ = audit("quota.redeem_credit", "quota", authIndex, "success", nil)
 

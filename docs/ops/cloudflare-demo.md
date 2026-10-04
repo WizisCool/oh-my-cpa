@@ -325,3 +325,27 @@ alongside inference: the public demonstration never starts a background model/wo
 ### Custom icon reads
 
 The generated dataset includes custom-icon metadata and one deterministic SVG content response from the real validated import path. The Worker serves the same-origin content route directly from that capture; query revision parameters do not change the artwork identity. The selector can browse this fixture without contacting an external asset host. Upload, preview-import, edit and delete requests are refused in both the Go demo policy and the Worker's non-read boundary, and their controls are disabled in demo mode. Regenerate the dataset after changing these responses or the picker reads.
+
+
+### Quota capacity examples
+
+The generated dataset seeds real normalized observations for Codex, Claude and an
+allowlisted Antigravity Gemini group through `internal/demo/quota.go`. A second Codex
+credential has a low current five-hour reading and an adjacent prior-cycle observation,
+so the real handlers can show a historical capacity reference from seeded request costs.
+Claude family windows select only their own models; amounts are never hand-authored.
+The freshness digest covers quota parsing, scope/history rules and repository joins.
+The Worker rebases `from_ms`, `to_ms`, `observed_at_ms` and `reset_at_ms` together for
+current usage and previous-cycle references, leaving their amounts and `basis` unchanged.
+
+Quota handlers use the export's injected reference clock, so seeded future resets
+remain live while generating the dataset. The exporter preserves those observations
+and usage bounds instead of shifting them twice or treating them as incomplete
+calendar days. Export assertions require current, scoped and previous-cycle estimates
+with their original provenance, not merely successful quota responses.
+
+Runtime numeric measurements are pinned with either JSON decoder mode, using the
+owner shape to preserve seeded request latency and source-file sizes. Runtime text
+stamps use the same minute precision as rebased millisecond stamps; quota observations
+and creation/update metadata on the seeded clock retain their original precision.
+A second generation must match the committed dataset byte for byte (`pnpm demo:generate --check`).

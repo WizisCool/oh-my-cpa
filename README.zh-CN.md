@@ -224,7 +224,7 @@ https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-ag
 <summary><b>网关与提供商</b></summary>
 
 - **AI 提供商**：Codex、Claude、Gemini、Meta Muse、xAI、Vertex AI、Gemini Interactions、DeepSeek 及 OpenAI 兼容服务，统一管理凭据、模型、优先级、权重、代理，以及在网关层真正生效的启停开关。
-- **OAuth 管理**：在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；按凭据管理认证文件、模型列表、别名与配额，并估算 Codex 与 Claude 每个配额窗口的额度。
+- **OAuth 管理**：在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；按凭据管理认证文件、模型列表、别名与配额，支持 Codex、Claude 与已知 Antigravity 模型组的窗口额度估算，并明确标注上一周期的参考估值。
 - **客户端密钥**：创建、命名与吊销网关 API Key，名称会出现在请求记录与筛选项中。
 - **模型目录**：直接从上游提供商拉取模型列表。
 - **操练场**：用文本与图片调试任意已路由的模型，支持流式多轮对话与请求诊断。

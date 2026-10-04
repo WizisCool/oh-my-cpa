@@ -123,6 +123,9 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	if err := seedCustomIcon(ctx, repo, now); err != nil {
 		return SeedStats{}, err
 	}
+	if err := seedQuotaObservations(ctx, repo, now); err != nil {
+		return SeedStats{}, err
+	}
 	stats.DurationMS = time.Since(started).Milliseconds()
 	return stats, nil
 }
@@ -335,6 +338,22 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 	// window is indistinguishable from a demo that is not working.
 	events = append(events, fillRecentWindow(random, session, profiles, credentials, fingerprints, keys, events, now)...)
 	events = append(events, recentSubstitutions(random, profiles, credentials, fingerprints, keys, now)...)
+	// Keep the adjacent-cycle reference backed by captured traffic even when
+	// random history happens to route every Codex request to the first account.
+	for _, profile := range profiles {
+		if profile.provider != "codex" {
+			continue
+		}
+		for _, offset := range []time.Duration{4 * time.Hour, 5 * time.Hour, 6 * time.Hour} {
+			event := buildEventAt(random, profile, credentials, now.Add(-offset))
+			event.AuthIndex = "auth-codex-02"
+			event.APIGroupKey = fingerprints[0]
+			event.APIGroupLabel = "api_key"
+			event.APIKeyMask = security.MaskSecret(keys[0].value)
+			events = append(events, event)
+		}
+		break
+	}
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return 0, 0, 0, fmt.Errorf("seed request history: %w", err)

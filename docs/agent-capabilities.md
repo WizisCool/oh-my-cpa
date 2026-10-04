@@ -310,3 +310,30 @@ See [ADR 0044](adr/0044-browser-connections-subscribe-to-server-owned-runs.md).
 `custom_icons_list` is a low-risk read for Agent/MCP, accepting an optional `offset` and returning at most twenty icon metadata records plus `has_more`. It includes names, stable IDs, revisions and stored reference counts, never image bytes. `custom_icon_create` accepts `{name,data}` and `custom_icon_update` accepts `{id,name?,data?}` as low-risk presentation writes. Both reuse the browser import validation and return metadata only. The existing 32 KiB capability input cap still applies; larger artwork must be imported through the browser picker rather than widening the tool envelope.
 
 `custom_icon_delete` accepts `{id}` and is destructive/high-risk on both adapters. Its preview contains the icon ID/name, artwork revision, reference count and `provider_icons: restore_defaults` impact; approval rechecks the artwork revision, removes all current matching overrides and deletes the asset in one transaction. Every successful write invalidates `custom-icons`; deletion additionally invalidates `preferences`. Stable refusals are `custom_icon_invalid_image`, `custom_icon_too_large`, `custom_icon_invalid_name`, `custom_icon_limit`, `custom_icon_not_found`; stale deletion approval returns `resource_conflict`. No artwork is returned in capability output, preview or audit details. Tests exercise both adapters, administrator permissions, refusal, reference-reset confirmation and confirmed deletion.
+
+
+## Quota capacity output
+
+`quota_list` and `quota_refresh` expose the same safe window results as the console.
+No new capability or permission is needed: listing remains a read and refreshing
+remains a low-risk write. Their tool descriptions identify these as estimates rather
+than balances or routing instructions.
+
+Each supported window can carry `usage` (current cycle's half-open range, requests,
+priced requests, tokens and locked cost), `capacity` (tokens, optional locked-cost
+estimate and rounding allowance), and `capacity_unavailable` (why the current cycle
+cannot be estimated). A capacity's `basis` is `current_cycle` or `previous_cycle`, and
+`observed_at_ms`, `from_ms` and `reset_at_ms` identify the reading it derives from.
+A previous-cycle reference must be described as historical, never as the current
+remaining balance; its current unavailable reason and current recorded usage remain
+in the result. Neither value is an actual provider-denominated quota or a spend forecast.
+
+`model_families` identifies reviewed scope metadata. `has_mid_cycle_reset` is durable
+reset evidence; `has_incomplete_history` preserves a failed evidence read for the cycle.
+Neither flag is an estimate. Unknown scope/alias resolution, unavailable
+history and unavailable usage return `scope_unknown`, `history_unavailable` and
+`usage_unavailable`; these never mean zero. Only a fresh valid current cycle with
+`low_usage`, `no_traffic` or `no_reading` may carry a previous-cycle reference. Missing
+history, changed scopes/periods and early-reset cycles do not produce one. Costs use
+request-time prices and require 95% priced-request coverage; error percentages describe
+rounding only and must not be presented as statistical confidence. See ADR 0059.

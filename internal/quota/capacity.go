@@ -25,6 +25,9 @@ const usedPercentHalfStep = 0.5
 // Reasons a window carries no capacity estimate. They are wire values the
 // console maps to its own copy.
 const (
+	CapacityReasonScopeUnknown       = "scope_unknown"
+	CapacityReasonHistoryUnavailable = "history_unavailable"
+	CapacityReasonUsageUnavailable   = "usage_unavailable"
 	// CapacityReasonBoundaryUnknown: the cycle start cannot be derived, because
 	// the reset instant or the period is missing or only approximate.
 	CapacityReasonBoundaryUnknown = "boundary_unknown"
@@ -61,7 +64,11 @@ type WindowUsage struct {
 // scaled to 100% of the quota. It is not a projection of what will have been
 // used when the window ends.
 type WindowCapacity struct {
-	Tokens int64 `json:"tokens"`
+	Tokens       int64  `json:"tokens"`
+	Basis        string `json:"basis"`
+	ObservedAtMS int64  `json:"observed_at_ms"`
+	FromMS       int64  `json:"from_ms"`
+	ResetAtMS    int64  `json:"reset_at_ms"`
 	// CostNanos is nil when too much of the cycle's usage is unpriced.
 	CostNanos *int64 `json:"cost_nanos,omitempty"`
 	// ErrorPercent is the relative uncertainty, in percent, that upstream's
@@ -75,12 +82,17 @@ type ObservedWindows struct {
 	Windows      []QuotaWindow
 }
 
-// SupportsWindowCapacity reports whether a window is one whose quota every
-// request of the credential draws on. A model- or feature-scoped window meters
-// only part of the traffic, so dividing the credential's whole usage by its
-// used share would overstate it.
+// SupportsWindowCapacity identifies supported global or model-metered windows.
+// Scoped windows still need a complete mapping before any usage is counted;
+// a feature allowance has no model-only numerator and stays unsupported.
 func SupportsWindowCapacity(provider string, window QuotaWindow) bool {
-	if provider != "codex" && provider != "claude" {
+	if provider != "codex" && provider != "claude" && provider != "antigravity" {
+		return false
+	}
+	if window.Scope == "model" || provider == "antigravity" && window.Scope == "group" {
+		return true
+	}
+	if provider == "antigravity" {
 		return false
 	}
 	if window.Scope != "standard" || window.Model != "" {
@@ -98,7 +110,7 @@ func SupportsWindowCapacity(provider string, window QuotaWindow) bool {
 // "now": requests made after the reading are not part of the share it reports,
 // and counting them would inflate the estimate until the next refresh.
 func WindowCycleRange(window QuotaWindow, observedAtMS, nowMS int64) (fromMS, toMS int64, reason string) {
-	if window.ResetAtMS == nil || window.PeriodHours == nil || *window.PeriodHours <= 0 {
+	if window.ResetAtMS == nil || window.PeriodHours == nil || *window.PeriodHours <= 0 || math.IsNaN(*window.PeriodHours) || math.IsInf(*window.PeriodHours, 0) {
 		return 0, 0, CapacityReasonBoundaryUnknown
 	}
 	if window.ResetAccuracy != "exact" && window.ResetAccuracy != "derived" {
@@ -140,7 +152,13 @@ func PeakUsedPercent(history []ObservedWindows, windowID string, fromMS, toMS in
 // EstimateWindowCapacity scales a cycle's recorded usage to the whole window.
 // earlierPeak is the highest used share seen earlier in the same cycle, or nil.
 func EstimateWindowCapacity(window QuotaWindow, usage WindowUsage, earlierPeak *float64) (*WindowCapacity, string) {
-	if window.UsedPercent == nil {
+	if window.HasIncompleteHistory {
+		return nil, CapacityReasonHistoryUnavailable
+	}
+	if window.HasMidCycleReset {
+		return nil, CapacityReasonResetMidCycle
+	}
+	if window.UsedPercent == nil || math.IsNaN(*window.UsedPercent) || math.IsInf(*window.UsedPercent, 0) || *window.UsedPercent > 100 || *window.UsedPercent < 0 {
 		return nil, CapacityReasonNoReading
 	}
 	usedPercent := *window.UsedPercent
@@ -157,11 +175,16 @@ func EstimateWindowCapacity(window QuotaWindow, usage WindowUsage, earlierPeak *
 	scale := 100 / usedPercent
 	capacity := &WindowCapacity{
 		Tokens:       int64(math.Round(float64(usage.Tokens) * scale)),
-		ErrorPercent: math.Round(usedPercentHalfStep/usedPercent*1000) / 10,
+		Basis:        "current_cycle",
+		ObservedAtMS: usage.ToMS, FromMS: usage.FromMS,
+		ErrorPercent: math.Round(usedPercentHalfStep/(usedPercent-usedPercentHalfStep)*1000) / 10,
 	}
 	if float64(usage.PricedRequests) >= float64(usage.Requests)*capacityMinPricedShare {
 		costNanos := int64(math.Round(float64(usage.CostNanos) * scale))
 		capacity.CostNanos = &costNanos
+	}
+	if window.ResetAtMS != nil {
+		capacity.ResetAtMS = *window.ResetAtMS
 	}
 	return capacity, ""
 }

@@ -38,8 +38,9 @@ function quotaFor(index) {
     // row without one. The figures are four-digit dollars: the widest reading a row has to fit.
     ...(index === 0 ? {
       usage: { from_ms: Date.now() - 3_600_000, to_ms: Date.now(), requests: 420, priced_requests: 420, tokens: 61_250_000, cost_nanos: 308_500_000_000 },
-      capacity: { tokens: 245_000_000, cost_nanos: 1_234_000_000_000, error_percent: 2.5 },
-    } : {}),
+      ...(windowIndex === 1 ? { capacity_unavailable: 'low_usage' } : {}),
+      capacity: { tokens: 245_000_000, cost_nanos: 1_234_000_000_000, error_percent: 2.5, basis: windowIndex === 0 ? 'current_cycle' : 'previous_cycle', observed_at_ms: Date.now() - 86_400_000 },
+    } : index === 1 ? { capacity_unavailable: 'scope_unknown' } : {}),
   }));
   const cooldown = index === 9;
   const unsupported = index === 10;
@@ -131,7 +132,7 @@ export async function oauthManagement({ base, page, check }) {
   check(
     'a compact record carries each window\'s estimated capacity without growing or clipping it',
     compactEstimates.length === 2
-      && compactEstimates.every((cell) => cell.text === '≈$1,230' && !cell.clipped)
+      && compactEstimates.every((cell, index) => cell.text === (index === 0 ? '≈$1,230' : 'Prev ≈$1,230') && !cell.clipped)
       && Math.abs(estimatedHeight - plainHeight) <= 0.5
       && (await plainRow.locator('[data-quota-compact-capacity]').count()) === 0,
     `estimates=${JSON.stringify(compactEstimates)} heights=${estimatedHeight}/${plainHeight}`,
@@ -362,8 +363,9 @@ export async function oauthManagement({ base, page, check }) {
     });
     check(
       `the quota drawer keeps recorded usage and the estimate inside the panel at ${width}px`,
-      drawerEstimates.length === 4 && drawerEstimates.every(Boolean)
-        && (await phoneDrawer.locator('[data-quota-capacity-hint]').isVisible()),
+      drawerEstimates.length === 5 && drawerEstimates.every(Boolean)
+        && (await phoneDrawer.locator('[data-quota-capacity-hint]').isVisible())
+        && (await phoneDrawer.locator('[data-quota-capacity-basis="previous_cycle"]').innerText()).includes('Previous cycle estimate'),
       JSON.stringify(drawerEstimates),
     );
     await page.screenshot({ path: `tmp/oauth-management-drawer-${width}.png` });

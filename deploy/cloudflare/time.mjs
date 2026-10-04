@@ -37,6 +37,7 @@ const INSTANT_NAMED = new Set([
   'as_of_ms',
   'first_stored_ms',
   'to_ms',
+  'from_ms',
   'as_of_ms',
   'timestamp_ms',
   // A price version's start, moved with the history so the price book's timeline stays

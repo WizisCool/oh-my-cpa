@@ -65,7 +65,7 @@ describe('the dataset the demonstration is served from', () => {
 function withoutInstants(value) {
   const INSTANT_BY_NAME = /(?:^|_)at_ms$/;
   const INSTANT_NAMED = new Set([
-    't', 'to_ms', 'as_of_ms', 'timestamp_ms', 'latest_after', 'from', 'to', 'modified',
+    't', 'to_ms', 'from_ms', 'as_of_ms', 'timestamp_ms', 'latest_after', 'from', 'to', 'modified',
     'exported_at', 'time', 'last_capture_at', 'last_run_at',
   ]);
   const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -428,4 +428,17 @@ describe('the deployment custom icon library', () => {
       assert.equal((await refused.json()).code, 'demo_operation_refused');
     }
   });
+});
+
+
+it('rebases current and previous capacity ranges without changing their basis or amounts', () => {
+  const before = { usage: { from_ms: REFERENCE_MS - 1000, to_ms: REFERENCE_MS, tokens: 10 }, capacity: { basis: 'previous_cycle', from_ms: REFERENCE_MS - 6000, observed_at_ms: REFERENCE_MS - 2000, reset_at_ms: REFERENCE_MS - 1000, tokens: 100 } };
+  const after = rebase(before, 3600000);
+  assert.equal(after.usage.from_ms, before.usage.from_ms + 3600000);
+  assert.equal(after.usage.to_ms, before.usage.to_ms + 3600000);
+  assert.equal(after.capacity.from_ms, before.capacity.from_ms + 3600000);
+  assert.equal(after.capacity.observed_at_ms, before.capacity.observed_at_ms + 3600000);
+  assert.equal(after.capacity.reset_at_ms, before.capacity.reset_at_ms + 3600000);
+  assert.equal(after.capacity.basis, 'previous_cycle');
+  assert.equal(after.capacity.tokens, 100);
 });

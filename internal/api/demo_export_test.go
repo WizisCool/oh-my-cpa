@@ -28,6 +28,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/demo"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
@@ -314,10 +315,8 @@ func TestExportDemoDataset(t *testing.T) {
 		responses[one.Name] = demoExportFetch(t, server.URL, one)
 	}
 
-	// Every response was rendered against the wall clock, so the history it describes
-	// ends "now". One delta moves all of it onto the reference instant, which keeps
-	// the span internally consistent and makes the export reproducible.
-	_ = exportedAt
+	// Runtime-stamped fields move onto the reference instant. Seeded quota
+	// observations already use the injected reference clock and remain unchanged.
 	// One table across every response, so the same generated id becomes the same
 	// stand-in wherever it appears, and one delta for the whole dataset, so every
 	// interval inside it survives the move and the panels that have to agree still do.
@@ -357,6 +356,8 @@ func TestExportDemoDataset(t *testing.T) {
 		response.Body = demoExportScrub(string(encoded))
 		normalised[name] = response
 	}
+
+	assertDemoQuotaCapacityExamples(t, normalised, seededAt.UnixMilli())
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		t.Fatalf("create export directory: %v", err)
@@ -444,21 +445,20 @@ var demoExportShiftedTextKeys = map[string]bool{
 var demoExportMeasuredKeys = map[string]bool{
 	"latency_ms":       true,
 	"pid":              true,
-	"size_bytes":       true,
 	"seed_duration_ms": true,
 	// The system page reports the process it is running in. These are real
 	// measurements of the export run, so they change every time - and a public
 	// demonstration should not present them as though they described the service a
 	// visitor is looking at.
-	"alloc_mb":      true,
-	"sys_mb":        true,
-	"heap_mb":       true,
-	"num_gc":        true,
-	"num_goroutine": true,
-	"uptime_ms":     true,
-	"rss_mb":        true,
-	"num_cpu":       true,
-	"memory_mb":     true,
+	"alloc_mb":       true,
+	"sys_mb":         true,
+	"heap_mb":        true,
+	"num_gc":         true,
+	"num_goroutines": true,
+	"uptime_ms":      true,
+	"rss_mb":         true,
+	"num_cpu":        true,
+	"memory_mb":      true,
 }
 
 // demoExportHostKeys are runtime facts about the machine that ran the export. They
@@ -494,11 +494,23 @@ func demoExportScrub(text string) string {
 // Schema property names overlap with runtime measurements; only scalar numbers are measurements.
 func demoExportIsNumber(value any) bool {
 	switch value.(type) {
-	case float64, int, int64:
+	case float64, int, int64, json.Number:
 		return true
 	default:
 		return false
 	}
+}
+
+// Request latency and source sizes are seeded business data, not measurements
+// of the exporting process. Classify the owner as well as the field name.
+func demoExportIsRuntimeMeasurement(owner map[string]any, key string, item any) bool {
+	if !demoExportMeasuredKeys[key] || !demoExportIsNumber(item) {
+		return false
+	}
+	if key == "latency_ms" {
+		return owner["endpoint_masked"] != nil && owner["status"] != nil
+	}
+	return owner["go_version"] != nil || key == "seed_duration_ms"
 }
 
 // demoExportRebase moves the instants the handler stamped onto the export's reference
@@ -507,6 +519,11 @@ func demoExportIsNumber(value any) bool {
 func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	switch typed := value.(type) {
 	case map[string]any:
+		// Quota reads and their seeded history already use the fixed handler clock,
+		// including future reset bounds. Moving them again would expire valid cycles.
+		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) {
+			deltaMS = 0
+		}
 		for key, item := range typed {
 			switch {
 			case key == "started_at_ms":
@@ -517,7 +534,7 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 				} else {
 					typed[key] = demoExportRebase(item, deltaMS, requestIDs)
 				}
-			case demoExportMeasuredKeys[key] && demoExportIsNumber(item):
+			case demoExportIsRuntimeMeasurement(typed, key, item):
 				typed[key] = 0
 			case key == demoExportRequestID:
 				typed[key] = demoExportStableRequestID(requestIDs, item)
@@ -525,8 +542,8 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 				typed[key] = demoExportNormaliseDayBoundary(typed, key, item)
 			case demoExportHostKeys[key] != "":
 				typed[key] = demoExportHostKeys[key]
-			case (key == "occurred_at_ms" || key == "effective_from_ms") && demoExportIsSeededInstant(item):
-				// A seeded audit row or price version is already on the reference's
+			case (key == "occurred_at_ms" || key == "effective_from_ms" || key == "created_at_ms" || key == "updated_at_ms") && demoExportIsSeededInstant(item):
+				// Seeded audit, price and metadata timestamps already use the reference's
 				// calendar; only a value the export itself stamped needs moving onto it.
 			case key == "effective_from_ms":
 				// A price version written by the export's own sync is stamped with the
@@ -678,7 +695,7 @@ var demoExportDayBoundaryKeys = map[string]bool{
 
 // demoExportNormaliseDayBoundary blanks the end boundary of an incomplete day.
 func demoExportNormaliseDayBoundary(owner map[string]any, key string, item any) any {
-	if key != "to_ms" {
+	if key != "to_ms" || owner["day"] == nil {
 		return item
 	}
 	millis, ok := demoExportNumericMillis(item)
@@ -750,10 +767,20 @@ func demoExportShiftText(item any, deltaMS int64) any {
 			if parseErr != nil {
 				return match
 			}
-			return at.Add(time.Duration(deltaMS) * time.Millisecond).UTC().Format(time.RFC3339)
+			shifted := at.Add(time.Duration(deltaMS) * time.Millisecond)
+			if deltaMS != 0 {
+				shifted = shifted.Round(time.Minute)
+			}
+			return shifted.UTC().Format(time.RFC3339)
 		})
 	}
-	return parsed.Add(time.Duration(deltaMS) * time.Millisecond).UTC().Format(time.RFC3339)
+	// Runtime text stamps use the same minute precision as shifted millis;
+	// response latency must not introduce a new one-second dataset on each run.
+	shifted := parsed.Add(time.Duration(deltaMS) * time.Millisecond)
+	if deltaMS != 0 {
+		shifted = shifted.Round(time.Minute)
+	}
+	return shifted.UTC().Format(time.RFC3339)
 }
 
 // demoExportRouter builds the real handler over a freshly seeded demo repository.
@@ -857,13 +884,9 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 	// every run and describe the export rather than a deployment.
 	handler.serviceLog = applog.NewBuffer(applog.DefaultCapacity)
 	demo.SeedServiceLog(handler.serviceLog, now)
-	// The token-activity grid is the one response whose calendar is the history's rather than
-	// the run's: it is a rolling year ending "today" and it derives that window from the
-	// clock instead of taking one from the request, so it is the one surface the reference
-	// does not otherwise reach. Built on the export machine's clock it described a year the
-	// seeded history was not on, and the two calendars overlap by only the hundred days
-	// between them - the exported grid carried data for a quarter of its span and read as a
-	// broken fixture. Pinning it here is what puts the grid and the history on one calendar.
+	// Quota reads and rolling calendar grids derive bounds from the handler's
+	// clock rather than caller parameters. Pin them to the seeded history so
+	// quota cycles stay live and the calendar grid covers that same history.
 	handler.nowFn = func() time.Time { return demoExportReference }
 	return handler.routes(), demoExportReference
 }
@@ -1196,6 +1219,43 @@ func TestDemoExportCasesAllSucceed(t *testing.T) {
 	if len(failed) > 0 {
 		t.Fatalf("exported responses that are not 200:\n  %s", strings.Join(failed, "\n  "))
 	}
+	assertDemoQuotaCapacityExamples(t, exported.Responses, exported.ReferenceMS)
+}
+
+func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExportResponse, referenceMS int64) {
+	t.Helper()
+	var quotas struct {
+		Quotas []quota.NormalizedQuota `json:"quotas"`
+	}
+	if err := json.Unmarshal([]byte(responses["quota"].Body), &quotas); err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]string{
+		"auth-codex-01/five_hour":                            "current_cycle",
+		"auth-codex-02/five_hour":                            "previous_cycle",
+		"auth-claude-01/seven_day_sonnet":                    "current_cycle",
+		"auth-claude-01/seven_day_opus":                      "current_cycle",
+		"auth-antigravity-01/ag_Gemini models_gemini-shared": "current_cycle",
+	}
+	for _, observation := range quotas.Quotas {
+		for _, window := range observation.Windows {
+			key := observation.AuthIndex + "/" + window.ID
+			basis, isExpected := expected[key]
+			if !isExpected {
+				continue
+			}
+			if window.Capacity == nil || window.Capacity.Basis != basis || window.Capacity.Tokens <= 0 || window.Usage == nil || window.Usage.ToMS != observation.ObservedAtMS || window.ResetAtMS == nil || *window.ResetAtMS <= referenceMS {
+				t.Fatalf("invalid exported capacity example %s: %+v", key, window)
+			}
+			if basis == "previous_cycle" && (window.Capacity.ObservedAtMS >= window.Usage.FromMS || window.CapacityUnavailable != quota.CapacityReasonLowUsage) {
+				t.Fatalf("previous-cycle reference lost provenance: %+v", window)
+			}
+			delete(expected, key)
+		}
+	}
+	if len(expected) != 0 {
+		t.Fatalf("missing quota examples: %v", expected)
+	}
 }
 
 func demoExportPlaygroundModelsPath(captured map[string]demoExportResponse) (string, error) {
@@ -1236,8 +1296,12 @@ func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
 	reference := demoExportReference.UnixMilli()
 	export := func(exportedAt int64) map[string]any {
 		body := map[string]any{
-			"runtime":  map[string]any{"go_version": "go1.99.0", "os_arch": "plan9/mips"},
-			"channels": []any{map[string]any{"updated_at_ms": float64(0)}},
+			"runtime":     map[string]any{"go_version": "go1.99.0", "os_arch": "plan9/mips"},
+			"exported_at": time.UnixMilli(exportedAt + 1800).UTC().Format(time.RFC3339),
+			"collector":   map[string]any{"last_capture_at": time.UnixMilli(exportedAt - 5000).UTC().Format(time.RFC3339)},
+			"maintenance": map[string]any{"last_run_at": time.UnixMilli(exportedAt - 10000).UTC().Format(time.RFC3339)},
+			"channels":    []any{map[string]any{"updated_at_ms": float64(0)}},
+			"icons":       []any{map[string]any{"created_at_ms": float64(reference - 5000), "updated_at_ms": float64(reference)}},
 			"versions": []any{
 				map[string]any{"effective_from_ms": float64(exportedAt + 3)},
 				map[string]any{"effective_from_ms": float64(reference - 86_400_000)},
@@ -1245,12 +1309,16 @@ func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
 		}
 		return demoExportRebase(body, reference-exportedAt, map[string]int{}).(map[string]any)
 	}
-	first := export(reference + 1_000_000_000)
-	second := export(reference + 2_000_000_000)
+	first := export(reference + 1_000_000_999)
+	second := export(reference + 2_000_001_555)
 	firstJSON, _ := json.Marshal(first)
 	secondJSON, _ := json.Marshal(second)
 	if string(firstJSON) != string(secondJSON) {
 		t.Fatalf("exports differ:\n%s\n%s", firstJSON, secondJSON)
+	}
+	icon := first["icons"].([]any)[0].(map[string]any)
+	if icon["created_at_ms"] != float64(reference-5000) || icon["updated_at_ms"] != float64(reference) {
+		t.Fatalf("seeded metadata timestamps moved: %v", icon)
 	}
 	versions := first["versions"].([]any)
 	if got := versions[0].(map[string]any)["effective_from_ms"]; got != float64(reference) {
@@ -1315,8 +1383,10 @@ func TestDemoExportStartTimesUseReferenceClock(t *testing.T) {
 
 func TestDemoExportPreservesSchemaProperties(t *testing.T) {
 	value := map[string]any{
-		"latency_ms": float64(17),
-		"properties": map[string]any{"latency_ms": map[string]any{"type": "integer"}, "uptime_ms": true},
+		"latency_ms":      json.Number("17"),
+		"endpoint_masked": "http://127.0.0.1:0",
+		"status":          "ok",
+		"properties":      map[string]any{"latency_ms": map[string]any{"type": "integer"}, "uptime_ms": true},
 	}
 	result := demoExportRebase(value, 0, map[string]int{}).(map[string]any)
 	if result["latency_ms"] != 0 {
@@ -1325,5 +1395,61 @@ func TestDemoExportPreservesSchemaProperties(t *testing.T) {
 	properties := result["properties"].(map[string]any)
 	if properties["latency_ms"].(map[string]any)["type"] != "integer" || properties["uptime_ms"] != true {
 		t.Fatalf("schema was rewritten: %v", properties)
+	}
+}
+
+func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
+	reference := demoExportReference.UnixMilli()
+	input := map[string]any{
+		"auth_index": "demo-auth", "observed_at_ms": reference,
+		"windows": []any{map[string]any{
+			"reset_at_ms": reference + 3600000,
+			"usage":       map[string]any{"from_ms": reference - 3600000, "to_ms": reference},
+			"capacity":    map[string]any{"basis": "previous_cycle", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000, "reset_at_ms": reference - 1800000},
+		}},
+	}
+	output := demoExportRebase(input, -90*86400000, map[string]int{}).(map[string]any)
+	if output["observed_at_ms"] != float64(reference) {
+		t.Fatalf("seeded observation shifted: %+v", output)
+	}
+	window := output["windows"].([]any)[0].(map[string]any)
+	if window["reset_at_ms"] != reference+3600000 {
+		t.Fatalf("seeded future reset shifted: %+v", window)
+	}
+	usage := window["usage"].(map[string]any)
+	if usage["to_ms"] != reference {
+		t.Fatalf("usage was treated as an incomplete calendar day: %+v", usage)
+	}
+	capacity := window["capacity"].(map[string]any)
+	if capacity["basis"] != "previous_cycle" || capacity["observed_at_ms"] != float64(reference-3600000) {
+		t.Fatalf("historical provenance shifted: %+v", capacity)
+	}
+}
+
+func TestDemoExportPreservesSeededLatencyAndSourceSize(t *testing.T) {
+	for _, shouldUseNumber := range []bool{false, true} {
+		t.Run(fmt.Sprintf("use-number=%t", shouldUseNumber), func(t *testing.T) {
+			decoder := json.NewDecoder(strings.NewReader(`{"event":{"latency_ms":1423,"timestamp_ms":1767225000000},"config":{"size_bytes":4580,"revision":"seed"},"cpa":{"endpoint_masked":"http://127.0.0.1:0","status":"ok","latency_ms":2},"runtime":{"go_version":"go1.27.1","pid":7123,"num_goroutines":17}}`))
+			if shouldUseNumber {
+				decoder.UseNumber()
+			}
+			var decoded any
+			if err := decoder.Decode(&decoded); err != nil {
+				t.Fatal(err)
+			}
+			output := demoExportRebase(decoded, 0, map[string]int{}).(map[string]any)
+			for name, expected := range map[string]float64{"event": 1423, "config": 4580} {
+				key := "latency_ms"
+				if name == "config" {
+					key = "size_bytes"
+				}
+				if amount, ok := demoExportNumericMillis(output[name].(map[string]any)[key]); !ok || amount != expected {
+					t.Fatalf("seeded %s.%s changed: %v", name, key, output[name])
+				}
+			}
+			if output["cpa"].(map[string]any)["latency_ms"] != 0 || output["runtime"].(map[string]any)["pid"] != 0 || output["runtime"].(map[string]any)["num_goroutines"] != 0 {
+				t.Fatalf("runtime measurements drift: %v", output)
+			}
+		})
 	}
 }

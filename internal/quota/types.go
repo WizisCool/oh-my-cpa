@@ -16,6 +16,11 @@ type QuotaWindow struct {
 	PeriodHours      *float64 `json:"period_hours,omitempty"`
 	ResetAccuracy    string   `json:"reset_accuracy,omitempty"` // "exact", "derived", "approximate"
 
+	ModelFamilies []string `json:"model_families,omitempty"`
+	// Reset evidence survives snapshot retention until this scheduled cycle ends.
+	HasMidCycleReset     bool `json:"has_mid_cycle_reset,omitempty"`
+	HasIncompleteHistory bool `json:"has_incomplete_history,omitempty"`
+
 	// The three fields below are joined from recorded usage when a quota is
 	// read and are never part of a stored snapshot: usage keeps arriving after
 	// an observation, and a persisted figure would freeze whatever had been

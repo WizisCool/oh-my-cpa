@@ -762,11 +762,11 @@ func quotaPayloads(now time.Time) map[string]any {
 				"allowed": true,
 				"primary_window": map[string]any{
 					"used_percent": 42.5, "limit_window_seconds": 18000,
-					"reset_after_seconds": 8064, "reset_at": resetAt,
+					"reset_after_seconds": 8040, "reset_at": now.Add(2*time.Hour + 14*time.Minute).Unix(),
 				},
 				"secondary_window": map[string]any{
 					"used_percent": 61.2, "limit_window_seconds": 604800,
-					"reset_after_seconds": 356400, "reset_at": weeklyReset,
+					"reset_after_seconds": 367200, "reset_at": now.Add(4*24*time.Hour + 6*time.Hour).Unix(),
 				},
 			},
 			"credits": map[string]any{"has_credits": true, "unlimited": false},
@@ -821,9 +821,9 @@ func quotaPayloads(now time.Time) map[string]any {
 		},
 		antigravityUsageURL: map[string]any{
 			"groups": []map[string]any{{
-				"displayName": "Gemini 3 Pro",
+				"displayName": "Gemini models",
 				"buckets": []map[string]any{{
-					"bucketId": "gemini-3-pro", "displayName": "Gemini 3 Pro",
+					"bucketId": "gemini-shared", "displayName": "Five Hour Limit",
 					"window": "5h", "resetTime": resetAt, "remainingFraction": 0.71,
 				}},
 			}},

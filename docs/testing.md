@@ -377,3 +377,31 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
 - Automated visible-viewport simulation does not certify iPhone keyboard/selection behaviour. Manual
   Safari acceptance must additionally exercise address-bar collapse, software keyboard, long-press
   selection and caret movement in normal and focused editing; record that evidence separately.
+
+
+### Quota capacity coverage
+
+- `internal/quota/capacity_scope_test.go` owns complete family/exact identity matching,
+  dated model releases and fail-closed aliases/groups. `internal/quota/capacity_history_test.go`
+  owns adjacent-cycle selection, final-reading precedence and reset/period/scope refusals.
+- `internal/repository/quota_test.go` pins half-open aggregates and served-model precedence.
+  `internal/api/management_quota_capacity_test.go` owns current-vs-previous provenance,
+  scoped joins, failed refreshes masked by cooldown, unreadable/corrupt history, snapshot
+  stripping, fresh observation persistence despite corrupt history, and sticky reset/
+  incomplete-history evidence surviving retention until a scheduled reset.
+- `scripts/test-quota-capacity.ts` owns historical labels and unavailable copy selection;
+  the existing `oauth-management` probe owns current/previous rendering and wrapping at
+  desktop and 320/375px. This extends the existing scenario without a new runner or list.
+- `internal/demo/quota_test.go` pins real normalized observations in the seeded demo.
+  `internal/api/demo_export_test.go` checks scoped and previous-cycle examples from the
+  generated handlers, the injected quota clock and preserved half-open usage bounds;
+  calendar-day normalization must not erase quota usage ends. Runtime numeric
+  measurements remain deterministic with both ordinary and `UseNumber` JSON decoders,
+  without altering schema properties, seeded request latency or source-file sizes.
+  Measurement classification includes the owner shape, not just a field name.
+  Seeded creation/update metadata keeps its reference-clock timestamps.
+  Runtime text stamps use the same minute
+  precision as shifted numeric stamps, so response latency does not create dataset drift.
+  `deploy/cloudflare/worker.test.mjs` verifies usage/reference bounds rebase together without
+  changing amounts or basis. The demo freshness digest includes quota parsing, estimation,
+  repository joins and observation seeding through `scripts/demo-inputs.mjs`.

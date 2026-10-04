@@ -268,6 +268,9 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 	}
 
 	if file.Disabled {
+		if prior != nil {
+			result.ObservedAtMS = prior.ObservedAtMS
+		}
 		result.Status = "idle"
 		EvaluateStatusAndRecommendation(result, nowMS)
 		return result, nil
@@ -346,6 +349,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 		result.Error = fetchErr.Error()
 		if prior != nil && len(prior.Windows) > 0 {
 			result.Status = "stale"
+			result.ObservedAtMS = prior.ObservedAtMS
 			result.Windows = prior.Windows
 			result.Plan = prior.Plan
 			result.ResetCredits = prior.ResetCredits

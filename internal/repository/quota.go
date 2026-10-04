@@ -201,7 +201,7 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
 		FROM quota_snapshots
 		WHERE auth_index = ?
-		ORDER BY observed_at_ms DESC
+		ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC
 		LIMIT ?
 	`
 	rows, err := r.SQL().QueryContext(ctx, query, strings.TrimSpace(authIndex), limit)
@@ -370,4 +370,31 @@ func (r *Repository) QueryCredentialWindowUsage(ctx context.Context, authIndex s
 		return usage, fmt.Errorf("query credential window usage: %w", err)
 	}
 	return usage, nil
+}
+
+// CredentialModelWindowUsage uses the served identity when CPA published it;
+// otherwise the scope resolver must decide whether the requested id is usable.
+type CredentialModelWindowUsage struct {
+	Model string
+	CredentialWindowUsage
+}
+
+func (r *Repository) QueryCredentialModelWindowUsage(ctx context.Context, authIndex string, fromMS, toMS int64) ([]CredentialModelWindowUsage, error) {
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.SQL().QueryContext(ctx, `SELECT COALESCE(NULLIF(response_model, ''), model), COUNT(1), COALESCE(SUM(cost_nanos IS NOT NULL),0), COALESCE(SUM(total_tokens),0), COALESCE(SUM(cost_nanos),0) FROM usage_events WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ? GROUP BY COALESCE(NULLIF(response_model, ''), model) ORDER BY 1`, strings.TrimSpace(authIndex), fromMS, toMS)
+	if err != nil {
+		return nil, fmt.Errorf("query credential model window usage: %w", err)
+	}
+	defer rows.Close()
+	result := []CredentialModelWindowUsage{}
+	for rows.Next() {
+		var group CredentialModelWindowUsage
+		if err := rows.Scan(&group.Model, &group.Requests, &group.PricedRequests, &group.Tokens, &group.CostNanos); err != nil {
+			return nil, fmt.Errorf("scan credential model window usage: %w", err)
+		}
+		result = append(result, group)
+	}
+	return result, rows.Err()
 }

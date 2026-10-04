@@ -11,6 +11,9 @@ export interface QuotaWindow {
    */
   scope: 'standard' | 'model' | 'group' | 'code_review';
   model?: string;
+  model_families?: string[];
+  has_mid_cycle_reset?: boolean;
+  has_incomplete_history?: boolean;
   used?: number;
   limit?: number;
   used_percent?: number;
@@ -36,6 +39,10 @@ export interface QuotaWindowUsage {
 }
 
 export interface QuotaWindowCapacity {
+  basis?: 'current_cycle' | 'previous_cycle';
+  observed_at_ms?: number;
+  from_ms?: number;
+  reset_at_ms?: number;
   tokens: number;
   /** Absent when too much of the cycle's usage carries no price. */
   cost_nanos?: number;
@@ -50,7 +57,10 @@ export type QuotaCapacityUnavailableReason =
   | 'no_reading'
   | 'low_usage'
   | 'no_traffic'
-  | 'reset_mid_cycle';
+  | 'reset_mid_cycle'
+  | 'scope_unknown'
+  | 'history_unavailable'
+  | 'usage_unavailable';
 
 export interface QuotaExtraUsage {
   is_enabled: boolean;
