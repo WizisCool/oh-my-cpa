@@ -53,6 +53,7 @@ export async function omcSettings({ base, page, check, context }) {
   shouldRejectTpsWrite = false;
   await page.setViewportSize({ width: 320, height: 800 });
   await until(() => tpsRow.locator('.ant-segmented-vertical').count(), { label: 'the phone TPS picker' });
+  await settleLayout(page);
   check('the phone TPS choices fit without horizontal overflow', await tpsRow.evaluate(row => row.scrollWidth <= row.clientWidth + 1));
   await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
   await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the restored default TPS mode' });
