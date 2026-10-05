@@ -388,7 +388,7 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   Back/focus restoration, 640/641 and 900/901 boundaries, desktop and landscape, plus simulated
   keyboard bounds and Send hit-testing for both conversation workspaces. Each mounted route is
   resized across the three phone widths without repeating navigation. Direct route mappings retain
-  the sweep (including Quick Start); planner tests pin positive and negative cases.
+  the sweep (including Model Square); planner tests pin positive and negative cases.
 - `config-source-editor` owns real Monaco widgets, font/gutter/wrapping, long URLs and indentation,
   phone find, in-place focused editing, draft/undo/focus continuity, nested Back, simulated keyboard
   viewport bounds, invalid input, revision conflict, failed saves and single successful confirmation.
@@ -437,3 +437,44 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   `deploy/cloudflare/worker.test.mjs` verifies usage/reference bounds rebase together without
   changing amounts or basis. The demo freshness digest includes quota parsing, estimation,
   repository joins and observation seeding through `scripts/demo-inputs.mjs`.
+
+### Built request-record filter coverage
+
+The built request-record filter flow explicitly selects a 50-record page in its
+initial URL before asserting clear-all restores that page. The assertion must not
+depend on asynchronous preference hydration or the console's default page size.
+
+### Model Square
+
+`scripts/test-model-square.ts` owns advertised-identity grouping, maker ordering, shared-name
+fanout, search, the maker filter, the row's reference caption, openness classification,
+manufacturer artwork, unknown profiles and encoded external reference links.
+`scripts/test-model-square-ledger.ts` owns the join with the price book and the request
+records: the call-name key, unlisted-means-unpriced, unknown versus zero when a neighbour is
+unread or its facet list is full, and a request link the request list's own reader accepts.
+Go tests beside `internal/operations/model_square.go`, `internal/api/model_square.go`,
+`internal/cpa/management/client_model_definitions.go` and `internal/modelcatalog/catalog.go`
+own route projection, server-side client-key authentication, secret-safe responses,
+live authority through failed enrichment, native defaults/exclusions, fixed-channel
+reads, API-owned response field allowlists, metadata matching (exact evidence, the enumerated
+request-variant forms and their negative cases) and safe
+weight/resource links. The snapshot generator's self-test checks that ambiguous source aliases and reseller costs are not retained.
+
+The `model-square` probe owns vertically stacked manufacturer sections and their order, the
+card's price and connection with no usage figure in the list, the mark-and-count form of
+a model served by several connections, the several-column card
+grid on a wide page and its single column on phones, click-to-copy of the call name without opening the details, the absence of a page-level
+price-book banner, the "Set price" hand-off to the shared editor, the maker filter with its count and URL state,
+the details' price and 24-hour figures and request-list link, wrapping names, model profile wiring,
+stepping to the next model inside the Drawer, responsive detail geometry, reachable touch
+targets and native Back dismissal. Its price book and request counts come from
+`modelSquareLedgerFixtures`, kept apart from the directory fixture so `mobile-console` can
+pair the directory with its own pricing and facet routes. `mobile-console` includes the populated directory fixture. Planner tests select
+both for directory-source changes and retain the detail scenario for shared overlay
+changes. Built acceptance waits for the populated `/model-square` directory and opens
+a model to check its three lookup destinations. `scripts/fake-cpa.test.mjs` owns the
+fixture's gateway/management authentication separation, live client-key rotation and
+revocation, identity-only responses and configured model aliases/prefixes. Both demo
+checks exercise `/model-square`; the Worker dataset captures the same safe live
+directory and models.dev facts. New logic checks, the populated built-directory
+assertion and the section geometry check are mutation-tested before delivery.

@@ -56,7 +56,7 @@ with latency, TTFT, tokens and cost.
 ### Manage
 
 Providers, OAuth sign-in, client keys, quotas, plugins and CPA's `config.yaml`, as forms
-or as YAML.
+or as YAML. Model Square lists the model names clients can call, by maker, with price, recent requests and models.dev specifications.
 
 </td>
 <td width="25%" valign="top">

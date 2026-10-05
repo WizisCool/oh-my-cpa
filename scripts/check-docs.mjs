@@ -57,6 +57,7 @@ export const DOCUMENTS = [
 /** References that have already gone stale at least once. Each entry is
  * evidence for a future reviewer: the reason explains what replaced it. */
 export const RETIRED_REFERENCES = [
+  { pattern: /QuickStartPage/, reason: 'the connected model directory is ModelSquarePage' },
   {
     pattern: /deploy\/(?:Caddyfile(?:\.root)?|caddy-entrypoint\.sh)/,
     reason: 'image-based Compose uses direct listeners; bundled reverse-proxy templates and their entrypoint were retired',

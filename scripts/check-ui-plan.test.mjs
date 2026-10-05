@@ -345,7 +345,7 @@ test('dependency and build inputs widen the UI plan even with unrelated document
 
 // The route sweep must follow every page it actually loads, independently of shell changes.
 test('the mobile sweep follows console routes and excludes unrelated backend changes', () => {
-  for (const file of ['web/src/pages/QuickStartPage.tsx', 'web/src/pages/ConfigPage.tsx',
+  for (const file of ['web/src/pages/ModelSquarePage.tsx', 'web/src/pages/ConfigPage.tsx',
     'web/src/pages/DashboardPage.tsx', 'web/src/pages/ProvidersPage.tsx',
     'web/src/pages/pricing/PricingPage.tsx', 'web/src/pages/PluginsPage.tsx',
     'web/src/pages/oauthManagement/OAuthManagementPage.tsx', 'web/src/pages/ApiKeysPage.tsx',
@@ -358,12 +358,21 @@ test('the mobile sweep follows console routes and excludes unrelated backend cha
 
 test('phone source editing and backup dialogs are selected by shared overlay and viewport hooks', () => {
   for (const file of ['web/src/hooks/useOverlayHistory.ts', 'web/src/hooks/overlayHistory.ts']) {
-    assert.deepEqual(planFor(file), ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console']);
+    assert.deepEqual(planFor(file), ['overlay-back', 'config-source-editor', 'config-backups', 'model-square', 'mobile-console']);
   }
   assert.deepEqual(planFor('web/src/hooks/useIsPhoneViewport.ts'), [
     'agent-narrow', 'playground-narrow', 'touch-ergonomics', 'phone-lists',
-    'config-source-editor', 'config-backups', 'mobile-console',
+    'config-source-editor', 'config-backups', 'model-square', 'mobile-console',
   ]);
   // A source-only decision must not schedule unrelated conversation checks.
   assert.deepEqual(planFor('web/src/components/config/sourceWrap.ts'), ['phone-lists', 'config-source-editor', 'config-backups', 'mobile-console']);
+});
+
+
+test('the model directory selects its vertical-list and mobile scenarios without unrelated pages', () => {
+  for (const file of ['web/src/pages/ModelSquarePage.tsx', 'web/src/pages/ModelSquarePage.module.css', 'web/src/types/modelSquare.ts']) {
+    assert.deepEqual(planFor(file), ['model-square', 'mobile-console']);
+  }
+  assert.equal(planFor('web/src/pages/SystemPage.tsx').includes('model-square'), false);
+  assert.equal(planFor('internal/operations/model_square.go').includes('model-square'), false);
 });

@@ -1,3 +1,4 @@
+import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './probes/modelSquare.mjs';
 import { mobileConsole } from './probes/mobileConsole.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
 import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
@@ -796,6 +797,12 @@ export const SCENARIOS = [
     run: (context) => configBackups({ ...context, log: configBackupsLog }),
   },
   {
+    id: 'model-square',
+    name: 'advertised models form maker sections with copyable call names, price and request linkage, details and native Back',
+    options: { routes: [...modelSquareFixtures(), ...modelSquareLedgerFixtures()] },
+    run: modelSquare,
+  },
+  {
     id: 'mobile-console',
     name: 'every console route fits phones and the shared tools follow native Back',
     options: {
@@ -804,7 +811,7 @@ export const SCENARIOS = [
       routes: [
         ...PHONE_LIST_ROUTES,
         ...agentFixtures(), ...playgroundFixtures(), ...logsFixtures([]),
-        ...pricingFixtures([]), ...systemFixtures(), ...pluginManagementFixtures([]),
+        ...modelSquareFixtures(), ...pricingFixtures([]), ...systemFixtures(), ...pluginManagementFixtures([]),
         ...oauthManagementProbeRoutes(), ...configSourceFixtures(),
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],

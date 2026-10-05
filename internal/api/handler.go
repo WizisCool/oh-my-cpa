@@ -192,6 +192,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/instances/default/discover", h.discoverDefault)
 				v1.Get("/resources", h.listResources)
 				v1.Patch("/resources/{id}/override", h.updateResourceOverride)
+				v1.Get("/management/model-square", h.listModelSquare)
 				v1.Get("/management/overview", h.managementOverview)
 				v1.Get("/management/dashboard", h.dashboard)
 				v1.Get("/management/dashboard/tail", h.dashboardTail)

@@ -18,7 +18,7 @@ import {
   ProfileOutlined,
   RobotOutlined,
   SettingOutlined,
-  ThunderboltOutlined,
+  BlockOutlined,
 } from '../icons';
 import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -91,7 +91,7 @@ const staticNavGroups: NavGroup[] = [
       { key: '/dashboard', labelKey: 'nav.dashboard', icon: <DashboardOutlined /> },
       { key: '/agent', labelKey: 'nav.agent', icon: <RobotOutlined /> },
       { key: '/playground', labelKey: 'nav.playground', icon: <CodeSandboxOutlined /> },
-      { key: '/quick-start', labelKey: 'nav.quick_start', icon: <ThunderboltOutlined /> },
+      { key: '/model-square', labelKey: 'nav.model_square', icon: <BlockOutlined /> },
     ],
   },
   {

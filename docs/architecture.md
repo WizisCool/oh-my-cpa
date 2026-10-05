@@ -93,8 +93,9 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
+| `internal/modelcatalog` | Bundled models.dev canonical reference facts, exact source aliases and safe weight/resource links for Model Square | — |
 | `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
-| `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
+| `internal/cpa/gateway` | Fixed-endpoint CPA client for the Playground, Agent and Model Square: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `iconasset`, `crypto`, `domain`, `pricing`, `security`, `usage` |
@@ -103,7 +104,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/release` | Published-version observation: version comparison, the release feed client, and the stored index | `repository` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
 | `internal/capability` | Agent capability declarations, JSON Schema validation, permission/risk rules, pending-operation store, executor audit | `repository`, `crypto` |
-| `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system) used by both console handlers and capabilities | `capability`, `cpa/management`, `pricing`, `quota`, `repository` |
+| `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system, model directory) used by both console handlers and capabilities | `capability`, `cpa/management`, `cpa/gateway`, `modelcatalog`, `pricing`, `quota`, `repository` |
 | `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, the sectioned system prompt, display tools, budgets, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
 | `internal/agui` | The AG-UI 1.0 wire protocol for Agent runs: strict `RunAgentInput` decoding, the event translator and SSE framing; knows nothing of OMC | — |
 | `internal/mcpbridge` | stdio MCP transport over the capability HTTP endpoints; no business logic or approval policy | `capability` |
@@ -2731,3 +2732,82 @@ reserves real space; focused editing mounts the shared action bar into the focus
 siblings are inert while body-level modal portals stay interactive. Focus, tools and save confirmation
 join `useOverlayHistory`; a conflict remains above focus, and exiting focus preserves the draft.
 The shared `WorkspaceLayout` also bounds its own height to the phone visible viewport so Agent and Playground keep their existing transcript scroller and composer above the keyboard. All observers and event listeners are effect-owned, including StrictMode cleanup/re-setup.
+
+## Model Square directory
+
+The lazy `/model-square` route reads `GET /management/model-square` through
+`web/src/api/client.ts`. The HTTP adapter in `internal/api/model_square.go` and the
+read-only `models_list` capability share `operations.Service.ListModelSquare`.
+The server reads CPA's configured client keys, selects the first nonempty one and
+calls the gateway's `/v1/models`. Client keys never enter the result or frontend state;
+a deployment without one returns HTTP 409 with `client_key_required`. Gateway failures
+use the existing safe error projection. This directory makes no inference request.
+
+CPA's advertised IDs are the only availability authority. Configured mappings preserve
+fanout independently of pricing's alias-ambiguity map. Native entries without explicit
+mappings may read CPA's fixed `/routing/model-definitions/{channel}` catalogs, applying
+exclusions and prefixes. OAuth lists contribute only published call points; alias
+inversion supplies upstream identity where known. All provenance is intersected with
+live advertised IDs. Unmatched live models retain empty provider/upstream identities;
+failed enrichment emits named `partial` conditions without hiding the live list. This
+additional in-memory projection does not change pricing persistence.
+
+The HTTP handler projects API-owned DTO allowlists for the directory, its model
+references and their nested facts/links, independent of operation/catalog type growth.
+The DTO contains advertised `models`, safe `providers`, exact `routes`, `partial`,
+`model_info` and `metadata_updated_at`. No keys, credential/account metadata or full
+upstream URL is projected; connection endpoints are reduced to hostnames. Existing
+provider-name/icon overlays apply by stable provider ID.
+
+`internal/modelcatalog` embeds a models.dev reference snapshot, independent of the
+OpenRouter pricing catalog (ADR 0061). The snapshot contains canonical model facts and
+unambiguous source-declared aliases, with no reseller costs. Evidence in `Catalog.Match`
+is always an exact canonical identity or source-declared alias. A name with neither is
+retried only in forms that denote the same model, each of which must itself match exactly:
+without a router tag (`:free`), without one suffix of the closed `VARIANT_SUFFIXES` list
+(reasoning effort, `-thinking`), and without leading routing namespaces (`relay/model`).
+The literal name is always tried first, so a variant the source publishes as its own
+model keeps its own record; similarity and version stripping are never evidence. Weight/resource links admit only credential-free
+HTTPS URLs. `pnpm models:sync` regenerates the snapshot from fixed models.dev sources;
+ordinary requests never fetch third-party catalogs. Metadata is returned only for
+identities represented in this deployment's live routes. Unknowns remain unknown.
+
+`web/src/types/modelSquare.ts` groups client names by maker, orders named makers ahead of
+the multiple and unidentified groups, preserves multiple targets, searches the advertised set,
+applies the maker filter, decides which reference a row may caption, classifies openness
+(closed-source, open-weight, open-source by a license allowlist) and constructs safe
+reference navigation. The page draws open maker sections and a Back-aware model-detail
+Drawer that names the serving connections and steps through the filtered list. Search and
+maker are reflected in `q` and `maker`; pagination is
+bounded to 120 rows. External links go to
+models.dev's canonical detail, OpenRouter lookup or pi.dev's `name` search; they open
+only on the operator's explicit action. All brand artwork is served locally.
+
+### Price and request linkage
+
+The directory also shows each model's price and recent requests, and hands off to the
+price editor and the request list. It owns none of that data. The coupling is confined to
+one pure module, `web/src/types/modelSquareLedger.ts`, and rests on one contract:
+
+- **Join key.** The client call name CPA advertises in `/v1/models` is the same string as
+  the price book's `model` and the request records' `model_alias`. Nothing else is joined,
+  and no name is normalised on the way.
+- **Reads.** `GET /pricing` under the shared `PRICING_QUERY_KEYS.book` cache key
+  (`web/src/components/pricing/pricingQueries.ts`), so a price saved in the editor reaches
+  the rows without a read of their own; and `GET /usage/facets?preset=24h`, whose
+  `model_aliases` facet is the request count per call name. No endpoint was added.
+- **Actions.** `useOpenPriceEditor` (the console-wide editor) and `modelRequestsLink`, which
+  builds the request list's own `preset` + `model_alias` query; the ledger suite parses that
+  link with the request list's reader, so a renamed filter fails a test, not a click.
+- **Degradation.** The directory is authoritative and renders alone. A neighbour that failed
+  or has not answered yields `unknown` - a blank cell and no price action - never "unpriced"
+  or zero. A name the loaded book does not list is unpriced by definition. Linkage is per model
+  only, and every usage figure shares the one 24-hour window (`MODEL_REQUEST_PRESET`); the price
+  book's 30-day usage is not read, because it is grouped by the recorded upstream model rather
+  than the call name: the page aggregates nothing about the book, whose summary belongs to Cost & Usage. The facet returns
+  at most 200 values, busiest first (`USAGE_FACET_VALUE_CAP`), so a full list leaves an
+  absent model's count unknown instead of zero.
+
+A change to the price book's response, the facet's shape or cap, or the request list's
+filter names is answered in that module and `scripts/test-model-square-ledger.ts`; the page
+only renders a `ModelLedgerEntry`.

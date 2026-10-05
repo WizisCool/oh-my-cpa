@@ -27,8 +27,8 @@ export const AgentPage = React.lazy(loadAgentPage);
 export const loadPlaygroundPage = createPageLoader(() => import('./pages/playground/PlaygroundPage'), 'PlaygroundPage');
 export const PlaygroundPage = React.lazy(loadPlaygroundPage);
 
-export const loadQuickStartPage = createPageLoader(() => import('./pages/QuickStartPage'), 'QuickStartPage');
-export const QuickStartPage = React.lazy(loadQuickStartPage);
+export const loadModelSquarePage = createPageLoader(() => import('./pages/ModelSquarePage'), 'ModelSquarePage');
+export const ModelSquarePage = React.lazy(loadModelSquarePage);
 
 export const loadLogsPage = createPageLoader(() => import('./pages/LogsPage'), 'LogsPage');
 export const LogsPage = React.lazy(loadLogsPage);

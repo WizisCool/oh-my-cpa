@@ -439,3 +439,10 @@ func TestPricingEndpointHostDoesNotCarryCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestConfiguredModelRoutesRetainPrefixesAndAliases(t *testing.T) {
+	routes := configuredModelRoutes([]ModelAlias{{Name: " gpt-5 ", Alias: " fast "}, {Name: "claude-sonnet"}, {Alias: "invalid"}}, "team")
+	if len(routes) != 2 || routes[0].UpstreamModel != "gpt-5" || routes[0].CallPoint != "team/fast" || routes[1].CallPoint != "team/claude-sonnet" {
+		t.Fatalf("routes = %#v", routes)
+	}
+}

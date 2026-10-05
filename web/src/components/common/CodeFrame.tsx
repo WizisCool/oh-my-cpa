@@ -20,7 +20,7 @@ export interface CodeFrameProps {
 /**
  * A block of code: a head naming it with a copy action, then the code.
  *
- * The frame is shared by the model transcripts and the quick-start snippets, so a fenced block in
+ * The frame is shared by model transcripts and code previews, so a fenced block in
  * an answer and a snippet on a setup page are the same object with the same copy control. The
  * body is a slot because only the transcript highlights - it owns the grammar allowlist and the
  * streaming rule that goes with it.

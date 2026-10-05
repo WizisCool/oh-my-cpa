@@ -272,3 +272,24 @@ answered by a Cloudflare Worker from that generated dataset: `docs/ops/cloudflar
 is its runbook, `docs/architecture.md` §13 and
 [ADR 0021](adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)
 record why.
+
+## Available model directory
+
+The authenticated `/model-square` route reads `GET /api/v1/management/model-square`
+(relative to the deployment base path). The server uses the first nonempty configured
+client key to read CPA's live `/v1/models`; no key returns `client_key_required` (409).
+No client or upstream secret is returned. Configuration enriches only advertised IDs,
+with partial conditions for unavailable model definitions or mappings. Refresh rereads
+CPA; it does not make a paid model request.
+
+Model specifications come from the bundled models.dev snapshot in
+`internal/modelcatalog/snapshot.json`. Run `pnpm models:sync` when maintaining a release
+to update it from models.dev's canonical model data and exact source aliases, then run
+`pnpm demo:generate` because the snapshot changes the demonstration's response. There
+is no runtime synchronization loop or new environment setting. The page displays the
+snapshot date and unknown fields, and renders without browser catalog/CDN requests.
+External reference links are user-initiated navigation. Pricing remains on its existing
+OpenRouter source and is not synchronized by viewing Model Square. The page additionally
+reads the existing `GET /api/v1/pricing` and `GET /api/v1/usage/facets?preset=24h` to show
+each name's price and recent requests; if either fails, the directory still renders and
+those cells stay blank.

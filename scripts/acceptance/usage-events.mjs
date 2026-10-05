@@ -166,7 +166,9 @@ export async function runUsageEventsAcceptance({
     return values.filter((value) => Number.isFinite(value));
   };
 
-  await page.goto(`${appURL}/usage/events`, { waitUntil: 'domcontentloaded' });
+  // The filter flow asserts a 50-record page; an explicit URL keeps preference
+  // hydration and the console's default page size from changing that fixture.
+  await page.goto(`${appURL}/usage/events?limit=50`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
   const filterSuffix = () => new URL(page.url()).search;
   const initialFilterQuery = filterSuffix();

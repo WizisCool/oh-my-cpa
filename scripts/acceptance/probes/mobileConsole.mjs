@@ -8,7 +8,7 @@ const ROUTES = [
   ['/logs', '.logs-page'], ['/audit', '[data-testid="audit-page"]'],
   ['/config', '.config-page'], ['/plugins', '.plugins-page'],
   ['/system', '.system-page'], ['/omc-settings', '.omc-settings-page'],
-  ['/quick-start', '.quick-start-page'], ['/agent', '[data-testid="agent-page"]'],
+  ['/model-square', '.model-square-page'], ['/agent', '[data-testid="agent-page"]'],
   ['/playground', '[data-testid="playground-page"]'],
 ];
 

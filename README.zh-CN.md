@@ -52,7 +52,7 @@ MCP · 可视化 · 管理
 
 ### 管理
 
-提供商、OAuth 登录、客户端密钥、配额、插件，以及 CPA 的 `config.yaml`，表单或 YAML 两种方式均可编辑。
+提供商、OAuth 登录、客户端密钥、配额、插件，以及 CPA 的 `config.yaml`，表单或 YAML 两种方式均可编辑。模型广场按厂商列出客户端可调用的模型名，并给出价格、近期请求与 models.dev 规格资料。
 
 </td>
 <td width="25%" valign="top">

@@ -456,8 +456,7 @@ func (a *App) Close() error {
 	return a.db.Close()
 }
 
-// seedDemoResources fills the resource list the overview and quick-start pages
-// read.
+// seedDemoResources fills the resource list consumed by the overview.
 //
 // It runs the ordinary discovery path against the in-process fixture instead of
 // writing resource rows directly, so the demo's resources are produced by the

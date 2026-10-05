@@ -39,7 +39,7 @@ const { check, checkEventually, failures, checks } = createChecker();
 const PAGES = [
   { route: 'playground', label: 'playground', selector: '[data-testid="playground-page"]', min: 1 },
   { route: 'dashboard', label: 'dashboard', selector: '.dashboard-tile', min: 4 },
-  { route: 'quick-start', label: 'quick start', selector: '.quick-start-page ol > li', min: 4 },
+  { route: 'model-square', label: 'model square', selector: '.model-square-page [data-model-identity]', min: 1 },
   { route: 'ai-providers', label: 'providers', selector: '.ant-table-row', min: 2 },
   { route: 'api-keys', label: 'gateway keys', selector: '.ant-table-row', min: 2 },
   { route: 'agent', label: 'agent', selector: '[data-testid="agent-directory"] code', min: 1 },

@@ -79,7 +79,8 @@
     "verify:static:repository": "pnpm verify:workflow && pnpm check-i18n && pnpm check-docs && pnpm check-brand && pnpm check-css-modules && pnpm check:motion && pnpm check:feedback && pnpm test:self",
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
     "verify:toolchain:strict": "node scripts/verify-toolchain.mjs --strict",
-    "verify:workflow": "node scripts/validate-workflow.mjs"
+    "verify:workflow": "node scripts/validate-workflow.mjs",
+    "models:sync": "node scripts/sync-model-metadata.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",

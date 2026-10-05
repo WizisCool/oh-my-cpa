@@ -168,17 +168,44 @@ func (m ModelAlias) MarshalJSON() ([]byte, error) {
 	return encodeWithExtras(modelAliasFields(m), m.extra)
 }
 
+// ConfiguredModelRoute keeps the configured upstream identity separate from its client label.
+type ConfiguredModelRoute struct {
+	UpstreamModel string
+	CallPoint     string
+}
+
+func configuredModelRoutes(models []ModelAlias, prefix string) []ConfiguredModelRoute {
+	routes := make([]ConfiguredModelRoute, 0, len(models))
+	for _, model := range models {
+		name := strings.TrimSpace(model.Name)
+		if name == "" {
+			continue
+		}
+		callPoint := strings.TrimSpace(model.Alias)
+		if callPoint == "" {
+			callPoint = name
+		}
+		if prefix != "" {
+			callPoint = strings.TrimSuffix(prefix, "/") + "/" + callPoint
+		}
+		routes = append(routes, ConfiguredModelRoute{UpstreamModel: name, CallPoint: callPoint})
+	}
+	return routes
+}
+
 // ConfiguredModelProvider is non-secret provenance captured alongside the model directory.
 type ConfiguredModelProvider struct {
-	EndpointHost string
-	ID           string
-	Family       string
-	Name         string
-	Prefix       string
-	Channel      string
-	Priority     int
-	IsOAuth      bool
-	Models       []string
+	EndpointHost   string
+	ID             string
+	Family         string
+	Name           string
+	Prefix         string
+	Channel        string
+	Priority       int
+	IsOAuth        bool
+	Models         []string
+	Routes         []ConfiguredModelRoute
+	ExcludedModels []string
 }
 
 // Only the hostname is needed to reuse provider icon inference; URL credentials,
@@ -211,10 +238,13 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 	addProvider := func(provider ConfiguredModelProvider, models []string) {
 		current := providers[provider.ID]
 		if current == nil {
-			current = &provider
+			providerCopy := provider
+			current = &providerCopy
 			current.Models = nil
+			current.Routes = nil
 			providers[provider.ID] = current
 		}
+		current.Routes = append(current.Routes, provider.Routes...)
 		if provider.Priority > current.Priority {
 			current.Priority = provider.Priority
 		}
@@ -327,7 +357,7 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 			for _, model := range entry.Models {
 				identities = append(identities, model.Name, model.Alias)
 			}
-			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("%s-%d", family, entryIndex), Family: string(family), Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: string(family), Priority: priorityOf(entry.Priority)}, identities)
+			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("%s-%d", family, entryIndex), Family: string(family), Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: string(family), Priority: priorityOf(entry.Priority), Routes: configuredModelRoutes(entry.Models, entry.Prefix), ExcludedModels: entry.ExcludedModels}, identities)
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -352,7 +382,7 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 			for _, model := range entry.Models {
 				identities = append(identities, model.Name, model.Alias)
 			}
-			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("openai-compat-%d", entryIndex), Family: "openai-compatibility", Name: entry.Name, Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: OpenAICompatibilityLabelPrefix + strings.ToLower(entry.Name), Priority: priorityOf(entry.Priority)}, identities)
+			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("openai-compat-%d", entryIndex), Family: "openai-compatibility", Name: entry.Name, Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: OpenAICompatibilityLabelPrefix + strings.ToLower(entry.Name), Priority: priorityOf(entry.Priority), Routes: configuredModelRoutes(entry.Models, entry.Prefix)}, identities)
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {

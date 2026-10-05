@@ -1,7 +1,7 @@
 /** Initial reads and rendered content, not polling silence, define a ready demo route. */
 export const DEMO_ROUTES = [
   { path: '/dashboard', heading: '仪表盘', reads: ['/management/dashboard'], content: '.dashboard-grid .dashboard-tile' },
-  { path: '/quick-start', heading: '快速上手与客户端接入指引', reads: [], content: '.quick-start-page ol' },
+  { path: '/model-square', heading: '模型广场', reads: ['/management/model-square', '/pricing', '/usage/facets'], content: '.model-square-page [data-model-identity]' },
   { path: '/playground', heading: '操练场', reads: ['/management/api-keys'], content: '[data-testid="playground-empty"]' },
   { path: '/agent', heading: '智能体', reads: ['/agent/session', '/capabilities'], content: '[data-testid="agent-directory"]', detail: 'providers_list' },
   { path: '/ai-providers', heading: 'AI 提供商', reads: ['/management/providers'], content: '.providers-page .ant-table-row' },

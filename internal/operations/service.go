@@ -15,13 +15,14 @@ import (
 )
 
 type Service struct {
-	Pricing Pricing
-	Repo    *repository.Repository
-	Cipher  *appcrypto.Cipher
-	Client  func(context.Context) (*management.Client, error)
-	Acquire func(context.Context) error
-	Release func()
-	Notify  func()
+	TLSSkipVerify bool
+	Pricing       Pricing
+	Repo          *repository.Repository
+	Cipher        *appcrypto.Cipher
+	Client        func(context.Context) (*management.Client, error)
+	Acquire       func(context.Context) error
+	Release       func()
+	Notify        func()
 	// Existing normalized projections remain shared while HTTP adapters are narrowed.
 	SaveProvider               func(context.Context, ProviderMutation, string, string) (ProviderMutationResult, error)
 	DeleteProvider             func(context.Context, string, string) error
@@ -69,7 +70,7 @@ func read[I, O any](registry *capability.Registry, name, description string, han
 	return capability.Register(registry, Meta(name, description, "read", "low"), nil, func(ctx context.Context, input I, _, _ string) (O, error) { return handler(ctx, input) })
 }
 func (s *Service) Register(registry *capability.Registry) error {
-	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerCustomIcons}
+	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerCustomIcons, s.registerModelSquare}
 	for _, register := range registrations {
 		if err := register(registry); err != nil {
 			return err

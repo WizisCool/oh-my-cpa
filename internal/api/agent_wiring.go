@@ -116,7 +116,7 @@ func (h *Handler) inferenceClient(ctx context.Context, fingerprint string) (*gat
 	return gateway.NewClient(client.BaseURL(), key, h.cfg.TLSSkipVerify)
 }
 func (h *Handler) operationsService() *operations.Service {
-	service := &operations.Service{Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: h.providerWrites.acquire, Release: h.providerWrites.release, Notify: func() {
+	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: h.providerWrites.acquire, Release: h.providerWrites.release, Notify: func() {
 		if h.pricing != nil {
 			h.pricing.NotifyModelsChanged()
 		}

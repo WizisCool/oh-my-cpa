@@ -50,6 +50,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/pricing', 'pricing'],
   ['/api/v1/pricing/attention', 'pricing-attention'],
   ['/api/v1/pricing/catalog', 'pricing-catalog'],
+  ['/api/v1/management/model-square', 'model-square'],
   ['/api/v1/management/overview', 'overview'],
   ['/api/v1/management/system', 'system'],
   ['/api/v1/management/system/releases', 'system-releases'],

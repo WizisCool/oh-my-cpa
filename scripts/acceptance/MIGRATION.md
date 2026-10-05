@@ -47,8 +47,7 @@ than an oversight:
 
 ## Go demonstration page assertions
 
-`scripts/demo-smoke.mjs` checks quick-start's four ordered steps rather than the
-retired card layout. Legacy credential, OAuth and quota URLs remain exercised:
+`scripts/demo-smoke.mjs` checks that Model Square renders connected model entries. Legacy credential, OAuth and quota URLs remain exercised:
 they must reach the unified OAuth workspace and render credential records, connect
 choices and matched quota records respectively. Direct workspace, agent-directory
 and audit-entry reads are also covered. Server-side refusal, masked-key and

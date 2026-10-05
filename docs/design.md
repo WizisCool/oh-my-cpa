@@ -2052,3 +2052,64 @@ age. Each summary uses at most two paired facts, with labels beside values rathe
 separate metric grids. Positive ingestion backlog and collection gaps appear as warning
 readings; healthy zero values do not consume space. Missing observations remain explicit.
 The version card retains the compact comparison and separate change-log action above.
+
+### Model Square directory
+
+Model Square answers one question: which model names can a client call right now. The head's
+subtitle carries live data only: the model count, the maker count and the reference snapshot's
+source and date. One toolbar holds the search field (names, makers and known model
+identities). A strip of maker chips, each with its mark and a count, filters to one maker; its
+counts follow the search, so a count is what selecting the chip will show. An active filter
+states "shown of total" and offers one clear action. Search and maker live in the URL.
+
+Makers are open sections under a heading rule. Named makers sort alphabetically; the
+multiple-maker group (a shared alias spanning several makers) and the unidentified group follow
+them. Inside a section each client model name is a compact bordered card, and the cards fill
+the section's width in as many columns as fit (280px minimum, `auto-fill`): a model here is a
+name, a price and a connection, which is too little to justify a full-width line. A card holds
+only what the operator acts on: the call name with its reference display name as a caption
+under it, then one line with the price (input / output; the per-1M-token unit is stated once,
+in the details) on the left and the connection serving it on the right. One connection is named; several
+collapse to up to three of their marks and a count ("3 connections"), so every card keeps
+the same height, and the details list each of them. Reference
+specifications - limits, capabilities, openness - and usage figures are not drawn in the list;
+they belong to the details.
+
+The call name is itself the copy control: clicking it copies exactly the string a client
+sends, and the glyph beside it turns into a `--success` check for 1.5s. Everything else on the
+card opens the details, so the card has two targets and no dead space; hover raises its
+border to `--fg-2` over `--hover`. A model without a price shows a `warn` status reading
+"Set price" in the price position, which opens the shared price editor in place. The directory
+raises no page-level notice about unpriced models: summarising the price book is Cost & Usage's
+job. A price that could not be read is left blank - never drawn as unpriced.
+
+The column count follows the section's own width with no breakpoint: three or four columns on
+a desktop, one on a phone. On phones the name and the details chevron are 44px touch targets,
+long names wrap inside the card, and the maker strip scrolls within itself so the page never
+moves sideways.
+
+A maker with brand artwork shows it. The two groups that are not a maker draw the console's
+own Lucide glyph (a cube for unidentified, layers for multiple) at 1.5px stroke in `--fg-2`,
+framed by a 1px `--border`, `--surface` and the 4px radius once the mark is 20px or larger;
+smaller marks are the bare glyph in `--muted`. They read as chrome beside the artwork, never
+as another brand. The navigation entry uses the boxes glyph, distinct from the dashboard's grid.
+
+The details are a Back-aware, viewport-bounded Drawer titled with the client name, with copy
+beside the title. It opens with Cost & Usage: three tiles (input price, output price, requests
+in 24 hours - the one window every usage figure on this page uses), then the price action - primary "Set price" for an unpriced
+model, default "Edit price" otherwise - and a link to the request list narrowed to this call
+name over the same 24 hours. The price editor stacks above the Drawer and one Back closes it
+alone. Below, the Drawer names the connections serving the model (the upstream name where it
+differs), then gives each distinct configured target its own models.dev profile: three limit
+tiles (context, output, input), a capability group (modalities, reasoning, tools, structured
+output, attachments) and a release group (openness, license, release, knowledge cutoff,
+metadata date). Openness is one of three terms: closed-source model, open-weight model (weights
+are published), open-source model (weights are published under a recognised open-source
+license). A supported capability carries a `--success` check; an unsupported one and every
+omitted field are drawn in `--meta`, so what is known stands out and what is unknown stays
+explicitly stated. Weight links, source links and the models.dev, OpenRouter and pi.dev
+lookups are bordered link buttons that open a new tab with opener/referrer protection. The
+footer steps to the previous or next model of the filtered list without closing the Drawer;
+one Back still dismisses it. The source note and snapshot date close the Drawer. Local icons
+and the existing palette, typography, spacing and motion tokens are reused without new global
+design tokens.

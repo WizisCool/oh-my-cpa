@@ -337,3 +337,20 @@ history and unavailable usage return `scope_unknown`, `history_unavailable` and
 history, changed scopes/periods and early-reset cycles do not produce one. Costs use
 request-time prices and require 95% priced-request coverage; error percentages describe
 rounding only and must not be presented as statistical confidence. See ADR 0059.
+
+### Available model directory
+
+`models_list` is a low-risk read exposed to the Agent and MCP. It takes no parameters,
+requires the existing read permission and performs no inference or mutation. Its safe
+`models`, `providers`, `routes`, `partial`, `model_info` and `metadata_updated_at` result
+is shared with `GET /management/model-square`. CPA's live `/v1/models` is authoritative;
+the first nonempty configured client key is used server-side and never disclosed.
+Without one, the operation returns `client_key_required`.
+
+Exact call points may retain several upstream targets. Empty `upstream_model` or
+`provider_id` denotes unresolved provenance; unreadable enrichment does not suppress
+advertised models. Bundled models.dev facts are matched only by exact canonical identity
+or an unambiguous source alias. They do not establish operational availability or an
+open-source license. Names/icons use current deployment overlays; endpoints are reduced
+to hostnames. Secrets and account fields are excluded. Results exceeding 2,000 routes
+are refused with `tool_result_too_large`.

@@ -12,6 +12,20 @@ web
 - **Scenarios & Tasks**: Users maintain multiple heterogeneous AI credentials (such as ChatGPT Plus/Pro OAuth credentials, OpenCode Go or Command Code API keys, DeepSeek, and upstream aggregation relays) unified through CLIProxyAPI (CPA) for protocol translation and dispatch; users rely on Oh My CPA as their control console to assign clear business ownership, intuitive naming, health monitoring, model pricing, and usage analytics to technical drivers.
 - **Secondary Audience (Restricted Phase)**: Small teams or studio members sharing a single CPA instance with read-only or scoped console access (future evolutionary target).
 
+## Connected model discovery
+
+Model Square takes over the available-model-list role of CPAMC's Center Information.
+It lists CPA's advertised client model names in vertically stacked manufacturer sections,
+each row giving the call name (click to copy), its price and the serving connection, with search, a maker filter and local brand artwork. Unpriced
+models are flagged and priced in place; a model's requests open in the request list. A model
+opens its serving connections and its models.dev reference profile:
+context/output limits, modalities, capabilities, openness (closed-source, open-weight or
+open-source), license and dates,
+plus weight links and direct models.dev, OpenRouter and pi.dev lookups. Reference facts
+are bundled for offline use; absent or ambiguous data stays unknown. Listing a model
+does not provision it or certify inference availability. The safe directory and metadata
+are also available through the read-only `models_list` capability.
+
 ## Product Purpose
 
 - Provide a dedicated, user-owned "AI Resource Identity & Organization Console" for CLIProxyAPI (CPA).

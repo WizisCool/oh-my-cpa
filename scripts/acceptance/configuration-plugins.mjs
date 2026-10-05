@@ -2,7 +2,7 @@ import { until } from './harness.mjs';
 
 /**
  * Configuration and plugin release acceptance: payload-rule structure, source
- * editing, the plugin store/settings, system and quick-start routes, and the
+ * editing, the plugin store/settings, system and model-square routes, and the
  * structured plugin configuration editor.
  */
 export async function runConfigurationPluginsAcceptance({
@@ -148,8 +148,21 @@ export async function runConfigurationPluginsAcceptance({
     ['/plugins/store', '[data-plugin-panel="store"]', { pageSecrets: providerSecrets }],
     ['/plugins/settings', '[data-plugin-panel="settings"]', { pageSecrets: providerSecrets }],
     ['/system', '.system-page', { pageSecrets: providerSecrets }],
-    ['/quick-start', '.quick-start-page', { pageSecrets: providerSecrets }],
+    ['/model-square', '.model-square-page [data-model-identity]', { pageSecrets: providerSecrets }],
   ]);
+
+  const fixtureModel = page.locator('[data-model-identity="gpt-e2e"]');
+  await fixtureModel.waitFor({ state: 'visible', timeout: 10000 });
+  check('the built Model Square loads the authenticated live model directory', await fixtureModel.isVisible());
+  await fixtureModel.click();
+  const modelDetails = page.locator('.ant-drawer').filter({ has: page.locator('a[href="https://pi.dev/models?name=gpt-e2e"]') });
+  await modelDetails.waitFor({ state: 'visible', timeout: 5000 });
+  check('the built Model Square opens a model with all three external lookups',
+    await modelDetails.locator('a[href="https://models.dev/"]').count() === 1
+      && await modelDetails.locator('a[href="https://openrouter.ai/models?q=gpt-e2e"]').count() === 1
+      && await modelDetails.locator('a[href="https://pi.dev/models?name=gpt-e2e"]').count() === 1);
+  await modelDetails.locator('.ant-drawer-close').click();
+  await modelDetails.waitFor({ state: 'hidden', timeout: 5000 });
 
   // Plugin configuration is a structured editing surface: the declared fields are
   // typed controls, the JSON view validates before save and exposes the object

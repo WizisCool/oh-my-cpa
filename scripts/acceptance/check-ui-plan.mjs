@@ -125,18 +125,18 @@ const SCENARIO_PATHS = [
   // provider editor. A change to the hook itself moves all of them.
   {
     prefix: 'web/src/hooks/useOverlayHistory',
-    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console'],
+    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'model-square', 'mobile-console'],
   },
   {
     prefix: 'web/src/hooks/overlayHistory',
-    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'mobile-console'],
+    scenarios: ['overlay-back', 'config-source-editor', 'config-backups', 'model-square', 'mobile-console'],
   },
   // The console's global stylesheet is already a shared path, and the touch rules live in it, so
   // any change to the shell selects the touch scenario too. Named here rather than folded into
   // SHELL_PATHS because it is about the rules those files carry, not about every scenario.
   {
     prefix: 'web/src/hooks/useIsPhoneViewport',
-    scenarios: ['phone-lists', 'touch-ergonomics', 'agent-narrow', 'playground-narrow', 'config-source-editor', 'config-backups', 'mobile-console'],
+    scenarios: ['phone-lists', 'touch-ergonomics', 'agent-narrow', 'playground-narrow', 'config-source-editor', 'config-backups', 'model-square', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/common/PhoneRow',
@@ -221,7 +221,8 @@ const SCENARIO_PATHS = [
   },
   { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor', 'config-backups', 'mobile-console'] },
   { prefix: 'web/src/types/configSchema', scenarios: ['config-source-editor', 'phone-lists', 'mobile-console'] },
-  { prefix: 'web/src/pages/QuickStartPage', scenarios: ['mobile-console'] },
+  { prefix: 'web/src/pages/ModelSquarePage', scenarios: ['model-square', 'mobile-console'] },
+  { prefix: 'web/src/types/modelSquare', scenarios: ['model-square', 'mobile-console'] },
   // The key list page: the phone rendering, the touch rules and the modal Back dismissal
   // each load `/api-keys`.
   { prefix: 'web/src/pages/ApiKeysPage', scenarios: ['phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console'] },

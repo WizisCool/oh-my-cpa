@@ -52,7 +52,7 @@ const routes = [
   { name: 'pricing', path: '/pricing' },
   { name: 'oauth', path: '/oauth' },
   { name: 'system', path: '/system' },
-  { name: 'quick_start', path: '/quick-start' },
+  { name: 'model_square', path: '/model-square' },
 ];
 
 async function main() {

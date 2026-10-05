@@ -1,3 +1,4 @@
+import type { ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import { getAppConfig } from '../types/config';
 import { isDemoMode } from '../types/demoMode';
@@ -573,6 +574,10 @@ export const api = {
    * model to reason with, but both read the same gateway directory, so the declaration lives
    * here rather than in either page's module.
    */
+  async getModelSquare(): Promise<ModelSquareDirectory> {
+    return request<ModelSquareDirectory>('/management/model-square', { method: 'GET' });
+  },
+
   async getGatewayModels(fingerprint: string, signal?: AbortSignal): Promise<{ models: GatewayModelItem[] }> {
     return request<{ models: GatewayModelItem[] }>(
       `/playground/models?client_key_fingerprint=${encodeURIComponent(fingerprint)}`,

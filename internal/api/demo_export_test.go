@@ -127,6 +127,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "playground-models", Route: "/api/v1/playground/models", From: demoExportPlaygroundModelsPath},
 		{Name: "api-keys-with-keys", Path: "/api/v1/management/api-keys?include_keys=true"},
 		{Name: "client-key-aliases", Path: "/api/v1/management/client-key-aliases"},
+		{Name: "model-square", Path: "/api/v1/management/model-square"},
 		{Name: "pricing", Path: "/api/v1/pricing"},
 		{Name: "pricing-attention", Path: "/api/v1/pricing/attention"},
 		{Name: "pricing-catalog", Path: "/api/v1/pricing/catalog"},

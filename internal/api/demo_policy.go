@@ -155,6 +155,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Observation of the fixture: the dashboard, the request records and the log
 	// tail all read data the fixture published.
+	{http.MethodGet, "/api/v1/management/model-square", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/overview", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/dashboard", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/dashboard/tail", demoAllow, ""},
