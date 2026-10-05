@@ -2660,6 +2660,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   height: clamp(520px, calc(100vh - 280px), 800px);
   height: clamp(520px, calc(100dvh - 280px), 800px);
   position: relative;
+  /* Monaco writes its own pixel width and only corrects it when its resize observer runs. Until
+     then a narrowed shell holds an editor of the old width, which would widen the whole page -
+     visibly on a rotation, and for as long as the browser is busy. Clipped, not scrollable: a
+     scroll container here could be scrolled out from under the editor by a focus. */
+  overflow: clip;
 }
 
 .config-monaco-loading {

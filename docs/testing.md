@@ -393,6 +393,8 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   phone find, in-place focused editing, draft/undo/focus continuity, nested Back, simulated keyboard
   viewport bounds, invalid input, revision conflict, failed saves and single successful confirmation.
   Phone geometry is measured after Monaco's render pass has resized the layers inside the editor.
+  It also forces the editor wider than its shell and requires the page not to widen: Monaco corrects
+  its pixel width only when its resize observer runs, and the shell clips it until then.
   Neither React option changes nor the editor's own box certify that: its layout pass sizes the
   box first, and until the render pass follows the closed find box keeps its desktop offset.
   `scripts/acceptance/configuration-plugins.mjs` also formats a document from the built SPA to

@@ -205,6 +205,19 @@ async function configSourceMobile({ base, page, check }) {
       fontSize: getComputedStyle(document.querySelector('.monaco-editor .view-lines')).fontSize,
     }));
     check(`source reading uses a compact gutter and 16px text at ${width}px`, geometry.overflow <= 1 && geometry.gutter < 48 && geometry.fontSize === '16px', JSON.stringify(geometry));
+    // Monaco corrects its pixel width only when its resize observer runs, so on a busy machine
+    // the shell is briefly narrower than the editor inside it. The stale state is produced here
+    // on purpose instead of being raced: the page must not widen whenever that happens.
+    const staleEditorOverflow = await page.evaluate(() => {
+      const editor = document.querySelector('.monaco-editor');
+      const content = document.querySelector('.app-content');
+      const width = editor.style.width;
+      editor.style.width = '2000px';
+      const overflow = content.scrollWidth - content.clientWidth;
+      editor.style.width = width;
+      return overflow;
+    });
+    check(`an editor still at a wider layout cannot widen the page at ${width}px`, staleEditorOverflow <= 1, `overflow=${staleEditorOverflow}`);
     check('desktop shortcut guidance is not shown on phones', !await page.locator('.config-source-hint').isVisible());
     check('a clean phone document has no duplicate save surface', await page.locator('.config-dirty-bar').count() === 0 && await page.locator('.config-toolbar').getByRole('button', { name: /Save/ }).count() === 0);
   }
