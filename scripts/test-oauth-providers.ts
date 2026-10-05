@@ -242,7 +242,6 @@ test('auth-provider metadata does not declare a redirect flow, and plugin pages 
 
 test('plugin login flow is resolved only from a successful login response', () => {
   assert.equal(resolveStartedOAuthFlow('plugin', {}), 'plugin');
-  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom', url: 'https://auth.example.test', state: 'session' }), 'plugin');
   assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'device' }), 'device');
   assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'redirect' }), 'manual-callback');
   assert.equal(resolveStartedOAuthFlow('plugin', { user_code: 'ABCD' }), 'device');
@@ -251,4 +250,27 @@ test('plugin login flow is resolved only from a successful login response', () =
   assert.equal(resolveStartedOAuthFlow('plugin', { url: 'https://auth.example.test' }), 'plugin');
   assert.equal(resolveStartedOAuthFlow('device', {}), 'device');
   assert.equal(resolveStartedOAuthFlow('manual-callback', {}), 'manual-callback');
+});
+
+
+test('unknown plugin flow labels use successful response fields without inventing a flow', () => {
+  assert.equal(resolveStartedOAuthFlow('plugin', {
+    flow: 'custom', url: 'https://auth.example.test', state: 'session',
+  }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('plugin', {
+    flow: 'custom', url: 'https://auth.example.test', session_id: 'session',
+  }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('plugin', {
+    flow: 'custom', url: 'https://auth.example.test', state: 'session', user_code: 'ABCD',
+  }), 'device', 'a returned device code takes precedence over redirect-shaped fields');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom', url: 'https://auth.example.test' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom', url: ' ', state: 'session' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom', url: 'https://auth.example.test', state: ' ' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', {
+    flow: 'device', url: 'https://auth.example.test', state: 'session',
+  }), 'device', 'recognized flow labels remain authoritative');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'redirect', user_code: 'ABCD' }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('device', { flow: 'custom' }), 'device');
+  assert.equal(resolveStartedOAuthFlow('manual-callback', { flow: 'custom', user_code: 'ABCD' }), 'manual-callback');
 });

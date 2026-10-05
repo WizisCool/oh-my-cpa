@@ -156,7 +156,8 @@ settles, not after a fixed delay.
 
 `scripts/test-oauth-providers.ts` owns the distinction between auth-provider capability
 and login method, registered-page precedence, disabled/built-in deduplication, and flow
-resolution from successful CPA responses (including older unlabelled redirect responses).
+resolution from successful CPA responses (including absent or unknown labels, device-code
+precedence, both session-token fields, and incomplete responses that stay plugin-managed).
 The existing `oauth-management` probe owns the connection wiring: an API-key plugin
 opens its hosted page without an OAuth start request, and pageless interactive plugins
 switch to device or callback controls only after explicit Start. Credential membership

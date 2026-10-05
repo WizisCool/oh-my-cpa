@@ -94,7 +94,7 @@ export function normalizeOAuthFlow(flow: unknown): OAuthFlowKind | undefined {
   return undefined;
 }
 
-/** Older CPA plugins omit flow labels; a returned login URL and session establish a redirect. */
+/** Successful response fields keep plugins usable when their flow label is absent or unfamiliar. */
 export function resolveStartedOAuthFlow(
   declaredFlow: OAuthFlowKind,
   response: { flow?: string; url?: string; state?: string; session_id?: string; user_code?: string },
@@ -102,7 +102,6 @@ export function resolveStartedOAuthFlow(
   const reportedFlow = normalizeOAuthFlow(response.flow);
   if (reportedFlow) return reportedFlow;
   if (declaredFlow !== 'plugin') return declaredFlow;
-  if (response.flow?.trim()) return 'plugin';
   if (response.user_code?.trim()) return 'device';
   if (response.url?.trim() && (response.state?.trim() || response.session_id?.trim())) return 'manual-callback';
   return 'plugin';

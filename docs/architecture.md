@@ -151,9 +151,10 @@ The connection picker uses plugin names without an OAuth suffix and labels their
 as plugin-managed. When a running plugin registers a page, its connection action opens
 the first registered page through the existing plugin host instead of starting OAuth.
 Pageless auth providers retain an explicit login request with capability-neutral copy;
-only a successful login response activates device or callback controls. CPA flow labels
-are authoritative; older responses with a device code use device flow, while a login
-URL plus session state establishes a redirect. Built-in declared flows retain their
+only a successful login response activates device or callback controls. Recognized CPA
+flow labels are authoritative. When a plugin response omits the label or uses an unknown
+one, a device code identifies device flow; otherwise a login URL plus session state
+establishes a redirect. Incomplete responses remain plugin-managed. Built-in declared flows retain their
 compatibility fallback. No login is started to probe capability, and credential collection
 membership and plugin logos remain independent of connection actions.
 
