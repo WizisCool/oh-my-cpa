@@ -13,6 +13,18 @@ function isV0Endpoint(path) {
 }
 
 // The settings a v8 credential group may carry for all of its keys.
+/**
+ * Whether an exclusion list hides an upstream model, by CPA's rule: case-insensitive, with `*`
+ * matching any run of characters. Without it the gateway would advertise models a provider has
+ * switched off, and a directory read against this fixture would accept them as available.
+ */
+function isModelExcluded(model, patterns) {
+  return (patterns ?? []).some((pattern) => {
+    const expression = String(pattern).trim().replace(/[.+?^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*');
+    return new RegExp(`^${expression}$`, 'i').test(model);
+  });
+}
+
 const GROUP_SHARED_FIELDS = new Set(['base-url', 'priority', 'prefix', 'proxy-url', 'headers', 'models', 'excluded-models', 'disable-cooling', 'request-retry', 'request-scoped-errors']);
 
 // groupEntries renders a flat credential list the way CPA renders a converted
@@ -325,6 +337,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       for (const credential of authFiles) {
         if (credential.disabled || credential.unavailable) continue;
         for (const model of credential.models ?? []) {
+          if (isModelExcluded(model.id, credential.excluded_models)) continue;
           const aliases = (oauthModelAliases[credential.provider] ?? []).filter((alias) => alias.name === model.id);
           if (aliases.length === 0 || aliases.some((alias) => alias.fork)) modelIds.add(model.id);
           for (const alias of aliases) modelIds.add(alias.alias);
@@ -334,6 +347,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         for (const provider of list.get()) {
           if (provider.disabled) continue;
           for (const model of provider.models ?? []) {
+            if (isModelExcluded(model.name, provider['excluded-models'])) continue;
             const identity = model.alias || model.name;
             modelIds.add(provider.prefix ? `${provider.prefix}/${identity}` : identity);
           }

@@ -63,3 +63,26 @@ test('gateway directory reads current configured model aliases and prefixes', as
   assert.ok(!identities.includes('gpt-e2e-second'));
   assert.ok(identities.includes('gpt-e2e'));
 });
+
+test('gateway directory leaves out models a provider or credential excludes', async (context) => {
+  const request = await startFixture(context);
+  const route = (excluded) => request('/v8/management/config', FAKE_CPA_MANAGEMENT_KEY, {
+    method: 'PATCH',
+    body: JSON.stringify({ 'api-keys': { codex: [{ name: 'fixture-route', 'excluded-models': excluded, models: [{ name: 'Route-Kept' }, { name: 'route-hidden', alias: 'hidden-alias' }], keys: [{ 'api-key': FAKE_PROVIDER_SECRET }] }] } }),
+  });
+  const identities = async () => (await (await request('/v1/models', FAKE_CLIENT_SECRET)).json()).data.map((model) => model.id);
+
+  assert.equal((await route(['ROUTE-hid*'])).status, 200);
+  assert.ok((await identities()).includes('Route-Kept'));
+  assert.ok(!(await identities()).includes('hidden-alias'));
+
+  assert.equal((await route(['*'])).status, 200);
+  assert.ok(!(await identities()).includes('Route-Kept'));
+  assert.ok(!(await identities()).includes('hidden-alias'));
+
+  assert.ok((await identities()).includes('sonnet-latest'));
+  assert.equal((await request('/v8/management/credentials/fields', FAKE_CPA_MANAGEMENT_KEY, {
+    method: 'PATCH', body: JSON.stringify({ name: 'claude-fixture.json', excluded_models: ['claude-*'] }),
+  })).status, 200);
+  assert.ok(!(await identities()).includes('sonnet-latest'));
+});
