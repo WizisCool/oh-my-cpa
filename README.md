@@ -282,7 +282,7 @@ so connect only agents you would trust with the console.
 - **Client keys**: create, name and revoke gateway API keys. Names appear in request records and filters.
 - **Model catalog**: pull model lists straight from upstream providers.
 - **Playground**: test any routed model with text and images, streamed multi-turn answers and request diagnostics.
-- **Plugins**: installed plugins, a plugin store and typed settings forms on one page.
+- **Plugins**: installed plugins, a plugin store, typed settings forms, and the pages plugins register, opened inside the console.
 
 </details>
 

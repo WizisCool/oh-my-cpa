@@ -14,6 +14,8 @@ export const DEMO_ROUTES = [
   { path: '/config', heading: '配置面板', reads: ['/management/config'], content: '.config-workbench' },
   { path: '/omc-settings', heading: 'OMC 设置', reads: ['/preferences'], content: '.omc-settings-group' },
   { path: '/plugins', heading: '插件管理', reads: ['/management/plugins'], content: '[data-plugin-status]' },
+  { path: '/plugins/store', heading: '插件管理', reads: ['/management/plugins', '/management/plugin-store'], content: '[data-plugin-panel="store"]' },
+  { path: '/plugins/settings', heading: '插件管理', reads: ['/management/plugins', '/management/plugins/settings'], content: '[data-plugin-panel="settings"]' },
   { path: '/system', heading: '系统信息', reads: ['/management/system'], content: '[data-testid="sys-card-versions"]' },
 ];
 

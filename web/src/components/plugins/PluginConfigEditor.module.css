@@ -22,13 +22,17 @@
   min-width: 0;
 }
 
+/* The document is the drawer's whole content in this view, so it takes the drawer's
+   height rather than a fixed number of rows above an empty half. */
 .source {
+  min-height: max(320px, calc(100vh - 330px)) !important;
   font-family: var(--font-mono) !important;
   font-size: 12px !important;
   line-height: 1.5 !important;
 }
 
 .summary {
+  align-self: start;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);

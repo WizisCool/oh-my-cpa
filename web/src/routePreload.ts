@@ -14,6 +14,7 @@ import {
   loadLegacyOAuthManagementRedirect,
   loadSystemPage,
   loadPluginsPage,
+  loadPluginPageHost,
   loadOmcSettingsPage,
 } from './routePages';
 
@@ -33,11 +34,13 @@ const ROUTE_LOADERS: Record<string, () => Promise<unknown>> = {
   '/auth-files': loadLegacyOAuthManagementRedirect,
   '/system': loadSystemPage,
   '/plugins': loadPluginsPage,
+  '/plugins/store': loadPluginsPage,
   '/omc-settings': loadOmcSettingsPage,
 };
 
 export function preloadRoute(path: string): void {
   // Code only: intent must not send authenticated reads or mount a page's effects.
-  const loadRoute = ROUTE_LOADERS[path];
+  // A plugin's page has a route per plugin, all served by one module.
+  const loadRoute = path.startsWith('/plugin-pages/') ? loadPluginPageHost : ROUTE_LOADERS[path];
   if (loadRoute) void loadRoute().catch(() => undefined);
 }

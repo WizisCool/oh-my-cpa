@@ -65,10 +65,20 @@ type PluginItemDTO struct {
 	SupportsOAuth    bool                   `json:"supports_oauth,omitempty"`
 	OAuthProvider    string                 `json:"oauth_provider,omitempty"`
 	SupportsQuota    bool                   `json:"supports_quota,omitempty"`
+	QuotaProvider    string                 `json:"quota_provider,omitempty"`
+	Pages            []PluginPageDTO        `json:"pages"`
 	Logo             string                 `json:"logo,omitempty"`
 	RepositoryURL    string                 `json:"repository_url,omitempty"`
 	ConfigFields     []PluginConfigFieldDTO `json:"config_fields"`
 	Metadata         *PluginMetadataDTO     `json:"metadata,omitempty"`
+}
+
+// PluginPageDTO is one page a running plugin registers. `path` is the plugin resource
+// path the plugin host serves it from, never a URL of the gateway's.
+type PluginPageDTO struct {
+	Path        string `json:"path"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
 }
 
 type PluginStoreSourceDTO struct {
@@ -139,11 +149,46 @@ func projectPluginItem(plugin management.PluginItem) PluginItemDTO {
 		SupportsOAuth:    plugin.SupportsOAuth,
 		OAuthProvider:    boundedText(plugin.OAuthProvider, pluginTextLimit),
 		SupportsQuota:    plugin.SupportsQuota,
+		QuotaProvider:    boundedText(plugin.QuotaProvider, pluginTextLimit),
+		Pages:            projectPluginPages(plugin),
 		Logo:             plugin.Logo,
 		RepositoryURL:    pluginRepositoryURL(repository),
 		ConfigFields:     projectPluginConfigFields(fields),
 		Metadata:         projectPluginMetadata(plugin.Metadata),
 	}
+}
+
+// projectPluginPages keeps the menus that are pages of this plugin: a resource path
+// under the plugin's own prefix. A menu naming anything else - another plugin's
+// resources, a management route, a foreign URL - is not something the host serves
+// and is dropped rather than listed as a page that cannot open. A plugin that is
+// not running lists none, since CPA serves its resources only while it is loaded.
+func projectPluginPages(plugin management.PluginItem) []PluginPageDTO {
+	pages := []PluginPageDTO{}
+	if !plugin.EffectiveEnabled {
+		return pages
+	}
+	seen := make(map[string]bool, len(plugin.Menus))
+	for _, menu := range plugin.Menus {
+		if len(pages) >= pluginListLimit {
+			break
+		}
+		resourcePath, owner, ok := management.PluginResourcePath(strings.TrimSpace(menu.Path))
+		if !ok || owner != strings.TrimSpace(plugin.ID) || seen[resourcePath] {
+			continue
+		}
+		seen[resourcePath] = true
+		label := boundedText(menu.Menu, 128)
+		if label == "" {
+			label = boundedText(plugin.DisplayName(), 128)
+		}
+		pages = append(pages, PluginPageDTO{
+			Path:        resourcePath,
+			Label:       label,
+			Description: boundedText(menu.Description, pluginTextLimit),
+		})
+	}
+	return pages
 }
 
 func projectPluginMetadata(metadata *management.PluginMetadata) *PluginMetadataDTO {

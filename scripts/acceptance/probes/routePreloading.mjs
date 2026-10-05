@@ -32,7 +32,11 @@ export async function routePreloading({ base, page, context, check }) {
     { path: '/logs', module: '/pages/LogsPage.tsx', action: (item) => item.focus(), read: '/management/logs' },
     { path: '/plugins', module: '/pages/PluginsPage.tsx', action: (item) => item.dispatchEvent('touchstart'), read: '/management/plugins' },
   ];
+  // The shell reads the plugin list for its navigation, so only reads made after an
+  // intent count against it.
+  await until(async () => apiPaths.some((path) => path.endsWith('/management/plugins')), { label: 'the shell plugin list read' });
   for (const target of targets) {
+    const readsBefore = apiPaths.length;
     const item = page.locator(`.app-menu [data-route-path="${target.path}"]`).first();
     const loaded = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(target.module));
     await target.action(item);
@@ -40,7 +44,7 @@ export async function routePreloading({ base, page, context, check }) {
     await response.finished();
     check(`${target.path} intent loads its module`, response.ok(), response.url());
     check(`${target.path} intent does not navigate`, new URL(page.url()).pathname === startPath, page.url());
-    check(`${target.path} intent does not read business data`, !apiPaths.some((path) => path.includes(target.read)), apiPaths.join(' | '));
+    check(`${target.path} intent does not read business data`, !apiPaths.slice(readsBefore).some((path) => path.includes(target.read)), apiPaths.slice(readsBefore).join(' | '));
   }
   check('preloading config keeps the YAML editor on demand', !scriptPaths.some((path) => path.endsWith('/YamlSourceEditor.tsx')), scriptPaths.join(' | '));
 

@@ -36,6 +36,7 @@ import {
   LegacyOAuthManagementRedirect,
   SystemPage,
   PluginsPage,
+  PluginPageHost,
   OmcSettingsPage,
 } from './routePages';
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
@@ -142,9 +143,13 @@ const AppRoutes: React.FC = () => {
         { path: 'pricing', element: <PricingPage /> },
         { path: 'config', element: <ConfigPage /> },
         { path: 'omc-settings', element: <OmcSettingsPage /> },
+        // One page under three addresses, so the store and the settings can be linked to
+        // and listed in the navigation.
         { path: 'plugins', element: <PluginsPage /> },
-        // The store is a tab of plugin management now; the old address keeps working.
-        { path: 'plugin-store', element: <Navigate to="/plugins?tab=store" replace /> },
+        { path: 'plugins/store', element: <PluginsPage /> },
+        { path: 'plugins/settings', element: <PluginsPage /> },
+        { path: 'plugin-store', element: <Navigate to="/plugins/store" replace /> },
+        { path: 'plugin-pages/:pluginId/:pageIndex', element: <PluginPageHost /> },
         { path: 'system', element: <SystemPage /> },
         { path: '*', element: <Navigate to="/dashboard" replace /> },
       ],

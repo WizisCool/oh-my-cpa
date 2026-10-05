@@ -249,7 +249,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         { name: 'redact-headers', type: 'array', enum_values: [], description: 'Header names removed before logging.' },
         { name: 'include-body', type: 'boolean', enum_values: [], description: 'Log request bodies.' },
       ],
-      menus: [],
+      menus: [{ path: '/v0/resource/plugins/fixture-logger/console', menu: 'Logger Console', description: 'Recent requests the logger kept.' }],
       metadata: { name: 'Request Logger Plugin', version: '1.0.0', author: 'router-for-me', github_repository: 'router-for-me/fixture-logger', logo: '', config_fields: [] },
     }],
     ['iflow-auth', {
@@ -309,8 +309,37 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     for await (const chunk of request) chunks.push(chunk);
     requests.push({ method: request.method, path: url.pathname, query: url.search, body: Buffer.concat(chunks).toString('utf8') });
 
+    // A plugin's own page and its assets: CPA serves these without the management key,
+    // and the page reaches its plugin through absolute paths from CPA's root.
+    if (request.method === 'GET' && url.pathname === '/v0/resource/plugins/fixture-logger/console') {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      response.end([
+        '<!doctype html><html><head><meta charset="utf-8"><title>Logger Console</title></head><body>',
+        '<h1 id="plugin-title">Logger Console</h1><p id="plugin-status">loading</p><p id="plugin-theme"></p>',
+        '<script src="/v0/resource/plugins/fixture-logger/console.js"></script>',
+        '</body></html>',
+      ].join(''));
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v0/resource/plugins/fixture-logger/console.js') {
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      response.end([
+        "document.getElementById('plugin-theme').textContent = window.parent.document.documentElement.getAttribute('data-theme') || '';",
+        "fetch(new URL('/v0/management/fixture-logger/status', location.origin))",
+        "  .then((reply) => reply.json())",
+        "  .then((body) => { document.getElementById('plugin-status').textContent = body.state; })",
+        "  .catch((error) => { document.getElementById('plugin-status').textContent = 'failed: ' + error.message; });",
+      ].join('\n'));
+      return;
+    }
+
     if (request.headers.authorization !== `Bearer ${managementKey}`) {
       json(response, 401, { error: 'unauthorized' });
+      return;
+    }
+    // The plugin's own management route, registered beside CPA's and guarded by the same key.
+    if (request.method === 'GET' && url.pathname === '/v0/management/fixture-logger/status') {
+      json(response, 200, { state: 'logger running' });
       return;
     }
     // A v8 gateway: operations live under /v8/management, and /v0/management answers

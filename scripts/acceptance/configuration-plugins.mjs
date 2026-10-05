@@ -145,8 +145,8 @@ export async function runConfigurationPluginsAcceptance({
   }
   await auditRoutes(page, responseBodies, [
     ['/plugins', '.plugins-page', { pageSecrets: providerSecrets }],
-    ['/plugins?tab=store', '[data-plugin-panel="store"]', { pageSecrets: providerSecrets }],
-    ['/plugins?tab=settings', '[data-plugin-panel="settings"]', { pageSecrets: providerSecrets }],
+    ['/plugins/store', '[data-plugin-panel="store"]', { pageSecrets: providerSecrets }],
+    ['/plugins/settings', '[data-plugin-panel="settings"]', { pageSecrets: providerSecrets }],
     ['/system', '.system-page', { pageSecrets: providerSecrets }],
     ['/quick-start', '.quick-start-page', { pageSecrets: providerSecrets }],
   ]);
@@ -186,4 +186,21 @@ export async function runConfigurationPluginsAcceptance({
   check('plugin configuration discards only after confirmation', await pluginDiscard.isVisible());
   await pluginDiscard.locator('.ant-btn-primary').first().click();
   await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+
+  // A page the plugin registered is a destination in the navigation, and it works end to
+  // end only if the whole chain does: the frame's document and script come through the
+  // console's plugin host, their CPA-root paths are re-based onto it, and the plugin's own
+  // management route is called with the key the server holds.
+  const pageEntry = page.locator('.app-menu [data-route-path="/plugin-pages/fixture-logger/0"]').first();
+  await pageEntry.waitFor({ state: 'visible', timeout: 10000 });
+  check('a plugin page is listed in the navigation under its registered label', (await pageEntry.innerText()).includes('Logger Console'));
+  await pageEntry.click();
+  await page.locator('[data-plugin-page="fixture-logger"]').waitFor({ state: 'visible', timeout: 10000 });
+  const pluginDocument = page.frameLocator('[data-plugin-page-frame]').frameLocator('iframe');
+  await pluginDocument.locator('#plugin-title').waitFor({ state: 'visible', timeout: 15000 });
+  const pluginStatus = pluginDocument.locator('#plugin-status');
+  const statusSettled = await pluginStatus.filter({ hasText: 'logger running' }).waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+  check('the plugin page reaches its own management route through the console', statusSettled, await pluginStatus.innerText().catch(() => ''));
+  const frameTheme = await pluginDocument.locator('#plugin-theme').innerText();
+  check('the plugin page reads the console colour mode from its parent', frameTheme === 'dark' || frameTheme === 'light', frameTheme);
 }

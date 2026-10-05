@@ -2,7 +2,9 @@ import React from 'react';
 import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Switch, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClearOutlined, PlusOutlined, UndoOutlined } from '../icons';
+import { useNavigate } from 'react-router-dom';
+import { AppstoreOutlined, ClearOutlined, UndoOutlined } from '../icons';
+import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
@@ -13,14 +15,17 @@ import {
   buildPluginConfigDraft,
   composePluginConfig,
   isPluginFieldChanged,
+  isSecretPluginField,
   pluginFieldDraftFromValue,
   pluginFieldKind,
+  readPluginInstallRecord,
   undeclaredPluginKeys,
   type PluginConfigDraft,
   type PluginFieldDraft,
   type PluginFieldError,
 } from './pluginConfigForm';
-import { formatPluginVersion, PluginLogo, PluginMeta } from './PluginParts';
+import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
@@ -37,17 +42,21 @@ interface PluginConfigDrawerProps {
  * One plugin's settings, edited as the typed fields the plugin declares, or as the JSON
  * document CPA stores.
  *
- * The form is the default whenever the plugin declares fields: each one is a control of
- * its own type, states whether it is set or left to the plugin's default, and marks what
- * the draft changed. The JSON view is the same document, for keys the plugin does not
- * declare and for plugins that declare nothing. Switching views carries the draft across,
- * and a view that does not parse cannot be left, so an edit is never silently dropped.
+ * The form is the default: each declared field is a control of its own type that can be
+ * edited at once. A field left empty is not written, so the plugin's own default applies,
+ * and the row says so; what the draft changed is marked. A plugin that declares nothing
+ * still opens on the form: the host's own settings, where the plugin was installed from,
+ * and the way to the plugin's own page, which is where such a plugin is usually
+ * configured. The JSON view is the same document, for keys the plugin does not declare.
+ * Switching views carries the draft across, and a view that does not parse cannot be
+ * left, so an edit is never silently dropped.
  */
 export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDrawerProps) {
   const t = useT();
   const { modal } = AntdApp.useApp();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const pluginId = plugin?.id ?? '';
   const fields = React.useMemo(() => plugin?.config_fields ?? [], [plugin]);
 
@@ -81,7 +90,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
     setDraft(buildPluginConfigDraft(fields, saved, plugin.enabled));
     setBase(saved);
     setJsonText(JSON.stringify(saved, null, 2));
-    setMode(fields.length > 0 ? 'form' : 'json');
+    setMode('form');
   }, [plugin, saved, fields, isReading]);
 
   const composed = React.useMemo(() => {
@@ -165,6 +174,16 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   };
 
   const name = plugin ? pluginDisplayName(plugin) : '';
+  const pages = React.useMemo(() => (plugin ? collectPluginPages([plugin]) : []), [plugin]);
+  const installRecord = mode === 'form' ? readPluginInstallRecord(base) : undefined;
+  const openPage = (route: string) => {
+    if (isDirty) {
+      toast.warning(t('plugin.config_save_before_leaving'));
+      return;
+    }
+    onClose();
+    navigate(route);
+  };
   const extraKeys = mode === 'form' ? undeclaredPluginKeys(base, fields) : [];
   const extraSummary = new Map(pluginConfigSummary(base).map((entry) => [entry.key, entry.type]));
 
@@ -218,6 +237,19 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
               ]}
             />
           </div>
+
+          {pages.length > 0 && (
+            <div className={styles['config-pages']} data-plugin-config-pages>
+              <span className={styles['config-field-desc']}>{t('plugin.config_pages_hint')}</span>
+              <span className={styles['page-links']}>
+                {pages.map((page) => (
+                  <Button key={page.route} size="small" type="primary" ghost icon={<AppstoreOutlined />} onClick={() => openPage(page.route)}>
+                    {pages.length > 1 ? page.label : t('plugin.open_page', { name: page.label })}
+                  </Button>
+                ))}
+              </span>
+            </div>
+          )}
 
           {!configQuery.isError && (configQuery.isLoading || !draft || seededFor.current !== plugin.id) ? (
             <ParagraphPlaceholder rows={6} />
@@ -284,6 +316,23 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
                 ))}
               </section>
 
+              {installRecord && (
+                <section className={styles['config-section']} data-plugin-install-record>
+                  <h3 className={styles['config-section-title']}>{t('plugin.config_install_record')}</h3>
+                  <PluginMeta
+                    items={[
+                      installRecord.name,
+                      formatPluginVersion(installRecord.version),
+                      installRecord.author,
+                      installRecord.license,
+                    ]}
+                  />
+                  {installRecord.description && <p className={styles.description}>{installRecord.description}</p>}
+                  <PluginLinks repositoryURL={installRecord.repository} homepage={installRecord.homepage} />
+                  <p className={styles['config-field-desc']}>{t('plugin.config_install_record_hint')}</p>
+                </section>
+              )}
+
               {extraKeys.length > 0 && (
                 <section className={styles['config-section']}>
                   <h3 className={styles['config-section-title']}>{t('plugin.config_extra_title')}</h3>
@@ -330,29 +379,31 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
   const t = useT();
   const kind = pluginFieldKind(field);
 
+  // An emptied text control means "not set": the key is left out and the plugin's default
+  // applies. There is no separate step to start editing a field.
+  const changeText = (text: string) => onChange({ text, isSet: text.trim() !== '' });
+
   const control = (() => {
-    if (!draft.isSet) {
-      return (
-        <div className={styles['config-unset']}>
-          <span>{t('plugin.field_unset')}</span>
-          <Button size="small" type="link" icon={<PlusOutlined />} disabled={isReadOnly} onClick={() => onChange({ isSet: true })}>
-            {t('plugin.field_set')}
-          </Button>
-        </div>
-      );
-    }
     if (kind === 'boolean') {
-      return <Switch checked={draft.checked} disabled={isReadOnly} onChange={(checked) => onChange({ checked })} aria-label={field.name} />;
+      return (
+        <Switch
+          checked={draft.isSet && draft.checked}
+          disabled={isReadOnly}
+          onChange={(checked) => onChange({ checked, isSet: true })}
+          aria-label={field.name}
+        />
+      );
     }
     if (kind === 'enum') {
       return (
         <Select
-          value={draft.text || undefined}
+          allowClear
+          value={draft.isSet ? draft.text || undefined : undefined}
           disabled={isReadOnly}
           status={error ? 'error' : undefined}
-          placeholder={t('plugin.field_select')}
+          placeholder={t('plugin.field_default_placeholder')}
           options={(field.enum_values ?? []).map((value) => ({ value, label: value }))}
-          onChange={(value: string) => onChange({ text: value })}
+          onChange={(value: string | undefined) => changeText(value ?? '')}
           aria-label={field.name}
         />
       );
@@ -361,13 +412,13 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
       return (
         <Select
           mode="tags"
-          value={draft.list}
+          value={draft.isSet ? draft.list : []}
           disabled={isReadOnly}
           open={false}
           suffixIcon={null}
           tokenSeparators={[',', '\n']}
           placeholder={t('plugin.field_list_placeholder')}
-          onChange={(values: string[]) => onChange({ list: values })}
+          onChange={(values: string[]) => onChange({ list: values, isSet: values.length > 0 })}
           aria-label={field.name}
         />
       );
@@ -375,24 +426,38 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
     if (kind === 'array' || kind === 'object') {
       return (
         <Input.TextArea
-          value={draft.text}
+          value={draft.isSet ? draft.text : ''}
           disabled={isReadOnly}
-          autoSize={{ minRows: 3, maxRows: 12 }}
+          autoSize={{ minRows: 2, maxRows: 12 }}
           spellCheck={false}
           className={styles['config-json']}
           status={error ? 'error' : undefined}
-          onChange={(event) => onChange({ text: event.target.value })}
+          placeholder={kind === 'array' ? '[ ]' : '{ }'}
+          onChange={(event) => changeText(event.target.value)}
+          aria-label={field.name}
+        />
+      );
+    }
+    if (kind === 'string' && isSecretPluginField(field)) {
+      return (
+        <SecretInput
+          value={draft.isSet ? draft.text : ''}
+          disabled={isReadOnly}
+          autoComplete="off"
+          placeholder={t('plugin.field_default_placeholder')}
+          onChange={(event) => changeText(event.target.value)}
           aria-label={field.name}
         />
       );
     }
     return (
       <Input
-        value={draft.text}
+        value={draft.isSet ? draft.text : ''}
         disabled={isReadOnly}
         inputMode={kind === 'integer' || kind === 'number' ? 'decimal' : undefined}
         status={error ? 'error' : undefined}
-        onChange={(event) => onChange({ text: event.target.value })}
+        placeholder={t('plugin.field_default_placeholder')}
+        onChange={(event) => changeText(event.target.value)}
         aria-label={field.name}
       />
     );
@@ -421,7 +486,9 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
             </Tooltip>
           )}
         </div>
-        {error && <span className={styles['field-error']}>{t(FIELD_ERROR_KEYS[error])}</span>}
+        {error
+          ? <span className={styles['field-error']}>{t(FIELD_ERROR_KEYS[error])}</span>
+          : !draft.isSet && <span className={styles['config-field-default']} data-plugin-config-default>{t('plugin.field_unset')}</span>}
       </div>
     </div>
   );

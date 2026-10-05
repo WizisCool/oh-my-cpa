@@ -2,7 +2,7 @@ import { ActionMenu } from '../components/common/ActionMenu';
 import React from 'react';
 import { Button, Card, Segmented } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
@@ -20,8 +20,19 @@ import { LoadFailure, Notice } from '../components/feedback';
 const PLUGIN_TABS = ['installed', 'store', 'settings'] as const;
 type PluginTab = (typeof PLUGIN_TABS)[number];
 
-function parseTab(value: string | null): PluginTab {
-  return PLUGIN_TABS.includes(value as PluginTab) ? (value as PluginTab) : 'installed';
+const TAB_PATHS: Record<PluginTab, string> = {
+  installed: '/plugins',
+  store: '/plugins/store',
+  settings: '/plugins/settings',
+};
+
+function tabOfPath(pathname: string): PluginTab {
+  const segment = pathname.replace(/\/+$/, '').split('/').pop();
+  return segment === 'store' || segment === 'settings' ? segment : 'installed';
+}
+
+function isPluginTab(value: string | null): value is PluginTab {
+  return PLUGIN_TABS.includes(value as PluginTab);
 }
 
 /**
@@ -30,9 +41,9 @@ function parseTab(value: string | null): PluginTab {
  *
  * The three are one surface because they are one workflow - find a plugin, install it,
  * configure it, switch the system on - and the operator should not have to cross to the
- * configuration page for the last step. The tab lives in the URL (`?tab=store`), so the
- * store and the settings can be linked to directly; `?plugin=<id>` opens that plugin's
- * settings.
+ * configuration page for the last step. Each tab has its own address (`/plugins/store`,
+ * `/plugins/settings`), so the navigation can list the store beside the installed plugins
+ * and either can be linked to; `?plugin=<id>` opens that plugin's settings.
  *
  * The store is only read once its tab is opened: reading it makes CPA fetch every
  * registry, which is slow and rate limited, and the installed list must not wait on it.
@@ -42,8 +53,21 @@ export const PluginsPage: React.FC = () => {
   const t = useT();
   const isDemo = isDemoMode();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = parseTab(searchParams.get('tab'));
+  const tab = tabOfPath(location.pathname);
+
+  // `?tab=` was the tab's address before each tab had a path; links that carry it still land.
+  const legacyTab = searchParams.get('tab');
+  React.useEffect(() => {
+    if (legacyTab === null) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete('tab');
+    const query = params.toString();
+    navigate(`${TAB_PATHS[isPluginTab(legacyTab) ? legacyTab : 'installed']}${query ? `?${query}` : ''}`, { replace: true });
+  }, [legacyTab, navigate, searchParams]);
+
   const [hasVisitedStore, setHasVisitedStore] = React.useState(tab === 'store');
   const [configuring, setConfiguring] = React.useState<PluginItem | null>(null);
 
@@ -76,10 +100,7 @@ export const PluginsPage: React.FC = () => {
     }, { replace: true });
   };
 
-  const selectTab = (next: PluginTab) => updateParams((params) => {
-    if (next === 'installed') params.delete('tab');
-    else params.set('tab', next);
-  });
+  const selectTab = (next: PluginTab) => navigate(TAB_PATHS[next]);
 
   // `?plugin=<id>` opens that plugin's settings once the list has it.
   const requestedPlugin = searchParams.get('plugin');
@@ -92,12 +113,7 @@ export const PluginsPage: React.FC = () => {
     // every render and is deliberately not a trigger.
   }, [requestedPlugin, pluginsQuery.data]);
 
-  const manage = (pluginId: string) => {
-    updateParams((params) => {
-      params.delete('tab');
-      params.set('plugin', pluginId);
-    });
-  };
+  const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
 
   const refresh = () => {
     void pluginsQuery.refetch();

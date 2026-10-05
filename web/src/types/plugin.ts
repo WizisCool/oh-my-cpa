@@ -15,6 +15,14 @@ export interface PluginMetadata {
   logo?: string;
 }
 
+/** A page a plugin serves itself, shown inside the console (ADR 0060). */
+export interface PluginPage {
+  /** CPA's own resource path, `/v0/resource/plugins/<id>/...`; the console reads it through its plugin host. */
+  path: string;
+  label: string;
+  description?: string;
+}
+
 export interface PluginItem {
   id: string;
   path?: string;
@@ -26,6 +34,9 @@ export interface PluginItem {
   supports_oauth?: boolean;
   oauth_provider?: string;
   supports_quota?: boolean;
+  quota_provider?: string;
+  /** Present only while the plugin is running: a stopped plugin serves nothing. */
+  pages?: PluginPage[];
   logo?: string;
   repository_url?: string;
   config_fields: PluginConfigField[];

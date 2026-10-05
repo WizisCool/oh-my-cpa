@@ -238,12 +238,24 @@ The server-stored `omc_tps_calculation_mode` preference (`exclude_ttft` /
 `include_ttft`) also supports Agent/MCP reads and writes; historical timing and usage
 remain unchanged.
 
+## Plugin pages
+
+A page a CPA plugin registers is shown inside the console and loaded through
+`<base>/api/v1/plugin-host/`, which requires the console session. The server reads the
+plugin's resources from CPA and calls the plugin's own management routes with the
+management key; the key is never sent to the browser, and CPA's own management roots are
+refused there. A plugin page is same-origin with the console and therefore acts with the
+signed-in operator's authority, so install only plugins you trust: a plugin already runs
+inside the gateway process. Non-`GET` calls a page makes to its plugin are recorded in the
+audit trail as `plugin.route_call`. Nothing needs configuring, and CPA does not have to be
+reachable from the browser (ADR 0060).
+
 ## Demo mode
 
 `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead
 of a CPA, so it needs no management key and no provider credential. Its storage is not
 durable — the database is deleted and rebuilt on every boot — and the server refuses
-sign-in flows, credential movement, plugin execution, gateway configuration writes and
+sign-in flows, credential movement, plugin execution and plugin pages, gateway configuration writes and
 anything that would leave the process. It opens at the site root rather than `/omc`
 unless `OMCPA_BASE_PATH` says otherwise. A visitor's theme stays in their own browser:
 a demonstration is shared, so it is neither sent to the server nor read from it.

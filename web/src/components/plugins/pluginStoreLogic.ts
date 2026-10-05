@@ -52,7 +52,10 @@ export function filterInstalledPlugins(
   return plugins.filter((plugin) => {
     const listing = catalog.get(plugin.id);
     return matchesQuery(
-      [plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider, listing?.description, ...(listing?.tags ?? [])],
+      [
+        plugin.id, plugin.metadata?.name, plugin.metadata?.author, plugin.oauth_provider, listing?.description,
+        ...(listing?.tags ?? []), ...(plugin.pages ?? []).map((page) => page.label),
+      ],
       needle,
     );
   });

@@ -48,6 +48,9 @@ export const LegacyOAuthManagementRedirect = React.lazy(loadLegacyOAuthManagemen
 export const loadSystemPage = createPageLoader(() => import('./pages/SystemPage'), 'SystemPage');
 export const SystemPage = React.lazy(loadSystemPage);
 
+export const loadPluginPageHost = createPageLoader(() => import('./pages/PluginPageHost'), 'PluginPageHost');
+export const PluginPageHost = React.lazy(loadPluginPageHost);
+
 export const loadPluginsPage = createPageLoader(() => import('./pages/PluginsPage'), 'PluginsPage');
 export const PluginsPage = React.lazy(loadPluginsPage);
 

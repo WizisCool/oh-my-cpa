@@ -295,6 +295,11 @@ func (h *Handler) routes() chi.Router {
 				v1.Put("/management/plugins/{id}/config", h.setPluginConfig)
 				v1.Get("/management/plugin-store", h.listPluginStore)
 				v1.Post("/management/plugin-store/{id}/install", h.installPlugin)
+				// A plugin's own page and the plugin routes its script calls.
+				v1.Get(PLUGIN_HOST_ROUTE+"/v0/resource/plugins/*", h.servePluginResource)
+				for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+					v1.Method(method, PLUGIN_HOST_ROUTE+"/v0/management/*", http.HandlerFunc(h.servePluginRoute))
+				}
 				v1.Get("/management/audit/events", h.listAuditEvents)
 				v1.Get("/management/audit/summary", h.summarizeAuditEvents)
 				v1.Get("/management/audit/export", h.exportAuditEvents)

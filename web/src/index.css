@@ -556,6 +556,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .ant-menu-item-group-title { color: var(--meta) !important; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; padding: 14px 12px 6px; }
 .app-menu .ant-menu-item { color: var(--muted); margin: 2px 8px; width: calc(100% - 16px); padding-inline: 10px; border-radius: var(--radius-sm); }
 .app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 600; background: transparent !important; box-shadow: inset 2px 0 0 var(--fg) !important; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.app-menu .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; border-radius: 3px; object-fit: contain; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
 .app-menu .ant-menu-item-selected:hover { background: var(--surface) !important; }
 /* A page waiting on the operator (models without a price) carries a warn pip after its label. */

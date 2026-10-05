@@ -9,12 +9,48 @@ import { pluginConfigsEqual } from './pluginConfig';
  * declare (an older setting, a hand-written one) is carried through untouched, so
  * saving from the form can never drop something the operator did not see; the JSON
  * view shows and edits those keys. `enabled` and `priority` are the host's own keys
- * and are edited as the form's base settings rather than as plugin fields.
+ * and are edited as the form's base settings rather than as plugin fields; `store` is
+ * the record CPA writes when it installs a plugin from a registry, which the form shows
+ * as where the plugin came from and never edits.
  */
 
 export type PluginFieldKind = 'string' | 'number' | 'integer' | 'boolean' | 'enum' | 'array' | 'object';
 
-export const PLUGIN_HOST_KEYS: readonly string[] = ['enabled', 'priority'];
+export const PLUGIN_INSTALL_RECORD_KEY = 'store';
+
+export const PLUGIN_HOST_KEYS: readonly string[] = ['enabled', 'priority', PLUGIN_INSTALL_RECORD_KEY];
+
+/** What the form shows of CPA's install record: the registry's description of the plugin. */
+export interface PluginInstallRecord {
+  name?: string;
+  version?: string;
+  author?: string;
+  license?: string;
+  description?: string;
+  homepage?: string;
+  repository?: string;
+}
+
+function recordText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+export function readPluginInstallRecord(config: Record<string, unknown>): PluginInstallRecord | undefined {
+  const record = config[PLUGIN_INSTALL_RECORD_KEY];
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) return undefined;
+  const source = record as Record<string, unknown>;
+  const repository = recordText(source.repository);
+  return {
+    name: recordText(source.name),
+    version: recordText(source.version),
+    author: recordText(source.author),
+    license: recordText(source.license),
+    description: recordText(source.description),
+    homepage: recordText(source.homepage),
+    // A registry names a repository as `owner/name` or as its address.
+    repository: repository && /^[\w.-]+\/[\w.-]+$/.test(repository) ? `https://github.com/${repository}` : repository,
+  };
+}
 
 /** How a declared field is edited. An enum without values, or an unknown type, is free text. */
 export function pluginFieldKind(field: PluginConfigField): PluginFieldKind {
@@ -27,8 +63,22 @@ export function pluginFieldKind(field: PluginConfigField): PluginFieldKind {
   return 'string';
 }
 
+/**
+ * Field names that read as credentials. A plugin's manifest has no "secret" type, so the
+ * name is the only signal; a match only masks the control, the value is stored as typed.
+ */
+const SECRET_FIELD_NAME = /(secret|token|password|passwd|api[-_]?key|access[-_]?key|private[-_]?key|credential)/i;
+
+export function isSecretPluginField(field: PluginConfigField): boolean {
+  return SECRET_FIELD_NAME.test(field.name);
+}
+
 export interface PluginFieldDraft {
-  /** False when the key is absent, so the plugin's own default applies. */
+  /**
+   * False when the key is absent, so the plugin's own default applies. The form clears it
+   * when a text, choice or list control is emptied; a document that stores an explicit
+   * empty value keeps it set until the operator edits that field.
+   */
   isSet: boolean;
   text: string;
   checked: boolean;
@@ -91,7 +141,7 @@ export function pluginFieldDraftFromValue(field: PluginConfigField, value: unkno
     return draft;
   }
   if (kind === 'object') {
-    draft.text = isSet ? stringifyValue(value) : '{}';
+    draft.text = isSet ? stringifyValue(value) : '';
     return draft;
   }
   draft.text = isSet ? stringifyValue(value) : '';
@@ -175,6 +225,8 @@ export function composePluginConfig(
   for (const key of undeclaredPluginKeys(base, fields)) {
     Object.defineProperty(value, key, { value: base[key], enumerable: true, writable: true, configurable: true });
   }
+
+  if (Object.prototype.hasOwnProperty.call(base, PLUGIN_INSTALL_RECORD_KEY)) value[PLUGIN_INSTALL_RECORD_KEY] = base[PLUGIN_INSTALL_RECORD_KEY];
 
   if (draft.hasEnabledKey || draft.enabled !== draft.initialEnabled) value.enabled = draft.enabled;
 

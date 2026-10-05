@@ -2,6 +2,7 @@ import React from 'react';
 import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
 import {
   PuzzleOutlined,
+  ShopOutlined,
   AuditOutlined,
   CloudServerOutlined,
   CodeSandboxOutlined,
@@ -36,6 +37,8 @@ import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
+import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX, type PluginPageEntry } from '../plugins/pluginPages';
+import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
 
 const { Sider, Content } = Layout;
 
@@ -43,7 +46,9 @@ type NavItem = Required<MenuProps>['items'][number];
 
 interface NavEntry {
   key: string;
+  /** A translation key, or for a plugin's own page the label the plugin registered. */
   labelKey: string;
+  isLiteralLabel?: boolean;
   icon: React.ReactNode;
 }
 
@@ -64,7 +69,21 @@ interface NavGroup {
  */
 const WORKSPACE_ROUTES = new Set(['/playground', '/agent']);
 
-const navGroups: NavGroup[] = [
+/** A plugin page is a frame that fills the content area and scrolls inside itself. */
+function isWorkspaceRoute(pathname: string): boolean {
+  return WORKSPACE_ROUTES.has(pathname) || pathname.startsWith(`${PLUGIN_PAGE_ROUTE_PREFIX}/`);
+}
+
+/**
+ * The key a route's view is mounted under. Plugin management's tabs are addresses of one
+ * page, so moving between them must not remount it: the store listing it has read and the
+ * settings drawer it has open belong to the page, not to the tab.
+ */
+function routeViewKey(pathname: string): string {
+  return pathname === '/plugins' || pathname.startsWith('/plugins/') ? '/plugins' : pathname;
+}
+
+const staticNavGroups: NavGroup[] = [
   {
     key: 'operate',
     labelKey: 'nav.group.operate',
@@ -104,17 +123,44 @@ const navGroups: NavGroup[] = [
     items: [
       { key: '/config', labelKey: 'nav.config', icon: <ControlOutlined /> },
       { key: '/omc-settings', labelKey: 'nav.omc_settings', icon: <SettingOutlined /> },
-      { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
       { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
     ],
   },
 ];
 
-const navEntries: NavEntry[] = navGroups.flatMap((group) => group.items);
+/**
+ * Plugins are a group of their own: what is installed, the store, and then every page a
+ * running plugin registered. A plugin's page is a destination in its own right, so it sits
+ * in the navigation beside the console's pages rather than behind the plugin's row.
+ */
+function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGroup[] {
+  const pluginGroup: NavGroup = {
+    key: 'plugins',
+    labelKey: 'nav.group.plugins',
+    items: [
+      { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
+      { key: '/plugins/store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
+      ...pluginPages.map((page): NavEntry => ({
+        key: page.route,
+        labelKey: page.navLabel,
+        isLiteralLabel: true,
+        icon: isRenderableLogoURL(page.logo)
+          ? <img className="app-menu-plugin-logo" src={page.logo} alt="" />
+          : <PuzzleOutlined />,
+      })),
+    ],
+  };
+  const controlIndex = staticNavGroups.findIndex((group) => group.key === 'control');
+  return [...staticNavGroups.slice(0, controlIndex), pluginGroup, ...staticNavGroups.slice(controlIndex)];
+}
 
-function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
+function navLabel(entry: NavEntry, t: TFunc): string {
+  return entry.isLiteralLabel ? entry.labelKey : t(entry.labelKey);
+}
+
+function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean): NavItem[] {
   if (isCollapsed) {
-    return navEntries.map((entry) => ({ key: entry.key, icon: entry.icon, label: t(entry.labelKey), title: t(entry.labelKey), 'data-route-path': entry.key }));
+    return navGroups.flatMap((group) => group.items).map((entry) => ({ key: entry.key, icon: entry.icon, label: navLabel(entry, t), title: navLabel(entry, t), 'data-route-path': entry.key }));
   }
   return navGroups.map((group) => ({
     key: `group:${group.key}`,
@@ -123,7 +169,8 @@ function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
     children: group.items.map((entry): NavItem => ({
       key: entry.key,
       icon: entry.icon,
-      label: t(entry.labelKey),
+      label: navLabel(entry, t),
+      title: entry.isLiteralLabel ? entry.labelKey : undefined,
       'data-route-path': entry.key,
     })),
   }));
@@ -186,13 +233,26 @@ export const AppLayout: React.FC = () => {
 
   // The title names only a page the path really is; the menu still highlights the dashboard
   // for a path no entry owns, but the tab then reads as the console rather than as a page.
+  // The navigation needs the plugin list on every route, to offer the pages plugins
+  // registered; it is read once the gateway is known to answer management requests.
+  const isCpaManageable = health !== undefined && health.cpa_management_api !== 'unsupported' && health.cpa_management_api !== 'disabled';
+  const { data: pluginList } = useQuery({
+    queryKey: ['management-plugins'],
+    queryFn: api.getPlugins,
+    enabled: isCpaManageable,
+    staleTime: 60_000,
+  });
+  const navGroups = React.useMemo(() => buildNavGroups(collectPluginPages(pluginList?.plugins)), [pluginList]);
+  const navEntries = React.useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
+
   const currentEntry = navEntries
     .filter((entry) => location.pathname === entry.key || location.pathname.startsWith(`${entry.key}/`))
     .sort((a, b) => b.key.length - a.key.length)[0];
   const selectedKey = currentEntry?.key ?? '/dashboard';
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
-  useDocumentTitle(currentEntry ? t(currentEntry.labelKey) : t('common.management'));
-  const menuItems = React.useMemo(() => buildMenuItems(t, isCollapsed), [t, isCollapsed]);
+  const currentLabel = currentEntry ? navLabel(currentEntry, t) : t('common.management');
+  useDocumentTitle(currentLabel);
+  const menuItems = React.useMemo(() => buildMenuItems(navGroups, t, isCollapsed), [navGroups, t, isCollapsed]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);
@@ -341,7 +401,7 @@ export const AppLayout: React.FC = () => {
               className="app-breadcrumb"
               items={[
                 { title: currentGroup ? t(currentGroup.labelKey) : '' },
-                { title: <span className="app-breadcrumb-current">{currentEntry ? t(currentEntry.labelKey) : t('common.management')}</span> },
+                { title: <span className="app-breadcrumb-current">{currentLabel}</span> },
               ]}
             />
           </div>
@@ -364,7 +424,7 @@ export const AppLayout: React.FC = () => {
           <DataProgress />
           {/* Keyed by pathname so each view cross-fades in instead of hard
               swapping, and the scroll position resets with the new page. */}
-          <div key={location.pathname} className={`route-transition${WORKSPACE_ROUTES.has(location.pathname) ? ' workspace-route' : ''}`}>
+          <div key={routeViewKey(location.pathname)} className={`route-transition${isWorkspaceRoute(location.pathname) ? ' workspace-route' : ''}`}>
             <React.Suspense fallback={<RouteLoading />}>
               {isCpaUnsupported ? (
                 <CpaUpgradeRequired />

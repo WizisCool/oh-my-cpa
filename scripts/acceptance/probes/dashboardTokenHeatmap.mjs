@@ -162,7 +162,11 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
         return [...months.querySelectorAll('.heatmap-month')].map((label) => {
           const cell = cells.find((c) => columnOf(c) === columnOf(label));
           if (!cell) return 0;
-          return Math.round(label.getBoundingClientRect().left - cell.getBoundingClientRect().left);
+          // A month that starts in the final column is anchored to that column's right edge,
+          // so its label cannot run off the panel; its left edge is then offset by however
+          // much wider the label is than a cell, and the edge it shares is the right one.
+          const edge = label.classList.contains('is-last') ? 'right' : 'left';
+          return Math.round(label.getBoundingClientRect()[edge] - cell.getBoundingClientRect()[edge]);
         });
       })(),
       cell: Number(getComputedStyle(grid.querySelector('.heatmap-cell')).width.replace('px', '')),

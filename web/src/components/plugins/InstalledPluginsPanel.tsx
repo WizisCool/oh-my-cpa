@@ -8,6 +8,7 @@ import { useT } from '../../i18n';
 import { pluginDisplayName, type PluginItem, type StorePluginItem } from '../../types/plugin';
 import { StatusLabel } from '../common/StatusLabel';
 import { filterInstalledPlugins } from './pluginStoreLogic';
+import { waitForPluginRuntime } from './pluginRuntime';
 import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
@@ -53,9 +54,17 @@ export function InstalledPluginsPanel({
   };
 
   const enabledMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.setPluginEnabled(id, enabled),
-    onSuccess: (_, variables) => {
-      toast.success(variables.enabled ? t('plugin.enabled_success') : t('plugin.disabled_success'));
+    // The switch stays busy until the gateway has loaded or unloaded the plugin, so the
+    // row and the navigation's plugin pages change together with the acknowledgement.
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      await api.setPluginEnabled(id, enabled);
+      return waitForPluginRuntime(id, enabled, api.getPlugins);
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData(['management-plugins'], result.response);
+      if (result.status === 'timeout') toast.warning(t('plugin.runtime_pending'));
+      else if (result.status === 'system-disabled') toast.warning(t('plugin.runtime_system_disabled'));
+      else toast.success(variables.enabled ? t('plugin.enabled_success') : t('plugin.disabled_success'));
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ['management-plugin-config', variables.id] });
     },

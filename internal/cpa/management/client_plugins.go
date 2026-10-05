@@ -42,9 +42,19 @@ type PluginItem struct {
 	SupportsOAuth    bool                `json:"supports_oauth,omitempty"`
 	OAuthProvider    string              `json:"oauth_provider,omitempty"`
 	SupportsQuota    bool                `json:"supports_quota,omitempty"`
+	QuotaProvider    string              `json:"quota_provider,omitempty"`
 	Logo             string              `json:"logo,omitempty"`
 	ConfigFields     []PluginConfigField `json:"config_fields,omitempty"`
+	Menus            []PluginMenu        `json:"menus,omitempty"`
 	Metadata         *PluginMetadata     `json:"metadata,omitempty"`
+}
+
+// PluginMenu is one page a loaded plugin registers for a management console: a GET
+// resource CPA serves under `/v0/resource/plugins/<id>/`, with the label to list it by.
+type PluginMenu struct {
+	Path        string `json:"path"`
+	Menu        string `json:"menu"`
+	Description string `json:"description,omitempty"`
 }
 
 // DisplayName is the name the plugin registered, or its id when it registered none.

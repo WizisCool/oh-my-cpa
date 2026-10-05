@@ -34,9 +34,17 @@ type pluginMockState struct {
 	configPuts    int
 	configWrites  []string
 	deleteBlocked bool
-	handler       *Handler
+	// routeCalls records what reached the plugin's own management routes.
+	routeCalls []pluginRouteCall
+	// resourceAuthorization is the Authorization header the last resource read carried.
+	resourceAuthorization string
+	handler               *Handler
 	// hasBareInstall lists a second plugin that is installed but has no settings.
 	hasBareInstall bool
+}
+
+type pluginRouteCall struct {
+	method, path, query, authorization, cookie, managementKey, contentType, body string
 }
 
 // pluginConfigsPath is where the fake serves `plugins.configs.<id>`.
@@ -68,8 +76,37 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		path := request.URL.Path
 
 		switch {
+		case path == "/v0/resource/plugins/logger/console":
+			state.resourceAuthorization = request.Header.Get("Authorization")
+			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			writer.Header().Set("Set-Cookie", "plugin=1; Path=/")
+			_, _ = writer.Write([]byte(`<!doctype html><html><head><meta name="api" content="/v0/management/logger"><link rel="stylesheet" href="/v0/resource/plugins/logger/app.css"></head><body><script>const API='/v0/management/logger';const other="https://cpa.example/v0/management/logger";</script></body></html>`))
+		case path == "/v0/resource/plugins/logger/app.css":
+			writer.Header().Set("Content-Type", "text/css")
+			_, _ = writer.Write([]byte(`body{background:url(/v0/resource/plugins/logger/bg.png)}`))
+		case path == "/v0/resource/plugins/logger/bg.png":
+			writer.Header().Set("Content-Type", "image/png")
+			_, _ = writer.Write([]byte("/v0/management/raw-bytes"))
+		case strings.HasPrefix(path, "/v0/resource/plugins/"):
+			writer.WriteHeader(http.StatusNotFound)
+		case strings.HasPrefix(path, "/v0/management/logger/"):
+			body, _ := io.ReadAll(request.Body)
+			state.routeCalls = append(state.routeCalls, pluginRouteCall{
+				method: request.Method, path: path, query: request.URL.RawQuery,
+				authorization: request.Header.Get("Authorization"), cookie: request.Header.Get("Cookie"),
+				managementKey: request.Header.Get("X-Management-Key"), contentType: request.Header.Get("Content-Type"), body: string(body),
+			})
+			if strings.HasSuffix(path, "/missing") {
+				writer.WriteHeader(http.StatusNotFound)
+				_, _ = writer.Write([]byte(`{"error":"not found"}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{"plugin":"logger","ok":true}`))
+		case strings.HasPrefix(path, "/v0/management/"):
+			state.routeCalls = append(state.routeCalls, pluginRouteCall{method: request.Method, path: path})
+			_, _ = writer.Write([]byte(`{"secret":"raw-core-document"}`))
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
-			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/x","menu":"X","description":""}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
+			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
 			if state.hasBareInstall {
 				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
 			}
@@ -258,12 +295,20 @@ func TestPluginsLifecycle(t *testing.T) {
 
 	// The response shape is this console's own, not the facade model's: every field is
 	// declared in `PluginItemDTO`, so a field added to `management.PluginItem` for
-	// decoding CPA's document cannot reach a caller without a decision here. CPA's
-	// `menus` are one such field: the console does not render plugin pages.
+	// decoding CPA's document cannot reach a caller without a decision here.
 	assertDeclaredKeys(t, "plugin", plugin, []string{
 		"id", "path", "configured", "registered", "enabled", "effective_enabled", "supports_oauth",
-		"oauth_provider", "supports_quota", "logo", "repository_url", "config_fields", "metadata",
+		"oauth_provider", "supports_quota", "quota_provider", "pages", "logo", "repository_url", "config_fields", "metadata",
 	})
+	// Of the menus the plugin registers, only a resource under its own prefix is a
+	// page: the host serves nothing else, so nothing else may be listed as openable.
+	pages, _ := plugin["pages"].([]any)
+	if len(pages) != 1 {
+		t.Fatalf("pages = %#v, want only the plugin's own resource", plugin["pages"])
+	}
+	if page, _ := pages[0].(map[string]any); page["path"] != "/v0/resource/plugins/logger/console" || page["label"] != "Logger Console" || page["description"] != "Live log view" {
+		t.Fatalf("page = %#v, want the registered resource with its label", pages[0])
+	}
 	if metadata, ok := plugin["metadata"].(map[string]any); ok {
 		assertDeclaredKeys(t, "plugin metadata", metadata, []string{"name", "version", "author", "logo"})
 	} else {

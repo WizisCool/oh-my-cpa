@@ -616,14 +616,8 @@
   margin-right: auto;
 }
 
-.config-unset {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 10px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+.config-field-default {
+  margin-top: 4px;
   color: var(--meta);
   font-size: 12px;
 }
@@ -687,4 +681,24 @@
   .config-field {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* A plugin's own pages, offered in its settings drawer. */
+.page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
 }
