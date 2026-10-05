@@ -121,7 +121,14 @@ export function buildModelSquareEntries(directory: ModelSquareDirectory, search:
   const needle = search.trim().toLowerCase();
   return directory.models.map(model => {
     const routes = routesByIdentity.get(model.id) ?? [{ provider_id: '', upstream_model: '', call_point: model.id }];
-    const profiles = [...new Set(routes.map(route => route.upstream_model || route.call_point))].map(identity => ({ identity, metadata: directory.model_info[identity] }));
+    // A profile is a distinct model, not a distinct route: two connections reaching the same
+    // source record under different upstream names describe one model once.
+    const profiles: ModelSquareEntry['profiles'] = [];
+    for (const identity of new Set(routes.map(route => route.upstream_model || route.call_point))) {
+      const metadata = directory.model_info[identity];
+      if (metadata && profiles.some(profile => profile.metadata?.id === metadata.id)) continue;
+      profiles.push({ identity, metadata });
+    }
     const makers = profiles.map(profile => resolveModelManufacturer(profile.identity, profile.metadata));
     const manufacturer = makers.every(maker => maker.id === makers[0].id) ? makers[0] : { id: 'multiple', name: '' };
     return { identity: model.id, manufacturer, routes, profiles };

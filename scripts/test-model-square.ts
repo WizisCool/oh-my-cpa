@@ -57,6 +57,21 @@ test('duplicate routes do not duplicate profiles or model labels', () => {
   assert.equal(entries.length, 3);
   assert.equal(entries.find(entry => entry.identity === 'team/fast')?.routes.length, 2);
 });
+test('connections naming one source model differently yield one profile, and unmatched names stay apart', () => {
+  const shared = { id: 'meta/muse', name: 'Muse' };
+  const [entry] = buildModelSquareEntries({
+    models: [{ id: 'muse', call_point: 'muse', vision: 'unknown' }], providers: [], partial: [],
+    routes: [
+      { provider_id: 'relay-a', upstream_model: 'a/muse', call_point: 'muse' },
+      { provider_id: 'relay-b', upstream_model: 'b/muse', call_point: 'muse' },
+      { provider_id: 'relay-c', upstream_model: 'c/unknown-one', call_point: 'muse' },
+      { provider_id: 'relay-d', upstream_model: 'd/unknown-two', call_point: 'muse' },
+    ],
+    model_info: { 'a/muse': shared, 'b/muse': shared },
+  }, '');
+  assert.deepEqual(entry.profiles.map(profile => profile.identity), ['a/muse', 'c/unknown-one', 'd/unknown-two']);
+  assert.equal(entry.routes.length, 4);
+});
 test('recognized manufacturer and family marks exist in the offline catalog', () => {
   for (const model of ['gpt-5', 'claude-sonnet', 'gemini-pro', 'grok-4', 'qwen3', 'deepseek-r1', 'kimi-k2', 'glm-4', 'minimax-m2', 'mistral-large', 'llama-3', 'command-r', 'seed-1', 'mimo-v2', 'mercury-2', 'index-1.9b', 'phi-4', 'nova-pro', 'ernie-4', 'hunyuan-large', 'sonar-pro', 'nemotron-70b', 'step-2']) {
     const maker = resolveModelManufacturer(model);

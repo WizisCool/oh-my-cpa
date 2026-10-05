@@ -2773,7 +2773,7 @@ ordinary requests never fetch third-party catalogs. Metadata is returned only fo
 identities represented in this deployment's live routes. Unknowns remain unknown.
 
 `web/src/types/modelSquare.ts` groups client names by maker, orders named makers ahead of
-the multiple and unidentified groups, preserves multiple targets, searches the advertised set,
+the multiple and unidentified groups, preserves multiple targets while giving one profile per distinct source model, searches the advertised set,
 applies the maker filter, decides which reference a row may caption, classifies openness
 (closed-source, open-weight, open-source by a license allowlist) and constructs safe
 reference navigation. The page draws open maker sections and a Back-aware model-detail

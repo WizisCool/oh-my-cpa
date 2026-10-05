@@ -2100,7 +2100,8 @@ in 24 hours - the one window every usage figure on this page uses), then the pri
 model, default "Edit price" otherwise - and a link to the request list narrowed to this call
 name over the same 24 hours. The price editor stacks above the Drawer and one Back closes it
 alone. Below, the Drawer names the connections serving the model (the upstream name where it
-differs), then gives each distinct configured target its own models.dev profile: three limit
+differs), then gives each distinct model its own models.dev profile (connections that reach the same
+source record under different upstream names share one): three limit
 tiles (context, output, input), a capability group (modalities, reasoning, tools, structured
 output, attachments) and a release group (openness, license, release, knowledge cutoff,
 metadata date). Openness is one of three terms: closed-source model, open-weight model (weights
