@@ -143,6 +143,25 @@ and hidden-tab suspension are logic tests, while the Agent probe checks visible 
 light Stop border. Stream-coalescing probes exclude only elapsed-label mutations, not answer
 mutations, because the clock does not publish through the transcript's run hook.
 
+### Plugin row regressions
+
+The existing `plugin-management` probe owns the installed row's matching action geometry,
+auth-provider capability wording, overflow links and uninstall handoff. It verifies that
+opening or dismissing confirmation sends no delete, cancel/Escape return focus to the
+row action, and confirming removes only the chosen plugin. `plugin-management-narrow` checks the row, overflow and confirmation at
+320px as well as the existing phone tab sweep. Portal geometry is measured after layout
+settles, not after a fixed delay.
+
+### Plugin connection regressions
+
+`scripts/test-oauth-providers.ts` owns the distinction between auth-provider capability
+and login method, registered-page precedence, disabled/built-in deduplication, and flow
+resolution from successful CPA responses (including older unlabelled redirect responses).
+The existing `oauth-management` probe owns the connection wiring: an API-key plugin
+opens its hosted page without an OAuth start request, and pageless interactive plugins
+switch to device or callback controls only after explicit Start. Credential membership
+and identity remain covered by the workspace and plugin-logo logic suites.
+
 ### Feedback regressions
 
 - `scripts/test-feedback-surfaces.ts` pins short acknowledgement lifetimes, the second-line and

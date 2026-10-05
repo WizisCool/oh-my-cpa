@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
-  normalizeOAuthFlow,
+  resolveStartedOAuthFlow,
   normalizeOAuthStatus,
   type OAuthFlowKind,
   type OAuthProviderChoice,
@@ -256,7 +256,7 @@ export function useOAuthSessions(
 
   const start = React.useCallback(async (providerId: string) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
-    if (!choice) return;
+    if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
     startInFlightRef.current[providerId] = true;
@@ -275,7 +275,7 @@ export function useOAuthSessions(
       const response = await api.startOAuthFlow(providerId);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
-      const flow = normalizeOAuthFlow(response.flow) ?? choice.flow;
+      const flow = resolveStartedOAuthFlow(choice.flow, response);
       const userCode = (response.user_code || '').trim() || undefined;
       updateProviderState(providerId, {
         url: response.url,

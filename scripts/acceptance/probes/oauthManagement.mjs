@@ -385,6 +385,7 @@ export async function oauthManagement({ base, page, check }) {
   await verifyFullTokenCapacity({ base, page, check });
   await verifyAuthorizationOutcomes({ base, page, check });
   await verifyWorkspaceScale({ base, page, check });
+  await verifyPluginConnections({ base, page, check, oauthStarts });
 }
 
 
@@ -440,6 +441,76 @@ async function verifyFullTokenCapacity({ base, page, check }) {
   } finally {
     await page.unroute(quotaPattern, quotaHandler);
     await setTokenStyle('en-compact');
+  }
+
+}
+
+async function verifyPluginConnections({ base, page, check, oauthStarts }) {
+  // An auth-provider interface also serves API-key plugins. Their own page must
+  // remain reachable without starting the interactive login method they reject.
+  const plugins = [
+    {
+      id: 'key-bridge', configured: true, registered: true, enabled: true,
+      effective_enabled: true, supports_oauth: true, oauth_provider: 'key-service',
+      metadata: { name: 'Key Bridge' }, config_fields: [],
+      pages: [{ path: '/v0/resource/plugins/key-bridge/console', label: 'Key credentials' }],
+    },
+    {
+      id: 'interactive-auth', configured: true, registered: true, enabled: true,
+      effective_enabled: true, supports_oauth: true, oauth_provider: 'interactive',
+      metadata: { name: 'Interactive Auth' }, config_fields: [], pages: [],
+    },
+  ];
+  await page.route('**/management/plugins', (route) => route.fulfill({ json: { plugins, total: plugins.length } }));
+  await page.route('**/plugin-host/v0/resource/plugins/key-bridge/console', (route) => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><title>Key credentials</title><h1>Import API key</h1>',
+  }));
+  let pluginFlow = 'device';
+  await page.route('**/management/oauth/start', (route) => {
+    const provider = route.request().postDataJSON().provider;
+    if (provider !== 'interactive') return route.fallback();
+    return route.fulfill({ json: {
+      url: 'https://auth.example.test/authorize', state: 'plugin-session',
+      ...(pluginFlow === 'device' ? { flow: 'device', user_code: 'PLUGIN-CODE' } : {}),
+    } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const openPluginConnection = async (provider) => {
+    await page.goto(`${base}/oauth-management`, { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('oauth-credential-record').first().waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: /OAuth sign-in/i }).click();
+    await page.locator(`button[data-oauth-card="${provider}"]`).click();
+    await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible' });
+  };
+  await openPluginConnection('key-service');
+  const pluginPanel = page.getByTestId('oauth-connect-panel');
+  check('an API-key auth provider is plugin-managed rather than an OAuth redirect',
+    (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1
+      && (await pluginPanel.getByText('Key Bridge', { exact: true }).count()) > 0
+      && (await pluginPanel.getByText('Redirect callback', { exact: true }).count()) === 0
+      && (await pluginPanel.locator('[data-oauth-start]').count()) === 0);
+  const startsBeforePluginPage = oauthStarts.length;
+  await pluginPanel.locator('[data-plugin-connect="key-service"]').click();
+  await page.waitForURL('**/plugin-pages/key-bridge/0');
+  await page.locator('[data-plugin-page="key-bridge"]').waitFor({ state: 'visible' });
+  check('opening plugin credentials sends no OAuth start request', oauthStarts.length === startsBeforePluginPage);
+
+  for (const flow of ['device', 'redirect']) {
+    pluginFlow = flow;
+    await openPluginConnection('interactive');
+    check(`plugin ${flow} flow is not assumed before Start`,
+      (await pluginPanel.getByText('Plugin-managed', { exact: true }).count()) === 1);
+    await pluginPanel.locator('[data-oauth-start="interactive"]').click();
+    if (flow === 'device') {
+      await pluginPanel.locator('[data-oauth-user-code]').waitFor({ state: 'visible' });
+      check('a real plugin device response exposes its code but no callback input',
+        (await pluginPanel.getByText('Device code', { exact: true }).count()) > 0
+          && (await pluginPanel.locator('[data-oauth-callback-input]').count()) === 0);
+    } else {
+      await pluginPanel.getByText('Redirect callback', { exact: true }).waitFor({ state: 'visible' });
+      check('a legacy plugin login URL and state retain manual callback support',
+        (await pluginPanel.locator('[data-oauth-callback-input]').count()) === 1);
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+import { collectPluginPages } from '../components/plugins/pluginPages';
 import { credentialProviderIconId } from '../components/common/providerMetadata';
 import type { TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
@@ -18,7 +19,7 @@ import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAu
  * management path and whether CPA opens its loopback callback listener.
  */
 
-export type OAuthFlowKind = 'manual-callback' | 'device';
+export type OAuthFlowKind = 'manual-callback' | 'device' | 'plugin';
 
 /** Why a pasted redirect was refused. */
 export type OAuthCallbackError = 'invalid' | 'state_mismatch';
@@ -91,6 +92,20 @@ export function normalizeOAuthFlow(flow: unknown): OAuthFlowKind | undefined {
   if (normalized === 'device') return 'device';
   if (normalized === 'redirect' || normalized === 'callback') return 'manual-callback';
   return undefined;
+}
+
+/** Older CPA plugins omit flow labels; a returned login URL and session establish a redirect. */
+export function resolveStartedOAuthFlow(
+  declaredFlow: OAuthFlowKind,
+  response: { flow?: string; url?: string; state?: string; session_id?: string; user_code?: string },
+): OAuthFlowKind {
+  const reportedFlow = normalizeOAuthFlow(response.flow);
+  if (reportedFlow) return reportedFlow;
+  if (declaredFlow !== 'plugin') return declaredFlow;
+  if (response.flow?.trim()) return 'plugin';
+  if (response.user_code?.trim()) return 'device';
+  if (response.url?.trim() && (response.state?.trim() || response.session_id?.trim())) return 'manual-callback';
+  return 'plugin';
 }
 
 function readQueryLikeCallbackParams(value: string): URLSearchParams | null {
@@ -298,6 +313,8 @@ export interface OAuthProviderChoice {
   /** Set only for CPA plugin providers. */
   pluginId?: string;
   pluginLogo?: string;
+  /** A plugin-owned page takes precedence over a speculative interactive login. */
+  pluginPageRoute?: string;
   requiresExplicitCancel?: boolean;
   callback?: OAuthCallbackRules;
 }
@@ -316,8 +333,9 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
 }
 
 /**
- * Builds the connectable set from declared plugin metadata only. A disabled plugin
- * keeps owning any credentials it previously created, but it cannot start a new
+ * Auth-provider capability does not declare a login method. Prefer the plugin
+ * page when one exists; otherwise request a flow only after an explicit action.
+ * A disabled plugin keeps owning any credentials it previously created, but it cannot start a new
  * authorization until its effective-enabled state says it may.
  */
 export function pluginOAuthProviderChoices(
@@ -326,28 +344,30 @@ export function pluginOAuthProviderChoices(
 ): OAuthProviderChoice[] {
   const seen = new Set<string>(BUILTIN_OAUTH_IDS);
   const logos = pluginOAuthProviderLogos(plugins);
+  const pages = collectPluginPages(plugins);
   const choices: OAuthProviderChoice[] = [];
   for (const plugin of plugins ?? []) {
-    const supportsOAuth = Boolean(plugin.supports_oauth);
-    const providerId = (plugin.oauth_provider || (supportsOAuth ? plugin.id : '')).trim().toLowerCase();
+    const hasAuthProvider = Boolean(plugin.supports_oauth);
+    const providerId = (plugin.oauth_provider || (hasAuthProvider ? plugin.id : '')).trim().toLowerCase();
     const isEnabled = plugin.effective_enabled ?? plugin.enabled;
-    if (!supportsOAuth || !isEnabled || !providerId || seen.has(providerId) || !OAUTH_PROVIDER_PATTERN.test(providerId)) {
+    if (!hasAuthProvider || !isEnabled || !providerId || seen.has(providerId) || !OAUTH_PROVIDER_PATTERN.test(providerId)) {
       continue;
     }
     seen.add(providerId);
     const title = pluginDisplayName(plugin);
+    const pluginPageRoute = pages.find((page) => page.pluginId === plugin.id)?.route;
     choices.push({
       id: providerId,
-      flow: 'manual-callback',
+      flow: 'plugin',
+      pluginPageRoute,
       iconId: credentialProviderIconId(providerId, title),
       title: t('oauth.plugin_title', { name: title }),
-      description: t('oauth.plugin_hint', { name: title }),
-      loginLabel: t('oauth.plugin_login', { name: title }),
+      description: t(pluginPageRoute ? 'oauth.plugin_page_hint' : 'oauth.plugin_hint', { name: title }),
+      loginLabel: t(pluginPageRoute ? 'oauth.plugin_open_page' : 'oauth.plugin_login', { name: title }),
       pluginId: plugin.id,
       pluginLogo: pluginOAuthLogoFor(logos, providerId),
-      callback: {
-        // Plugin redirect targets vary. The generic rule keeps the paste explicit
-        // and lets CPA judge it, rather than guessing a vendor callback shape.
+      callback: pluginPageRoute ? undefined : {
+        // These rules become usable only after CPA actually starts a redirect session.
         errorKeys: {
           invalid: 'oauth.callback_invalid_url',
           missingState: 'oauth.missing_state',

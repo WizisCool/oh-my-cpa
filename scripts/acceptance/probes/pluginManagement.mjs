@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
 
 /**
  * Plugin management: the installed list, the store's cards and the plugin system settings,
@@ -28,6 +28,7 @@ const PLUGINS = {
       registered: true,
       enabled: true,
       effective_enabled: true,
+      supports_oauth: true,
       logo: LOGO,
       repository_url: 'https://github.com/router-for-me/request-logger',
       pages: [{ path: '/v0/resource/plugins/request-logger/console', label: 'Logger Console', description: 'Recent requests.' }],
@@ -96,6 +97,7 @@ const SETTINGS = {
 
 /** The fixtures, with a log of the writes each scenario can assert against. */
 export function pluginManagementFixtures(writes) {
+  const installedPlugins = structuredClone(PLUGINS);
   return [
     [(url) => url.pathname.endsWith('/management/plugins/settings'), (url, method, request) => {
       if (method === 'PUT') {
@@ -119,7 +121,15 @@ export function pluginManagementFixtures(writes) {
       return { status: 'ok', id: 'team-router', version: '0.3.0', plugins_enabled: true, restart_required: false };
     }],
     [(url) => url.pathname.endsWith('/management/plugin-store'), () => STORE],
-    [(url) => url.pathname.endsWith('/management/plugins'), () => PLUGINS],
+    [(url) => /\/management\/plugins\/[^/]+$/.test(url.pathname), (url, method) => {
+      if (method !== 'DELETE') throw new Error(`Unexpected plugin operation: ${method}`);
+      const pluginId = decodeURIComponent(url.pathname.split('/').pop());
+      writes.push({ kind: 'delete', path: url.pathname });
+      installedPlugins.plugins = installedPlugins.plugins.filter((plugin) => plugin.id !== pluginId);
+      installedPlugins.total = installedPlugins.plugins.length;
+      return { status: 'ok', id: pluginId, file_deleted: true, configured_removed: true, restart_required: false };
+    }],
+    [(url) => url.pathname.endsWith('/management/plugins'), () => installedPlugins],
   ];
 }
 
@@ -201,7 +211,54 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('an installed row borrows the store description once the store was read', describedText.includes('Logs request metadata.'), describedText);
   check('an installed row names the release it can update to', /v1\.1\.0/.test(describedText), describedText);
 
-  await page.locator('article[data-plugin-id="request-logger"]').getByRole('button', { name: /配置|Configure/ }).click();
+  const loggerRow = page.locator('article[data-plugin-id="request-logger"]');
+  check('the auth-provider capability does not claim an OAuth login method',
+    (await loggerRow.getByText('Auth provider', { exact: true }).count()) === 1
+      && (await loggerRow.getByText('OAuth', { exact: true }).count()) === 0);
+  const configureButton = loggerRow.getByRole('button', { name: /配置|Configure/ });
+  const moreButton = loggerRow.getByRole('button', { name: /更多|More/ });
+  const actions = await loggerRow.locator('.row-actions button').evaluateAll((buttons) => buttons.map((button) => {
+    const bounds = button.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    return { width: bounds.width, height: bounds.height, top: bounds.top, background: style.backgroundColor, border: style.borderColor, color: style.color };
+  }));
+  check('configuration and overflow use two aligned, matching 28px row controls', actions.length === 2
+    && actions.every((action) => action.width === 28 && action.height === 28)
+    && actions[0].top === actions[1].top
+    && actions[0].background === actions[1].background
+    && actions[0].border === actions[1].border
+    && actions[0].color === actions[1].color, JSON.stringify(actions));
+  check('removal and external links do not crowd the installed row',
+    (await loggerRow.getByRole('button', { name: /卸载|Uninstall/ }).count()) === 0
+      && (await loggerRow.locator('a[target="_blank"]').count()) === 0);
+  await moreButton.click();
+  const menu = page.locator('.ant-dropdown:visible');
+  await menu.waitFor();
+  check('the overflow keeps the safe repository link reachable',
+    (await menu.locator('a[href="https://github.com/router-for-me/request-logger"][target="_blank"][rel="noreferrer noopener"]').count()) === 1);
+  await menu.getByRole('menuitem', { name: /卸载|Uninstall/ }).click();
+  const removal = page.locator('.ant-popconfirm:visible');
+  await removal.waitFor();
+  check('choosing removal opens a named confirmation without deleting',
+    (await removal.innerText()).includes('Request Logger') && !writes.some((write) => write.kind === 'delete'));
+  await removal.getByRole('button', { name: /取消|Cancel/ }).click();
+  await removal.waitFor({ state: 'hidden' });
+  check('cancelling removal returns keyboard focus to the row action',
+    await moreButton.evaluate((button) => document.activeElement === button));
+  check('cancelling removal keeps the plugin and sends no delete', await loggerRow.isVisible()
+    && !writes.some((write) => write.kind === 'delete'));
+  await moreButton.click();
+  await menu.getByRole('menuitem', { name: /卸载|Uninstall/ }).click();
+  await removal.waitFor();
+  await page.keyboard.press('Escape');
+  await removal.waitFor({ state: 'hidden' });
+  check('Escape returns keyboard focus to the row action',
+    await moreButton.evaluate((button) => document.activeElement === button));
+  check('Escape dismisses the removal confirmation without deleting',
+    await isTrue(async () => !(await removal.isVisible()), 'dismissed removal')
+      && !writes.some((write) => write.kind === 'delete'));
+
+  await configureButton.click();
   const drawer = page.locator('[data-plugin-config="request-logger"]');
   await drawer.waitFor({ timeout: 5000 });
   const rendered = await isTrue(async () => (await drawer.locator('[data-plugin-config-field]').count()) === 5, 'the declared fields');
@@ -318,6 +375,20 @@ export async function pluginManagement({ base, page, check, writes }) {
       && settingsWrite.body.store_auth[0].token_env === 'MIRROR_TOKEN',
     JSON.stringify(settingsWrite),
   );
+
+  await page.goto(`${base}/plugins`, { waitUntil: 'domcontentloaded' });
+  const removable = page.locator('article[data-plugin-id="quota-notifier"]');
+  await removable.getByRole('button', { name: /更多|More/ }).click();
+  await page.locator('.ant-dropdown:visible').getByRole('menuitem', { name: /卸载|Uninstall/ }).click();
+  const confirmedRemoval = page.locator('.ant-popconfirm:visible');
+  await confirmedRemoval.getByRole('button', { name: /卸载|Uninstall/ }).click();
+  const removed = await isTrue(async () => writes.some((write) => write.kind === 'delete'), 'the confirmed removal');
+  check('confirmed removal deletes only the chosen plugin', removed
+    && writes.filter((write) => write.kind === 'delete').length === 1
+    && writes.find((write) => write.kind === 'delete').path.endsWith('/plugins/quota-notifier'), JSON.stringify(writes.filter((write) => write.kind === 'delete')));
+  check('the removed plugin disappears while other plugins remain',
+    await isTrue(async () => (await removable.count()) === 0, 'the refreshed plugin rows')
+      && (await page.locator('article[data-plugin-id="request-logger"]').count()) === 1);
 }
 
 /** At a phone width no card, row or control may run off the right edge. */
@@ -325,7 +396,7 @@ export async function pluginManagementNarrow({ base, page, check }) {
   for (const tab of ['', '/store', '/settings']) {
     await page.goto(`${base}/plugins${tab}`, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-plugin-panel]').first().waitFor({ timeout: 20_000 });
-    await page.waitForTimeout(300);
+    await settleLayout(page);
     const overflow = await page.evaluate(() => {
       const width = document.documentElement.clientWidth;
       const outside = [];
@@ -341,4 +412,31 @@ export async function pluginManagementNarrow({ base, page, check }) {
       JSON.stringify(overflow),
     );
   }
+
+  await page.setViewportSize({ width: 320, height: 812 });
+  await page.goto(`${base}/plugins`, { waitUntil: 'domcontentloaded' });
+  const row = page.locator('article[data-plugin-id="request-logger"]');
+  const more = row.getByRole('button', { name: /更多|More/ });
+  await more.waitFor();
+  await settleLayout(page);
+  check('the installed action group fits a 320px viewport', await row.evaluate((article) =>
+    [...article.querySelectorAll('button')].every((button) => button.getBoundingClientRect().right <= document.documentElement.clientWidth)));
+  await more.click();
+  const menu = page.locator('.ant-dropdown:visible');
+  await menu.waitFor();
+  await settleLayout(page);
+  check('the overflow menu fits a 320px viewport', await menu.evaluate((popup) => {
+    const bounds = popup.getBoundingClientRect();
+    return bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth;
+  }));
+  await menu.getByRole('menuitem', { name: /卸载|Uninstall/ }).click();
+  const removal = page.locator('.ant-popconfirm:visible');
+  await removal.waitFor();
+  await settleLayout(page);
+  check('the removal confirmation fits a 320px viewport', await removal.evaluate((popup) => {
+    const bounds = popup.getBoundingClientRect();
+    return bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth;
+  }));
+  await removal.getByRole('button', { name: /取消|Cancel/ }).click();
+
 }

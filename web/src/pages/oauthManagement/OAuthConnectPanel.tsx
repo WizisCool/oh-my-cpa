@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Drawer,
@@ -47,6 +48,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   sessions,
 }) => {
   const t = useT();
+  const navigate = useNavigate();
   const toast = useToast();
   const isDemo = isDemoMode();
   const choice = choices.find((candidate) => candidate.id === selectedProviderId);
@@ -133,7 +135,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       <div className={styles['tile-title-row']}>
                         <span className={styles['tile-title']}>{candidate.title}</span>
                         <Tag style={{ margin: 0 }}>
-                          {candidate.flow === 'device' ? t('omc.flow_device') : t('omc.flow_redirect')}
+                          {t(candidate.flow === 'plugin' ? 'omc.flow_plugin' : candidate.flow === 'device' ? 'omc.flow_device' : 'omc.flow_redirect')}
                         </Tag>
                         {candidate.pluginId && (
                           <Tag className={styles['plugin-tag']} style={{ margin: 0 }}>{t('oauth.plugin_tag')}</Tag>
@@ -184,7 +186,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <div className={styles['connect-copy']}>
                 <div className={styles['connect-title-row']}>
                   <h3 className={styles['connect-title']}>{choice.title}</h3>
-                  <Tag>{flow === 'device' ? t('omc.flow_device') : t('omc.flow_redirect')}</Tag>
+                  <Tag>{t(flow === 'plugin' ? 'omc.flow_plugin' : flow === 'device' ? 'omc.flow_device' : 'omc.flow_redirect')}</Tag>
                   {choice.pluginId && <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>}
                 </div>
                 <p className={styles['connect-desc']}>{choice.description}</p>
@@ -205,9 +207,17 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <Button
                 type="primary"
                 loading={session?.starting}
-                disabled={isWaiting || isDemo}
-                onClick={() => void sessions.start(choice.id)}
-                data-oauth-start={choice.id}
+                disabled={isWaiting || (isDemo && !choice.pluginPageRoute)}
+                onClick={() => {
+                  if (choice.pluginPageRoute) {
+                    onClose();
+                    navigate(choice.pluginPageRoute);
+                  } else {
+                    void sessions.start(choice.id);
+                  }
+                }}
+                data-oauth-start={choice.pluginPageRoute ? undefined : choice.id}
+                data-plugin-connect={choice.pluginPageRoute ? choice.id : undefined}
               >
                 {isSuccess ? t('oauth.login_another') : choice.loginLabel}
               </Button>

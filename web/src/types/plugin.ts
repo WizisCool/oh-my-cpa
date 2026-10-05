@@ -31,6 +31,7 @@ export interface PluginItem {
   enabled: boolean;
   /** Enabled here, registered with the running host, and the plugin system switched on. */
   effective_enabled: boolean;
+  /** CPA's legacy name for an auth-provider capability, not proof of interactive OAuth login. */
   supports_oauth?: boolean;
   oauth_provider?: string;
   supports_quota?: boolean;

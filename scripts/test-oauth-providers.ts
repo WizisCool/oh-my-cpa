@@ -10,6 +10,7 @@ import {
   pluginOAuthProviderChoices,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
+  resolveStartedOAuthFlow,
   resolveXaiCallback,
   validateDevinCallback,
 } from '../web/src/pages/oauthProviderLogic.ts';
@@ -217,4 +218,37 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
   assert.equal(choices[0].pluginId, 'iflow-auth');
   assert.equal(choices[0].pluginLogo, 'data:image/svg+xml,fixture');
   assert.equal(choices[0].callback?.errorKeys.missingState, 'oauth.missing_state');
+});
+
+
+test('auth-provider metadata does not declare a redirect flow, and plugin pages own connection', () => {
+  const t = ((key: string) => key) as Parameters<typeof builtinOAuthProviderChoices>[0];
+  const plugins = [{
+    id: 'key-bridge', configured: true, registered: true, enabled: true,
+    effective_enabled: true, supports_oauth: true, oauth_provider: 'key-service',
+    config_fields: [], pages: [{ path: '/v0/resource/plugins/key-bridge/console', label: 'Credentials' }],
+  }];
+  const [choice] = pluginOAuthProviderChoices(plugins, t);
+  assert.equal(choice.flow, 'plugin');
+  assert.equal(choice.pluginPageRoute, '/plugin-pages/key-bridge/0');
+  assert.equal(choice.description, 'oauth.plugin_page_hint');
+  assert.equal(choice.callback, undefined, 'a plugin-managed connection must not expose callback submission');
+  const [pageless] = pluginOAuthProviderChoices([{ ...plugins[0], pages: [] }], t);
+  assert.equal(pageless.flow, 'plugin', 'pageless auth providers have no declared login flow either');
+  assert.equal(pageless.pluginPageRoute, undefined);
+  assert.equal(pageless.description, 'oauth.plugin_hint');
+});
+
+
+test('plugin login flow is resolved only from a successful login response', () => {
+  assert.equal(resolveStartedOAuthFlow('plugin', {}), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'custom', url: 'https://auth.example.test', state: 'session' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'device' }), 'device');
+  assert.equal(resolveStartedOAuthFlow('plugin', { flow: 'redirect' }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('plugin', { user_code: 'ABCD' }), 'device');
+  assert.equal(resolveStartedOAuthFlow('plugin', { url: 'https://auth.example.test', state: 'session' }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('plugin', { url: 'https://auth.example.test', session_id: 'session' }), 'manual-callback');
+  assert.equal(resolveStartedOAuthFlow('plugin', { url: 'https://auth.example.test' }), 'plugin');
+  assert.equal(resolveStartedOAuthFlow('device', {}), 'device');
+  assert.equal(resolveStartedOAuthFlow('manual-callback', {}), 'manual-callback');
 });

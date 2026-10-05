@@ -1,15 +1,16 @@
 import React from 'react';
-import { Button, Empty, Input, Popconfirm, Switch, Tooltip } from 'antd';
+import { Button, Dropdown, Empty, Input, Popconfirm, Switch, Tooltip } from 'antd';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, SearchOutlined, SettingOutlined, ShopOutlined } from '../icons';
+import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, SearchOutlined, SettingOutlined, ShopOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { pluginDisplayName, type PluginItem, type StorePluginItem } from '../../types/plugin';
+import { safeExternalURL } from '../../utils/externalUrl';
 import { StatusLabel } from '../common/StatusLabel';
 import { filterInstalledPlugins } from './pluginStoreLogic';
 import { waitForPluginRuntime } from './pluginRuntime';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
+import { formatPluginVersion, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 
@@ -45,6 +46,16 @@ export function InstalledPluginsPanel({
   const toast = useToast();
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState('');
+  const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+  const moreButtonRefs = React.useRef(new Map<string, HTMLElement>());
+  const previousDeleteIdRef = React.useRef<string | null>(null);
+
+  React.useLayoutEffect(() => {
+    const previousDeleteId = previousDeleteIdRef.current;
+    previousDeleteIdRef.current = pendingDeleteId;
+    // Confirmation replaces the menu trigger, so its old DOM node cannot restore focus.
+    if (previousDeleteId && !pendingDeleteId) moreButtonRefs.current.get(previousDeleteId)?.focus();
+  }, [pendingDeleteId]);
 
   const visible = React.useMemo(() => filterInstalledPlugins(plugins, query, catalog), [plugins, query, catalog]);
 
@@ -137,6 +148,25 @@ export function InstalledPluginsPanel({
             const logo = plugin.logo || plugin.metadata?.logo || listing?.logo;
             const version = formatPluginVersion(plugin.metadata?.version || listing?.installed_version);
             const isUpdating = enabledMutation.isPending && enabledMutation.variables?.id === plugin.id;
+            const isDeleting = deleteMutation.isPending && deleteMutation.variables === plugin.id;
+            const repositoryURL = safeExternalURL(plugin.repository_url || listing?.repository_url);
+            const homepageURL = safeExternalURL(listing?.homepage);
+            const hasHomepage = homepageURL !== undefined && homepageURL !== repositoryURL;
+            const moreButton = (
+              <Button
+                size="small"
+                className="row-action-btn"
+                ref={(button) => {
+                  if (button) moreButtonRefs.current.set(plugin.id, button);
+                  else moreButtonRefs.current.delete(plugin.id);
+                }}
+                icon={<MoreOutlined />}
+                loading={isDeleting}
+                disabled={isDeleting}
+                aria-label={`${t('common.more')}: ${name}`}
+                aria-haspopup="menu"
+              />
+            );
             const stateLabel = plugin.effective_enabled
               ? <StatusLabel tone="success">{t('plugin.state_running')}</StatusLabel>
               : plugin.enabled
@@ -155,7 +185,7 @@ export function InstalledPluginsPanel({
                     <span className={styles.badges}>
                       {stateLabel}
                       {!plugin.registered && <span className={styles.badge}>{t('plugin.badge_not_registered')}</span>}
-                      {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_oauth')}</span>}
+                      {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_auth_provider')}</span>}
                       {plugin.supports_quota && <span className={styles.badge}>{t('plugin.badge_quota')}</span>}
                       {listing?.update_available && (
                         <span className={`${styles.badge} ${styles['badge-accent']}`}>
@@ -181,41 +211,74 @@ export function InstalledPluginsPanel({
                       size="small"
                       checked={plugin.enabled}
                       loading={isUpdating}
-                      disabled={isDemo}
+                      disabled={isDemo || isDeleting}
                       title={isDemo ? t('demo.blocked') : undefined}
                       onChange={(checked) => enabledMutation.mutate({ id: plugin.id, enabled: checked })}
                       aria-label={t('plugin.toggle_label', { name })}
                     />
                   </span>
-                  <Button
-                    size="small"
-                    icon={<SettingOutlined />}
-                    onClick={() => onConfigure(plugin)}
-                    aria-label={t('plugin.configure_label', { name })}
-                  >
-                    {t('plugin.configure')}
-                  </Button>
-                  <Popconfirm
-                    title={t('plugin.delete_confirm_title', { name })}
-                    description={t('plugin.delete_confirm_desc')}
-                    onConfirm={() => deleteMutation.mutate(plugin.id)}
-                    okText={t('plugin.delete')}
-                    cancelText={t('common.cancel')}
-                    okButtonProps={{ danger: true }}
-                    disabled={isDemo}
-                  >
-                    <Tooltip title={isDemo ? t('demo.blocked') : t('plugin.delete')}>
+                  <div className="row-actions">
+                    <Tooltip title={t('plugin.configure')}>
                       <Button
                         size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        disabled={isDemo}
-                        loading={deleteMutation.isPending && deleteMutation.variables === plugin.id}
-                        aria-label={t('plugin.delete_label', { name })}
+                        className="row-action-btn"
+                        icon={<SettingOutlined />}
+                        disabled={isDeleting}
+                        onClick={() => onConfigure(plugin)}
+                        aria-label={t('plugin.configure_label', { name })}
                       />
                     </Tooltip>
-                  </Popconfirm>
-                  <PluginLinks repositoryURL={plugin.repository_url || listing?.repository_url} homepage={listing?.homepage} />
+                    {pendingDeleteId === plugin.id ? (
+                      <Popconfirm
+                        open
+                        title={t('plugin.delete_confirm_title', { name })}
+                        description={t('plugin.delete_confirm_desc')}
+                        onConfirm={() => {
+                          setPendingDeleteId(null);
+                          deleteMutation.mutate(plugin.id);
+                        }}
+                        onCancel={() => setPendingDeleteId(null)}
+                        onOpenChange={(isOpen) => {
+                          if (!isOpen) setPendingDeleteId(null);
+                        }}
+                        okText={t('plugin.delete')}
+                        cancelText={t('common.cancel')}
+                        okButtonProps={{ danger: true }}
+                      >
+                        {moreButton}
+                      </Popconfirm>
+                    ) : (
+                      <Dropdown
+                        trigger={['click']}
+                        placement="bottomRight"
+                        menu={{
+                          items: [
+                            ...(repositoryURL ? [{
+                              key: 'repository',
+                              icon: <GithubOutlined />,
+                              label: <a href={repositoryURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_repository')}</a>,
+                            }] : []),
+                            ...(hasHomepage ? [{
+                              key: 'homepage',
+                              icon: <ExternalLinkOutlined />,
+                              label: <a href={homepageURL} target="_blank" rel="noreferrer noopener">{t('plugin.open_homepage')}</a>,
+                            }] : []),
+                            ...(repositoryURL || hasHomepage ? [{ type: 'divider' as const }] : []),
+                            {
+                              key: 'delete',
+                              icon: <DeleteOutlined />,
+                              label: isDemo ? <Tooltip title={t('demo.blocked')}>{t('plugin.delete')}</Tooltip> : t('plugin.delete'),
+                              danger: true,
+                              disabled: isDemo || isUpdating,
+                              onClick: () => setPendingDeleteId(plugin.id),
+                            },
+                          ],
+                        }}
+                      >
+                        {moreButton}
+                      </Dropdown>
+                    )}
+                  </div>
                 </div>
               </article>
             );

@@ -315,8 +315,9 @@ The geometric form language is compact, rectangular, and tightly controlled:
 
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
-- **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
+- **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 28×28px for row-level action icon buttons.
 - **Row Actions**: A row's secret-facing actions (reveal, copy, edit) stay in the open as square buttons. Actions that do not read the value — a drill-down into the row's traffic, and removal — group behind one overflow trigger of the same size. An action that cannot apply is disabled with its reason rather than hidden.
+- **Installed Plugin Actions**: Configuration and overflow are matching 28px row-action buttons. The enable switch is separated from the action pair by a quiet rule. Repository/homepage links and uninstall sit in the overflow menu; uninstall confirms against the same row with a danger confirmation button. Cancel and Escape return keyboard focus to the row action. Existing palette and motion tokens are reused. The credential-handling capability badge says "Auth provider", without claiming an OAuth login method. The OAuth connection picker uses plugin names without an OAuth suffix and a "Plugin-managed" method tag. Registered plugin pages take precedence through "Open plugin page"; pageless providers resolve device/redirect controls only after a successful explicit login request.
 - **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
 - **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.

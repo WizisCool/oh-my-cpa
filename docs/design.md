@@ -838,6 +838,15 @@ reader moving between pages never sees the refresh control jump or resize:
   touch rules' hit insets meet rather than overlap. The glyph takes the accent on hover, and a
   destructive action shows the danger colour only on hover - a column of red bins read as a column
   of errors. Destructive actions confirm in a `Popconfirm` whose OK button is the danger one.
+  Installed plugin rows keep configuration directly accessible beside a matching overflow button;
+  repository/homepage links and uninstall live in that menu. The enable switch is separated from
+  the action pair by a quiet rule, and uninstall confirms against the same row. These controls use
+  the existing row-action sizing, palette and motion tokens. Cancel and Escape return
+  keyboard focus to the row action. The auth-provider capability badge says "Auth provider"; it does not label an unspecified login method as OAuth.
+  The OAuth connection picker shows plugin names without an OAuth suffix and a
+  "Plugin-managed" method tag. A plugin with a registered page offers "Open plugin page"
+  instead of OAuth Start; pageless providers resolve device/redirect controls only after
+  a successful explicit login request.
 - **Card heads** use `PanelTitle`: a muted glyph, the title, and the one control that acts on that
   card alone.
 - **Table headers never wrap.** A squeezed column wraps its cells, not its name.

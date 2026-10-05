@@ -62,6 +62,11 @@ Status definitions: `Covered` = Fully implemented with live endpoints and UI; `I
 
 ## Current State and Roadmap
 
+Plugin auth-provider discovery does not imply an interactive OAuth method. The OAuth
+connection picker labels plugin entries as plugin-managed, opens their registered page
+when available, and otherwise resolves device/callback controls from an explicitly
+requested successful CPA login response. Existing plugin credentials remain manageable.
+
 Implemented surfaces: Dashboard, Quick Start, AI Providers, Key Management, OAuth Management, Logs, Audit, Usage Events, Pricing, Config, OMC Settings, Plugins (installed, store and settings tabs, each with its own address), System, and Playground—totalling 14 live routed pages, plus one hosted route per page a plugin registers (`/plugin-pages/<id>/<n>`), the parameter-safe legacy OAuth/auth-file/quota redirects, the `/plugin-store` redirect to the store tab, and the root fallback. No pages remain as placeholder capability mocks.
 
 Subsequent milestones:
