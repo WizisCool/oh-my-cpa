@@ -2461,6 +2461,7 @@ export const MS: Readonly<Record<string, string>> = {
   "plugin.delete_restart_required": "Pemalam sedang dimuatkan dan CPA tidak dapat membuangnya semasa berjalan. Mulakan semula get laluan, kemudian nyahpasang.",
   "plugin.enabled_success": "Pemalam didayakan",
   "plugin.runtime_pending": "Disimpan, tetapi get laluan belum selesai memuat atau menyahmuat pemalam; muat semula sebentar lagi.",
+  "plugin.runtime_unconfirmed": "Disimpan, tetapi keadaan berjalan pemalam tidak dapat disahkan; muat semula untuk menyemak.",
   "plugin.runtime_system_disabled": "Pemalam didayakan, tetapi sistem pemalam dimatikan; ia berjalan setelah sistem dihidupkan.",
   "plugin.disabled_success": "Pemalam dilumpuhkan",
   "plugin.open_repository": "Buka repositori GitHub",

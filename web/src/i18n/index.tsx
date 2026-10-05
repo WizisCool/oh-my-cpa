@@ -2569,6 +2569,7 @@ const DICT: Record<string, [string, string]> = {
   'plugin.delete_restart_required': ['插件正在运行，CPA 无法在运行时删除它。请重启网关后再卸载。', 'The plugin is loaded, and CPA cannot remove it while running. Restart the gateway, then uninstall it.'],
   'plugin.enabled_success': ['插件已启用', 'Plugin enabled'],
   'plugin.runtime_pending': ['设置已保存，但网关尚未完成加载或卸载，请稍后刷新。', 'Saved, but the gateway has not finished loading or unloading the plugin yet; refresh in a moment.'],
+  'plugin.runtime_unconfirmed': ['设置已保存，但无法确认插件的运行状态，请刷新查看。', 'Saved, but the plugin\'s running state could not be confirmed; refresh to check.'],
   'plugin.runtime_system_disabled': ['插件已启用，但插件系统处于关闭状态，开启后才会运行。', 'The plugin is enabled, but the plugin system is off; it runs once the system is switched on.'],
   'plugin.disabled_success': ['插件已停用', 'Plugin disabled'],
   'plugin.open_repository': ['打开 GitHub 仓库', 'Open the GitHub repository'],

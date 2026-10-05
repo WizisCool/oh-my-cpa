@@ -58,11 +58,18 @@ export function InstalledPluginsPanel({
     // row and the navigation's plugin pages change together with the acknowledgement.
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
       await api.setPluginEnabled(id, enabled);
-      return waitForPluginRuntime(id, enabled, api.getPlugins);
+      // The write is done from here on. A list read that fails afterwards leaves the
+      // running state unconfirmed; it must not be reported as the switch having failed.
+      try {
+        return await waitForPluginRuntime(id, enabled, api.getPlugins);
+      } catch {
+        return null;
+      }
     },
     onSuccess: (result, variables) => {
-      queryClient.setQueryData(['management-plugins'], result.response);
-      if (result.status === 'timeout') toast.warning(t('plugin.runtime_pending'));
+      if (result) queryClient.setQueryData(['management-plugins'], result.response);
+      if (!result) toast.warning(t('plugin.runtime_unconfirmed'));
+      else if (result.status === 'timeout') toast.warning(t('plugin.runtime_pending'));
       else if (result.status === 'system-disabled') toast.warning(t('plugin.runtime_system_disabled'));
       else toast.success(variables.enabled ? t('plugin.enabled_success') : t('plugin.disabled_success'));
       invalidate();

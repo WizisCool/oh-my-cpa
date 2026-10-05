@@ -32,10 +32,14 @@ const BROWSER_CLOCK: PluginRuntimeClock = {
 /** Whether the list shows the plugin in the state the switch asked for. */
 export function pluginRuntimeStatus(response: PluginsResponse, pluginId: string, isEnabled: boolean): PluginRuntimeStatus | 'pending' {
   const plugin = response.plugins.find((item) => item.id === pluginId);
-  if (!isEnabled) return !plugin || !plugin.effective_enabled ? 'ready' : 'pending';
+  // The stored switch has to agree as well as the runtime: with the plugin system off a
+  // plugin is stopped whichever way its switch points, so a list read before the write
+  // landed would otherwise confirm a change that is not there yet.
+  if (!isEnabled) return !plugin || (!plugin.enabled && !plugin.effective_enabled) ? 'ready' : 'pending';
+  if (!plugin?.enabled) return 'pending';
   // With the plugin system off nothing loads, however long the console waits.
   if (!response.plugins_enabled) return 'system-disabled';
-  return plugin?.registered && plugin.effective_enabled ? 'ready' : 'pending';
+  return plugin.registered && plugin.effective_enabled ? 'ready' : 'pending';
 }
 
 export async function waitForPluginRuntime(

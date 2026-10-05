@@ -76,8 +76,12 @@ assert.equal(pluginRuntimeStatus(list({}), 'bridge', true), 'ready');
 assert.equal(pluginRuntimeStatus(list({ registered: false, effective_enabled: false }), 'bridge', true), 'pending');
 assert.equal(pluginRuntimeStatus(list({ effective_enabled: false }, false), 'bridge', true), 'system-disabled');
 assert.equal(pluginRuntimeStatus(list({}), 'bridge', false), 'pending');
-assert.equal(pluginRuntimeStatus(list({ effective_enabled: false }), 'bridge', false), 'ready');
+assert.equal(pluginRuntimeStatus(list({ enabled: false, effective_enabled: false }), 'bridge', false), 'ready');
 assert.equal(pluginRuntimeStatus(list({}), 'gone', false), 'ready');
+// A list read before the write landed: stopped because the system is off, switch unchanged.
+assert.equal(pluginRuntimeStatus(list({ enabled: true, effective_enabled: false }, false), 'bridge', false), 'pending');
+assert.equal(pluginRuntimeStatus(list({ enabled: false, effective_enabled: false }, false), 'bridge', true), 'pending');
+assert.equal(pluginRuntimeStatus(list({ enabled: false, effective_enabled: false }, false), 'bridge', false), 'ready');
 
 function fakeClock() {
   let current = 0;

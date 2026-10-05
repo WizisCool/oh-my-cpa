@@ -2461,6 +2461,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "plugin.delete_restart_required": "外掛正在執行，CPA 無法在執行時刪除它。請重新啟動閘道後再解除安裝。",
   "plugin.enabled_success": "外掛已啟用",
   "plugin.runtime_pending": "設定已儲存，但閘道尚未完成載入或卸載，請稍後重新整理。",
+  "plugin.runtime_unconfirmed": "設定已儲存，但無法確認外掛的執行狀態，請重新整理查看。",
   "plugin.runtime_system_disabled": "外掛已啟用，但外掛系統處於關閉狀態，開啟後才會執行。",
   "plugin.disabled_success": "外掛已停用",
   "plugin.open_repository": "開啟 GitHub 儲存庫",
