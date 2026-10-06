@@ -35,7 +35,8 @@ export function validateReleaseWorkflow(workflow) {
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
   assert.equal(workflow.concurrency.queue, 'max');
   assert.equal(workflow.permissions.contents, 'read');
-  for (const job of Object.values(workflow.jobs)) {
+  for (const [jobName, job] of Object.entries(workflow.jobs)) {
+    if (jobName !== 'release') assert.equal(job.permissions?.contents ?? workflow.permissions.contents, 'read');
     for (const step of job.steps.filter(step => step.uses)) {
       assert.match(step.uses, /@[a-f0-9]{40}$/, 'Release actions use immutable revisions');
       if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
@@ -56,7 +57,30 @@ export function validateReleaseWorkflow(workflow) {
   assert.equal(imageStep.with.platforms, 'linux/amd64,linux/arm64');
   assert.equal(imageStep.with.push, true);
   assert.ok(imageStep.with['build-args'].includes('VERSION=${{ needs.verify.outputs.tag }}'));
-  assert.equal(workflow.jobs.release.needs.includes('publish'), true);
+  assert.deepEqual(workflow.jobs.release.needs, ['verify', 'publish', 'native']);
+  assert.equal(workflow.jobs.native.needs, 'verify');
+  const nativeSteps = workflow.jobs.native.steps;
+  assert.equal(nativeSteps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref, '${{ needs.verify.outputs.revision }}');
+  const nativeBuildIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release.mjs');
+  const nativeSmokeIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release-smoke.mjs');
+  const nativeUploadIndex = nativeSteps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.ok(nativeBuildIndex >= 0 && nativeSmokeIndex > nativeBuildIndex && nativeUploadIndex > nativeSmokeIndex);
+  assert.equal(nativeSteps[nativeUploadIndex].with['if-no-files-found'], 'error');
+  assert.equal(nativeSteps[nativeUploadIndex].with.name, 'native-release');
+  const releaseSteps = workflow.jobs.release.steps;
+  const downloadIndex = releaseSteps.findIndex(step => step.uses?.startsWith('actions/download-artifact@'));
+  const publicationIndex = releaseSteps.findIndex(step => step.run?.includes('gh release create'));
+  assert.ok(downloadIndex >= 0 && publicationIndex > downloadIndex);
+  assert.equal(releaseSteps[downloadIndex].with.name, 'native-release');
+  const publication = releaseSteps[publicationIndex].run;
+  assert.ok(publication.includes('native-release.mjs --verify'));
+  assert.ok(publication.indexOf('native-release.mjs --verify') < publication.indexOf('gh release upload'));
+  assert.ok(publication.includes('gh release upload "$RELEASE_TAG" tmp/native-release/* --clobber'));
+  assert.ok(publication.includes('gh release create "$RELEASE_TAG" tmp/native-release/*'));
+  assert.ok(publication.includes('--generate-notes --draft --latest=false'));
+  assert.ok(publication.includes('gh release edit "$RELEASE_TAG" --draft=false --latest="$IS_LATEST"'));
+  assert.ok(publication.lastIndexOf('IS_LATEST=$(node scripts/release-plan.mjs') > publication.indexOf('gh release upload'));
+  assert.ok(publication.indexOf('gh release edit') > publication.indexOf('gh release create'));
   assert.equal(workflow.jobs.release.permissions.contents, 'write');
   assert.deepEqual(workflow.jobs.promote.needs, ['verify', 'publish', 'release']);
   assert.ok(workflow.jobs.promote.steps.some(step => step.run?.includes('imagetools create')));
@@ -89,4 +113,22 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   const persisted = structuredClone(workflow);
   persisted.jobs.release.steps[0].with['persist-credentials'] = true;
   assert.throws(() => validateReleaseWorkflow(persisted));
+});
+
+test('native release publication rejects missing build, smoke, transfer and integrity gates', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  for (const alter of [
+    value => { value.jobs.release.needs = ['verify', 'publish']; },
+    value => { value.jobs.native.needs = []; },
+    value => { value.jobs.native.permissions = { contents: 'write' }; },
+    value => { const step = value.jobs.release.steps.find(step => step.run?.includes('gh release create')); step.run = step.run.replace('--generate-notes --draft --latest=false', '--generate-notes'); },
+    value => { value.jobs.native.steps = value.jobs.native.steps.filter(step => !step.run?.includes('native-release-smoke')); },
+    value => { value.jobs.release.steps = value.jobs.release.steps.filter(step => !step.uses?.startsWith('actions/download-artifact@')); },
+    value => { const step = value.jobs.release.steps.find(step => step.run?.includes('gh release create')); step.run = step.run.replace('node scripts/native-release.mjs --verify', ''); },
+    value => { value.jobs.native.steps.find(step => step.uses?.startsWith('actions/upload-artifact@')).with['if-no-files-found'] = 'warn'; },
+  ]) {
+    const broken = structuredClone(workflow);
+    alter(broken);
+    assert.throws(() => validateReleaseWorkflow(broken));
+  }
 });

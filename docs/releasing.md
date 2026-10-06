@@ -2,8 +2,54 @@
 
 The stable distribution is **`wiziscool/oh-my-cpa`** on Docker Hub, for
 `linux/amd64` and `linux/arm64`. GitHub Releases in `WizisCool/oh-my-cpa` are the
-console's version/update source and carry standalone installation assets. A Git tag
+console's version/update source and carry native executables and installation assets. A Git tag
 alone is not a published release and is not discovered by update checks.
+
+## Native assets
+
+Every release publishes eight executables matching CPA's OS/architecture coverage:
+
+| OS | Go architectures | Archive |
+| --- | --- | --- |
+| Darwin (macOS) | amd64, arm64 | tar.gz |
+| Windows | amd64, arm64 | zip |
+| Linux | amd64, arm64 | tar.gz |
+| FreeBSD | amd64, arm64 | tar.gz |
+
+Names follow `oh-my-cpa_VERSION_OS_ARCH.tar.gz` (Windows uses `.zip`), with the
+numeric version without `v`. Each archive contains the executable (`oh-my-cpa.exe`
+on Windows), MIT license, both READMEs, installation/operations/SQLite guides and `.env.example` from
+`deploy/native.env.example`. No secrets or runtime data are included. `checksums.txt`
+contains SHA-256 hashes for all eight archives and the three Compose/CPA installation
+attachments; it does not hash itself.
+
+The matrix is pinned in `scripts/native-release.mjs`, not downloaded during builds.
+It was checked on October 6, 2026 against CPA's official release workflow at commit
+`a2976eb8a303f11b4ea5177bce9f9ff752634dfc` and the v8.0.16 assets. CPA's current source
+uses its [release workflow](https://github.com/router-for-me/CLIProxyAPI/blob/a2976eb8a303f11b4ea5177bce9f9ff752634dfc/.github/workflows/release.yaml) rather than GoReleaser. Its `aarch64` asset label
+means Go `arm64`; its additional Linux plugin variants are not OMC targets. All OMC
+builds use `CGO_ENABLED=0` with modernc SQLite and embed the IANA time-zone database
+through `-tags timetzdata`. OS certificate roots are still required for HTTPS.
+The Darwin and Windows executables are not code-signed or notarized.
+
+The existing release pipeline remains the publication authority (ADR 0066). To build
+and inspect the same assets locally on Linux, install the repository's pinned Node,
+pnpm and Go toolchains plus GNU tar, zip and unzip, then run:
+
+```bash
+pnpm install --frozen-lockfile
+RELEASE_TAG=v$(node -p 'require("./package.json").version') node scripts/native-release.mjs
+RELEASE_TAG=v$(node -p 'require("./package.json").version') node scripts/native-release-smoke.mjs
+```
+
+The builder validates both package versions, builds/syncs the SPA once before the
+Go targets, verifies the actual Go build metadata, packages all targets into
+`tmp/native-release`, and validates the complete checksum manifest. Archive member
+timestamps use the source commit date; tar owners are normalized and zip strips
+extra metadata. A clean output directory prevents stale assets from entering a retry.
+The smoke check extracts the host-architecture Linux archive into a new directory
+and checks SQLite, login, `/omc`, root and nested base paths, embedded JavaScript and
+the running tag. Foreign targets are cross-compiled, not executed on Linux.
 
 ## One-time configuration
 
@@ -69,9 +115,17 @@ the [v0.1.2 release notes](releases/v0.1.2.md).
      the actual non-root/read-only package, SQLite permissions, canonical base paths,
      health, login and version endpoints. It then builds/pushes the amd64/arm64 image
      with provenance and SBOM to Docker Hub.
-   - **release** runs only after a successful push, publishes generated release notes
-     with the multi-platform digest, and attaches `deploy/compose.full.yml`,
-     `deploy/compose.omc.yml` and `deploy/cpa.config.example.yaml`.
+   - **native** runs after verification, builds the eight archives and checksum
+     manifest, smoke-tests the extracted Linux package, asserts clean generated state
+     and transfers the complete asset directory with pinned upload/download actions.
+     It checks out the immutable verified revision and runs alongside **publish**,
+     with no repository-write permission.
+   - **release** runs only after both native packaging and a successful Docker push,
+     revalidates downloaded assets against their checksums and expected matrix, then
+     stages new GitHub releases as drafts with generated notes, the multi-platform
+     digest and all assets. Only after every attachment succeeds does it recheck
+     latest policy and publish the draft. Existing releases receive verified
+     replacement assets through the same resumable path.
    - **promote** rechecks the published stable index and moves Docker `latest` to the
      uploaded immutable digest only if no newer stable release exists.
 5. Verify the public manifest and assets, pull the image on the desired platform,
@@ -94,14 +148,15 @@ gh release view v0.1.2 --repo WizisCool/oh-my-cpa
 Workflows use a serialized `queue: max` concurrency group: pending releases queue
 instead of replacing each other, and running releases are not cancelled by newer tags.
 GitHub limits this queue to 100 pending runs; beyond that, new runs are cancelled. A failed verification
-cannot push; a failed image push cannot publish a GitHub Release. If the final release
-step fails after the image upload, retry the failed job, not an unrelated version. Docker `latest` promotion follows
+cannot push or package; a failed image push or native package cannot publish a GitHub Release. If the final release
+step fails after the image upload, retry the failed job, not an unrelated version.
+New releases remain drafts if an attachment upload fails; update checks ignore them. Docker `latest` promotion follows
 GitHub publication; if promotion fails, versioned pulls still work and only that job
 needs retrying.
 `workflow_dispatch` also accepts an existing verified tag for recovery; checkout uses
 that tag and the image revision names its actual commit, not the dispatch branch.
 Latest decisions are re-evaluated at publication/promotion, so retrying an old run
-after a newer release cannot downgrade the latest pointers. Re-running the release-assets step replaces the installation attachments for the same
+after a newer release cannot downgrade the latest pointers. Re-running the release-assets step verifies and replaces all native and installation attachments for the same
 source without creating a duplicate release. Do not delete/recreate a version tag to
 work around a failed gate.
 

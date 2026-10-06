@@ -30,7 +30,7 @@ The React bundle is built into `internal/web/dist` and embedded with
 browser can reach is a handwritten JSON endpoint; there is no generic pass
 through to CPA.
 
-### Image distribution and release flow
+### Binary/image distribution and release flow
 
 `Dockerfile` builds the embedded frontend on the builder platform, cross-compiles Go
 for the target architecture and injects `internal/config.BuildVersion` from the release
@@ -46,12 +46,20 @@ retain their configuration, panels and collection ownership. See `docs/install.m
 
 `.github/workflows/release.yml` validates a stable version tag against both package
 versions, clears the full verification and packaged-image smoke gates, pushes images,
-then publishes GitHub Release notes and installation assets before promoting Docker
-latest to the immutable digest. Publication and promotion recheck the stable index
+and builds/smoke-tests native packages in a separate read-only job. GitHub publication
+requires both the Docker push and complete native assets, whose SHA-256 hashes are
+rechecked after artifact transfer. It then publishes notes, archives and installation
+assets in a draft that becomes visible only after uploads finish, before promoting
+Docker latest to the immutable digest. Publication and promotion recheck the stable index
 so retrying an old run cannot regress either latest pointer. Only the release job has
 repository write permission. `scripts/release-plan.mjs` prevents backports from moving
 latest backwards. GitHub Releases remain the source of version observations; Docker
-Hub is the distribution source. `docs/releasing.md` records the maintainer workflow
+Hub distributes images and GitHub distributes native executables. Native builds
+match CPA's Darwin/Windows/Linux/FreeBSD amd64/arm64 coverage. They build the SPA once,
+then cross-compile CGO-free Go with the same version injection and embedded IANA zone
+data. The extracted host Linux package is smoke-tested; foreign targets are build
+coverage, not claims of target-native execution. ADR 0066 records the asset contract.
+`docs/releasing.md` records the maintainer workflow
 and ADR 0056 the publication ordering and immutable version identity.
 
 ### Demo mode is the same process with the gateway replaced

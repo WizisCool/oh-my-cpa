@@ -3,7 +3,8 @@
 This runbook is for a coding agent installing Oh My CPA (OMC) on a user's machine. OMC
 is a web console for CLIProxyAPI (CPA). It needs **CPA v8.0.0 or later** and CPA's plaintext
 management key, which is also OMC's sign-in password. The Docker image is
-`wiziscool/oh-my-cpa:latest` (amd64 and arm64), so a normal install builds nothing.
+`wiziscool/oh-my-cpa:latest` (amd64 and arm64). Native release archives cover Darwin,
+Windows, Linux and FreeBSD on amd64/arm64; a normal install builds nothing.
 
 The work is: look at what is already there, pick a path, install, verify.
 
@@ -47,7 +48,8 @@ Ask the user only for what cannot be found out.
 | No CPA | **A**: install CPA and OMC together |
 | CPA runs from a Compose file the user can edit | **B1**: add an OMC service to that file |
 | CPA in Docker without such a file, on another machine, or on the host listening on all interfaces | **B2**: add OMC from its own Compose file |
-| CPA on the host listening on `127.0.0.1` only, or no Docker | **C**: build OMC from source and run it on the host |
+| CPA on the host listening on `127.0.0.1` only, or no Docker | **C**: install the native executable on the host |
+| User explicitly requests source, or no native target matches | **D**: build from source |
 | OMC already installed | Step 5 |
 
 Before starting, tell the user which path was chosen and what it will create.
@@ -166,7 +168,30 @@ In B1 and B2 alike, CPA treats OMC's container as a remote client. If health rep
 `cpa_connected: false` with a correct URL and key, CPA has `management.allow-remote`
 turned off. Turning it on is a change to CPA: explain it and ask first.
 
-### C. From source
+### C. Native executable
+
+Follow the Native executable section in `docs/install.md`. Detect the OS and CPU
+architecture first: Darwin, Windows, Linux or FreeBSD with amd64/arm64; `x86_64` maps
+to amd64 and `aarch64` to arm64. Pick a single published stable release containing
+that asset, download its archive and `checksums.txt` from the same tag, and compare
+its exact manifest entry with a locally calculated SHA-256 hash before extracting.
+Do not attempt to verify undownloaded entries or run a mismatched executable.
+
+Extract into a new user-owned directory. Copy the packaged `.env.example` to `.env`
+only if no existing file is present. Generate a master key without printing it and
+ask the user to fill in the plaintext CPA management key. The template binds loopback,
+uses `/omc` and writes `./data`; preserve those defaults unless the user approves a
+change. Leave `OMCPA_VERSION` unset, match CPA's `TZ`, and apply B2's usage-reader
+ownership decision. A host CPA listening on loopback needs no remote-management edit.
+Restrict the environment/data files to the service account (Unix permissions or Windows
+ACLs). Use the OS's certificate roots; the binary already embeds IANA zone data.
+
+Run `./oh-my-cpa` or `.\oh-my-cpa.exe` from the extracted directory, then verify as in
+step 4. Do not bypass macOS/Windows trust controls: unsigned binaries may require an
+explicit user decision after checksum verification. Offer a service manager only if
+requested, retaining the working directory and data path.
+
+### D. From source
 
 Needs Go 1.25+, Node.js 22+ and pnpm 11+.
 
@@ -207,7 +232,13 @@ the actual reason. Common ones:
 
 ## 5. Upgrading an existing OMC
 
-Do not reinstall. Find the existing Compose file, data directory and `.env`, back up
+Do not reinstall. For a native installation, stop only OMC, back up its `.env` and
+data directory, verify/extract the new archive separately and replace only the
+executable. Preserve its service account, working directory, data path and master
+key, restart and verify as in step 4. Restore the corresponding data backup to return
+to an older executable; migrations are forward-only.
+
+For a container installation, find the existing Compose file, data directory and `.env`, back up
 the data directory and `.env`, then:
 
 ```bash

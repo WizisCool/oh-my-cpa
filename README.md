@@ -274,6 +274,15 @@ OMCPA_MASTER_KEY=<output of: openssl rand -hex 32>
 Run `docker compose up -d`, then open **`http://127.0.0.1:8080/omc/`** and sign in with
 the management key.
 
+### Install a native executable
+
+[Tagged releases](https://github.com/WizisCool/oh-my-cpa/releases) include executables
+for macOS (Darwin), Windows, Linux and FreeBSD, on amd64 and arm64. Each archive embeds
+the console and includes an environment template; verify its SHA-256 hash against the
+release's `checksums.txt`. No Go, Node or Docker is required. CPA must be installed
+separately. Follow the [native installation guide](docs/install.md#native-executable)
+for configuration, permissions and upgrades.
+
 ### Notes
 
 > [!IMPORTANT]
@@ -420,7 +429,7 @@ Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (
 | [`AGENTS.md`](AGENTS.md) | The contract coding agents follow in this repository |
 | [`docs/architecture.md`](docs/architecture.md) | Module boundaries, data flows and invariants |
 | [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | Domain vocabulary · visual system |
-| [`docs/releasing.md`](docs/releasing.md) | Tag-triggered Docker Hub and GitHub releases |
+| [`docs/releasing.md`](docs/releasing.md) | Tag-triggered Docker Hub images, native archives and GitHub releases |
 | [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) | How the public demo is deployed |
 
 ## Contributing

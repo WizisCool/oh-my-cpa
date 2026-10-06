@@ -110,8 +110,44 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+  native:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.verify.outputs.revision }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.27.1
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - name: Build all native archives and checksums
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: node scripts/native-release.mjs
+      - name: Verify the extracted native package
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: node scripts/native-release-smoke.mjs
+      - name: Require clean generated state
+        run: test -z "$(git status --porcelain)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-release
+          path: tmp/native-release/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
   release:
-    needs: [verify, publish]
+    needs: [verify, publish, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -124,6 +160,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: native-release
+          path: tmp/native-release
       - name: Publish installation assets and release notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -132,18 +172,22 @@ jobs:
           RELEASE_DIGEST: ${{ needs.publish.outputs.digest }}
           RELEASE_INDEX: /tmp/omc-releases.json
         run: |
+          node scripts/native-release.mjs --verify
           # Recompute at publication: retries can run after a newer release completed.
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
-          IS_LATEST=$(node scripts/release-plan.mjs | jq -r .isLatest)
-          printf 'Docker Hub: `%s:%s`\n\nMulti-platform digest: `%s@%s`\n\nPlatforms: `linux/amd64`, `linux/arm64`.\n\nSee [installation](https://github.com/%s/blob/%s/docs/install.md) and the [agent guide](https://github.com/%s/blob/%s/docs/install-for-agents.md).\n' \
+          printf 'Docker Hub: `%s:%s`\n\nMulti-platform digest: `%s@%s`\n\nDocker platforms: `linux/amd64`, `linux/arm64`.\n\nNative executables: Darwin, Windows, Linux and FreeBSD, each on amd64 and arm64. Archives embed the console; verify downloads with `checksums.txt`.\n\nSee [installation](https://github.com/%s/blob/%s/docs/install.md) and the [agent guide](https://github.com/%s/blob/%s/docs/install-for-agents.md).\n' \
             "$RELEASE_IMAGE" "$RELEASE_TAG" "$RELEASE_IMAGE" "$RELEASE_DIGEST" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$GITHUB_REPOSITORY" "$RELEASE_TAG" > /tmp/release-notes.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" deploy/compose.full.yml deploy/compose.omc.yml deploy/cpa.config.example.yaml --clobber
+            gh release upload "$RELEASE_TAG" tmp/native-release/* --clobber
           else
-            gh release create "$RELEASE_TAG" deploy/compose.full.yml deploy/compose.omc.yml deploy/cpa.config.example.yaml \
+            gh release create "$RELEASE_TAG" tmp/native-release/* \
               --verify-tag --title "$RELEASE_TAG" --notes-file /tmp/release-notes.md \
-              --generate-notes --latest="$IS_LATEST"
+              --generate-notes --draft --latest=false
           fi
+          # Attachments must finish before a new release becomes visible to update checks.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
+          IS_LATEST=$(node scripts/release-plan.mjs | jq -r .isLatest)
+          gh release edit "$RELEASE_TAG" --draft=false --latest="$IS_LATEST"
   promote:
     needs: [verify, publish, release]
     runs-on: ubuntu-24.04

@@ -87,6 +87,20 @@ Release verification provisions and launch-probes Chromium with
 `scripts/install-chromium.mjs`, then runs `pnpm verify:full` before this additional
 container check. Dependency installation alone does not install the browser binary.
 
+Native release planning, archive payloads, manifest integrity and workflow ordering
+are repository self-tests in `scripts/native-release.test.mjs` and
+`scripts/release-plan.test.mjs`, discovered automatically. They do not build Go or
+launch browsers. Archive payload self-tests use GNU tar, zip and unzip, matching
+the Linux packaging runner. The tag workflow's **native** job runs `scripts/native-release.mjs`
+to build all eight CGO-free targets after embedding the SPA, then
+`scripts/native-release-smoke.mjs` to extract/run the host Linux archive and assert
+HTTP readiness, SQLite, login, prefix handling, local JavaScript and injected version.
+It uses fresh temporary directories and OS-assigned ports, and condition-based waits.
+This package smoke is separate from the container smoke and full browser gates;
+foreign cross-compilation does not prove foreign runtime behaviour. The release job
+rechecks completeness and SHA-256 integrity after the pinned artifact transfer;
+new releases remain drafts until all attachments upload and latest policy is rechecked.
+
 ## 2. Registering a new test
 
 Discovery is automatic wherever it can be, so a test cannot be written and then never

@@ -5,6 +5,19 @@ constraints a deployment must respect, and how the parts that outlive a page vis
 behave. Database backup, restore and maintenance from the host have their own runbook,
 `docs/ops/sqlite-operations.md`.
 
+## Native deployments
+
+Native releases support Darwin, Windows, Linux and FreeBSD on amd64/arm64. The
+executable embeds the SPA and IANA time-zone database, but HTTPS still uses OS
+certificate roots. The packaged environment template binds loopback and stores
+SQLite in `./data`; run under a dedicated user/service account, preserve its working
+directory and restrict environment/data access with Unix permissions or Windows ACLs.
+Container uid/gid `10001:10001` is not a requirement for native installs. Leave
+`OMCPA_VERSION` unset to retain the injected release tag. Stop OMC before replacing
+the executable, keep the master key and data directory, and back up both before an
+upgrade. Only a matching data backup can undo forward migrations. The download,
+checksum and host configuration steps are in `docs/install.md`.
+
 ## Settings
 
 Everything is an environment variable. The binary also reads `.env` from its working

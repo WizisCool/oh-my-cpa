@@ -257,6 +257,13 @@ OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
 
 执行 `docker compose up -d`，然后访问 **`http://127.0.0.1:8080/omc/`**，以管理密钥登录。
 
+### 安装原生可执行文件
+
+[标签发布](https://github.com/WizisCool/oh-my-cpa/releases)提供 macOS（Darwin）、Windows、
+Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控制台，并附环境变量模板；
+下载后请按该发布的 `checksums.txt` 校验 SHA-256。无需 Go、Node 或 Docker，CPA 需单独安装。
+配置、权限及升级步骤见[原生安装指南](docs/install.md#native-executable)。
+
 ### 注意事项
 
 > [!IMPORTANT]
@@ -396,7 +403,7 @@ CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其�
 | [`AGENTS.md`](AGENTS.md) | 编码 Agent 在本仓库中遵循的约定 |
 | [`docs/architecture.md`](docs/architecture.md) | 模块边界、数据流与架构约束 |
 | [`CONTEXT.md`](CONTEXT.md) · [`docs/design.md`](docs/design.md) | 领域术语 · 视觉系统 |
-| [`docs/releasing.md`](docs/releasing.md) | Docker Hub 镜像与 GitHub 标签发布流程 |
+| [`docs/releasing.md`](docs/releasing.md) | Docker Hub 镜像、原生压缩包与 GitHub 标签发布流程 |
 | [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) | 在线演示的部署方式 |
 
 ## 参与贡献

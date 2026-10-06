@@ -6,6 +6,14 @@
 
 web
 
+## Distribution
+
+Tagged releases ship the embedded console as native executables for Darwin (macOS),
+Windows, Linux and FreeBSD, on amd64 and arm64, plus Docker Hub images for Linux
+amd64/arm64. Native archives include an environment template and SHA-256 checksums;
+users need neither a frontend toolchain nor Docker to run them. CPA remains a separate
+required service, and SQLite remains local, single-replica state.
+
 ## Users
 
 - **Core Users**: Individual developers and self-hosters running AI infrastructure on local workstations, personal servers, HomeLabs, VPS instances, or private Tailscale mesh networks.

@@ -6,10 +6,11 @@ image is **`wiziscool/oh-my-cpa`** on Docker Hub, for `linux/amd64` and `linux/a
 
 | Scenario | Method |
 | --- | --- |
+| Run on macOS, Windows, Linux or FreeBSD without Docker | [Native executable](#native-executable) |
 | CPA is not deployed yet | [New install](#new-install) |
 | CPA is deployed with Docker Compose | [Add to the existing Compose file](#add-to-the-existing-compose-file) |
 | CPA is deployed another way | [Standalone](#standalone) |
-| No Docker, or a CPA that listens on `127.0.0.1` only | [Build from source](#from-source) |
+| Explicit source build, or a host outside the native matrix | [Build from source](#from-source) |
 
 A coding agent can run the same steps from
 [`docs/install-for-agents.md`](install-for-agents.md).
@@ -229,7 +230,7 @@ OMC runs in a container, so `OMCPA_CPA_BASE_URL` has to work from inside that co
 | Runs on the same machine, listening on all interfaces | `http://host.docker.internal:8317` (the value above) |
 | Runs in another Docker project | `http://<CPA's container name>:8317`, with OMC joined to CPA's network (below) |
 | Runs on another machine | Its private or HTTPS address |
-| Listens on `127.0.0.1` only | A container cannot reach it. [Build from source](#from-source) and run OMC on the host |
+| Listens on `127.0.0.1` only | A container cannot reach it. Install the [native executable](#native-executable) on the host |
 
 To join CPA's Docker network, add this to the standalone `compose.yml`:
 
@@ -404,6 +405,68 @@ curl -fsS https://example.com/omc/api/healthz
 
 With a different `OMCPA_BASE_PATH`, the same holds for that prefix. With `/` there is
 no bare path to handle.
+
+## Native executable
+
+[GitHub Releases](https://github.com/WizisCool/oh-my-cpa/releases) publish OMC for
+Darwin (macOS), Windows, Linux and FreeBSD, each on **amd64** and **arm64**. `x86_64`
+is amd64; `aarch64` and Apple Silicon are arm64. Unix archives are `.tar.gz`; Windows
+archives are `.zip`. CPA must already be installed separately (v8.0.0 or later).
+The console and IANA time-zone database are embedded, so neither Node, Go nor Docker
+is needed. HTTPS uses the operating system's certificate roots. Darwin/Windows
+binaries are unsigned; inspect the release and verify its checksum before handling
+any operating-system trust prompt.
+
+Choose one published version and its matching OS/architecture asset. On Unix, set
+these values to that release and host; the example uses Linux amd64:
+
+```bash
+VERSION=MAJOR.MINOR.PATCH
+OS=linux
+ARCH=amd64
+ASSET="oh-my-cpa_${VERSION}_${OS}_${ARCH}.tar.gz"
+mkdir -p oh-my-cpa && cd oh-my-cpa
+curl -fLO "https://github.com/WizisCool/oh-my-cpa/releases/download/v${VERSION}/${ASSET}"
+curl -fLO "https://github.com/WizisCool/oh-my-cpa/releases/download/v${VERSION}/checksums.txt"
+```
+
+Verify **only the downloaded archive's entry** (the manifest also lists the other
+platforms and installation attachments). On Linux use `sha256sum -c`, on macOS
+`shasum -a 256 -c`, or on FreeBSD compare `sha256 -q "$ASSET"` with its entry:
+
+```bash
+grep -F "  $ASSET" checksums.txt | sha256sum -c -
+tar -xzf "$ASSET"
+cp -n .env.example .env
+chmod 600 .env
+```
+
+On Windows, download the matching ZIP and `checksums.txt` from the same release,
+use PowerShell `Get-FileHash -Algorithm SHA256` and compare with that ZIP's manifest
+entry, then `Expand-Archive` into a new directory and copy `.env.example` to `.env`.
+Restrict access to `.env` and the data directory to the service account with Windows
+file ACLs. Do not overwrite an existing configuration or data directory.
+
+Set `OMCPA_MASTER_KEY` once to a random 64-character hex string (`openssl rand -hex 32`
+on Unix; use a cryptographic random generator on Windows), set CPA's plaintext
+management key and its reachable URL, and match CPA's `TZ`. Keep `OMCPA_VERSION`
+unset so the tagged build reports its embedded version. The included template binds
+`127.0.0.1:8080`, serves `/omc` and writes SQLite to `./data` under the working directory.
+When CPA is on the same host, its loopback URL works without changing CPA's remote
+management policy. Review [usage-reader ownership](#other-panels-and-usage-trackers)
+before keeping `OMCPA_USAGE_INGEST_MODE=auto`; use `off` if another reader continues.
+
+Run `./oh-my-cpa` on Unix or `.\oh-my-cpa.exe` on Windows from that directory. Verify
+[health and connectivity](#verifying-the-install), then open `http://127.0.0.1:8080/omc/`
+and sign in with CPA's management key. For an operator-owned service manager, keep the
+same working directory, environment file, service account and data path. Do not open
+the listener to the network without configuring remote access and HTTPS.
+
+To upgrade a native install, stop OMC alone, back up `.env` and its data directory,
+verify/extract the new archive separately, then replace only the executable and start
+it from the original working directory. Preserve the master key and state. Verify
+health and the new running version. Migrations are forward-only; returning to an
+older executable requires restoring the corresponding data backup.
 
 ## From source
 
