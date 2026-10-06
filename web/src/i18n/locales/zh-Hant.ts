@@ -750,6 +750,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "dash.range.7d": "近 7 天",
   "dash.range.30d": "近 30 天",
   "dash.range.90d": "近 90 天",
+  "dash.range.all": "全部",
   "dash.range.until_now": "至今",
   "time_range.title": "時間範圍",
   "time_range.quick": "最近",

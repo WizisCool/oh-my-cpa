@@ -98,7 +98,7 @@ func BenchmarkUsageEventWindow(b *testing.B) {
 	repo := performanceRepository(b, 100000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := repo.readEventWindow(context.Background(), "default", 1700000000000, 1700000100000, 60000, ""); err != nil {
+		if _, err := repo.QueryUsageAnalytics(context.Background(), "default", 1700000000000, 1700000100000, 60000); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -116,27 +116,41 @@ func BenchmarkUsageFacets(b *testing.B) {
 	}
 }
 
-// BenchmarkUsageModelBuckets exists because the model panels deliberately read the detail table
-// instead of the aggregation rollup - the query's own doc comment records why that rollup's window
-// split is not reusable for a per-model ranking. A choice to be more expensive than the cheap
-// alternative is only defensible with its cost measured, so "cheaper but sometimes wrong" has a number
-// to be weighed against the panels' refresh cadence.
+// BenchmarkUsageModelBuckets measures the dashboard's heaviest read in both shapes it takes: a
+// grid finer than the fact grain, which has to bucket request records, and a grid on the fact
+// grain after the fold, which reads the permanent facts. The second is what every window longer
+// than a few hours pays, on every poll, so the gap between the two is the reason the facts exist.
 func BenchmarkUsageModelBuckets(b *testing.B) {
 	for _, n := range []int{1000, 100000} {
-		b.Run(fmt.Sprint(n), func(b *testing.B) {
-			repo := performanceRepository(b, n)
-			// The fixture writes one model for every event, so spread them over twenty to make
-			// the grouping and the ranking do real work rather than collapsing to one group.
-			if _, err := repo.SQL().Exec(`UPDATE usage_events SET model = 'model-' || (id % 20)`); err != nil {
-				b.Fatal(err)
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				if _, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-					1700000000000, 1700100000000, 60000, UsageModelBucketOptions{}); err != nil {
+		for _, shape := range []struct {
+			name     string
+			bucketMS int64
+			isFolded bool
+		}{{"records", 60000, false}, {"facts", QuarterHourBucketMS, true}} {
+			b.Run(fmt.Sprintf("%s/%d", shape.name, n), func(b *testing.B) {
+				repo := performanceRepository(b, n)
+				// The fixture writes one model for every event, so spread them over twenty to make
+				// the grouping and the ranking do real work rather than collapsing to one group.
+				if _, err := repo.SQL().Exec(`UPDATE usage_events SET model = 'model-' || (id % 20), timestamp_ms = 1700000000000 + id * 1000`); err != nil {
 					b.Fatal(err)
 				}
-			}
-		})
+				for shape.isFolded {
+					folded, err := repo.AggregateUsageFacts(context.Background(), 20000)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if folded < 20000 {
+						break
+					}
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					if _, err := repo.QueryUsageModelBuckets(context.Background(), "default",
+						1700000000000, 1700100000000, shape.bucketMS, UsageModelBucketOptions{}); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
 	}
 }

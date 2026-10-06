@@ -40,6 +40,7 @@ import {
   dashboardRangeParams,
   DEFAULT_DASHBOARD_RANGE,
   isSlidingRange,
+  requestListPreset,
   livePollInterval,
   parseDashboardRange,
   costNoteKey,
@@ -171,7 +172,7 @@ export const DashboardPage: React.FC = () => {
 
   const handleDrillDown = React.useCallback(() => {
     const search = new URLSearchParams();
-    if (range.preset) search.set('preset', range.preset);
+    if (range.preset) search.set('preset', requestListPreset(range.preset));
     else if (range.from !== undefined) {
       search.set('from', String(range.from));
       if (typeof range.to === 'number') search.set('to', String(range.to));
@@ -549,7 +550,7 @@ export const DashboardPage: React.FC = () => {
 
       <OverviewSecondary query={query} range={range} enabled={rangeReady} />
 
-      {data.coverage.stored_events === 0 && (
+      {!data.coverage.has_usage && (
         <div className="terminal-panel dashboard-empty">
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}

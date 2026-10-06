@@ -84,8 +84,11 @@ func TestIngestGapsRecordingAndRetention(t *testing.T) {
 
 	// Run retention purge older than 24 hours ago
 	cutoff := now.Add(-24 * time.Hour).UnixMilli()
-	if _, err := repo.PurgeUsageOlderThan(ctx, cutoff); err != nil {
-		t.Fatalf("PurgeUsageOlderThan failed: %v", err)
+	// The first pass publishes the horizon; the second deletes below it.
+	for pass := 0; pass < 2; pass++ {
+		if _, err := repo.RunLifecycle(ctx, map[string]int64{LifecycleUsageDetail: cutoff}, 10); err != nil {
+			t.Fatalf("RunLifecycle failed: %v", err)
+		}
 	}
 
 	// Gaps older than cutoff should be purged!

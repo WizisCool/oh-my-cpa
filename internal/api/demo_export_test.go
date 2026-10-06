@@ -203,6 +203,17 @@ func demoExportCases() []demoExportCase {
 			demoExportCase{Name: "client-key-usage-" + preset, Path: "/api/v1/management/client-key-usage?" + window},
 		)
 	}
+	// The all-time window has no span to turn into bounds: the server starts it at the
+	// first usage record. It is still reproducible, because the export pins the
+	// handler's clock to the reference instant. The key table does not offer it.
+	const allTime = "preset=all"
+	cases = append(cases,
+		demoExportCase{Name: "dashboard-all", Path: "/api/v1/management/dashboard?" + allTime},
+		demoExportCase{Name: "dashboard-tail-all", Path: "/api/v1/management/dashboard/tail?" + allTime},
+		demoExportCase{Name: "dashboard-models-call-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=call"},
+		demoExportCase{Name: "dashboard-models-model-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=model"},
+		demoExportCase{Name: "dashboard-providers-all", Path: "/api/v1/management/dashboard/providers?" + allTime},
+	)
 	// The heatmap is asked for in the viewer's own zone; the export keeps a UTC and a
 	// non-UTC zone so the Worker's calendar maths has a reference for both an offset
 	// that is a whole number of hours and one that is not.
@@ -1055,6 +1066,7 @@ func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
 		"dashboard-tail-7d",
 		"dashboard-tail-30d",
 		"dashboard-tail-90d",
+		"dashboard-tail-all",
 	}
 	for _, name := range tails {
 		entry, ok := exported.Responses[name]

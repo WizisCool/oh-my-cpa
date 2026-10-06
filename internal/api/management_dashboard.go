@@ -41,8 +41,19 @@ var dashboardSeriesBucket = []time.Duration{
 	time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute,
 	30 * time.Minute, time.Hour, 2 * time.Hour, 3 * time.Hour, 6 * time.Hour,
 	12 * time.Hour, 24 * time.Hour, 2 * 24 * time.Hour, 3 * 24 * time.Hour,
-	6 * 24 * time.Hour, 7 * 24 * time.Hour,
+	6 * 24 * time.Hour, 7 * 24 * time.Hour, 14 * 24 * time.Hour, 30 * 24 * time.Hour,
+	90 * 24 * time.Hour, 180 * 24 * time.Hour, 365 * 24 * time.Hour,
 }
+
+// dashboardPresetAll is the window that starts at the deployment's first usage
+// record and follows the current time. Only the dashboard's own endpoints
+// resolve it: they read the permanent usage facts, while the request list reads
+// request records, which roll out of retention and are bounded per query.
+const dashboardPresetAll = "all"
+
+// dashboardAllFallback is the span the all-time window covers before any usage
+// has been recorded, so an empty deployment still draws an ordinary grid.
+const dashboardAllFallback = 24 * time.Hour
 
 type dashboardResponse struct {
 	Window   dashboardWindow   `json:"window"`
@@ -112,7 +123,10 @@ type dashboardCoverage struct {
 	FromRollup   int64 `json:"rollup_requests"`
 	FromDetails  int64 `json:"detail_requests"`
 	PendingInbox int64 `json:"pending_inbox"`
-	Events       int64 `json:"stored_events"`
+	// HasUsage is whether the deployment has ever recorded a request. It is not a
+	// count of request records: those roll out of retention while the usage they
+	// described stays, so an empty record table does not mean an empty dashboard.
+	HasUsage bool `json:"has_usage"`
 }
 
 // dashboardTailResponse is the live-poll shape. It carries the same window
@@ -186,7 +200,11 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
 	now := time.Now().UTC()
-	window, windowErr := dashboardWindowFromRequest(request, now)
+	window, windowErr, resolveErr := h.dashboardWindow(request, now)
+	if resolveErr != nil {
+		writeInternalError(writer, fmt.Errorf("resolve dashboard window: %w", resolveErr))
+		return
+	}
 	if windowErr != "" {
 		writeError(writer, http.StatusBadRequest, windowErr)
 		return
@@ -219,9 +237,11 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	// Collector stats are the one block a live poll skips: they describe the
 	// pipeline, not the window, and they move far slower than the numbers
 	// printed next to them.
-	if stats, statsErr := h.repo.StatsUsagePipeline(ctx); statsErr == nil {
-		response.Coverage.PendingInbox = stats.Pending
-		response.Coverage.Events = stats.Events
+	pending, pendingErr := h.repo.CountPendingUsageInbox(ctx)
+	first, firstErr := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID())
+	if pendingErr == nil && firstErr == nil {
+		response.Coverage.PendingInbox = pending
+		response.Coverage.HasUsage = first != nil
 	} else {
 		response.Errors = append(response.Errors, "pipeline stats unavailable")
 	}
@@ -239,7 +259,11 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) dashboardTail(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
-	window, windowErr := dashboardWindowFromRequest(request, time.Now().UTC())
+	window, windowErr, resolveErr := h.dashboardWindow(request, time.Now().UTC())
+	if resolveErr != nil {
+		writeInternalError(writer, fmt.Errorf("resolve dashboard window: %w", resolveErr))
+		return
+	}
 	if windowErr != "" {
 		writeError(writer, http.StatusBadRequest, windowErr)
 		return
@@ -386,7 +410,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 	// denominator must be input tokens, not total (which also carries output).
 	// And cached_tokens overlaps cache_read_tokens for the same event, so they
 	// are alternatives, never a sum.
-	if numerator, denominator := cacheRateParts(totals); denominator > 0 {
+	if numerator, denominator := cacheRateParts(totals.UsageTotals); denominator > 0 {
 		rate := roundPercent(float64(numerator) / float64(denominator))
 		// Presentation policy: the list caps its per-event badge at 99.9%, and
 		// the aggregate follows so the two readings agree.
@@ -403,30 +427,28 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 		ttft := roundTwo(float64(totals.TTFTSumMS) / float64(totals.TTFTCount))
 		facts.metrics.AvgTTFTMS = &ttft
 	}
-	// Cost comes from immutable request-time snapshots; unpriced and legacy rows
-	// keep the window honest via CostSource instead of a fabricated zero.
-	costStats, err := h.repo.QueryUsageCostWindowFiltered(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS, apiKey)
-	if err != nil {
-		return facts, err
-	}
-	switch {
-	case costStats.PricedEvents == 0 && costStats.UnpricedEvents == 0:
-		// No events in the window: keep the explicit placeholder.
-	case costStats.UnpricedEvents > 0:
-		facts.metrics.Cost = costStats.CostUSD
-		facts.metrics.CostSource = "partial"
-		facts.metrics.CostNote = "some requests had no price at request time; total excludes them"
-	default:
-		facts.metrics.Cost = costStats.CostUSD
+	// Cost comes from immutable request-time snapshots, read with the rest of the
+	// window; unpriced and legacy rows keep it honest via CostSource instead of a
+	// fabricated zero.
+	if totals.Requests > 0 {
+		facts.metrics.Cost = float64(totals.CostNanos) / 1e9
 		facts.metrics.CostSource = "estimated"
 		facts.metrics.CostNote = ""
+		if totals.PricedRequests < totals.Requests {
+			facts.metrics.CostSource = "partial"
+			facts.metrics.CostNote = "some requests had no price at request time; total excludes them"
+		}
+	}
+	costs := make([]repository.UsageCostBucket, 0, len(analytics.Buckets))
+	for _, bucket := range analytics.Buckets {
+		costs = append(costs, repository.UsageCostBucket{StartMS: bucket.StartMS, CostNanos: bucket.CostNanos})
 	}
 
 	// Zero-fill every bucket in the window. A GROUP BY over sparse data returns
 	// only the buckets that have rows, and because the window slides with
 	// "now", a refresh can silently merge two populated buckets into one and
 	// collapse the sparkline. A fixed grid keeps the series stable.
-	series := fillDashboardBuckets(window.FromMS, window.ToMS, window.BucketMS, analytics.Buckets, costStats.Buckets)
+	series := fillDashboardBuckets(window.FromMS, window.ToMS, window.BucketMS, analytics.Buckets, costs)
 	for _, point := range series {
 		facts.requests.Series = append(facts.requests.Series, point)
 		facts.tokens.Series = append(facts.tokens.Series, dashboardSeriesPoint{
@@ -535,6 +557,56 @@ func (h *Handler) refreshTimeout() time.Duration {
 	return min(budget, usageRefreshCeiling)
 }
 
+// dashboardWindow resolves the window a dashboard panel reads.
+//
+// It adds two things to dashboardWindowFromRequest that need the database. The
+// all-time preset starts at the first usage record, which only the store knows.
+// And a window reaching behind the request-record horizon is widened to whole
+// fact buckets, because a bucket cannot be split once its records are gone; the
+// response then states the window that was actually read.
+func (h *Handler) dashboardWindow(request *http.Request, now time.Time) (dashboardWindow, string, error) {
+	preset := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("preset")))
+	isAllTime := preset == dashboardPresetAll && request.URL.Query().Get("from") == "" && request.URL.Query().Get("to") == ""
+	var window dashboardWindow
+	if !isAllTime {
+		var message string
+		if window, message = dashboardWindowFromRequest(request, now); message != "" {
+			return dashboardWindow{}, message, nil
+		}
+	}
+	if h.repo == nil {
+		if isAllTime {
+			return dashboardWindow{}, "", errors.New("database is unavailable")
+		}
+		return window, "", nil
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), h.queryTimeout())
+	defer cancel()
+	if isAllTime {
+		// The all-time window is the server's to place, not the caller's, so it
+		// follows the handler's clock: an anchored deployment resolves it against
+		// its anchor.
+		nowMS := h.now().UnixMilli()
+		fromMS := nowMS - dashboardAllFallback.Milliseconds()
+		first, err := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID())
+		if err != nil {
+			return dashboardWindow{}, "", err
+		}
+		if first != nil && *first < fromMS {
+			fromMS = *first
+		}
+		window = dashboardWindow{Preset: dashboardPresetAll, FromMS: fromMS, ToMS: nowMS, Complete: true}
+		window.BucketMS = dashboardBucketWidth(time.Duration(nowMS-fromMS) * time.Millisecond).Milliseconds()
+	}
+	horizonMS, err := h.repo.LifecycleHorizonMS(ctx, repository.LifecycleUsageDetail)
+	if err != nil {
+		return dashboardWindow{}, "", err
+	}
+	window.FromMS, window.ToMS, window.BucketMS = repository.AlignUsageWindow(horizonMS, window.FromMS, window.ToMS, window.BucketMS)
+	window.Minutes = int((window.ToMS - window.FromMS) / 60000)
+	return window, "", nil
+}
+
 func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboardWindow, string) {
 	query := request.URL.Query()
 	preset := strings.ToLower(strings.TrimSpace(query.Get("preset")))
@@ -620,10 +692,10 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 //
 // Cache-write tokens are NOT added to the denominator. They exist for providers
 // whose accounting separates cache buckets from input, but these are window
-// totals: the rollup carries no provider column and no canonical per-event
-// breakdown, so a window cannot be split by convention. Adding writes for some
+// totals: the usage facts carry no canonical per-convention breakdown, so a
+// window cannot be split by convention. Adding writes for some
 // events while leaving others alone is not expressible here, and guessing would
-// misreport mixed windows. Deferred until the rollup can carry per-convention
+// misreport mixed windows. Deferred until the usage facts can carry per-convention
 // token columns.
 func cacheRateParts(totals repository.UsageTotals) (int64, int64) {
 	numerator := totals.CacheReadTokens

@@ -11,23 +11,30 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
-// Maintenance folds detail rows into the rollups and applies retention.
+// Maintenance folds request records into the permanent usage facts and rolls the
+// records, and the payloads they were decoded from, out of retention.
 //
-// Aggregation runs on a short cadence so the dashboard's rollup-assisted path
-// stops being a lagging approximation; retention runs hourly because deleting
-// is not on any read path.
+// Folding runs on a short cadence so reads find almost everything in the facts;
+// retention runs hourly because deleting is not on any read path.
 type Maintenance struct {
 	store  *repository.Repository
 	logger *slog.Logger
 
-	// aggregateInterval bounds how stale rollup-assisted queries can get.
+	// aggregateInterval bounds how many unfolded records a read has to add.
 	aggregateInterval time.Duration
-	// retentionInterval is how often the purge is attempted.
+	// retentionInterval is how often a retention pass is started.
 	retentionInterval time.Duration
-	// retentionDays removes detail rows older than this. Zero keeps everything.
+	// retentionDays rolls request records older than this. Zero keeps everything.
 	retentionDays int
-	// aggregateBatch caps events folded per pass.
+	// inboxRetentionDays rolls decoded payloads older than this. Zero keeps them
+	// as long as request records.
+	inboxRetentionDays int
+	// aggregateBatch caps records folded per transaction.
 	aggregateBatch int
+	// retentionBatches caps delete transactions per pass, so a retention that was
+	// just shortened is worked off between folds rather than in one long hold.
+	retentionBatches int
+	now              func() time.Time
 
 	mu     sync.RWMutex
 	status MaintenanceStatus
@@ -35,18 +42,19 @@ type Maintenance struct {
 
 // MaintenanceStatus reports background maintenance progress.
 type MaintenanceStatus struct {
-	Running          bool       `json:"running"`
-	HourlyAggregated int64      `json:"hourly_aggregated"`
-	DailyAggregated  int64      `json:"daily_aggregated"`
-	Purged           int64      `json:"purged"`
-	LastError        string     `json:"last_error,omitempty"`
-	LastErrorAt      *time.Time `json:"last_error_at,omitempty"`
-	LastRunAt        *time.Time `json:"last_run_at,omitempty"`
+	Running bool `json:"running"`
+	// Folded counts request records absorbed into the usage facts.
+	Folded      int64      `json:"folded"`
+	Purged      int64      `json:"purged"`
+	LastError   string     `json:"last_error,omitempty"`
+	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+	LastRunAt   *time.Time `json:"last_run_at,omitempty"`
 }
 
-// NewMaintenance builds the maintenance loop. retentionDays <= 0 disables purge.
+// NewMaintenance builds the maintenance loop. retentionDays <= 0 keeps every
+// request record.
 func NewMaintenance(store *repository.Repository, logger *slog.Logger,
-	aggregateInterval time.Duration, retentionDays int) (*Maintenance, error) {
+	aggregateInterval time.Duration, retentionDays, inboxRetentionDays int) (*Maintenance, error) {
 	if store == nil {
 		return nil, errors.New("usage store is required")
 	}
@@ -57,12 +65,15 @@ func NewMaintenance(store *repository.Repository, logger *slog.Logger,
 		aggregateInterval = 15 * time.Second
 	}
 	return &Maintenance{
-		store:             store,
-		logger:            logger,
-		aggregateInterval: aggregateInterval,
-		retentionInterval: time.Hour,
-		retentionDays:     retentionDays,
-		aggregateBatch:    20000,
+		store:              store,
+		logger:             logger,
+		aggregateInterval:  aggregateInterval,
+		retentionInterval:  time.Hour,
+		retentionDays:      retentionDays,
+		inboxRetentionDays: inboxRetentionDays,
+		aggregateBatch:     20000,
+		retentionBatches:   25,
+		now:                time.Now,
 	}, nil
 }
 
@@ -73,7 +84,7 @@ func (m *Maintenance) Status() MaintenanceStatus {
 	return m.status
 }
 
-// Run maintains rollups and retention until the context is cancelled.
+// Run maintains the usage facts and retention until the context is cancelled.
 func (m *Maintenance) Run(ctx context.Context) error {
 	m.mu.Lock()
 	m.status.Running = true
@@ -89,61 +100,87 @@ func (m *Maintenance) Run(ctx context.Context) error {
 	retention := time.NewTicker(m.retentionInterval)
 	defer retention.Stop()
 
-	// Fold whatever the previous process left behind before waiting a tick.
+	// Fold whatever the previous process left behind before waiting a tick. After
+	// an upgrade that is the whole stored history.
 	m.aggregateOnce(ctx)
 
+	// isRetentionUnfinished carries a pass that stopped at its batch budget over to
+	// the next fold tick, so a backlog drains in minutes instead of one batch
+	// budget per hour.
+	isRetentionUnfinished := false
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-aggregate.C:
 			m.aggregateOnce(ctx)
+			if isRetentionUnfinished {
+				isRetentionUnfinished = !m.purgeOnce(ctx)
+			}
 		case <-retention.C:
-			m.purgeOnce(ctx)
+			isRetentionUnfinished = !m.purgeOnce(ctx)
 		}
 	}
 }
 
-// aggregateOnce folds pending events into both grains. Each grain keeps its own
-// checkpoint, so a slow daily pass cannot stall hourly freshness.
+// aggregateOnce folds every pending record, one bounded transaction at a time,
+// so a large backlog never holds the database for longer than one batch.
 func (m *Maintenance) aggregateOnce(ctx context.Context) {
-	hourly, err := m.store.AggregateUsageGrain(ctx, repository.CheckpointHourly, repository.HourBucketMS, m.aggregateBatch)
-	if err != nil {
-		m.recordError(fmt.Errorf("aggregate hourly rollup: %w", err))
-		return
+	for ctx.Err() == nil {
+		folded, err := m.store.AggregateUsageFacts(ctx, m.aggregateBatch)
+		if err != nil {
+			m.recordError(fmt.Errorf("fold usage facts: %w", err))
+			return
+		}
+		now := time.Now().UTC()
+		m.mu.Lock()
+		m.status.Folded += int64(folded)
+		m.status.LastRunAt = &now
+		m.mu.Unlock()
+		if folded < m.aggregateBatch {
+			return
+		}
 	}
-	daily, err := m.store.AggregateUsageGrain(ctx, repository.CheckpointDaily, repository.DayBucketMS, m.aggregateBatch)
-	if err != nil {
-		m.recordError(fmt.Errorf("aggregate daily rollup: %w", err))
-		return
-	}
-	now := time.Now().UTC()
-	m.mu.Lock()
-	m.status.HourlyAggregated += int64(hourly)
-	m.status.DailyAggregated += int64(daily)
-	m.status.LastRunAt = &now
-	m.mu.Unlock()
 }
 
-// purgeOnce applies the retention horizon. Aggregation checkpoints gate the
-// cutoff inside the store, so rollups are never asked to cover deleted details.
-func (m *Maintenance) purgeOnce(ctx context.Context) {
-	if m.retentionDays <= 0 {
-		return
+// lifecycleCutoffs turns the configured retention into the instant each policy
+// deletes to.
+func (m *Maintenance) lifecycleCutoffs() map[string]int64 {
+	cutoffs := map[string]int64{}
+	now := m.now()
+	if m.retentionDays > 0 {
+		cutoff := now.Add(-time.Duration(m.retentionDays) * 24 * time.Hour).UnixMilli()
+		// Whole days only: a usage read can then treat any fact bucket as either
+		// entirely backed by request records or not at all.
+		cutoffs[repository.LifecycleUsageDetail] = (cutoff / repository.DayBucketMS) * repository.DayBucketMS
 	}
-	cutoff := time.Now().Add(-time.Duration(m.retentionDays) * 24 * time.Hour).UnixMilli()
-	deleted, err := m.store.PurgeUsageOlderThan(ctx, cutoff)
+	switch {
+	case m.inboxRetentionDays > 0:
+		cutoffs[repository.LifecycleUsageInbox] = now.Add(-time.Duration(m.inboxRetentionDays) * 24 * time.Hour).UnixMilli()
+	case m.retentionDays > 0:
+		cutoffs[repository.LifecycleUsageInbox] = cutoffs[repository.LifecycleUsageDetail]
+	}
+	return cutoffs
+}
+
+// purgeOnce runs one retention pass and reports whether it finished. The store
+// keeps a request record until the usage facts have absorbed it, so the facts are
+// never asked to stand in for something they do not contain.
+func (m *Maintenance) purgeOnce(ctx context.Context) bool {
+	report, err := m.store.RunLifecycle(ctx, m.lifecycleCutoffs(), m.retentionBatches)
 	if err != nil {
-		m.recordError(fmt.Errorf("purge usage history: %w", err))
-		return
+		m.recordError(fmt.Errorf("apply retention: %w", err))
+		return true
 	}
-	if deleted == 0 {
-		return
+	if deleted := report.Total(); deleted > 0 {
+		m.mu.Lock()
+		m.status.Purged += deleted
+		m.mu.Unlock()
+		m.logger.Info("usage retention applied", "deleted_rows", deleted,
+			"retention_days", m.retentionDays, "inbox_retention_days", m.inboxRetentionDays,
+			"complete", report.IsComplete)
 	}
-	m.mu.Lock()
-	m.status.Purged += deleted
-	m.mu.Unlock()
-	m.logger.Info("usage retention applied", "deleted_events", deleted, "retention_days", m.retentionDays)
+	return report.IsComplete
 }
 
 func (m *Maintenance) recordError(err error) {

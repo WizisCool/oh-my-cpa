@@ -290,7 +290,7 @@ export const chartDashboard = {
     series: chartSeries,
   },
   metrics: { rpm: 12, tpm: 1234, cache_rate: 42, cost: 0, cost_source: 'none', cost_note: '', avg_latency_ms: 900, avg_ttft_ms: 200 },
-  coverage: { rollup_requests: 0, detail_requests: 0, pending_inbox: 0, stored_events: 0 },
+  coverage: { rollup_requests: 0, detail_requests: 0, pending_inbox: 0, has_usage: false },
   partial_errors: [],
 };
 

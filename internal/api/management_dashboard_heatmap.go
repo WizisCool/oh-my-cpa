@@ -188,7 +188,7 @@ func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *htt
 	// A nil marker is reported as null, never as epoch zero: the panel paints "no
 	// stored usage" before that instant, and zero would claim the whole strip had been
 	// recorded since 1970.
-	first, err := h.repo.FirstUsageEventMS(ctx, defaultInstanceID())
+	first, err := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID())
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("query first usage event: %w", err))
 		return

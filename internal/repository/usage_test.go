@@ -277,24 +277,24 @@ func TestUsageRollupAggregationIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	aggregated, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100)
+	aggregated, err := repo.AggregateUsageFacts(ctx, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if aggregated == 0 {
 		t.Fatal("first pass should fold rows")
 	}
-	checkpoint, _ := repo.UsageCheckpoint(ctx, CheckpointHourly)
+	checkpoint, _ := repo.UsageCheckpoint(ctx, CheckpointFacts)
 	if checkpoint == 0 {
 		t.Fatal("checkpoint did not advance")
 	}
 
 	// A second pass over the same data must be a no-op, not a double count.
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 	var requests int64
-	if err := repo.SQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(requests),0) FROM usage_overview_hourly_stats`).Scan(&requests); err != nil {
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT COALESCE(SUM(requests),0) FROM usage_facts_15m`).Scan(&requests); err != nil {
 		t.Fatal(err)
 	}
 	if requests != 5 {
@@ -314,10 +314,7 @@ func TestUsageAnalyticsHybridCountsEachEventOnce(t *testing.T) {
 	if _, err := repo.InsertUsageEvents(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointDaily, DayBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 
@@ -366,19 +363,19 @@ func TestUsageAnalyticsLeftEdgePartialBucketIsNotDropped(t *testing.T) {
 
 	events := []usage.Event{
 		usageEventAt("default", "before", base, usage.TokenStats{TotalTokens: 7}, false),
-		usageEventAt("default", "inside", base.Add(30*time.Minute), usage.TokenStats{TotalTokens: 11}, false),
+		usageEventAt("default", "inside", base.Add(12*time.Minute), usage.TokenStats{TotalTokens: 11}, false),
 	}
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 
-	// Window starts mid-bucket: the aggregated 10:00 row covers 10:00-10:59 as a
+	// Window starts mid-bucket: the folded 10:00 row covers 10:00-10:14 as a
 	// whole, so reading it would over-count and skipping it would lose "inside".
 	result, err := repo.QueryUsageAnalytics(ctx, "default",
-		base.Add(15*time.Minute).UnixMilli(), base.Add(time.Hour).UnixMilli(), HourBucketMS)
+		base.Add(10*time.Minute).UnixMilli(), base.Add(time.Hour).UnixMilli(), HourBucketMS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,11 +383,11 @@ func TestUsageAnalyticsLeftEdgePartialBucketIsNotDropped(t *testing.T) {
 		t.Fatalf("partial leading bucket wrong: %+v", result.Totals)
 	}
 	if result.FromRollup != 0 {
-		t.Fatalf("partial bucket must be served from the detail table, got %+v", result)
+		t.Fatalf("partial bucket must be served from request records, got %+v", result)
 	}
 }
 
-func TestUsageRetentionRespectsAggregationWatermark(t *testing.T) {
+func TestRetentionKeepsRecordsTheFactsHaveNotAbsorbed(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()
 	base := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
@@ -401,42 +398,41 @@ func TestUsageRetentionRespectsAggregationWatermark(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Nothing aggregated yet: the watermark is the oldest event, so a purge must
-	// not delete data the rollup has not absorbed.
-	deleted, err := repo.PurgeUsageOlderThan(ctx, base.Add(2*time.Hour).UnixMilli())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if deleted != 0 {
-		t.Fatalf("purge deleted unaggregated events: %d", deleted)
+	cutoffs := map[string]int64{LifecycleUsageDetail: base.Add(24 * time.Hour).UnixMilli()}
+	runTwice := func() int64 {
+		t.Helper()
+		var deleted int64
+		// The first pass publishes the horizon; the second deletes below it.
+		for pass := 0; pass < 2; pass++ {
+			report, err := repo.RunLifecycle(ctx, cutoffs, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			deleted += report.Deleted["usage_events"]
+		}
+		return deleted
 	}
 
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+	// Nothing folded yet: deleting now would lose the usage for good, because
+	// the facts are all that is left once a record is gone.
+	if deleted := runTwice(); deleted != 0 {
+		t.Fatalf("retention deleted unfolded records: %d", deleted)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointDaily, DayBucketMS, 100); err != nil {
-		t.Fatal(err)
+	if deleted := runTwice(); deleted != 2 {
+		t.Fatalf("retention after the fold should clear both records, deleted %d", deleted)
 	}
-	deleted, err = repo.PurgeUsageOlderThan(ctx, base.Add(2*time.Hour).UnixMilli())
+
+	// The facts outlive the records: the window still reads both requests.
+	result, err := repo.QueryUsageAnalytics(ctx, "default",
+		base.Add(-time.Hour).UnixMilli(), base.Add(3*time.Hour).UnixMilli(), HourBucketMS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deleted != 2 {
-		t.Fatalf("purge after aggregation should clear both rows, deleted %d", deleted)
-	}
-	var remaining int64
-	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM usage_events`).Scan(&remaining); err != nil {
-		t.Fatal(err)
-	}
-	if remaining != 0 {
-		t.Fatalf("events survived purge: %d", remaining)
-	}
-	// Rollup rows outside the horizon are removed with the details.
-	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM usage_overview_hourly_stats`).Scan(&remaining); err != nil {
-		t.Fatal(err)
-	}
-	if remaining != 0 {
-		t.Fatalf("hourly stats survived purge: %d", remaining)
+	if result.Totals.Requests != 2 || result.FromEvents != 0 {
+		t.Fatalf("usage must survive its request records: %+v", result)
 	}
 }
 
@@ -467,31 +463,24 @@ func TestErrorEventsAreIdempotent(t *testing.T) {
 func TestUsageCheckpointNeverRewinds(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()
-	if err := repo.SetUsageCheckpoint(ctx, CheckpointHourly, 50); err != nil {
+	if err := repo.SetUsageCheckpoint(ctx, CheckpointFacts, 50); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.SetUsageCheckpoint(ctx, CheckpointHourly, 10); err != nil {
+	if err := repo.SetUsageCheckpoint(ctx, CheckpointFacts, 10); err != nil {
 		t.Fatal(err)
 	}
-	value, err := repo.UsageCheckpoint(ctx, CheckpointHourly)
+	value, err := repo.UsageCheckpoint(ctx, CheckpointFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if value != 50 {
 		t.Fatalf("checkpoint rewound to %d", value)
 	}
-	if err := repo.SetUsageCheckpoint(ctx, CheckpointHourly, 0); err != nil {
+	if err := repo.SetUsageCheckpoint(ctx, CheckpointFacts, 0); err != nil {
 		t.Fatal(err)
 	}
-	if value, _ = repo.UsageCheckpoint(ctx, CheckpointHourly); value != 50 {
+	if value, _ = repo.UsageCheckpoint(ctx, CheckpointFacts); value != 50 {
 		t.Fatalf("zero must not move the checkpoint, got %d", value)
-	}
-}
-
-func TestAggregateRejectsUnknownGrain(t *testing.T) {
-	repo := usageTestRepository(t)
-	if _, err := repo.AggregateUsageGrain(context.Background(), "weekly", HourBucketMS, 10); err == nil {
-		t.Fatal("unknown grain must be rejected")
 	}
 }
 
@@ -545,7 +534,7 @@ func TestUsageAnalyticsFinerBucketThanRollupKeepsDistribution(t *testing.T) {
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 

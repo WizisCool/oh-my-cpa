@@ -940,6 +940,7 @@ const DICT: Record<string, [string, string]> = {
   'dash.range.7d': ['近 7 天', 'Last 7 days'],
   'dash.range.30d': ['近 30 天', 'Last 30 days'],
   'dash.range.90d': ['近 90 天', 'Last 90 days'],
+  'dash.range.all': ['全部', 'All time'],
   'dash.range.until_now': ['至今', 'Until now'],
   'time_range.title': ['时间范围', 'Time range'],
   'time_range.quick': ['最近', 'Recent'],

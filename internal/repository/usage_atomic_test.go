@@ -38,7 +38,7 @@ func TestConcurrentAggregateUsageGrainIsAtomicAndExact(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				absorbed, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 20)
+				absorbed, err := repo.AggregateUsageFacts(ctx, 20)
 				if err != nil {
 					t.Errorf("concurrent aggregate error: %v", err)
 					return
@@ -54,7 +54,7 @@ func TestConcurrentAggregateUsageGrainIsAtomicAndExact(t *testing.T) {
 	var totalRequests, totalTokens int64
 	err := repo.SQL().QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(requests), 0), COALESCE(SUM(total_tokens), 0)
-		FROM usage_overview_hourly_stats WHERE instance_id = 'default'`).Scan(&totalRequests, &totalTokens)
+		FROM usage_facts_15m WHERE instance_id = 'default'`).Scan(&totalRequests, &totalTokens)
 	if err != nil {
 		t.Fatal(err)
 	}

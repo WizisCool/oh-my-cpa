@@ -139,7 +139,7 @@ func TestQueryDailyTokenTotalsCountsEveryRecordOnceWhenTimestampsArriveOutOfOrde
 	later := time.Date(2026, 9, 14, 10, 50, 0, 0, time.UTC)
 	earlier := time.Date(2026, 9, 14, 10, 30, 0, 0, time.UTC)
 	insertAt(t, repo, "later", later, 40)
-	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 	insertAt(t, repo, "earlier", earlier, 60)
@@ -289,7 +289,7 @@ func TestFirstUsageEventMSIsInstanceScopedAndDistinguishesEmptyFromEpoch(t *test
 
 	// Nothing captured: nil, not zero. The panel reads the difference to label a cell
 	// "no stored usage" rather than claiming a first record at the epoch.
-	value, err := repo.FirstUsageEventMS(ctx, "default")
+	value, err := repo.FirstUsageRecordMS(ctx, "default")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestFirstUsageEventMSIsInstanceScopedAndDistinguishesEmptyFromEpoch(t *test
 	insertAt(t, repo, "b", second, 1)
 	insertAt(t, repo, "a", first, 1)
 
-	value, err = repo.FirstUsageEventMS(ctx, "default")
+	value, err = repo.FirstUsageRecordMS(ctx, "default")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestFirstUsageEventMSIsInstanceScopedAndDistinguishesEmptyFromEpoch(t *test
 	}); err != nil {
 		t.Fatal(err)
 	}
-	value, err = repo.FirstUsageEventMS(ctx, "default")
+	value, err = repo.FirstUsageRecordMS(ctx, "default")
 	if err != nil {
 		t.Fatal(err)
 	}

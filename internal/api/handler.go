@@ -63,7 +63,8 @@ type Handler struct {
 	// in the store, for a plugin CPA has not loaded and so reports by id alone.
 	pluginIdentities *pluginIdentityCache
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
-	// the token-activity grid, quota reads and the price book's recent traffic. Nil means the wall
+	// the token-activity grid, the dashboard's all-time window, quota reads and the price book's
+	// recent traffic. Nil means the wall
 	// clock; only the demo dataset export sets it.
 	nowFn func() time.Time
 

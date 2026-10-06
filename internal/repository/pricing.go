@@ -470,61 +470,34 @@ func (r *Repository) QueryUsageCost(ctx context.Context, instanceID string, from
 
 // QueryUsageCostWindow sums locked request costs and, when bucketMS is positive,
 // also groups them onto the dashboard grid.
-//
-// Costs live only on the detail rows: the aggregation rollups carry token and
-// request counters but no cost column, because a price snapshot is per request
-// and a rollup cannot preserve which version each row was priced at. So this
-// reads usage_events regardless of which table served the token series.
 func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageCostStats, error) {
 	return r.QueryUsageCostWindowFiltered(ctx, instanceID, fromMS, toMS, bucketMS, "")
 }
 
 // QueryUsageCostWindowFiltered sums locked request costs, optionally filtered by
 // client API key fingerprint (api_group_key).
+//
+// The cost is a measure of the usage facts: a request's cost is immutable once
+// stored, so its sum per bucket never needs recomputing and outlives the request
+// record it was locked on.
 func (r *Repository) QueryUsageCostWindowFiltered(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageCostStats, error) {
-	query := `SELECT COALESCE(TOTAL(cost_nanos), 0) / 1000000000.0,
- COALESCE(SUM(pricing_status = 'priced'), 0), COALESCE(SUM(pricing_status <> 'priced'), 0)
- FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
-	args := []any{instanceID, fromMS, toMS}
-	if apiKey != "" {
-		query += " AND api_group_key = ?"
-		args = append(args, apiKey)
-	}
-	var stats UsageCostStats
-	if err := r.SQL().QueryRowContext(ctx, query, args...).Scan(&stats.CostUSD, &stats.PricedEvents, &stats.UnpricedEvents); err != nil {
+	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: max(bucketMS, 0), APIGroupKey: apiKey,
+	})
+	if err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost: %w", err)
+	}
+	totals := facts.Totals()
+	stats := UsageCostStats{
+		CostUSD:        float64(totals.CostNanos) / 1e9,
+		PricedEvents:   totals.PricedRequests,
+		UnpricedEvents: totals.Requests - totals.PricedRequests,
 	}
 	if bucketMS <= 0 {
 		return stats, nil
 	}
-	// Aligned the same way the series grid is, so the two agree on bucket edges.
-	// TOTAL() is a float aggregate by definition, so it cannot be scanned into an
-	// int64: SQLite hands back a float64 and the driver rejects the conversion. Sum
-	// the integer column instead, which is also exact - cost_nanos is integral and
-	// an accumulated float would lose precision over a long window.
-	bucketQuery := `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(SUM(cost_nanos), 0)
- FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
-	bucketArgs := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
-	if apiKey != "" {
-		bucketQuery += " AND api_group_key = ?"
-		bucketArgs = append(bucketArgs, apiKey)
-	}
-	bucketQuery += " GROUP BY aligned ORDER BY aligned ASC"
-
-	rows, err := r.SQL().QueryContext(ctx, bucketQuery, bucketArgs...)
-	if err != nil {
-		return UsageCostStats{}, fmt.Errorf("query usage cost buckets: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var bucket UsageCostBucket
-		if err := rows.Scan(&bucket.StartMS, &bucket.CostNanos); err != nil {
-			return UsageCostStats{}, fmt.Errorf("scan usage cost bucket: %w", err)
-		}
-		stats.Buckets = append(stats.Buckets, bucket)
-	}
-	if err := rows.Err(); err != nil {
-		return UsageCostStats{}, fmt.Errorf("iterate usage cost buckets: %w", err)
+	for _, row := range facts.Rows {
+		stats.Buckets = append(stats.Buckets, UsageCostBucket{StartMS: row.StartMS, CostNanos: row.CostNanos})
 	}
 	return stats, nil
 }

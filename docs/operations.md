@@ -48,7 +48,8 @@ a message naming the variable.
 | `OMCPA_USAGE_IDLE_INTERVAL` | `1s` | First wait after an empty poll |
 | `OMCPA_USAGE_MAX_IDLE_INTERVAL` | `10s` | Ceiling the idle backoff grows to. Keep it well below CPA's `redis-usage-queue-retention-seconds` |
 | `OMCPA_USAGE_BATCH_SIZE` | `1000` | Records read per poll (1–10000) |
-| `OMCPA_USAGE_RETENTION_DAYS` | `400` | Days of request records kept; the dashboard's heatmap spans a year |
+| `OMCPA_USAGE_RETENTION_DAYS` | `90` | Days of request records (the request list and its detail) kept, `0` to keep them all. Ninety matches the request list's longest preset. Dashboard statistics do not depend on it: they are kept permanently as usage facts |
+| `OMCPA_USAGE_INBOX_RETENTION_DAYS` | `7` | Days a captured payload is kept after it was decoded into a request record, `0` to keep it as long as the record. Payloads are the largest part of the database and nothing reads them once decoded except a re-decode after a decoder fix |
 
 ### Update checks and demo
 

@@ -45,7 +45,11 @@ type dashboardProviderTraffic struct {
 func (h *Handler) dashboardProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
-	window, windowErr := dashboardWindowFromRequest(request, time.Now().UTC())
+	window, windowErr, resolveErr := h.dashboardWindow(request, time.Now().UTC())
+	if resolveErr != nil {
+		writeInternalError(writer, fmt.Errorf("resolve dashboard window: %w", resolveErr))
+		return
+	}
 	if windowErr != "" {
 		writeError(writer, http.StatusBadRequest, windowErr)
 		return

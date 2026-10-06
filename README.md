@@ -289,7 +289,7 @@ so connect only agents you would trust with the console.
 <details>
 <summary><b>Observability</b></summary>
 
-- **Dashboard**: request volume, token throughput, cache hit rate and cost over presets from 15 minutes to 90 days or any custom range, plus a year-long token heatmap.
+- **Dashboard**: request volume, token throughput, cache hit rate and cost over presets from 15 minutes to 90 days, an all-time window since installation, or any custom range, plus a year-long token heatmap. Statistics are kept permanently; request records roll out of a configurable retention.
 - **Model panels**: token trend and usage ring by call point or by upstream model, with cost shares.
 - **Request records**: multi-select facets and full-text search; a detail drawer with duration, TTFT, token breakdown and the raw per-request log. Each record keeps the model the upstream reported serving, and flags the ones where it differs from the model requested.
 - **Background collection**: usage is ingested by stream or polling whether or not a browser is open.

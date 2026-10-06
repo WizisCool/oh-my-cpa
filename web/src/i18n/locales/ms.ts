@@ -750,6 +750,7 @@ export const MS: Readonly<Record<string, string>> = {
   "dash.range.7d": "7 hari lepas",
   "dash.range.30d": "30 hari lepas",
   "dash.range.90d": "90 hari lepas",
+  "dash.range.all": "Sepanjang masa",
   "dash.range.until_now": "Sehingga kini",
   "time_range.title": "Julat masa",
   "time_range.quick": "Baru-baru ini",

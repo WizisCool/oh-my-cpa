@@ -370,22 +370,19 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 	return len(events), oldest, newest, nil
 }
 
-// seedRollups folds the seeded history into both rollup grains through the
-// ordinary aggregation path, so the dashboard's long windows read a year of
-// history from the same pre-aggregated buckets a live deployment would have.
+// seedRollups folds the seeded history into the usage facts through the
+// ordinary fold, so the dashboard reads a year of history from the same tables
+// a live deployment would have.
 func seedRollups(ctx context.Context, repo *repository.Repository) error {
-	for _, grain := range []struct {
-		name     string
-		bucketMS int64
-	}{
-		{repository.CheckpointHourly, repository.HourBucketMS},
-		{repository.CheckpointDaily, repository.DayBucketMS},
-	} {
-		if _, err := repo.AggregateUsageGrain(ctx, grain.name, grain.bucketMS, 20000); err != nil {
-			return fmt.Errorf("aggregate demo rollup %s: %w", grain.name, err)
+	for {
+		folded, err := repo.AggregateUsageFacts(ctx, 20000)
+		if err != nil {
+			return fmt.Errorf("fold demo usage facts: %w", err)
+		}
+		if folded < 20000 {
+			return nil
 		}
 	}
-	return nil
 }
 
 // recentWindow is the shortest window the dashboard offers.

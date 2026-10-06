@@ -98,7 +98,7 @@ describe('routing', () => {
   it('serves each dashboard preset from its own captured window', () => {
     // Not the same response relabelled: the picker's positions have to hold different
     // numbers, or the control would look broken.
-    const names = ['15m', '1h', '6h', '24h', '7d', '30d', '90d'].map((preset) =>
+    const names = ['15m', '1h', '6h', '24h', '7d', '30d', '90d', 'all'].map((preset) =>
       responseNameFor(request(`/api/v1/management/dashboard?preset=${preset}`)),
     );
     assert.equal(new Set(names).size, names.length, 'two presets resolve to one response');

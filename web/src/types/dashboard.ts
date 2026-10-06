@@ -1,4 +1,4 @@
-/** Response shapes for the request-record backed dashboard. */
+/** Response shapes for the dashboard, which reads permanent usage facts. */
 
 export interface DashboardWindow {
   preset?: string;
@@ -82,7 +82,8 @@ export interface DashboardCoverage {
   rollup_requests: number;
   detail_requests: number;
   pending_inbox: number;
-  stored_events: number;
+  /** Whether any request was ever recorded; false only on a deployment with no usage at all. */
+  has_usage: boolean;
 }
 
 export interface DashboardResponse {
@@ -98,20 +99,26 @@ export interface DashboardResponse {
  * Range presets offered by the dashboard picker, shortest first. "15m" is the
  * one the picker labels Live — see docs/design.md for why fifteen minutes and
  * not five.
+ *
+ * "all" has no length of its own: the server starts it at the deployment's first
+ * usage record, which is why no table here maps a preset to a span.
  */
-export const DASHBOARD_PRESETS = ['15m', '1h', '6h', '24h', '7d', '30d', '90d'] as const;
+export const DASHBOARD_PRESETS = ['15m', '1h', '6h', '24h', '7d', '30d', '90d', 'all'] as const;
 export type DashboardPreset = (typeof DASHBOARD_PRESETS)[number];
 
-/** Window length per preset, used to preview the range a preset resolves to. */
-export const DASHBOARD_PRESET_MS: Record<DashboardPreset, number> = {
-  '15m': 15 * 60_000,
-  '1h': 3_600_000,
-  '6h': 6 * 3_600_000,
-  '24h': 24 * 3_600_000,
-  '7d': 7 * 86_400_000,
-  '30d': 30 * 86_400_000,
-  '90d': 90 * 86_400_000,
-};
+/**
+ * The preset a dashboard drill-down opens the request list on.
+ *
+ * The request list reads request records, which roll out of retention, and it
+ * bounds its window; the dashboard's all-time window reads permanent usage
+ * facts and does neither. An all-time drill-down therefore lands on the longest
+ * window the list offers instead of a range it would reject.
+ */
+export const REQUEST_LIST_LONGEST_PRESET = '90d';
+
+export function requestListPreset(preset: DashboardPreset): string {
+  return preset === 'all' ? REQUEST_LIST_LONGEST_PRESET : preset;
+}
 
 export interface DashboardRange {
   preset?: DashboardPreset;

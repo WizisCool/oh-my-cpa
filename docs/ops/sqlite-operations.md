@@ -189,10 +189,16 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 
 ## 6. Data Retention & Periodic Maintenance
 
-1. **Historical Event Retention**:
-   - Configured via `OMCPA_USAGE_RETENTION_DAYS` (default 400 days, `0` for indefinite retention) to control raw usage payloads and event details. The default follows the dashboard's token heatmap, which covers a rolling year: a shorter horizon would leave the window's own beginning unreadable, and 400 rather than 365 leaves slack so neither a leap year nor an offset boundary can push the oldest day out;
-   - Pruning runs once per hour inside `ingest.Maintenance`, while rollups advance every `OMCPA_USAGE_AGGREGATE_INTERVAL` (default 15 seconds);
-   - Pruning boundaries are gated by aggregation checkpoints, guaranteeing that detailed records are never removed before rollups have processed them.
+1. **Usage data lifecycle**:
+   - Every table declares one lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`): `permanent`, `rolling`, `owner_bounded` or `replaced`. A migration that adds a table without declaring it fails `TestEveryTableDeclaresItsLifecycle`;
+   - **Permanent**: `usage_facts_15m` and `usage_facts_daily`, which every dashboard panel reads. They grow with distinct model/credential/key combinations per bucket, not with requests, and are never pruned;
+   - **Rolling, `OMCPA_USAGE_RETENTION_DAYS`** (default 90, `0` keeps everything): request records (`usage_events`), `error_events`, `ingest_gaps` and discarded payloads. The cutoff is floored to a whole UTC day;
+   - **Rolling, `OMCPA_USAGE_INBOX_RETENTION_DAYS`** (default 7, `0` follows the request-record horizon): payloads in `usage_inboxes` that were decoded into a request record. They are the largest part of the database;
+   - The pass runs hourly inside `ingest.Maintenance` in batches of 2000 rows, at most 25 full batches at a time; an unfinished pass continues on the next fold tick (`OMCPA_USAGE_AGGREGATE_INTERVAL`, default 15 seconds) so the write gate is never held for a long delete;
+   - A request record is deleted only when its id is at or below the `facts` checkpoint, so nothing leaves before the permanent facts hold it. What each policy has removed, and up to which instant, is recorded in `data_lifecycle_state`;
+   - Deleting rows frees pages for reuse but does not shrink the file (`auto_vacuum` is off). After shortening a horizon, reclaim the space with the compaction under *Space Reclamation & Compaction* below;
+   - **Upgrade note**: the request-record default was 400 days and is now 90, and decoded payloads are now kept 7 days. A deployment that sets neither variable has its older request records and payloads deleted by the passes that follow the upgrade, once the usage facts have absorbed them; dashboard statistics are unaffected. To keep the previous behaviour set `OMCPA_USAGE_RETENTION_DAYS=400` and `OMCPA_USAGE_INBOX_RETENTION_DAYS=0` before upgrading;
+   - On upgrade, migration 035 starts the facts empty and the maintenance loop folds the stored request records into them from the first id. Totals stay exact meanwhile because unfolded records are read directly; statistics for requests already deleted by an earlier retention pass cannot be recovered.
 2. **Price History (`model_price_versions`, `pricing_channel_versions`)**:
    - Price and channel versions are append-only and are never pruned: every stored request cost references the versions it was locked against, and removing one would leave a cost that can no longer be explained. They grow with price changes, not with traffic, so their size is negligible;
    - Migration 028 (OpenRouter pricing) rebuilds `model_prices` and `pricing_sync_state` by copying their rows verbatim with the version triggers dropped, so the upgrade mints no version and changes no recorded cost. The auto-sync interval is carried over; the models.dev sync history is not. The pre-migration backup above covers it like any other migration;

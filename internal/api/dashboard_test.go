@@ -170,10 +170,7 @@ func TestDashboardUsesRollupOnceAggregated(t *testing.T) {
 		{Event: eventFor("a", base.Add(time.Minute), usage.TokenStats{TotalTokens: 10}, false)},
 		{Event: eventFor("b", base.Add(2*time.Minute), usage.TokenStats{TotalTokens: 20}, false)},
 	})
-	if _, err := repo.AggregateUsageGrain(context.Background(), repository.CheckpointHourly, repository.HourBucketMS, 100); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.AggregateUsageGrain(context.Background(), repository.CheckpointDaily, repository.DayBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
 		t.Fatal(err)
 	}
 
@@ -191,20 +188,20 @@ func TestDashboardUsesRollupOnceAggregated(t *testing.T) {
 	if body.Coverage.FromRollup+body.Coverage.FromDetails != body.Requests.Total {
 		t.Fatalf("coverage must partition the total: %+v", body.Coverage)
 	}
-	// The rollup serves a window only where it can be sliced honestly. This
-	// preset's grid is finer than the hourly grain, so the answer must come from
-	// the detail rows: an hourly row cannot be split across ten-minute buckets, and
-	// re-aligning it would collapse the hour onto its first bucket (see
+	// The facts serve a window only where they can be sliced honestly. This
+	// preset's grid is finer than the quarter-hour grain, so the answer must come
+	// from request records: a fact row cannot be split across ten-minute buckets,
+	// and re-aligning it would collapse the quarter hour onto its first bucket (see
 	// TestUsageAnalyticsFinerBucketThanRollupKeepsDistribution).
-	if body.Window.BucketMS < repository.HourBucketMS && body.Coverage.FromRollup != 0 {
-		t.Fatalf("a finer-than-grain grid must not be served from the hourly rollup: %+v", body.Coverage)
+	if body.Window.BucketMS < repository.QuarterHourBucketMS && body.Coverage.FromRollup != 0 {
+		t.Fatalf("a finer-than-grain grid must not be served from the facts: %+v", body.Coverage)
 	}
 }
 
 // TestDashboardUsesRollupForCoarseGrids is the other half of the rule above: the
-// rollup still carries the long presets, which is the reason it exists. A daily
-// grid is coarser than the hourly grain, so slicing it is honest and the answer
-// must not fall back to scanning every detail row.
+// facts carry the long presets, which is the reason they exist. A daily grid is
+// coarser than the fact grain, so slicing it is honest and the answer must not
+// fall back to scanning every request record.
 func TestDashboardUsesRollupForCoarseGrids(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	// Well inside the 30d window: a base exactly at the boundary would fall
@@ -214,7 +211,7 @@ func TestDashboardUsesRollupForCoarseGrids(t *testing.T) {
 		{Event: eventFor("coarse-a", base.Add(time.Minute), usage.TokenStats{TotalTokens: 10}, false)},
 		{Event: eventFor("coarse-b", base.Add(2*time.Minute), usage.TokenStats{TotalTokens: 20}, false)},
 	})
-	if _, err := repo.AggregateUsageGrain(context.Background(), repository.CheckpointDaily, repository.DayBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
 		t.Fatal(err)
 	}
 	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=30d")
@@ -232,7 +229,67 @@ func TestDashboardUsesRollupForCoarseGrids(t *testing.T) {
 		t.Fatalf("expected a coarse grid for the 30d preset, got %d", body.Window.BucketMS)
 	}
 	if body.Coverage.FromRollup == 0 {
-		t.Fatalf("a coarse grid must still be served from the rollup: %+v", body.Coverage)
+		t.Fatalf("a coarse grid must still be served from the facts: %+v", body.Coverage)
+	}
+}
+
+// The all-time window is the reason the facts are permanent: it starts at the
+// first usage ever recorded and still reads it after retention has deleted the
+// request records, on every panel that draws a window.
+func TestDashboardAllTimeWindowOutlivesRequestRecords(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	ctx := context.Background()
+	old := time.Now().UTC().Add(-500 * 24 * time.Hour).Truncate(24 * time.Hour).Add(3 * time.Hour)
+	recent := time.Now().UTC().Add(-2 * time.Hour)
+	oldEvent := eventFor("ancient", old, usage.TokenStats{TotalTokens: 40}, false)
+	oldEvent.Model, oldEvent.Provider = "old-model", "codex"
+	recentEvent := eventFor("fresh", recent, usage.TokenStats{TotalTokens: 2}, true)
+	recentEvent.Model, recentEvent.Provider = "new-model", "claude"
+	seedEvents(t, repo, old, []repository.UsageDecoded{{Event: oldEvent}, {Event: recentEvent}})
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	cutoff := time.Now().UTC().Add(-400 * 24 * time.Hour).Truncate(24 * time.Hour).UnixMilli()
+	for pass := 0; pass < 2; pass++ {
+		if _, err := repo.RunLifecycle(ctx, map[string]int64{repository.LifecycleUsageDetail: cutoff}, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var records int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(1) FROM usage_events`).Scan(&records); err != nil || records != 1 {
+		t.Fatalf("retention left %d request records, want only the recent one: %v", records, err)
+	}
+
+	body := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=all")
+	if body.Window.Preset != "all" || body.Requests.Total != 2 || body.Tokens.Total != 42 || body.Requests.Failed != 1 {
+		t.Fatalf("all-time window = %+v requests %+v tokens %d, want both requests", body.Window, body.Requests, body.Tokens.Total)
+	}
+	if body.Window.FromMS > old.UnixMilli() || len(body.Requests.Series) > 2*dashboardTargetBuckets {
+		t.Fatalf("all-time window starts at %d with %d points; it must reach %d on a readable grid", body.Window.FromMS, len(body.Requests.Series), old.UnixMilli())
+	}
+	var seriesRequests int64
+	for _, point := range body.Requests.Series {
+		seriesRequests += point.Requests
+	}
+	if seriesRequests != 2 {
+		t.Fatalf("all-time series holds %d requests, want 2", seriesRequests)
+	}
+
+	for _, panel := range []string{"dashboard/tail", "dashboard/models", "dashboard/providers"} {
+		response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/"+panel+"?preset=all")
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s?preset=all status = %d body %s", panel, response.StatusCode, payload)
+		}
+		if panel != "dashboard/tail" && (!strings.Contains(string(payload), "old-model") && !strings.Contains(string(payload), "codex")) {
+			t.Fatalf("%s lost the usage whose request record was deleted: %s", panel, payload)
+		}
+	}
+
+	// The request list reads request records, which do not reach that far, so it
+	// does not offer the window at all rather than answering it with a fragment.
+	response, _ := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=all")
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("request list accepted preset=all with status %d", response.StatusCode)
 	}
 }
 
@@ -593,8 +650,8 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	from := bucket*10 + 500 // unaligned start
 	to := bucket * 14
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 9, UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30, CacheReadTokens: 7}},
-		{StartMS: bucket * 12, UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50, CacheReadTokens: 11}},
+		{StartMS: bucket * 9, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30, CacheReadTokens: 7}}},
+		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50, CacheReadTokens: 11}}},
 	}
 	costs := []repository.UsageCostBucket{
 		{StartMS: bucket * 9, CostNanos: 2_000_000_000},
@@ -636,9 +693,9 @@ func TestDashboardSeriesCarriesPerBucketCacheAndCost(t *testing.T) {
 	from := bucket * 10
 	to := bucket * 13
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 11, UsageTotals: repository.UsageTotals{
+		{StartMS: bucket * 11, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
 			Requests: 4, InputTokens: 100, CacheReadTokens: 60, TotalTokens: 160,
-		}},
+		}}},
 	}
 	costs := []repository.UsageCostBucket{{StartMS: bucket * 11, CostNanos: 1_500_000_000}}
 	points := fillDashboardBuckets(from, to, bucket, buckets, costs)

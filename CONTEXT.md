@@ -336,9 +336,28 @@ and the places it deliberately differs from the hand-tuned values it replaced.
 ## Time windows
 
 - **Range Preset**: A relative window — Live (last 15m), 1h, 6h, 24h, 7d, 30d,
-  90d. It slides with the current time, so its totals move on every poll even
+  90d, and on the dashboard only, All time. It slides with the current time, so its totals move on every poll even
   when no request arrived: the left edge keeps dropping old events. That is why
   a relative window cannot answer "nothing changed".
+- **All time**: The dashboard preset that starts at the first usage this
+  deployment recorded and ends at now. The server places its start; it is not a
+  custom range and is not subject to the custom range's 365-day cap. The request
+  list does not offer it, because it reads Request Records, which roll out of
+  retention; a dashboard drill-down from All time opens the list on its longest
+  preset.
+- **Usage Facts**: The permanent statistics every dashboard panel reads: requests,
+  failures, tokens, latency and request-time cost per fifteen minutes and per day,
+  by client key, model, call point, credential and provider. They are derived from
+  Request Records and outlive them. They cannot answer a question about a single
+  request.
+- **Request Record retention**: Request Records, and the captured payloads they
+  were decoded from, are detail: they are kept for a configured number of days
+  and then deleted in the background. Deleting them never changes a dashboard
+  number. A request record is never deleted before Usage Facts hold it.
+- **Detail horizon**: The instant before which Request Records have been
+  deleted. A dashboard window that reaches behind it is widened to whole
+  fifteen-minute buckets and drawn no finer than that; the response reports the
+  bounds actually read.
 - **Live (15m)**: The shortest preset, fifteen minutes at one bucket per minute.
   It is a preset, not a mode: it slides and is polled like the rest, at the
   cadence its own bucket width implies (five seconds). Five minutes was too
@@ -470,14 +489,14 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   the zone requires, and the exact interval a cell aggregated is the same interval its click
   opens in the request list.
 - **Heatmap Cell State**: One of `measured` (carried traffic), `empty` (stored, no traffic), or
-  `unrecorded` (nothing stored for that day — whether the records were pruned or the day is later
+  `unrecorded` (nothing stored for that day — it precedes the deployment's first usage, or is later
   this week than today). There is no separate `pending` state: the panel distinguishes "there is
   stored data" from "there is not", and a reader comparing days cannot act on the difference between
-  a day that has not happened and one whose records were pruned. The days after today in the final
+  a day that has not happened and one before recording began. The days after today in the final
   column are drawn as ordinary unrecorded cells so the current week stays a complete column.
   `empty` and `unrecorded` are **solid fills ordered against the card**, not outlines: the window is
-  a rolling year and the default retention horizon is 400 days, so the two agree — but the window
-  still ends on today, and outlining the zero cells turned the field into a wire mesh regardless of
+  a rolling year, read from permanent Usage Facts, so a day is unrecorded only before the
+  deployment's first usage — but the window still ends on today, and outlining the zero cells turned the field into a wire mesh regardless of
   how many there were. Their order carries the meaning — unrecorded is closest to the card (no
   information), empty is a step further (a measured zero), and only a measured day is clearly louder.
   **Every cell is interactive**, including one with nothing stored: its tooltip says so rather than

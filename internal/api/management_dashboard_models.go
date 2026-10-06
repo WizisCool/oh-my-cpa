@@ -74,14 +74,14 @@ type dashboardModelPoint struct {
 // dashboardModels answers the dashboard's two model-level panels.
 //
 // It is a separate endpoint rather than a block on the dashboard response for the reasons
-// ADR 0005 recorded for the token heatmap, and they still hold here. Its aggregation walks
-// the detail rows instead of the rollup, which is far more expensive than the KPI tiles'
-// read; attaching it to `/management/dashboard` would pay that cost on every live tail poll,
-// which fires as often as every five seconds. It answers for the window the picker selected
+// ADR 0005 recorded for the token heatmap, and they still hold here. It groups the window
+// by model as well as by bucket, which makes it the page's widest read; attaching it to
+// `/management/dashboard` would pay that cost on every live tail poll, which fires as often
+// as every five seconds. It answers for the window the picker selected
 // but on its own cadence, and it is allowed to fail alone: an unavailable read leaves the six
 // tiles and the activity grid beside it readable.
 //
-// The window is resolved by the same `dashboardWindowFromRequest` the tiles use, so the two
+// The window is resolved by the same `Handler.dashboardWindow` the tiles use, so the two
 // surfaces cannot disagree about what "last 24 hours" means.
 //
 // `group_by` selects the grouping: `model` (the upstream model name, the original view) or
@@ -93,7 +93,11 @@ type dashboardModelPoint struct {
 func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
-	window, windowErr := dashboardWindowFromRequest(request, time.Now().UTC())
+	window, windowErr, resolveErr := h.dashboardWindow(request, time.Now().UTC())
+	if resolveErr != nil {
+		writeInternalError(writer, fmt.Errorf("resolve dashboard window: %w", resolveErr))
+		return
+	}
 	if windowErr != "" {
 		writeError(writer, http.StatusBadRequest, windowErr)
 		return

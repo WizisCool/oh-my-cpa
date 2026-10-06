@@ -99,7 +99,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `iconasset`, `crypto`, `domain`, `pricing`, `security`, `usage` |
-| `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
+| `internal/usage/ingest` | Collector loop, decode processor, usage-fact fold and data-lifecycle maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
 | `internal/release` | Published-version observation: version comparison, the release feed client, and the stored index | `repository` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
@@ -115,7 +115,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 Two rules keep the boundary meaningful:
 
 - `internal/repository` owns transaction boundaries. Anything that must be
-  atomic with a write (cost locking, inbox→event promotion, rollup checkpoints)
+  atomic with a write (cost locking, inbox→event promotion, the usage-fact fold and its checkpoint)
   is a repository method, not a sequence of calls from a service.
 - `internal/api` owns the allowlist. A new response field is a deliberate DTO
   change; the allowlist tests fail otherwise. Every management surface declares its own
@@ -1055,8 +1055,9 @@ CPA queue / subscription
   → usage_inboxes        raw payload, status pending, durable before decoding
   → ingest.Processor     decode via internal/usage, one event per inbox row
   → usage_events         typed row + request-time price snapshot (one tx)
-  → ingest.Maintenance   incremental rollup into hourly/daily stats,
-                         retention purge
+  → ingest.Maintenance   fold into usage_facts_15m + usage_facts_daily
+                         (permanent), then the data-lifecycle pass that
+                         rolls request records and decoded payloads out
   → /management/dashboard, /management/dashboard/tail,
     /management/dashboard/token-heatmap, /management/dashboard/models,
     /management/dashboard/providers, /usage/events
@@ -1140,48 +1141,74 @@ Its deadline is capped below the server's write timeout, so a slow sync cannot
 outlive the connection carrying its answer.
 
 Timestamps in the usage tables are epoch **milliseconds**; the older identity
-tables use `unixepoch()` seconds. Rollups are gated by
-`usage_aggregation_checkpoints` so aggregation is incremental rather than a
-full rescan.
+tables use `unixepoch()` seconds.
 
-**A window may only be served from a rollup whose grain is no finer than the
-requested bucket.** The rollups are hourly and daily; the dashboard's short presets
-ask for buckets well under an hour (15m and 1h resolve to one and two minutes, 6h to
-ten, 24h to thirty). An hourly row cannot be split across that grid: every rollup
-timestamp is already a multiple of any bucket dividing an hour, so re-aligning maps
-the whole hour onto its first bucket and reports the rest as zero. That failure is
-quiet — the window total stays correct, so sum-based assertions pass while the chart
-shows one spike per hour and nothing where the traffic actually was. `QueryUsageAnalytics`
-therefore reads the detail rows whenever `bucketMS < grainMS`, and keeps the rollup
-for hourly and coarser grids, where slicing is honest and the rollup earns its keep.
-The detail path is bounded by the retention window, so it cannot grow without limit.
+### Usage facts: what the dashboard reads, and why it outlives request records
 
-### Why the model breakdown reads one source, not the rollup split
+Request records (`usage_events`) and their captured payloads (`usage_inboxes`) grow with
+traffic and roll out of retention. The dashboard's numbers must not go with them, so every
+dashboard panel reads **usage facts** (ADR 0062): `usage_facts_15m` and `usage_facts_daily`,
+keyed by bucket, client key group, model, model alias, credential, provider and auth type,
+carrying every measure a panel prints (requests, failures, the token columns, latency and
+first-token sums, and the request-time cost with its priced and costed counts). They are
+never pruned. They grow with *distinct dimension combinations per bucket*, not with requests.
+
+`Repository.QueryUsageFacts` is the single read every panel goes through; the older
+`QueryUsageAnalytics`, `QueryUsageModelBuckets`, `QueryUsageProviderTotals`,
+`QueryUsageCostWindow` and `QueryDailyTokenTotals` are thin projections of it. A new panel
+adds a grouping or a measure there instead of writing another scan of `usage_events`.
+
+Three rules keep the read exact:
+
+- **Both grains fold in one transaction under one checkpoint** (`facts` in
+  `usage_aggregation_checkpoints`), so the two tables always cover the same set of event
+  ids. `AggregateUsageFacts` advances it in bounded batches.
+- **The split between facts and request records is an event id, never a timestamp.** A
+  record at or below the checkpoint is in the facts; one above it is not. CPA event times
+  arrive out of order, and a timestamp boundary would count a late record on both sides -
+  quietly in a total, and visibly wrong in a per-model ranking. The facts and the
+  unfolded records are read in **one SQL statement**, so the checkpoint cannot move
+  between the two halves.
+- **A bucket is only served from a grain that divides it.** Whole days come from the daily
+  table, the remaining whole quarter hours from the fifteen-minute table, and the ragged
+  edges of the window from request records at or below the checkpoint. A grid finer than
+  fifteen minutes is read from request records alone, because a fact row cannot be split.
+
+The fine grain is fifteen minutes because every civil UTC offset in use is a multiple of
+it: a local calendar day is a whole number of buckets in any deployment time zone, which
+an hourly grain cannot offer (`+05:30`, `+05:45`).
+
+**The detail horizon.** Once the lifecycle pass has removed request records before an
+instant, the ragged edges and the fine grids behind it can no longer be read. The instant is
+persisted (`data_lifecycle_state.horizon_ms`, policy `usage_detail`) rather than inferred
+from the oldest surviving row, and it is always a whole UTC day. `AlignUsageWindow` widens a
+window that reaches behind it to whole fact buckets and coarsens its grid to at least
+fifteen minutes; the response's `window` reports the bounds that were actually read.
+
+**The all-time window.** `preset=all` is resolved by the server (`Handler.dashboardWindow`)
+to start at the first usage the deployment recorded (`FirstUsageRecordMS`) and end at now.
+Only the dashboard endpoints accept it: the request list reads request records, so it
+keeps its bounded presets and rejects `all`. A custom range is still capped at 365 days.
+
+### Why the model breakdown is its own endpoint
 
 The dashboard's two model panels - the per-model token trend and the model-usage ring - are served by
 their own endpoint, `GET /management/dashboard/models`, with its own query, its own refresh cadence and
 its own failure mode. Three properties make it the wrong thing to attach to the KPI response, and each
 is the same reasoning ADR 0005 recorded for the token grid.
 
-**It is the page's most expensive read.** `QueryUsageModelBuckets` aggregates the *detail* table by
-model and bucket. `QueryUsageAnalytics` deliberately splits its window at the aggregation checkpoint
-and reads the two halves from different tables - but that split is not reusable here, and reusing it
-would be wrong rather than merely slower. Its boundary is a *timestamp*, while the rollup's unit of read
-is a whole row whose start may precede that boundary: an event timestamped inside an already-folded
-hour that arrived late (CPA event times can arrive out of order) sits on the detail side of the boundary
-while its own hour is already inside the rollup, so both halves count it. In a windowed total that
-artefact is a quiet double count; in a per-model *ranking* it also reorders models, which is the kind of
-wrong that still looks plausible on screen. One source has no boundary to get wrong.
+**It is the page's widest read.** `QueryUsageModelBuckets` groups the window by model and
+bucket, so it returns a row per model per bucket where the tiles return one per bucket. It goes
+through the same usage-fact read as the tiles, and the id split described above is what makes a
+per-model *ranking* safe: a late record is counted once, so it cannot reorder models.
 
 **It moves on its own cadence.** The KPI tiles poll through `/management/dashboard/tail` as often as
-every five seconds; that poll recomputes the window's aggregates, and for grids at or above the rollup's
-grain it reads them from the rollup rather than from individual events. Attaching a detail-table scan to
-it would multiply the page's heaviest query by twelve to redraw a ranking that changes when a caller
+every five seconds; that poll recomputes the window's aggregates. Attaching the grouped read to
+it would multiply the page's widest query by twelve to redraw a ranking that changes when a caller
 switches models, which is not a second-by-second event. The panels poll on a one-minute interval for a
 sliding window and not at all for a closed one.
 
-A closed range has fixed **bounds**, not immutable contents: records are still arriving, and retention
-can prune the far end. Its panels are simply not re-read on a timer, so they show what the range held
+A closed range has fixed **bounds**, not immutable contents: records are still arriving. Its panels are simply not re-read on a timer, so they show what the range held
 when it was last fetched - which is why the page's refresh button reaches them.
 
 **It is allowed to fail alone.** An unavailable read leaves the six tiles and the activity grid beside
@@ -1209,10 +1236,10 @@ because equal volumes are ordinary (two aliases of one model, or a window where 
 and without a total order the order would come from map iteration, reshuffling the legend under the
 operator on every poll.
 
-`BenchmarkUsageModelBuckets` pins the cost: roughly 0.23 s over 100 000 in-window detail rows and 2.6 s
-over 1 000 000 on one development machine, against a 15-second handler deadline. Retention bounds a
-row's *age* rather than how many exist, so those are the numbers to re-measure if the horizon or the
-traffic profile changes.
+`BenchmarkUsageModelBuckets` pins the cost of both paths over 100 000 in-window records on one
+development machine: about 0.74 s while none of them is folded, and about 0.02 s once the facts
+hold them. The first figure is the transient state after an upgrade, before the fold catches up;
+the second is the steady state, and it follows the number of fact rows, not of requests.
 
 ### Why the daily token grid folds its own days
 
@@ -1220,35 +1247,27 @@ The dashboard's windowed read and the year-long token grid look like the same qu
 two zoom levels, and they are not - which is why
 `/management/dashboard/token-heatmap` is a separate endpoint with its own query.
 
-Three properties of the windowed read make it the wrong tool for a calendar. Its window
-slides, so the same series is a different span every time it is asked. Its grid is a
-*bucket* grid (`dashboardBucketWidth`), chosen so a sparkline stays near 48 points, and
-`QueryUsageAnalytics` reads its hourly or daily rollup whenever the requested bucket is
-*at least as coarse as* that rollup's grain, and falls back to the detail rows when the grid
-is finer - a rollup row cannot be split across a finer grid, so re-aligning one would report
-the whole hour in its first bucket and the rest of it as zero. And the rollup is keyed on a UTC bucket start.
+Two properties of the windowed read make it the wrong tool for a calendar. Its window
+slides, so the same series is a different span every time it is asked. And its grid is a
+*bucket* grid (`dashboardBucketWidth`), chosen so a sparkline stays near 48 points.
 
-A day is not a bucket. Grouping hourly rows by an offset-shifted key cannot split a UTC
-hour that straddles a local midnight at a fractional offset: India is `+05:30`, so local
-midnight falls at 18:30 UTC - inside the 18:00 row. The same arithmetic is wrong for
-every day on the far side of a daylight-saving transition, not merely the two transition
-days, because a single offset cannot describe a span that crosses one.
+A day is not a bucket. An hourly grain cannot split a UTC hour that straddles a local
+midnight at a fractional offset: India is `+05:30`, so local midnight falls at 18:30 UTC.
+The same arithmetic is wrong for every day on the far side of a daylight-saving
+transition, not merely the two transition days, because a single offset cannot describe a
+span that crosses one.
 
 `Repository.QueryDailyTokenTotals` therefore takes the days as exact instant ranges,
-built by the handler from the effective OMC IANA zone with `time.Date`/`AddDate`, and reads the
-detail table only. It does not reuse the rollup-plus-tail split either: that split is
-correct for a bucket grid because the two halves partition by *time* against the same
-grid, but a day boundary and an hour checkpoint do not line up, and CPA event times can
-arrive out of order - a request timestamped inside an already-folded hour lands on the
-detail side of the boundary while its own hour is already in the rollup, so a hybrid read
-counts it twice. One source has no boundary to get wrong.
+built by the handler from the effective OMC IANA zone with `time.Date`/`AddDate`. Because
+every civil offset is a multiple of fifteen minutes, each of those days is a whole number
+of `usage_facts_15m` buckets: the grid is one fifteen-minute fact read over the span,
+folded into days in Go. Days that are not contiguous or not quarter-hour aligned are read
+one at a time through the same fact query.
 
-The cost is a scan of the detail table over the span, aggregated inside SQLite so at most one row
-per day crosses into Go. The window is a rolling year of weeks, and the default retention horizon
-(`OMCPA_USAGE_RETENTION_DAYS`) is 400 days so the whole window stays readable — the two are one
-decision, since a shorter horizon would show the window's own beginning as carrying nothing. A day
-with no stored record (pruned, or later this week than today) is reported as carrying nothing and
-drawn as *unrecorded*, rather than as a measured zero that would claim the gateway was idle.
+The grid no longer depends on request-record retention: a day whose records have rolled
+out still carries its totals. A day before the deployment's first usage, or later this week
+than today, is reported as carrying nothing and drawn as *unrecorded*, rather than as a
+measured zero that would claim the gateway was idle.
 The panel calls it on a five-minute interval and on an explicit page refresh, not on the tail
 poll's cadence. The final day's window stops at the read instant rather than at the following
 midnight, so a record timestamped in the future cannot inflate today's total.
@@ -1796,7 +1815,7 @@ account as the reading it was decided from.
 | Table group | Tables | Notes |
 | --- | --- | --- |
 | Instances & identity | `cpa_instances`, `discovered_resources`, `resource_overrides`, `connections`, `cpa_bindings` | Encrypted management key; bindings survive upstream removal. `connections` is provisioned by migration 006 for the Connection entity but no code reads or writes it yet — treat it as reserved, not as a live table |
-| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted. Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown |
+| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown |
 | Custom icons | `custom_icons` | Migration 032 adds durable sanitized image BLOBs, stable IDs and content revisions; confirmed deletion atomically clears matching provider overrides and deletes the asset |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions`, `pricing_match_reviews` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29. Migration 031 added `pricing_match_reviews` (the OpenRouter model last answered for a custom or linked price); match-review reads and writes refuse to run before migration 31 |
 | Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
@@ -1842,7 +1861,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
-| Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
+| Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 | Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there

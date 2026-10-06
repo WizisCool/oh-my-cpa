@@ -39,10 +39,9 @@ func IngestStatus(ctx context.Context, store *repository.Repository, now time.Ti
 			Decoded: stats.Events,
 		},
 		Maintenance: ingest.MaintenanceStatus{
-			Running:          true,
-			HourlyAggregated: stats.CheckpointHourly,
-			DailyAggregated:  stats.CheckpointDaily,
-			LastRunAt:        &aggregatedAt,
+			Running:   true,
+			Folded:    stats.CheckpointFacts,
+			LastRunAt: &aggregatedAt,
 		},
 		Stats:   stats,
 		Healthy: true,

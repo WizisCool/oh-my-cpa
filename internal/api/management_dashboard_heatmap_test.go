@@ -225,7 +225,7 @@ func TestTokenHeatmapCountsEachRecordOnceAcrossRollupAndTail(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AggregateUsageGrain(ctx, repository.CheckpointHourly, repository.HourBucketMS, 100); err != nil {
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{

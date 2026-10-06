@@ -338,7 +338,7 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 	if err != nil {
 		return nil, fmt.Errorf("build usage processor: %w", err)
 	}
-	maintenance, err := ingest.NewMaintenance(repo, logger, cfg.Usage.AggregateInterval, cfg.Usage.RetentionDays)
+	maintenance, err := ingest.NewMaintenance(repo, logger, cfg.Usage.AggregateInterval, cfg.Usage.RetentionDays, cfg.Usage.InboxRetentionDays)
 	if err != nil {
 		return nil, fmt.Errorf("build usage maintenance: %w", err)
 	}
@@ -376,7 +376,8 @@ func (a *App) Run(ctx context.Context) error {
 				"mode", a.cfg.Usage.Mode,
 				"idle_interval", a.cfg.Usage.IdleInterval.String(),
 				"batch_size", a.cfg.Usage.BatchSize,
-				"retention_days", a.cfg.Usage.RetentionDays)
+				"retention_days", a.cfg.Usage.RetentionDays,
+				"inbox_retention_days", a.cfg.Usage.InboxRetentionDays)
 			pipelineErrors <- a.pipeline.Run(ctx)
 		}()
 	}

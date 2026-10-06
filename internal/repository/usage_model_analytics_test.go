@@ -107,7 +107,7 @@ func TestQueryUsageModelBucketsIgnoresTheRollup(t *testing.T) {
 	if before != 130 {
 		t.Fatalf("before aggregation = %d tokens, want 130", before)
 	}
-	if _, err := repo.AggregateUsageGrain(context.Background(), CheckpointHourly, HourBucketMS, 1000); err != nil {
+	if _, err := repo.AggregateUsageFacts(context.Background(), 1000); err != nil {
 		t.Fatal(err)
 	}
 	// A record that arrives late with an earlier timestamp, after its own hour was folded.

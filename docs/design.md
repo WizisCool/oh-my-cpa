@@ -298,10 +298,10 @@ separately (Anthropic-style) reports prompt tokens as `input + cache_read +
 cache_creation`, so its hit ratio currently reads high because the written
 tokens sit outside the denominator. Counting them needs evidence the app does
 not keep: CPA classifies each payload by provider/executor and emits a canonical
-breakdown, but the decoder persists only the raw counts, and the hourly/daily
-rollups carry no provider column, so a window cannot be split by convention.
+breakdown, but the decoder persists only the raw counts, and the usage facts
+carry no per-convention token columns, so a window cannot be split by convention.
 Fixing it means persisting the breakdown (or per-convention token columns in the
-rollup) before any arithmetic change. Until then the ratio is a bounded estimate
+usage facts) before any arithmetic change. Until then the ratio is a bounded estimate
 for cache-writing providers, and the request list is exact only for providers
 whose input already includes the cached prefix.
 

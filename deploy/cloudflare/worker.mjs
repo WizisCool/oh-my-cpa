@@ -23,7 +23,7 @@
  * this code rather than a claim about the environment.
  */
 import { applyQueryFilters } from './filters.mjs';
-import { DATASET, REFERENCE_MS, presetOf, responseNameFor } from './routes.mjs';
+import { DATASET, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
 const DEMO_HEADER = 'X-OMCPA-Demo';
@@ -191,7 +191,7 @@ function serve(entry, nowMs, url) {
       );
     }
     const decoded = rebase(applyQueryFilters(identity, url, { deltaMs, dataset: DATASET }), deltaMs);
-    const preset = url.searchParams.has('preset') ? presetOf(url) : '';
+    const preset = url.searchParams.has('preset') ? dashboardPresetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {
     // A body that is not JSON is served as captured. There are none today; this keeps

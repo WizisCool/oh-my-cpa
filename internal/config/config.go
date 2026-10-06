@@ -98,8 +98,12 @@ type UsageConfig struct {
 	BatchSize int
 	// AggregateInterval bounds how stale rollup-assisted queries can get.
 	AggregateInterval time.Duration
-	// RetentionDays prunes detail and rollup rows; zero keeps everything.
+	// RetentionDays rolls request records; zero keeps everything. The usage
+	// facts the dashboard reads are permanent and do not follow it.
 	RetentionDays int
+	// InboxRetentionDays rolls captured payloads once they are decoded; zero
+	// keeps them as long as request records.
+	InboxRetentionDays int
 	// CollectErrors also subscribes to CPA's push-only errors channel.
 	CollectErrors bool
 }
@@ -410,17 +414,29 @@ func loadUsageConfig() (UsageConfig, error) {
 		}
 		batchSize = parsed
 	}
-	// 400 days, not 90: the dashboard's token grid is a calendar year, so a shorter horizon would
-	// leave the year's own beginning unreadable from October onward - the panel would spend the last
-	// quarter of every year showing that spring had no traffic. 400 rather than 365 leaves enough
-	// slack that neither a leap year nor an offset boundary can push January 1st out of the window.
-	retentionDays := 400
+	// Request records are what the request list, the quota estimates and the price
+	// previews read. The dashboard does not depend on them: its history lives in
+	// the permanent usage facts. Ninety days matches the longest window the request
+	// list offers, so every preset it shows is fully backed by stored records.
+	retentionDays := 90
 	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_RETENTION_DAYS")); raw != "" {
 		parsed, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || parsed < 0 {
 			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_RETENTION_DAYS must be zero or positive: %q", raw)
 		}
 		retentionDays = parsed
+	}
+	// A decoded payload is only read again to replay a record after a decoder fix,
+	// so a week is a replay window, not an archive. Payloads are several times the
+	// size of the records they produce, which is why they do not share the long
+	// horizon.
+	inboxRetentionDays := 7
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_INBOX_RETENTION_DAYS")); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed < 0 {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_INBOX_RETENTION_DAYS must be zero or positive: %q", raw)
+		}
+		inboxRetentionDays = parsed
 	}
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv("OMCPA_USAGE_INGEST_MODE")))
 	if mode == "" {
@@ -432,13 +448,14 @@ func loadUsageConfig() (UsageConfig, error) {
 		return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_INGEST_MODE must be auto, subscribe, resp_pull, http_pull or off")
 	}
 	return UsageConfig{
-		Enabled:           enabled,
-		Mode:              mode,
-		IdleInterval:      idleInterval,
-		MaxIdleInterval:   maxIdleInterval,
-		BatchSize:         batchSize,
-		AggregateInterval: aggregateInterval,
-		RetentionDays:     retentionDays,
-		CollectErrors:     collectErrors,
+		Enabled:            enabled,
+		Mode:               mode,
+		IdleInterval:       idleInterval,
+		MaxIdleInterval:    maxIdleInterval,
+		BatchSize:          batchSize,
+		AggregateInterval:  aggregateInterval,
+		RetentionDays:      retentionDays,
+		InboxRetentionDays: inboxRetentionDays,
+		CollectErrors:      collectErrors,
 	}, nil
 }

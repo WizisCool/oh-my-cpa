@@ -19,15 +19,26 @@ export const DATASET = dataset;
 export const REFERENCE_MS = dataset.reference_ms;
 
 /**
- * Dashboard presets, which the console offers as a picker and the dataset holds as one
- * captured window each.
+ * Fixed-length presets, which the dataset holds as one captured window each.
  */
 const PRESETS = new Set(['15m', '1h', '6h', '24h', '7d', '30d', '90d']);
+
+/**
+ * The window that starts at the first usage record. Only the dashboard offers it:
+ * it reads permanent usage facts, while the key table reads request records.
+ */
+const ALL_TIME_PRESET = 'all';
 
 /** The preset a request is asking for, defaulting to the console's own default. */
 export function presetOf(url) {
   const preset = (url.searchParams.get('preset') ?? '24h').toLowerCase();
   return PRESETS.has(preset) ? preset : '24h';
+}
+
+/** The same, for the dashboard routes that also answer the all-time window. */
+export function dashboardPresetOf(url) {
+  const preset = (url.searchParams.get('preset') ?? '').toLowerCase();
+  return preset === ALL_TIME_PRESET ? ALL_TIME_PRESET : presetOf(url);
 }
 
 /**
@@ -99,10 +110,10 @@ const FIXED_ROUTES = new Map([
  * from `dashboard-24h`, not the same response relabelled.
  */
 const PRESET_ROUTES = new Map([
-  ['/api/v1/management/dashboard', (preset) => `dashboard-${preset}`],
-  ['/api/v1/management/dashboard/tail', (preset) => `dashboard-tail-${preset}`],
-  ['/api/v1/management/dashboard/providers', (preset) => `dashboard-providers-${preset}`],
-  ['/api/v1/management/client-key-usage', (preset) => `client-key-usage-${preset}`],
+  ['/api/v1/management/dashboard', (url) => `dashboard-${dashboardPresetOf(url)}`],
+  ['/api/v1/management/dashboard/tail', (url) => `dashboard-tail-${dashboardPresetOf(url)}`],
+  ['/api/v1/management/dashboard/providers', (url) => `dashboard-providers-${dashboardPresetOf(url)}`],
+  ['/api/v1/management/client-key-usage', (url) => `client-key-usage-${presetOf(url)}`],
 ]);
 
 /** A request record's detail, for whichever record the console opened. */
@@ -129,7 +140,7 @@ const PARAMETERISED_ROUTES = [
   {
     path: '/api/v1/management/dashboard/models',
     resolve: (url) => {
-      const preset = presetOf(url);
+      const preset = dashboardPresetOf(url);
       const grouping = url.searchParams.get('group_by') === 'model' ? 'model' : 'call';
       return `dashboard-models-${grouping}-${preset}`;
     },
@@ -188,7 +199,7 @@ export function responseNameFor(request) {
   const path = url.pathname;
 
   const byPreset = PRESET_ROUTES.get(path);
-  if (byPreset) return byPreset(presetOf(url));
+  if (byPreset) return byPreset(url);
 
   const parameterised = PARAMETERISED_ROUTES.find((route) =>
     route.pattern ? route.pattern.test(path) : route.path === path,

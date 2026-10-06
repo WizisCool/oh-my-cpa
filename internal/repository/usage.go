@@ -22,12 +22,6 @@ const (
 	InboxDiscarded = "discarded"
 )
 
-// Aggregation checkpoint names.
-const (
-	CheckpointHourly = "hourly"
-	CheckpointDaily  = "daily"
-)
-
 // maxInboxAttempts bounds retries before a poison message is parked out of the
 // working set. The raw payload stays on disk for inspection.
 const maxInboxAttempts = 12
@@ -81,14 +75,19 @@ func (r *Repository) AppendUsageInbox(ctx context.Context, instanceID, sourceMod
 			continue
 		}
 		projection := security.RedactPayload(payload)
+		messageHash := usage.Hash(projection)
 		var ciphertext, nonce []byte
 		if r.db.cipher != nil {
 			ciphertext, nonce, err = r.db.cipher.Encrypt([]byte(payload))
 			if err != nil {
 				return written, fmt.Errorf("encrypt usage inbox row: %w", err)
 			}
+			// The decoder reads the encrypted payload whenever there is one, so the
+			// redacted projection would be a second copy nothing reads. Payloads are
+			// the largest thing this database stores; keeping one copy halves them.
+			projection = ""
 		}
-		if _, errExec := statement.ExecContext(ctx, instanceID, sourceMode, usage.Hash(projection), projection, ciphertext, nonce, poppedMS); errExec != nil {
+		if _, errExec := statement.ExecContext(ctx, instanceID, sourceMode, messageHash, projection, ciphertext, nonce, poppedMS); errExec != nil {
 			return written, fmt.Errorf("insert usage inbox row: %w", errExec)
 		}
 		written++
@@ -328,15 +327,15 @@ func (r *Repository) MarkUsageInboxFailure(ctx context.Context, id int64, reason
 
 // UsagePipelineStats summarises what the pipeline has stored so far.
 type UsagePipelineStats struct {
-	Events           int64
-	ErrorEvents      int64
-	Pending          int64
-	Processed        int64
-	Discarded        int64
-	FirstEventMS     *int64
-	LastEventMS      *int64
-	CheckpointHourly int64
-	CheckpointDaily  int64
+	Events       int64
+	ErrorEvents  int64
+	Pending      int64
+	Processed    int64
+	Discarded    int64
+	FirstEventMS *int64
+	LastEventMS  *int64
+	// CheckpointFacts is the highest request record id folded into the usage facts.
+	CheckpointFacts int64
 }
 
 // StatsUsagePipeline reports pipeline fill state for the status endpoint.
@@ -369,13 +368,28 @@ func (r *Repository) StatsUsagePipeline(ctx context.Context) (UsagePipelineStats
 			(SELECT COUNT(*) FROM usage_inboxes WHERE status = '`+InboxDiscarded+`')`).Scan(&stats.Pending, &stats.Processed, &stats.Discarded); err != nil {
 		return stats, fmt.Errorf("read usage inbox stats: %w", err)
 	}
-	if stats.CheckpointHourly, err = r.UsageCheckpoint(ctx, CheckpointHourly); err != nil {
-		return stats, err
-	}
-	if stats.CheckpointDaily, err = r.UsageCheckpoint(ctx, CheckpointDaily); err != nil {
+	if stats.CheckpointFacts, err = r.UsageCheckpoint(ctx, CheckpointFacts); err != nil {
 		return stats, err
 	}
 	return stats, nil
+}
+
+// CountPendingUsageInbox reports how many captured payloads still wait to be
+// decoded.
+//
+// The dashboard asks on every full load, so this is the one number it needs and
+// nothing else: StatsUsagePipeline also counts every request record and every
+// decoded payload, which is a scan that grows with the store.
+func (r *Repository) CountPendingUsageInbox(ctx context.Context) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	var pending int64
+	if err := r.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM usage_inboxes WHERE status = '`+InboxPending+`'`).Scan(&pending); err != nil {
+		return 0, fmt.Errorf("count pending usage inbox: %w", err)
+	}
+	return pending, nil
 }
 
 // CaptureErrorEvent decodes and stores one CPA errors-channel payload.
@@ -541,98 +555,6 @@ func (r *Repository) SetUsageCheckpoint(ctx context.Context, name string, lastEv
 		return fmt.Errorf("advance usage checkpoint %s: %w", name, err)
 	}
 	return nil
-}
-
-// OldestUnaggregatedEventMS returns the earliest event time still outside a
-// grain's rollup, or nil when every stored event has been folded in.
-//
-// Dashboard queries use it as the boundary between "trust the rollup" and
-// "read the detail table", which is what makes the hybrid free of double
-// counting even though CPA event times can arrive slightly out of order.
-func (r *Repository) OldestUnaggregatedEventMS(ctx context.Context, checkpoint string) (*int64, error) {
-	if r == nil || r.SQL() == nil {
-		return nil, errors.New("repository is not initialized")
-	}
-	lastID, err := r.UsageCheckpoint(ctx, checkpoint)
-	if err != nil {
-		return nil, err
-	}
-	var value *int64
-	err = r.SQL().QueryRowContext(ctx, `
-		SELECT MIN(timestamp_ms) FROM usage_events WHERE id > ?`, lastID).Scan(&value)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("read oldest unaggregated event: %w", err)
-	}
-	return value, nil
-}
-
-// PurgeUsageOlderThan deletes detail and rollup rows before cutoffMS and reports
-// how many events were removed. Retention must never delete data the rollups
-// have not yet absorbed, so the aggregation checkpoints gate the cutoff.
-func (r *Repository) PurgeUsageOlderThan(ctx context.Context, cutoffMS int64) (int64, error) {
-	if r == nil || r.SQL() == nil {
-		return 0, errors.New("repository is not initialized")
-	}
-	if cutoffMS <= 0 {
-		return 0, nil
-	}
-	// Only purge below what both grains have already aggregated.
-	hourly, err := r.OldestUnaggregatedEventMS(ctx, CheckpointHourly)
-	if err != nil {
-		return 0, err
-	}
-	daily, err := r.OldestUnaggregatedEventMS(ctx, CheckpointDaily)
-	if err != nil {
-		return 0, err
-	}
-	safeCutoff := cutoffMS
-	for _, watermark := range []*int64{hourly, daily} {
-		if watermark != nil && *watermark < safeCutoff {
-			safeCutoff = *watermark
-		}
-	}
-
-	tx, err := r.SQL().BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin usage purge: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	result, err := tx.ExecContext(ctx, `DELETE FROM usage_events WHERE timestamp_ms < ?`, safeCutoff)
-	if err != nil {
-		return 0, fmt.Errorf("purge usage events: %w", err)
-	}
-	deleted, _ := result.RowsAffected()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM error_events WHERE timestamp_ms < ?`, safeCutoff); err != nil {
-		return 0, fmt.Errorf("purge error events: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM usage_overview_hourly_stats WHERE bucket_start_ms < ?`, safeCutoff); err != nil {
-		return 0, fmt.Errorf("purge hourly stats: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM usage_overview_daily_stats WHERE bucket_start_ms < ?`, safeCutoff); err != nil {
-		return 0, fmt.Errorf("purge daily stats: %w", err)
-	}
-	// Captured payloads are only useful for replay, so they follow the same
-	// horizon once processed. Failed rows stay until an operator looks.
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM usage_inboxes WHERE status = ? AND popped_at < ?`,
-		InboxProcessed, safeCutoff); err != nil {
-		return 0, fmt.Errorf("purge usage inboxes: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM usage_inboxes WHERE status = ? AND popped_at < ?`,
-		InboxDiscarded, cutoffMS); err != nil {
-		return 0, fmt.Errorf("purge discarded usage inboxes: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM ingest_gaps WHERE ended_at_ms < ?`,
-		cutoffMS); err != nil {
-		return 0, fmt.Errorf("purge ingest gaps: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit usage purge: %w", err)
-	}
-	return deleted, nil
 }
 
 func boolInt(value bool) int {

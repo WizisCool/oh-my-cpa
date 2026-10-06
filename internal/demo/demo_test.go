@@ -273,8 +273,8 @@ func TestSeedAggregatesRollups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.CheckpointHourly == 0 || stats.CheckpointDaily == 0 {
-		t.Fatalf("aggregation checkpoints = %d/%d, want both grains folded", stats.CheckpointHourly, stats.CheckpointDaily)
+	if stats.CheckpointFacts == 0 {
+		t.Fatal("usage fact checkpoint = 0, want the seeded history folded")
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -299,7 +298,7 @@ func TestDashboardModelsIgnoresAggregatedRollups(t *testing.T) {
 		t.Fatalf("before aggregation total = %d, want 110", before.TokenTotal)
 	}
 
-	if _, err := repo.AggregateUsageGrain(context.Background(), repository.CheckpointHourly, repository.HourBucketMS, 1000); err != nil {
+	if _, err := repo.AggregateUsageFacts(context.Background(), 1000); err != nil {
 		t.Fatal(err)
 	}
 	// A late record with an earlier timestamp, arriving after its own hour was folded.

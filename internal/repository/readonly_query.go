@@ -49,6 +49,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"connections":                   nil,
 	"cpa_bindings":                  nil,
 	"cpa_config_backup_settings":    nil,
+	"data_lifecycle_state":          nil,
 	"discovered_resources":          {"details_json"},
 	"error_events":                  {"body"},
 	"ingest_gaps":                   nil,
@@ -70,8 +71,8 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"sqlite_sequence":               nil,
 	"usage_aggregation_checkpoints": nil,
 	"usage_events":                  nil,
-	"usage_overview_daily_stats":    nil,
-	"usage_overview_hourly_stats":   nil,
+	"usage_facts_15m":               nil,
+	"usage_facts_daily":             nil,
 }
 
 // QUERY_HIDDEN_TABLES are never readable, with the reason recorded for the next reviewer.

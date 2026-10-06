@@ -43,21 +43,11 @@ type UsageModelBucketRow struct {
 // QueryUsageModelBuckets aggregates one window per group per bucket, ordered by
 // group and then by bucket.
 //
-// **It reads the detail table only, and never the hourly or daily rollup.**
-// `QueryUsageAnalytics` splits its window at the aggregation checkpoint and reads the two
-// halves from different tables, and that split is not reusable here. Its boundary is a
-// *timestamp*, while the rollup's unit of read is a whole row whose start can precede that
-// boundary: an event timestamped inside an already-folded hour that arrived late stays on
-// the detail side of the boundary while its own hour is already inside the rollup, so both
-// halves count it. In a windowed total that artefact is a quiet double count; in a
-// per-model ranking it also reorders models, which is the kind of wrong that still looks
-// plausible. One source has no boundary to get wrong - the argument ADR 0005 already made
-// for the daily token grid.
-//
-// The cost is a scan of the retained detail rows rather than a read of the rollup, bounded
-// by the retention horizon rather than by total history. Its callers are panels that read
-// on their own cadence rather than on the dashboard's live tail poll, and
-// `BenchmarkQueryUsageModelBuckets` pins the budget.
+// It goes through the same fact read as every other panel. The facts and the
+// request records past the checkpoint are split by event id inside one statement,
+// so a record that arrives late with an old timestamp is counted once: it is
+// either folded or it is not. A per-model ranking is where a double count would
+// do the most damage, because it reorders models and still looks plausible.
 //
 // The measure is `total_tokens`, the column CPA's own accounting persisted, rather than a
 // sum of the individual token columns: cached and cache-read tokens overlap between
@@ -67,60 +57,33 @@ type UsageModelBucketRow struct {
 // Rows are ordered by group then bucket as part of the contract, not as a convenience: the
 // caller's fold walks one group at a time and never builds a map of maps.
 func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, opts UsageModelBucketOptions) ([]UsageModelBucketRow, error) {
-	if r == nil || r.SQL() == nil {
-		return nil, errors.New("repository is not initialized")
-	}
 	if bucketMS <= 0 {
 		return nil, fmt.Errorf("invalid model analytics bucket width %d", bucketMS)
 	}
 	if toMS < fromMS {
 		return nil, errors.New("model analytics window is negative")
 	}
-
-	// The grouping key follows the view the panel is drawing. The model view
-	// groups by the upstream model name as CPA recorded it. The call view groups
-	// by call point: the operator-assigned model alias when the client requested
-	// one, falling back to the bare model name, so one call point served by two
-	// upstream aliases still reads as the single line the operator called for.
-	// The alias is the identity, not a display rewrite: it partitions the rows.
-	groupExpression := "model"
+	// The grouping key follows the view the panel is drawing. The alias is the
+	// identity in the call view, not a display rewrite: it partitions the rows, so
+	// one call point served by two upstream models still reads as a single line.
+	grouping := UsageGroupModel
 	if opts.IsGroupedByCallPoint {
-		groupExpression = `COALESCE(NULLIF(TRIM(COALESCE(model_alias, '')), ''), model)`
+		grouping = UsageGroupCallPoint
 	}
-
-	query := `
-		SELECT ` + groupExpression + ` AS group_key, (timestamp_ms / ?) * ? AS aligned,
-		       COALESCE(SUM(total_tokens), 0), COUNT(1),
-		       COALESCE(SUM(cost_nanos), 0), COALESCE(SUM(cost_nanos IS NOT NULL), 0)
-		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
-	args := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
-	if opts.APIGroupKey != "" {
-		query += " AND api_group_key = ?"
-		args = append(args, opts.APIGroupKey)
-	}
-	query += `
-		GROUP BY group_key, aligned
-		ORDER BY group_key ASC, aligned ASC`
-	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS,
+		GroupBy: grouping, APIGroupKey: opts.APIGroupKey,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read usage model buckets: %w", err)
 	}
-	defer rows.Close()
-
-	result := []UsageModelBucketRow{}
-	for rows.Next() {
-		var row UsageModelBucketRow
-		var costNanos, pricedRequests int64
-		if errScan := rows.Scan(&row.Model, &row.StartMS, &row.Tokens, &row.Requests, &costNanos, &pricedRequests); errScan != nil {
-			return nil, fmt.Errorf("scan usage model bucket: %w", errScan)
-		}
-		row.CostNanos = &costNanos
-		row.PricedRequests = &pricedRequests
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate usage model buckets: %w", err)
+	result := make([]UsageModelBucketRow, 0, len(facts.Rows))
+	for _, fact := range facts.Rows {
+		costNanos, pricedRequests := fact.CostNanos, fact.CostedRequests
+		result = append(result, UsageModelBucketRow{
+			Model: fact.Group, StartMS: fact.StartMS, Tokens: fact.TotalTokens, Requests: fact.Requests,
+			CostNanos: &costNanos, PricedRequests: &pricedRequests,
+		})
 	}
 	return result, nil
 }
@@ -141,46 +104,28 @@ type UsageProviderTotalsRow struct {
 	Failures        int64
 }
 
-// QueryUsageProviderTotals aggregates the requested window per provider.
+// QueryUsageProviderTotals aggregates the requested window, [fromMS, toMS), per provider.
 //
 // One row per provider, with no bucket: the dashboard's provider list prints a window total and a
-// rate, and reads the rate against the console's fixed bands. A per-bucket grid used to be read
-// here as well, for a sparkline each row drew; that mark is gone, so the GROUP BY that produced it
-// is gone with it. Nothing else consumed it, and a group-by over the detail table is the most
-// expensive read this endpoint makes.
+// rate, and reads the rate against the console's fixed bands.
 func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID string, fromMS, toMS int64) ([]UsageProviderTotalsRow, error) {
-	if r == nil || r.SQL() == nil {
-		return nil, errors.New("repository is not initialized")
-	}
 	if toMS < fromMS {
 		return nil, errors.New("provider analytics window is negative")
 	}
-
-	query := `
-		SELECT COALESCE(NULLIF(TRIM(provider), ''), 'unknown') AS provider_key,
-		       CASE WHEN auth_type = 'apikey' THEN TRIM(auth_index) ELSE '' END AS credential_index,
-		       COUNT(1),
-		       COALESCE(SUM(failed), 0)
-		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ?
-		GROUP BY provider_key, credential_index
-		ORDER BY provider_key ASC, credential_index ASC`
-	rows, err := r.SQL().QueryContext(ctx, query, instanceID, fromMS, toMS)
+	result := []UsageProviderTotalsRow{}
+	if toMS == fromMS {
+		return result, nil
+	}
+	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, GroupBy: UsageGroupProviderCredential,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read usage provider totals: %w", err)
 	}
-	defer rows.Close()
-
-	result := []UsageProviderTotalsRow{}
-	for rows.Next() {
-		var row UsageProviderTotalsRow
-		if errScan := rows.Scan(&row.Provider, &row.CredentialIndex, &row.Requests, &row.Failures); errScan != nil {
-			return nil, fmt.Errorf("scan usage provider total: %w", errScan)
-		}
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate usage provider totals: %w", err)
+	for _, fact := range facts.Rows {
+		result = append(result, UsageProviderTotalsRow{
+			Provider: fact.Group, CredentialIndex: fact.SubGroup, Requests: fact.Requests, Failures: fact.Failures,
+		})
 	}
 	return result, nil
 }

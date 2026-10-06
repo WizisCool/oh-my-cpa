@@ -163,7 +163,7 @@ export function dashboardBody(series = [], { bucketMS = 60_000, preset = '1h' } 
       series,
     },
     metrics: { rpm: 0, tpm: 0, cache_rate: 0, cost: 0, cost_source: 'none', cost_note: '', avg_latency_ms: 0, avg_ttft_ms: 0 },
-    coverage: { rollup_requests: 0, detail_requests: 0, pending_inbox: 0, stored_events: 0 },
+    coverage: { rollup_requests: 0, detail_requests: 0, pending_inbox: 0, has_usage: false },
     partial_errors: [],
   };
 }
