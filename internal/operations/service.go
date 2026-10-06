@@ -46,6 +46,14 @@ type Done struct {
 	IsUpdated bool `json:"is_updated"`
 }
 
+// invalidParameters is a refusal the caller can correct. The code stays the stable
+// invalid_parameters; the detail names what to change, so an agent can repair its own
+// call instead of guessing which field was wrong.
+type invalidParameters struct{ detail string }
+
+func (e invalidParameters) Error() string         { return "invalid_parameters" }
+func (e invalidParameters) FailureDetail() string { return e.detail }
+
 func (s *Service) revision(value any) string {
 	raw, _ := json.Marshal(value)
 	digest, _ := s.Cipher.Fingerprint("capability-revision", string(raw))

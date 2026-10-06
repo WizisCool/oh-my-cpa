@@ -267,3 +267,91 @@ func TestModelPriceValidation(t *testing.T) {
 		}
 	}
 }
+
+func utcMS(year int, month time.Month, day, hour, minute int) int64 {
+	return time.Date(year, month, day, hour, minute, 0, 0, time.UTC).UnixMilli()
+}
+
+// A vendor bills its off-peak hours on its own clock: 00:30–08:30 in Beijing is
+// 16:30–00:30 UTC, and reading the same digits as UTC would discount the wrong
+// half of the day.
+func TestQuoteWindowIsReadInTheTiersOwnZone(t *testing.T) {
+	offPeak := PriceTier{UTCStart: ptr(30), UTCEnd: ptr(830), TimeZone: "Asia/Shanghai", PromptPricePer1M: ptr(1.0)}
+	price := ModelPrice{Model: "m", PromptPricePer1M: 2, PriceMultiplier: 1, Tiers: []PriceTier{offPeak}}
+	for _, test := range []struct {
+		name        string
+		timestampMS int64
+		wantTier    bool
+	}{
+		{"01:00 in Beijing", utcMS(2026, 10, 6, 17, 0), true},
+		{"window start is inclusive", utcMS(2026, 10, 6, 16, 30), true},
+		{"window end is exclusive", utcMS(2026, 10, 7, 0, 30), false},
+		{"20:00 in Beijing, 01:00 would be UTC", utcMS(2026, 10, 6, 12, 0), false},
+		{"01:00 UTC is 09:00 in Beijing", utcMS(2026, 10, 6, 1, 0), false},
+	} {
+		breakdown, err := Quote(price, 1, Tokens{Input: 1_000_000}, test.timestampMS)
+		if err != nil || (breakdown.TierIndex != nil) != test.wantTier {
+			t.Errorf("%s: tier applied = %v, want %v (%v)", test.name, breakdown.TierIndex != nil, test.wantTier, err)
+		}
+	}
+	// The same digits without a zone stay a UTC window, as every stored tier is.
+	price.Tiers[0].TimeZone = ""
+	if breakdown, _ := Quote(price, 1, Tokens{Input: 1}, utcMS(2026, 10, 6, 1, 0)); breakdown.TierIndex == nil {
+		t.Error("a tier without a zone must read its window in UTC")
+	}
+}
+
+// A named zone follows the vendor's wall clock across daylight saving, which a
+// window converted to UTC once cannot.
+func TestQuoteZonedWindowFollowsDaylightSaving(t *testing.T) {
+	price := ModelPrice{Model: "m", PromptPricePer1M: 2, PriceMultiplier: 1, Tiers: []PriceTier{
+		{UTCStart: ptr(900), UTCEnd: ptr(1700), TimeZone: "America/New_York", PromptPricePer1M: ptr(4.0)},
+	}}
+	for _, test := range []struct {
+		name        string
+		timestampMS int64
+		wantTier    bool
+	}{
+		{"09:30 EST", utcMS(2026, 1, 15, 14, 30), true},
+		{"09:30 EDT", utcMS(2026, 7, 15, 13, 30), true},
+		{"08:30 EDT, 09:30 by the winter offset", utcMS(2026, 7, 15, 12, 30), false},
+		{"17:30 EDT", utcMS(2026, 7, 15, 21, 30), false},
+	} {
+		if index, ok := SelectTier(price.Tiers, 1, test.timestampMS); ok != test.wantTier {
+			t.Errorf("%s: selected %d %v, want applied=%v", test.name, index, ok, test.wantTier)
+		}
+	}
+}
+
+func TestTierTimeZoneValidationAndEncoding(t *testing.T) {
+	window := func(zone string) []PriceTier {
+		return []PriceTier{{UTCStart: ptr(30), UTCEnd: ptr(830), TimeZone: zone}}
+	}
+	for _, zone := range []string{"Mars/Phobos", "Local", "../etc/passwd", "UTC+8"} {
+		if err := ValidateTiers(window(zone)); err == nil {
+			t.Errorf("time zone %q accepted", zone)
+		}
+	}
+	for _, zone := range []string{"", "UTC", "Asia/Shanghai", "Etc/GMT-8"} {
+		if err := ValidateTiers(window(zone)); err != nil {
+			t.Errorf("time zone %q refused: %v", zone, err)
+		}
+	}
+	if err := ValidateTiers([]PriceTier{{MinPromptTokens: 200_000, TimeZone: "Asia/Shanghai"}}); err == nil {
+		t.Error("a time zone without a window accepted")
+	}
+	// A tier without a zone keeps its stored spelling, so the version trigger sees
+	// no change on rows written before zones existed.
+	encoded, err := EncodeTiers(window(""))
+	if err != nil || encoded != `[{"utc_start":30,"utc_end":830}]` {
+		t.Fatalf("zone-free spelling changed: %s %v", encoded, err)
+	}
+	encoded, err = EncodeTiers(window("Asia/Shanghai"))
+	if err != nil || encoded != `[{"utc_start":30,"utc_end":830,"time_zone":"Asia/Shanghai"}]` {
+		t.Fatalf("zoned spelling: %s %v", encoded, err)
+	}
+	decoded, err := DecodeTiers(encoded)
+	if err != nil || len(decoded) != 1 || decoded[0].TimeZone != "Asia/Shanghai" {
+		t.Fatalf("round trip: %+v %v", decoded, err)
+	}
+}

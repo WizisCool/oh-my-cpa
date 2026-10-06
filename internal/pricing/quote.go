@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"time"
 )
 
 // Tokens are one request's billable token buckets. Input includes cached and
@@ -50,13 +51,14 @@ type Breakdown struct {
 
 // SelectTier picks the single override that governs a request. A tier applies
 // when all of its conditions hold: min_prompt_tokens against the full input
-// (cached tokens included, as the providers count it) and a half-open UTC window
-// [start, end) that wraps past midnight when end <= start, read from the
-// request's own timestamp so late ingestion cannot move it. Among applicable
-// tiers the highest threshold wins, then a windowed tier over an unwindowed
-// one, then list order — exactly one tier, never a stack.
+// (cached tokens included, as the providers count it) and a half-open window
+// [start, end) that wraps past midnight when end <= start. The window is read
+// on the tier's own clock (UTC unless it names a zone) at the request's own
+// timestamp, so late ingestion cannot move it and a zone's daylight saving
+// moves the window with the vendor's wall clock. Among applicable tiers the
+// highest threshold wins, then a windowed tier over an unwindowed one, then
+// list order — exactly one tier, never a stack.
 func SelectTier(tiers []PriceTier, inputTokens, timestampMS int64) (int, bool) {
-	minute := minuteOfDayUTC(timestampMS)
 	best := -1
 	for i, tier := range tiers {
 		if tier.MinPromptTokens == 0 && !tier.HasWindow() {
@@ -65,7 +67,7 @@ func SelectTier(tiers []PriceTier, inputTokens, timestampMS int64) (int, bool) {
 		if tier.MinPromptTokens > 0 && clampTokens(inputTokens) < tier.MinPromptTokens {
 			continue
 		}
-		if tier.HasWindow() && !inWindow(minute, *tier.UTCStart, *tier.UTCEnd) {
+		if tier.HasWindow() && !tier.windowHolds(timestampMS) {
 			continue
 		}
 		if best < 0 || tierOutranks(tier, tiers[best]) {
@@ -82,12 +84,15 @@ func tierOutranks(candidate, current PriceTier) bool {
 	return candidate.HasWindow() && !current.HasWindow()
 }
 
-func minuteOfDayUTC(timestampMS int64) int {
-	minutes := timestampMS / 60_000 % 1440
-	if minutes < 0 {
-		minutes += 1440
+// windowHolds reports whether the instant falls inside the tier's window. A
+// zone that cannot be loaded never applies rather than silently reading UTC.
+func (t PriceTier) windowHolds(timestampMS int64) bool {
+	location, err := t.windowLocation()
+	if err != nil {
+		return false
 	}
-	return int(minutes)
+	local := time.UnixMilli(timestampMS).In(location)
+	return inWindow(local.Hour()*60+local.Minute(), *t.UTCStart, *t.UTCEnd)
 }
 
 // inWindow tests a half-open HHMM window; a malformed or empty window never

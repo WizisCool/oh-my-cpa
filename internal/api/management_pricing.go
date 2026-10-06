@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
@@ -27,6 +27,7 @@ type PricingManager interface {
 	DismissCandidate(ctx context.Context, model, upstreamID string) error
 	StoredCatalog(ctx context.Context) ([]pricing.UpstreamModel, error)
 	SyncStateView(ctx context.Context) (pricing.SyncState, bool, error)
+	PreviewModeChange(ctx context.Context, change pricing.ModeChange) (pricing.ModelPrice, error)
 	SetModelMode(ctx context.Context, change pricing.ModeChange) (pricing.ModelPrice, error)
 	SetModelModeChecked(context.Context, pricing.ModeChange, func([]pricing.ModelPrice) error) (pricing.ModelPrice, error)
 	DeletePrice(ctx context.Context, model string) (bool, error)
@@ -48,11 +49,10 @@ func (h *Handler) SetPricing(manager PricingManager) {
 	h.pricing = manager
 }
 
+// The price book and the agent's pricing reads describe the same traffic windows.
 const (
-	// pricingUsageWindow is the traffic the price book shows beside each rate.
-	pricingUsageWindow = 30 * 24 * time.Hour
-	// pricingProfileWindow is the traffic the editor's cost preview samples.
-	pricingProfileWindow   = 7 * 24 * time.Hour
+	pricingUsageWindow     = operations.PricingUsageWindow
+	pricingProfileWindow   = operations.PricingProfileWindow
 	pricingSuggestionLimit = 3
 )
 

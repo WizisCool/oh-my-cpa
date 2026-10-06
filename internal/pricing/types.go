@@ -1,7 +1,7 @@
 // Package pricing keeps the per-model USD price book and computes request costs.
 // OpenRouter's public model list is the only automatic source. A price carries
 // four rates per 1M tokens (prompt, completion, cache read, cache write), an
-// optional list of tiers (long-context thresholds and UTC time-of-day windows)
+// optional list of tiers (long-context thresholds and time-of-day windows)
 // and one model multiplier; a channel multiplier per CPA provider is applied on
 // top. A model without a price row is unpriced, never zero.
 package pricing
@@ -11,6 +11,10 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
 
 // ModelPrice is one price row. Source records who last wrote the rates; Mode is
@@ -61,18 +65,44 @@ const (
 
 // PriceTier is one conditional rate override. A tier applies when every
 // condition it carries holds; rates it leaves nil inherit the base price.
+//
+// The window fields keep the names OpenRouter publishes them under, and a tier
+// without a zone is stored exactly as before: the version trigger compares the
+// stored text, so respelling existing windows would mint a version per price.
+// TimeZone names the clock the window is read on; empty means UTC.
 type PriceTier struct {
-	MinPromptTokens  int64    `json:"min_prompt_tokens,omitempty"`
-	UTCStart         *int     `json:"utc_start,omitempty"`
-	UTCEnd           *int     `json:"utc_end,omitempty"`
-	PromptPricePer1M *float64 `json:"prompt_price_per_1m,omitempty"`
+	MinPromptTokens  int64    `json:"min_prompt_tokens,omitempty" jsonschema:"Applies when the full prompt (cached tokens included) has at least this many tokens"`
+	UTCStart         *int     `json:"utc_start,omitempty" jsonschema:"Window start as HHMM (830 is 08:30) on the time_zone clock; set with utc_end"`
+	UTCEnd           *int     `json:"utc_end,omitempty" jsonschema:"Exclusive window end as HHMM on the time_zone clock; an end not after the start wraps past midnight"`
+	TimeZone         string   `json:"time_zone,omitempty" jsonschema:"IANA zone the window is read in, such as Asia/Shanghai; omit for UTC"`
+	PromptPricePer1M *float64 `json:"prompt_price_per_1m,omitempty" jsonschema:"USD per 1M tokens inside the tier; omit to inherit the base rate"`
 	CompletionPer1M  *float64 `json:"completion_price_per_1m,omitempty"`
 	CacheReadPer1M   *float64 `json:"cache_read_price_per_1m,omitempty"`
 	CacheWritePer1M  *float64 `json:"cache_write_price_per_1m,omitempty"`
 }
 
-// HasWindow reports whether the tier is limited to a UTC time-of-day window.
+// HasWindow reports whether the tier is limited to a time-of-day window.
 func (t PriceTier) HasWindow() bool { return t.UTCStart != nil && t.UTCEnd != nil }
+
+// tierLocations caches loaded zones: the request lock selects a tier for every
+// ingested request, and the embedded zone database is parsed on each load.
+var tierLocations sync.Map
+
+// windowLocation resolves the clock a tier's window is read on.
+func (t PriceTier) windowLocation() (*time.Location, error) {
+	if t.TimeZone == "" {
+		return time.UTC, nil
+	}
+	if cached, ok := tierLocations.Load(t.TimeZone); ok {
+		return cached.(*time.Location), nil
+	}
+	location, err := timezone.Load(t.TimeZone)
+	if err != nil {
+		return nil, err
+	}
+	tierLocations.Store(t.TimeZone, location)
+	return location, nil
+}
 
 // DeriveMode names how a row is maintained. A legacy row is automatic: the next
 // sync that finds an OpenRouter match replaces it.
@@ -159,6 +189,11 @@ func ValidateTiers(tiers []PriceTier) error {
 			if *tier.UTCStart == *tier.UTCEnd {
 				return fmt.Errorf("tier %d: an empty time window never applies", i)
 			}
+			if _, err := tier.windowLocation(); err != nil {
+				return fmt.Errorf("tier %d: time_zone must be an IANA time zone name such as Asia/Shanghai", i)
+			}
+		} else if tier.TimeZone != "" {
+			return fmt.Errorf("tier %d: time_zone needs utc_start and utc_end", i)
 		}
 		if tier.MinPromptTokens == 0 && !tier.HasWindow() {
 			return fmt.Errorf("tier %d: a tier needs min_prompt_tokens or a time window", i)

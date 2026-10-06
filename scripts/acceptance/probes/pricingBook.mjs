@@ -224,6 +224,33 @@ export async function pricingBook({ base, page, check, writes }) {
   check('custom rates start from the OpenRouter reference', await isTrue(async () => (await promptInput.inputValue()) === '2', 'the prefilled rate'), await promptInput.inputValue());
   const tierPrompt = editor.locator('[data-testid="pricing-context-tiers"] input[data-testid="pricing-tier-prompt"]');
   check('a published long-context tier opens as multiples of the base', await isTrue(async () => (await tierPrompt.inputValue()) === '2', 'the tier multiple'), await tierPrompt.inputValue().catch(() => ''));
+  // A time-of-day tier on the vendor's own clock: the zone list has to scroll under a real wheel,
+  // and the hours typed are the hours saved.
+  await editor.locator('[data-testid="pricing-add-window-tier"]').click();
+  const windowTiers = editor.locator('[data-testid="pricing-window-tiers"]');
+  const zone = windowTiers.getByRole('combobox', { name: 'Billing time zone', exact: true });
+  await zone.click();
+  const zonePopup = page.locator('.ant-select-dropdown:visible').filter({ hasText: 'UTC' });
+  await zonePopup.waitFor();
+  const zoneOptions = zonePopup.locator('.ant-select-item-option');
+  const firstZone = await zoneOptions.first().innerText();
+  const popupBox = await zonePopup.boundingBox();
+  await page.mouse.move(popupBox.x + popupBox.width / 2, popupBox.y + popupBox.height / 2);
+  await page.mouse.wheel(0, 900);
+  check(
+    'the billing time zone list scrolls under the wheel',
+    await isTrue(async () => (await zoneOptions.first().innerText()) !== firstZone, 'the zone list scrolling'),
+    firstZone,
+  );
+  check('the zone list mounts only its visible options', (await zoneOptions.count()) < 30, String(await zoneOptions.count()));
+  await zone.fill('Asia/Shanghai');
+  await zone.press('Enter');
+  const windowInputs = windowTiers.locator('.ant-picker input');
+  await windowInputs.nth(0).fill('00:30');
+  await windowInputs.nth(0).press('Enter');
+  await windowInputs.nth(1).fill('08:30');
+  await windowInputs.nth(1).press('Enter');
+  await windowTiers.locator('input[data-testid="pricing-tier-prompt"]').fill('0.5');
   await promptInput.fill('1.5');
   await editor.locator('[data-testid="pricing-editor-save"]').click();
   const customSaved = await isTrue(async () => writes.some((write) => write.kind === 'model' && write.model === 'gpt-6-sol'), 'the custom write');
@@ -236,6 +263,11 @@ export async function pricingBook({ base, page, check, writes }) {
   check(
     'tier multiples follow the edited base and are sent as rates',
     customWrite?.body.tiers?.[0]?.prompt_price_per_1m === 3 && customWrite?.body.tiers?.[0]?.completion_price_per_1m === 15,
+    JSON.stringify(customWrite?.body.tiers),
+  );
+  check(
+    'a time-of-day tier is saved on its billing clock, hours unconverted',
+    JSON.stringify(customWrite?.body.tiers?.[1]) === JSON.stringify({ utc_start: 30, utc_end: 830, time_zone: 'Asia/Shanghai', prompt_price_per_1m: 0.75 }),
     JSON.stringify(customWrite?.body.tiers),
   );
   check('the editor closes after saving', await isTrue(async () => !(await editor.isVisible()), 'the editor closing'));

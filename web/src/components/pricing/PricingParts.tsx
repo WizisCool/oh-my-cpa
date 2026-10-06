@@ -1,8 +1,8 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Empty, Input, InputNumber, Pagination, Segmented, TimePicker, Tooltip } from 'antd';
+import { Button, Checkbox, Empty, Input, InputNumber, Pagination, Segmented, Select, TimePicker, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
-import dayjs from '../../utils/time';
+import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, SearchOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
@@ -11,6 +11,7 @@ import type { PriceTier, UpstreamModel } from '../../types/pricing';
 import {
   MAX_TIERS,
   RATE_KEYS,
+  clockShiftMinutes,
   convertTierDraftUnit,
   formatHHMM,
   formatMultiplier,
@@ -24,6 +25,7 @@ import {
   rateField,
   searchUpstreamModels,
   shiftClockText,
+  tierTimeZone,
   type RateFields,
   type RateKey,
   type TierDraft,
@@ -37,7 +39,9 @@ import styles from './Pricing.module.css';
 export function describeTier(t: TFunc, tier: PriceTier): string {
   const parts: string[] = [];
   if (tier.min_prompt_tokens) parts.push(t('pricing.tier.long_context', { n: formatTokenCount(tier.min_prompt_tokens) }));
-  if (hasTimeWindow(tier)) parts.push(t('pricing.tier.window', { start: formatHHMM(tier.utc_start), end: formatHHMM(tier.utc_end) }));
+  if (hasTimeWindow(tier)) {
+    parts.push(t('pricing.tier.window', { start: formatHHMM(tier.utc_start), end: formatHHMM(tier.utc_end), zone: tierTimeZone(tier) }));
+  }
   return parts.join(' · ');
 }
 
@@ -196,36 +200,12 @@ const RATE_LABEL_KEYS: Record<RateKey, string> = {
 const THRESHOLD_PRESETS = [128_000, 200_000, 256_000, 272_000, 1_000_000];
 
 /**
- * The console zone's offset from UTC today, and whether it moves during the year. Tier windows are
- * stored in UTC; the editor only uses this to show and accept them in the zone the operator reads
- * every other timestamp in.
+ * A tier's condition as the ladder names it. A window is named on its own clock, with the same
+ * hours as the console zone reads them today when the two clocks differ.
  */
-function useConsoleZoneOffset(): { zone: string; offsetMinutes: number; hasDst: boolean } {
-  const zone = useTimeZone();
-  return React.useMemo(() => {
-    const offsetAt = (iso: string) => dayjs(iso).utcOffset();
-    const year = new Date().getUTCFullYear();
-    return {
-      zone,
-      offsetMinutes: dayjs().utcOffset(),
-      hasDst: offsetAt(`${year}-01-15T00:00:00Z`) !== offsetAt(`${year}-07-15T00:00:00Z`),
-    };
-  }, [zone]);
-}
-
-function formatOffset(minutes: number): string {
-  if (minutes === 0) return 'UTC';
-  const sign = minutes > 0 ? '+' : '-';
-  const magnitude = Math.abs(minutes);
-  const hours = Math.floor(magnitude / 60);
-  const rest = magnitude % 60;
-  return `UTC${sign}${hours}${rest ? `:${String(rest).padStart(2, '0')}` : ''}`;
-}
-
-/** A tier's condition as the ladder names it, with a UTC window also read in the console zone. */
 function useScheduleCondition() {
   const t = useT();
-  const { offsetMinutes } = useConsoleZoneOffset();
+  const consoleZone = useTimeZone();
   return React.useCallback((tier: PriceTier | null, upTo: number | null): string => {
     if (!tier) return upTo ? t('pricing.schedule.base_below', { n: formatTokenCount(upTo) }) : t('pricing.schedule.base');
     const parts: string[] = [];
@@ -233,14 +213,15 @@ function useScheduleCondition() {
     if (hasTimeWindow(tier)) {
       const start = formatHHMM(tier.utc_start);
       const end = formatHHMM(tier.utc_end);
-      let window = t('pricing.tier.window', { start, end });
-      if (offsetMinutes !== 0) {
-        window += ` (${t('pricing.schedule.window_local', { start: shiftClockText(start, offsetMinutes), end: shiftClockText(end, offsetMinutes) })})`;
+      let window = t('pricing.tier.window', { start, end, zone: tierTimeZone(tier) });
+      const shift = clockShiftMinutes(tierTimeZone(tier), consoleZone, Date.now());
+      if (shift !== 0) {
+        window += ` (${t('pricing.schedule.window_local', { start: shiftClockText(start, shift), end: shiftClockText(end, shift) })})`;
       }
       parts.push(window);
     }
     return parts.join(' · ');
-  }, [t, offsetMinutes]);
+  }, [t, consoleZone]);
 }
 
 /**
@@ -297,39 +278,54 @@ export const PriceSchedule: React.FC<{
   );
 };
 
-/** A window picker that edits a UTC "HH:mm" pair in either UTC or the console zone. */
+/**
+ * A tier's window and the clock it is read on. The times are the ones the vendor publishes, in the
+ * vendor's zone; nothing is converted on the way to the server.
+ */
 const WindowField: React.FC<{
-  utcStart: string;
-  utcEnd: string;
-  inUtc: boolean;
-  offsetMinutes: number;
-  onChange: (utcStart: string, utcEnd: string) => void;
-}> = ({ utcStart, utcEnd, inUtc, offsetMinutes, onChange }) => {
+  draft: TierDraft;
+  onChange: (patch: Partial<TierDraft>) => void;
+}> = ({ draft, onChange }) => {
   const t = useT();
-  const shown = (text: string) => (inUtc || !text ? text : shiftClockText(text, offsetMinutes));
-  const stored = (text: string) => (inUtc || !text ? text : shiftClockText(text, -offsetMinutes));
+  const consoleZone = useTimeZone();
   const pickerValue = (text: string) => (text ? dayjs(`2000-01-01 ${text}`, 'YYYY-MM-DD HH:mm') : null);
-  const start = shown(utcStart);
-  const end = shown(utcEnd);
-  const isComplete = utcStart !== '' && utcEnd !== '';
+  const zones = React.useMemo(() => timeZoneOptions(consoleZone, draft.timeZone, t('pricing.editor.window_zone_console')), [consoleZone, draft.timeZone, t]);
+  const shift = clockShiftMinutes(draft.timeZone, consoleZone, Date.now());
+  const isComplete = draft.windowStart !== '' && draft.windowEnd !== '';
   return (
-    <div className={styles['tier-field']}>
-      <TimePicker.RangePicker
-        format="HH:mm"
-        order={false}
-        allowEmpty={[true, true]}
-        value={[pickerValue(start), pickerValue(end)]}
-        aria-label={t('pricing.editor.window_range')}
-        onChange={(values) => onChange(
-          stored(values?.[0] ? values[0].format('HH:mm') : ''),
-          stored(values?.[1] ? values[1].format('HH:mm') : ''),
-        )}
-      />
-      {isComplete && offsetMinutes !== 0 && (
+    <div className={styles['tier-window']}>
+      <div className={styles['tier-field']}>
+        <span>{t('pricing.editor.window_range')}</span>
+        <TimePicker.RangePicker
+          format="HH:mm"
+          order={false}
+          allowEmpty={[true, true]}
+          value={[pickerValue(draft.windowStart), pickerValue(draft.windowEnd)]}
+          aria-label={t('pricing.editor.window_range')}
+          onChange={(values) => onChange({
+            windowStart: values?.[0] ? values[0].format('HH:mm') : '',
+            windowEnd: values?.[1] ? values[1].format('HH:mm') : '',
+          })}
+        />
+      </div>
+      <div className={styles['tier-field']}>
+        <span>{t('pricing.editor.window_zone')}</span>
+        <Select
+          showSearch={{ filterOption: (input, option) => String(option?.searchText ?? '').includes(input.replace(/_/g, ' ').toLowerCase()) }}
+          // Virtualized explicitly: a fixed popup width alone would switch antd to a plain list of
+          // every zone, which the console's wheel smoothing does not drive.
+          virtual
+          popupMatchSelectWidth={320}
+          value={draft.timeZone}
+          onChange={(timeZone) => onChange({ timeZone })}
+          options={zones}
+          aria-label={t('pricing.editor.window_zone')}
+          data-testid="pricing-tier-time-zone"
+        />
+      </div>
+      {isComplete && shift !== 0 && (
         <span className={styles['tier-note']}>
-          {inUtc
-            ? t('pricing.editor.window_as_local', { start: shiftClockText(utcStart, offsetMinutes), end: shiftClockText(utcEnd, offsetMinutes) })
-            : t('pricing.editor.window_as_utc', { start: utcStart, end: utcEnd })}
+          {t('pricing.editor.window_as_local', { start: shiftClockText(draft.windowStart, shift), end: shiftClockText(draft.windowEnd, shift) })}
         </span>
       )}
     </div>
@@ -405,40 +401,22 @@ export interface TieredPricingEditorProps {
  * the base price, which is how providers publish tiers.
  */
 export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts, base, invalid, onChange }) => {
-  useTimeZone();
   const t = useT();
-  const { offsetMinutes, hasDst } = useConsoleZoneOffset();
-  const [isUtcEntry, setIsUtcEntry] = React.useState(offsetMinutes === 0);
+  const consoleZone = useTimeZone();
   const isFull = drafts.length >= MAX_TIERS;
   const update = (key: string, patch: Partial<TierDraft>) =>
     onChange(drafts.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
   const remove = (key: string) => onChange(drafts.filter((draft) => draft.key !== key));
+  // A new window starts on the console's clock, the one the operator reads everything else in;
+  // a vendor billing on another clock is one pick away.
   const add = (kind: TierKind) => onChange([...drafts, newTierDraft(kind === 'context'
-    ? { kind, minPromptTokens: formatTokenCount(200_000) }
-    : { kind, isWindowed: true })]);
+    ? { kind, minPromptTokens: formatTokenCount(200_000), timeZone: consoleZone }
+    : { kind, isWindowed: true, timeZone: consoleZone })]);
   const errorFor = (index: number) => (invalid?.index === index ? (
     <p className={styles['field-error']} role="alert">{t(`pricing.editor.tier_error_${invalid.error}`)}</p>
   ) : null);
-  const zoneToggle = offsetMinutes !== 0 && (
-    <Segmented<'local' | 'utc'>
-      size="small"
-      value={isUtcEntry ? 'utc' : 'local'}
-      onChange={(value) => setIsUtcEntry(value === 'utc')}
-      options={[
-        { value: 'local', label: t('pricing.editor.window_zone_local', { offset: formatOffset(offsetMinutes) }) },
-        { value: 'utc', label: 'UTC' },
-      ]}
-      aria-label={t('pricing.editor.window_zone')}
-    />
-  );
   const windowField = (draft: TierDraft) => (
-    <WindowField
-      utcStart={draft.utcStart}
-      utcEnd={draft.utcEnd}
-      inUtc={isUtcEntry}
-      offsetMinutes={offsetMinutes}
-      onChange={(utcStart, utcEnd) => update(draft.key, { utcStart, utcEnd })}
-    />
+    <WindowField draft={draft} onChange={(patch) => update(draft.key, patch)} />
   );
   const removeButton = (draft: TierDraft) => (
     <Tooltip title={t('pricing.editor.tier_remove')}>
@@ -461,7 +439,6 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
     />
   );
   const sectionDrafts = (kind: TierKind) => drafts.map((draft, index) => ({ draft, index })).filter(({ draft }) => draft.kind === kind);
-  const hasWindows = drafts.some((draft) => draft.kind === 'window' || draft.isWindowed);
 
   return (
     <div className={styles['tier-sections']}>
@@ -521,28 +498,18 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
       <section className={styles['tier-section']} data-testid="pricing-window-tiers">
         <div className={styles['tier-section-head']}>
           <h3>{t('pricing.editor.window_title')}</h3>
-          {zoneToggle && (
-            <div className={styles['tier-zone']}>
-              <span>{t('pricing.editor.window_zone')}</span>
-              {zoneToggle}
-            </div>
-          )}
         </div>
         <p className={styles['mode-hint']}>{t('pricing.editor.window_hint')}</p>
         {sectionDrafts('window').map(({ draft, index }) => (
           <div key={draft.key} className={clsx(styles['tier-row'], invalid?.index === index && styles['tier-row-invalid'])} data-testid="pricing-tier-row">
             <div className={styles['tier-condition']}>
-              <div className={styles['tier-threshold']}>
-                <span>{t('pricing.editor.window_range')}</span>
-                {windowField(draft)}
-              </div>
+              {windowField(draft)}
               {removeButton(draft)}
             </div>
             {rates(draft)}
             {errorFor(index)}
           </div>
         ))}
-        {hasWindows && hasDst && <p className={styles['mode-hint']}>{t('pricing.editor.window_dst')}</p>}
         <Button icon={<PlusOutlined />} disabled={isFull} onClick={() => add('window')} data-testid="pricing-add-window-tier">
           {t('pricing.editor.window_add')}
         </Button>

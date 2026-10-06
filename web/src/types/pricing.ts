@@ -15,14 +15,18 @@ export type PricingMatchKind = '' | 'exact' | 'canonical' | 'normalized' | 'date
 
 /**
  * One conditional rate override. It applies when every condition it carries holds: a prompt of at
- * least `min_prompt_tokens` (cached tokens included) and/or a request stamped inside the UTC window
+ * least `min_prompt_tokens` (cached tokens included) and/or a request stamped inside the window
  * `[utc_start, utc_end)` in HHMM, which wraps past midnight when the end is not after the start.
+ * The window is read on the `time_zone` clock - the vendor's billing clock - and on UTC when the
+ * tier names none; the field names are the ones OpenRouter publishes UTC windows under.
  * A rate left out inherits the base price.
  */
 export interface PriceTier {
   min_prompt_tokens?: number;
   utc_start?: number;
   utc_end?: number;
+  /** IANA zone the window is read in; absent means UTC. */
+  time_zone?: string;
   prompt_price_per_1m?: number;
   completion_price_per_1m?: number;
   cache_read_price_per_1m?: number;

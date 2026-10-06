@@ -92,7 +92,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/auth` | Admin session cookie: sign, verify, rotate | — |
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
-| `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
+| `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes (windows read on each tier's billing time zone), sync service, modes and channel multipliers | — |
 | `internal/modelcatalog` | Bundled models.dev canonical reference facts, exact source aliases and safe weight/resource links for Model Square | — |
 | `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA client for the Playground, Agent and Model Square: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |

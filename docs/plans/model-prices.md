@@ -38,8 +38,14 @@ write), a model multiplier, and an optional list of **tiers**:
 - a **long-context tier** (`min_prompt_tokens`) applies when the request's full
   input, cached tokens included, reaches the threshold;
 - a **time-of-day tier** (`utc_start`/`utc_end`, HHMM) applies when the
-  request's own timestamp falls in the UTC window `[start, end)`, which wraps
-  past midnight when the end is not after the start;
+  request's own timestamp falls in the window `[start, end)`, which wraps past
+  midnight when the end is not after the start. The window is read on the
+  tier's **billing time zone** (`time_zone`, an IANA name such as
+  `Asia/Shanghai`) and on UTC when the tier names none, so a vendor that
+  publishes off-peak hours in Beijing time is entered as published. The request
+  is placed on that zone's wall clock at its own instant, so a zone's daylight
+  saving moves the window with the vendor. The zone is unrelated to the OMC
+  Time Zone, which only decides how the console displays time (ADR 0063);
 - a tier carrying both applies only when both hold.
 
 Exactly one tier governs a request: the highest applicable threshold, then a
@@ -68,8 +74,9 @@ what the pre-tier formula charged (`FuzzQuoteLegacyParity`).
 - variants (`:free`, `:batch`, every `:` flavour), OpenRouter's own routers and
   any entry whose price is negative or missing are skipped;
 - `~vendor/…-latest` aliases are kept but only ever match as a last resort;
-- overrides with `min_prompt_tokens` or `utc_start`/`utc_end` become tiers; any
-  other override is dropped;
+- overrides with `min_prompt_tokens` or `utc_start`/`utc_end` become tiers,
+  always without a zone, as OpenRouter publishes its windows in UTC; any other
+  override is dropped;
 - **a cache rate OpenRouter omits resolves to the prompt rate**, never to zero:
   the omission means no cache discount is published, and zero would bill cached
   tokens as free. A tier inherits its own prompt rate the same way when the base
@@ -77,7 +84,9 @@ what the pre-tier formula charged (`FuzzQuoteLegacyParity`).
 
 Tiers are stored in one canonical spelling (`pricing.EncodeTiers`), because the
 version trigger compares the stored text and two spellings of the same tiers
-would mint a version on every sync.
+would mint a version on every sync. A tier without a zone keeps the spelling it
+had before zones existed, and the editor saves a UTC window without one, for the
+same reason.
 
 ## Matching rule
 
@@ -135,9 +144,12 @@ A CPA alias with conflicting targets is persisted with an empty `price_model`. I
   running), `PUT /v1/pricing/sync-schedule`. Path parameters are decoded, so a
   model named `openai/gpt-5` works. The request detail response carries
   `cost_breakdown`.
-- `internal/operations/pricing.go`: the agent capabilities `pricing_list`,
+- `internal/operations/pricing.go`: the agent capabilities `pricing_overview`,
+  `pricing_list`, `pricing_get`, `pricing_catalog_search`, `pricing_quote`,
   `pricing_set` (mode, link, rates, tiers), `pricing_delete`, `pricing_sync`,
-  `pricing_channel_set`, `pricing_channel_delete`.
+  `pricing_channel_set`, `pricing_channel_delete`; `requests_cost_breakdown`
+  lives beside the request reads in `internal/operations/usage.go`. See
+  "Pricing through an agent".
 - `web/src/components/pricing/`: the console-wide editor (`PricingEditorProvider`,
   `PriceEditorDrawer`), the request cost breakdown, and shared parts.
 - `web/src/pages/pricing/`: the price book — coverage and sync status in the head,
@@ -172,10 +184,11 @@ pins:
   as providers publish it (`200K`, `1M`, `272,000`) or picked from presets, and a
   tier can additionally be limited to a time window, which covers the combined
   tiers the server accepts.
-- **Time-of-day pricing** lists tiers with only a window. Window times are entered
-  in the OMC Time Zone or in UTC; the editor converts at the zone's current offset
-  and always shows the UTC rule it will save, and says so when the zone observes
-  daylight saving. The stored rule is UTC either way.
+- **Time-of-day pricing** lists tiers with only a window. Each window carries its
+  own billing time zone, picked from the IANA list with current offsets; a new
+  window starts on the OMC Time Zone. The hours are saved as typed, never
+  converted, and when the billing zone and the OMC Time Zone differ the editor
+  and the price ladder also show the same window as the console reads it today.
 - A tier's rates are entered as **multiples of the base** (the default) or as
   **fixed prices**; a blank field inherits the base rate in both. Multiples are
   converted to rates on save, so the server only ever stores rates. A stored tier
@@ -190,6 +203,28 @@ pins:
   rates a request pays there, with inherited rates muted and changed ones marked
   with their multiple. It appears for automatic and linked prices that carry tiers
   as well as under a custom price being edited.
+
+## Pricing through an agent
+
+Setting prices is the console's most involved task, so the capability surface is
+shaped for an agent to do it on the operator's behalf (`docs/agent-capabilities.md`):
+
+1. `pricing_overview` says where to start: sync state, how many models are priced
+   in each mode, and the unpriced models busiest first with suggestions.
+2. `pricing_get` reads one model in full - price, automatic match, suggestions,
+   candidate, the channels serving it, 30-day traffic and the 7-day median request.
+3. `pricing_catalog_search` finds the OpenRouter id for a link, or published rates
+   and tiers to copy into a custom price.
+4. `pricing_quote` prices a hypothetical request against the stored price or a
+   proposed `pricing_set` input without saving it, through `pricing.Quote` and
+   `Service.PreviewModeChange`, the same resolution the write uses. Varying
+   `timestamp_ms` and `input_tokens` checks a window or a threshold before the
+   operator is asked to approve.
+5. `pricing_set` writes after approval. A refusal carries `invalid_parameters`
+   with a `detail` naming the field to change, and is raised when the call is
+   prepared, so a wrong zone or an unknown OpenRouter id never reaches approval.
+
+`requests_cost_breakdown` answers the reverse question for a recorded request.
 
 ## Provider-grouped workbench
 

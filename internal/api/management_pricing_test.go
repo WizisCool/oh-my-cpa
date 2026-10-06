@@ -90,6 +90,14 @@ func (f *fakePricing) SetModelModeChecked(_ context.Context, change pricing.Mode
 	f.changes = append(f.changes, change)
 	return pricing.ModelPrice{Model: change.Model, Mode: change.Mode, UpstreamID: change.UpstreamID}, nil
 }
+func (f *fakePricing) PreviewModeChange(_ context.Context, change pricing.ModeChange) (pricing.ModelPrice, error) {
+	if f.changeErr != nil {
+		return pricing.ModelPrice{}, f.changeErr
+	}
+	row := change.Price
+	row.Model, row.Mode, row.UpstreamID, row.PriceMultiplier = change.Model, change.Mode, change.UpstreamID, max(change.Multiplier, 1)
+	return row, nil
+}
 func (f *fakePricing) DeletePrice(ctx context.Context, model string) (bool, error) {
 	return f.DeletePriceChecked(ctx, model, nil)
 }

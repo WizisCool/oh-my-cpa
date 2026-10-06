@@ -77,6 +77,11 @@ func (e *Executor) Invoke(ctx context.Context, p Principal, name string, raw jso
 	if definition.Risk == "high" || definition.HumanInput == "answer" {
 		preview, err := definition.Prepare(ctx, canonical)
 		if err != nil {
+			// A refusal that says what to change is a result, not a transport failure:
+			// nothing was prepared, and the caller needs the detail to correct the call.
+			if detail := ErrorDetail(err); detail != "" {
+				return Result{Status: "error", Code: ErrorCode(err), Detail: detail}, nil
+			}
 			return Result{}, err
 		}
 		previewJSON, err := json.Marshal(preview)

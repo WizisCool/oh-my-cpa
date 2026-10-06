@@ -8,7 +8,9 @@ import {
   formatMultiplier,
   formatRatePer1M,
   formatTokenCount,
+  clockShiftMinutes,
   formatUsd,
+  minuteOfDayIn,
   modeOf,
   matchesModelSearch,
   newTierDraft,
@@ -77,6 +79,43 @@ check('a window wraps past midnight and is half-open', () => {
   assert.equal(selectTier([{ utc_start: 900, utc_end: 900 }], 1, at(9, 0)), -1, 'an empty window never applies');
 });
 
+check('a window is read on the tier\'s own clock, as the server reads it', () => {
+  const utc = (month: number, day: number, hour: number, minute: number) => Date.UTC(2026, month - 1, day, hour, minute);
+  // Off-peak 00:30-08:30 in Beijing is 16:30-00:30 UTC; the same digits read as UTC discount the wrong hours.
+  const offPeak: PriceTier[] = [{ utc_start: 30, utc_end: 830, time_zone: 'Asia/Shanghai', prompt_price_per_1m: 1 }];
+  assert.equal(selectTier(offPeak, 1, utc(10, 6, 17, 0)), 0, '01:00 in Beijing');
+  assert.equal(selectTier(offPeak, 1, utc(10, 6, 16, 30)), 0, 'the start is inclusive');
+  assert.equal(selectTier(offPeak, 1, utc(10, 7, 0, 30)), -1, 'the end is exclusive');
+  assert.equal(selectTier(offPeak, 1, utc(10, 6, 12, 0)), -1, '20:00 in Beijing');
+  assert.equal(selectTier(offPeak, 1, utc(10, 6, 1, 0)), -1, '01:00 UTC is 09:00 in Beijing');
+  assert.equal(selectTier([{ utc_start: 30, utc_end: 830 }], 1, utc(10, 6, 1, 0)), 0, 'a tier without a zone stays UTC');
+  // A named zone follows the vendor's wall clock across daylight saving.
+  const office: PriceTier[] = [{ utc_start: 900, utc_end: 1700, time_zone: 'America/New_York' }];
+  assert.equal(selectTier(office, 1, utc(1, 15, 14, 30)), 0, '09:30 EST');
+  assert.equal(selectTier(office, 1, utc(7, 15, 13, 30)), 0, '09:30 EDT');
+  assert.equal(selectTier(office, 1, utc(7, 15, 12, 30)), -1, '08:30 EDT');
+  assert.equal(selectTier([{ utc_start: 0, utc_end: 2359, time_zone: 'Mars/Phobos' }], 1, utc(1, 1, 12, 0)), -1, 'an unreadable zone never applies');
+  assert.equal(minuteOfDayIn(utc(10, 6, 16, 30), 'Asia/Shanghai'), 30);
+  assert.equal(clockShiftMinutes('Asia/Shanghai', 'UTC', utc(10, 6, 12, 0)), 960, 'UTC reads eight hours behind Beijing');
+  assert.equal(clockShiftMinutes('Asia/Shanghai', 'Asia/Shanghai', 0), 0);
+});
+
+check('a tier keeps its billing zone through the editor, and a UTC window keeps its stored spelling', () => {
+  const zoned: PriceTier[] = [{ utc_start: 30, utc_end: 830, time_zone: 'Asia/Shanghai', prompt_price_per_1m: 1 }];
+  const drafts = tierDraftsFrom(zoned);
+  assert.deepEqual([drafts[0].windowStart, drafts[0].windowEnd, drafts[0].timeZone], ['00:30', '08:30', 'Asia/Shanghai']);
+  assert.deepEqual(tiersFromDrafts(drafts), { tiers: zoned }, 'the hours are saved as typed, never converted');
+  assert.equal(tierDraftsFrom([{ utc_start: 1600, utc_end: 0 }])[0].timeZone, 'UTC');
+  assert.deepEqual(
+    tiersFromDrafts([newTierDraft({ kind: 'window', windowStart: '16:00', windowEnd: '00:00', timeZone: 'UTC' })]),
+    { tiers: [{ utc_start: 1600, utc_end: 0 }] },
+    'UTC is written without a zone, so an untouched tier mints no price version',
+  );
+  const sameHours = (timeZone: string) => newTierDraft({ kind: 'window', windowStart: '00:30', windowEnd: '08:30', timeZone, rateUnit: 'price', prompt: '1' });
+  assert.ok('tiers' in tiersFromDrafts([sameHours('Asia/Shanghai'), sameHours('Asia/Tokyo')]), 'the same hours on two clocks are two conditions');
+  assert.deepEqual(tiersFromDrafts([sameHours('Asia/Shanghai'), sameHours('Asia/Shanghai')]), { error: 'duplicate', index: 1 });
+});
+
 check('among tiers that apply, a windowed one beats an unwindowed one at the same threshold', () => {
   const tiers: PriceTier[] = [{ min_prompt_tokens: 100 }, { utc_start: 0, utc_end: 2359 }, { min_prompt_tokens: 100, utc_start: 0, utc_end: 2359 }];
   assert.equal(selectTier(tiers, 500, at(12, 0)), 2);
@@ -101,8 +140,8 @@ check('tier drafts round-trip and refuse what the server would refuse', () => {
   assert.ok('tiers' in back);
   assert.deepEqual(back.tiers, tiers);
   assert.deepEqual(tiersFromDrafts([newTierDraft({ rateUnit: 'price', prompt: '1' })]), { error: 'condition', index: 0 });
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '16:00' })]), { error: 'window', index: 0 });
-  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '09:00', utcEnd: '09:00' })]), { error: 'window', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', windowStart: '16:00' })]), { error: 'window', index: 0 });
+  assert.deepEqual(tiersFromDrafts([newTierDraft({ kind: 'window', windowStart: '09:00', windowEnd: '09:00' })]), { error: 'window', index: 0 });
   assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '1000', rateUnit: 'price', prompt: '-1' })]), { error: 'rate', index: 0 });
   assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '1.5' })]), { error: 'condition', index: 0 });
   assert.deepEqual(tiersFromDrafts([newTierDraft({ minPromptTokens: '200K', prompt: '2' })]), { error: 'base', index: 0 }, 'a multiple needs a base');
@@ -114,9 +153,9 @@ check('tier drafts round-trip and refuse what the server would refuse', () => {
 });
 
 check('a long-context tier limited to a window keeps both conditions, and an unticked window is dropped', () => {
-  const windowed = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: true, utcStart: '16:30', utcEnd: '00:30' })], BASE);
+  const windowed = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: true, windowStart: '16:30', windowEnd: '00:30' })], BASE);
   assert.deepEqual(windowed, { tiers: [{ min_prompt_tokens: 128_000, utc_start: 1630, utc_end: 30 }] });
-  const unticked = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: false, utcStart: '16:30', utcEnd: '00:30' })], BASE);
+  const unticked = tiersFromDrafts([newTierDraft({ minPromptTokens: '128K', isWindowed: false, windowStart: '16:30', windowEnd: '00:30' })], BASE);
   assert.deepEqual(unticked, { tiers: [{ min_prompt_tokens: 128_000 }] });
   const reopened = tierDraftsFrom([{ min_prompt_tokens: 128_000, utc_start: 1630, utc_end: 30 }], BASE)[0];
   assert.equal(reopened.kind, 'context');
@@ -126,7 +165,7 @@ check('a long-context tier limited to a window keeps both conditions, and an unt
 check('multiples are priced from the base and written as rates the server stores', () => {
   const result = tiersFromDrafts([newTierDraft({ minPromptTokens: '200K', prompt: '2', completion: '1.5', cacheRead: '' })], BASE);
   assert.deepEqual(result, { tiers: [{ min_prompt_tokens: 200_000, prompt_price_per_1m: 6, completion_price_per_1m: 22.5 }] }, 'a blank multiple inherits');
-  const noisy = tiersFromDrafts([newTierDraft({ kind: 'window', utcStart: '00:00', utcEnd: '08:00', prompt: '3' })], { ...BASE, prompt_price_per_1m: 0.1 });
+  const noisy = tiersFromDrafts([newTierDraft({ kind: 'window', windowStart: '00:00', windowEnd: '08:00', prompt: '3' })], { ...BASE, prompt_price_per_1m: 0.1 });
   assert.ok('tiers' in noisy && noisy.tiers[0].prompt_price_per_1m === 0.3, 'float noise from multiplying is trimmed');
 });
 
@@ -152,7 +191,7 @@ check('switching how rates are entered keeps the price they describe', () => {
 
 check('long-context tiers are written before time-of-day tiers without changing which applies', () => {
   const drafts = [
-    newTierDraft({ kind: 'window', utcStart: '16:00', utcEnd: '00:00', rateUnit: 'price', prompt: '1' }),
+    newTierDraft({ kind: 'window', windowStart: '16:00', windowEnd: '00:00', rateUnit: 'price', prompt: '1' }),
     newTierDraft({ minPromptTokens: '200K', rateUnit: 'price', prompt: '6' }),
   ];
   const result = tiersFromDrafts(drafts, BASE);

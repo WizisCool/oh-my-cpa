@@ -123,6 +123,14 @@ risk and are bound to the revision of the current price list or channel list, so
 edit made in the console between preparation and approval returns `resource_conflict`.
 `pricing_delete` and `pricing_channel_delete` are destructive. None of them reprices a recorded request (ADR 0030).
 
+A refusal the caller can correct says what to change. `operations.invalidParameters`
+keeps the stable `invalid_parameters` code and implements `capability.DetailedError`,
+and the executor returns a detailed refusal raised by `Prepare` as an `error` result
+with that `detail` instead of a bare failure - on both adapters, before any pending
+operation or approval exists. Pricing uses it for every rejected rate, tier, zone,
+mode and OpenRouter id; reuse it rather than returning a bare code from a new
+capability whose arguments an agent could plausibly get wrong.
+
 ### Asking the operator
 
 `ask_question` is the one capability that belongs to the conversation rather than to OMC:
@@ -277,6 +285,41 @@ the console itself, and rotate the key if that trust changes.
 `pricing_list` includes `providers` for the models in its bounded current page. Each membership carries the configured provider id, family, snapshot name, channel, priority, OAuth marker, a hostname-only endpoint hint and exact model identities. This read uses the stored complete CPA catalog and never retrieves credential secrets. Provider-specific presentation does not create separate prices: `pricing_set` still edits the global model identity, with its existing revision and confirmation policy.
 
 `pricing_list` also returns `candidates`, keyed by model, for the custom and linked prices on its page that OpenRouter now offers a price for and the operator has not answered: `kind` `automatic` (auto mode would match it) or `suggested` (a resemblance), with the OpenRouter model and its rates; a failed lookup leaves it empty rather than failing the list. An agent acts on one through `pricing_set` (mode `auto`, or `linked` to the candidate's id), which records the answer like a console save; ignoring a candidate is left to the console, because it only silences a prompt and changes no price.
+
+### Pricing an agent can carry out end to end
+
+Five reads surround the pricing writes so an agent can work a price out, check it and
+only then ask for approval. All are low-risk reads on both adapters, bounded to 20 rows
+a page, and none returns a secret.
+
+- `pricing_overview` (`offset`): `sync` (`is_known`, `is_running`, `has_failed`, last
+  success, next run, interval, `upstream_models`), `coverage` counts by mode, and the
+  `unpriced` models busiest first with 30-day traffic and up to two OpenRouter
+  suggestions. The stored sync failure text is withheld because it can quote an
+  upstream response; `has_failed` says that it exists.
+- `pricing_get` (`model`): `price` (absent when unpriced), `automatic` (what auto mode
+  would match), `suggestions`, `candidate`, `channels` serving the model, `usage_30d`
+  and `profile_7d` (median request size and the largest prompt). Advisory fields are
+  left out when their lookup fails.
+- `pricing_catalog_search` (`query`, `offset`): the stored OpenRouter snapshot matched
+  on id, name and canonical slug, exact ids first, with rates and tiers.
+- `pricing_quote`: one hypothetical request (`input_tokens`, optional output and cache
+  tokens, `timestamp_ms`, `channel`) priced against `model`'s stored price or a
+  `proposed` object shaped like `pricing_set`'s input. It returns the resolved `price`,
+  the `breakdown` with the governing `tier_index`, and `cost_usd`. Nothing is written.
+- `requests_cost_breakdown` (`id`): a recorded request's pricing status, stored nanos,
+  locked price and channel versions, tier and per-bucket rates; `resource_missing` for
+  an unknown id.
+
+A time-of-day tier's `utc_start`/`utc_end` are HHMM on the clock named by `time_zone`,
+UTC when omitted (ADR 0063). An agent given a vendor's price page enters the published
+hours with the vendor's zone; converting them to UTC is wrong for any zone with
+daylight saving and is never needed. `pricing_set` resolves a link or an automatic
+match while preparing, so a model outside the CPA catalog, an unknown OpenRouter id
+or an automatic switch with no match arrives as `invalid_parameters` with a detail
+rather than as a failed approval. Tests in
+`internal/operations/pricing_test.go` cover both adapters, the refusals, the dry run
+and the breakdown's schema.
 
 ### Timezone capabilities
 

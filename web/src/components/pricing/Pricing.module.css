@@ -333,13 +333,21 @@
   color: var(--fg);
 }
 
-.tier-zone {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--fg-2);
-  font-size: 12px;
+/* A window and its clock sit side by side, and stack when the row cannot hold both. */
+.tier-window {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 220px) minmax(0, 280px);
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.tier-window :global(.ant-select) {
+  width: 100%;
+}
+
+.tier-window .tier-note {
+  grid-column: 1 / -1;
 }
 
 .tier-row {
@@ -636,6 +644,10 @@
   .rate-grid,
   .tier-rates {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tier-window {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rate-inputs {

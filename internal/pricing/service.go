@@ -718,13 +718,41 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 			return ModelPrice{}, err
 		}
 	}
-	models, err := s.store.ListPricingModels(ctx)
+	row, link, target, err := s.resolveModeChange(ctx, change)
 	if err != nil {
 		return ModelPrice{}, err
 	}
+	if err := s.store.ApplyModelPrice(ctx, row, link); err != nil {
+		return ModelPrice{}, err
+	}
+	s.acknowledgeCandidate(ctx, change.Model, target, change.Mode, link)
+	row.Mode = change.Mode
+	return row, nil
+}
+
+// PreviewModeChange resolves the price a mode change would write, without
+// writing it, so a dry run and the write can never disagree about the rates.
+func (s *Service) PreviewModeChange(ctx context.Context, change ModeChange) (ModelPrice, error) {
+	if s == nil || s.store == nil {
+		return ModelPrice{}, errors.New("pricing service is not initialized")
+	}
+	change.Model = strings.TrimSpace(change.Model)
+	change.UpstreamID = strings.TrimSpace(change.UpstreamID)
+	row, _, _, err := s.resolveModeChange(ctx, change)
+	row.Mode = change.Mode
+	return row, err
+}
+
+// resolveModeChange turns a decision into the row to store, the pin to keep
+// beside it and the catalog target the model resolves to.
+func (s *Service) resolveModeChange(ctx context.Context, change ModeChange) (ModelPrice, string, string, error) {
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return ModelPrice{}, "", "", err
+	}
 	target, inCatalog := models[change.Model]
 	if !inCatalog {
-		return ModelPrice{}, fmt.Errorf("%w: %q", ErrModelNotInCatalog, change.Model)
+		return ModelPrice{}, "", "", fmt.Errorf("%w: %q", ErrModelNotInCatalog, change.Model)
 	}
 	multiplier := change.Multiplier
 	if multiplier == 0 {
@@ -743,38 +771,33 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 		row.PriceMultiplier = multiplier
 		row.Tiers = CanonicalTiers(row.Tiers)
 	case ModeLinked, ModeAuto:
-		// Only the local snapshot: the write lock is held, and a link can only name
-		// a model the picker showed from that same snapshot.
+		// Only the local snapshot: a write holds the lock here, and a link can only
+		// name a model the picker showed from that same snapshot.
 		catalog, ok := s.localCatalog(ctx)
 		if !ok {
-			return ModelPrice{}, fmt.Errorf("%w: the price list has not been downloaded yet", ErrUpstreamNotFound)
+			return ModelPrice{}, "", "", fmt.Errorf("%w: the price list has not been downloaded yet", ErrUpstreamNotFound)
 		}
 		if change.Mode == ModeLinked {
 			upstream, ok := catalog.Lookup(change.UpstreamID)
 			if !ok {
-				return ModelPrice{}, fmt.Errorf("%w: %q", ErrUpstreamNotFound, change.UpstreamID)
+				return ModelPrice{}, "", "", fmt.Errorf("%w: %q", ErrUpstreamNotFound, change.UpstreamID)
 			}
 			row = upstream.PriceFor(change.Model, MatchLinked, multiplier, s.clock().UnixMilli())
 			link = upstream.ID
 		} else {
 			match, ok := catalog.MatchModel(target)
 			if target == "" || !ok {
-				return ModelPrice{}, fmt.Errorf("%w: %q", ErrNoAutomaticMatch, change.Model)
+				return ModelPrice{}, "", "", fmt.Errorf("%w: %q", ErrNoAutomaticMatch, change.Model)
 			}
 			row = match.Model.PriceFor(change.Model, match.Kind, multiplier, s.clock().UnixMilli())
 		}
 	default:
-		return ModelPrice{}, ErrInvalidMode
+		return ModelPrice{}, "", "", ErrInvalidMode
 	}
 	if err := row.ValidateWrite(); err != nil {
-		return ModelPrice{}, fmt.Errorf("model %q: %w", change.Model, err)
+		return ModelPrice{}, "", "", fmt.Errorf("model %q: %w", change.Model, err)
 	}
-	if err := s.store.ApplyModelPrice(ctx, row, link); err != nil {
-		return ModelPrice{}, err
-	}
-	s.acknowledgeCandidate(ctx, change.Model, target, change.Mode, link)
-	row.Mode = change.Mode
-	return row, nil
+	return row, link, target, nil
 }
 
 // Candidate kinds: OpenRouter now prices the model by name, or only resembles it.

@@ -461,7 +461,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 				} else {
 					result, err := r.Executor.Invoke(ctx, PRINCIPAL, call.Function.Name, json.RawMessage(call.Function.Arguments), conversation.ID)
 					if err != nil {
-						result = capability.Result{Status: "error", Code: capability.ErrorCode(err)}
+						result = capability.Result{Status: "error", Code: capability.ErrorCode(err), Detail: capability.ErrorDetail(err)}
 					}
 					trace.Result = result
 				}

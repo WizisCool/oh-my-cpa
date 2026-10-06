@@ -61,9 +61,43 @@ function isValidHHMM(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 2359 && value % 100 < 60;
 }
 
-function minuteOfDayUTC(timestampMs: number): number {
-  const minutes = Math.floor(timestampMs / 60_000) % 1440;
-  return minutes < 0 ? minutes + 1440 : minutes;
+/** The zone a tier's window is read in. */
+export function tierTimeZone(tier: Pick<PriceTier, 'time_zone'>): string {
+  return tier.time_zone || 'UTC';
+}
+
+const CLOCK_FORMATS = new Map<string, Intl.DateTimeFormat | null>();
+
+/**
+ * The minute of the day an instant falls on in a zone, or null for a zone the runtime does not
+ * know. Reading the zone's own wall clock is what makes a window follow daylight saving.
+ */
+export function minuteOfDayIn(timestampMs: number, zone: string): number | null {
+  let format = CLOCK_FORMATS.get(zone);
+  if (format === undefined) {
+    try {
+      format = new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      format = null;
+    }
+    CLOCK_FORMATS.set(zone, format);
+  }
+  if (!format) return null;
+  const parts = format.formatToParts(timestampMs);
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  const minute = (read('hour') % 24) * 60 + read('minute');
+  return Number.isFinite(minute) ? minute : null;
+}
+
+/**
+ * How many minutes a clock in `to` is ahead of one in `from` at an instant, around the clock face.
+ * It only ever moves an "HH:mm" for display, so a whole-day difference is the same as none.
+ */
+export function clockShiftMinutes(from: string, to: string, timestampMs: number): number {
+  const source = minuteOfDayIn(timestampMs, from);
+  const target = minuteOfDayIn(timestampMs, to);
+  if (source === null || target === null) return 0;
+  return (((target - source) % 1440) + 1440) % 1440;
 }
 
 function inWindow(minute: number, startHHMM: number, endHHMM: number): boolean {
@@ -75,19 +109,22 @@ function inWindow(minute: number, startHHMM: number, endHHMM: number): boolean {
 
 /**
  * The single tier that governs a request, by the server's rule: every condition a tier carries
- * must hold; among those that do, the highest prompt threshold wins, then a windowed tier over an
+ * must hold - a window on the tier's own clock, never applying in a zone that cannot be read;
+ * among those that do, the highest prompt threshold wins, then a windowed tier over an
  * unwindowed one, then list order. Returns -1 for the base rates.
  */
 export function selectTier(tiers: readonly PriceTier[] | null | undefined, inputTokens: number, timestampMs: number): number {
   if (!tiers) return -1;
-  const minute = minuteOfDayUTC(timestampMs);
   let best = -1;
   tiers.forEach((tier, index) => {
     const threshold = tier.min_prompt_tokens ?? 0;
     const windowed = hasTimeWindow(tier);
     if (threshold === 0 && !windowed) return;
     if (threshold > 0 && Math.max(inputTokens, 0) < threshold) return;
-    if (windowed && !inWindow(minute, tier.utc_start, tier.utc_end)) return;
+    if (windowed) {
+      const minute = minuteOfDayIn(timestampMs, tierTimeZone(tier));
+      if (minute === null || !inWindow(minute, tier.utc_start, tier.utc_end)) return;
+    }
     if (best < 0) {
       best = index;
       return;
@@ -222,8 +259,8 @@ export function rateField(key: RateKey): keyof RateFields {
 
 /**
  * One tier as the editor holds it: every field a string so a half-typed value survives
- * re-renders, converted to a `PriceTier` only on save. The window is always held in UTC "HH:mm";
- * showing it in another zone is the editor's presentation, never the stored rule.
+ * re-renders, converted to a `PriceTier` only on save. The window is held as "HH:mm" on the clock
+ * of `timeZone`, exactly as it is stored; showing it in another zone is presentation only.
  */
 export interface TierDraft {
   key: string;
@@ -232,8 +269,10 @@ export interface TierDraft {
   minPromptTokens: string;
   /** Whether a long-context tier is further limited to a window; a time-of-day tier always is. */
   isWindowed: boolean;
-  utcStart: string;
-  utcEnd: string;
+  windowStart: string;
+  windowEnd: string;
+  /** IANA zone the window is read in; "UTC" is saved as a tier without a zone. */
+  timeZone: string;
   rateUnit: TierRateUnit;
   prompt: string;
   completion: string;
@@ -263,8 +302,9 @@ export function newTierDraft(partial: Partial<TierDraft> = {}): TierDraft {
     kind: 'context',
     minPromptTokens: '',
     isWindowed: false,
-    utcStart: '',
-    utcEnd: '',
+    windowStart: '',
+    windowEnd: '',
+    timeZone: 'UTC',
     rateUnit: 'multiple',
     prompt: '',
     completion: '',
@@ -303,8 +343,9 @@ export function tierDraftsFrom(tiers: readonly PriceTier[] | null | undefined, b
       kind: hasThreshold ? 'context' : 'window',
       minPromptTokens: hasThreshold ? formatTokenCount(tier.min_prompt_tokens!) : '',
       isWindowed: windowed,
-      utcStart: hhmmText(tier.utc_start),
-      utcEnd: hhmmText(tier.utc_end),
+      windowStart: hhmmText(tier.utc_start),
+      windowEnd: hhmmText(tier.utc_end),
+      timeZone: tierTimeZone(tier),
       rateUnit: isMultiple ? 'multiple' : 'price',
       prompt: rateText('prompt'),
       completion: rateText('completion'),
@@ -363,8 +404,8 @@ function parseHHMMText(value: string): number | null {
 }
 
 /**
- * "HH:mm" moved by a number of minutes around the clock face. The editor uses it to show a UTC
- * window in the console's zone and to read one typed there back to UTC.
+ * "HH:mm" moved by a number of minutes around the clock face. The editor uses it to show a
+ * window kept on a vendor's clock as the console's zone reads it.
  */
 export function shiftClockText(value: string, offsetMinutes: number): string {
   const hhmm = parseHHMMText(value);
@@ -413,13 +454,16 @@ export function tiersFromDrafts(
       tier.min_prompt_tokens = threshold;
     }
     if (draft.kind === 'window' || draft.isWindowed) {
-      const start = parseHHMMText(draft.utcStart);
-      const end = parseHHMMText(draft.utcEnd);
+      const start = parseHHMMText(draft.windowStart);
+      const end = parseHHMMText(draft.windowEnd);
       if (start === null || end === null || start === end) return { error: 'window', index };
       tier.utc_start = start;
       tier.utc_end = end;
+      // A UTC window is written without a zone, the spelling every tier had before zones: an
+      // untouched tier then saves byte-identical and mints no price version.
+      if (draft.timeZone && draft.timeZone !== 'UTC') tier.time_zone = draft.timeZone;
     }
-    const condition = `${tier.min_prompt_tokens ?? 0}|${tier.utc_start ?? ''}|${tier.utc_end ?? ''}`;
+    const condition = `${tier.min_prompt_tokens ?? 0}|${tier.utc_start ?? ''}|${tier.utc_end ?? ''}|${tier.time_zone ?? ''}`;
     if (conditions.has(condition)) return { error: 'duplicate', index };
     conditions.add(condition);
     for (const key of RATE_KEYS) {
