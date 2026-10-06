@@ -2145,8 +2145,10 @@ states "shown of total" and offers one clear action. Search and maker live in th
 
 Makers are open sections under a heading rule. Named makers sort alphabetically; the
 multiple-maker group (a shared alias spanning several makers) and the unidentified group follow
-them. Inside a section each client model name is a compact bordered card, and the cards fill
-the section's width in as many columns as fit (280px minimum, `auto-fill`): a model here is a
+them. Inside a section each client model name is a compact card on `--surface` with a 1px
+`--border` and the 4px radius - the dashboard tiles' surface at a directory's density - and the
+cards fill the section's width in as many columns as fit (280px minimum, `auto-fill`, 12px
+gaps): a model here is a
 name, a price and a connection, which is too little to justify a full-width line. A card holds
 only what the operator acts on: the call name with its reference display name as a caption
 under it, then one line with the price (input / output; the per-1M-token unit is stated once,
