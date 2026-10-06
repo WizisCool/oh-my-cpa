@@ -40,7 +40,7 @@ Thank you for your interest in contributing to Oh My CPA! We welcome bug reports
    ```bash
    pnpm dev
    ```
-   This launches Air (watching Go backend on `:8080`) and Vite (frontend dev server on `:5173`) concurrently. Access the console at **`http://127.0.0.1:5173/omc/`**.
+   This launches Air (watching Go backend on `:8080`) and Vite (frontend dev server on `:5173`) concurrently. Access the console at **`http://127.0.0.1:5173/omc/`** (`/omc` redirects there).
 
 ---
 

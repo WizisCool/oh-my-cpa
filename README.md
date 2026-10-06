@@ -153,8 +153,8 @@ chmod 600 deploy/.env
 docker compose -f deploy/compose.full.yml up -d
 ```
 
-Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` from
-`deploy/.env`. Then add your providers and client keys in the console.
+Open **`http://127.0.0.1:8080/omc/`** (`/omc` redirects there) and sign in with the
+`CPA_MANAGEMENT_KEY` from `deploy/.env`. Then add your providers and client keys in the console.
 
 ### My CPA runs in Docker Compose
 

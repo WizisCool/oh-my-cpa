@@ -229,5 +229,10 @@ step 4.
 - Whether OMC is collecting usage, and why not if it is off.
 - Anything you changed outside the new `oh-my-cpa` directory.
 
+OMC redirects the bare `/omc` to `/omc/`. If you put a reverse proxy in front of it,
+route both `/omc` and `/omc/` to OMC (or redirect `/omc` to `/omc/` at the proxy) and
+confirm `curl -sI <public address>/omc` answers `308`; a rule for `/omc/` alone leaves
+the bare path unreachable.
+
 More detail, including HTTPS behind a reverse proxy and every setting, is in
 `docs/install.md`.

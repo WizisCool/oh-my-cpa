@@ -146,7 +146,7 @@ chmod 600 deploy/.env
 docker compose -f deploy/compose.full.yml up -d
 ```
 
-打开 **`http://127.0.0.1:8080/omc/`**，用 `deploy/.env` 里的 `CPA_MANAGEMENT_KEY` 登录，
+打开 **`http://127.0.0.1:8080/omc/`**（`/omc` 会自动跳转到这里），用 `deploy/.env` 里的 `CPA_MANAGEMENT_KEY` 登录，
 然后在控制台里添加提供商和客户端密钥。
 
 ### CPA 是用 Docker Compose 部署的

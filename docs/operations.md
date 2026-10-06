@@ -86,8 +86,12 @@ The MCP bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL` and
   CPA needs no configuration change. The console's first configuration save converts
   such a file to the v8 layout, after keeping an encrypted copy of the original that the
   configuration page offers for download (see `docs/cpa-v8-compat.md`).
-- **Base path**: Direct OMC serving supports `/omc` or `/`. An operator-owned proxy
-  must preserve the prefix; CPA keeps its separate port regardless of OMC's base path.
+- **Base path**: Direct OMC serving supports `/omc` or `/`. The console is served at
+  the prefix with a trailing slash (`/omc/`); OMC answers the bare prefix (`/omc`) with
+  a 308 redirect to it. An operator-owned proxy must preserve the prefix and route the
+  bare prefix as well as everything beneath it (`deploy/nginx.conf` shows both rules;
+  `docs/install.md` has the Caddy equivalent); CPA keeps its separate port regardless
+  of OMC's base path.
 - **Container image**: Compose pulls `wiziscool/oh-my-cpa:latest` from Docker Hub by
   default; the full-stack CPA image also defaults to `:latest`. Pin `OMCPA_IMAGE` to the desired version or digest; updates recreate only
   OMC with its existing data and master key. The image runs as uid/gid `10001:10001`,

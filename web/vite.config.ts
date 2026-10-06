@@ -4,6 +4,7 @@ import path from 'path';
 import { resolveApiTarget } from '../scripts/api-target.mjs';
 import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
 import { bundleGraphPlugin } from '../scripts/bundle-graph.mjs';
+import { bareBaseRedirectPlugin } from '../scripts/dev-base-redirect.mjs';
 
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -19,9 +20,10 @@ export default defineConfig(({ command }) => ({
     },
     react(),
     bundleGraphPlugin(repoRoot),
+    bareBaseRedirectPlugin(),
   ],
-  // Development has one browser entry at /omc/; Vite proxies only API calls
-  // to Go. Production output stays relative so Go can embed it at any subpath.
+  // Development has one browser entry at /omc/ (the bare /omc redirects to it);
+  // Vite proxies only API calls to Go. Production output stays relative so Go can embed it at any subpath.
   base: command === 'serve' ? '/omc/' : './',
   resolve: {
     alias: [

@@ -37,8 +37,8 @@ chmod 600 deploy/.env
 docker compose -f deploy/compose.full.yml up -d
 ```
 
-Open **`http://127.0.0.1:8080/omc/`** and sign in with the `CPA_MANAGEMENT_KEY` from
-`deploy/.env`. The new CPA has no providers and no client keys; add both in the console
+Open **`http://127.0.0.1:8080/omc/`** (`/omc` without the slash redirects there) and
+sign in with the `CPA_MANAGEMENT_KEY` from `deploy/.env`. The new CPA has no providers and no client keys; add both in the console
 before sending requests. CPA itself listens on `127.0.0.1:8317`.
 
 The `chown` is there because the OMC container runs as user `10001` and writes its
@@ -175,6 +175,50 @@ the `/omc` prefix, and set `OMCPA_PUBLIC_URL` to the address browsers use. Set
 `OMCPA_TRUSTED_PROXY_CIDRS` to the proxy's address so OMC reads the client IP it
 forwards. Do not publish port 8080 on a public interface without TLS: the sign-in
 password is CPA's administrator key.
+
+### `/omc` and `/omc/`
+
+The console lives at `/omc/`. OMC answers the bare `/omc` with a permanent redirect
+(308) to `/omc/`, so either address opens it when browsers reach OMC directly.
+
+Behind a reverse proxy the bare path only works if the proxy handles it. A rule that
+matches `/omc/` alone never passes `/omc` to OMC, and the visitor gets whatever the
+proxy serves for unmatched paths instead of the console. Cover both: redirect the bare
+path at the proxy, or forward it and let OMC redirect.
+
+nginx (`deploy/nginx.conf` is a complete example that also routes the rest of the host
+to CPA):
+
+```nginx
+location = /omc {
+    return 308 /omc/;
+}
+
+# No trailing slash on proxy_pass: the /omc prefix must reach OMC unchanged.
+location ^~ /omc/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+Caddy:
+
+```caddyfile
+@omc path /omc /omc/*
+reverse_proxy @omc 127.0.0.1:8080
+```
+
+Check both addresses through the proxy:
+
+```bash
+curl -sI https://your-host/omc | head -n 1                           # 308
+curl -fsS https://your-host/omc/api/healthz
+```
+
+With a different `OMCPA_BASE_PATH`, the same holds for that prefix. With `/` there is
+no bare path to handle.
 
 ## Settings
 
