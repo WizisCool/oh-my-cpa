@@ -440,7 +440,7 @@ KPI card bodies stretch within each grid row; captions absorb spare space so plo
 bottom-aligned when cost notes wrap. KPI sparklines and Token Trend share G2 tooltip
 hit-testing, crosshairs and positioning, with escaped content from
 `web/src/charts/chartTooltip.ts` and the palette-styled `.omc-tip` readout.
-Token Trend preserves measured zero buckets as continuous baseline segments.
+Token Trend preserves measured zero buckets as continuous baseline segments. KPI, model-trend and model-donut tooltip rows use content-sized columns, 8px decorative swatches and 6px gutters; timestamp headings do not stretch the data tracks. Names align on the left and numeric edges on the right, with full names and exact values in escaped titles. Existing palette, font and motion tokens remain unchanged.
 
 ## Time zone picker
 
@@ -695,3 +695,11 @@ controls wrap within the viewport and the log list owns its scrolling.
 
 Under reduced motion, a closing floating panel becomes hidden as soon as its
 leave phase starts, even while the library retains its node for motion cleanup.
+
+### Credential cooldown and model disclosure
+
+An identified `credential_quota` cooldown is explained by the existing CPA cooldown status tooltip rather than a second red banner. Unrecognized reasons remain visible in the overview; the Quota tab retains full reasons and action-failure diagnostics. A newly added provider custom model starts collapsed, with its request model and alias editable; image and reasoning controls open only through explicit disclosure, preserving other rows' expansion.
+
+### Native and virtual option scrolling
+
+Native option popups with `overflow-y: auto`, including the Playground model picker, retain browser-owned wheel scrolling even when they share the list library's holder structure. Their scroll listener mirrors offsets through deferred React state, so a second offset writer can undo progress. Only hidden-overflow virtual holders receive synthetic wheel steps; structure alone does not identify virtual scrolling. Existing scroll and motion tokens are unchanged.

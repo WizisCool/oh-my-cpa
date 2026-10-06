@@ -62,6 +62,7 @@ export async function mobileConsole({ base, page, check, errors }) {
 
   for (const width of [640, 641, 900, 901, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    await settleLayout(page);
     const count = await page.locator('.app-header-actions > .ant-btn').count();
     check(`header changes once at the phone boundary (${width}px)`, count === (width <= 640 ? 2 : 5), `tools=${count}`);
     const hasSheetTrigger = await page.locator('.app-header-left button').isVisible();

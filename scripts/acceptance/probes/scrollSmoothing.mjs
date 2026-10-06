@@ -1,4 +1,5 @@
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
+import { playgroundFixtures } from './playground.mjs';
 
 /**
  * Console-wide wheel smoothing (`web/src/utils/scrollSmoothing.ts`).
@@ -8,7 +9,8 @@ import { until } from '../harness.mjs';
  * differently: an ordinary `overflow: auto` region (the console's content pane), and the request
  * list, whose virtualizer clips its overflow and applies every wheel delta itself in one jump - the
  * surface that stepped on every Windows desk. A Select's option popup is the same virtualizer, inline
- * in a portal, and is checked as well.
+ * in a portal, and is checked as well. Native option popups keep that structure without the
+ * virtual wheel handler, so the browser must own their wheel through actual native overflow.
  *
  * A glide is recognised by its frames: sampled once per animation frame after one notch, the offset
  * passes through intermediate values and settles exactly one notch further. A jump has no
@@ -298,4 +300,63 @@ export async function scrollSmoothing({ base, page, check }) {
     check(`${label}, the glide hands the list exactly the notches turned`, Math.abs(notch.handed - NOTCH * TURNED_NOTCHES * direction) <= 0.5, notch.detail);
     check(`${label}, the list lands ${TURNED_NOTCHES} notches further`, Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES * direction) <= REMEASURE_PX, notch.detail);
   }
+  await checkNativeModelPopup({ page, base, check });
+}
+
+async function checkNativeModelPopup({ page, base, check }) {
+  for (const [matches, respond] of playgroundFixtures()) {
+    await page.route(url => matches(new URL(url)), async route => {
+      const body = new URL(route.request().url()).pathname.endsWith('/playground/models')
+        ? { models: Array.from({ length: 80 }, (_, index) => ({
+          id: `model-${String(index).padStart(3, '0')}`,
+          call_point: `model-${String(index).padStart(3, '0')}`,
+          vision: 'unknown',
+        })) }
+        : respond();
+      await route.fulfill({ json: body });
+    });
+  }
+  await page.goto(`${base}/playground`);
+  const modelPicker = page.getByRole('combobox', { name: 'Model', exact: true });
+  await modelPicker.click();
+  const holder = page.locator('.ant-select-dropdown-list-holder:visible');
+  await holder.waitFor();
+  const hasNativeHolder = await holder.evaluate(element => {
+    element.setAttribute('data-probe-scroller', '');
+    return getComputedStyle(element).overflowY === 'auto'
+      && element.querySelector(':scope > div > [class*="-holder-inner"]') !== null;
+  });
+  check('the Playground model popup uses native overflow with the shared list structure', hasNativeHolder);
+  const popupBox = await holder.boundingBox();
+  const popupAt = { x: popupBox.x + popupBox.width / 2, y: popupBox.y + popupBox.height / 2 };
+  let notch = describeNotch(await sampleNotch(page, popupAt));
+  check('a native model popup scrolls down by one notch', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  notch = describeNotch(await sampleNotch(page, { ...popupAt, deltaY: -NOTCH }));
+  check('a native model popup scrolls back up by one notch', Math.abs(notch.travelled + NOTCH) <= 1, notch.detail);
+  notch = describeNotch(await sampleScroll(page, async () => {
+    for (let turned = 0; turned < TURNED_NOTCHES; turned += 1) await page.mouse.wheel(0, NOTCH);
+  }, TURNED_SAMPLE_FRAMES));
+  check('a native model popup continues scrolling across repeated notches', Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES) <= 1, notch.detail);
+
+  await modelPicker.fill('model-00');
+  await until(() => page.getByRole('option').count().then(count => count === 10), { label: 'filtered model options' });
+  const filteredDistance = await holder.evaluate(element => {
+    element.scrollTop = 0;
+    return Math.min(100, element.scrollHeight - element.clientHeight);
+  });
+  notch = describeNotch(await sampleNotch(page, popupAt));
+  check('a filtered native model popup remains scrollable', filteredDistance > 0 && Math.abs(notch.travelled - filteredDistance) <= 1, notch.detail);
+  await page.keyboard.press('Escape');
+  await holder.waitFor({ state: 'hidden' });
+  await modelPicker.click();
+  await holder.waitFor();
+  await until(() => page.getByRole('option').count().then(count => count === 80), { label: 'reopened unfiltered model options' });
+  await settleLayout(page);
+  const reopenedBox = await holder.boundingBox();
+  await holder.evaluate(element => { element.scrollTop = 0; });
+  notch = describeNotch(await sampleNotch(page, {
+    x: reopenedBox.x + reopenedBox.width / 2, y: reopenedBox.y + reopenedBox.height / 2,
+  }));
+  check('a reopened native model popup remains scrollable', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  await page.keyboard.press('Escape');
 }

@@ -2,6 +2,65 @@ import { until } from '../harness.mjs';
 import { chartDashboard, chartDashboardModels, chartTokenHeatmap } from './dashboardFixtures.mjs';
 import { installRoutes } from '../probe.mjs';
 
+/** Geometry belongs in Chromium: DOM text assertions cannot catch a value pushed away by auto margins. */
+export async function checkDashboardTooltipRows({ page, check }, selector, label, { hasNames = false, hasShares = false } = {}) {
+  const tip = typeof selector === 'string' ? page.locator(selector).first() : selector.first();
+  await tip.waitFor({ state: 'visible' });
+  const layout = await tip.evaluate((node) => {
+    const readBox = (element) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+    };
+    const readTextBox = (element) => {
+      if (!element) return null;
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return readBox(range);
+    };
+    const rows = [...node.querySelectorAll('.omc-tip-row')].map((row) => {
+      const swatch = row.querySelector('.omc-tip-swatch');
+      const name = row.querySelector('.omc-tip-name');
+      const value = row.querySelector('.omc-tip-value');
+      const share = row.querySelector('.omc-tip-share');
+      return {
+        swatch: readBox(swatch), name: readBox(name), value: readBox(value), share: readBox(share),
+        valueText: readTextBox(value), shareText: readTextBox(share),
+        exact: value?.getAttribute('title'), nameTitle: name?.getAttribute('title'), nameText: name?.textContent,
+        valueColor: value && getComputedStyle(value).color,
+        nameColor: name && getComputedStyle(name).color,
+      };
+    });
+    const surface = node.closest('.g2-tooltip');
+    const surfaceStyle = getComputedStyle(surface);
+    const probe = document.createElement('span');
+    node.append(probe);
+    const resolveColor = (token) => { probe.style.color = `var(${token})`; return getComputedStyle(probe).color; };
+    const palette = { value: resolveColor('--fg-2'), name: resolveColor('--fg'), surface: resolveColor('--surface') };
+    probe.remove();
+    return { rows, palette, surface: { background: surfaceStyle.backgroundColor, opacity: surfaceStyle.opacity } };
+  });
+  const closeGap = (left, right) => Boolean(left && right) && Math.abs(right.left - left.right - 6) <= 1;
+  check(`${label}: marker, name and value use compact six-pixel gutters`, layout.rows.length > 0 && layout.rows.every((row) =>
+    row.swatch?.width === 8 && row.swatch?.height === 8 && row.value?.width > 0
+    && (hasNames ? closeGap(row.swatch, row.name) && closeGap(row.name, row.value) : !row.name && closeGap(row.swatch, row.valueText))
+    && (hasShares ? closeGap(row.value, row.shareText) : !row.share)), JSON.stringify(layout.rows));
+  check(`${label}: row centers and numeric column edges align`, layout.rows.every((row) => {
+    if (!row.swatch || !row.valueText || (hasNames && !row.name)) return false;
+    const cells = [row.swatch, row.name, row.value, row.share].filter(Boolean);
+    const centers = cells.map((cell) => (cell.top + cell.bottom) / 2);
+    return Math.max(...centers) - Math.min(...centers) <= 1
+      && Math.abs(row.swatch.left - layout.rows[0].swatch.left) <= 1
+      && (!row.name || Math.abs(row.name.left - layout.rows[0].name.left) <= 1)
+      && Math.abs(row.valueText.right - layout.rows[0].valueText.right) <= 1;
+  }), JSON.stringify(layout.rows));
+  check(`${label}: exact values and full names stay accessible`, layout.rows.every((row) => Boolean(row.exact)
+    && (!hasNames || row.nameTitle === row.nameText)), JSON.stringify(layout.rows));
+  check(`${label}: tooltip surface and text retain palette colors`, layout.surface.background === layout.palette.surface
+    && layout.surface.opacity === '1' && layout.rows.every((row) => row.valueColor === layout.palette.value
+      && (!hasNames || row.nameColor === layout.palette.name)), JSON.stringify(layout));
+}
+
 /**
  * Probes for the dashboard's charts: the marks the KPI tiles draw, the rolling
  * readouts they print, and the sweep a revision triggers.
@@ -211,6 +270,7 @@ export async function dashboardChartMarks({ base, page, check }) {
     await readout.waitFor({ state: 'visible' });
     check(`KPI ${index + 1} uses the shared tooltip with an exact value`,
       Boolean(await readout.locator('.omc-tip-value').getAttribute('title')));
+    await checkDashboardTooltipRows({ page, check }, readout, `KPI ${index + 1}`);
   }
 
   await page.mouse.move(0, 0);

@@ -289,6 +289,31 @@ export async function providerModelPicker({ base, page, check }) {
     JSON.stringify(rows) === JSON.stringify(['deepseek-v4.1-flash', 'gpt-5.4', 'gpt-5.4-mini']),
     `rows=${JSON.stringify(rows)}`,
   );
+
+  const existingModel = drawer.locator('[id^="model-card-"]').first();
+  await existingModel.locator('button[aria-expanded]').click();
+  await existingModel.locator('[class*="item-body"]').waitFor({ state: 'visible' });
+  await drawer.getByRole('button', { name: /^(Add Model|添加模型)$/i }).click();
+  const newModel = drawer.locator('[id^="model-card-"]').last();
+  await until(async () => await drawer.locator('[id^="model-card-"]').count() === 4,
+    { label: 'the custom model row to be added' });
+  const expansion = newModel.locator('button[aria-expanded]');
+  check('a new custom model starts collapsed without collapsing existing expanded models',
+    await expansion.getAttribute('aria-expanded') === 'false'
+      && await newModel.locator('[class*="item-body"]').count() === 0
+      && await existingModel.locator('button[aria-expanded]').getAttribute('aria-expanded') === 'true');
+  const requestModel = newModel.getByPlaceholder(/Request Model|请求模型/);
+  await requestModel.fill('fixture-custom-model');
+  check('the collapsed custom model still allows editing its upstream name',
+    await requestModel.inputValue() === 'fixture-custom-model');
+  await expansion.click();
+  await newModel.locator('[class*="item-body"]').waitFor({ state: 'visible' });
+  check('the new model advanced settings can still be explicitly expanded',
+    await expansion.getAttribute('aria-expanded') === 'true');
+  await expansion.click();
+  await newModel.locator('[class*="item-body"]').waitFor({ state: 'detached' });
+  check('the new model advanced settings can be collapsed again',
+    await expansion.getAttribute('aria-expanded') === 'false');
 }
 
 export function customIconProbeRoutes() {

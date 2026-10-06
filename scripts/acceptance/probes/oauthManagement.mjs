@@ -1,5 +1,7 @@
 import { settleLayout, until } from '../harness.mjs';
 
+const KNOWN_COOLDOWN_REASON = JSON.stringify({ error: { code: 'credential_quota', message: 'Fixture quota exhausted' } });
+
 const files = Array.from({ length: 12 }, (_, index) => {
   // auth-12 is the reset-credit credential, and it is Codex: the redemption action exists
   // only there, so a fixture that borrowed another provider would prove nothing.
@@ -42,7 +44,7 @@ function quotaFor(index) {
       capacity: { tokens: 245_000_000, cost_nanos: 1_234_000_000_000, error_percent: 2.5, basis: windowIndex === 0 ? 'current_cycle' : 'previous_cycle', observed_at_ms: Date.now() - 86_400_000 },
     } : index === 1 ? { capacity_unavailable: 'scope_unknown' } : {}),
   }));
-  const cooldown = index === 9;
+  const cooldown = index === 8 || index === 9;
   const unsupported = index === 10;
   const credits = index === 11;
   return {
@@ -55,7 +57,7 @@ function quotaFor(index) {
     observed_at_ms: Date.now(),
     plan: { plan_type: 'pro', plan_label: 'Pro', tier: 'premium', ...(index === 3 ? { subscription_active: false } : {}) },
     windows,
-    active_cooldown: cooldown ? { is_active: true, reason: 'Rate limit protection active', recover_at_ms: Date.now() + 900_000 } : undefined,
+    active_cooldown: cooldown ? { is_active: true, reason: index === 9 ? KNOWN_COOLDOWN_REASON : 'Fixture unexpected upstream cooldown', recover_at_ms: Date.now() + 900_000 } : undefined,
     // The bank holds two credits while upstream considers none of them applicable right
     // now. That combination is exactly the reported defect: the action must still exist.
     reset_credits: credits ? { available_count: 2, applicable_available_count: 0 } : undefined,
@@ -65,6 +67,7 @@ function quotaFor(index) {
       clear_cooldown_supported: cooldown,
       reset_credit_supported: credits,
     },
+    ...(index === 9 ? { error: 'Fixture quota refresh failed' } : {}),
     quota_exceeded: false,
   };
 }
@@ -212,6 +215,24 @@ export async function oauthManagement({ base, page, check }) {
     `unsupported=${await unsupportedRow.locator('[data-quota-unsupported="true"]').count()}`,
   );
   const cooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-10"]');
+  check('a known credential_quota reason is consolidated into the CPA cooldown status',
+    await cooldownRow.getByText('CPA Cooldown', { exact: true }).isVisible()
+      && !(await cooldownRow.innerText()).includes('credential_quota')
+      && await cooldownRow.locator('[class*="rec-banner-danger"]').count() === 0);
+  await cooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
+  const cooldownTooltip = page.getByRole('tooltip').filter({ hasText: 'CPA 429 rate limit protection active' });
+  await cooldownTooltip.waitFor({ state: 'visible' });
+  check('the consolidated cooldown status explains the known condition', await cooldownTooltip.isVisible());
+  await cooldownRow.getByRole('button', { name: /^(Details|详情):/i }).click();
+  await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
+  check('the quota drawer retains raw cooldown evidence and refresh failure diagnostics',
+    (await detailPanel.innerText()).includes(KNOWN_COOLDOWN_REASON)
+      && (await detailPanel.innerText()).includes('Fixture quota refresh failed'));
+  await detailPanel.locator('.ant-drawer-close').click();
+  await detailPanel.waitFor({ state: 'hidden' });
+  const unexpectedCooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-09"]');
+  check('an unexpected cooldown reason remains readable in the compact row',
+    await unexpectedCooldownRow.getByText('Fixture unexpected upstream cooldown', { exact: true }).isVisible());
   await cooldownRow.getByRole('button', { name: /More actions|更多操作/i }).click();
   const cooldownItem = page.getByRole('menuitem', { name: /Clear Cooldown|清除冷却/i });
   check('an active cooldown stays actionable through the row menu', await cooldownItem.isEnabled());

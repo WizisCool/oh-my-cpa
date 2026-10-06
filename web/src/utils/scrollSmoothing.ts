@@ -142,10 +142,13 @@ type ClaimableEvent = Event & { _virtualHandled?: boolean };
 /**
  * A virtualized list's holder clips its overflow (`overflow-y: hidden`) and owns its wheel; its
  * `scrollTop` is the list's offset, but it is not the list's state. The filler inside it is the
- * library's structural signature.
+ * library's structural signature, but is also present when virtualization is disabled. Native
+ * holders expose `auto` overflow; their scroll listener reconciles offsets in React, so the browser
+ * must own their wheel rather than racing a second offset writer.
  */
 function isVirtualHolder(element: Element): boolean {
-  return element.querySelector(':scope > div > [class*="-holder-inner"]') !== null;
+  return getComputedStyle(element).overflowY === 'hidden'
+    && element.querySelector(':scope > div > [class*="-holder-inner"]') !== null;
 }
 
 function maxScrollTop(element: Element): number {
@@ -338,6 +341,10 @@ export function installScrollSmoothing({ durationMs = MOTION_SCROLL.duration }: 
   const findScroller = (start: Element | null, direction: number): Element | null => {
     for (let element = start; element; element = element.parentElement) {
       if (!isVerticalScroller(element)) continue;
+      // A nonvirtual library holder still mirrors scroll offsets through deferred React state.
+      // Driving its offset frame by frame races that updater, which can undo the glide's last step.
+      if (!isVirtualHolder(element)
+        && element.querySelector(':scope > div > [class*="-holder-inner"]') !== null) return null;
       const destination = destinationOf(element);
       const canMove = direction > 0 ? destination < maxScrollTop(element) - 0.5 : destination > 0.5;
       if (canMove) return element;

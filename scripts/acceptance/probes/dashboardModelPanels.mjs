@@ -1,4 +1,5 @@
 import { until } from '../harness.mjs';
+import { checkDashboardTooltipRows } from './dashboardCharts.mjs';
 
 /**
  * Probes for the dashboard's model panels: the token trend and the usage ring,
@@ -456,6 +457,8 @@ export async function dashboardModelPanels({ base, page, check }) {
     `hover=${JSON.stringify(ringHover)} list=${JSON.stringify({ name: list[0].name, tokens: list[0].tokens, share: list[0].share })}`,
   );
 
+  await checkDashboardTooltipRows({ page, check }, '.model-ring .omc-tip', 'Model usage ring', { hasNames: true, hasShares: true });
+
   // ── no axis label is clipped by the canvas it is drawn in ──────────────────
   //
   // The trend's x labels are painted into the canvas, so a label that overhangs the edge is cut with
@@ -773,6 +776,7 @@ export async function dashboardModelPanels({ base, page, check }) {
     `labelCoverage=${lightChrome.labels} want>=${LABEL_INK_COVERAGE} labelInk=${lightChrome.labelInk}`,
   );
   await hoverTrend();
+  await checkDashboardTooltipRows({ page, check }, '.model-trend .omc-tip', 'Light model token trend', { hasNames: true });
   const lightHover = await chromeInk();
   check(
     'the light trend draws its crosshair in the palette chrome ink',
@@ -789,6 +793,7 @@ export async function dashboardModelPanels({ base, page, check }) {
   });
   await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
   await hoverTrend();
+  await checkDashboardTooltipRows({ page, check }, '.model-trend .omc-tip', 'Dark model token trend', { hasNames: true });
   const darkChrome = await chromeInk();
   check(
     'the dark trend draws its grid rules in the palette grid ink',
