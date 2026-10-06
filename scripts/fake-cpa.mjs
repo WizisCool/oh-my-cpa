@@ -254,6 +254,11 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   const V8_ROOTS = new Set(['server', 'management', 'access', 'credentials', 'routing', 'requests', 'oauth', 'multimedia', 'observability', 'plugins', 'quota-exceeded', 'api-keys', 'config-version']);
   const legacyRootIn = (document) => Object.keys(document ?? {}).find((key) => !V8_ROOTS.has(key));
   const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const syncOAuthExcludedModelsConfig = () => {
+    if (!isPlainObject(configDoc.oauth)) configDoc.oauth = {};
+    configDoc.oauth['excluded-models'] = structuredClone(oauthExcludedModels);
+  };
+  syncOAuthExcludedModelsConfig();
   const mergeConfig = (target, patch) => {
     for (const [key, value] of Object.entries(patch)) {
       if (isPlainObject(value) && isPlainObject(target[key])) mergeConfig(target[key], value);
@@ -356,7 +361,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       for (const credential of authFiles) {
         if (credential.disabled || credential.unavailable) continue;
         for (const model of credential.models ?? []) {
-          if (isModelExcluded(model.id, credential.excluded_models)) continue;
+          if (isModelExcluded(model.id, credential.excluded_models) || isModelExcluded(model.id, oauthExcludedModels[credential.provider])) continue;
           const aliases = (oauthModelAliases[credential.provider] ?? []).filter((alias) => alias.name === model.id);
           if (aliases.length === 0 || aliases.some((alias) => alias.fork)) modelIds.add(model.id);
           for (const alias of aliases) modelIds.add(alias.alias);
@@ -587,6 +592,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         return;
       }
       delete oauthExcludedModels[settingPath[2]];
+      syncOAuthExcludedModelsConfig();
       json(response, 200, { status: 'ok', 'config-version': 8 });
       return;
     }
@@ -624,6 +630,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       for (const [channel, rules] of Object.entries(patch.oauth?.['excluded-models'] ?? {})) {
         oauthExcludedModels[channel] = rules;
       }
+      syncOAuthExcludedModelsConfig();
       for (const [id, config] of Object.entries(patch.plugins?.configs ?? {})) {
         applyPluginConfig(id, { ...(pluginConfigs.get(id) ?? {}), ...config });
       }

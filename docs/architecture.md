@@ -1049,7 +1049,10 @@ Empty lists delete that provider's configuration. Both writes acquire the whole-
 write gate, take the ordinary pre-write configuration backup, read CPA back before
 reporting success, notify pricing membership and record the audit outcome. The agent
 capabilities reuse the same normalization and write path, with a revision checked
-inside the write gate.
+inside the write gate. The HTTP exclusion update requires its attempt audit to succeed
+before contacting CPA. Once CPA has persisted the rules and the readback matches,
+a failed success-audit write is logged but the endpoint returns `200` with the
+verified provider and rules; the already-landed update must not be reported as failed.
 
 `GET /api/v1/management/auth-files/provider-models?provider=<key>` projects only
 model IDs and display names from the allowlisted OAuth channel's static model

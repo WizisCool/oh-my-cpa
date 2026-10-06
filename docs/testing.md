@@ -487,7 +487,14 @@ assertion and the section geometry check are mutation-tested before delivery.
 validation, catalog coverage and independent exact rules under wildcard coverage.
 `scripts/test-oauth-model-alias.ts` pins the new mapping's retain-original default.
 Go tests beside the OAuth exclusion facade own provider replacement/deletion,
-allowlisted catalog projection, request validation and refused readback.
+allowlisted catalog projection, request validation and refused readback. Audit fault
+injection checks that a rejected attempt audit prevents the upstream write, while a
+rejected success audit still returns the verified rules after the write has landed.
+`scripts/fake-cpa.test.mjs` checks that provider exclusion updates and deletions stay
+consistent across dedicated reads, JSON configuration and runtime/stored YAML snapshots.
+It also owns global exact, wildcard and catch-all OAuth exclusions before alias mapping,
+independent credential exclusions, unaffected static catalogs and API-key routes, and
+restoration after clearing rules.
 The existing `oauth-management` probe owns provider tab names/artwork in the picker,
 independent section drafts, section-only saves, trailing-edge close placement, native Back guards and 1440/375/320px
 Drawer geometry. Built auth-file acceptance owns both sections' verified

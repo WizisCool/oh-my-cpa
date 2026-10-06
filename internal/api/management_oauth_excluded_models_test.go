@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -239,5 +240,57 @@ func TestManagementOAuthProviderModelsPreserveUpstreamFailure(t *testing.T) {
 	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/auth-files/provider-models?provider=codex", "")
 	if response.StatusCode < 500 || strings.Contains(string(body), `"available":false`) {
 		t.Fatalf("failed catalog became an absent catalog: status=%d body=%s", response.StatusCode, body)
+	}
+}
+
+func TestManagementOAuthExcludedModelsAuditFailure(t *testing.T) {
+	for _, outcome := range []string{"attempt", "success"} {
+		t.Run(outcome, func(t *testing.T) {
+			state := map[string][]string{"codex": {"original-model"}, "claude": {"claude-*"}}
+			var stateMutex sync.Mutex
+			patchCount := 0
+			upstream := oauthExcludedModelsUpstream(t, state)
+			client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+				stateMutex.Lock()
+				defer stateMutex.Unlock()
+				if request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config" {
+					patchCount++
+				}
+				upstream(writer, request)
+			})
+			// Refuse only one audit phase to distinguish aborted writes from landed writes.
+			_, err := repo.SQL().Exec(`CREATE TRIGGER reject_excluded_models_audit BEFORE INSERT ON audit_events
+				WHEN NEW.action = 'oauth_excluded_models.update' AND NEW.result = '` + outcome + `'
+				BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, raw := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/auth-files/excluded-models", `{"provider":"CODEX","models":[" GPT-5-Codex ","gpt-5-codex","o3-*"]}`)
+			stateMutex.Lock()
+			defer stateMutex.Unlock()
+			if outcome == "attempt" {
+				if response.StatusCode != http.StatusInternalServerError || patchCount != 0 || strings.Join(state["codex"], ",") != "original-model" {
+					t.Fatalf("failed attempt audit: status %d, patches %d, state %v, body %s", response.StatusCode, patchCount, state, raw)
+				}
+			} else {
+				if response.StatusCode != http.StatusOK || patchCount != 1 || strings.Join(state["codex"], ",") != "gpt-5-codex,o3-*" {
+					t.Fatalf("failed success audit: status %d, patches %d, state %v, body %s", response.StatusCode, patchCount, state, raw)
+				}
+				var saved struct {
+					Status   string   `json:"status"`
+					Provider string   `json:"provider"`
+					Models   []string `json:"models"`
+				}
+				if err := json.Unmarshal(raw, &saved); err != nil {
+					t.Fatal(err)
+				}
+				if saved.Status != "ok" || saved.Provider != "codex" || strings.Join(saved.Models, ",") != strings.Join(state["codex"], ",") {
+					t.Fatalf("verified baseline mismatch: %s", raw)
+				}
+			}
+			if strings.Join(state["claude"], ",") != "claude-*" {
+				t.Fatalf("unrelated provider changed: %v", state)
+			}
+		})
 	}
 }

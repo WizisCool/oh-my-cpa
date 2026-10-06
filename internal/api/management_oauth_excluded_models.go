@@ -114,10 +114,8 @@ func (h *Handler) patchManagementOAuthExcludedModels(writer http.ResponseWriter,
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	if auditErr := h.recordAudit(request, "oauth_excluded_models.update", "oauth_provider", provider, "success", map[string]any{"count": len(current), "verified": true}); auditErr != nil {
-		writeError(writer, http.StatusInternalServerError, "audit log failure after excluded models update")
-		return
-	}
+	// CPA has already persisted and verified the rules; an audit failure cannot undo that write.
+	_ = h.recordAudit(request, "oauth_excluded_models.update", "oauth_provider", provider, "success", map[string]any{"count": len(current), "verified": true})
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":   "ok",
 		"provider": provider,
