@@ -27,4 +27,3 @@ Leave the PR number out; the squash merge appends it.
 - [ ] New user-visible copy is in `web/src/i18n/index.tsx` and every catalog under `web/src/i18n/locales/`.
 - [ ] Schema changes arrive as a new migration; an architectural trade-off arrives as a new ADR.
 - [ ] New API responses go through the `internal/api` DTO allowlists.
-- [ ] Screenshots or a recording are attached for visible UI changes.
