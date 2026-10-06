@@ -189,6 +189,10 @@ pins:
   window starts on the OMC Time Zone. The hours are saved as typed, never
   converted, and when the billing zone and the OMC Time Zone differ the editor
   and the price ladder also show the same window as the console reads it today.
+  If the browser cannot read a stored billing zone, the picker keeps its original
+  name and value without an offset label, so the editor still opens and the zone
+  can be preserved or changed. The local tier preview skips unreadable zones;
+  server-side billing remains authoritative.
 - A tier's rates are entered as **multiples of the base** (the default) or as
   **fixed prices**; a blank field inherits the base rate in both. Multiples are
   converted to rates on save, so the server only ever stores rates. A stored tier

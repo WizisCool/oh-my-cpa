@@ -53,9 +53,14 @@ export function formatTimeZoneOffset(zone: string, at = Date.now()): string {
   const minute = Math.floor(at / 60_000);
   const cached = OFFSET_CACHE.get(zone);
   if (cached?.minute === minute) return cached.offset;
-  const value = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' })
-    .formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
-  const offset = value === 'GMT' ? 'UTC+0' : value.replace('GMT', 'UTC');
+  let offset = '';
+  try {
+    const value = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' })
+      .formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+    offset = value === 'GMT' ? 'UTC+0' : value.replace('GMT', 'UTC');
+  } catch {
+    // The server's zone database can be newer than the browser's; keep the stored zone editable.
+  }
   OFFSET_CACHE.set(zone, { minute, offset });
   return offset;
 }
@@ -66,7 +71,7 @@ export function timeZoneOptions(server: string | undefined, selected: string, se
   const zones = Array.from(new Set([...(server ? [server] : []), 'UTC', ...(selected ? [selected] : []), ...availableTimeZones]));
   return zones.sort((left, right) => left === server ? -1 : right === server ? 1 : left.localeCompare(right)).map((zone) => {
     const offset = formatTimeZoneOffset(zone, at);
-    const label = `${zone} (${offset})${zone === server ? ` (${serverLabel})` : ''}`;
+    const label = `${zone}${offset ? ` (${offset})` : ''}${zone === server ? ` (${serverLabel})` : ''}`;
     return { value: zone, label, offset, searchText: label.replace(/_/g, ' ').toLowerCase() };
   });
 }

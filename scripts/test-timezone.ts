@@ -40,11 +40,30 @@ assert.equal(options[0].label, 'Asia/Kuala_Lumpur (UTC+8) (服务器时区)');
 assert.equal(options.filter((option) => option.value === 'Asia/Kuala_Lumpur').length, 1);
 assert.ok(options.every((option) => option.label.includes('(UTC')));
 
+const unsupportedZone = 'Invalid/Timezone';
+assert.equal(formatTimeZoneOffset(unsupportedZone, instant), '', 'an unreadable offset is unknown, not UTC');
+const unsupportedOptions = timeZoneOptions('UTC', unsupportedZone, 'Console time zone', instant);
+assert.deepEqual(unsupportedOptions.find((option) => option.value === unsupportedZone), {
+  value: unsupportedZone,
+  label: unsupportedZone,
+  offset: '',
+  searchText: 'invalid/timezone',
+}, 'a stored zone remains selectable with its original value and no fabricated offset');
+assert.equal(unsupportedOptions.filter((option) => option.value === unsupportedZone).length, 1);
+assert.equal(unsupportedOptions.find((option) => option.value === 'UTC')?.offset, 'UTC+0');
+const unsupportedServerOptions = timeZoneOptions(unsupportedZone, unsupportedZone, 'Server time zone', instant);
+assert.equal(unsupportedServerOptions[0].label, `${unsupportedZone} (Server time zone)`);
+assert.equal(unsupportedServerOptions.filter((option) => option.value === unsupportedZone).length, 1);
+
 const originalFormatter = Intl.DateTimeFormat;
 let formatterCalls = 0;
+const unsupportedBrowserZone = 'Asia/Manila';
 Intl.DateTimeFormat = new Proxy(originalFormatter, {
   construct(target, argumentsList) {
     formatterCalls += 1;
+    if (argumentsList[1]?.timeZone === unsupportedBrowserZone) {
+      throw new RangeError('The browser does not support this stored zone');
+    }
     return Reflect.construct(target, argumentsList);
   },
 });
@@ -52,9 +71,12 @@ try {
   const nextMinute = instant + 60000;
   const first = timeZoneOptions('Asia/Kuala_Lumpur', '', 'Server time zone', nextMinute);
   assert.ok(formatterCalls > 100);
+  assert.equal(first.find((option) => option.value === unsupportedBrowserZone)?.offset, '');
   formatterCalls = 0;
-  const second = timeZoneOptions('Asia/Kuala_Lumpur', 'America/New_York', 'Server time zone', nextMinute);
-  assert.equal(formatterCalls, 0, 'reopening or changing selection reuses cached offsets');
+  const second = timeZoneOptions('Asia/Kuala_Lumpur', unsupportedBrowserZone, 'Server time zone', nextMinute);
+  assert.equal(formatterCalls, 0, 'reopening or changing selection reuses cached offsets, including unreadable zones');
+  assert.equal(second.find((option) => option.value === unsupportedBrowserZone)?.label, unsupportedBrowserZone);
+  assert.equal(second.find((option) => option.value === 'America/New_York')?.offset, 'UTC-5');
   assert.equal(first[0].label, second[0].label);
 } finally { Intl.DateTimeFormat = originalFormatter; }
 
