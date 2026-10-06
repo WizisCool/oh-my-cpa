@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -83,6 +84,14 @@ type RawCodexUsagePayload struct {
 	AdditionalRateLimitsAlt []RawCodexAdditionalRateLimit `json:"additionalRateLimits"`
 	RateLimitResetCredits   *RawCodexResetCreditsSummary  `json:"rate_limit_reset_credits"`
 	RateLimitResetCredsAlt  *RawCodexResetCreditsSummary  `json:"rateLimitResetCredits"`
+	Credits                 *RawCodexAccountCredits       `json:"credits"`
+}
+
+// RawCodexAccountCredits is the account's prepaid credit standing. Upstream
+// sends the balance as a number or as a decimal string.
+type RawCodexAccountCredits struct {
+	Balance   any  `json:"balance"`
+	Unlimited bool `json:"unlimited"`
 }
 
 func toFloat(value any) (float64, bool) {
@@ -266,9 +275,11 @@ func resolveCodexPlanTier(planType string) (tier string, label string) {
 	norm := strings.ToLower(strings.TrimSpace(planType))
 	switch norm {
 	case "pro":
-		return "elite", "Pro 20x"
-	case "prolite", "pro_lite", "premium":
-		return "premium", "Pro Lite"
+		return "elite", "Pro 200"
+	case "prolite", "pro-lite", "pro_lite", "premium":
+		return "premium", "Pro 100"
+	case "self_serve_business_prolite":
+		return "premium", "Business Premium"
 	case "plus":
 		return "standard", "Plus"
 	case "team":
@@ -281,6 +292,33 @@ func resolveCodexPlanTier(planType string) (tier string, label string) {
 		}
 		return "unknown", "未知套餐"
 	}
+}
+
+var codexCreditBalancePattern = regexp.MustCompile(`^\d+(\.\d+)?$`)
+
+// parseCodexAccountCredits keeps the balance as the decimal text upstream sent:
+// it is a display value, and a float round trip could change its last digit. A
+// balance that is not a plain non-negative decimal is dropped rather than shown,
+// and a payload stating neither a balance nor unlimited credits yields nil, so
+// the absence of a reading is never rendered as a zero balance.
+func parseCodexAccountCredits(raw *RawCodexAccountCredits) *QuotaCredits {
+	if raw == nil {
+		return nil
+	}
+	var balance string
+	switch value := raw.Balance.(type) {
+	case string:
+		balance = strings.TrimSpace(value)
+	case float64:
+		balance = strconv.FormatFloat(value, 'f', -1, 64)
+	}
+	if !codexCreditBalancePattern.MatchString(balance) {
+		balance = ""
+	}
+	if balance == "" && !raw.Unlimited {
+		return nil
+	}
+	return &QuotaCredits{Balance: balance, IsUnlimited: raw.Unlimited}
 }
 
 // ParseCodexUsage parses the raw JSON from https://chatgpt.com/backend-api/wham/usage.
@@ -326,6 +364,7 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		Tier:         tier,
 		ExpiresAtMS:  expiresAtMS,
 		ExpiresLabel: expiresLabel,
+		Credits:      parseCodexAccountCredits(payload.Credits),
 	}
 
 	rateLimit := payload.RateLimit

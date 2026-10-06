@@ -18,6 +18,23 @@ import type {
   SaveProviderKeyItem,
   SaveProviderModelItem,
 } from '../../types/providers';
+import {
+  EMPTY_BEHAVIOR_DRAFT,
+  EMPTY_RUNTIME_POLICY_DRAFT,
+  buildBehavior,
+  buildRuntimePolicy,
+  readBehaviorDraft,
+  readRuntimePolicyDraft,
+  runtimePolicyProblem,
+  type BehaviorDraft,
+  type RuntimePolicyDraft,
+} from './runtimePolicy';
+import {
+  EMPTY_MODEL_OPTIONS_DRAFT,
+  buildModelOptions,
+  modelOptionsProblem,
+  readModelOptionsDraft,
+} from './modelOptions';
 import type {
   FormKeyItem,
   FormHeaderItem,
@@ -67,7 +84,11 @@ export function useProviderManagement({
   const [formPrefix, setFormPrefix] = useState<string>('');
   const [formPriority, setFormPriority] = useState<number | null>(null);
   const [formDisabled, setFormDisabled] = useState<boolean>(false);
-  const [formDisableCooling, setFormDisableCooling] = useState<boolean>(false);
+  const [formPolicy, setFormPolicy] = useState<RuntimePolicyDraft>(EMPTY_RUNTIME_POLICY_DRAFT);
+  const [formBehavior, setFormBehavior] = useState<BehaviorDraft>(EMPTY_BEHAVIOR_DRAFT);
+  const [policySectionOpen, setPolicySectionOpen] = useState<boolean>(false);
+  // Set by a refused save, so a rule still being typed is not marked wrong before that.
+  const [isPolicyChecked, setIsPolicyChecked] = useState<boolean>(false);
   const [formKeys, setFormKeys] = useState<FormKeyItem[]>([]);
   const [formHeaders, setFormHeaders] = useState<FormHeaderItem[]>([]);
   const [formModels, setFormModels] = useState<FormModelItem[]>([]);
@@ -179,6 +200,7 @@ export function useProviderManagement({
         alias: '',
         image: false,
         thinking: { levels: [] },
+        options: EMPTY_MODEL_OPTIONS_DRAFT,
       },
     ]);
     setExpandedModelIds((prev) => new Set([...prev, newId]));
@@ -205,6 +227,7 @@ export function useProviderManagement({
         alias: '',
         image: false,
         thinking: { levels: [] },
+        options: EMPTY_MODEL_OPTIONS_DRAFT,
       })),
     ]);
     toast.success(t('pro.models_applied', { count: added.length }));
@@ -498,7 +521,10 @@ export function useProviderManagement({
     setFormPrefix('');
     setFormPriority(null);
     setFormDisabled(false);
-    setFormDisableCooling(false);
+    setFormPolicy(EMPTY_RUNTIME_POLICY_DRAFT);
+    setFormBehavior(EMPTY_BEHAVIOR_DRAFT);
+    setPolicySectionOpen(false);
+    setIsPolicyChecked(false);
     setFormTestModel('auto');
     setFormIcon('OpenAI');
     setIconManuallySelected(false);
@@ -526,7 +552,10 @@ export function useProviderManagement({
     setFormPrefix(provider.prefix || '');
     setFormPriority(provider.priority != null ? provider.priority : null);
     setFormDisabled(provider.disabled);
-    setFormDisableCooling(Boolean(provider.disable_cooling));
+    setFormPolicy(readRuntimePolicyDraft(provider));
+    setFormBehavior(readBehaviorDraft(provider));
+    setPolicySectionOpen(false);
+    setIsPolicyChecked(false);
 
     setFormTestModel('auto');
     const existingIcon = resolveProviderIcon(
@@ -590,6 +619,7 @@ export function useProviderManagement({
           alias: m.alias || '',
           image: m.image || false,
           thinking: m.thinking ? { levels: m.thinking.levels || [] } : { levels: [] },
+          options: readModelOptionsDraft(m.options),
         }))
       );
     } else if (provider.models && provider.models.length > 0) {
@@ -600,6 +630,7 @@ export function useProviderManagement({
           alias: '',
           image: false,
           thinking: { levels: [] },
+          options: EMPTY_MODEL_OPTIONS_DRAFT,
         }))
       );
     } else {
@@ -616,6 +647,32 @@ export function useProviderManagement({
   const handleSaveProvider = () => {
     if (lookupProviderFamily(formFamily)?.requiresBaseURL && !formBaseURL.trim()) {
       toast.warning(t('pro.base_url_required'));
+      return;
+    }
+
+    const family = lookupProviderFamily(formFamily);
+    const supportsErrorRules = family?.supportsErrorRules ?? false;
+    const policyProblem = runtimePolicyProblem(formPolicy, supportsErrorRules);
+    if (policyProblem) {
+      // The section opens on the problem: a refusal pointing into a collapsed group cannot be acted on.
+      setIsPolicyChecked(true);
+      setPolicySectionOpen(true);
+      toast.warning(
+        policyProblem.kind === 'retry'
+          ? t('policy.retry_invalid')
+          : t('policy.rule_invalid', { n: policyProblem.position + 1 }),
+      );
+      return;
+    }
+
+    const modelOptionFields = family?.modelOptionFields ?? [];
+    const invalidModel = formModels.find(
+      (model) => model.name.trim() !== '' && modelOptionsProblem(model.options, modelOptionFields) !== null,
+    );
+    if (invalidModel) {
+      // The row opens on the problem, which it states beside the field at fault.
+      setExpandedModelIds((prev) => new Set([...prev, invalidModel.id]));
+      toast.warning(t('pro.model_options_invalid', { model: invalidModel.name.trim() }));
       return;
     }
 
@@ -636,6 +693,7 @@ export function useProviderManagement({
           m.thinking && m.thinking.levels && m.thinking.levels.length > 0
             ? { levels: m.thinking.levels }
             : undefined,
+        options: buildModelOptions(m.options, modelOptionFields),
       }));
 
     const headersPayload: Record<string, string> = {};
@@ -652,7 +710,8 @@ export function useProviderManagement({
       website: formWebsite.trim(),
       prefix: formPrefix.trim(),
       priority: formPriority != null ? formPriority : undefined,
-      disable_cooling: formDisableCooling,
+      runtime_policy: buildRuntimePolicy(formPolicy, supportsErrorRules),
+      behavior: buildBehavior(formBehavior, family?.behaviorSwitches),
       disabled: formDisabled,
       keys: keysPayload,
       model_entries: modelsPayload,
@@ -690,8 +749,13 @@ export function useProviderManagement({
     setFormPriority,
     formDisabled,
     setFormDisabled,
-    formDisableCooling,
-    setFormDisableCooling,
+    formPolicy,
+    setFormPolicy,
+    formBehavior,
+    setFormBehavior,
+    policySectionOpen,
+    setPolicySectionOpen,
+    isPolicyChecked,
     formKeys,
     setFormKeys,
     formHeaders,

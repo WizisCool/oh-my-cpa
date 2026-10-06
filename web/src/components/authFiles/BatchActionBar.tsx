@@ -5,6 +5,7 @@ import {
   StopOutlined,
   DeleteOutlined,
   CloseOutlined,
+  SyncOutlined,
 } from '../icons';
 import { useT } from '../../i18n';
 
@@ -16,6 +17,8 @@ interface BatchActionBarProps {
   onClearSelection: () => void;
   onEnable: () => void;
   onDisable: () => void;
+  onRefresh: () => void;
+  canRefresh: boolean;
   onDelete: () => void;
   hiddenCount?: number;
 }
@@ -28,6 +31,8 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   onClearSelection,
   onEnable,
   onDisable,
+  onRefresh,
+  canRefresh,
   onDelete,
   hiddenCount = 0,
 }) => {
@@ -104,6 +109,15 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
           onClick={onDisable}
         >
           {t('af.batch_disable')}
+        </Button>
+        <Button
+          size="small"
+          icon={<SyncOutlined />}
+          loading={isMutating}
+          disabled={!canRefresh}
+          onClick={onRefresh}
+        >
+          {t('af.batch_refresh')}
         </Button>
         <Popconfirm
           title={t('af.delete_selected_title')}

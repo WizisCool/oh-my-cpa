@@ -317,3 +317,34 @@ the editors still accept typed names. A successful write requires CPA readback;
 changes are serialized with other whole-config writes, backed up and audit logged
 (`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
 reads but refuses durable changes.
+
+## Kimi international quota
+
+The `kimi-ai` connection method uses the international Kimi account system. Its
+quota observation is a server-initiated `GET` to the compiled, single-endpoint
+allowlist entry `https://api.kimi.ai/coding/v1/usages` (ADR 0064). Domestic Kimi
+credentials continue to use `https://api.kimi.com/coding/v1/usages`. Selection
+uses credential type, provider and file name; the console does not download the
+token to detect an account system or retry the token against the other host.
+Neither the browser nor Agent/MCP can supply an arbitrary upstream target.
+
+## Credential management actions
+
+`POST /api/v1/management/auth-files/refresh` accepts `name` and `auth_index` for
+one credential. The console's selected-credential action runs bounded individual
+refreshes and reports each outcome; CPA still owns its scheduled token renewal.
+The response contains status only, never CPA's refreshed token payload.
+
+`POST /api/v1/management/auth-files/vertex-import` accepts the service-account JSON
+as its request body and an optional `location` query (CPA defaults to
+`us-central1`). A second import for the same project replaces its credential.
+The console previews the project/account and accepts files up to 64 KiB; the
+backend bounds the body with the existing 16 MiB auth-file upload limit. The
+response contains file name, project, account address and location, not key bytes
+or CPA's filesystem path. Closing the dialog invalidates an unfinished file read
+and clears its selected key; key bytes are not cached as mutation arguments.
+
+Both actions require the console session, are refused in demo mode, and must
+record an attempt audit before calling CPA. If the success audit fails after CPA
+has completed the action, the successful action remains successful; the audit
+failure is logged without tokens or uploaded key material.

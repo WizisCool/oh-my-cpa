@@ -467,6 +467,9 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         expired: target.expired ?? '',
         note: target.note ?? '',
         excluded_models: target.excluded_models ?? [],
+        ...(target.request_retry === undefined ? {} : { request_retry: target.request_retry }),
+        ...(target.request_scoped_errors === undefined ? {} : { request_scoped_errors: target.request_scoped_errors }),
+        ...(target.model_aliases === undefined ? {} : { model_aliases: target.model_aliases }),
       });
       return;
     }
@@ -498,8 +501,26 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         if (payload.using_api !== undefined) target.using_api = payload.using_api;
         if (payload.excluded_models !== undefined) target.excluded_models = payload.excluded_models;
         if (payload.expired !== undefined) target.expired = payload.expired;
+        // CPA removes the retry override on null rather than storing it.
+        if (payload.request_retry === null) delete target.request_retry;
+        else if (payload.request_retry !== undefined) target.request_retry = payload.request_retry;
+        if (payload.request_scoped_errors !== undefined) target.request_scoped_errors = payload.request_scoped_errors;
+        if (payload.model_aliases !== undefined) target.model_aliases = payload.model_aliases;
       }
       json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'POST' && path === '/credentials/refresh') {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let payload = {};
+      try { payload = JSON.parse(bodyText || '{}'); } catch {}
+      const target = authFiles.find(f => f.name === payload.name);
+      if (!target) {
+        json(response, 404, { error: 'auth file not found' });
+        return;
+      }
+      // CPA answers with the refreshed credential, tokens included; a caller must not relay it.
+      json(response, 200, { ok: true, auth: { id: target.name, metadata: { refresh_token: 'fake-renewed-refresh-token' } } });
       return;
     }
     if (request.method === 'DELETE' && path === '/credentials') {
@@ -720,7 +741,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       const provider = url.searchParams.get('provider') || '';
       // Device-code providers answer with their flow label and the short code
       // the operator confirms on the vendor page, as CPA does.
-      if (provider === 'meta' || provider === 'kimi') {
+      if (provider === 'meta' || provider === 'kimi' || provider === 'kimi-ai') {
         json(response, 200, {
           url: 'https://auth.example.test/oauth?session=e2e',
           state: 'e2e-state',

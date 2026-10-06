@@ -243,6 +243,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/auth-files", demoRefuse, "uploading a credential is disabled"},
 	{http.MethodDelete, "/api/v1/management/auth-files", demoRefuse, "deleting a credential is disabled"},
 	{http.MethodGet, "/api/v1/management/auth-files/download", demoRefuse, "downloading credential material is disabled"},
+	{http.MethodPost, "/api/v1/management/auth-files/refresh", demoRefuse, "refreshing a credential is disabled"},
+	{http.MethodPost, "/api/v1/management/auth-files/vertex-import", demoRefuse, "importing a credential is disabled"},
 
 	// Raw request and error content.
 	{http.MethodGet, "/api/v1/management/request-error-logs/{name}", demoRefuse, "downloading a request log is disabled: it quotes request content"},

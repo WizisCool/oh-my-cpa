@@ -14,6 +14,7 @@ import {
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
 import {
   BranchesOutlined,
+  CloudUploadOutlined,
   DownOutlined,
   FilterOutlined,
   LoginOutlined,
@@ -43,6 +44,7 @@ import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { CompactQuotaView } from '../quota/CompactQuotaView';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
+import { VertexImportModal } from '../../components/authFiles/VertexImportModal';
 import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { OAuthCredentialRecord } from './OAuthCredentialRecord';
 import { useOAuthSessions } from './useOAuthSessions';
@@ -354,6 +356,7 @@ export const OAuthManagementPage: React.FC = () => {
   }, [selectedIdentity, selectedRecord]);
 
   const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
+  const [isVertexImportOpen, setIsVertexImportOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const onTargetGone = React.useCallback((recordKey: string) => {
@@ -527,6 +530,7 @@ export const OAuthManagementPage: React.FC = () => {
           <>
             <ActionMenu>
               <Button icon={<UploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()}>{t('af.upload')}</Button>
+              <Button icon={<CloudUploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => setIsVertexImportOpen(true)}>{t('af.vertex_open')}</Button>
               <Button icon={<BranchesOutlined />} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open">{t('af.rules_open')}</Button>
             </ActionMenu>
             <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
@@ -540,6 +544,14 @@ export const OAuthManagementPage: React.FC = () => {
               onClick={() => fileInputRef.current?.click()}
             >
               {t('af.upload')}
+            </Button>
+            <Button
+              icon={<CloudUploadOutlined />}
+              disabled={isDemo || actions.isOperating}
+              onClick={() => setIsVertexImportOpen(true)}
+              data-testid="oauth-management-vertex-import-open"
+            >
+              {t('af.vertex_open')}
             </Button>
             <Button
               icon={<BranchesOutlined />}
@@ -679,6 +691,9 @@ export const OAuthManagementPage: React.FC = () => {
         onClearSelection={() => setSelectedKeys([])}
         onEnable={() => void actions.batchStatus(false, selectedRecords)}
         onDisable={() => void actions.batchStatus(true, selectedRecords)}
+        onRefresh={() => void actions.batchRefresh(selectedRecords)}
+        // The demonstration never contacts a provider, so it refuses a refresh.
+        canRefresh={!isDemo}
         onDelete={() => void actions.batchDelete(selectedRecords)}
       />
 
@@ -902,6 +917,12 @@ export const OAuthManagementPage: React.FC = () => {
           setIsConnectOpen(false);
         }}
         sessions={sessionController}
+      />
+
+      <VertexImportModal
+        open={isVertexImportOpen}
+        onClose={() => setIsVertexImportOpen(false)}
+        onImported={actions.reloadWorkspace}
       />
 
       <AuthFileDetailDrawer

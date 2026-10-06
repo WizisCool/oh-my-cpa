@@ -132,7 +132,8 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 func managementAuthFileNeedsSafeReadback(fields map[string]any) bool {
 	for key := range fields {
 		switch key {
-		case "prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models":
+		case "prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models",
+			"request_retry", "request_scoped_errors", "model_aliases":
 			return true
 		}
 	}
@@ -167,6 +168,9 @@ func projectManagementAuthFileSafeFields(name string, data []byte) (managementAu
 	fields.Websockets = boolValue(source["websockets"])
 	fields.UsingAPI = firstBool(source, "using_api", "using-api")
 	fields.ExcludedModels = projectExcludedModels(source)
+	fields.RequestRetry = projectCredentialRequestRetry(source)
+	fields.ErrorRules = projectCredentialErrorRules(source)
+	fields.ModelAliases = projectCredentialModelAliases(source)
 	return fields, nil
 }
 
@@ -200,6 +204,18 @@ func managementAuthFileFieldMismatch(requested map[string]any, file management.A
 		case "excluded_models":
 			if !equalStringSlices(stringSliceValue(raw), safe.ExcludedModels) {
 				return "excluded_models"
+			}
+		case "request_retry":
+			if raw == nil != (safe.RequestRetry == nil) || (raw != nil && intValue(raw) != *safe.RequestRetry) {
+				return "request_retry"
+			}
+		case "request_scoped_errors":
+			if !equalErrorRules(projectErrorRuleList(raw), safe.ErrorRules) {
+				return "request_scoped_errors"
+			}
+		case "model_aliases":
+			if !equalCredentialModelAliases(projectModelAliasList(raw), safe.ModelAliases) {
+				return "model_aliases"
 			}
 		case "priority":
 			if intValue(raw) != file.Priority {
@@ -264,6 +280,14 @@ func normalizeManagementAuthFileFields(raw map[string]json.RawMessage) (map[stri
 		"excluded_models": "excluded_models",
 		"excluded-models": "excluded_models",
 		"expired":         "expired",
+		"request_retry":   "request_retry",
+		"request-retry":   "request_retry",
+		// The console's own name for the rules is the snake-case one; the
+		// hyphenated spelling is CPA's and is accepted like the others above.
+		"request_scoped_errors": "request_scoped_errors",
+		"request-scoped-errors": "request_scoped_errors",
+		"model_aliases":         "model_aliases",
+		"model-aliases":         "model_aliases",
 	}
 	fields := make(map[string]any, len(raw))
 	seen := make(map[string]string, len(raw))
@@ -317,6 +341,10 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 			return nil, fmt.Errorf("field %q must not exceed 1000000", name)
 		}
 		return json.Number(strconv.FormatInt(number, 10)), nil
+	case "request_scoped_errors":
+		return credentialErrorRulesWire(value)
+	case "model_aliases":
+		return credentialModelAliasesWire(value)
 	case "excluded_models":
 		raw := value.([]any)
 		seen := make(map[string]struct{}, len(raw))
@@ -342,7 +370,7 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 func validateManagementAuthFileField(name string, value any) error {
 	if value == nil {
 		switch name {
-		case "prefix", "proxy_url", "headers", "priority", "weight", "note", "expired":
+		case "prefix", "proxy_url", "headers", "priority", "weight", "note", "expired", "request_retry":
 			return nil
 		default:
 			return fmt.Errorf("field %q cannot be null", name)
@@ -361,6 +389,24 @@ func validateManagementAuthFileField(name string, value any) error {
 		}
 		if _, err := number.Int64(); err != nil {
 			return fmt.Errorf("field %q must be an integer", name)
+		}
+	case "request_retry":
+		// CPA reads a negative count as "remove the override", which null already
+		// states, so a negative one is refused rather than silently reinterpreted.
+		number, ok := value.(json.Number)
+		if !ok {
+			return errors.New("request_retry must be an integer or null")
+		}
+		if retry, err := number.Int64(); err != nil || retry < 0 || retry > maxCredentialRequestRetry {
+			return fmt.Errorf("request_retry must be between 0 and %d, or null to inherit", maxCredentialRequestRetry)
+		}
+	case "request_scoped_errors":
+		if _, err := credentialErrorRulesWire(value); err != nil {
+			return err
+		}
+	case "model_aliases":
+		if _, err := credentialModelAliasesWire(value); err != nil {
+			return err
 		}
 	case "disable_cooling", "websockets", "using_api":
 		if _, ok := value.(bool); !ok {
@@ -390,4 +436,252 @@ func validateManagementAuthFileField(name string, value any) error {
 		}
 	}
 	return nil
+}
+
+// maxCredentialRequestRetry bounds a credential's retry override. CPA sets no
+// limit; this one only keeps a mistyped number from multiplying every request.
+const maxCredentialRequestRetry = 100
+
+// credentialErrorRulesWire validates a credential's error rules and returns
+// them under CPA's field names. An empty list clears the override: CPA falls
+// back to the channel's rules when the credential's list is empty.
+func credentialErrorRulesWire(value any) ([]any, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.New("request_scoped_errors must be an array of rules")
+	}
+	var rules []ProviderErrorRuleDTO
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rules); err != nil || rules == nil {
+		return nil, errors.New("request_scoped_errors must be an array of rules")
+	}
+	if len(rules) > maxProviderErrorRules {
+		return nil, fmt.Errorf("request_scoped_errors holds more than %d rules", maxProviderErrorRules)
+	}
+	wire := make([]any, 0, len(rules))
+	for position, rule := range rules {
+		rule.Action = strings.ToLower(strings.TrimSpace(rule.Action))
+		if reason := errorRuleProblem(rule); reason != "" {
+			return nil, fmt.Errorf("request_scoped_errors[%d]: %s", position, reason)
+		}
+		entry := map[string]any{"status": json.Number(strconv.Itoa(rule.Status)), "action": rule.Action}
+		if len(rule.Match) > 0 {
+			entry["match"] = rule.Match
+		}
+		if len(rule.MatchRegex) > 0 {
+			entry["match-regexr"] = rule.MatchRegex
+		}
+		wire = append(wire, entry)
+	}
+	return wire, nil
+}
+
+// maxCredentialModelAliases bounds one credential's alias list. CPA sets no
+// limit; the list is stored inside the credential file and read on every request.
+const maxCredentialModelAliases = 100
+
+// credentialModelAliasesWire validates a credential's own model aliases and
+// returns them under CPA's field names. It refuses what CPA's sanitiser would
+// drop without saying so - an alias equal to its model, or one alias named
+// twice - because a saved list that silently loses an entry reads as a bug.
+// An empty list removes the credential's aliases.
+func credentialModelAliasesWire(value any) ([]any, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.New("model_aliases must be an array of aliases")
+	}
+	var aliases []managementOAuthModelAlias
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&aliases); err != nil || aliases == nil {
+		return nil, errors.New("model_aliases must be an array of aliases")
+	}
+	if len(aliases) > maxCredentialModelAliases {
+		return nil, fmt.Errorf("model_aliases holds more than %d aliases", maxCredentialModelAliases)
+	}
+	wire := make([]any, 0, len(aliases))
+	seenAliases := make(map[string]struct{}, len(aliases))
+	for position, entry := range aliases {
+		name, alias, displayName := strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Alias), strings.TrimSpace(entry.DisplayName)
+		switch {
+		case name == "" || alias == "":
+			return nil, fmt.Errorf("model_aliases[%d]: name and alias are both required", position)
+		case len([]rune(name)) > managementAuthFileFieldLimit || len([]rune(alias)) > managementAuthFileFieldLimit || len([]rune(displayName)) > managementAuthFileFieldLimit:
+			return nil, fmt.Errorf("model_aliases[%d]: a value is too long", position)
+		case strings.EqualFold(name, alias):
+			return nil, fmt.Errorf("model_aliases[%d]: the alias must differ from the model it names", position)
+		}
+		aliasKey := strings.ToLower(alias)
+		if _, isDuplicate := seenAliases[aliasKey]; isDuplicate {
+			return nil, fmt.Errorf("model_aliases[%d]: alias %q is already used", position, alias)
+		}
+		seenAliases[aliasKey] = struct{}{}
+		item := map[string]any{"name": name, "alias": alias}
+		if entry.Fork {
+			item["fork"] = true
+		}
+		if displayName != "" {
+			item["display-name"] = displayName
+		}
+		if entry.ForceMapping {
+			item["force-mapping"] = true
+		}
+		wire = append(wire, item)
+	}
+	return wire, nil
+}
+
+func projectCredentialModelAliases(source map[string]any) []managementOAuthModelAlias {
+	for _, key := range []string{"model_aliases", "model-aliases"} {
+		if value, ok := source[key]; ok {
+			return projectModelAliasList(value)
+		}
+	}
+	return nil
+}
+
+// projectModelAliasList reads aliases stored under CPA's field names, skipping
+// the entries CPA's own sanitiser would not apply.
+func projectModelAliasList(value any) []managementOAuthModelAlias {
+	raw, ok := value.([]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	aliases := make([]managementOAuthModelAlias, 0, len(raw))
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, alias := strings.TrimSpace(stringValue(entry["name"])), strings.TrimSpace(stringValue(entry["alias"]))
+		if name == "" || alias == "" || strings.EqualFold(name, alias) {
+			continue
+		}
+		aliases = append(aliases, managementOAuthModelAlias{
+			Name:         boundedText(name, managementAuthFileFieldLimit),
+			Alias:        boundedText(alias, managementAuthFileFieldLimit),
+			Fork:         boolValue(entry["fork"]),
+			DisplayName:  boundedText(strings.TrimSpace(stringValue(entry["display-name"])), managementAuthFileFieldLimit),
+			ForceMapping: boolValue(entry["force-mapping"]),
+		})
+		if len(aliases) == maxCredentialModelAliases {
+			break
+		}
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+	return aliases
+}
+
+func equalCredentialModelAliases(left, right []managementOAuthModelAlias) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for position := range left {
+		if left[position] != right[position] {
+			return false
+		}
+	}
+	return true
+}
+
+func projectCredentialRequestRetry(source map[string]any) *int {
+	for _, key := range []string{"request_retry", "request-retry"} {
+		value, ok := source[key]
+		if !ok || value == nil {
+			continue
+		}
+		if _, err := numberInt64(value); err != nil {
+			return nil
+		}
+		// CPA treats a stored negative count as no override.
+		if retry := intValue(value); retry >= 0 {
+			return &retry
+		}
+		return nil
+	}
+	return nil
+}
+
+func projectCredentialErrorRules(source map[string]any) []ProviderErrorRuleDTO {
+	for _, key := range []string{"request_scoped_errors", "request-scoped-errors"} {
+		if value, ok := source[key]; ok {
+			return projectErrorRuleList(value)
+		}
+	}
+	return nil
+}
+
+// projectErrorRuleList reads rules stored under CPA's field names. Anything
+// that is not a rule object is skipped, as CPA itself would not run it.
+func projectErrorRuleList(value any) []ProviderErrorRuleDTO {
+	raw, ok := value.([]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	rules := make([]ProviderErrorRuleDTO, 0, len(raw))
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		rules = append(rules, ProviderErrorRuleDTO{
+			Status:     intValue(entry["status"]),
+			Match:      rawStringSlice(entry["match"]),
+			MatchRegex: rawStringSlice(entry["match-regexr"]),
+			Action:     stringValue(entry["action"]),
+		})
+	}
+	if len(rules) > maxProviderErrorRules {
+		rules = rules[:maxProviderErrorRules]
+	}
+	return rules
+}
+
+// rawStringSlice keeps each string as stored: a pattern is matched literally,
+// so its surrounding whitespace is part of it.
+func rawStringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				result = append(result, text)
+			}
+		}
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+	}
+	return nil
+}
+
+func equalErrorRules(left, right []ProviderErrorRuleDTO) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for position := range left {
+		a, b := left[position], right[position]
+		if a.Status != b.Status || a.Action != b.Action || !equalRawStrings(a.Match, b.Match) || !equalRawStrings(a.MatchRegex, b.MatchRegex) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalRawStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for position := range left {
+		if left[position] != right[position] {
+			return false
+		}
+	}
+	return true
 }

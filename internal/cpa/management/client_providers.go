@@ -63,10 +63,55 @@ type OpenAICompatibility struct {
 	LegacyAPIKeys  []string          `json:"api-keys,omitempty"`
 	Models         []ModelAlias      `json:"models,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
+	// RequestRetry overrides the global retry count. CPA reads nil or a negative
+	// value as "use the global setting" and 0 as "no additional retry rounds".
+	RequestRetry          *int                     `json:"request-retry,omitempty"`
+	RequestScopedErrors   []RequestScopedErrorRule `json:"request-scoped-errors,omitempty"`
+	SupportPromptCacheKey bool                     `json:"support-prompt-cache-key,omitempty"`
 
-	// extra keeps the settings the console does not model (request-retry,
-	// support-prompt-cache-key, ...) through a whole-list write.
+	// extra keeps the settings the console does not model through a whole-list
+	// write.
 	extra wireExtras
+}
+
+// RequestScopedErrorRule tells CPA how to treat one class of upstream error for
+// the request that hit it. A rule applies only when its status is positive, at
+// least one of its patterns is non-empty and its action is one CPA knows; CPA
+// skips any other rule without reporting it.
+type RequestScopedErrorRule struct {
+	Status int      `json:"status,omitempty"`
+	Match  []string `json:"match,omitempty"`
+	// The wire name is CPA's own spelling.
+	MatchRegex []string `json:"match-regexr,omitempty"`
+	Action     string   `json:"action,omitempty"`
+
+	extra wireExtras
+}
+
+type requestScopedErrorRuleFields RequestScopedErrorRule
+
+var requestScopedErrorRuleModelledFields = modelledWireFields(reflect.TypeOf(requestScopedErrorRuleFields{}))
+
+func (r *RequestScopedErrorRule) UnmarshalJSON(data []byte) error {
+	var fields requestScopedErrorRuleFields
+	extra, err := decodeWithExtras(data, &fields, requestScopedErrorRuleModelledFields)
+	if err != nil {
+		return err
+	}
+	*r = RequestScopedErrorRule(fields)
+	r.extra = extra
+	return nil
+}
+
+func (r RequestScopedErrorRule) MarshalJSON() ([]byte, error) {
+	return encodeWithExtras(requestScopedErrorRuleFields(r), r.extra)
+}
+
+// IsSameRule reports whether two rules agree on every setting the console
+// edits, so an unchanged rule can keep the settings it does not.
+func (r RequestScopedErrorRule) IsSameRule(other RequestScopedErrorRule) bool {
+	return r.Status == other.Status && r.Action == other.Action &&
+		slices.Equal(r.Match, other.Match) && slices.Equal(r.MatchRegex, other.MatchRegex)
 }
 
 type openAICompatibilityFields OpenAICompatibility
@@ -143,8 +188,15 @@ type ModelAlias struct {
 	ForceMapping     bool             `json:"force-mapping,omitempty"`
 	IsCompat         bool             `json:"is-compat,omitempty"`
 	Thinking         *ThinkingSupport `json:"thinking,omitempty"`
+	// The settings below exist on some families' entries only (the first on
+	// Codex-shaped ones, the rest on OpenAI-compatible ones); CPA refuses a
+	// configuration that states one elsewhere.
+	SupportConfigurationUpdate bool     `json:"support-configuration-update,omitempty"`
+	InputModalities            []string `json:"input-modalities,omitempty"`
+	OutputModalities           []string `json:"output-modalities,omitempty"`
+	UseMaxCompletionTokens     bool     `json:"use-max-completion-tokens,omitempty"`
 
-	// extra keeps a model's unmodelled settings (input-modalities, ...), which
+	// extra keeps the settings of a model this struct does not declare, which
 	// every provider write sends back for every model of the family.
 	extra wireExtras
 }
@@ -166,6 +218,13 @@ func (m *ModelAlias) UnmarshalJSON(data []byte) error {
 
 func (m ModelAlias) MarshalJSON() ([]byte, error) {
 	return encodeWithExtras(modelAliasFields(m), m.extra)
+}
+
+// WithUnmodelledFieldsOf returns the model carrying another's unmodelled
+// settings, for an edit that restates every modelled field of a stored model.
+func (m ModelAlias) WithUnmodelledFieldsOf(stored ModelAlias) ModelAlias {
+	m.extra = stored.extra
+	return m
 }
 
 // ConfiguredModelRoute keeps the configured upstream identity separate from its client label.

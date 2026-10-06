@@ -41,12 +41,74 @@ export interface ThinkingSupportConfig {
   levels?: string[];
 }
 
+/**
+ * A model entry's settings beyond its name, alias, image flag and thinking levels. On a save it
+ * states the whole entry: a setting left out is cleared.
+ */
+export interface ProviderModelOptions {
+  display_name?: string;
+  max_context_length?: number;
+  force_mapping?: boolean;
+  is_compat?: boolean;
+  support_configuration_update?: boolean;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  use_max_completion_tokens?: boolean;
+  thinking_min?: number;
+  thinking_max?: number;
+  thinking_zero_allowed?: boolean;
+  thinking_dynamic_allowed?: boolean;
+}
+
+/** The model settings only some families' entries have; the rest exist on every family. */
+export type ProviderModelOptionField =
+  | 'max_context_length'
+  | 'is_compat'
+  | 'support_configuration_update'
+  | 'modalities'
+  | 'use_max_completion_tokens';
+
 export interface ProviderModelItem {
   name: string;
   alias?: string;
   image?: boolean;
   thinking?: ThinkingSupportConfig;
+  options?: ProviderModelOptions;
 }
+
+/** How a provider treats a setting the gateway also has globally. */
+export type ProviderOverride = 'inherit' | 'enabled' | 'disabled';
+
+export const PROVIDER_ERROR_RULE_ACTIONS = ['stop', 'stop-and-cooldown', 'continue', 'continue-and-cooldown'] as const;
+export type ProviderErrorRuleAction = (typeof PROVIDER_ERROR_RULE_ACTIONS)[number];
+
+/** One request-scoped error rule. `action` is a string because a stored rule may name an action
+ *  this console does not know; such a rule is shown and kept, not rewritten. */
+export interface ProviderErrorRule {
+  status: number;
+  match?: string[];
+  match_regex?: string[];
+  action: string;
+}
+
+export interface ProviderRuntimePolicy {
+  cooling: ProviderOverride;
+  /** Absent when the provider inherits the global retry count. */
+  request_retry?: number;
+  error_rules?: ProviderErrorRule[];
+  /** Reported by the server; ignored on a write. */
+  supports_error_rules?: boolean;
+}
+
+/** The request-behaviour switches a family has; a family reports only its own. */
+export interface ProviderBehavior {
+  alpha_search?: boolean;
+  codex_cloaking?: ProviderOverride;
+  rebuild_mid_system_message?: boolean;
+  support_prompt_cache_key?: boolean;
+}
+
+export type ProviderBehaviorSwitch = keyof ProviderBehavior;
 
 export interface ProviderItem {
   id: string;
@@ -78,6 +140,8 @@ export interface ProviderItem {
   key_entries?: ProviderKeyEntry[];
   headers?: Record<string, string>;
   proxy_configured?: boolean;
+  runtime_policy?: ProviderRuntimePolicy;
+  behavior?: ProviderBehavior;
 }
 
 export interface SaveProviderKeyItem {
@@ -91,6 +155,7 @@ export interface SaveProviderModelItem {
   alias?: string;
   image?: boolean;
   thinking?: ThinkingSupportConfig;
+  options?: ProviderModelOptions;
 }
 
 export interface SaveProviderPayload {
@@ -108,4 +173,8 @@ export interface SaveProviderPayload {
   disabled?: boolean;
   /** Absent leaves the stored website alone; an empty string clears it. */
   website?: string;
+  /** Authoritative for cooling, retry and error rules when present; `disable_cooling` is then ignored. */
+  runtime_policy?: ProviderRuntimePolicy;
+  /** Sets only the switches it names. */
+  behavior?: ProviderBehavior;
 }

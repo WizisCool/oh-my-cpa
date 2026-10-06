@@ -1,4 +1,5 @@
 import type { ProviderItem } from '../../types/providers';
+import type { ModelOptionsDraft } from './modelOptions';
 
 /**
  * The view models the provider console builds on top of `ProviderItem`.
@@ -39,4 +40,5 @@ export interface FormModelItem {
   thinking?: {
     levels?: string[];
   };
+  options: ModelOptionsDraft;
 }

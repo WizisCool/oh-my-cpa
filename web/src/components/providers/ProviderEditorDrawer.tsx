@@ -26,6 +26,10 @@ import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFam
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
 import { EditorSection } from './EditorSection';
+import { RuntimePolicySection } from './RuntimePolicySection';
+import { countPolicyOverrides } from './runtimePolicy';
+import { ModelOptionsFields } from './ModelOptionsFields';
+import { modelOptionsProblem } from './modelOptions';
 import { ModelPickerModal } from './ModelPickerModal';
 import { SecretInput } from '../common/SecretInput';
 import styles from './ProviderEditorDrawer.module.css';
@@ -52,8 +56,13 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'setFormPriority'
   | 'formDisabled'
   | 'setFormDisabled'
-  | 'formDisableCooling'
-  | 'setFormDisableCooling'
+  | 'formPolicy'
+  | 'setFormPolicy'
+  | 'formBehavior'
+  | 'setFormBehavior'
+  | 'policySectionOpen'
+  | 'setPolicySectionOpen'
+  | 'isPolicyChecked'
   | 'formKeys'
   | 'setFormKeys'
   | 'formHeaders'
@@ -147,8 +156,13 @@ export function ProviderEditorDrawer({
     setFormPriority,
     formDisabled,
     setFormDisabled,
-    formDisableCooling,
-    setFormDisableCooling,
+    formPolicy,
+    setFormPolicy,
+    formBehavior,
+    setFormBehavior,
+    policySectionOpen,
+    setPolicySectionOpen,
+    isPolicyChecked,
     formKeys,
     setFormKeys,
     formHeaders,
@@ -213,7 +227,10 @@ export function ProviderEditorDrawer({
     label: `${t(family.labelKey)} (${family.id})`,
     value: family.id,
   }));
-  const supportsModelImage = lookupProviderFamily(formFamily)?.supportsModelImage ?? false;
+  const familyMeta = lookupProviderFamily(formFamily);
+  const supportsModelImage = familyMeta?.supportsModelImage ?? false;
+  const modelOptionFields = familyMeta?.modelOptionFields ?? [];
+  const policyOverrideCount = countPolicyOverrides(formPolicy, formBehavior, familyMeta?.behaviorSwitches);
   const configuredModelNames = new Set(
     formModels.map((m) => m.name.trim()).filter((name) => name !== ''),
   );
@@ -425,7 +442,7 @@ export function ProviderEditorDrawer({
             />
           </Form.Item>
 
-          {/* Flags: Disabled & Disable Cooling */}
+          {/* Flag: Disabled */}
           <div className={styles['flag-list']}>
             <div className={styles['flag']}>
               <Checkbox
@@ -436,18 +453,6 @@ export function ProviderEditorDrawer({
               </Checkbox>
               <div className={styles['flag-desc']}>
                 {t('pro.field_disabled_desc')}
-              </div>
-            </div>
-
-            <div className={styles['flag']}>
-              <Checkbox
-                checked={formDisableCooling}
-                onChange={(e) => setFormDisableCooling(e.target.checked)}
-              >
-                <span className={styles['flag-label']}>{t('pro.field_disable_cooling')}</span>
-              </Checkbox>
-              <div className={styles['flag-desc']}>
-                {t('pro.field_disable_cooling_desc')}
               </div>
             </div>
           </div>
@@ -879,6 +884,20 @@ export function ProviderEditorDrawer({
                                   })}
                                 </Row>
                               </div>
+
+                              <ModelOptionsFields
+                                idPrefix={`model-${m.id}`}
+                                options={m.options}
+                                fields={modelOptionFields}
+                                problem={modelOptionsProblem(m.options, modelOptionFields)}
+                                onChange={(patch) =>
+                                  setFormModels((prev) =>
+                                    prev.map((item) =>
+                                      item.id === m.id ? { ...item, options: { ...item.options, ...patch } } : item
+                                    )
+                                  )
+                                }
+                              />
                             </div>
                           )}
                         </div>
@@ -890,6 +909,24 @@ export function ProviderEditorDrawer({
                 <Button type="dashed" icon={<PlusOutlined />} onClick={handleAddModel}>
                   {t('pro.add_model_entry')}
                 </Button>
+          </EditorSection>
+
+          {/* Section: Runtime policy */}
+          <EditorSection
+            title={t('policy.section')}
+            count={policyOverrideCount > 0 ? policyOverrideCount : undefined}
+            isOpen={policySectionOpen}
+            onToggle={() => setPolicySectionOpen((prev) => !prev)}
+          >
+            <RuntimePolicySection
+              policy={formPolicy}
+              onPolicyChange={setFormPolicy}
+              behavior={formBehavior}
+              onBehaviorChange={setFormBehavior}
+              supportsErrorRules={familyMeta?.supportsErrorRules ?? false}
+              behaviorSwitches={familyMeta?.behaviorSwitches ?? []}
+              showProblems={isPolicyChecked}
+            />
           </EditorSection>
         </Form>
         <ModelPickerModal

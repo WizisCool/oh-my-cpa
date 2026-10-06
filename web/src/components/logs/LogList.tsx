@@ -14,6 +14,8 @@ interface LogListProps<T> {
   emptyText: string;
   /** Rendered above the rows, inside the scroller - a marker such as "records were lost". */
   header?: React.ReactNode;
+  /** Long lines wrap inside the list instead of scrolling it sideways. */
+  isWrapped?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ interface LogListProps<T> {
  * thousand lines is searched in memory, but painting all of them would stall the page
  * on every poll.
  */
-export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, header }: LogListProps<T>) {
+export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, header, isWrapped = false }: LogListProps<T>) {
   const t = useT();
   const [visibleCount, setVisibleCount] = React.useState(RENDER_CHUNK);
   // `isPinned` is state, not a ref: the "back to the newest line" affordance has
@@ -54,7 +56,7 @@ export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, h
   return (
     <>
       <div
-        className="log-list"
+        className={`log-list${isWrapped ? ' is-wrapped' : ''}`}
         ref={listRef}
         onScroll={(event) => {
           const node = event.currentTarget;

@@ -16,6 +16,126 @@
   margin-left: 0;
 }
 
+/* ── request filters: disclosed below the toolbar, one labelled field per filter ── */
+.filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-field-wide {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.filter-label {
+  color: var(--meta);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-empty {
+  color: var(--meta);
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.filter-check {
+  line-height: 24px;
+}
+
+.filter-clear {
+  margin-left: auto;
+  padding-inline: 0;
+}
+
+.method-count {
+  margin-left: 5px;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.path-select {
+  width: 100%;
+}
+
+.path-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.path-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-option-count {
+  flex: none;
+  color: var(--meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── fullscreen: the panel takes the viewport and the list takes what the toolbar leaves.
+   Below antd's popup layer, so the path dropdown and the confirmation still open above it. */
+.panel-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--bg);
+}
+
+.panel-fullscreen :global(.ant-tabs) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Every box between the tabs and the list passes the remaining height down. */
+.panel-fullscreen :global(.ant-tabs-body-holder),
+.panel-fullscreen :global(.ant-tabs-body),
+.panel-fullscreen :global(.ant-tabs-content-active) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-fullscreen :global(.logs-tail) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-fullscreen :global(.log-list) {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
 /* ── service log ─────────────────────────────────────────────────────────── */
 .service-message {
   flex: none;
@@ -52,6 +172,34 @@
 }
 
 @media (max-width: 640px) {
+  /* A phone gets three rows: search with the filter toggle, the levels, then the count
+     beside the actions. */
+  .panel :global(.logs-search) {
+    flex: 1 1 0;
+    order: -2;
+    width: auto;
+    min-width: 0;
+  }
+
+  .filter-toggle {
+    order: -1;
+  }
+
+  .panel :global(.logs-counts) {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .filter-field,
+  .filter-field-wide {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .filter-clear {
+    margin-left: 0;
+  }
+
   .toolbar-actions {
     margin-left: auto;
   }

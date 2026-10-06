@@ -25,6 +25,8 @@ type ProviderModelDTO struct {
 	Alias    string       `json:"alias,omitempty"`
 	Image    bool         `json:"image,omitempty"`
 	Thinking *ThinkingDTO `json:"thinking,omitempty"`
+	// Options is absent for a model with none of the advanced settings.
+	Options *ProviderModelOptionsDTO `json:"options,omitempty"`
 }
 
 type ProviderItemDTO struct {
@@ -51,15 +53,18 @@ type ProviderItemDTO struct {
 	// AuthIndexes are the runtime auth indexes of every key the provider holds. A request
 	// record names the index of the key that served it, which is the only sound way to credit
 	// traffic to a provider: CPA labels a family's keys by the family alone.
-	AuthIndexes     []string              `json:"auth_indexes,omitempty"`
-	Models          []string              `json:"models,omitempty"`
-	ModelEntries    []ProviderModelDTO    `json:"model_entries,omitempty"`
-	Disabled        bool                  `json:"disabled"`
-	KeyConfigured   bool                  `json:"key_configured"`
-	APIKey          string                `json:"api_key,omitempty"`
-	KeyEntries      []ProviderKeyEntryDTO `json:"key_entries,omitempty"`
-	Headers         map[string]string     `json:"headers,omitempty"`
-	ProxyConfigured bool                  `json:"proxy_configured"`
+	AuthIndexes     []string                  `json:"auth_indexes,omitempty"`
+	Models          []string                  `json:"models,omitempty"`
+	ModelEntries    []ProviderModelDTO        `json:"model_entries,omitempty"`
+	Disabled        bool                      `json:"disabled"`
+	KeyConfigured   bool                      `json:"key_configured"`
+	APIKey          string                    `json:"api_key,omitempty"`
+	KeyEntries      []ProviderKeyEntryDTO     `json:"key_entries,omitempty"`
+	Headers         map[string]string         `json:"headers,omitempty"`
+	ProxyConfigured bool                      `json:"proxy_configured"`
+	RuntimePolicy   *ProviderRuntimePolicyDTO `json:"runtime_policy,omitempty"`
+	// Behavior is nil for a family with no request-behaviour switches.
+	Behavior *ProviderBehaviorDTO `json:"behavior,omitempty"`
 
 	// Website is the provider's own homepage. It is Oh My CPA management metadata
 	// rather than a CPA configuration field - CPA has nowhere to put it - so it is
@@ -122,6 +127,7 @@ func lookupProviderConfigFamily(family string) (providerConfigFamilySpec, bool) 
 // configKeyProviderItems projects one family's credential list into provider rows.
 func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.ConfigAPIKey, customNames map[string]string) []ProviderItemDTO {
 	items := make([]ProviderItemDTO, 0, len(entries))
+	capabilities := providerPolicyCapabilitiesFor(string(spec.Family))
 	for i, entry := range entries {
 		id := fmt.Sprintf("%s%d", spec.IDPrefix, i)
 		name := spec.DefaultName
@@ -146,6 +152,7 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 				Alias:    m.Alias,
 				Image:    m.Image,
 				Thinking: thinking,
+				Options:  providerModelOptionsDTO(m),
 			})
 		}
 
@@ -185,6 +192,8 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 			KeyEntries:      keyEntries,
 			Headers:         entry.Headers,
 			ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
+			RuntimePolicy:   providerRuntimePolicyDTO(entry.DisableCooling, entry.RequestRetry, entry.RequestScopedErrors, capabilities),
+			Behavior:        configKeyBehaviorDTO(entry, capabilities),
 		})
 	}
 	return items
@@ -293,6 +302,7 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 					Alias:    m.Alias,
 					Image:    m.Image,
 					Thinking: thinking,
+					Options:  providerModelOptionsDTO(m),
 				})
 			}
 
@@ -321,6 +331,8 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 				})
 			}
 
+			isPromptCacheKeySupported := entry.SupportPromptCacheKey
+			compatCapabilities := providerPolicyCapabilitiesFor(openAICompatibilityFamily)
 			items = append(items, ProviderItemDTO{
 				ID:              id,
 				Family:          openAICompatibilityFamily,
@@ -340,6 +352,8 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: false,
+				RuntimePolicy:   providerRuntimePolicyDTO(entry.DisableCooling, entry.RequestRetry, entry.RequestScopedErrors, compatCapabilities),
+				Behavior:        &ProviderBehaviorDTO{SupportPromptCacheKey: &isPromptCacheKeySupported},
 			})
 		}
 	}

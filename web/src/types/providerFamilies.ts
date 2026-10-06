@@ -12,6 +12,8 @@
  * `internal/api/management_providers.go`).
  */
 
+import type { ProviderBehaviorSwitch, ProviderModelOptionField } from './providers';
+
 export interface ProviderFamilyMeta {
   /** CPA's family key, as sent to and received from the management API. */
   id: string;
@@ -48,54 +50,83 @@ export interface ProviderFamilyMeta {
    * whole configuration when the key is present.
    */
   supportsModelImage?: boolean;
+  /**
+   * Whether CPA's entry for this family has request-scoped error rules, and which
+   * request-behaviour switches it has. CPA decodes each family strictly, so the form
+   * offers only these; the server holds the same table and refuses anything else
+   * (`providerPolicyCapabilitiesFor` in `internal/api/management_provider_policy.go`).
+   */
+  supportsErrorRules?: boolean;
+  behaviorSwitches?: ProviderBehaviorSwitch[];
+  /**
+   * The model settings this family's entry has beyond the ones every family shares. The server
+   * holds the same table (`providerModelOptionFieldsFor` in
+   * `internal/api/management_provider_model_options.go`).
+   */
+  modelOptionFields?: ProviderModelOptionField[];
 }
 
 /** In the order the provider list and the family picker present them. */
 export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
   {
     id: 'openai-compatibility',
+    modelOptionFields: ['max_context_length', 'is_compat', 'modalities', 'use_max_completion_tokens'],
     labelKey: 'pro.family_openai_compat',
     color: '#10A37F',
     iconId: 'OpenAI',
     protocolMatchers: ['openai', 'chat completion'],
     supportsModelImage: true,
+    supportsErrorRules: true,
+    behaviorSwitches: ['support_prompt_cache_key'],
   },
   {
     id: 'codex',
+    modelOptionFields: ['max_context_length', 'is_compat', 'support_configuration_update'],
     labelKey: 'pro.family_codex',
     color: '#60A5FA',
     iconId: 'Codex',
     protocolMatchers: ['response'],
     requiresBaseURL: true,
+    supportsErrorRules: true,
+    behaviorSwitches: ['alpha_search', 'codex_cloaking'],
   },
   {
     id: 'claude',
+    modelOptionFields: ['max_context_length', 'is_compat'],
     labelKey: 'pro.family_claude',
     color: '#D97757',
     iconId: 'Anthropic',
     protocolMatchers: ['claude', 'anthropic', 'messages'],
+    supportsErrorRules: true,
+    behaviorSwitches: ['rebuild_mid_system_message'],
   },
   {
     id: 'gemini',
+    modelOptionFields: ['max_context_length', 'is_compat'],
     labelKey: 'pro.family_gemini',
     color: '#A78BFA',
     iconId: 'Gemini',
     protocolMatchers: ['gemini', 'google'],
+    supportsErrorRules: true,
   },
   {
     id: 'meta',
+    modelOptionFields: ['max_context_length', 'is_compat', 'support_configuration_update'],
     labelKey: 'pro.family_meta',
     color: '#0866FF',
     iconId: 'Meta',
     protocolMatchers: ['meta muse', 'meta'],
+    supportsErrorRules: true,
   },
   {
     id: 'xai',
+    modelOptionFields: ['max_context_length', 'is_compat', 'support_configuration_update'],
     labelKey: 'pro.family_xai',
     color: '#A1A1AA',
     iconId: 'XAI',
     protocolMatchers: ['xai', 'grok'],
     requiresBaseURL: true,
+    supportsErrorRules: true,
   },
   {
     id: 'vertex',
@@ -106,10 +137,12 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
   },
   {
     id: 'interactions',
+    modelOptionFields: ['max_context_length', 'is_compat'],
     labelKey: 'pro.family_interactions',
     color: '#34A853',
     iconId: 'Gemini',
     protocolMatchers: ['interactions'],
+    supportsErrorRules: true,
   },
 ];
 

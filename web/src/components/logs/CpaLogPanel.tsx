@@ -1,14 +1,19 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
-import { Button, Checkbox, Empty, Input, Popconfirm, Segmented, Tabs, Tooltip, Typography } from 'antd';
+import { createPortal } from 'react-dom';
+import { Button, Checkbox, Empty, Input, Popconfirm, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
+  FilterOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
+  WrapTextOutlined,
 } from '../icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
@@ -23,12 +28,15 @@ import { ResponsiveList } from '../common/ResponsiveList';
 import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import {
+  countLogFacets,
   DEFAULT_LOG_FILTERS,
-  isManagementLine,
   LOG_LEVELS,
+  LOG_METHODS,
   LOG_STATUS_CLASSES,
-  matchesStatusClass,
+  matchesLogFilters,
+  MAX_LOG_PATH_FILTERS,
   parseLogFilters,
+  shouldExitLogFullscreen,
   parseLogLine,
   statusTone,
   LOG_FILTERS_PREFERENCE,
@@ -48,6 +56,9 @@ const { Text } = Typography;
 // Status classes are shown as the numeric class, not as invented English words:
 // the log line itself says 400, and a localized UI must not caption it SUCCESS
 // under a different reading language (design.md rule 3).
+/** Anything of antd's that Escape should close before it closes the fullscreen viewer. */
+const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"])';
+
 const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
   all: '',
   success: '2xx',
@@ -194,16 +205,41 @@ export const CpaLogPanel: React.FC = () => {
 
   const parsed = React.useMemo(() => tail.lines.map((line) => parseLogLine(line)), [tail.lines]);
 
-  const rows = React.useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return parsed.filter((line) => {
-      if (filters.hideManagement && isManagementLine(line.raw)) return false;
-      if (needle && !line.raw.toLowerCase().includes(needle)) return false;
-      if (filters.levels.length > 0 && (!line.level || !filters.levels.includes(line.level))) return false;
-      if (!matchesStatusClass(line.status, filters.statusClass)) return false;
-      return true;
-    });
-  }, [filters, parsed, search]);
+  const needle = search.trim().toLowerCase();
+  const rows = React.useMemo(() => parsed.filter((line) => matchesLogFilters(line, filters, needle)), [filters, parsed, needle]);
+  const facets = React.useMemo(() => countLogFacets(parsed, filters, needle), [filters, parsed, needle]);
+  // A method stays offered while it is selected, so a filter that now matches nothing can
+  // still be switched off.
+  const offeredMethods = LOG_METHODS.filter((method) => (facets.methods[method] ?? 0) > 0 || filters.methods.includes(method));
+
+  // The request filters open on demand: the toolbar keeps what every visit uses - search and
+  // level - and a count on the button says when something out of sight is narrowing the list.
+  const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
+  const activeFilterCount = (filters.statusClass === 'all' ? 0 : 1) + (filters.methods.length > 0 ? 1 : 0) + (filters.paths.length > 0 ? 1 : 0);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const panelRef = React.useRef<HTMLElement>(null);
+  // The panel renders into a host element that is moved between its place in the page and
+  // the document body. A routed page sits inside a transformed container, which would
+  // confine `position: fixed` to the content area; moving the host instead of rendering
+  // twice keeps the tail, the scroll position's pin and every open row across the switch.
+  const [panelHost] = React.useState(() => document.createElement('div'));
+  const slotRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    (isFullscreen ? document.body : slotRef.current)?.appendChild(panelHost);
+    return () => panelHost.remove();
+  }, [isFullscreen, panelHost]);
+  React.useEffect(() => {
+    if (!isFullscreen) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const hasOpenOverlay = document.querySelector(OPEN_OVERLAY_SELECTOR) !== null;
+      if (shouldExitLogFullscreen(event.key, event.defaultPrevented, hasOpenOverlay)) setIsFullscreen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    // The viewer covers the page, so focus moves into it: Escape and Tab then act on what
+    // the reader is looking at rather than on the navigation underneath.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const truncate = useMutation({
     mutationFn: api.clearLogs,
@@ -274,115 +310,222 @@ export const CpaLogPanel: React.FC = () => {
   const isTail = tab === 'tail';
 
   return (
-    <section className={styles.panel}>
-      <div className="logs-toolbar">
-        {isTail && (
-          <>
-            <Input
-              allowClear
-              className="logs-search"
-              prefix={<SearchOutlined />}
-              placeholder={t('logs.search_placeholder')}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <Checkbox
-              checked={filters.hideManagement}
-              onChange={(event) => patchFilters({ hideManagement: event.target.checked })}
-            >
-              {t('logs.hide_management')}
-            </Checkbox>
-            <Segmented
-              size="small"
-              value={filters.statusClass}
-              options={LOG_STATUS_CLASSES.map((value) => ({
-                value,
-                label: value === 'all' ? t('logs.status_all') : STATUS_CLASS_LABELS[value],
-              }))}
-              onChange={(value) => patchFilters({ statusClass: value as LogStatusClass })}
-            />
-            <div className="logs-levels">
-              {LOG_LEVELS.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  aria-pressed={filters.levels.includes(level)}
-                  className={`log-level-chip is-${level}${filters.levels.includes(level) ? ' is-active' : ''}`}
-                  onClick={() => patchFilters({
-                    levels: filters.levels.includes(level)
-                      ? filters.levels.filter((item) => item !== level)
-                      : [...filters.levels, level],
-                  })}
+    <div ref={slotRef}>
+      {createPortal((
+        <section
+          ref={panelRef}
+          tabIndex={-1}
+          className={`${styles.panel}${isFullscreen ? ` ${styles['panel-fullscreen']}` : ''}`}
+        >
+          <div className="logs-toolbar">
+            {isTail && (
+              <>
+                <Input
+                  allowClear
+                  className="logs-search"
+                  prefix={<SearchOutlined />}
+                  placeholder={t('logs.search_placeholder')}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <div className="logs-levels">
+                  {LOG_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      aria-pressed={filters.levels.includes(level)}
+                      className={`log-level-chip is-${level}${filters.levels.includes(level) ? ' is-active' : ''}`}
+                      onClick={() => patchFilters({
+                        levels: filters.levels.includes(level)
+                          ? filters.levels.filter((item) => item !== level)
+                          : [...filters.levels, level],
+                      })}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  icon={<FilterOutlined />}
+                  className={styles['filter-toggle']}
+                  aria-expanded={isFiltersOpen}
+                  aria-controls="log-request-filters"
+                  type={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'default'}
+                  onClick={() => setIsFiltersOpen((isOpen) => !isOpen)}
                 >
-                  {level}
-                </button>
-              ))}
-            </div>
-            <Text className="logs-counts">
-              {t('logs.counts', { shown: rows.length, total: parsed.length })}
-              {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
-            </Text>
-          </>
-        )}
-        <div className={styles['toolbar-actions']}>
-          {isTail && (
-            <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
-              <Button
-                icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-                disabled={isBlocked}
-                onClick={() => tail.setPaused(!tail.paused)}
-                aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
-              />
-            </Tooltip>
-          )}
-          <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
-          {/* Truncating the file is irreversible, so it asks first - in the same popover every
-              other destructive action in the console uses. */}
-          <Popconfirm
-            title={t('logs.clear_hint')}
-            okText={t('logs.clear_confirm')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true, loading: truncate.isPending }}
-            onConfirm={() => truncate.mutate()}
-            disabled={isDemo}
-          >
-            <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear')}>
-              <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
-            </Tooltip>
-          </Popconfirm>
-        </div>
-      </div>
-
-      <Tabs
-        size="small"
-        activeKey={tab}
-        onChange={(key) => setTab(key as 'tail' | 'errors')}
-        items={[
-          {
-            key: 'tail',
-            label: t('logs.tab_tail'),
-            children: (
-              <div className="logs-tail">
-                {blockedAlert}
-                {!isBlocked && (
-                  <LogList
-                    items={rows}
-                    itemKey={(parts, index) => `${parts.raw}-${index}`}
-                    isLoading={isLoading}
-                    emptyText={parsed.length > 0 ? t('logs.filter_empty') : t('logs.tail_empty')}
-                    renderItem={(parts, isOpen) => <CpaLogLine parts={parts} isOpen={isOpen} />}
+                  {activeFilterCount > 0 ? t('logs.filters_active', { n: activeFilterCount }) : t('events.more_filters')}
+                </Button>
+                <Text className="logs-counts">
+                  {t('logs.counts', { shown: rows.length, total: parsed.length })}
+                  {tail.dropped > 0 ? ` · ${t('logs.dropped', { n: tail.dropped })}` : ''}
+                </Text>
+              </>
+            )}
+            <div className={styles['toolbar-actions']}>
+              {isTail && (
+                <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
+                  <Button
+                    icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                    disabled={isBlocked}
+                    onClick={() => tail.setPaused(!tail.paused)}
+                    aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
                   />
-                )}
+                </Tooltip>
+              )}
+              {isTail && (
+                <Tooltip title={t('logs.wrap')}>
+                  <Button
+                    icon={<WrapTextOutlined />}
+                    type={filters.wrapLines ? 'primary' : 'default'}
+                    aria-pressed={filters.wrapLines}
+                    aria-label={t('logs.wrap')}
+                    onClick={() => patchFilters({ wrapLines: !filters.wrapLines })}
+                  />
+                </Tooltip>
+              )}
+              <Tooltip title={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}>
+                <Button
+                  icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                  aria-pressed={isFullscreen}
+                  aria-label={isFullscreen ? t('logs.fullscreen_exit') : t('logs.fullscreen')}
+                  onClick={() => setIsFullscreen(!isFullscreen)}
+                />
+              </Tooltip>
+              <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
+              {/* Truncating the file is irreversible, so it asks first - in the same popover every
+                  other destructive action in the console uses. */}
+              <Popconfirm
+                title={t('logs.clear_hint')}
+                okText={t('logs.clear_confirm')}
+                cancelText={t('common.cancel')}
+                okButtonProps={{ danger: true, loading: truncate.isPending }}
+                onConfirm={() => truncate.mutate()}
+                disabled={isDemo}
+              >
+                <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear')}>
+                  <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
+                </Tooltip>
+              </Popconfirm>
+            </div>
+          </div>
+
+          {isTail && isFiltersOpen && (
+            <div id="log-request-filters" className={styles.filters}>
+              <div className={styles['filter-field']}>
+                <span className={styles['filter-label']}>{t('logs.status_filter')}</span>
+                <Segmented
+                  size="small"
+                  value={filters.statusClass}
+                  options={LOG_STATUS_CLASSES.map((value) => ({
+                    value,
+                    label: value === 'all' ? t('logs.status_all') : STATUS_CLASS_LABELS[value],
+                  }))}
+                  onChange={(value) => patchFilters({ statusClass: value as LogStatusClass })}
+                />
               </div>
-            ),
-          },
-          {
-            key: 'errors',
-            label: t('logs.tab_errors'),
-            children: <div className="log-files"><ErrorLogFiles /></div>,
-          },
-        ]}
-      />
-    </section>
+              <div className={styles['filter-field']}>
+                <span className={styles['filter-label']}>{t('logs.method_filter')}</span>
+                {offeredMethods.length > 0 ? (
+                  <div className="logs-levels" role="group" aria-label={t('logs.method_filter')}>
+                    {offeredMethods.map((method) => {
+                      const isActive = filters.methods.includes(method);
+                      return (
+                        <button
+                          key={method}
+                          type="button"
+                          aria-pressed={isActive}
+                          className={`log-level-chip${isActive ? ' is-active' : ''}`}
+                          onClick={() => patchFilters({
+                            methods: isActive
+                              ? filters.methods.filter((item) => item !== method)
+                              : LOG_METHODS.filter((item) => item === method || filters.methods.includes(item)),
+                          })}
+                        >
+                          {method}
+                          <span className={styles['method-count']}>{facets.methods[method] ?? 0}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : <span className={styles['filter-empty']}>{t('logs.no_requests')}</span>}
+              </div>
+              <div className={`${styles['filter-field']} ${styles['filter-field-wide']}`}>
+                <span className={styles['filter-label']}>{t('logs.path_filter')}</span>
+                {facets.paths.length > 0 ? (
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    maxTagCount="responsive"
+                    maxCount={MAX_LOG_PATH_FILTERS}
+                    className={styles['path-select']}
+                    popupMatchSelectWidth={false}
+                    placeholder={t('logs.path_filter')}
+                    aria-label={t('logs.path_filter')}
+                    value={filters.paths}
+                    onChange={(paths: string[]) => patchFilters({ paths })}
+                    options={facets.paths.map((option) => ({ value: option.path, count: option.count }))}
+                    optionRender={(option) => (
+                      <span className={styles['path-option']}>
+                        <span className={styles['path-option-name']}>{option.value}</span>
+                        <span className={styles['path-option-count']}>{option.data.count}</span>
+                      </span>
+                    )}
+                  />
+                ) : <span className={styles['filter-empty']}>{t('logs.no_requests')}</span>}
+              </div>
+              <Checkbox
+                className={styles['filter-check']}
+                checked={filters.hideManagement}
+                onChange={(event) => patchFilters({ hideManagement: event.target.checked })}
+              >
+                {t('logs.hide_management')}
+              </Checkbox>
+              {activeFilterCount > 0 && (
+                <Button
+                  type="link"
+                  size="small"
+                  className={styles['filter-clear']}
+                  onClick={() => patchFilters({ statusClass: 'all', methods: [], paths: [] })}
+                >
+                  {t('logs.filters_clear')}
+                </Button>
+              )}
+            </div>
+          )}
+
+          <Tabs
+            size="small"
+            activeKey={tab}
+            onChange={(key) => setTab(key as 'tail' | 'errors')}
+            items={[
+              {
+                key: 'tail',
+                label: t('logs.tab_tail'),
+                children: (
+                  <div className="logs-tail">
+                    {blockedAlert}
+                    {!isBlocked && (
+                      <LogList
+                        items={rows}
+                        itemKey={(parts, index) => `${parts.raw}-${index}`}
+                        isLoading={isLoading}
+                        isWrapped={filters.wrapLines}
+                        emptyText={parsed.length > 0 ? t('logs.filter_empty') : t('logs.tail_empty')}
+                        renderItem={(parts, isOpen) => <CpaLogLine parts={parts} isOpen={isOpen} />}
+                      />
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'errors',
+                label: t('logs.tab_errors'),
+                children: <div className="log-files"><ErrorLogFiles /></div>,
+              },
+            ]}
+          />
+        </section>
+      ), panelHost)}
+    </div>
   );
 };

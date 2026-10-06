@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
 
 /**
  * The logs page's two sources - the gateway's tail and this console's own service log - and the
@@ -33,7 +33,10 @@ export function logsFixtures(auditRequests) {
   return [
     [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
     [(url) => url.pathname.endsWith('/management/logs'), () => ({
-      lines: ['[2026-09-28 10:00:00] [abc12345] [info ] [gin_logger.go:1] 200 |   12ms | 127.0.0.1 | POST "/v1/chat/completions"'],
+      lines: [
+        '[2026-09-28 10:00:00] [abc12345] [info ] [gin_logger.go:1] 200 |   12ms | 127.0.0.1 | POST "/v1/chat/completions"',
+        '[2026-09-28 10:00:01] [def12345] [info ] [gin_logger.go:1] 200 |   10ms | 127.0.0.1 | GET "/v1/models"',
+      ],
       latest_after: 0,
       next_cursor: '',
       cursor_reset: false,
@@ -82,6 +85,43 @@ export async function logsSources({ base, page, check }) {
     label: 'the gateway tail rows',
   }).then(() => true).catch(() => false);
   check('the gateway tail is the default source and renders its lines', gatewayShown);
+
+  const filterToggle = page.locator('button[aria-controls="log-request-filters"]');
+  check('request filters start disclosed only on demand', await filterToggle.getAttribute('aria-expanded') === 'false');
+  await filterToggle.click();
+  const requestFilters = page.locator('#log-request-filters');
+  await requestFilters.waitFor();
+  const postFilter = requestFilters.getByRole('group', { name: 'Request method' }).getByRole('button', { name: /POST/ });
+  check('method choices carry their facet count', (await postFilter.innerText()).replace(/\s/g, '') === 'POST1');
+  await postFilter.click();
+  await until(async () => await page.locator('.log-row').count() === 1, { label: 'the POST method filter' });
+  check('method filtering keeps only the matching request', (await textOf(page, '.log-list')).includes('/v1/chat/completions') && !(await textOf(page, '.log-list')).includes('/v1/models'));
+  check('the toolbar reports a disclosed request filter', (await filterToggle.innerText()).includes('1'));
+  await postFilter.click();
+  await until(async () => await page.locator('.log-row').count() === 2, { label: 'clearing the method filter' });
+
+  const wrapSave = page.waitForResponse((response) => response.url().endsWith('/preferences/log_filters') && response.request().method() !== 'GET');
+  await page.getByRole('button', { name: 'Wrap long lines', exact: true }).click();
+  await wrapSave;
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  const viewer = page.locator('section').filter({ has: page.getByRole('button', { name: 'Exit fullscreen (Esc)', exact: true }) });
+  await settleLayout(page);
+  check('fullscreen escapes the transformed page shell and covers the viewport', await viewer.evaluate((node) => {
+    const bounds = node.getBoundingClientRect();
+    return node.parentElement.parentElement === document.body && Math.abs(bounds.top) <= 1 && Math.abs(bounds.left) <= 1
+      && Math.abs(bounds.width - window.innerWidth) <= 1 && Math.abs(bounds.height - window.innerHeight) <= 1;
+  }));
+  await requestFilters.getByRole('combobox', { name: 'Request path' }).click();
+  await page.locator('.ant-select-dropdown:visible').waitFor();
+  check('path choices expose request counts', (await page.locator('.ant-select-dropdown:visible').innerText()).includes('/v1/models'));
+  await page.keyboard.press('Escape');
+  await page.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
+  check('Escape closes the path popup before fullscreen', await page.getByRole('button', { name: 'Exit fullscreen (Esc)', exact: true }).isVisible());
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).waitFor();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(async () => await page.getByRole('button', { name: 'Wrap long lines', exact: true }).getAttribute('aria-pressed') === 'true', { label: 'the restored wrapping preference' });
+  check('wrapping survives reloading the console', await page.getByRole('button', { name: 'Wrap long lines', exact: true }).getAttribute('aria-pressed') === 'true');
 
   // ── the service log is its own source ───────────────────────────────────────
   await chooseSource(page, 1);

@@ -54,6 +54,14 @@ var OAuthProviders = []OAuthProvider{
 		Flow:        OAuthFlowDevice,
 	},
 	{
+		// Kimi's international accounts live on kimi.ai and are a separate login
+		// provider in CPA; a kimi.com account cannot sign in through it.
+		ID:          "kimi-ai",
+		Name:        "Kimi International",
+		Description: "Moonshot Kimi (kimi.ai) device code / OAuth flow",
+		Flow:        OAuthFlowDevice,
+	},
+	{
 		ID:                   "codex",
 		Name:                 "OpenAI Codex / ChatGPT Plus",
 		Description:          "Official OpenAI OAuth authorization flow",

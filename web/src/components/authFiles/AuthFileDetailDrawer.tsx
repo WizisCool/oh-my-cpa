@@ -19,6 +19,7 @@ import {
   ExclamationCircleOutlined,
   CopyOutlined,
   SearchOutlined,
+  SyncOutlined,
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, describeError } from '../../api/client';
@@ -41,6 +42,19 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { copyText } from '../../utils/clipboard';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
+import { ErrorRulesEditor } from '../policy/ErrorRulesEditor';
+import { CredentialModelAliasesEditor } from './CredentialModelAliasesEditor';
+import type { OAuthModelAliasValidationError } from './oauthModelAliasLogic';
+import {
+  EMPTY_CREDENTIAL_POLICY_DRAFT,
+  MAX_CREDENTIAL_MODEL_ALIASES,
+  MAX_CREDENTIAL_REQUEST_RETRY,
+  buildCredentialPolicyPatch,
+  credentialPolicyProblem,
+  isSameCredentialPolicy,
+  readCredentialPolicyDraft,
+  type CredentialPolicyDraft,
+} from './credentialPolicy';
 
 const { Text } = Typography;
 
@@ -73,6 +87,15 @@ interface FormValues {
   excluded_models?: string;
 }
 
+// Listed out so the translation check can see every key the alias rules can report.
+const ALIAS_PROBLEM_KEYS: Record<OAuthModelAliasValidationError, string> = {
+  provider: 'af.alias_error_provider',
+  too_many: 'af.alias_error_too_many',
+  name_alias_required: 'af.alias_error_name_alias_required',
+  field_too_long: 'af.alias_error_field_too_long',
+  alias_same: 'af.alias_error_alias_same',
+  alias_duplicate: 'af.alias_error_alias_duplicate',
+};
 const MAX_CREDENTIAL_WEIGHT = 1_000_000;
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
@@ -142,8 +165,19 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const [form] = Form.useForm<FormValues>();
   const [baseline, setBaseline] = useState<FormValues>({});
   const [isDirty, setIsDirty] = useState(false);
+  // The policy lives beside the form rather than in it: its rules are a nested, reorderable
+  // list, which the flat field comparison the form's dirty check relies on cannot express.
+  const [policy, setPolicy] = useState<CredentialPolicyDraft>(EMPTY_CREDENTIAL_POLICY_DRAFT);
+  const [policyBaseline, setPolicyBaseline] = useState<CredentialPolicyDraft>(EMPTY_CREDENTIAL_POLICY_DRAFT);
+  const [isPolicyChecked, setIsPolicyChecked] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
   const [activeSection, setActiveSection] = useState<'overview' | 'configuration' | 'models'>(initialSection);
+
+  const resetPolicy = useCallback((next: CredentialPolicyDraft) => {
+    setPolicy(next);
+    setPolicyBaseline(next);
+    setIsPolicyChecked(false);
+  }, []);
 
   const sessionCounterRef = useRef(0);
   const currentSessionRef = useRef<number>(0);
@@ -178,16 +212,23 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       setBaseline(initial);
       form.setFieldsValue(initial);
       setIsDirty(false);
+      resetPolicy(EMPTY_CREDENTIAL_POLICY_DRAFT);
     } else {
       currentSessionRef.current = 0;
       if (hasOpenedRef.current) form.resetFields();
       setBaseline({});
       setIsDirty(false);
+      resetPolicy(EMPTY_CREDENTIAL_POLICY_DRAFT);
     }
-  }, [file?.name, file?.auth_index, open, form]);
+  }, [file?.name, file?.auth_index, open, form, resetPolicy]);
 
   const handleValuesChange = () => {
-    setIsDirty(!sameFormValues(form.getFieldsValue(), baseline));
+    setIsDirty(!sameFormValues(form.getFieldsValue(), baseline) || !isSameCredentialPolicy(policy, policyBaseline));
+  };
+
+  const handlePolicyChange = (next: CredentialPolicyDraft) => {
+    setPolicy(next);
+    setIsDirty(!sameFormValues(form.getFieldsValue(), baseline) || !isSameCredentialPolicy(next, policyBaseline));
   };
 
   const saveMutation = useMutation({
@@ -212,6 +253,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           setBaseline(next);
           form.setFieldsValue(next);
         }
+        if (response.fields) resetPolicy(readCredentialPolicyDraft(response.fields));
         if (response.fields) {
           queryClient.setQueryData(
             ['auth-file-safe-fields', variables.fileName, variables.authIndex],
@@ -227,6 +269,19 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       isPendingRef.current = false;
       const msg = describeError(err);
       toast.error(msg);
+    },
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: ({ fileName, authIndex }: { fileName: string; authIndex?: string }) =>
+      api.refreshManagementAuthFile(fileName, authIndex),
+    onSuccess: () => {
+      // The renewed credential changes its status and expiry, which the lists behind the drawer show.
+      onSaved();
+      toast.success(t('af.refresh_success'));
+    },
+    onError: (err: unknown) => {
+      toast.error(t('af.refresh_failed', { msg: describeError(err) }));
     },
   });
 
@@ -267,7 +322,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     const next = formValues(file, safeFieldsQuery.data);
     setBaseline(next);
     form.setFieldsValue(next);
-  }, [file, form, isDirty, open, safeFieldsQuery.data]);
+    resetPolicy(readCredentialPolicyDraft(safeFieldsQuery.data));
+  }, [file, form, isDirty, open, resetPolicy, safeFieldsQuery.data]);
 
   const {
     data: modelsData,
@@ -283,9 +339,23 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   const handleFinish = (values: FormValues) => {
     if (!file || file.runtime_only || !canEdit || isPendingRef.current || saveMutation.isPending) return;
+    const policyProblem = credentialPolicyProblem(policy);
+    if (policyProblem) {
+      setIsPolicyChecked(true);
+      toast.warning(
+        policyProblem.kind === 'retry'
+          ? t('policy.retry_invalid')
+          : policyProblem.kind === 'rule'
+            ? t('policy.rule_invalid', { n: policyProblem.position + 1 })
+            : policyProblem.error === 'too_many'
+              ? t('af.policy_aliases_too_many', { n: MAX_CREDENTIAL_MODEL_ALIASES })
+              : t(ALIAS_PROBLEM_KEYS[policyProblem.error], { alias: policyProblem.alias ?? '' }),
+      );
+      return;
+    }
     isPendingRef.current = true;
 
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, unknown> = buildCredentialPolicyPatch(policy, policyBaseline);
     const nextPriority = values.priority ?? 0;
     const nextWeight = values.weight ?? 1;
     if (nextPriority !== (baseline.priority ?? 0)) {
@@ -632,6 +702,48 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           </div>
                         </div>
 
+                        <div className={styles['policy']}>
+                          <h4 className={styles['policy-title']}>{t('af.policy_section')}</h4>
+                          <div>
+                            <label className={styles['policy-label']} htmlFor="credential-policy-retry">
+                              {t('policy.retry')}
+                            </label>
+                            <InputNumber
+                              id="credential-policy-retry"
+                              className={styles['policy-number']}
+                              value={policy.requestRetry}
+                              min={0}
+                              max={MAX_CREDENTIAL_REQUEST_RETRY}
+                              precision={0}
+                              disabled={!safeFieldsReady}
+                              placeholder={t('policy.retry_placeholder')}
+                              onChange={(requestRetry) => handlePolicyChange({ ...policy, requestRetry })}
+                            />
+                            <div className={styles['policy-desc']}>{t('af.policy_retry_desc')}</div>
+                          </div>
+                          <div>
+                            <div className={styles['policy-label']}>{t('policy.rules')}</div>
+                            <div className={styles['policy-desc']}>{t('af.policy_rules_desc')}</div>
+                            {safeFieldsReady && (
+                              <ErrorRulesEditor
+                                rules={policy.errorRules}
+                                showProblems={isPolicyChecked}
+                                onChange={(errorRules) => handlePolicyChange({ ...policy, errorRules })}
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <div className={styles['policy-label']}>{t('af.policy_aliases')}</div>
+                            <div className={styles['policy-desc']}>{t('af.policy_aliases_desc')}</div>
+                            {safeFieldsReady && (
+                              <CredentialModelAliasesEditor
+                                aliases={policy.modelAliases}
+                                onChange={(modelAliases) => handlePolicyChange({ ...policy, modelAliases })}
+                              />
+                            )}
+                          </div>
+                        </div>
+
                         <Form.Item
                           className={styles['field-grid-wide']}
                           name="excluded_models"
@@ -690,6 +802,17 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           />
           {/* Footer Actions */}
           <div className={styles['drawer-footer']}>
+            <Button
+              icon={<SyncOutlined />}
+              loading={refreshMutation.isPending}
+              // A refresh spends the credential's refresh token with its provider, which the
+              // demonstration never contacts.
+              disabled={file.runtime_only || !canEdit || isDemo}
+              title={isDemo ? t('demo.blocked') : t('af.refresh_desc')}
+              onClick={() => refreshMutation.mutate({ fileName: file.name, authIndex: file.auth_index })}
+            >
+              {t('af.refresh')}
+            </Button>
             <Button
               icon={<DownloadOutlined />}
               // Downloading credential material is refused by the demonstration, here as

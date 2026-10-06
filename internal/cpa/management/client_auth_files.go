@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -68,6 +69,17 @@ func (c *Client) PatchAuthFileFields(ctx context.Context, name string, fields ma
 		return nil, err
 	}
 	return response, nil
+}
+
+// RefreshAuthFile asks CPA to renew one credential's tokens now rather than at
+// its next scheduled refresh. CPA answers with the refreshed credential, tokens
+// included, so the response body is never decoded: only the outcome leaves here.
+func (c *Client) RefreshAuthFile(ctx context.Context, name, authIndex string) error {
+	payload := map[string]string{
+		"name":       strings.TrimSpace(name),
+		"auth_index": strings.TrimSpace(authIndex),
+	}
+	return c.doJSONBody(ctx, http.MethodPost, "/credentials/refresh", payload, nil)
 }
 
 // UploadAuthFile uses CPA's documented raw-JSON upload form. The filename is
@@ -303,4 +315,41 @@ func withQuotaCredential(headers map[string]string) map[string]string {
 type AuthModel struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
+}
+
+// VertexImportResult is what CPA reports about a stored Vertex service account.
+type VertexImportResult struct {
+	// AuthFile is the path CPA saved to, on CPA's own filesystem.
+	AuthFile  string `json:"auth-file"`
+	ProjectID string `json:"project_id"`
+	Email     string `json:"email"`
+	Location  string `json:"location"`
+}
+
+// ImportVertexCredential hands a Google service-account key to CPA, which wraps it
+// as a Vertex credential named after the key's project. CPA only reads this route
+// as a multipart form, so the key travels as the form's `file` part.
+func (c *Client) ImportVertexCredential(ctx context.Context, serviceAccount []byte, location string) (VertexImportResult, error) {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	part, err := form.CreateFormFile("file", "service-account.json")
+	if err != nil {
+		return VertexImportResult{}, err
+	}
+	if _, err = part.Write(serviceAccount); err != nil {
+		return VertexImportResult{}, err
+	}
+	if location = strings.TrimSpace(location); location != "" {
+		if err = form.WriteField("location", location); err != nil {
+			return VertexImportResult{}, err
+		}
+	}
+	if err = form.Close(); err != nil {
+		return VertexImportResult{}, err
+	}
+	var result VertexImportResult
+	if err = c.doBody(ctx, http.MethodPost, "/oauth/import?provider=vertex", body.Bytes(), form.FormDataContentType(), &result); err != nil {
+		return VertexImportResult{}, err
+	}
+	return result, nil
 }

@@ -94,9 +94,40 @@ func (s *Service) SetCredentialStatus(ctx context.Context, target CredentialTarg
 	return nil
 }
 
+// RefreshCredential renews one credential's tokens now. The target is resolved
+// first so a stale or ambiguous selector never reaches CPA, which matches by
+// name alone when the index is empty.
+func (s *Service) RefreshCredential(ctx context.Context, target CredentialTarget, revision string) error {
+	release, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	file, err := s.authFile(ctx, target)
+	if err != nil {
+		return err
+	}
+	if revision != "" {
+		if err := s.checkRevision(file, revision); err != nil {
+			return err
+		}
+	}
+	client, err := s.Client(ctx)
+	if err != nil {
+		return err
+	}
+	if err := client.RefreshAuthFile(ctx, file.Name, file.AuthIndex); err != nil {
+		return err
+	}
+	if s.Notify != nil {
+		s.Notify()
+	}
+	return nil
+}
+
 // AGENT_CREDENTIAL_FIELDS is the agent-facing subset of the console's auth-file field
 // allowlist. headers and proxy_url are excluded because both can carry credential material.
-var AGENT_CREDENTIAL_FIELDS = map[string]bool{"prefix": true, "priority": true, "weight": true, "note": true, "excluded_models": true, "expired": true, "disable_cooling": true, "websockets": true, "using_api": true}
+var AGENT_CREDENTIAL_FIELDS = map[string]bool{"prefix": true, "priority": true, "weight": true, "note": true, "excluded_models": true, "expired": true, "disable_cooling": true, "websockets": true, "using_api": true, "request_retry": true, "request_scoped_errors": true, "model_aliases": true}
 
 func (s *Service) normalizeAgentCredentialFields(fields map[string]any) (map[string]any, error) {
 	if len(fields) == 0 || len(fields) > 16 {
@@ -142,6 +173,16 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		return s.credentialPreview(ctx, CredentialTarget{input.Name, input.AuthIndex}, input)
 	}, func(ctx context.Context, input StatusInput, revision, _ string) (Done, error) {
 		err := s.SetCredentialStatus(ctx, CredentialTarget{input.Name, input.AuthIndex}, input.IsDisabled, revision)
+		return Done{err == nil}, err
+	}); err != nil {
+		return err
+	}
+	metadata = Meta("oauth_refresh_credential", "Renew one OAuth credential's tokens now instead of waiting for its scheduled refresh. Reports only whether it succeeded.", "write", "high")
+	metadata.Invalidates = []string{"management-auth-files", "management-quota"}
+	if err := capability.Register(registry, metadata, func(ctx context.Context, input CredentialTarget) (capability.Preview, error) {
+		return s.credentialPreview(ctx, input, input)
+	}, func(ctx context.Context, input CredentialTarget, revision, _ string) (Done, error) {
+		err := s.RefreshCredential(ctx, input, revision)
 		return Done{err == nil}, err
 	}); err != nil {
 		return err
@@ -192,7 +233,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		AuthIndex string         `json:"auth_index"`
 		Fields    map[string]any `json:"fields"`
 	}
-	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models, expired, disable_cooling, websockets, using_api. Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
+	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models, expired, disable_cooling, websockets, using_api, request_retry (null inherits), request_scoped_errors (rules of status, match, match_regex and action; an empty list clears them), model_aliases (entries of name, alias and optional fork, display_name and force_mapping; an empty list clears them). Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
 	metadata.Invalidates = []string{"management-auth-files", "management-quota", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input FieldsInput) (capability.Preview, error) {
 		fields, err := s.normalizeAgentCredentialFields(input.Fields)

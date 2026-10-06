@@ -29,34 +29,9 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 		return nil, newProviderWriteError(http.StatusBadRequest, "website must be an absolute http or https URL")
 	}
 
-	models := make([]management.ModelAlias, 0)
-	if len(req.ModelEntries) > 0 {
-		for _, m := range req.ModelEntries {
-			mName := strings.TrimSpace(m.Name)
-			if mName != "" {
-				alias := strings.TrimSpace(m.Alias)
-				if alias == "" {
-					alias = mName
-				}
-				var thinking *management.ThinkingSupport
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					thinking = &management.ThinkingSupport{Levels: m.Thinking.Levels}
-				}
-				models = append(models, management.ModelAlias{
-					Name:     mName,
-					Alias:    alias,
-					Image:    m.Image,
-					Thinking: thinking,
-				})
-			}
-		}
-	} else {
-		for _, m := range req.Models {
-			m = strings.TrimSpace(m)
-			if m != "" {
-				models = append(models, management.ModelAlias{Name: m, Alias: m})
-			}
-		}
+	models, err := editedProviderModels(family, req)
+	if err != nil {
+		return nil, err
 	}
 
 	firstKey := apiKey
@@ -70,10 +45,9 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 		firstWeight = req.Keys[0].Weight
 	}
 
-	var disableCoolingPtr *bool
-	if req.DisableCooling {
-		t := true
-		disableCoolingPtr = &t
+	policyEdit, err := resolveProviderPolicyEdit(family, req)
+	if err != nil {
+		return nil, err
 	}
 
 	if auditErr := audit("provider.create", "provider", family, "attempt", map[string]any{"name": name}); auditErr != nil {
@@ -89,14 +63,17 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 	switch family {
 	case openAICompatibilityFamily:
 		newEntry := management.OpenAICompatibility{
-			Name:           name,
-			BaseURL:        baseURL,
-			Prefix:         strings.TrimSpace(req.Prefix),
-			Priority:       req.Priority,
-			DisableCooling: editedDisableCooling(nil, req.DisableCooling),
-			Disabled:       req.Disabled,
-			Models:         models,
-			Headers:        req.Headers,
+			Name:     name,
+			BaseURL:  baseURL,
+			Prefix:   strings.TrimSpace(req.Prefix),
+			Priority: req.Priority,
+			Disabled: req.Disabled,
+			Models:   newProviderModels(models),
+			Headers:  req.Headers,
+		}
+		if err := policyEdit.applyToOpenAICompatibility(&newEntry, req.DisableCooling); err != nil {
+			_ = audit("provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			return nil, err
 		}
 		if len(req.Keys) > 0 {
 			for _, k := range req.Keys {
@@ -133,15 +110,18 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
 		}
 		newEntry := management.ConfigAPIKey{
-			APIKey:         firstKey,
-			BaseURL:        baseURL,
-			ProxyURL:       firstProxy,
-			Prefix:         strings.TrimSpace(req.Prefix),
-			Priority:       req.Priority,
-			Weight:         firstWeight,
-			Headers:        req.Headers,
-			Models:         withoutImageFlag(models),
-			DisableCooling: disableCoolingPtr,
+			APIKey:   firstKey,
+			BaseURL:  baseURL,
+			ProxyURL: firstProxy,
+			Prefix:   strings.TrimSpace(req.Prefix),
+			Priority: req.Priority,
+			Weight:   firstWeight,
+			Headers:  req.Headers,
+			Models:   withoutImageFlag(newProviderModels(models)),
+		}
+		if err := policyEdit.applyToConfigKey(&newEntry, req.DisableCooling); err != nil {
+			_ = audit("provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			return nil, err
 		}
 		_, err := h.appendConfigKeyProvider(ctx, client, spec, newEntry, func(ctx context.Context, entries []management.ConfigAPIKey) error {
 			targetID := fmt.Sprintf("%s%d", spec.IDPrefix, len(entries)-1)
@@ -184,34 +164,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 		return nil, newProviderWriteError(http.StatusBadRequest, "website must be an absolute http or https URL")
 	}
 
-	models := make([]management.ModelAlias, 0)
-	if len(req.ModelEntries) > 0 {
-		for _, m := range req.ModelEntries {
-			mName := strings.TrimSpace(m.Name)
-			if mName != "" {
-				alias := strings.TrimSpace(m.Alias)
-				if alias == "" {
-					alias = mName
-				}
-				var thinking *management.ThinkingSupport
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					thinking = &management.ThinkingSupport{Levels: m.Thinking.Levels}
-				}
-				models = append(models, management.ModelAlias{
-					Name:     mName,
-					Alias:    alias,
-					Image:    m.Image,
-					Thinking: thinking,
-				})
-			}
-		}
-	} else {
-		for _, m := range req.Models {
-			m = strings.TrimSpace(m)
-			if m != "" {
-				models = append(models, management.ModelAlias{Name: m, Alias: m})
-			}
-		}
+	models, err := editedProviderModels(family, req)
+	if err != nil {
+		return nil, err
 	}
 
 	firstKey := apiKey
@@ -223,6 +178,11 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 		}
 		firstProxy = strings.TrimSpace(req.Keys[0].ProxyURL)
 		firstWeight = req.Keys[0].Weight
+	}
+
+	policyEdit, err := resolveProviderPolicyEdit(family, req)
+	if err != nil {
+		return nil, err
 	}
 
 	if auditErr := audit("provider.update", "provider", id, "attempt", map[string]any{"name": name}); auditErr != nil {
@@ -253,7 +213,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				entry.BaseURL = baseURL
 				entry.Prefix = strings.TrimSpace(req.Prefix)
 				entry.Priority = req.Priority
-				entry.DisableCooling = editedDisableCooling(entry.DisableCooling, req.DisableCooling)
+				if err := policyEdit.applyToOpenAICompatibility(entry, req.DisableCooling); err != nil {
+					return err
+				}
 				entry.Disabled = req.Disabled
 				entry.Models = mergeModelEdits(entry.Models, models)
 				entry.Headers = req.Headers
@@ -308,7 +270,10 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 		if spec.RequiresBaseURL && baseURL == "" {
 			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
 		}
-		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) {
+		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) error {
+			if err := policyEdit.applyToConfigKey(entry, req.DisableCooling); err != nil {
+				return err
+			}
 			entry.BaseURL = entry.SubmittedBaseURL(baseURL)
 			if firstKey != "" {
 				entry.APIKey = firstKey
@@ -319,7 +284,7 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 			entry.Weight = firstWeight
 			entry.Models = withoutImageFlag(mergeModelEdits(entry.Models, models))
 			entry.Headers = req.Headers
-			entry.DisableCooling = editedDisableCooling(entry.DisableCooling, req.DisableCooling)
+			return nil
 		}, func(ctx context.Context, _ []management.ConfigAPIKey) error {
 			return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
 		}); err != nil {
@@ -430,44 +395,4 @@ func withoutImageFlag(models []management.ModelAlias) []management.ModelAlias {
 		models[i].Image = false
 	}
 	return models
-}
-
-// mergeModelEdits applies the form's models to the stored ones. The form edits
-// a model's name, alias, image flag and thinking levels; every other setting
-// of a model it keeps (display name, force-mapping, input modalities, thinking
-// bounds) comes from the stored model of the same name.
-func mergeModelEdits(stored, edited []management.ModelAlias) []management.ModelAlias {
-	byName := make(map[string]management.ModelAlias, len(stored))
-	for _, model := range stored {
-		if _, seen := byName[model.Name]; !seen {
-			byName[model.Name] = model
-		}
-	}
-	merged := make([]management.ModelAlias, 0, len(edited))
-	for _, model := range edited {
-		old, found := byName[model.Name]
-		if !found {
-			merged = append(merged, model)
-			continue
-		}
-		old.Alias = model.Alias
-		old.Image = model.Image
-		var levels []string
-		if model.Thinking != nil {
-			levels = model.Thinking.Levels
-		}
-		if old.Thinking != nil {
-			thinking := *old.Thinking
-			thinking.Levels = levels
-			if thinking.Min == 0 && thinking.Max == 0 && !thinking.ZeroAllowed && !thinking.DynamicAllowed && len(levels) == 0 {
-				old.Thinking = nil
-			} else {
-				old.Thinking = &thinking
-			}
-		} else {
-			old.Thinking = model.Thinking
-		}
-		merged = append(merged, old)
-	}
-	return merged
 }

@@ -88,8 +88,13 @@ export const ProvidersPage: React.FC = () => {
     setFormPriority,
     formDisabled,
     setFormDisabled,
-    formDisableCooling,
-    setFormDisableCooling,
+    formPolicy,
+    setFormPolicy,
+    formBehavior,
+    setFormBehavior,
+    policySectionOpen,
+    setPolicySectionOpen,
+    isPolicyChecked,
     formKeys,
     setFormKeys,
     formHeaders,
@@ -370,8 +375,13 @@ export const ProvidersPage: React.FC = () => {
         setFormPriority={setFormPriority}
         formDisabled={formDisabled}
         setFormDisabled={setFormDisabled}
-        formDisableCooling={formDisableCooling}
-        setFormDisableCooling={setFormDisableCooling}
+        formPolicy={formPolicy}
+        setFormPolicy={setFormPolicy}
+        formBehavior={formBehavior}
+        setFormBehavior={setFormBehavior}
+        policySectionOpen={policySectionOpen}
+        setPolicySectionOpen={setPolicySectionOpen}
+        isPolicyChecked={isPolicyChecked}
         formKeys={formKeys}
         setFormKeys={setFormKeys}
         formHeaders={formHeaders}

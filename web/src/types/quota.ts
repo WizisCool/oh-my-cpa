@@ -80,6 +80,14 @@ export interface QuotaPlan {
   /** Whether upstream says the plan renews; absent when the source does not expose it. */
   auto_renews?: boolean;
   extra_usage?: QuotaExtraUsage;
+  /** Prepaid credit standing; absent when the provider reports none. */
+  credits?: QuotaCredits;
+}
+
+export interface QuotaCredits {
+  /** Upstream's decimal text; absent when credits are unlimited. */
+  balance?: string;
+  unlimited?: boolean;
 }
 
 export interface CodexResetCredit {

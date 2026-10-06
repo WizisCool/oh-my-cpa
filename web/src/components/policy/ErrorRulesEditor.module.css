@@ -1,0 +1,97 @@
+/* The request-scoped error rule list. Rules are evaluated in order, so each one is a numbered
+   entry with its own move controls rather than a row of a sortable table. */
+
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.rule {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.rule-invalid {
+  border-color: var(--danger);
+}
+
+.rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.rule-order {
+  min-width: 20px;
+  color: var(--meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-status {
+  width: 96px;
+}
+
+/* The action is the widest control and the one that wraps first on a narrow drawer. */
+.rule-action {
+  flex: 1;
+  min-width: 180px;
+}
+
+.rule-tools {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.match-kind {
+  flex-shrink: 0;
+  width: 120px;
+}
+
+.match-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-problem {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.rule-note {
+  margin: 0 0 12px;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+/* A finger has no hover and needs a taller target than a pointer does. */
+@media (pointer: coarse) {
+  .rule-tools :global(.ant-btn),
+  .match-row :global(.ant-btn) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}

@@ -112,6 +112,76 @@
   color: var(--fg);
 }
 
+.policy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.policy-title {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.policy-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.policy-number {
+  width: 160px;
+}
+
+.policy-desc {
+  margin: 6px 0;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.alias-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.alias {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.alias-names {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.alias-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.alias-remove {
+  margin-left: auto;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;

@@ -14,6 +14,7 @@ import {
   ManagementAuthFileMutationResponse,
   ManagementAuthFileModel,
   ManagementAuthFileSafeFields,
+  VertexImportResult,
 } from '../types/managementAuthFile';
 import {
   ManagementOAuthExcludedModelsMutationResponse,
@@ -814,6 +815,19 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ name, ...(authIndex ? { auth_index: authIndex } : {}), ...fields }),
     });
+  },
+
+  /** Renews one credential's tokens now. The answer is the outcome alone, never the credential. */
+  async refreshManagementAuthFile(name: string, authIndex?: string): Promise<{ status: string }> {
+    return request<{ status: string }>('/management/auth-files/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ name, ...(authIndex ? { auth_index: authIndex } : {}) }),
+    });
+  },
+
+  async importVertexServiceAccount(keyJson: string, location: string): Promise<VertexImportResult> {
+    const search = location ? `?${new URLSearchParams({ location }).toString()}` : '';
+    return request<VertexImportResult>(`/management/auth-files/vertex-import${search}`, { method: 'POST', body: keyJson });
   },
 
   async getManagementAuthFileSafeFields(name: string, authIndex?: string): Promise<ManagementAuthFileSafeFields> {

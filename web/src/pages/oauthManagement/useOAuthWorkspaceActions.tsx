@@ -18,11 +18,14 @@ export interface OAuthWorkspaceActions {
   busyFileKeys: Set<string>;
   busyQuotaIndexes: Set<string>;
   isOperating: boolean;
+  /** Re-reads the credential list after a change made outside these actions. */
+  reloadWorkspace: () => Promise<void>;
   upload: (files: File[]) => void;
   download: (record: OAuthWorkspaceRecord) => void;
   deleteOne: (record: OAuthWorkspaceRecord) => Promise<void>;
   toggleOne: (record: OAuthWorkspaceRecord) => Promise<void>;
   batchStatus: (disabled: boolean, records: OAuthWorkspaceRecord[]) => Promise<void>;
+  batchRefresh: (records: OAuthWorkspaceRecord[]) => Promise<void>;
   batchDelete: (records: OAuthWorkspaceRecord[]) => Promise<void>;
   refreshQuotaForRecord: (record: OAuthWorkspaceRecord) => Promise<void>;
   refreshQuota: (
@@ -38,6 +41,7 @@ export interface OAuthWorkspaceActions {
 
 /** Quota refreshes answer under one key: a new run's outcome replaces the last run's report. */
 const QUOTA_REFRESH_TOAST_KEY = 'omc-quota-refresh';
+const BATCH_REFRESH_CONCURRENCY = 3;
 
 function errorMessage(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
@@ -318,6 +322,51 @@ export function useOAuthWorkspaceActions(
     }
   }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
 
+  const batchRefresh = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
+    const eligible = selectedRecords.filter((record) => record.canToggleFile);
+    if (eligible.length === 0 || !acquireFileLock()) return;
+    const reservation = reserveRecordSet(eligible);
+    const targetRecords = reservation.reservedRecords;
+    if (targetRecords.length === 0) {
+      toast.warning(t('omc.operation_conflict'));
+      releaseFileLock();
+      return;
+    }
+    const targets = reservation.reservedKeys;
+    markFileBusy(targetRecords.map((record) => record.key), true);
+    const failures = reservation.conflicts.map((record) => ({ name: record.fileName, error: t('omc.operation_conflict') }));
+    let succeededCount = 0;
+    try {
+      // Each refresh is a round trip to the credential's provider, so they run a few at a
+      // time: one after another would hold the page for a long selection, and all at once
+      // would have the gateway open a connection per credential.
+      const pending = [...targetRecords];
+      const refreshNext = async (): Promise<void> => {
+        for (let record = pending.shift(); record; record = pending.shift()) {
+          try {
+            await api.refreshManagementAuthFile(record.fileName, record.file.auth_index);
+            succeededCount += 1;
+          } catch (error) {
+            failures.push({ name: record.fileName, error: errorMessage(error, t) });
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(BATCH_REFRESH_CONCURRENCY, targetRecords.length) }, refreshNext));
+      if (failures.length > 0) {
+        toast.warning(t('af.batch_refresh_partial', { ok: succeededCount, failed: failures.length }), {
+          items: failures.map((item) => ({ name: item.name, reason: item.error })),
+        });
+      } else {
+        toast.success(t('af.batch_refresh_success', { n: succeededCount }));
+      }
+      await invalidateWorkspace();
+    } finally {
+      markFileBusy(targetRecords.map((record) => record.key), false);
+      releaseTargets(targets);
+      releaseFileLock();
+    }
+  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, t]);
+
   const batchDelete = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canDeleteFile);
     if (eligible.length === 0 || !acquireFileLock()) return;
@@ -553,11 +602,13 @@ export function useOAuthWorkspaceActions(
     busyFileKeys,
     busyQuotaIndexes,
     isOperating,
+    reloadWorkspace: invalidateWorkspace,
     upload,
     download,
     deleteOne,
     toggleOne,
     batchStatus,
+    batchRefresh,
     batchDelete,
     refreshQuotaForRecord,
     refreshQuota,

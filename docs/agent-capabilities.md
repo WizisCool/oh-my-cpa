@@ -217,7 +217,12 @@ choose them for a final display.
 Capabilities are opt-in. The following are deliberately not reachable by an agent, and
 a new capability must not add them:
 
-- raw credential reads, auth-file downloads, or key reveals;
+- provider runtime-policy and advanced model edits through the console's whole-entry
+  provider-edit facade, which also handles credential material. A dedicated
+  secret-free shared operation is required before those edits become Agent tools;
+- raw credential reads, auth-file downloads, or key reveals; Vertex service-account
+  import remains a console-only file handoff, not raw key material supplied through
+  model-visible capability arguments or previews;
 - arbitrary URL, CPA, or HTTP proxying; SQL beyond the read-only query surface above
   (no writes, no hidden table, no redacted column); filesystem; shell; or host maintenance;
 - plugin installation, execution, or configuration, including the plugin system settings;
@@ -230,7 +235,8 @@ a new capability must not add them:
   write, and the other two discard the copies a restore depends on (ADR 0051);
 - the credential fields that can transport secrets: `oauth_set_credential_fields`
   accepts `prefix`, `priority`, `weight`, `note`, `excluded_models`, `expired`,
-  `disable_cooling`, `websockets`, and `using_api`, while `headers` and `proxy_url`
+  `disable_cooling`, `websockets`, `using_api`, `request_retry`,
+  `request_scoped_errors` and `model_aliases`, while `headers` and `proxy_url`
   stay console-only because either can carry credential material into a preview;
 - approval, secret submission, or OAuth completion for an operation an external agent
   prepared.
@@ -397,6 +403,14 @@ or an unambiguous source alias. They do not establish operational availability o
 open-source license. Names/icons use current deployment overlays; endpoints are reduced
 to hostnames. Secrets and account fields are excluded. Results exceeding 2,000 routes
 are refused with `tool_result_too_large`.
+
+### OAuth credential refresh
+
+`oauth_refresh_credential` is a high-risk write accepting `name` and `auth_index`. It
+asks CPA to renew that credential's tokens now instead of at its scheduled refresh and
+returns only whether it succeeded: CPA's own answer carries the renewed tokens, so it
+is discarded inside the management client and never reaches a preview, a result or the
+audit log. It invalidates `management-auth-files` and `management-quota`.
 
 ### OAuth model exclusions
 

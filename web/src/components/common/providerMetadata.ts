@@ -20,6 +20,9 @@ export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = {
   grok: { id: 'xai', label: 'xAI', iconId: 'XAI' },
   kimi: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
   moonshot: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
+  // An international (kimi.ai) account is the same product on another host, so it shares
+  // Kimi's tab and mark instead of standing as a provider of its own.
+  'kimi-ai': { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
   devin: { id: 'devin', label: 'Devin', iconId: 'Devin' },
   meta: { id: 'meta', label: 'Meta', iconId: 'Meta' },
   // The CodeBuddy plugin registers `codebuddy` as its provider key; a store build

@@ -205,7 +205,7 @@ export function validateDevinCallback(input: string, expectedState?: string): OA
 /**
  * The built-in authorizations, in the order the cards are rendered.
  *
- * The device flows (Kimi, Meta Muse) confirm a short code on the vendor's own
+ * The device flows (Kimi, Kimi International, Meta Muse) confirm a short code on the vendor's own
  * page and are polled; the redirect flows land on a callback the operator may
  * have to submit by hand.
  */
@@ -214,6 +214,12 @@ export const BUILTIN_OAUTH_PROVIDERS: OAuthProviderDefinition[] = [
     id: 'kimi',
     iconId: 'Kimi',
     keyBase: 'kimi',
+    flow: 'device',
+  },
+  {
+    id: 'kimi-ai',
+    iconId: 'Kimi',
+    keyBase: 'kimi_ai',
     flow: 'device',
   },
   {

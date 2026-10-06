@@ -3,6 +3,8 @@ package quota
 import (
 	"testing"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 func TestParseKimiUsage(t *testing.T) {
@@ -46,5 +48,28 @@ func TestParseKimiUsage(t *testing.T) {
 	}
 	if w.ResetAtMS == nil || *w.ResetAtMS != nowMS+3600*1000 {
 		t.Errorf("w.ResetAtMS = %v, want %v", w.ResetAtMS, nowMS+3600*1000)
+	}
+}
+
+// A kimi.ai token must be read from kimi.ai and a kimi.com token from kimi.com:
+// the two are separate account systems.
+func TestKimiUsageHostFollowsTheCredentialDomain(t *testing.T) {
+	cases := []struct {
+		file management.AuthFile
+		want string
+	}{
+		{management.AuthFile{Name: "kimi-user.json", Type: "kimi", Provider: "kimi"}, KimiUsageURL},
+		{management.AuthFile{Name: "kimi-ai-user.json", Type: "kimi-ai", Provider: "kimi-ai"}, KimiInternationalUsageURL},
+		{management.AuthFile{Name: "renamed.json", Type: "kimi_ai"}, KimiInternationalUsageURL},
+		{management.AuthFile{Name: "kimi.ai-user.json", Type: "kimi", Provider: "kimi"}, KimiInternationalUsageURL},
+		{management.AuthFile{Name: "moonshot.json", Type: "moonshot"}, KimiUsageURL},
+	}
+	for _, tc := range cases {
+		if got := kimiUsageURLFor(tc.file); got != tc.want {
+			t.Errorf("%+v reads %s, want %s", tc.file, got, tc.want)
+		}
+	}
+	if !IsAllowedQuotaURL(KimiInternationalUsageURL) || IsAllowedQuotaURL("https://api.kimi.ai/coding/v1/chat/completions") {
+		t.Fatal("the allowlist must admit the kimi.ai usage endpoint and nothing else on that host")
 	}
 }

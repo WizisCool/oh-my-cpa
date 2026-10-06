@@ -46,7 +46,9 @@ const LEVEL_WORDS: Record<string, LogLevel> = {
   error: 'error',
   fatal: 'fatal',
 };
-const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+export const LOG_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+export type LogMethod = (typeof LOG_METHODS)[number];
+const HTTP_METHODS: readonly string[] = LOG_METHODS;
 const LATENCY = /^[\d.]+\s*(?:µs|us|ms|s|m)$/;
 const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const EMPTY_REQUEST_ID = /^-+$/;
@@ -196,9 +198,55 @@ export interface LogFilters {
   hideManagement: boolean;
   levels: LogLevel[];
   statusClass: LogStatusClass;
+  methods: LogMethod[];
+  /** Request paths without their query string; a line matches when its path is one of them. */
+  paths: string[];
+  wrapLines: boolean;
 }
 
-export const DEFAULT_LOG_FILTERS: LogFilters = { hideManagement: true, levels: [], statusClass: 'all' };
+export const DEFAULT_LOG_FILTERS: LogFilters = {
+  hideManagement: true,
+  levels: [],
+  statusClass: 'all',
+  methods: [],
+  paths: [],
+  wrapLines: false,
+};
+
+/** MAX_LOG_PATH_FILTERS bounds the stored selection; the preference is a small JSON blob. */
+export const MAX_LOG_PATH_FILTERS = 20;
+/** MAX_LOG_PATH_OPTIONS bounds the offered paths to the busiest ones in the buffer. */
+export const MAX_LOG_PATH_OPTIONS = 50;
+const MAX_LOG_PATH_LENGTH = 512;
+
+function isLogMethod(value: string | undefined): value is LogMethod {
+  return value !== undefined && HTTP_METHODS.includes(value);
+}
+
+/**
+ * logPathKey is the path a line is filtered and counted under.
+ *
+ * The query string is dropped: `/v1/models?key=...` and `/v1/models` are one route to the
+ * reader, and a query can carry a credential that must not be written into a stored
+ * preference.
+ */
+export function logPathKey(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  const key = path.split(/[?#]/, 1)[0];
+  return key || undefined;
+}
+
+function normalizeLogPaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const paths: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string' || entry.length > MAX_LOG_PATH_LENGTH) continue;
+    const key = logPathKey(entry.trim());
+    if (key && !paths.includes(key)) paths.push(key);
+    if (paths.length === MAX_LOG_PATH_FILTERS) break;
+  }
+  return paths;
+}
 
 function isLogLevel(value: unknown): value is LogLevel {
   return typeof value === 'string' && (LOG_LEVELS as readonly string[]).includes(value);
@@ -223,6 +271,9 @@ export function parseLogFilters(raw: unknown): LogFilters | undefined {
     hideManagement: value.hideManagement !== false,
     levels,
     statusClass,
+    methods: Array.isArray(value.methods) ? LOG_METHODS.filter((method) => (value.methods as unknown[]).includes(method)) : [],
+    paths: normalizeLogPaths(value.paths),
+    wrapLines: value.wrapLines === true,
   };
 }
 
@@ -232,6 +283,71 @@ export function matchesStatusClass(status: number | undefined, wanted: LogStatus
   if (wanted === 'success') return status < 400;
   if (wanted === 'client') return status >= 400 && status < 500;
   return status >= 500;
+}
+
+/**
+ * matchesLogFilters decides whether a line survives the view's filters.
+ *
+ * A method or path filter excludes every line that is not a request: choosing "POST" asks
+ * for POST requests, and a startup message is not one.
+ */
+export function matchesLogFilters(line: LogLineParts, filters: LogFilters, needle = ''): boolean {
+  if (filters.hideManagement && isManagementLine(line.raw)) return false;
+  if (needle && !line.raw.toLowerCase().includes(needle)) return false;
+  if (filters.levels.length > 0 && (!line.level || !filters.levels.includes(line.level))) return false;
+  if (!matchesStatusClass(line.status, filters.statusClass)) return false;
+  if (filters.methods.length > 0 && !(filters.methods as string[]).includes(line.method ?? '')) return false;
+  if (filters.paths.length > 0 && !filters.paths.includes(logPathKey(line.path) ?? '')) return false;
+  return true;
+}
+
+export interface LogPathOption {
+  path: string;
+  count: number;
+}
+
+export interface LogFacets {
+  methods: Partial<Record<LogMethod, number>>;
+  /** Busiest first; a selected path stays listed even when no buffered line carries it. */
+  paths: LogPathOption[];
+}
+
+/**
+ * countLogFacets counts the buffer per method and per path.
+ *
+ * Each facet is counted with every other filter applied but not its own, so a count is
+ * what choosing that value would show rather than what the current choice already hides.
+ */
+export function countLogFacets(lines: readonly LogLineParts[], filters: LogFilters, needle = ''): LogFacets {
+  const withoutMethods: LogFilters = { ...filters, methods: [] };
+  const withoutPaths: LogFilters = { ...filters, paths: [] };
+  const methods: Partial<Record<LogMethod, number>> = {};
+  const pathCounts = new Map<string, number>();
+  for (const line of lines) {
+    if (isLogMethod(line.method) && matchesLogFilters(line, withoutMethods, needle)) {
+      methods[line.method] = (methods[line.method] ?? 0) + 1;
+    }
+    const path = logPathKey(line.path);
+    if (path && matchesLogFilters(line, withoutPaths, needle)) {
+      pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
+    }
+  }
+  const paths = [...pathCounts]
+    .map(([path, count]) => ({ path, count }))
+    .sort((left, right) => right.count - left.count || left.path.localeCompare(right.path))
+    .slice(0, MAX_LOG_PATH_OPTIONS);
+  for (const path of filters.paths) {
+    if (!paths.some((option) => option.path === path)) paths.push({ path, count: pathCounts.get(path) ?? 0 });
+  }
+  return { methods, paths };
+}
+
+/**
+ * shouldExitLogFullscreen leaves Escape to whatever is open inside the viewer first: a
+ * dropdown or a confirmation closes on the first press, the viewer on the next.
+ */
+export function shouldExitLogFullscreen(key: string, isDefaultPrevented: boolean, hasOpenOverlay: boolean): boolean {
+  return key === 'Escape' && !isDefaultPrevented && !hasOpenOverlay;
 }
 
 /** One record of Oh My CPA's own service log, already redacted by the server. */

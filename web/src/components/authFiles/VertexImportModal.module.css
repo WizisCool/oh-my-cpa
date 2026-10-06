@@ -1,0 +1,61 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.desc {
+  margin: 6px 0 0;
+  color: var(--meta);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.file-name {
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.summary dt {
+  color: var(--meta);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.problem {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}

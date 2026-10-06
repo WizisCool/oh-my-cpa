@@ -1,3 +1,6 @@
+import type { ManagementOAuthModelAlias } from './managementOAuthModelAlias';
+import type { ProviderErrorRule } from './providers';
+
 export interface ManagementAuthFileRequestBucket {
   time?: string;
   success: number;
@@ -70,4 +73,19 @@ export interface ManagementAuthFileSafeFields {
   using_api: boolean;
   note?: string;
   excluded_models?: string[];
+  /** Absent when the credential inherits the retry count. */
+  request_retry?: number;
+  /** The credential's own error rules, which replace its channel's while the list is not empty. */
+  request_scoped_errors?: ProviderErrorRule[];
+  /** The credential's own model aliases, resolved before its provider's. */
+  model_aliases?: ManagementOAuthModelAlias[];
+}
+
+/** What the gateway stored for an imported Vertex service account; never the key. */
+export interface VertexImportResult {
+  status: string;
+  name: string;
+  project_id: string;
+  email?: string;
+  location: string;
 }

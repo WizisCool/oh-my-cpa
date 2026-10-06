@@ -68,7 +68,7 @@ func (h *Handler) mutateConfigKeyProvider(
 	client *management.Client,
 	spec providerConfigFamilySpec,
 	index int,
-	apply func(*management.ConfigAPIKey),
+	apply func(*management.ConfigAPIKey) error,
 	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
 ) error {
 	return gatedProviderListWrite(h, ctx,
@@ -82,8 +82,7 @@ func (h *Handler) mutateConfigKeyProvider(
 			if index >= len(*list) {
 				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 			}
-			apply(&(*list)[index])
-			return nil
+			return apply(&(*list)[index])
 		},
 		afterUpdate)
 }

@@ -293,8 +293,8 @@ troubleshooting.
 <details open>
 <summary><b>Gateway & providers</b></summary>
 
-- **AI providers**: Codex, Claude, Gemini, Meta Muse, xAI, Vertex AI, Gemini Interactions, DeepSeek and OpenAI-compatible services, each with credentials, models, priority, weight, proxy and an enable switch enforced by the gateway.
-- **OAuth management**: sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse. Auth files, model lists and quota are managed per credential; model aliases and exclusion rules apply provider-wide. Window capacity is estimated for Codex, Claude and supported Antigravity groups, with the previous cycle shown as a labelled reference.
+- **AI providers**: Codex, Claude, Gemini, Meta Muse, xAI, Vertex AI, Gemini Interactions, DeepSeek and OpenAI-compatible services, each with credentials, advanced model options, runtime retry/error policies, priority, weight, proxy and an enable switch enforced by the gateway.
+- **OAuth management**: sign in from the console for Codex, Claude, Antigravity, xAI, Kimi (kimi.com and kimi.ai), Devin and Meta Muse, or import a Vertex service account key. Auth files, manual token refresh, model lists, quota and credential-specific aliases are managed per credential; shared model aliases and exclusion rules apply provider-wide. Window capacity is estimated for Codex, Claude and supported Antigravity groups, with the previous cycle shown as a labelled reference.
 - **Client keys**: create, name and revoke gateway API keys. Names appear in request records and filters.
 - **Model catalog**: pull model lists straight from upstream providers.
 - **Playground**: test any routed model with text and images, streamed multi-turn answers and request diagnostics.

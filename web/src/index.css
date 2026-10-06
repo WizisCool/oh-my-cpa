@@ -1764,6 +1764,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     opacity: 1 !important;
     transform: none !important;
   }
+  /* rc-motion can retain its leaving node when animation is disabled. A closed
+     popup must disappear rather than remain painted in its pinned entering state. */
+  .ant-popover[class*="-leave"],
+  .ant-dropdown[class*="-leave"],
+  .ant-select-dropdown[class*="-leave"],
+  .ant-picker-dropdown[class*="-leave"] {
+    visibility: hidden !important;
+  }
   .route-transition { animation: none; }
   /* Rough progress updates on task events only; waiting activity and the completion fade are removed. */
   .progress-bar { transition: none; }
@@ -1865,6 +1873,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   white-space: pre-wrap;
   word-break: break-all;
 }
+.log-list.is-wrapped .log-line { flex-wrap: wrap; white-space: pre-wrap; }
+.log-list.is-wrapped .log-path { flex: 0 1 auto; max-width: none; overflow: visible; overflow-wrap: anywhere; }
+/* The message keeps the rest of the row while that leaves it a readable measure, and takes
+   a row of its own only once the fields before it have used the width up. */
+.log-list.is-wrapped .log-msg { flex: 1 1 28ch; min-width: 0; overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; }
 .logs-jump { position: absolute; right: 14px; bottom: 14px; }
 .log-files { min-height: 220px; }
 .log-files-state { color: var(--muted); font-size: 12px; padding: 24px 0; }

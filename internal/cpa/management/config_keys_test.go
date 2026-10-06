@@ -146,7 +146,7 @@ func TestOAuthProviderRegistryFlagsMatchTheConsoleFlow(t *testing.T) {
 	for _, provider := range OAuthProviders {
 		byID[provider.ID] = provider
 	}
-	for _, id := range []string{"kimi", "codex", "anthropic", "antigravity", "xai", "devin", "meta"} {
+	for _, id := range []string{"kimi", "kimi-ai", "codex", "anthropic", "antigravity", "xai", "devin", "meta"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("provider %s is missing from the registry", id)
 		}

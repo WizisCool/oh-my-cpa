@@ -50,8 +50,8 @@ func TestParseCodexUsageCurrentPayload(t *testing.T) {
 		t.Fatalf("ParseCodexUsage failed: %v", err)
 	}
 
-	if plan.PlanType != "pro" || plan.Tier != "elite" || plan.PlanLabel != "Pro 20x" {
-		t.Errorf("plan = %+v, want pro/elite/Pro 20x", plan)
+	if plan.PlanType != "pro" || plan.Tier != "elite" || plan.PlanLabel != "Pro 200" {
+		t.Errorf("plan = %+v, want pro/elite/Pro 200", plan)
 	}
 
 	if len(windows) != 2 {
@@ -432,6 +432,55 @@ func TestWindowPeriodNameKeepsShortWindowsReadable(t *testing.T) {
 	} {
 		if got := windowPeriodName(one.seconds); got != one.want {
 			t.Errorf("windowPeriodName(%v) = %q, want %q", one.seconds, got, one.want)
+		}
+	}
+}
+
+func TestResolveCodexPlanTierNamesCurrentPlans(t *testing.T) {
+	cases := []struct {
+		planType  string
+		wantTier  string
+		wantLabel string
+	}{
+		{"pro", "elite", "Pro 200"},
+		{"ProLite", "premium", "Pro 100"},
+		{"pro-lite", "premium", "Pro 100"},
+		{"pro_lite", "premium", "Pro 100"},
+		{"self_serve_business_prolite", "premium", "Business Premium"},
+		{"plus", "standard", "Plus"},
+	}
+	for _, tc := range cases {
+		tier, label := resolveCodexPlanTier(tc.planType)
+		if tier != tc.wantTier || label != tc.wantLabel {
+			t.Errorf("resolveCodexPlanTier(%q) = %q/%q, want %q/%q", tc.planType, tier, label, tc.wantTier, tc.wantLabel)
+		}
+	}
+}
+
+func TestParseCodexUsageReadsAccountCredits(t *testing.T) {
+	cases := []struct {
+		name    string
+		credits string
+		want    *QuotaCredits
+	}{
+		{"string balance", `{"has_credits":true,"unlimited":false,"balance":" 12.50 "}`, &QuotaCredits{Balance: "12.50"}},
+		{"numeric balance", `{"unlimited":false,"balance":7}`, &QuotaCredits{Balance: "7"}},
+		{"zero balance is a reading", `{"unlimited":false,"balance":"0"}`, &QuotaCredits{Balance: "0"}},
+		{"unlimited", `{"unlimited":true,"balance":null}`, &QuotaCredits{IsUnlimited: true}},
+		{"no balance stated", `{"has_credits":false,"unlimited":false}`, nil},
+		{"malformed balance", `{"unlimited":false,"balance":"-3"}`, nil},
+		{"non-decimal balance", `{"unlimited":false,"balance":"1e3"}`, nil},
+		{"absent", `null`, nil},
+	}
+	for _, tc := range cases {
+		raw := []byte(`{"plan_type":"plus","credits":` + tc.credits + `}`)
+		plan, _, _, err := ParseCodexUsage(raw, 0)
+		if err != nil {
+			t.Fatalf("%s: ParseCodexUsage failed: %v", tc.name, err)
+		}
+		got := plan.Credits
+		if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+			t.Errorf("%s: credits = %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 }

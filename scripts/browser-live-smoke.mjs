@@ -207,11 +207,14 @@ async function main() {
   await page.goto(`${appURL}/logs`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.logs-page', { timeout: 15000 });
   await page.waitForTimeout(2500);
+  // The management-traffic switch sits with the request filters, which open on demand.
+  const openLogFilters = () => page.locator('.logs-toolbar button[aria-controls="log-request-filters"]').click();
+  await openLogFilters();
   const logsState = await page.evaluate(() => ({
     rows: document.querySelectorAll('.log-row').length,
     alert: document.querySelector('.logs-alert')?.innerText ?? '',
     counts: document.querySelector('.logs-counts')?.innerText ?? '',
-    managementHiddenByDefault: document.querySelector('.logs-toolbar .ant-checkbox-input')?.checked ?? false,
+    managementHiddenByDefault: document.querySelector('#log-request-filters .ant-checkbox-input')?.checked ?? false,
   }));
   const logsResponse = await page.request.get(`${appURL}/api/v1/management/logs/status`);
   const logsStatus = await logsResponse.json();
@@ -222,17 +225,18 @@ async function main() {
 
   // Log filters are a server-side preference: flipping one and reloading must
   // not quietly reset it.
-  await page.locator('.logs-toolbar .ant-checkbox-wrapper').click();
+  await page.locator('#log-request-filters .ant-checkbox-wrapper').click();
   await page.waitForTimeout(700);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForSelector('.logs-toolbar');
+  await openLogFilters();
   await page.waitForTimeout(1200);
-  const filtersAfterReload = await page.evaluate(() => document.querySelector('.logs-toolbar .ant-checkbox-input')?.checked);
+  const filtersAfterReload = await page.evaluate(() => document.querySelector('#log-request-filters .ant-checkbox-input')?.checked);
   const storedPreferences = await (await page.request.get(`${appURL}/api/v1/preferences`)).json();
   check('日志筛选跨刷新持久化', `afterReload=${filtersAfterReload} stored=${JSON.stringify(storedPreferences.preferences?.log_filters)}`,
     filtersAfterReload === !logsState.managementHiddenByDefault);
   // Leave the shared dev console on the documented default.
-  await page.locator('.logs-toolbar .ant-checkbox-wrapper').click();
+  await page.locator('#log-request-filters .ant-checkbox-wrapper').click();
   await page.waitForTimeout(500);
   await page.locator('.ant-tabs-tab', { hasText: '错误日志' }).click();
   await page.waitForTimeout(1200);

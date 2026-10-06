@@ -86,6 +86,14 @@ type managementAuthFileSafeFields struct {
 	UsingAPI       bool     `json:"using_api"`
 	Note           string   `json:"note,omitempty"`
 	ExcludedModels []string `json:"excluded_models,omitempty"`
+	// RequestRetry is nil when the credential inherits the retry count.
+	RequestRetry *int `json:"request_retry,omitempty"`
+	// ErrorRules are the credential's own request-scoped error rules, which
+	// replace its channel's while the list is not empty.
+	ErrorRules []ProviderErrorRuleDTO `json:"request_scoped_errors,omitempty"`
+	// ModelAliases are the credential's own aliases, resolved before its
+	// provider's OAuth aliases.
+	ModelAliases []managementOAuthModelAlias `json:"model_aliases,omitempty"`
 }
 
 func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
@@ -155,6 +163,55 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "disabled": *payload.Disabled})
+}
+
+// refreshManagementAuthFile renews one credential's tokens on demand. The
+// response states the outcome only: CPA's own answer carries the new tokens.
+func (h *Handler) refreshManagementAuthFile(writer http.ResponseWriter, request *http.Request) {
+	var payload struct {
+		Name      string `json:"name"`
+		AuthIndex string `json:"auth_index"`
+	}
+	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &payload); err != nil {
+		return
+	}
+	name, selectorErr := validateAuthSelector(payload.Name)
+	if selectorErr != nil {
+		writeError(writer, http.StatusBadRequest, selectorErr.Error())
+		return
+	}
+	authIndex := strings.TrimSpace(payload.AuthIndex)
+	if len([]rune(authIndex)) > managementAuthFileNameLimit {
+		writeError(writer, http.StatusBadRequest, "auth_index is too long")
+		return
+	}
+	if _, ok := h.managementClientOrError(writer, request); !ok {
+		return
+	}
+	if err := h.recordAudit(request, "auth_file.refresh", "auth_file", name, "attempt", nil); err != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; refresh aborted")
+		return
+	}
+	if err := h.operationsService().RefreshCredential(request.Context(), operations.CredentialTarget{Name: name, AuthIndex: authIndex}, ""); err != nil {
+		// CPA's reason quotes the provider's token endpoint, so the audit entry
+		// keeps the status alone.
+		detail := map[string]any{"error": "refresh failed"}
+		var httpErr *management.HTTPError
+		if errors.As(err, &httpErr) {
+			detail["cpa_status"] = httpErr.StatusCode
+		}
+		_ = h.recordAudit(request, "auth_file.refresh", "auth_file", name, "failure", detail)
+		if err.Error() == "resource_conflict" {
+			writeError(writer, http.StatusNotFound, "auth file not found")
+			return
+		}
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	// The upstream mutation has landed; an outcome-audit failure must not invite
+	// a retry that renews or replaces the credential again.
+	_ = h.recordAudit(request, "auth_file.refresh", "auth_file", name, "success", nil)
+	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 func (h *Handler) getManagementAuthFileSafeFields(writer http.ResponseWriter, request *http.Request) {

@@ -362,3 +362,14 @@ maps plus a provider-scoped static model catalog. The dataset exports these as
 Worker routes resolve only the exported catalogs and refuse durable rule writes.
 They are separate from individual credentials' safe fields. Regenerate the dataset
 when the facade, its normalization or console reads change.
+
+### CPAMC management projection coverage
+
+The generated responses include provider runtime policies and advanced model
+options, the `kimi-ai` login-provider declaration, credential-refresh capability
+metadata, and gateway log samples with HTTP methods and paths. They remain
+projections of synthetic fixture state, never uploaded service-account keys or
+refreshed OAuth tokens. Vertex import and credential refresh are refused in demo
+mode; their interactive checks use isolated browser fixtures instead. Regenerate
+with `pnpm demo:generate` and verify `pnpm check:demo` when these projections
+change, alongside the pictured credential/provider page screenshots.

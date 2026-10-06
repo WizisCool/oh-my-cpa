@@ -260,10 +260,63 @@
 }
 
 .item-field-label {
+  display: block;
   margin-bottom: 6px;
   color: var(--fg);
   font-size: 13px;
   font-weight: 500;
+}
+
+/* ── model options ──────────────────────────────────────────────────────── */
+
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.option-number,
+.option-select {
+  width: 100%;
+}
+
+.option-problem {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* The checkboxes close the row, so the list's own bottom margin would double its padding. */
+.item-body > .flag-list {
+  margin-bottom: 0;
+}
+
+@media (max-width: 575px) {
+  .option-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── runtime policy ─────────────────────────────────────────────────────── */
+
+.policy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.policy-field {
+  min-width: 0;
+}
+
+.policy-number {
+  width: 160px;
+}
+
+.policy-desc {
+  margin-top: 6px;
+  color: var(--meta);
+  font-size: 12px;
 }
 
 /* ── custom headers ─────────────────────────────────────────────────────── */

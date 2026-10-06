@@ -46,7 +46,7 @@ const BASELINE = {
   'scripts/acceptance/probe.mjs': 6,
   'scripts/acceptance/probes/dashboardCharts.mjs': 5,
   'scripts/acceptance/probes/dashboardTokenHeatmap.mjs': 8,
-  'scripts/acceptance/probes/oauthManagement.mjs': 8,
+  'scripts/acceptance/probes/oauthManagement.mjs': 7,
   'scripts/acceptance/probes/omcSettings.mjs': 1,
   'scripts/acceptance/probes/overlayHistory.mjs': 1,
   'scripts/acceptance/probes/phoneLists.mjs': 1,

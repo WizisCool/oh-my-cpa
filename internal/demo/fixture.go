@@ -610,9 +610,40 @@ func logTail(now time.Time) []string {
 		{19 * time.Minute, `level=info msg="usage record queued" channel=usage records=1`},
 		{24 * time.Minute, `level=info msg="request completed" model=gpt-5.1-codex provider=codex auth_index=auth-codex-01 status=200 latency_ms=11240 stream=true`},
 	}
-	lines := make([]string, 0, len(entries))
+	// The request lines are in the gin access-log shape CPA writes, which is what
+	// the log page reads a method, a path and a status from.
+	requests := []struct {
+		ago                                     time.Duration
+		requestID, status, latency, method, url string
+	}{
+		{90 * time.Second, "9f2c41aa", "200", "8.127s", "POST", "/v1/responses"},
+		{3 * time.Minute, "5b7e0c13", "200", "6.904s", "POST", "/v1/messages"},
+		{6 * time.Minute, "c81d77f0", "429", "412ms", "POST", "/v1/responses"},
+		{8 * time.Minute, "2a6b93de", "200", "9.043s", "POST", "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"},
+		{12 * time.Minute, "e04f5a67", "200", "3ms", "GET", "/v1/models"},
+		{14 * time.Minute, "71c3d2b8", "200", "1.983s", "POST", "/v1/messages"},
+		{21 * time.Minute, "0d9a6e42", "401", "1ms", "GET", "/v1/models"},
+		{24 * time.Minute, "b3f81c55", "200", "11.24s", "POST", "/v1/responses"},
+	}
+	type datedLine struct {
+		ago  time.Duration
+		text string
+	}
+	dated := make([]datedLine, 0, len(entries)+len(requests))
+	stamp := func(ago time.Duration) string { return now.Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z") }
 	for _, entry := range entries {
-		lines = append(lines, fmt.Sprintf("%s %s", now.Add(-entry.ago).UTC().Format("2006-01-02T15:04:05.000Z"), entry.message))
+		dated = append(dated, datedLine{entry.ago, fmt.Sprintf("%s %s", stamp(entry.ago), entry.message)})
+	}
+	for _, request := range requests {
+		dated = append(dated, datedLine{request.ago, fmt.Sprintf(`[%s] [%s] [info ] [gin_logger.go:101] %s | %s | 203.0.113.24 | %s "%s"`,
+			stamp(request.ago), request.requestID, request.status, request.latency, request.method, request.url)})
+	}
+	// Newest first, as the entries above are written; a request line follows the
+	// gateway message it shares a moment with.
+	sort.SliceStable(dated, func(left, right int) bool { return dated[left].ago < dated[right].ago })
+	lines := make([]string, 0, len(dated))
+	for _, line := range dated {
+		lines = append(lines, line.text)
 	}
 	return lines
 }
@@ -769,7 +800,7 @@ func quotaPayloads(now time.Time) map[string]any {
 					"reset_after_seconds": 367200, "reset_at": now.Add(4*24*time.Hour + 6*time.Hour).Unix(),
 				},
 			},
-			"credits": map[string]any{"has_credits": true, "unlimited": false},
+			"credits": map[string]any{"has_credits": true, "unlimited": false, "balance": "48.25"},
 		},
 		codexResetCreditsURL: map[string]any{
 			"available_count": 2,

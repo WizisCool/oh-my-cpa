@@ -86,7 +86,7 @@ func TestServiceRefreshPreservesPreviousStateOnTransientError(t *testing.T) {
 		},
 		Plan: &QuotaPlan{
 			PlanType:  "pro",
-			PlanLabel: "Pro 20x",
+			PlanLabel: "Pro 200",
 			Tier:      "elite",
 		},
 	}

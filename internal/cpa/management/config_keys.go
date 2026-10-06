@@ -67,6 +67,18 @@ type ConfigAPIKey struct {
 	Weight         *int              `json:"weight,omitempty"`
 	Prefix         string            `json:"prefix,omitempty"`
 	DisableCooling *bool             `json:"disable-cooling,omitempty"`
+	// RequestRetry overrides the global retry count. CPA reads nil or a negative
+	// value as "use the global setting" and 0 as "no additional retry rounds".
+	RequestRetry        *int                     `json:"request-retry,omitempty"`
+	RequestScopedErrors []RequestScopedErrorRule `json:"request-scoped-errors,omitempty"`
+	// The three settings below exist on some families only, and CPA decodes each
+	// family strictly: one of them written to a family that lacks it makes CPA
+	// refuse the whole configuration. Callers set them per family.
+	AlphaSearch bool `json:"alpha-search,omitempty"`
+	// DisableCodexCloaking overrides the global Codex cloaking switch; nil
+	// inherits it.
+	DisableCodexCloaking    *bool `json:"disable-codex-cloaking,omitempty"`
+	RebuildMidSystemMessage bool  `json:"rebuild-mid-system-message,omitempty"`
 
 	extra wireExtras
 	// origin is the v8 group this entry was read from, set only by

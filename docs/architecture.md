@@ -561,6 +561,17 @@ unstated (`ConfigAPIKey.SubmittedBaseURL`), and a group field outside the shared
 settings stays on the group. CPA's reason for refusing any v8 write is scrubbed of
 the stored file's secrets and of the ones the write sent before the response or the
 audit log sees it (`ApplyConfigChanges`).
+A provider's runtime policy (cooling, retry count, request-scoped error rules) and its
+family's request-behaviour switches travel as `runtime_policy` and `behavior` on the
+provider DTO and save request (`internal/api/management_provider_policy.go`). CPA
+decodes the configuration strictly and skips an error rule it cannot apply without
+reporting it, so the save refuses a switch the family lacks, a rule that would never
+run and a regular expression Go cannot compile; a save naming no policy leaves the
+stored one untouched.
+A model row's advanced settings travel the same way, as `options` on the model entry
+(`internal/api/management_provider_model_options.go`): with them a row states the whole
+entry CPA models, without them the stored model of the same name keeps its settings, and
+in both cases a field the console does not model survives the write.
 Two per-family constants in the registry carry the remaining differences:
 `RequiresBaseURL` (Codex and xAI, whose entries CPA drops without an error when the
 base URL is empty, so the console refuses them up front) and `PullProtocol` (the
@@ -751,7 +762,7 @@ Query for server state.
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, desktop `actions` and explicit `mobileActions`), `ActionMenu` (click-open secondary tools, focus and overlay history), `FilterDisclosure` (phone-only extra filters with selected-state summary), `timeRange/TimeRangePicker` (the one window picker the dashboard and the request list both adapt: presets first and an inline range calendar one level down, in a popover or a bottom sheet; its rules are `timeRange/rangeDraft.ts`), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `FactList` (label/value rows), `StatTiles` (counted tiles that double as a list's filter), the loading feedback (ADRs 0052 and 0054: `ProgressBar` draws rough task progress from `utils/loadProgress.ts` through `utils/progressController.ts`, with an independent CSS waiting-activity segment, `DataProgress` feeds it the non-silent queries and `utils/progressTasks.ts`; `Placeholder.tsx` holds the eager shell/sign-in kit, while `ContentPlaceholder.tsx` keeps paragraph/table compositions behind route imports; `utils/progressSources.ts` merges sources only for the loaded shell; the kit is composed by `PageLoading`, `RouteLoading`, `SuspenseFallback` and the shell's `ShellLoading`), `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); `SecretInput` (a secret that is not the console login, masked by style so the browser's password manager leaves it alone); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
 | `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `AssistantThread` (assistant-ui's thread viewport: follows the newest message while the reader is at the bottom, holds their place once they scroll away, and offers "back to latest" only then), `AssistantComposer` (assistant-ui's composer with Ant Design controls: attachments, the queue of messages sent during a run, and Enter and the send button both asking the runtime to send, because the framework's own send controls decide from state that reaches them a task after the page changed it), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (a collapsible reasoning disclosure that follows its newest output while it streams and folds when the stream ends), `ReasoningEffortPicker` and `TargetPicker` (key and call point as one joined control). The side panel takes tabs, which both pages use for their directory or parameters beside the call or turn details |
 | `components/feedback/` | Every notification and failure surface (ADR 0045): `useToast` (an action's outcome, including report toasts with per-target reasons), `LoadFailure` (a region's failed read, in its place, with Retry) and `Notice` (a condition, or a refusal beside its input). `toastContent.ts` holds the pure parts - `readableReason`, grouping, lifetimes. `pnpm check:feedback` keeps raw antd `Alert`, `message`, `notification` and information-only dialogs out of the rest of `web/src` |
-| `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` |
+| `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. `CpaLogPanel` renders into a host element it moves to the document body for its fullscreen viewer, because a routed page sits inside a transformed container that would confine `position: fixed`. Wire types and pure helpers (line parsing, the filters and their per-value counts) live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, direct settings action and an overflow menu for safe external links and confirmed removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys and CPA's `store` install record carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pluginRuntime.ts` waits for the gateway to load or unload a switched plugin. `pages/PluginsPage.tsx` owns the tab, which is the path (`/plugins`, `/plugins/store`, `/plugins/settings`), and reads the store only once its tab is opened. `pluginPages.ts` turns the plugin list into the pages plugins registered; `AppLayout` lists them in the navigation's Plugins group, reading the plugin list once per shell, and `pages/PluginPageHost.tsx` shows one at `/plugin-pages/<id>/<n>` in a frame on the plugin host, inside a console-written parent document that states the colour mode as `data-theme` (ADR 0060) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` and `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
@@ -1040,8 +1051,21 @@ Auth-file edits use CPA's field patch but do not treat its `200` as proof:
 the facade reads the runtime entry and a server-side projection of the
 downloaded JSON back before returning success. The projection exposes only
 prefix, proxy URL, expiry, disable-cooling, WebSockets, using-API, note, priority,
-weight and excluded models; tokens and other credential material stay inside
-the Go process. Global OAuth model rules are separate from those per-credential fields:
+weight, excluded models, the retry count, the request-scoped error rules and the
+credential's own model aliases; tokens
+and other credential material stay inside the Go process. A manual refresh
+(`POST /api/v1/management/auth-files/refresh`) resolves its selector to exactly one
+credential before asking CPA, and reports the outcome alone: CPA's answer carries the
+renewed tokens, so the management client never decodes it. A Vertex service-account
+import (`POST /api/v1/management/auth-files/vertex-import`) forwards the uploaded key to
+CPA's `oauth/import?provider=vertex` as a multipart form, after refusing a body that is
+not a key and a `location` that is not a region name; it is audited, and its answer
+names the stored file, project, account address and location only. The import dialog
+keeps key bytes outside cached mutation variables and invalidates pending file reads
+when it closes, so a late read cannot restore a cancelled key selection. Refresh and import
+abort if the attempt audit cannot be stored, but an outcome-audit failure after CPA's
+successful mutation does not turn the landed write into an error response or invite
+a duplicate mutation. Global OAuth model rules are separate from those per-credential fields:
 `/api/v1/management/auth-files/model-aliases` reads and replaces one provider's
 aliases, and `/api/v1/management/auth-files/excluded-models` reads and replaces
 one provider's exclusions (`oauth.model-alias` and `oauth.excluded-models` in CPA).
@@ -1751,6 +1775,12 @@ reach the provider's own usage endpoint. Targets are restricted to
 the resulting snapshot is normalized and stored in `quota_snapshots`. This is the
 only place Oh My CPA uses CPA as a request proxy, and it is server-initiated:
 there is no user-supplied URL or generic `/api-call` surface.
+
+Kimi international credentials use the single allowlisted
+`https://api.kimi.ai/coding/v1/usages` endpoint rather than the domestic Kimi host.
+`kimiUsageURLFor` selects the account system from safe credential metadata without
+reading tokens or trying a second host. Endpoint entries refuse appended paths;
+entries ending in `/` cover a family (ADR 0064).
 
 A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no

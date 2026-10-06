@@ -674,3 +674,24 @@ list for typed IDs and wildcard rules. A wildcard-covered row identifies its rul
 and cannot be unchecked unless its own exact rule exists; the catch-all rule warns
 that every model will be excluded. The footer keeps Clear, Revert and Save reachable
 on a phone. Existing palette, shape, typography and motion tokens are reused.
+
+### Credential policies, Vertex import and gateway log tools
+
+The credential Configuration tab edits credential-local model aliases as stacked
+entries: source name, call alias and display name share one group, with retain-original
+and force-mapping controls below. It uses the existing guarded configuration draft;
+provider-wide OAuth mappings remain a separate editor. The Vertex import dialog
+shows the selected service-account file's project and account address before import,
+with the region field and replacement consequence visible. Key contents are never
+rendered or retained in cached mutation variables; closing also invalidates an unfinished
+file read so it cannot restore the cancelled selection.
+
+The gateway log toolbar keeps search, level, the additional-filter count, row count
+and actions on its first row. Status class, method, path and management-traffic
+visibility belong to its disclosed filter panel. Method and path choices show facet
+counts; wrapping is a persistent viewing preference. Fullscreen moves the same log
+viewer above page chrome without replacing its tail or scroll state. Escape leaves fullscreen only when no selector or confirmation is open. On phones the
+controls wrap within the viewport and the log list owns its scrolling.
+
+Under reduced motion, a closing floating panel becomes hidden as soon as its
+leave phase starts, even while the library retains its node for motion cleanup.

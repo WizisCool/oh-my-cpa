@@ -26,6 +26,7 @@ const (
 	AntigravityQuotaURLSandbox = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary"
 	AntigravityQuotaURLCloud   = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 	KimiUsageURL               = "https://api.kimi.com/coding/v1/usages"
+	KimiInternationalUsageURL  = "https://api.kimi.ai/coding/v1/usages"
 	XaiBillingMonthlyURL       = "https://cli-chat-proxy.grok.com/v1/billing"
 	XaiBillingWeeklyURL        = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 	XaiApiMeURL                = "https://api.x.ai/v1/me"
@@ -52,6 +53,7 @@ var AllowedURLPrefixes = []string{
 	"https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
 	"https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
 	"https://api.kimi.com/coding/v1/",
+	KimiInternationalUsageURL,
 	"https://cli-chat-proxy.grok.com/v1/billing",
 	"https://api.x.ai/v1/",
 	DevinSeatStatusURL,
@@ -583,11 +585,28 @@ func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.Aut
 	return nil, errors.New("antigravity quota query failed")
 }
 
+// kimiUsageURLFor picks the host a Kimi credential's usage is read from.
+//
+// kimi.com and kimi.ai are separate account systems: a token of one is refused by
+// the other, and sending it there would hand a credential to a host it was not
+// issued for. CPA's own login names an international credential "kimi-ai" in its
+// type, provider and file name, which is all the credential list exposes; the
+// file's `domain` field is not read, because that would mean downloading the token.
+func kimiUsageURLFor(file management.AuthFile) string {
+	for _, value := range []string{file.Type, file.Provider, file.Name} {
+		normalized := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "_", "-")
+		if strings.Contains(normalized, "kimi-ai") || strings.Contains(normalized, "kimi.ai") {
+			return KimiInternationalUsageURL
+		}
+	}
+	return KimiUsageURL
+}
+
 func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept": "application/json",
 	})
-	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", KimiUsageURL, headers, "")
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", kimiUsageURLFor(file), headers, "")
 	if err != nil {
 		return nil, err
 	}

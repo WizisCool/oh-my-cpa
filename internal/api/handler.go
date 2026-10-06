@@ -243,6 +243,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/management/auth-files", h.uploadManagementAuthFiles)
 				v1.Patch("/management/auth-files/status", h.patchManagementAuthFileStatus)
 				v1.Patch("/management/auth-files/fields", h.patchManagementAuthFileFields)
+				v1.Post("/management/auth-files/refresh", h.refreshManagementAuthFile)
+				v1.Post("/management/auth-files/vertex-import", h.importVertexServiceAccount)
 				v1.Patch("/management/auth-files/model-aliases", h.patchManagementOAuthModelAliases)
 				v1.Patch("/management/auth-files/excluded-models", h.patchManagementOAuthExcludedModels)
 				v1.Delete("/management/auth-files", h.deleteManagementAuthFiles)

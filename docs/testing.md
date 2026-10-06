@@ -507,3 +507,27 @@ provider-wide exclusions and static catalogs separately from credential fields.
 Demo coverage requires both maps and each exported catalog; Worker tests pin
 provider-specific catalog routing, unknown-catalog handling and mutation refusal.
 Demo browser acceptance opens both rule sections and checks read-only controls.
+
+### CPAMC management catch-up
+
+`scripts/test-error-rules.ts`, `scripts/test-model-options.ts`,
+`scripts/test-credential-policy.ts` and `scripts/test-vertex-import.ts` own pure
+validation and request normalization. `scripts/test-log-lines.ts` owns method/path
+matching, facet counts, wrapping preference parsing and the Escape decision.
+Go tests beside the management facades own provider policy/model projections,
+credential field readback, token-free manual refresh and Vertex multipart import.
+`internal/quota/kimi_test.go` owns account-system selection and the international
+endpoint boundary; Codex tests own plan labels and prepaid credit projection.
+
+The existing `logs-sources` probe owns the disclosed gateway request filters,
+method wiring, wrapping persistence and fullscreen portal/Escape ordering. The
+existing `oauth-management` probe owns credential-alias draft retention across
+tabs, phone geometry, Vertex identity-only preview, region validation and key
+selection clearing when reopened, including a held file read released after cancellation. Its screenshots use only synthetic fixture
+identities; no live credential is imported. Both scenarios remain automatically
+selected through their existing ownership and importer rules.
+
+Credential mutation audit fault injection refuses the attempt before CPA is
+called and preserves a successful refresh/import response when outcome auditing
+fails after the upstream mutation. The gateway popup Escape probe also catches a
+retained, painted leave node under reduced motion.

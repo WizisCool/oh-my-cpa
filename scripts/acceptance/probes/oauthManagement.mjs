@@ -92,6 +92,7 @@ export async function oauthManagement({ base, page, check }) {
     providerTabs.join(' | '),
   );
 
+  await verifyVertexImportDialog({ page, check });
   await checkOAuthModelRules({ page, base, check });
 
   check('the collection presents a single overview with no density switch', (await page.locator('.oauth-management-page .ant-segmented').count()) === 0);
@@ -164,15 +165,35 @@ export async function oauthManagement({ base, page, check }) {
       && !(await detailPanel.locator('#note').isVisible()));
   const labels = await detailPanel.locator('[class*=progress-label-row]').allInnerTexts();
   check('quota windows stay grouped in source order', labels[0]?.includes('Model group 1') && labels[1]?.includes('Model group 1') && labels[2]?.includes('Model group 2'), labels.join(' | '));
-  await page.waitForTimeout(350);
+  await settleLayout(page);
   await page.screenshot({ path: 'tmp/oauth-management-quota-drawer.png' });
   await detailPanel.getByRole('tab', { name: 'Configuration', exact: true }).click();
   await detailPanel.locator('#note').fill('Keep this draft while checking quota');
+  await detailPanel.getByRole('button', { name: 'Add mapping', exact: true }).click();
+  await detailPanel.getByRole('textbox', { name: 'Upstream model 1', exact: true }).fill('gpt-5');
+  await detailPanel.getByRole('textbox', { name: 'Client alias 1', exact: true }).fill('credential-gpt');
+  await detailPanel.getByRole('textbox', { name: 'Display name 1', exact: true }).fill('Credential GPT');
+  await detailPanel.getByRole('checkbox', { name: 'Force mapping', exact: true }).check();
+  const aliasEntry = detailPanel.locator('li').filter({ has: page.getByRole('textbox', { name: 'Client alias 1', exact: true }) });
+  await aliasEntry.scrollIntoViewIfNeeded();
+  await settleLayout(page);
+  await page.screenshot({ path: 'tmp/oauth-credential-aliases-desktop.png' });
+  const desktopViewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settleLayout(page);
+  await aliasEntry.scrollIntoViewIfNeeded();
+  check('credential alias fields stay inside the phone drawer', await aliasEntry.evaluate((node) => node.scrollWidth <= node.clientWidth && [...node.querySelectorAll('input')].every((input) => input.getBoundingClientRect().right <= window.innerWidth)));
+  await page.screenshot({ path: 'tmp/oauth-credential-aliases-phone.png' });
+  await page.setViewportSize(desktopViewport);
+  await settleLayout(page);
   await detailPanel.getByRole('tab', { name: 'Quota', exact: true }).click();
   check('configuration fields stay outside the quota tab', !(await detailPanel.locator('#note').isVisible()));
   await detailPanel.getByRole('tab', { name: /Configuration/ }).click();
   check('switching tabs preserves an unsaved configuration draft',
     (await detailPanel.locator('#note').inputValue()) === 'Keep this draft while checking quota');
+  check('credential aliases share the guarded configuration draft',
+    await detailPanel.getByRole('textbox', { name: 'Client alias 1', exact: true }).inputValue() === 'credential-gpt'
+      && await detailPanel.getByRole('checkbox', { name: 'Force mapping', exact: true }).isChecked());
   await detailPanel.getByRole('tab', { name: 'Quota', exact: true }).click();
   await detailPanel.locator('.ant-drawer-close').click();
   const discard = page.locator('.ant-modal-confirm');
@@ -911,4 +932,55 @@ async function verifyWorkspaceScale({ base, page, check }) {
     await page.unroute('**/management/quota', quotaHandler);
     await page.unroute('**/management/quota/refresh', batchHandler);
   }
+}
+
+async function verifyVertexImportDialog({ page, check }) {
+  const openImport = page.getByRole('button', { name: 'Import Vertex key', exact: true });
+  await openImport.click();
+  const dialog = page.getByRole('dialog', { name: 'Import a Vertex service account key' });
+  await dialog.waitFor();
+  check('Vertex import starts with no key and cannot submit', await dialog.getByRole('button', { name: 'Import', exact: true }).isDisabled());
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'service-account-fixture.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ project_id: 'fixture-project', private_key: 'SYNTHETIC-KEY-FIXTURE', client_email: 'fixture@fixture-project.iam.gserviceaccount.com' })),
+  });
+  await dialog.getByText('fixture-project', { exact: true }).waitFor();
+  check('Vertex import presents identity without rendering key contents', (await dialog.innerText()).includes('fixture@fixture-project.iam.gserviceaccount.com') && !(await dialog.innerText()).includes('SYNTHETIC-KEY-FIXTURE'));
+  await settleLayout(page);
+  await page.screenshot({ path: 'tmp/vertex-import-desktop.png' });
+  const desktopViewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settleLayout(page);
+  check('the Vertex import dialog fits a phone viewport', await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth && node.getBoundingClientRect().right <= window.innerWidth));
+  await page.screenshot({ path: 'tmp/vertex-import-phone.png' });
+  await dialog.getByRole('textbox', { name: 'Location', exact: true }).fill('us-central1.evil.test');
+  check('an invalid Vertex region prevents submitting', await dialog.getByRole('button', { name: 'Import', exact: true }).isDisabled());
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await page.setViewportSize(desktopViewport);
+  await openImport.click();
+  await dialog.waitFor();
+  check('reopening Vertex import discards the selected key', await dialog.getByText('fixture-project', { exact: true }).count() === 0 && await dialog.getByRole('button', { name: 'Import', exact: true }).isDisabled());
+  await page.evaluate(() => {
+    const readFile = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'delayed-service-account-fixture.json') return readFile.call(this);
+      return new Promise((resolve) => {
+        window.__releaseVertexFile = () => resolve(JSON.stringify({ project_id: 'delayed-project', private_key: 'SYNTHETIC-DELAYED-KEY' }));
+      });
+    };
+  });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'delayed-service-account-fixture.json', mimeType: 'application/json', buffer: Buffer.from('{}'),
+  });
+  await until(async () => await page.evaluate(() => typeof window.__releaseVertexFile === 'function'), { label: 'the held Vertex file read' });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await openImport.click();
+  await dialog.waitFor();
+  await page.evaluate(() => window.__releaseVertexFile());
+  await settleLayout(page);
+  check('a file read from a cancelled Vertex dialog cannot repopulate its next opening', await dialog.getByText('delayed-project', { exact: true }).count() === 0 && await dialog.getByRole('button', { name: 'Import', exact: true }).isDisabled());
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
 }

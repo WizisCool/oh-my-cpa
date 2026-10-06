@@ -18,6 +18,9 @@ type SaveProviderModelEntry struct {
 	Alias    string       `json:"alias,omitempty"`
 	Image    bool         `json:"image,omitempty"`
 	Thinking *ThinkingDTO `json:"thinking,omitempty"`
+	// Options is nil when the client does not edit the advanced settings, which
+	// then stay as stored.
+	Options *ProviderModelOptionsDTO `json:"options,omitempty"`
 }
 
 type SaveProviderRequest struct {
@@ -33,6 +36,13 @@ type SaveProviderRequest struct {
 	ModelEntries   []SaveProviderModelEntry `json:"model_entries,omitempty"`
 	Headers        map[string]string        `json:"headers,omitempty"`
 	Disabled       bool                     `json:"disabled"`
+	// RuntimePolicy, when present, is authoritative for cooling, the retry count
+	// and the error rules, and DisableCooling is ignored. A request without it
+	// keeps the single-switch cooling edit and leaves retry and rules as stored,
+	// so a client that never carried the policy cannot erase one.
+	RuntimePolicy *ProviderRuntimePolicyDTO `json:"runtime_policy,omitempty"`
+	// Behavior sets only the switches it names; nil leaves all of them as stored.
+	Behavior *ProviderBehaviorDTO `json:"behavior,omitempty"`
 	// Website is operator metadata, not a CPA field. nil means "leave the stored
 	// value alone"; a present empty string clears it. That distinction is what
 	// lets a rename save from a client that never carried a website field avoid
