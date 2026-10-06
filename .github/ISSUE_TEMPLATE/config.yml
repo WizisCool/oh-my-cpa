@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/WizisCool/oh-my-cpa/security/policy
+    about: Report privately, never in a public issue. The security policy describes the process.
+  - name: Installation and settings
+    url: https://github.com/WizisCool/oh-my-cpa/blob/master/docs/install.md
+    about: Install methods, required settings, reverse proxy and sub-path configuration.
+  - name: CLIProxyAPI
+    url: https://github.com/router-for-me/CLIProxyAPI/issues
+    about: Protocol adaptation, upstream provider behavior and request proxying are handled by CLIProxyAPI.

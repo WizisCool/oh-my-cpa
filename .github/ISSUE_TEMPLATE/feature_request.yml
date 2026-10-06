@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose a new capability or an improvement to an existing one.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Requests in English or 中文 are both welcome.
+
+        Oh My CPA owns identity, naming, organization, the management facade and usage observability above CLIProxyAPI. Protocol adaptation, credential execution and request proxying belong to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) itself; [PRODUCT.md](https://github.com/WizisCool/oh-my-cpa/blob/master/PRODUCT.md) describes the boundary.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and found no request for this.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The situation this would improve, and who runs into it. A concrete workflow is more useful than a proposed control.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What the console or API would do. Mention the page, endpoint or setting involved if known.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: Other approaches considered, or how the need is met today.
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Project constraints
+      description: Tick whatever the proposal would touch; these shape how it can be built.
+      options:
+        - label: It needs a CPA management endpoint or field the console does not read today.
+        - label: It needs network access beyond CPA itself (the console otherwise runs fully offline, with no CDN).
+        - label: It displays, stores or exports a secret (management key, provider key, client key, OAuth token).
+        - label: It should also be available to agents as a capability (docs/agent-capabilities.md).
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - I am only proposing this
+        - I can help test it
+        - I would like to implement it
+    validations:
+      required: true

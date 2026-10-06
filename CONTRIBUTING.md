@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to Oh My CPA! We welcome bug reports, feature suggestions, documentation improvements, and code contributions.
 
+Bug reports and feature requests go through the issue forms under [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/); security vulnerabilities are reported privately as described in [`SECURITY.md`](SECURITY.md).
+
 ---
 
 ## Code of Conduct & Ground Rules
@@ -98,5 +100,5 @@ User-facing strings must never be hardcoded in backend responses or React compon
    ```
 4. Push your branch to your fork and open a Pull Request against `master`.
 5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md).
-6. Clearly describe the problem, the solution, and any documentation updated in your PR description.
+6. Fill in the pull request template ([`.github/pull_request_template.md`](.github/pull_request_template.md)): the problem and the solution, the context documents updated, and the gates that were run. Title the pull request `type(scope): lowercase subject`.
 7. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.

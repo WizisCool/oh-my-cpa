@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in Oh My CPA behaves incorrectly or differently from its documentation.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports in English or 中文 are both welcome.
+
+        A security vulnerability must not be filed here: follow [SECURITY.md](https://github.com/WizisCool/oh-my-cpa/blob/master/SECURITY.md) and report it privately.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and found no report of this problem.
+          required: true
+        - label: I removed every API key, management key, token, auth file and private hostname from the text, logs and screenshots below.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: The observed behavior, and the page or area of the console where it appears.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What was expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The shortest sequence that triggers the problem. State whether it also reproduces on the [live demo](https://omc-demo.junze.dev).
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. Observe …
+    validations:
+      required: true
+  - type: input
+    id: omc-version
+    attributes:
+      label: Oh My CPA version
+      description: Shown on the System Information page, or the image tag in use.
+      placeholder: v0.1.2
+    validations:
+      required: true
+  - type: input
+    id: cpa-version
+    attributes:
+      label: CLIProxyAPI version
+      description: Shown on the System Information page. Oh My CPA requires CPA v8.0.0 or later.
+      placeholder: v8.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      description: The sections of docs/install.md.
+      options:
+        - New install (CPA and Oh My CPA in one Compose file)
+        - Added to an existing CPA Compose file
+        - Standalone container
+        - Built from source
+        - Live demo only
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Whatever applies — host OS and architecture, reverse proxy and sub-path, browser and version, device or viewport width, console language and theme.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and screenshots
+      description: Container logs (`docker compose logs oh-my-cpa`), browser console errors, failed network responses, or screenshots. Redact secrets first.
