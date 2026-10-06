@@ -66,7 +66,8 @@ func seededDatabase(t *testing.T) (*repository.Repository, time.Time, SeedStats)
 			return
 		}
 		seededRepo = repository.New(db)
-		seededAt = time.Now().UTC()
+		// Pin the workload to the export reference clock; wall time changes its daily model mix.
+		seededAt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		seededStat, seededErr = Seed(context.Background(), seededRepo, seededAt)
 	})
 	if seededErr != nil {
@@ -712,8 +713,8 @@ func TestFixtureQuotaURLsAreTheOnesTheQuotaServiceMayCall(t *testing.T) {
 // database.
 func TestIngestStatusDescribesTheInstanceAndReadsItsOwnStats(t *testing.T) {
 	ctx := context.Background()
-	repo, _, _ := seededDatabase(t)
-	status, err := IngestStatus(ctx, repo, time.Now().UTC())
+	repo, now, _ := seededDatabase(t)
+	status, err := IngestStatus(ctx, repo, now)
 	if err != nil {
 		t.Fatal(err)
 	}

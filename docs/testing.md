@@ -55,7 +55,11 @@ Rules that keep the suite fast and honest:
   `scripts/install-chromium.test.mjs` does.
 - **Keep the fixtures hermetic.** Browser fixtures build their environment with
   `scripts/acceptance/environment.mjs`; never read the operator's `.env`, network or
-  data directory. Calendar fixtures must use the console's configured timezone rather
+  data directory. The shared seeded database in `internal/demo/demo_test.go` uses the
+  same fixed UTC reference clock as the demo export; wall time changes the generated
+  daily workload and must not change the sample behind model-concentration assertions.
+  Capture-status reads in those tests use that same seed clock.
+  Calendar fixtures must use the console's configured timezone rather
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
