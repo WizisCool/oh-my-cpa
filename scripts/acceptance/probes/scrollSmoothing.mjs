@@ -1,4 +1,4 @@
-import { until } from '../harness.mjs';
+import { settleLayout, until } from '../harness.mjs';
 import { playgroundFixtures } from './playground.mjs';
 
 /**
@@ -347,10 +347,16 @@ async function checkNativeModelPopup({ page, base, check }) {
   notch = describeNotch(await sampleNotch(page, popupAt));
   check('a filtered native model popup remains scrollable', filteredDistance > 0 && Math.abs(notch.travelled - filteredDistance) <= 1, notch.detail);
   await page.keyboard.press('Escape');
+  await holder.waitFor({ state: 'hidden' });
   await modelPicker.click();
   await holder.waitFor();
+  await until(() => page.getByRole('option').count().then(count => count === 80), { label: 'reopened unfiltered model options' });
+  await settleLayout(page);
+  const reopenedBox = await holder.boundingBox();
   await holder.evaluate(element => { element.scrollTop = 0; });
-  notch = describeNotch(await sampleNotch(page, popupAt));
+  notch = describeNotch(await sampleNotch(page, {
+    x: reopenedBox.x + reopenedBox.width / 2, y: reopenedBox.y + reopenedBox.height / 2,
+  }));
   check('a reopened native model popup remains scrollable', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   await page.keyboard.press('Escape');
 }
