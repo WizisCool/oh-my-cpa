@@ -17,6 +17,45 @@ export async function runConfigurationPluginsAcceptance({
   // group head restating it. The panel is reached through the section nav.
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
   await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  // These are stored at client/upstream paths in recent CPA v8 releases. The
+  // fake gateway canonicalizes historical writes, so refresh cannot mask a
+  // reader that still searches only the OAuth-provider subtree.
+  const openCodexBehavior = async () => {
+    await page.locator('.config-nav-btn').filter({ hasText: /OAuth (?:Provider Behavior|提供商行为)/ }).click();
+    await page.locator('#cfg-codexOptimizeMultiAgentV2').waitFor({ state: 'visible' });
+  };
+  const readCodexSwitches = async (isEnabled) => {
+    const expected = String(isEnabled);
+    await until(async () => await page.locator('#cfg-codexOptimizeMultiAgentV2').getAttribute('aria-checked') === expected
+      && await page.locator('#cfg-codexOrphanDelegationCompatibility').getAttribute('aria-checked') === expected,
+    { label: `Codex switches read ${expected} from canonical configuration` });
+  };
+  await openCodexBehavior();
+  await readCodexSwitches(true);
+  check('Codex behavior switches read enabled canonical settings', true);
+  for (const isEnabled of [false, true]) {
+    await page.locator('#cfg-codexOptimizeMultiAgentV2').click();
+    await page.locator('#cfg-codexOrphanDelegationCompatibility').click();
+    await readCodexSwitches(isEnabled);
+    await page.locator('.config-dirty-btn-save').click();
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith('/management/config')
+        && response.request().method() === 'PATCH'),
+      page.locator('.ant-popconfirm:visible').getByRole('button', { name: /^(?:Confirm|确定)$/ }).click(),
+    ]);
+    const submitted = response.request().postDataJSON();
+    check(`Codex behavior saves ${isEnabled} at canonical paths`, response.ok()
+      && JSON.stringify(submitted.changes) === JSON.stringify([
+        { path: ['client', 'codex', 'optimize-multi-agent-v2'], value: isEnabled },
+        { path: ['upstream', 'codex', 'orphan-delegation-compatibility'], value: isEnabled },
+      ]));
+    await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.config-page').first().waitFor({ state: 'visible' });
+    await openCodexBehavior();
+    await readCodexSwitches(isEnabled);
+    check(`Codex behavior stays ${isEnabled} after saving and reloading`, true);
+  }
   const payloadNav = page.locator('.config-nav-btn').filter({ hasText: /Payload/ });
   await payloadNav.first().waitFor({ state: 'visible', timeout: 10000 });
   await payloadNav.first().click();

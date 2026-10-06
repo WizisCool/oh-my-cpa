@@ -471,6 +471,15 @@ secrets from the stored document, and answer with CPA's new rendering, which bec
 editor's baseline. A failed success-audit write is logged but the save still returns
 `200` with that baseline, because the configuration write has already landed; if the
 readback fails, the response omits the baseline so the editor reloads.
+The two relocated Codex behavior controls declare canonical `client.codex` and
+`upstream.codex` paths with a historical `oauth.providers.codex` fallback in the
+frontend schema. The field reader and writer choose the canonical path by its
+presence, never its truthiness; an omitted field uses the historical alias so
+early CPA v8 gateways remain writable. A field relocated between its supported
+paths in the source draft is also used at that location by visual edits, and
+reverting its value preserves the independent relocation. Visual draft rebasing moves a pending
+field edit to the path CPA's newer baseline contains, without changing unrelated
+settings. The measured paths and compatibility rule are in `docs/cpa-v8-compat.md`.
 `Client.ApplyConfigChanges` sends a change set as one
 `PATCH /v8/management/config` merge for scalars and lists, one `PUT /config/<path>` per
 map value and one `DELETE /config/<path>` per removal. CPA refuses a legacy name, an

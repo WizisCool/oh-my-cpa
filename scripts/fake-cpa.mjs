@@ -248,12 +248,32 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     server: { host: '127.0.0.1', port: 8317 },
     observability: { logs: { debug: false, 'logging-to-file': true, 'request-log': true } },
     access: { 'api-keys': [FAKE_CLIENT_SECRET] },
+    client: { codex: { 'optimize-multi-agent-v2': true } },
+    upstream: { codex: { 'orphan-delegation-compatibility': true } },
     plugins: { enabled: true, dir: 'plugins' },
     'config-version': 8,
   };
-  const V8_ROOTS = new Set(['server', 'management', 'access', 'credentials', 'routing', 'requests', 'oauth', 'multimedia', 'observability', 'plugins', 'quota-exceeded', 'api-keys', 'config-version']);
+  const V8_ROOTS = new Set(['server', 'management', 'access', 'credentials', 'routing', 'requests', 'oauth', 'multimedia', 'observability', 'plugins', 'quota-exceeded', 'api-keys', 'config-version', 'client', 'upstream']);
   const legacyRootIn = (document) => Object.keys(document ?? {}).find((key) => !V8_ROOTS.has(key));
   const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const CODEX_BEHAVIOR_ALIASES = [
+    { key: 'optimize-multi-agent-v2', root: 'client' },
+    { key: 'orphan-delegation-compatibility', root: 'upstream' },
+  ];
+  // Normalize the submitted root before merging, so historical alias writes
+  // override a previously stored canonical value, as CPA v8.0.16 does.
+  const normalizeCodexBehavior = (document) => {
+    const historical = document.oauth?.providers?.codex;
+    if (historical !== null && !isPlainObject(historical)) return;
+    for (const { key, root } of CODEX_BEHAVIOR_ALIASES) {
+      if (historical !== null && !Object.hasOwn(historical, key)) continue;
+      if (!isPlainObject(document[root])) document[root] = {};
+      if (!isPlainObject(document[root].codex)) document[root].codex = {};
+      if (!Object.hasOwn(document[root].codex, key)) document[root].codex[key] = historical === null ? null : historical[key];
+      if (historical !== null) delete historical[key];
+    }
+    if (historical === null) delete document.oauth.providers.codex;
+  };
   const syncOAuthExcludedModelsConfig = () => {
     if (!isPlainObject(configDoc.oauth)) configDoc.oauth = {};
     configDoc.oauth['excluded-models'] = structuredClone(oauthExcludedModels);
@@ -265,7 +285,11 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       else target[key] = structuredClone(value);
     }
   };
-  const configPathOf = (path) => path.slice('/config/'.length).split('/').map(decodeURIComponent);
+  const configPathOf = (path) => {
+    const parts = path.slice('/config/'.length).split('/').map(decodeURIComponent);
+    const alias = CODEX_BEHAVIOR_ALIASES.find(({ key }) => parts.join('.') === `oauth.providers.codex.${key}`);
+    return alias ? [alias.root, 'codex', alias.key] : parts;
+  };
   const renderConfigYaml = () => stringifyYaml(configDoc);
 
   const plugins = new Map([
@@ -677,6 +701,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
             json(response, 400, { error: 'invalid_config', message: `legacy field ${legacy} is not accepted by v8` });
             return;
           }
+          normalizeCodexBehavior(document);
           configDoc = { ...document, 'config-version': 8 };
         } else if (request.method === 'PATCH' && configPath.length === 0) {
           const patch = JSON.parse(bodyText || '{}');
@@ -685,6 +710,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
             json(response, 400, { error: 'invalid_config', message: `legacy field ${legacy} is not accepted by v8` });
             return;
           }
+          normalizeCodexBehavior(patch);
           mergeConfig(configDoc, patch);
         } else if (request.method === 'PUT' && configPath.length > 0) {
           let parent = configDoc;
@@ -709,6 +735,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         json(response, 400, { error: 'invalid_config', message: String(error?.message ?? error) });
         return;
       }
+      normalizeCodexBehavior(configDoc);
       json(response, 200, { status: 'ok', 'config-version': 8 });
       return;
     }

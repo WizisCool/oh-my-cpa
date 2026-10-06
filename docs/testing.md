@@ -271,6 +271,19 @@ Image parsing, bounds, MIME consistency, static-format detection and SVG securit
 
 The `custom-icon-library` probe owns file selection, validated preview, Base64 replacement, immediate repaint of a mounted provider, selection failure, invalid-replacement save prevention, retained inputs after save/delete failure, reload persistence, referenced deletion with default restoration, cancellation, reload persistence of resets, full-width empty states, focus restoration the narrow editor/confirmation overlay above the provider drawer and automatic reset of its unsaved icon selection. Provider-console planner rules include it alongside the existing picker scenarios, with pinned union and negative cases. Assertions wait on observable state rather than fixed delays.
 
+### Codex configuration path regression coverage
+
+`scripts/test-config-patch.ts` owns canonical and historical field reads/writes,
+canonical false/null precedence, baseline restoration with comments, omitted
+settings, source-path relocations followed by visual edits, and carrying later
+edits onto CPA's relocated readback. The fake CPA
+starts with canonical `client.codex` and `upstream.codex` values; its root writes
+normalize the two historical aliases before merging. `scripts/fake-cpa.test.mjs`
+checks the resulting JSON and YAML readback independently. The existing
+configuration cross-stack acceptance saves both switches on and off at their
+canonical paths and reloads the page after each save. The API's revision guard,
+backup and secret restoration remain covered by their existing Go tests.
+
 ### Configuration backup regression coverage
 
 `internal/repository/config_backups_test.go` owns encryption at rest, deduplication against the newest copy, the separate pre-v8 retention, the operator's retention and its immediate pruning, and deletion. `internal/cpa/management/client_config_test.go` owns the pre-write hook: a copy before every write, the reason each write names (an outer operation's name winning), and refusal when a copy cannot be kept. `internal/api/management_config_backups_test.go` owns the routes: the server-side restore and its whole-document write, the pre-v8 `409`, the manual copy's `created` flag, retention bounds and deletion. The `config-backups` probe owns the dialog: reason labels, the withheld pre-v8 restore, the retention write, the restore confirmation stacking above the dialog, the restore request and the editor reload after it. The configuration page and `web/src/components/config/` planner rules select it, with a negative case for the schema.

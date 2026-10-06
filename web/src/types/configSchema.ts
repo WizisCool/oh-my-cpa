@@ -35,8 +35,10 @@ export interface ConfigFieldDefinition {
   sectionId: ConfigSectionId;
   labelKey: string;
   descKey: string;
-  /** The setting's path in CPA's v8 configuration tree, which is also its write path. */
+  /** The canonical path in CPA's current v8 configuration tree. */
   yamlPath: string[];
+  /** Earlier v8 layout; also the compatible write path when neither spelling is present. */
+  legacyYamlPath?: string[];
   type: ConfigFieldType;
   scalarEndpointKey?: string;
   defaultValue?: unknown;
@@ -952,7 +954,8 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     sectionId: 'providers',
     labelKey: 'cfg.f_codex_multi_agent_v2',
     descKey: 'cfg.f_codex_multi_agent_v2_desc',
-    yamlPath: ['oauth', 'providers', 'codex', 'optimize-multi-agent-v2'],
+    yamlPath: ['client', 'codex', 'optimize-multi-agent-v2'],
+    legacyYamlPath: ['oauth', 'providers', 'codex', 'optimize-multi-agent-v2'],
     type: 'switch',
     defaultValue: false,
     keywords: ['codex', 'multi-agent', 'agent'],
@@ -962,7 +965,8 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     sectionId: 'providers',
     labelKey: 'cfg.f_codex_orphan_delegation',
     descKey: 'cfg.f_codex_orphan_delegation_desc',
-    yamlPath: ['oauth', 'providers', 'codex', 'orphan-delegation-compatibility'],
+    yamlPath: ['upstream', 'codex', 'orphan-delegation-compatibility'],
+    legacyYamlPath: ['oauth', 'providers', 'codex', 'orphan-delegation-compatibility'],
     type: 'switch',
     defaultValue: false,
     keywords: ['codex', 'orphan', 'delegation', 'subagent'],

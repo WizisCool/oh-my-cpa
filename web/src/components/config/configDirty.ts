@@ -3,6 +3,16 @@ import type { ConfigFieldDefinition } from '../../types/configSchema';
 import { PAYLOAD_PATH } from './payloadRules';
 
 /**
+ * Presence wins over truthiness: a canonical false/null must not inherit an old
+ * true. If CPA omits both spellings, the historical alias is writable on every
+ * supported v8 gateway, including versions that reject the newer root sections.
+ */
+export function getFieldYamlPath(doc: Document | null, field: ConfigFieldDefinition): string[] {
+  if (!field.legacyYamlPath || doc?.hasIn(field.yamlPath)) return field.yamlPath;
+  return field.legacyYamlPath;
+}
+
+/**
  * Reads a field's current value out of the parsed document, unwrapping YAML AST
  * nodes, and falls back to the schema default when the key is absent.
  *
@@ -15,7 +25,7 @@ export function getFieldSemanticValue(
   field: ConfigFieldDefinition
 ): unknown {
   if (!doc) return field.defaultValue;
-  const node = doc.getIn(field.yamlPath);
+  const node = doc.getIn(getFieldYamlPath(doc, field));
   if (node === undefined || node === null) {
     return field.defaultValue;
   }
@@ -79,9 +89,10 @@ export function areValuesSemanticallyEqual(currentValue: unknown, baselineValue:
 /**
  * Writes one field into `currentDoc` while keeping `serverDoc` as the baseline.
  *
- * The invariant this exists for: returning a field to its baseline value must
- * leave the document byte-identical to the server's, not merely semantically
- * equal. Two rules follow. A field that existed on the server is restored from
+ * With an unchanged field path, returning to its baseline value must leave
+ * the document byte-identical to the server's, not merely semantically equal.
+ * A path independently relocated in source remains at that draft location.
+ * For unchanged paths, a field that existed on the server is restored from
  * the server's own node, so scalar style and comments survive. A field the
  * server omitted is deleted again, and a parent map that the deletion empties is
  * removed too — otherwise the editor would write `headers: {}` into config the
@@ -93,12 +104,20 @@ export function updateFieldWithBaseline(
   field: ConfigFieldDefinition,
   newValue: unknown
 ): void {
+  // Source edits may relocate a field before saving. Follow the draft reader
+  // so a visual edit neither restores the old spelling nor masks its value.
+  const draftPath = getFieldYamlPath(currentDoc, field);
+  const yamlPath = currentDoc.hasIn(draftPath)
+    ? draftPath
+    : getFieldYamlPath(serverDoc ?? currentDoc, field);
+  const baselinePath = getFieldYamlPath(serverDoc, field);
   const serverBaselineValue = serverDoc
     ? getFieldSemanticValue(serverDoc, field)
     : field.defaultValue;
 
-  if (areValuesSemanticallyEqual(newValue, serverBaselineValue)) {
-    restorePathFromServer(currentDoc, serverDoc, field.yamlPath);
+  // Reverting a value must preserve an independent source-path relocation.
+  if (areValuesSemanticallyEqual(newValue, serverBaselineValue) && yamlPath.join('.') === baselinePath.join('.')) {
+    restorePathFromServer(currentDoc, serverDoc, yamlPath);
     return;
   }
 
@@ -107,15 +126,15 @@ export function updateFieldWithBaseline(
   // actually serialise.
   if (newValue === undefined || newValue === null || newValue === '' || (Array.isArray(newValue) && newValue.length === 0)) {
     if (field.type === 'switch') {
-      currentDoc.setIn(field.yamlPath, false);
+      currentDoc.setIn(yamlPath, false);
     } else if (field.type === 'number') {
-      currentDoc.setIn(field.yamlPath, field.defaultValue ?? 0);
+      currentDoc.setIn(yamlPath, field.defaultValue ?? 0);
     } else {
-      currentDoc.deleteIn(field.yamlPath);
-      pruneEmptyAncestors(currentDoc, serverDoc, field.yamlPath);
+      currentDoc.deleteIn(yamlPath);
+      pruneEmptyAncestors(currentDoc, serverDoc, yamlPath);
     }
   } else {
-    currentDoc.setIn(field.yamlPath, newValue);
+    currentDoc.setIn(yamlPath, newValue);
   }
 }
 

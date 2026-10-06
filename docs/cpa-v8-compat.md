@@ -7,6 +7,44 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+### Codex behavior path compatibility
+
+CPA v8.0.16 renders multi-agent optimization at
+`client.codex.optimize-multi-agent-v2` and orphan delegation compatibility at
+`upstream.codex.orphan-delegation-compatibility`. Its root configuration writes
+accept the historical `oauth.providers.codex.*` spellings and normalize the
+submitted values before merging them into the canonical document. Canonical
+values win by presence when both spellings are submitted, including explicit
+`false` and `null`.
+
+The visual editor reads and edits a canonical field when that field is present.
+Otherwise it uses its historical v8 path, also when both spellings are absent:
+early CPA v8 releases reject the newer root sections, whereas the historical
+alias is accepted by both layouts. Readback, not the submitted path, determines
+the next baseline. If source editing relocates a field between the supported
+paths before saving, visual edits use its draft location, and reverting a visual
+value preserves the independent source relocation. Edits made during a save follow the field if CPA relocates it
+in that readback. No gateway version-string guess or whole-document migration is
+required. `ConfigFieldDefinition.legacyYamlPath` declares this compatibility for
+these two controls only.
+
+This was verified with the official CPA v8.0.16 Linux ARM64 no-plugin binary:
+a historical root PATCH returned `200`, both canonical values remained enabled
+after restarting CPA, and subsequent canonical writes disabled both settings.
+The historical paths were absent from the root readback. The fixed frontend
+reader and change-set writer were also exercised against checksum-verified
+official Linux ARM64 no-plugin binaries for both v8.0.2 and v8.0.16: enabled
+settings were read, disabled and enabled through root PATCH, read back, and
+verified again after each restart. The isolated configurations used
+`oauth.auth-dir`, temporary credential directories and independent loopback ports.
+Source references:
+
+- [v8.0.16 configuration paths](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/config/config_v8.go)
+- [v8.0.16 management alias normalization](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/config/config_v8_api.go)
+
+The following measurements and mapping tables retain their CPA v8.0.2 baseline;
+the two paths above supersede the corresponding editor locations in that table.
+
 Upstream sources, all at tag `v8.0.2` (commit `4a2c818`):
 
 - [management-api-v8.md](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.2/docs/management-api-v8.md) — the v8 Management API.

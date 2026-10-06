@@ -172,3 +172,55 @@ test('gateway applies global OAuth exclusions before alias mapping without hidin
   assert.ok(!(await identities()).includes('claude-3-5-sonnet'));
   assert.ok(!(await identities()).includes('sonnet-latest'));
 });
+
+test('Codex behavior writes use canonical paths and root aliases survive only as canonical readback', async (context) => {
+  const request = await startFixture(context);
+  const write = (body) => request('/v8/management/config', FAKE_CPA_MANAGEMENT_KEY, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const assertReadback = async (value) => {
+    for (const path of ['/v8/management/config', '/v8/management/config.yaml', '/v0/management/config.yaml']) {
+      const response = await request(path, FAKE_CPA_MANAGEMENT_KEY);
+      assert.equal(response.status, 200);
+      const document = path.endsWith('.yaml') ? parseYaml(await response.text()) : await response.json();
+      assert.equal(document.client.codex['optimize-multi-agent-v2'], value);
+      assert.equal(document.upstream.codex['orphan-delegation-compatibility'], value);
+      assert.equal(document.oauth?.providers?.codex?.['optimize-multi-agent-v2'], undefined);
+      assert.equal(document.oauth?.providers?.codex?.['orphan-delegation-compatibility'], undefined);
+    }
+  };
+  await assertReadback(true);
+  assert.equal((await write({ client: { codex: { 'optimize-multi-agent-v2': false } }, upstream: { codex: { 'orphan-delegation-compatibility': false } } })).status, 200);
+  await assertReadback(false);
+  assert.equal((await write({ oauth: { providers: { codex: { 'optimize-multi-agent-v2': true, 'orphan-delegation-compatibility': true } } } })).status, 200);
+  await assertReadback(true);
+  assert.equal((await write({
+    client: { codex: { 'optimize-multi-agent-v2': false } },
+    upstream: { codex: { 'orphan-delegation-compatibility': false } },
+    oauth: { providers: { codex: { 'optimize-multi-agent-v2': true, 'orphan-delegation-compatibility': true } } },
+  })).status, 200);
+  await assertReadback(false);
+});
+
+
+test('a null historical Codex container resets canonical leaves without masking explicit canonical values', async (context) => {
+  const request = await startFixture(context);
+  const write = (body) => request('/v8/management/config', FAKE_CPA_MANAGEMENT_KEY, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal((await write({ oauth: { providers: { codex: null } } })).status, 200);
+  let document = await (await request('/v8/management/config', FAKE_CPA_MANAGEMENT_KEY)).json();
+  assert.equal(document.client.codex['optimize-multi-agent-v2'], null);
+  assert.equal(document.upstream.codex['orphan-delegation-compatibility'], null);
+  assert.equal(document.oauth?.providers?.codex, undefined);
+
+  assert.equal((await write({
+    client: { codex: { 'optimize-multi-agent-v2': false } },
+    upstream: { codex: { 'orphan-delegation-compatibility': true } },
+    oauth: { providers: { codex: null } },
+  })).status, 200);
+  document = await (await request('/v8/management/config', FAKE_CPA_MANAGEMENT_KEY)).json();
+  assert.equal(document.client.codex['optimize-multi-agent-v2'], false);
+  assert.equal(document.upstream.codex['orphan-delegation-compatibility'], true);
+  assert.equal(document.oauth?.providers?.codex, undefined);
+});

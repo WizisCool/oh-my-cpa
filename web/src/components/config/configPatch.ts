@@ -1,6 +1,8 @@
 import { parseDocument, type Document } from 'yaml';
 
 import type { ConfigChange } from '../../types/configManagement';
+import { ALL_CONFIG_FIELDS } from '../../types/configSchema';
+import { areValuesSemanticallyEqual, getFieldSemanticValue, getFieldYamlPath, updateFieldWithBaseline } from './configDirty';
 
 /**
  * Turns the visual editor's draft into the settings a save sends.
@@ -32,9 +34,20 @@ export function computeConfigChanges(serverDoc: Document | null, draftDoc: Docum
  * now a scalar), which the caller treats as a draft it cannot carry over.
  */
 export function rebaseDraft(draftBase: Document | null, draft: Document, nextBaseYaml: string): string | null {
-  const changes = computeConfigChanges(draftBase, draft);
-  if (changes.length === 0) return nextBaseYaml;
-  const rebased = parseDocument(nextBaseYaml);
+  const nextBase = parseDocument(nextBaseYaml);
+  const remainingDraft = draft.clone();
+  // CPA may canonicalize a historical path during the save. Carry a later
+  // field edit onto its returned path, not an alias the canonical value masks.
+  const migratedEdits = ALL_CONFIG_FIELDS.filter((field) => field.legacyYamlPath
+    && getFieldYamlPath(draftBase, field).join('.') !== getFieldYamlPath(nextBase, field).join('.')
+    && !areValuesSemanticallyEqual(getFieldSemanticValue(draftBase, field), getFieldSemanticValue(draft, field)))
+    .map((field) => ({ field, value: getFieldSemanticValue(draft, field) }));
+  for (const { field } of migratedEdits) {
+    updateFieldWithBaseline(remainingDraft, draftBase, field, getFieldSemanticValue(draftBase, field));
+  }
+  const changes = computeConfigChanges(draftBase, remainingDraft);
+  if (changes.length === 0 && migratedEdits.length === 0) return nextBaseYaml;
+  const rebased = nextBase.clone();
   try {
     for (const change of changes) {
       if (change.remove) {
@@ -42,6 +55,9 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
       } else {
         rebased.setIn(change.path, rebased.createNode(change.value));
       }
+    }
+    for (const { field, value } of migratedEdits) {
+      updateFieldWithBaseline(rebased, nextBase, field, value);
     }
   } catch {
     return null;
