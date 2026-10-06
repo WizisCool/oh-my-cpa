@@ -99,6 +99,7 @@ It uses fresh temporary directories and OS-assigned ports, and condition-based w
 This package smoke is separate from the container smoke and full browser gates;
 foreign cross-compilation does not prove foreign runtime behaviour. The release job
 rechecks completeness and SHA-256 integrity after the pinned artifact transfer;
+workflow regressions reject shared pnpm/Go caches and direct cache steps in the native publication job;
 new releases remain drafts until all attachments upload and latest policy is rechecked.
 
 ## 2. Registering a new test

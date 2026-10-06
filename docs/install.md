@@ -6,11 +6,11 @@ image is **`wiziscool/oh-my-cpa`** on Docker Hub, for `linux/amd64` and `linux/a
 
 | Scenario | Method |
 | --- | --- |
-| Run on macOS, Windows, Linux or FreeBSD without Docker | [Native executable](#native-executable) |
+| Run without Docker on macOS, Windows, Linux or FreeBSD on amd64/arm64, with a matching release asset | [Native executable](#native-executable) |
 | CPA is not deployed yet | [New install](#new-install) |
 | CPA is deployed with Docker Compose | [Add to the existing Compose file](#add-to-the-existing-compose-file) |
 | CPA is deployed another way | [Standalone](#standalone) |
-| Explicit source build, or a host outside the native matrix | [Build from source](#from-source) |
+| Explicit source build, or no published native asset matches the host OS/architecture | [Build from source](#from-source) |
 
 A coding agent can run the same steps from
 [`docs/install-for-agents.md`](install-for-agents.md).
@@ -230,7 +230,7 @@ OMC runs in a container, so `OMCPA_CPA_BASE_URL` has to work from inside that co
 | Runs on the same machine, listening on all interfaces | `http://host.docker.internal:8317` (the value above) |
 | Runs in another Docker project | `http://<CPA's container name>:8317`, with OMC joined to CPA's network (below) |
 | Runs on another machine | Its private or HTTPS address |
-| Listens on `127.0.0.1` only | A container cannot reach it. Install the [native executable](#native-executable) on the host |
+| Listens on `127.0.0.1` only | A container cannot reach it. Install the [native executable](#native-executable) on the host when a release asset matches its OS/architecture; otherwise [build from source](#from-source) |
 
 To join CPA's Docker network, add this to the standalone `compose.yml`:
 

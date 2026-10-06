@@ -32,6 +32,8 @@ builds use `CGO_ENABLED=0` with modernc SQLite and embed the IANA time-zone data
 through `-tags timetzdata`. OS certificate roots are still required for HTTPS.
 The Darwin and Windows executables are not code-signed or notarized.
 
+Native package builders do not restore shared Actions caches for the pnpm store or Go modules/build outputs. Dependencies are installed from the frozen lockfile and binaries are compiled in the fresh release job, so another workflow's cached outputs cannot become publication inputs.
+
 The existing release pipeline remains the publication authority (ADR 0066). To build
 and inspect the same assets locally on Linux, install the repository's pinned Node,
 pnpm and Go toolchains plus GNU tar, zip and unzip, then run:

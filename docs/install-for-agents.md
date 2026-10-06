@@ -37,6 +37,7 @@ Find out:
 - Is OMC already installed? Then this is an upgrade (step 5), not an install.
 - Does anything else collect CPA's usage, such as another panel's statistics or an
   exporter? CPA gives each usage record to one reader only, so this decides step 3.
+- Which OS and CPU architecture will run OMC, and does the release provide a matching native archive?
 - Are ports 8080 and 8317 free?
 
 Ask the user only for what cannot be found out.
@@ -48,8 +49,8 @@ Ask the user only for what cannot be found out.
 | No CPA | **A**: install CPA and OMC together |
 | CPA runs from a Compose file the user can edit | **B1**: add an OMC service to that file |
 | CPA in Docker without such a file, on another machine, or on the host listening on all interfaces | **B2**: add OMC from its own Compose file |
-| CPA on the host listening on `127.0.0.1` only, or no Docker | **C**: install the native executable on the host |
-| User explicitly requests source, or no native target matches | **D**: build from source |
+| A published native asset matches the detected OS/architecture, and either CPA listens on `127.0.0.1` only on the host or Docker is unavailable | **C**: install the matching native executable on the host |
+| User explicitly requests source, or no published native asset matches the detected OS/architecture | **D**: build from source |
 | OMC already installed | Step 5 |
 
 Before starting, tell the user which path was chosen and what it will create.

@@ -60,6 +60,14 @@ export function validateReleaseWorkflow(workflow) {
   assert.deepEqual(workflow.jobs.release.needs, ['verify', 'publish', 'native']);
   assert.equal(workflow.jobs.native.needs, 'verify');
   const nativeSteps = workflow.jobs.native.steps;
+  const nativePnpm = nativeSteps.find(step => step.uses?.startsWith('pnpm/action-setup@'));
+  const nativeNode = nativeSteps.find(step => step.uses?.startsWith('actions/setup-node@'));
+  const nativeGo = nativeSteps.find(step => step.uses?.startsWith('actions/setup-go@'));
+  assert.equal(nativePnpm.with?.cache, false, 'Published native artifacts must not restore the shared pnpm cache');
+  assert.equal(nativeNode.with['package-manager-cache'], false, 'Published native artifacts must disable automatic package caching');
+  assert.equal(nativeNode.with.cache, undefined, 'Published native artifacts must not select a dependency cache');
+  assert.equal(nativeGo.with.cache, false, 'Published native artifacts must not restore shared Go caches');
+  assert.ok(!nativeSteps.some(step => step.uses?.startsWith('actions/cache@')), 'Native publication must not add a direct shared cache');
   assert.equal(nativeSteps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref, '${{ needs.verify.outputs.revision }}');
   const nativeBuildIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release.mjs');
   const nativeSmokeIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release-smoke.mjs');
@@ -126,6 +134,25 @@ test('native release publication rejects missing build, smoke, transfer and inte
     value => { value.jobs.release.steps = value.jobs.release.steps.filter(step => !step.uses?.startsWith('actions/download-artifact@')); },
     value => { const step = value.jobs.release.steps.find(step => step.run?.includes('gh release create')); step.run = step.run.replace('node scripts/native-release.mjs --verify', ''); },
     value => { value.jobs.native.steps.find(step => step.uses?.startsWith('actions/upload-artifact@')).with['if-no-files-found'] = 'warn'; },
+  ]) {
+    const broken = structuredClone(workflow);
+    alter(broken);
+    assert.throws(() => validateReleaseWorkflow(broken));
+  }
+});
+
+test('native release publication rejects shared dependency cache restoration', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  validateReleaseWorkflow(workflow);
+  for (const alter of [
+    value => { value.jobs.native.steps.find(step => step.uses?.startsWith('pnpm/action-setup@')).with.cache = true; },
+    value => { delete value.jobs.native.steps.find(step => step.uses?.startsWith('pnpm/action-setup@')).with.cache; },
+    value => { value.jobs.native.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with.cache = 'pnpm'; },
+    value => { value.jobs.native.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['package-manager-cache'] = true; },
+    value => { delete value.jobs.native.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['package-manager-cache']; },
+    value => { value.jobs.native.steps.find(step => step.uses?.startsWith('actions/setup-go@')).with.cache = true; },
+    value => { delete value.jobs.native.steps.find(step => step.uses?.startsWith('actions/setup-go@')).with.cache; },
+    value => { value.jobs.native.steps.push({ uses: `actions/cache@${'a'.repeat(40)}` }); },
   ]) {
     const broken = structuredClone(workflow);
     alter(broken);
