@@ -29,6 +29,10 @@ type OAuthModelAliasView struct {
 	Aliases  map[string][]OAuthModelAlias `json:"aliases"`
 	Revision string                       `json:"revision"`
 }
+type OAuthExcludedModelsView struct {
+	ExcludedModels map[string][]string `json:"excluded_models"`
+	Revision       string              `json:"revision"`
+}
 type CredentialTarget struct {
 	Name      string `json:"name"`
 	AuthIndex string `json:"auth_index"`
@@ -226,7 +230,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		Aliases  []OAuthModelAlias `json:"aliases"`
 	}
 	metadata = Meta("oauth_set_model_aliases", "Replace one provider's OAuth model alias mapping after confirmation. Empty aliases delete the mapping.", "write", "high")
-	metadata.Invalidates = []string{"management-oauth-model-aliases", "pricing"}
+	metadata.Invalidates = []string{"management-oauth-model-aliases", "auth-file-models", "model-square", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input SetAliasesInput) (capability.Preview, error) {
 		if s.NormalizeOAuthModelAliases == nil {
 			return capability.Preview{}, errors.New("capability_unavailable")
@@ -253,6 +257,56 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 			return Done{}, errors.New("invalid_parameters")
 		}
 		if err := s.SetOAuthModelAliases(ctx, provider, aliases, revision); err != nil {
+			return Done{}, err
+		}
+		return Done{true}, nil
+	}); err != nil {
+		return err
+	}
+	if err := read(registry, "oauth_excluded_models_list", "Read the global per-provider OAuth model exclusion rules: the models CPA hides from every OAuth credential of a provider. A rule is a model ID or a pattern where * matches any characters.", func(ctx context.Context, _ Empty) (OAuthExcludedModelsView, error) {
+		if s.OAuthExcludedModels == nil {
+			return OAuthExcludedModelsView{}, errors.New("capability_unavailable")
+		}
+		excluded, revision, err := s.OAuthExcludedModels(ctx)
+		if excluded == nil {
+			excluded = map[string][]string{}
+		}
+		return OAuthExcludedModelsView{ExcludedModels: excluded, Revision: revision}, err
+	}); err != nil {
+		return err
+	}
+	type SetExcludedModelsInput struct {
+		Provider string   `json:"provider"`
+		Models   []string `json:"models"`
+	}
+	metadata = Meta("oauth_set_excluded_models", "Replace one provider's OAuth model exclusion rules after confirmation. Excluded models stop being served by every OAuth credential of that provider; the rule * excludes all of them. Empty models delete the provider's rules.", "write", "high")
+	metadata.Invalidates = []string{"management-oauth-excluded-models", "auth-file-models", "model-square", "pricing"}
+	if err := capability.Register(registry, metadata, func(ctx context.Context, input SetExcludedModelsInput) (capability.Preview, error) {
+		if s.NormalizeOAuthExclusions == nil || s.OAuthExcludedModels == nil {
+			return capability.Preview{}, errors.New("capability_unavailable")
+		}
+		provider, rules, err := s.NormalizeOAuthExclusions(input.Provider, input.Models)
+		if err != nil {
+			return capability.Preview{}, errors.New("invalid_parameters")
+		}
+		view, revision, err := s.OAuthExcludedModels(ctx)
+		if err != nil {
+			return capability.Preview{}, err
+		}
+		before := view[provider]
+		if before == nil {
+			before = []string{}
+		}
+		return capability.Preview{Target: provider, Revision: revision, Changes: map[string]any{"provider": provider, "before": before, "after": rules}}, nil
+	}, func(ctx context.Context, input SetExcludedModelsInput, revision, _ string) (Done, error) {
+		if s.NormalizeOAuthExclusions == nil || s.SetOAuthExcludedModels == nil {
+			return Done{}, errors.New("capability_unavailable")
+		}
+		provider, rules, err := s.NormalizeOAuthExclusions(input.Provider, input.Models)
+		if err != nil {
+			return Done{}, errors.New("invalid_parameters")
+		}
+		if err := s.SetOAuthExcludedModels(ctx, provider, rules, revision); err != nil {
 			return Done{}, err
 		}
 		return Done{true}, nil

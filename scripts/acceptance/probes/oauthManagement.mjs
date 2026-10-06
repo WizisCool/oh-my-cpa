@@ -92,6 +92,8 @@ export async function oauthManagement({ base, page, check }) {
     providerTabs.join(' | '),
   );
 
+  await checkOAuthModelRules({ page, base, check });
+
   check('the collection presents a single overview with no density switch', (await page.locator('.oauth-management-page .ant-segmented').count()) === 0);
   const compactVisible = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('[data-testid="oauth-credential-record"]')];
@@ -514,6 +516,108 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
   }
 }
 
+
+async function checkOAuthModelRules({ page, base, check }) {
+  const writes = [];
+  let aliasState = { claude: [{ name: 'claude-sonnet-4', alias: 'sonnet-latest', fork: true }] };
+  let exclusionState = { codex: ['gpt-5-mini', 'gpt-4*'] };
+  await page.route('**/management/auth-files/model-aliases', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON();
+      writes.push(body);
+      aliasState = { ...aliasState, [body.provider]: body.aliases };
+      await route.fulfill({ json: { status: 'ok', provider: body.provider, aliases: body.aliases } });
+    } else await route.fulfill({ json: { aliases: aliasState } });
+  });
+  await page.route('**/management/auth-files/excluded-models', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON();
+      writes.push(body);
+      exclusionState = { ...exclusionState, [body.provider]: body.models };
+      await route.fulfill({ json: { status: 'ok', provider: body.provider, models: body.models } });
+    } else await route.fulfill({ json: { excluded_models: exclusionState } });
+  });
+  const openRules = page.getByTestId('oauth-management-model-rules-open').first();
+  await openRules.click();
+  const drawer = page.getByTestId('oauth-model-rules-drawer');
+  await drawer.locator('[data-alias-field="alias"]').waitFor({ state: 'visible' });
+  const closeButton = drawer.getByRole('button', { name: 'Close', exact: true });
+  const closeBounds = await closeButton.boundingBox();
+  const drawerBounds = await drawer.boundingBox();
+  check('model rules keep the close action at the trailing header edge',
+    closeBounds.x > drawerBounds.x + drawerBounds.width / 2);
+  const provider = drawer.getByTestId('oauth-model-rules-provider');
+  const identity = provider.getByTestId('oauth-model-rules-provider-identity');
+  check('model rules use the provider tab name and mark in the selected control',
+    (await identity.innerText()) === 'Claude' && (await identity.locator('img, [aria-hidden="true"]').count()) > 0
+      && (await provider.getAttribute('data-provider')) === 'claude');
+  await drawer.locator('[data-alias-field="alias"]').fill('sonnet-preview');
+  await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
+  await drawer.getByTestId('oauth-excluded-models-rule-input').fill('claude-3*');
+  await drawer.getByTestId('oauth-excluded-models-rule-add').click();
+  await drawer.getByTestId('oauth-model-rules-tab-aliases').click();
+  check('switching sections preserves the alias draft and marks both unsaved tabs',
+    (await drawer.locator('[data-alias-field="alias"]').inputValue()) === 'sonnet-preview'
+      && (await drawer.getByRole('img', { name: 'Unsaved changes', exact: true }).count()) === 2);
+  await drawer.getByTestId('oauth-model-rules-save').click();
+  await until(() => drawer.getByTestId('oauth-model-rules-save').isDisabled());
+  check('saving aliases writes only that section while exclusion drafts remain protected',
+    writes.length === 1 && writes[0].provider === 'claude' && writes[0].aliases[0].alias === 'sonnet-preview'
+      && (await provider.getByRole('combobox').isDisabled()));
+  await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
+  check('the other section still has its draft after the alias save',
+    (await drawer.locator('[data-rule="claude-3*"]').count()) === 1);
+  await page.goBack();
+  const discard = page.locator('.ant-modal-confirm').last();
+  await discard.waitFor({ state: 'visible' });
+  await discard.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await discard.waitFor({ state: 'hidden' });
+  check('declining native Back leaves the rules and draft visible', await drawer.locator('[data-rule="claude-3*"]').isVisible());
+  await drawer.getByTestId('oauth-model-rules-revert').click();
+  const picker = provider.getByRole('combobox');
+  await picker.fill('Codex');
+  const codexOption = page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'Codex' });
+  await codexOption.waitFor({ state: 'visible' });
+  check('provider options carry tab names and brand artwork', (await codexOption.locator('img, [aria-hidden="true"]').count()) > 0);
+  await codexOption.click();
+  await drawer.locator('[data-model="gpt-4.1"]').waitFor({ state: 'visible' });
+  const wildcardModel = drawer.locator('[data-model="gpt-4.1"]').getByRole('checkbox');
+  check('catalog models covered by a wildcard cannot be unchecked independently',
+    await wildcardModel.isChecked() && await wildcardModel.isDisabled());
+  await drawer.getByTestId('oauth-excluded-models-rule-input').fill('*');
+  await drawer.getByTestId('oauth-excluded-models-rule-add').click();
+  await drawer.getByTestId('oauth-model-rules-save').click();
+  await until(() => drawer.getByTestId('oauth-model-rules-save').isDisabled());
+  check('global exclusion write preserves existing rules and targets the provider key',
+    writes.length === 2 && writes[1].provider === 'codex' && writes[1].models.join(',') === 'gpt-5-mini,gpt-4*,*');
+  for (const width of [1440, 375, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await settleLayout(page);
+    await until(() => drawer.evaluate((element) => element.getBoundingClientRect().left >= -1));
+    const geometry = await drawer.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const body = element.querySelector('.ant-drawer-body');
+      const footer = element.querySelector('.ant-drawer-footer').getBoundingClientRect();
+      return { left: rect.left, right: rect.right, bodyOverflow: body.scrollWidth - body.clientWidth, footerBottom: footer.bottom };
+    });
+    check(`model rules ${width}px stay within the viewport and keep the footer reachable`,
+      geometry.left >= -1 && geometry.right <= width + 1 && geometry.bodyOverflow <= 1 && geometry.footerBottom <= 901,
+      JSON.stringify(geometry));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goBack();
+  await drawer.waitFor({ state: 'hidden' });
+  check('native Back closes the saved rules without leaving the OAuth workspace', page.url().includes('/oauth-management'));
+  await openRules.click();
+  await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
+  await drawer.locator('[data-rule="claude-3*"]').waitFor({ state: 'hidden' });
+  check('a discarded section draft is not resurrected when the drawer reopens', (await drawer.locator('[data-rule="claude-3*"]').count()) === 0);
+  await drawer.locator('.ant-drawer-close').click();
+  await drawer.waitFor({ state: 'hidden' });
+  await page.unroute('**/management/auth-files/model-aliases');
+  await page.unroute('**/management/auth-files/excluded-models');
+}
+
 export const oauthManagementFixtures = {
   files,
   quota,
@@ -527,7 +631,14 @@ export const oauthManagementFixtures = {
     // Confirming a redemption is mocked here: the real call spends an entitlement, so the
     // probe only proves the request is issued once, from the enabled action.
     [(url, method) => method === 'POST' && url.pathname.endsWith('/management/quota/redeem-credit'), () => ({ status: 'ok', quota: quota[11] })],
-    [(url) => url.pathname.endsWith('/management/auth-files/model-aliases'), () => ({ 'oauth-model-alias': {}, supported: true })],
+    [(url) => url.pathname.endsWith('/management/auth-files/model-aliases'), () => ({ aliases: { claude: [{ name: 'claude-sonnet-4', alias: 'sonnet-latest', fork: true }] } })],
+    [(url) => url.pathname.endsWith('/management/auth-files/excluded-models'), () => ({ excluded_models: { codex: ['gpt-5-mini', 'gpt-4*'] } })],
+    [(url) => url.pathname.endsWith('/management/auth-files/provider-models'), (url) => ({
+      provider: url.searchParams.get('provider'), available: true,
+      models: url.searchParams.get('provider') === 'codex'
+        ? [{ id: 'gpt-5', display_name: 'GPT-5' }, { id: 'gpt-5-mini' }, { id: 'gpt-4.1' }]
+        : [{ id: 'claude-sonnet-4', display_name: 'Claude Sonnet 4' }],
+    })],
     [(url) => url.pathname.endsWith('/management/plugins'), () => ({ plugins: [], total: 0 })],
     [(url, method) => method === 'POST' && url.pathname.endsWith('/management/oauth/start'), () => ({
       url: 'https://auth.example.test/authorize',

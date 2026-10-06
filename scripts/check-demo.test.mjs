@@ -139,3 +139,16 @@ test('it reports the dataset as current when everything agrees', async () => {
   const result = await runCheck();
   assert.equal(result.code, 0, `the worktree was left modified:\n${result.output}`);
 });
+
+test('OAuth model rules cannot lose a captured read without failing coverage', async () => {
+  for (const name of ['auth-files-excluded-models', 'auth-files-provider-models-claude', 'auth-files-provider-models-codex', 'auth-files-provider-models-none']) {
+    await withModifiedFile(DATASET, (content) => {
+      const dataset = JSON.parse(content);
+      delete dataset.responses[name];
+      return JSON.stringify(dataset);
+    }, (result) => {
+      assert.equal(result.code, 1);
+      assert.ok(result.output.includes(`/oauth-management needs "${name}"`), result.output);
+    });
+  }
+});

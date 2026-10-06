@@ -608,6 +608,8 @@ func TestUpstreamServesTheConsoleSurface(t *testing.T) {
 		managementPrefix + "/config",
 		managementPrefix + "/config.yaml",
 		managementPrefix + "/config/oauth/model-alias",
+		managementPrefix + "/config/oauth/excluded-models",
+		managementPrefix + "/routing/model-definitions/codex",
 		managementPrefix + "/config/plugins/configs/usage-exporter",
 		legacyManagementPrefix + "/config.yaml",
 		legacyManagementPrefix + "/openai-compatibility",

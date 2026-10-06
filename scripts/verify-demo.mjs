@@ -197,6 +197,19 @@ async function main() {
         if (text.includes('Management Key') || text.includes('使用 CPA')) {
           throw new Error('rendered the sign-in card instead of the console');
         }
+        if (route.path === '/oauth-management') {
+          await page.getByTestId('oauth-management-model-rules-open').first().click();
+          const drawer = page.getByTestId('oauth-model-rules-drawer');
+          await drawer.locator('[data-alias-field="alias"]').first().waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          await drawer.getByTestId('oauth-model-rules-tab-excluded').click();
+          await drawer.getByTestId('oauth-excluded-models-catalog').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          if (!await drawer.getByTestId('oauth-model-rules-save').isDisabled()
+            || !await drawer.getByTestId('oauth-model-rules-clear').isDisabled()) {
+            throw new Error('the demonstration enabled durable OAuth rule writes');
+          }
+          await drawer.locator('.ant-drawer-close').click();
+          await drawer.waitFor({ state: 'hidden', timeout: NAVIGATION_TIMEOUT_MS });
+        }
         console.log(`[demo] ${route.path}: ${((performance.now() - started) / 1000).toFixed(2)}s`);
       } catch (error) {
         failures.push(`${route.path}: ${error.message}`);

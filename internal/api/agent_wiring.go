@@ -313,6 +313,57 @@ func (h *Handler) operationsService() *operations.Service {
 		})
 		return mapAgentProviderError(err)
 	}
+	service.OAuthExcludedModels = func(ctx context.Context) (map[string][]string, string, error) {
+		client, err := h.capabilityClient(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		raw, err := client.OAuthExcludedModels(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		projected, err := projectManagementOAuthExcludedModels(raw)
+		if err != nil {
+			return nil, "", err
+		}
+		encoded, err := json.Marshal(projected)
+		if err != nil {
+			return nil, "", err
+		}
+		revision, err := h.cipher.Fingerprint("oauth-excluded-models-operation", string(encoded))
+		if err != nil {
+			return nil, "", err
+		}
+		return projected, revision, nil
+	}
+	service.NormalizeOAuthExclusions = func(provider string, rules []string) (string, []string, error) {
+		normalizedProvider, err := normalizeManagementOAuthModelAliasProvider(provider)
+		if err != nil {
+			return "", nil, errors.New("invalid_parameters")
+		}
+		normalized, err := normalizeManagementOAuthExcludedModels(rules)
+		if err != nil {
+			return "", nil, errors.New("invalid_parameters")
+		}
+		return normalizedProvider, normalized, nil
+	}
+	service.SetOAuthExcludedModels = func(ctx context.Context, provider string, rules []string, revision string) error {
+		client, err := h.capabilityClient(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = h.applyManagementOAuthExcludedModels(ctx, client, provider, rules, func(ctx context.Context) error {
+			_, current, err := service.OAuthExcludedModels(ctx)
+			if err != nil {
+				return err
+			}
+			if current != revision {
+				return errors.New("resource_conflict")
+			}
+			return nil
+		})
+		return mapAgentProviderError(err)
+	}
 	service.NormalizeCredentialFields = func(fields map[string]any) (map[string]any, error) {
 		raw := make(map[string]json.RawMessage, len(fields))
 		for key, value := range fields {

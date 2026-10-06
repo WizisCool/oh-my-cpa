@@ -16,9 +16,12 @@ import {
   ManagementAuthFileSafeFields,
 } from '../types/managementAuthFile';
 import {
+  ManagementOAuthExcludedModelsMutationResponse,
+  ManagementOAuthExcludedModelsResponse,
   ManagementOAuthModelAlias,
   ManagementOAuthModelAliasesResponse,
   ManagementOAuthModelAliasMutationResponse,
+  ManagementOAuthProviderModelsResponse,
 } from '../types/managementOAuthModelAlias';
 import { DashboardResponse, DashboardTailResponse, DashboardWindow, type WindowCredentialTraffic } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
@@ -856,6 +859,27 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ provider, aliases }),
     });
+  },
+
+  async getManagementOAuthExcludedModels(): Promise<ManagementOAuthExcludedModelsResponse> {
+    return request<ManagementOAuthExcludedModelsResponse>('/management/auth-files/excluded-models', { method: 'GET' });
+  },
+
+  async patchManagementOAuthExcludedModels(
+    provider: string,
+    models: string[],
+  ): Promise<ManagementOAuthExcludedModelsMutationResponse> {
+    return request<ManagementOAuthExcludedModelsMutationResponse>('/management/auth-files/excluded-models', {
+      method: 'PATCH',
+      body: JSON.stringify({ provider, models }),
+    });
+  },
+
+  async getManagementOAuthProviderModels(provider: string): Promise<ManagementOAuthProviderModelsResponse> {
+    return request<ManagementOAuthProviderModelsResponse>(
+      `/management/auth-files/provider-models?provider=${encodeURIComponent(provider)}`,
+      { method: 'GET' },
+    );
   },
 
   async getHealth(): Promise<HealthStatus> {

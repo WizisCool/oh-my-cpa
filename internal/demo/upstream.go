@@ -371,6 +371,14 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 	case request.Method == http.MethodGet && path == "/credentials/models":
 		name := request.URL.Query().Get("name")
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"models": authFileModels(name)})
+	case request.Method == http.MethodGet && strings.HasPrefix(path, "/routing/model-definitions/"):
+		channel := strings.TrimPrefix(path, "/routing/model-definitions/")
+		models := channelModelDefinitions(channel)
+		if len(models) == 0 {
+			writeFixtureJSON(writer, http.StatusBadRequest, map[string]any{"error": "unknown channel", "channel": channel})
+			return
+		}
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{"channel": channel, "models": models})
 	case request.Method == http.MethodPatch && path == "/credentials/status":
 		u.patchAuthFileStatus(writer, request)
 	case request.Method == http.MethodPatch && path == "/credentials/fields":

@@ -35,6 +35,9 @@ type Service struct {
 	OAuthModelAliases          func(context.Context) (map[string][]OAuthModelAlias, string, error)
 	NormalizeOAuthModelAliases func(string, []OAuthModelAlias) (string, []OAuthModelAlias, error)
 	SetOAuthModelAliases       func(context.Context, string, []OAuthModelAlias, string) error
+	OAuthExcludedModels        func(context.Context) (map[string][]string, string, error)
+	NormalizeOAuthExclusions   func(string, []string) (string, []string, error)
+	SetOAuthExcludedModels     func(context.Context, string, []string, string) error
 	NormalizeCredentialFields  func(map[string]any) (map[string]any, error)
 	UpdateCredentialFields     func(context.Context, CredentialTarget, map[string]any, string) error
 }

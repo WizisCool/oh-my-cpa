@@ -104,6 +104,59 @@ func TestOAuthModelAliasCapabilityUsesSharedNormalizationAndRevision(t *testing.
 	}
 }
 
+func TestOAuthExcludedModelsCapabilityIsConfirmedAndRevisioned(t *testing.T) {
+	registry := capability.NewRegistry()
+	excluded := map[string][]string{"codex": {"gpt-5-mini"}}
+	revision := "r1"
+	service := &Service{
+		OAuthExcludedModels: func(context.Context) (map[string][]string, string, error) {
+			return excluded, revision, nil
+		},
+		NormalizeOAuthExclusions: func(provider string, rules []string) (string, []string, error) {
+			if provider == "" {
+				return "", nil, errors.New("invalid")
+			}
+			return provider, rules, nil
+		},
+		SetOAuthExcludedModels: func(_ context.Context, provider string, rules []string, expected string) error {
+			if expected != revision {
+				return errors.New("resource_conflict")
+			}
+			excluded = map[string][]string{provider: rules}
+			revision = "r2"
+			return nil
+		},
+	}
+	if err := service.registerOAuth(registry); err != nil {
+		t.Fatal(err)
+	}
+	principal := capability.Principal{Adapter: "agent", IsAdmin: true}
+	if definition, err := registry.Lookup("oauth_excluded_models_list", principal); err != nil || definition.Permission != "read" {
+		t.Fatalf("list definition: %+v %v", definition, err)
+	}
+	definition, err := registry.Lookup("oauth_set_excluded_models", principal)
+	if err != nil || definition.Permission != "write" || definition.Risk != "high" || definition.Prepare == nil {
+		t.Fatalf("definition: %+v %v", definition, err)
+	}
+	arguments := json.RawMessage(`{"provider":"codex","models":["gpt-5-*"]}`)
+	preview, err := definition.Prepare(context.Background(), arguments)
+	if err != nil || preview.Target != "codex" || preview.Revision != "r1" {
+		t.Fatalf("preview: %+v %v", preview, err)
+	}
+	if _, err := definition.Prepare(context.Background(), json.RawMessage(`{"provider":"","models":[]}`)); err == nil || err.Error() != "invalid_parameters" {
+		t.Fatalf("invalid provider accepted: %v", err)
+	}
+	if _, err := definition.Execute(context.Background(), arguments, "stale", ""); err == nil || err.Error() != "resource_conflict" {
+		t.Fatalf("stale revision accepted: %v", err)
+	}
+	if _, err := definition.Execute(context.Background(), arguments, preview.Revision, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(excluded["codex"]) != 1 || excluded["codex"][0] != "gpt-5-*" {
+		t.Fatalf("excluded: %+v", excluded)
+	}
+}
+
 func TestAgentCredentialFieldsRefuseSecretBearingKeys(t *testing.T) {
 	registry := capability.NewRegistry()
 	service := &Service{NormalizeCredentialFields: func(fields map[string]any) (map[string]any, error) { return fields, nil }}

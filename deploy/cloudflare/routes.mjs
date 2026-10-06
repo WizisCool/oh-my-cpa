@@ -77,6 +77,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/plugin-store', 'plugin-store'],
   ['/api/v1/management/auth-files', 'auth-files'],
   ['/api/v1/management/auth-files/model-aliases', 'auth-files-model-aliases'],
+  ['/api/v1/management/auth-files/excluded-models', 'auth-files-excluded-models'],
   ['/api/v1/management/oauth/providers', 'oauth-providers'],
   ['/api/v1/management/quota', 'quota'],
   ['/api/v1/management/logs/status', 'logs-status'],
@@ -149,6 +150,15 @@ const PARAMETERISED_ROUTES = [
   // the answer is the same for every credential because the fixture lists one model
   // set per provider family.
   { path: '/api/v1/management/auth-files/models', resolve: () => 'auth-files-models' },
+  // One provider's model catalog, for the model rule editors. A provider the dataset
+  // holds no catalog for answers as CPA does for one it keeps none for.
+  {
+    path: '/api/v1/management/auth-files/provider-models',
+    resolve: (url) => {
+      const name = `auth-files-provider-models-${(url.searchParams.get('provider') ?? '').toLowerCase()}`;
+      return Object.hasOwn(dataset.responses, name) ? name : 'auth-files-provider-models-none';
+    },
+  },
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },

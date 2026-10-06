@@ -298,3 +298,22 @@ OpenRouter source and is not synchronized by viewing Model Square. The page addi
 reads the existing `GET /api/v1/pricing` and `GET /api/v1/usage/facets?preset=24h` to show
 each name's price and recent requests; if either fails, the directory still renders and
 those cells stay blank.
+
+## OAuth model rules
+
+Open **Model rules** in OAuth management to edit CPA's provider-wide aliases or
+model exclusions. These settings affect every OAuth/file-backed credential of
+the selected provider, not just one file. Exact exclusions and `*` patterns match
+case-insensitively; `*` excludes all models. Exclusions run before alias mapping,
+so aliasing an excluded upstream model does not make it available again. Use the
+credential configuration tab for an individual file's exclusion fields.
+
+The facade exposes GET/PATCH at `/api/v1/management/auth-files/model-aliases` and
+`/api/v1/management/auth-files/excluded-models`. An exclusion PATCH carries
+`provider` and `models`; an empty `models` array removes that provider's rules.
+The provider model catalog is read at
+`/api/v1/management/auth-files/provider-models?provider=codex`. Without a catalog,
+the editors still accept typed names. A successful write requires CPA readback;
+changes are serialized with other whole-config writes, backed up and audit logged
+(`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
+reads but refuses durable changes.

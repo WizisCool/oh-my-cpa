@@ -49,8 +49,11 @@ export function createOAuthModelAliasDrafts(
   }));
 }
 
+// A new mapping keeps the upstream name beside the alias: without `fork` CPA
+// replaces the model ID, and clients already calling it would lose the model
+// the moment the alias is saved.
 export function emptyOAuthModelAliasDraft(rowKey: string): ManagementOAuthModelAliasDraft {
-  return { rowKey, name: '', alias: '', fork: false, force_mapping: false, display_name: '' };
+  return { rowKey, name: '', alias: '', fork: true, force_mapping: false, display_name: '' };
 }
 
 export function validateOAuthModelAliasDrafts(

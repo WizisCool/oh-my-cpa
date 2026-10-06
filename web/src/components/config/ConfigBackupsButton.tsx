@@ -27,6 +27,7 @@ const KNOWN_REASONS = new Set([
   'provider_keys',
   'client_keys',
   'oauth_aliases',
+  'oauth_excluded_models',
   'plugin_settings',
   'plugin_install',
   'plugin_delete',

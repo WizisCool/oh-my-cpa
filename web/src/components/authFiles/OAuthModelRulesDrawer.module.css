@@ -1,0 +1,269 @@
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scope-label {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.scope-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provider-select {
+  width: 100%;
+}
+
+.provider-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.provider-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sections {
+  width: 100%;
+}
+
+.provider-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-option-meta {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An unsaved tab is marked beside its label, so switching tabs never hides
+   that the other one still holds changes. */
+.dirty-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-count {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--fg-2);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.rule-entry {
+  display: flex;
+  gap: 8px;
+}
+
+.rule-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hint,
+.field-error,
+.field-warning {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.field-error {
+  color: var(--danger);
+}
+
+.field-warning {
+  color: var(--warn);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border-soft);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
+}
+
+.row-check {
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row-id {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.row-meta {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.row-action {
+  flex: none;
+}
+
+.catalog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-search {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* The catalog is the long list in this drawer, so it scrolls inside its own
+   box and the footer's actions stay within reach of the rule list above it. */
+.catalog {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.catalog .row {
+  padding-inline: 12px;
+}
+
+.catalog .row:last-child {
+  border-bottom: 0;
+}
+
+.alias-source {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.alias-source-input {
+  width: 100%;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* A phone: the label sits above the picker and the typed-rule button takes its
+   own row, because neither leaves the field beside it room for a provider key
+   or a model ID. */
+@media (max-width: 640px) {
+  .scope,
+  .rule-entry {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

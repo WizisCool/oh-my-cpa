@@ -958,6 +958,38 @@ func authFileModels(name string) []map[string]any {
 	return []map[string]any{}
 }
 
+// channelModelDefinitions is the catalog an OAuth channel is served from: every
+// model its credentials list, and the ones the channel's exclusion rules name,
+// because an excluded model is in the catalog and absent from the credentials.
+func channelModelDefinitions(channel string) []map[string]any {
+	models := []map[string]any{}
+	seen := map[string]bool{}
+	add := func(model string) {
+		if seen[model] || strings.Contains(model, "*") {
+			return
+		}
+		seen[model] = true
+		models = append(models, map[string]any{"id": model, "display_name": displayNameForModel(model)})
+	}
+	for _, item := range credentialCatalog() {
+		if item.provider != channel || item.accountType != "oauth" {
+			continue
+		}
+		for _, model := range item.models {
+			add(model)
+		}
+	}
+	if len(models) == 0 {
+		return models
+	}
+	if rules, ok := oauthExcludedModels()[channel].([]string); ok {
+		for _, rule := range rules {
+			add(rule)
+		}
+	}
+	return models
+}
+
 // displayNameForModel is the presentation name the credential page shows beside
 // each model id.
 func displayNameForModel(model string) string {

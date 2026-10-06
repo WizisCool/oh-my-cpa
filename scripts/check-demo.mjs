@@ -74,7 +74,7 @@ const ROUTE_READS = {
   '/agent': ['api-keys', 'capabilities', 'agent-session'],
   '/ai-providers': ['providers', 'dashboard-providers-24h'],
   '/api-keys': ['api-keys', 'client-key-aliases'],
-  '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'plugins', 'quota'],
+  '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'auth-files-excluded-models', 'auth-files-provider-models-claude', 'auth-files-provider-models-codex', 'auth-files-provider-models-none', 'plugins', 'quota'],
   '/logs': ['logs', 'logs-status', 'request-error-logs'],
   '/audit': ['audit-events', 'audit-summary'],
   '/usage/events': ['usage-events', 'usage-facets', 'usage-event-detail', 'usage-ingest-status'],

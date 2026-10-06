@@ -2114,3 +2114,25 @@ footer steps to the previous or next model of the filtered list without closing 
 one Back still dismisses it. The source note and snapshot date close the Drawer. Local icons
 and the existing palette, typography, spacing and motion tokens are reused without new global
 design tokens.
+
+### OAuth model rules
+
+The OAuth workspace's Model rules action opens a viewport-bounded, Back-aware
+Drawer. The close action sits at the trailing header edge, keeping it reachable
+beside centered save acknowledgements; the credential detail Drawer uses the same
+close placement. Its provider picker uses the same display names and local brand marks as
+the provider tabs, including plugin-published artwork, while retaining CPA's key
+as the selected value. Search accepts both the display name and the key. Options
+carry the saved alias and exclusion counts; the closed picker shows only the
+provider identity. Unknown providers keep a neutral mark and a readable name.
+
+Two full-width section tabs show aliases and exclusions with their draft counts
+and an unsaved indicator. Each section saves or reverts independently, and provider
+selection remains disabled while either has edits. Closing or native Back asks
+before discarding drafts. Aliases use the provider catalog as source suggestions,
+keep manual entry and default new mappings to retaining the original model (`fork`).
+Exclusions use open checkbox rows, searchable catalog bulk actions and a separate
+list for typed IDs and wildcard rules. A wildcard-covered row identifies its rule
+and cannot be unchecked unless its own exact rule exists; the catch-all rule warns
+that every model will be excluded. The footer keeps Clear, Revert and Save reachable
+on a phone. Existing palette, shape, typography and motion tokens are reused.

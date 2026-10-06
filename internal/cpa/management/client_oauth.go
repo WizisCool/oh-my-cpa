@@ -231,3 +231,83 @@ func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, al
 	}
 	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonOAuthAliases), changes)
 }
+
+// OAUTH_EXCLUDED_MODELS_PATH is where v8 keeps the models CPA hides from every
+// OAuth/file-backed credential of a provider, one rule list per provider.
+var OAUTH_EXCLUDED_MODELS_PATH = []string{"oauth", "excluded-models"}
+
+// OAuthExcludedModels reads CPA's global OAuth model exclusions as CPA applies
+// them: the stored lists pass through the cleanup CPA runs when it loads them
+// (see sanitizeOAuthExcludedModels).
+func (c *Client) OAuthExcludedModels(ctx context.Context) (map[string][]string, error) {
+	var stored map[string][]string
+	if _, err := c.configValueAt(ctx, OAUTH_EXCLUDED_MODELS_PATH, &stored); err != nil {
+		return nil, err
+	}
+	return sanitizeOAuthExcludedModels(stored), nil
+}
+
+// NormalizeExcludedModelRules mirrors CPA's NormalizeExcludedModels: rules are
+// trimmed and lower-cased, and a blank or repeated rule is dropped. CPA matches
+// model IDs case-insensitively, so the lower-cased rule is the one it uses.
+func NormalizeExcludedModelRules(rules []string) []string {
+	seen := make(map[string]bool, len(rules))
+	clean := make([]string, 0, len(rules))
+	for _, raw := range rules {
+		rule := strings.ToLower(strings.TrimSpace(raw))
+		if rule == "" || seen[rule] {
+			continue
+		}
+		seen[rule] = true
+		clean = append(clean, rule)
+	}
+	return clean
+}
+
+// CPA normalizes provider keys but gives colliding stored spellings no stable
+// winner. Read the first nonempty list in sorted order until a provider write
+// removes every alternate spelling, so the console does not fluctuate.
+func sanitizeOAuthExcludedModels(stored map[string][]string) map[string][]string {
+	providers := make([]string, 0, len(stored))
+	for provider := range stored {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	out := map[string][]string{}
+	for _, rawProvider := range providers {
+		provider := strings.ToLower(strings.TrimSpace(rawProvider))
+		if provider == "" || out[provider] != nil {
+			continue
+		}
+		if clean := NormalizeExcludedModelRules(stored[rawProvider]); len(clean) > 0 {
+			out[provider] = clean
+		}
+	}
+	return out
+}
+
+// PatchOAuthExcludedModels replaces one provider's exclusion rules, and removes
+// the provider when the list is empty. A stored spelling of the same provider
+// in another case is removed with it, because CPA would read both as one
+// provider and keep either.
+func (c *Client) PatchOAuthExcludedModels(ctx context.Context, provider string, rules []string) error {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	var stored map[string]any
+	if _, err := c.configValueAt(ctx, OAUTH_EXCLUDED_MODELS_PATH, &stored); err != nil {
+		return err
+	}
+	path := append(append([]string{}, OAUTH_EXCLUDED_MODELS_PATH...), provider)
+	var changes []ConfigChange
+	_, isStored := stored[provider]
+	for storedProvider := range stored {
+		if storedProvider != provider && strings.ToLower(strings.TrimSpace(storedProvider)) == provider {
+			changes = append(changes, ConfigChange{Path: append(append([]string{}, OAUTH_EXCLUDED_MODELS_PATH...), storedProvider), Remove: true})
+		}
+	}
+	if len(rules) > 0 {
+		changes = append(changes, ConfigChange{Path: path, Value: rules})
+	} else if isStored {
+		changes = append(changes, ConfigChange{Path: path, Remove: true})
+	}
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonOAuthExclusions), changes)
+}

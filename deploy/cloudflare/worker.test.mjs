@@ -198,6 +198,8 @@ describe('routing', () => {
       '/api/v1/management/providers',
       '/api/v1/management/api-keys',
       '/api/v1/management/auth-files',
+      '/api/v1/management/auth-files/model-aliases',
+      '/api/v1/management/auth-files/excluded-models',
       '/api/v1/management/quota',
       '/api/v1/management/logs',
       '/api/v1/management/plugins',
@@ -441,4 +443,32 @@ it('rebases current and previous capacity ranges without changing their basis or
   assert.equal(after.capacity.reset_at_ms, before.capacity.reset_at_ms + 3600000);
   assert.equal(after.capacity.basis, 'previous_cycle');
   assert.equal(after.capacity.tokens, 100);
+});
+
+describe('provider-wide OAuth model rules', () => {
+  it('serves the selected provider catalog without borrowing another provider', () => {
+    for (const provider of ['claude', 'codex']) {
+      const name = responseNameFor(request(`/api/v1/management/auth-files/provider-models?provider=${provider}`));
+      assert.equal(name, `auth-files-provider-models-${provider}`);
+      const catalog = JSON.parse(DATASET.responses[name].body);
+      assert.equal(catalog.provider, provider);
+      assert.equal(catalog.available, true);
+      assert.ok(catalog.models.length > 0);
+    }
+    const unknown = responseNameFor(request('/api/v1/management/auth-files/provider-models?provider=plugin-without-catalog'));
+    assert.equal(unknown, 'auth-files-provider-models-none');
+    assert.equal(JSON.parse(DATASET.responses[unknown].body).available, false);
+    assert.deepEqual(JSON.parse(DATASET.responses[unknown].body).models, []);
+  });
+
+  it('refuses durable OAuth rule mutations', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    for (const section of ['model-aliases', 'excluded-models']) {
+      const response = await worker.fetch(new Request(`https://demo.example/api/v1/management/auth-files/${section}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: 'codex', models: ['*'], aliases: [] }),
+      }), env);
+      assert.equal(response.status, 403);
+    }
+  });
 });

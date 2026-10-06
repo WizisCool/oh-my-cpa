@@ -436,6 +436,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   return (
     <Drawer
       title={identity?.primary || t('af.drawer_title')}
+      closable={{ placement: 'end', 'aria-label': t('common.close') }}
       size="large"
       open={open}
       onClose={handleAttemptClose}

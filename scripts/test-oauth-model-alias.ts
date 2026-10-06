@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createOAuthModelAliasDrafts,
+  emptyOAuthModelAliasDraft,
   oauthModelAliasDraftsEqual,
   validateOAuthModelAliasDrafts,
 } from '../web/src/components/authFiles/oauthModelAliasLogic.ts';
@@ -66,4 +67,14 @@ test('dirty comparison ignores row identity but not mapping semantics', () => {
     oauthModelAliasDraftsEqual(baseline, [{ ...same[0], force_mapping: true }]),
     false,
   );
+});
+
+test('a new mapping preserves the upstream model unless the operator switches fork off', () => {
+  const draft = { ...emptyOAuthModelAliasDraft('new'), name: 'gpt-5', alias: 'fast' };
+  assert.deepEqual(validateOAuthModelAliasDrafts('codex', [draft]), {
+    ok: true, provider: 'codex', aliases: [{ name: 'gpt-5', alias: 'fast', fork: true }],
+  });
+  assert.deepEqual(validateOAuthModelAliasDrafts('codex', [{ ...draft, fork: false }]), {
+    ok: true, provider: 'codex', aliases: [{ name: 'gpt-5', alias: 'fast' }],
+  });
 });

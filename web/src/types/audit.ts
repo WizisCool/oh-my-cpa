@@ -71,7 +71,7 @@ export const AUDIT_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
   access: ['auth'],
   keys: ['api_key', 'client_key'],
   providers: ['provider'],
-  credentials: ['auth_file', 'oauth', 'oauth_model_alias'],
+  credentials: ['auth_file', 'oauth', 'oauth_model_alias', 'oauth_excluded_models'],
   quota: ['quota'],
   config: ['config'],
   pricing: ['pricing'],

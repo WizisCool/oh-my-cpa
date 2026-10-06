@@ -143,6 +143,14 @@ func demoExportCases() []demoExportCase {
 		// The model and alias lists are asked for per credential; `auth-files-models`
 		// without a name is what the console's own model picker sends.
 		{Name: "auth-files-model-aliases", Path: "/api/v1/management/auth-files/model-aliases"},
+		{Name: "auth-files-excluded-models", Path: "/api/v1/management/auth-files/excluded-models"},
+		// The rule editors read one catalog per provider; these are the fixture's
+		// providers that carry rules, which are the ones the drawer opens on.
+		{Name: "auth-files-provider-models-claude", Path: "/api/v1/management/auth-files/provider-models?provider=claude"},
+		{Name: "auth-files-provider-models-codex", Path: "/api/v1/management/auth-files/provider-models?provider=codex"},
+		// What every other provider answers: CPA keeps no catalog for it, and the
+		// editors fall back to typed model IDs.
+		{Name: "auth-files-provider-models-none", Path: "/api/v1/management/auth-files/provider-models?provider=uncatalogued"},
 		{Name: "auth-files-models", Path: "/api/v1/management/auth-files/models?name=antigravity-studio.json"},
 		// The capability probe is keyed by a fixed catalogue name rather than by a
 		// credential; `oauth` is the one the console asks for.

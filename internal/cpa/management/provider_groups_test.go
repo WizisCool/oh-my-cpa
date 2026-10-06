@@ -339,6 +339,56 @@ func TestPatchOAuthModelAliasesReplacesEverySpellingOfTheProvider(t *testing.T) 
 	}
 }
 
+func TestPatchOAuthExcludedModelsReplacesEverySpellingOfTheProvider(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, path string) (int, string) {
+		if method == http.MethodGet && path == "/v8/management/config/oauth/excluded-models" {
+			return http.StatusOK, `{"Codex":["gpt-5-mini"],"claude":["claude-3-haiku"]}`
+		}
+		return 0, ""
+	}}
+	client := newConfigClient(t, gateway)
+	if err := client.PatchOAuthExcludedModels(context.Background(), "codex", []string{"gpt-5-*"}); err != nil {
+		t.Fatal(err)
+	}
+	sent := strings.Join(gateway.sent(), "\n")
+	if !strings.Contains(sent, "PATCH /v8/management/config") || !strings.Contains(sent, "DELETE /v8/management/config/oauth/excluded-models/Codex") {
+		t.Fatalf("requests = %s", sent)
+	}
+	if strings.Contains(sent, "excluded-models/claude") {
+		t.Fatalf("another provider was touched: %s", sent)
+	}
+}
+
+func TestPatchOAuthExcludedModelsWritesNothingForAProviderWithoutRules(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, path string) (int, string) {
+		if method == http.MethodGet && path == "/v8/management/config/oauth/excluded-models" {
+			return http.StatusOK, `{"claude":["claude-3-haiku"]}`
+		}
+		return 0, ""
+	}}
+	client := newConfigClient(t, gateway)
+	if err := client.PatchOAuthExcludedModels(context.Background(), "codex", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range gateway.sent() {
+		if !strings.HasPrefix(request, http.MethodGet) {
+			t.Fatalf("clearing a provider that stores no rules wrote to CPA: %s", request)
+		}
+	}
+}
+
+func TestOAuthExcludedModelsAreReadAsCPAAppliesThem(t *testing.T) {
+	got := sanitizeOAuthExcludedModels(map[string][]string{
+		"Codex": {" GPT-5 ", "gpt-5", "", "o3-*"},
+		"codex": {"ignored-second-spelling"},
+		" ":     {"orphan"},
+		"empty": {"  "},
+	})
+	if len(got) != 1 || strings.Join(got["codex"], ",") != "gpt-5,o3-*" {
+		t.Fatalf("sanitized = %#v", got)
+	}
+}
+
 func TestPluginConfigTellsAnUnconfiguredPluginFromAnUnknownOne(t *testing.T) {
 	gateway := &configGateway{answer: func(method, path string) (int, string) {
 		switch {

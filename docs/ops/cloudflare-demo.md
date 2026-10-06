@@ -353,3 +353,12 @@ owner shape to preserve seeded request latency and source-file sizes. Runtime te
 stamps use the same minute precision as rebased millisecond stamps; quota observations
 and creation/update metadata on the seeded clock retain their original precision.
 A second generation must match the committed dataset byte for byte (`pnpm demo:generate --check`).
+
+### OAuth model rules dataset
+
+The OAuth workspace's Model rules task reads provider-wide alias and exclusion
+maps plus a provider-scoped static model catalog. The dataset exports these as
+`auth-files-model-aliases`, `auth-files-excluded-models` and provider catalog entries;
+Worker routes resolve only the exported catalogs and refuse durable rule writes.
+They are separate from individual credentials' safe fields. Regenerate the dataset
+when the facade, its normalization or console reads change.

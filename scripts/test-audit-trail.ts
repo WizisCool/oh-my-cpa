@@ -31,6 +31,7 @@ const event = (fields: Partial<AuditEvent>): AuditEvent => ({
 
 test('a category covers every action prefix it names, and nothing that merely starts alike', () => {
   assert.equal(categoryOf('oauth_model_alias.update'), 'credentials');
+  assert.equal(categoryOf('oauth_excluded_models.update'), 'credentials');
   assert.equal(categoryOf('auth_file.delete'), 'credentials');
   assert.equal(categoryOf('auth.login'), 'access');
   assert.equal(categoryOf('capability.usage_aggregate'), 'agent');

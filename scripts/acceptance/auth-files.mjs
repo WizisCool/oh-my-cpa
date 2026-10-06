@@ -370,20 +370,20 @@ export async function runAuthFilesAcceptance({
 
     // OAuth model aliases are global CPA configuration. Exercise the complete
     // save -> readback -> close/reopen path, then the provider deletion action.
-    const aliasOpen = page.getByTestId('oauth-management-model-alias-open');
+    const aliasOpen = page.getByTestId('oauth-management-model-rules-open');
     await aliasOpen.click();
-    const aliasDrawer = page.getByTestId('oauth-model-alias-drawer').last();
+    const aliasDrawer = page.getByTestId('oauth-model-rules-drawer').last();
     await aliasDrawer.waitFor({ state: 'visible', timeout: 5000 });
-    check('oauth model alias drawer selects a mapped provider', (await aliasDrawer.getByTestId('oauth-model-alias-provider').innerText()) === 'claude');
+    check('oauth model alias drawer selects a mapped provider', (await aliasDrawer.getByTestId('oauth-model-rules-provider').getAttribute('data-provider')) === 'claude');
     const aliasInput = aliasDrawer.locator('[data-alias-field="alias"]').first();
     await aliasInput.waitFor({ state: 'visible', timeout: 5000 });
     check('oauth model alias drawer loads the CPA mapping', (await aliasInput.inputValue()) === 'sonnet-latest');
     await aliasInput.fill('sonnet-preview');
-    await aliasDrawer.getByTestId('oauth-model-alias-save').click();
+    await aliasDrawer.getByTestId('oauth-model-rules-save').click();
     await checkEventually(
       'oauth model alias save settles after verified readback',
-      async () => aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled(),
-      { detail: async () => `disabled=${await aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled()}` },
+      async () => aliasDrawer.getByTestId('oauth-model-rules-save').isDisabled(),
+      { detail: async () => `disabled=${await aliasDrawer.getByTestId('oauth-model-rules-save').isDisabled()}` },
     );
     await aliasDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
@@ -394,7 +394,7 @@ export async function runAuthFilesAcceptance({
       (await aliasDrawer.locator('[data-alias-field="alias"]').first().inputValue()) === 'sonnet-preview',
     );
 
-    await aliasDrawer.getByTestId('oauth-model-alias-delete-provider').click();
+    await aliasDrawer.getByTestId('oauth-model-rules-clear').click();
     const aliasDeleteConfirm = page.locator('.ant-modal-confirm').last();
     await aliasDeleteConfirm.waitFor({ state: 'visible', timeout: 5000 });
     await aliasDeleteConfirm.locator('.ant-btn-primary').click();
@@ -404,6 +404,35 @@ export async function runAuthFilesAcceptance({
     );
     await aliasDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+
+    // Global exclusions are separate from each auth file's own routing fields.
+    await aliasOpen.click();
+    await aliasDrawer.waitFor({ state: 'visible' });
+    const providerPicker = aliasDrawer.getByTestId('oauth-model-rules-provider').getByRole('combobox');
+    await providerPicker.fill('Codex');
+    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'Codex' }).click();
+    await aliasDrawer.getByTestId('oauth-model-rules-tab-excluded').click();
+    const exclusionInput = aliasDrawer.getByTestId('oauth-excluded-models-rule-input');
+    await exclusionInput.fill('o3-*');
+    await aliasDrawer.getByTestId('oauth-excluded-models-rule-add').click();
+    await aliasDrawer.getByTestId('oauth-model-rules-save').click();
+    await checkEventually('OAuth exclusions settle after verified readback',
+      () => aliasDrawer.getByTestId('oauth-model-rules-save').isDisabled());
+    await aliasDrawer.locator('.ant-drawer-close').click();
+    await aliasDrawer.waitFor({ state: 'hidden' });
+    await aliasOpen.click();
+    await aliasDrawer.waitFor({ state: 'visible' });
+    await aliasDrawer.getByTestId('oauth-model-rules-tab-excluded').click();
+    await checkEventually('OAuth exclusion survives close and reopen',
+      () => aliasDrawer.locator('[data-rule="o3-*"]').isVisible());
+    await aliasDrawer.getByTestId('oauth-model-rules-clear').click();
+    const exclusionConfirm = page.locator('.ant-modal-confirm').last();
+    await exclusionConfirm.waitFor({ state: 'visible' });
+    await exclusionConfirm.locator('.ant-btn-primary').click();
+    await checkEventually('clearing OAuth exclusions leaves no saved rules',
+      () => aliasDrawer.getByTestId('oauth-model-rules-clear').isDisabled());
+    await aliasDrawer.locator('.ant-drawer-close').click();
+    await aliasDrawer.waitFor({ state: 'hidden' });
 
     // 8. Viewports at 390px and 320px for the unified workspace
     for (const width of [390, 320]) {

@@ -354,3 +354,16 @@ or an unambiguous source alias. They do not establish operational availability o
 open-source license. Names/icons use current deployment overlays; endpoints are reduced
 to hostnames. Secrets and account fields are excluded. Results exceeding 2,000 routes
 are refused with `tool_result_too_large`.
+
+### OAuth model exclusions
+
+`oauth_excluded_models_list` reads the provider-wide, normalized exclusion map and
+its revision. `oauth_set_excluded_models` is a high-risk write accepting `provider`
+and `models`. Its preview names the provider and shows before/after rules; execution
+requires the operator's confirmation and rechecks the map revision under the shared
+whole-config write gate. It reuses the console facade's rule validation and verified
+CPA readback, then invalidates the exclusion map, credential model lists, Model Square and pricing.
+An empty list removes only that provider's rules. The wildcard `*` hides every model
+for that provider's OAuth credentials, so it must remain visible in the preview.
+These capabilities are available through the built-in Agent and stdio MCP registry,
+without a new adapter or any secret-bearing response.

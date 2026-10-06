@@ -80,6 +80,7 @@ func TestDemoPolicyRefusesTheDangerousSurface(t *testing.T) {
 		{http.MethodGet, "/api/v1/management/auth-files/download"},
 		{http.MethodDelete, "/api/v1/management/auth-files"},
 		{http.MethodPatch, "/api/v1/management/auth-files/model-aliases"},
+		{http.MethodPatch, "/api/v1/management/auth-files/excluded-models"},
 		{http.MethodGet, "/api/v1/management/request-error-logs/request-error-2026-01-01.log"},
 		{http.MethodGet, "/api/v1/usage/events/41/request-log"},
 		{http.MethodDelete, "/api/v1/management/logs"},

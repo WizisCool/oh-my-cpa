@@ -657,8 +657,10 @@ timer clears the previous one first, which is what holds the one-checker rule. T
 drawer presents one serialized status checker per attempt. The workspace opts out of
 the hook’s default completion notification and reports completion once, through its
 credential-aware toast after the list refresh settles. Credential detail,
-configuration and models share one guarded Drawer; provider aliases remain
-provider-scoped. `CredentialQuotaBody` is the single quota renderer used by the
+configuration and models share one guarded Drawer. Provider-scoped aliases and
+global OAuth exclusions share a separate Model Rules Drawer, with independent
+section drafts; switching provider or closing cannot discard an unsaved section
+without a guard. Its names and brand marks match the provider filter tabs. `CredentialQuotaBody` is the single quota renderer used by the
 workspace and its detail panel. The list always renders a compact quota summary;
 the Quota tab always renders the full quota body. Configuration and Models are
 separate tabs with query eligibility bound to the selected tab. The configuration
@@ -1039,10 +1041,24 @@ the facade reads the runtime entry and a server-side projection of the
 downloaded JSON back before returning success. The projection exposes only
 prefix, proxy URL, expiry, disable-cooling, WebSockets, using-API, note, priority,
 weight and excluded models; tokens and other credential material stay inside
-the Go process. Global OAuth model aliases are managed separately through
-`/api/v1/management/auth-files/model-aliases`: the facade replaces one provider
-at a time, reads CPA back before reporting success, and audit logs the write.
-These writes and safe reads are audit logged.
+the Go process. Global OAuth model rules are separate from those per-credential fields:
+`/api/v1/management/auth-files/model-aliases` reads and replaces one provider's
+aliases, and `/api/v1/management/auth-files/excluded-models` reads and replaces
+one provider's exclusions (`oauth.model-alias` and `oauth.excluded-models` in CPA).
+Empty lists delete that provider's configuration. Both writes acquire the whole-config
+write gate, take the ordinary pre-write configuration backup, read CPA back before
+reporting success, notify pricing membership and record the audit outcome. The agent
+capabilities reuse the same normalization and write path, with a revision checked
+inside the write gate.
+
+`GET /api/v1/management/auth-files/provider-models?provider=<key>` projects only
+model IDs and display names from the allowlisted OAuth channel's static model
+catalog. It is unaffected by aliases or exclusions and never reads credential secrets.
+An unknown channel or CPA's 400/404 returns `available: false`; other upstream
+failures remain failures. The editors retain manual entry without a catalog.
+Exclusion reads use CPA's trimmed, lowercase, deduplicated rules. The facade bounds
+provider count, rule count (512) and rule length (256 characters).
+Aliases and exclusions remain CPA-owned configuration, without a new OMC table.
 
 `cpa_bindings` carries `missing_at_ms` and `ON DELETE SET NULL` so upstream
 removal marks a binding missing without cascading into history.

@@ -38,7 +38,7 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import { AuthFileDetailDrawer } from '../../components/authFiles/AuthFileDetailDrawer';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
-import { OAuthModelAliasDrawer } from '../../components/authFiles/OAuthModelAliasDrawer';
+import { OAuthModelRulesDrawer } from '../../components/authFiles/OAuthModelRulesDrawer';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
 import { CompactQuotaView } from '../quota/CompactQuotaView';
@@ -353,7 +353,7 @@ export const OAuthManagementPage: React.FC = () => {
     if (selectedIdentity && !selectedRecord) setSelectedIdentity(undefined);
   }, [selectedIdentity, selectedRecord]);
 
-  const [isAliasOpen, setIsAliasOpen] = React.useState(false);
+  const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const onTargetGone = React.useCallback((recordKey: string) => {
@@ -527,7 +527,7 @@ export const OAuthManagementPage: React.FC = () => {
           <>
             <ActionMenu>
               <Button icon={<UploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()}>{t('af.upload')}</Button>
-              <Button icon={<BranchesOutlined />} disabled={actions.isOperating} onClick={() => setIsAliasOpen(true)} data-testid="oauth-management-model-alias-open">{t('af.alias_open')}</Button>
+              <Button icon={<BranchesOutlined />} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open">{t('af.rules_open')}</Button>
             </ActionMenu>
             <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
           </>
@@ -544,10 +544,10 @@ export const OAuthManagementPage: React.FC = () => {
             <Button
               icon={<BranchesOutlined />}
               disabled={actions.isOperating}
-              onClick={() => setIsAliasOpen(true)}
-              data-testid="oauth-management-model-alias-open"
+              onClick={() => setIsModelRulesOpen(true)}
+              data-testid="oauth-management-model-rules-open"
             >
-              {t('af.alias_open')}
+              {t('af.rules_open')}
             </Button>
             <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>
               {t('omc.connect_account')}
@@ -926,17 +926,20 @@ export const OAuthManagementPage: React.FC = () => {
         quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
       />
 
-      <OAuthModelAliasDrawer
-        open={isAliasOpen}
-        onClose={() => setIsAliasOpen(false)}
+      <OAuthModelRulesDrawer
+        open={isModelRulesOpen}
+        onClose={() => setIsModelRulesOpen(false)}
         onSaved={() => {
           void Promise.all([
             queryClient.invalidateQueries({ queryKey: ['management-oauth-model-aliases'] }),
+            queryClient.invalidateQueries({ queryKey: ['management-oauth-excluded-models'] }),
             queryClient.invalidateQueries({ queryKey: ['auth-file-models'] }),
+            queryClient.invalidateQueries({ queryKey: ['model-square'] }),
             queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
           ]);
         }}
         providerOptions={providerOptions.filter((provider) => provider !== 'all')}
+        pluginLogos={pluginLogos}
       />
     </div>
   );

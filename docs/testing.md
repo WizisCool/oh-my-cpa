@@ -480,3 +480,19 @@ revocation, identity-only responses and configured model aliases/prefixes. Both 
 checks exercise `/model-square`; the Worker dataset captures the same safe live
 directory and models.dev facts. New logic checks, the populated built-directory
 assertion and the section geometry check are mutation-tested before delivery.
+
+### OAuth model rules
+
+`scripts/test-oauth-excluded-models.ts` owns normalization, exact/wildcard matching,
+validation, catalog coverage and independent exact rules under wildcard coverage.
+`scripts/test-oauth-model-alias.ts` pins the new mapping's retain-original default.
+Go tests beside the OAuth exclusion facade own provider replacement/deletion,
+allowlisted catalog projection, request validation and refused readback.
+The existing `oauth-management` probe owns provider tab names/artwork in the picker,
+independent section drafts, section-only saves, trailing-edge close placement, native Back guards and 1440/375/320px
+Drawer geometry. Built auth-file acceptance owns both sections' verified
+save/close/reopen/clear paths against fake CPA. The generated Worker dataset includes
+provider-wide exclusions and static catalogs separately from credential fields.
+Demo coverage requires both maps and each exported catalog; Worker tests pin
+provider-specific catalog routing, unknown-catalog handling and mutation refusal.
+Demo browser acceptance opens both rule sections and checks read-only controls.
