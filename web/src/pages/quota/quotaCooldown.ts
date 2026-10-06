@@ -20,3 +20,7 @@ export function compactCooldownDiagnostic(item: QuotaItem): string | null {
   if (!item.active_cooldown?.is_active || !reason?.trim() || isKnownQuotaCooldownReason(reason)) return null;
   return reason;
 }
+
+export function resolveQuotaCooldownTooltip(reason: string | undefined, fallback: string): string {
+  return !reason?.trim() || isKnownQuotaCooldownReason(reason) ? fallback : reason;
+}

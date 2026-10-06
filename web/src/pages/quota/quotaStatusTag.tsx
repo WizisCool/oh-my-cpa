@@ -8,7 +8,7 @@ import {
 } from '../../components/icons';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { isKnownQuotaCooldownReason } from './quotaCooldown';
+import { resolveQuotaCooldownTooltip } from './quotaCooldown';
 
 /**
  * The one status vocabulary for credential quota.
@@ -20,7 +20,7 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
   if (item.active_cooldown?.is_active || item.status === 'cooldown') {
     const reason = item.active_cooldown?.reason;
     return (
-      <Tooltip title={isKnownQuotaCooldownReason(reason) ? t('quota.cooldown_active_desc') : reason || t('quota.cooldown_active_desc')}>
+      <Tooltip title={resolveQuotaCooldownTooltip(reason, t('quota.cooldown_active_desc'))}>
         <Tag color="error" icon={<StopOutlined />} style={{ margin: 0 }}>{t('quota.status_cooldown')}</Tag>
       </Tooltip>
     );

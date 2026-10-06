@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compactCooldownDiagnostic, isKnownQuotaCooldownReason } from '../web/src/pages/quota/quotaCooldown.ts';
+import { compactCooldownDiagnostic, isKnownQuotaCooldownReason, resolveQuotaCooldownTooltip } from '../web/src/pages/quota/quotaCooldown.ts';
 import type { QuotaItem } from '../web/src/types/quota.ts';
 
 const quota: QuotaItem = {
@@ -40,4 +40,13 @@ test('inactive or reasonless cooldowns do not create a duplicate banner', () => 
   assert.equal(compactCooldownDiagnostic({ ...quota, active_cooldown: { is_active: true } }), null);
   assert.equal(compactCooldownDiagnostic({ ...quota, active_cooldown: { is_active: true, reason: '  ' } }), null);
   assert.equal(compactCooldownDiagnostic({ ...quota, active_cooldown: { is_active: false, reason: 'Previous failure' } }), null);
+});
+
+test('cooldown tooltip explains known and blank reasons while preserving unexpected diagnostics', () => {
+  const fallback = 'CPA cooldown is active';
+  for (const reason of [undefined, '', '  ', '\t\n', knownReason, ' credential_quota ']) {
+    assert.equal(resolveQuotaCooldownTooltip(reason, fallback), fallback, JSON.stringify(reason));
+  }
+  const unexpected = '  Refresh failed: invalid_token  ';
+  assert.equal(resolveQuotaCooldownTooltip(unexpected, fallback), unexpected);
 });
