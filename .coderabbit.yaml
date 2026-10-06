@@ -21,6 +21,13 @@ reviews:
   # which is what a maintainer needs when judging a finding.
   in_progress_fortune: false
   review_details: true
+  # Generated artifacts whose freshness a gate already proves. The README
+  # screenshots are binary, so a review can say nothing about them, and the
+  # demonstration dataset is regenerated from the real handlers and pinned by
+  # `pnpm check:demo`; the generators and the pages they capture stay in review.
+  path_filters:
+    - '!docs/images/**'
+    - '!deploy/cloudflare/data/**'
   high_level_summary_instructions: >-
     Summarize what changed and which invariant or document it affects. Group the
     walkthrough by layer (Go packages, SPA, scripts, migrations, context docs)
@@ -49,7 +56,7 @@ reviews:
     # A coverage percentage is not a meaningful target for a codebase whose
     # comments are reserved for design intent.
     docstrings:
-      mode: off
+      mode: 'off'
     title:
       mode: warning
       requirements: >-
