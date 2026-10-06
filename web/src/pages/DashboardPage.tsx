@@ -550,7 +550,9 @@ export const DashboardPage: React.FC = () => {
 
       <OverviewSecondary query={query} range={range} enabled={rangeReady} />
 
-      {!data.coverage.has_usage && (
+      {/* has_usage is false when the server could not tell, too; a partial
+          response must not claim the deployment has never been used. */}
+      {!data.coverage.has_usage && data.partial_errors.length === 0 && (
         <div className="terminal-panel dashboard-empty">
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}

@@ -237,13 +237,18 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	// Collector stats are the one block a live poll skips: they describe the
 	// pipeline, not the window, and they move far slower than the numbers
 	// printed next to them.
-	pending, pendingErr := h.repo.CountPendingUsageInbox(ctx)
-	first, firstErr := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID())
-	if pendingErr == nil && firstErr == nil {
+	// The two are read and reported separately: a failed pending count must not
+	// leave has_usage false, which the page would read as a deployment with no
+	// usage at all.
+	if pending, err := h.repo.CountPendingUsageInbox(ctx); err == nil {
 		response.Coverage.PendingInbox = pending
-		response.Coverage.HasUsage = first != nil
 	} else {
 		response.Errors = append(response.Errors, "pipeline stats unavailable")
+	}
+	if first, err := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID()); err == nil {
+		response.Coverage.HasUsage = first != nil
+	} else {
+		response.Errors = append(response.Errors, "usage history unavailable")
 	}
 	writeJSON(writer, http.StatusOK, response)
 }
@@ -607,6 +612,16 @@ func (h *Handler) dashboardWindow(request *http.Request, now time.Time) (dashboa
 	return window, "", nil
 }
 
+// presetErrorMessage lists the presets the requested endpoint accepts. The parser
+// is shared with the request list, which does not offer the all-time window, so
+// only the dashboard's own routes name it.
+func presetErrorMessage(request *http.Request) string {
+	if strings.Contains(request.URL.Path, "/management/dashboard") {
+		return "preset must be one of 15m, 1h, 6h, 24h, 7d, 30d, 90d, all"
+	}
+	return "preset must be one of 15m, 1h, 6h, 24h, 7d, 30d, 90d"
+}
+
 func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboardWindow, string) {
 	query := request.URL.Query()
 	preset := strings.ToLower(strings.TrimSpace(query.Get("preset")))
@@ -658,7 +673,7 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 	default:
 		span, known := dashboardPresets[preset]
 		if !known {
-			return dashboardWindow{}, "preset must be one of 15m, 1h, 6h, 24h, 7d, 30d, 90d"
+			return dashboardWindow{}, presetErrorMessage(request)
 		}
 		fromMS, toMS = nowMS-span.Milliseconds(), nowMS
 	}

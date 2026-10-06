@@ -280,8 +280,31 @@ func TestDashboardAllTimeWindowOutlivesRequestRecords(t *testing.T) {
 		if response.StatusCode != http.StatusOK {
 			t.Fatalf("%s?preset=all status = %d body %s", panel, response.StatusCode, payload)
 		}
-		if panel != "dashboard/tail" && (!strings.Contains(string(payload), "old-model") && !strings.Contains(string(payload), "codex")) {
-			t.Fatalf("%s lost the usage whose request record was deleted: %s", panel, payload)
+		switch panel {
+		case "dashboard/models":
+			if !strings.Contains(string(payload), "old-model") {
+				t.Fatalf("%s lost the usage whose request record was deleted: %s", panel, payload)
+			}
+		case "dashboard/providers":
+			// Both records may share a credential, so the count is the assertion,
+			// not a provider name the recent record also carries.
+			var traffic struct {
+				Providers   []struct{ Total int64 } `json:"providers"`
+				Credentials []struct{ Total int64 } `json:"credentials"`
+			}
+			if err := json.Unmarshal(payload, &traffic); err != nil {
+				t.Fatal(err)
+			}
+			var total int64
+			for _, row := range traffic.Providers {
+				total += row.Total
+			}
+			for _, row := range traffic.Credentials {
+				total += row.Total
+			}
+			if total != 2 {
+				t.Fatalf("%s counts %d requests, want both: %s", panel, total, payload)
+			}
 		}
 	}
 

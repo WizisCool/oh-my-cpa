@@ -1376,8 +1376,9 @@ served nothing with another surface's traffic. The fact that does identify the k
 already in the record: the credential's runtime `auth_index`.
 
 `/management/dashboard/providers` therefore answers with two lists instead of one.
-`internal/repository/usage_model_analytics.go` groups the window by
-`(provider_key, CASE WHEN auth_type = 'apikey' THEN auth_index ELSE '' END)`;
+`QueryUsageProviderTotals` reads the usage facts grouped by `UsageGroupProviderCredential`
+(`usageFactGroupExpressions` in `internal/repository/usage_facts.go`): the provider label
+CPA wrote, and `CASE WHEN auth_type = 'apikey' THEN auth_index ELSE '' END`;
 `internal/api/management_dashboard_providers.go` folds the empty-index rows into
 `providers[]` by the label CPA wrote — the OAuth channels, and records that name no
 credential — and the rest into `credentials[]`, one entry per key that served traffic.

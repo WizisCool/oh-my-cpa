@@ -190,7 +190,7 @@ func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *htt
 	// recorded since 1970.
 	first, err := h.repo.FirstUsageRecordMS(ctx, defaultInstanceID())
 	if err != nil {
-		writeInternalError(writer, fmt.Errorf("query first usage event: %w", err))
+		writeInternalError(writer, fmt.Errorf("query first usage record: %w", err))
 		return
 	}
 	response.FirstStoredMS = first
