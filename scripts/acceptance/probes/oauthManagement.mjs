@@ -53,7 +53,7 @@ function quotaFor(index) {
     disabled: false,
     status: cooldown ? 'cooldown' : unsupported ? 'idle' : 'healthy',
     observed_at_ms: Date.now(),
-    plan: { plan_type: 'pro', plan_label: 'Pro', tier: 'premium' },
+    plan: { plan_type: 'pro', plan_label: 'Pro', tier: 'premium', ...(index === 3 ? { subscription_active: false } : {}) },
     windows,
     active_cooldown: cooldown ? { is_active: true, reason: 'Rate limit protection active', recover_at_ms: Date.now() + 900_000 } : undefined,
     // The bank holds two credits while upstream considers none of them applicable right
@@ -156,9 +156,11 @@ export async function oauthManagement({ base, page, check }) {
       && !groupLabels.some((label) => label.includes('Model group 2') || label.includes('Model group 3')),
     groupLabels.join(' | '),
   );
+  check('an explicitly inactive subscription is visible in its compact reading', await groupRecord.locator('[data-subscription-inactive]').isVisible());
   await groupRecord.getByRole('button', { name: /^(Details|详情):/i }).click();
   const detailPanel = page.locator('.ant-drawer-open');
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
+  check('an explicitly inactive subscription is visible in credential details', await detailPanel.locator('[data-subscription-inactive]').isVisible());
   check('quota tab shows every model group without unrelated configuration',
     (await detailPanel.locator('.ant-progress').count()) === 6
       && (await detailPanel.innerText()).includes('Model group 3 · Window 2')

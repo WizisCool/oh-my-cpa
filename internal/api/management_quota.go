@@ -65,6 +65,15 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		return
 	}
 
+	// Meta's observation endpoint can mint a key. Fail closed before downloading
+	// its DCA credential or making that upstream call, including batch refreshes.
+	auditMetaAttempt := func(file management.AuthFile) error {
+		if quota.DetectProvider(file.Type, file.Provider) != "meta" || file.Disabled {
+			return nil
+		}
+		return h.recordAudit(request, "quota.refresh", "quota", file.AuthIndex, "attempt", map[string]any{"provider": "meta", "upstream_action": "key_exchange"})
+	}
+
 	fileMap := make(map[string]management.AuthFile)
 	for _, f := range filesResp.Files {
 		idx := strings.TrimSpace(f.AuthIndex)
@@ -81,6 +90,10 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			return
 		}
 
+		if err := auditMetaAttempt(file); err != nil {
+			writeAuditFailure(writer, "quota refresh attempt could not be audited")
+			return
+		}
 		prior := h.loadPriorNormalizedQuota(ctx, targetIndex)
 		svc := quota.NewService(client)
 		refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
@@ -95,7 +108,11 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		}
 		h.attachWindowCapacity(ctx, refreshed, h.now().UnixMilli())
 
-		_ = h.recordAudit(request, "quota.refresh", "quota", targetIndex, "success", map[string]any{
+		outcome := "success"
+		if refreshed.Provider == "meta" && refreshed.Error != "" {
+			outcome = "failure"
+		}
+		_ = h.recordAudit(request, "quota.refresh", "quota", targetIndex, outcome, map[string]any{
 			"status": refreshed.Status,
 		})
 
@@ -106,7 +123,17 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		return
 	}
 
-	targetIndexes := req.AuthIndexes
+	// Deduplicate before auditing or exchanging keys: repeated selections must
+	// not perform the same credential-bearing observation more than once.
+	targetIndexes := make([]string, 0, len(req.AuthIndexes))
+	seenIndexes := make(map[string]bool, len(req.AuthIndexes))
+	for _, value := range req.AuthIndexes {
+		authIndex := strings.TrimSpace(value)
+		if authIndex != "" && !seenIndexes[authIndex] {
+			seenIndexes[authIndex] = true
+			targetIndexes = append(targetIndexes, authIndex)
+		}
+	}
 	if len(targetIndexes) == 0 {
 		writeError(writer, http.StatusBadRequest, "auth_index or auth_indexes is required")
 		return
@@ -115,6 +142,14 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		targetIndexes = targetIndexes[:10]
 	}
 
+	for _, targetIndex := range targetIndexes {
+		if file, exists := fileMap[strings.TrimSpace(targetIndex)]; exists {
+			if err := auditMetaAttempt(file); err != nil {
+				writeAuditFailure(writer, "quota refresh attempt could not be audited")
+				return
+			}
+		}
+	}
 	svc := quota.NewService(client)
 	results := make([]*quota.NormalizedQuota, len(targetIndexes))
 	var wg sync.WaitGroup
@@ -147,6 +182,13 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 	out := make([]*quota.NormalizedQuota, 0, len(results))
 	for _, r := range results {
 		if r != nil {
+			if r.Provider == "meta" && !r.Disabled {
+				outcome := "success"
+				if r.Error != "" {
+					outcome = "failure"
+				}
+				_ = h.recordAudit(request, "quota.refresh", "quota", r.AuthIndex, outcome, map[string]any{"status": r.Status})
+			}
 			h.attachWindowCapacity(ctx, r, h.now().UnixMilli())
 			out = append(out, r)
 		}

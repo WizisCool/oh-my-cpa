@@ -127,6 +127,11 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             <span className={styles['meta-item']}>
               <span className={styles['meta-label']}>{t('quota.col_plan')}</span>
               <span className={styles['meta-value']}>{item.plan.plan_label}</span>
+              {item.plan.subscription_active === false && (
+                <span className={styles['meta-tag']} data-subscription-inactive="true">
+                  {t('quota.subscription_inactive')}
+                </span>
+              )}
             </span>
           )}
           {item.plan?.expires_at_ms && (

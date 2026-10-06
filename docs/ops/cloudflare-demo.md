@@ -373,3 +373,12 @@ refreshed OAuth tokens. Vertex import and credential refresh are refused in demo
 mode; their interactive checks use isolated browser fixtures instead. Regenerate
 with `pnpm demo:generate` and verify `pnpm check:demo` when these projections
 change, alongside the pictured credential/provider page screenshots.
+
+### Subscription observation fixtures
+
+The in-process fixture answers the fixed xAI user/settings and Antigravity
+Code Assist endpoints alongside their usage endpoints. It also owns a projected
+Meta usage sample with no token or minted key. These are catalogue lookups, not
+outbound HTTP requests; their paths are checked against the compiled quota
+allowlist. Regenerate the Worker dataset when the normalized subscription output
+changes, so the served plan labels match the Go facade (ADR 0065).

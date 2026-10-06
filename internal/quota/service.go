@@ -25,6 +25,10 @@ const (
 	AntigravityQuotaURLDaily   = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 	AntigravityQuotaURLSandbox = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary"
 	AntigravityQuotaURLCloud   = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+	AntigravitySubscriptionURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+	MetaUsageURL               = "https://api.meta.ai/muse-code/key"
+	XaiSubscriptionURL         = "https://cli-chat-proxy.grok.com/v1/user?include=subscription"
+	XaiSettingsURL             = "https://cli-chat-proxy.grok.com/v1/settings"
 	KimiUsageURL               = "https://api.kimi.com/coding/v1/usages"
 	KimiInternationalUsageURL  = "https://api.kimi.ai/coding/v1/usages"
 	XaiBillingMonthlyURL       = "https://cli-chat-proxy.grok.com/v1/billing"
@@ -57,6 +61,10 @@ var AllowedURLPrefixes = []string{
 	"https://cli-chat-proxy.grok.com/v1/billing",
 	"https://api.x.ai/v1/",
 	DevinSeatStatusURL,
+	MetaUsageURL,
+	AntigravitySubscriptionURL,
+	"https://cli-chat-proxy.grok.com/v1/user",
+	XaiSettingsURL,
 }
 
 // IsAllowedQuotaURL verifies that a target URL is in the strict quota allowlist.
@@ -130,6 +138,8 @@ func DetectProvider(fileType, provider string) string {
 		return "kimi"
 	case strings.Contains(t, "xai") || strings.Contains(p, "xai") || strings.Contains(t, "grok") || strings.Contains(p, "grok"):
 		return "xai"
+	case t == "meta" || p == "meta" || t == "meta-muse" || p == "meta-muse" || t == "meta_muse" || p == "meta_muse":
+		return "meta"
 	case strings.Contains(t, "devin") || strings.Contains(p, "devin"):
 		return "devin"
 	default:
@@ -153,7 +163,7 @@ func CapabilitiesForProvider(provider string) QuotaCapabilities {
 			ClearCooldownSupported: true,
 			ResetCreditSupported:   true,
 		}
-	case "claude", "antigravity", "kimi", "xai", "devin":
+	case "claude", "antigravity", "kimi", "xai", "devin", "meta":
 		return QuotaCapabilities{
 			RefreshSupported:       true,
 			ClearCooldownSupported: true,
@@ -309,9 +319,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 			fetchErr = err
 		} else {
 			result.Windows = windows
-			if result.Plan == nil {
-				result.Plan = ResolveAntigravityPlan("pro")
-			}
+			result.Plan = s.fetchAntigravitySubscription(ctx, file)
 		}
 
 	case "kimi":
@@ -327,6 +335,15 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 
 	case "xai":
 		plan, windows, err := s.fetchXaiQuota(ctx, file, nowMS)
+		if err != nil {
+			fetchErr = err
+		} else {
+			result.Plan = plan
+			result.Windows = windows
+		}
+
+	case "meta":
+		plan, windows, err := s.fetchMetaQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -634,7 +651,11 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingMonthlyURL, headers, "")
 	if err == nil && resp.StatusCode == 200 {
 		if normBody, bErr := resp.NormalizedBody(); bErr == nil {
-			return ParseXaiBilling(normBody, nowMS)
+			plan, windows, parseErr := ParseXaiBilling(normBody, nowMS)
+			if parseErr == nil {
+				s.applyXaiSubscription(ctx, file, headers, plan)
+			}
+			return plan, windows, parseErr
 		}
 	}
 

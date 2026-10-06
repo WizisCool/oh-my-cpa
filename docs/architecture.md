@@ -1782,6 +1782,19 @@ Kimi international credentials use the single allowlisted
 reading tokens or trying a second host. Endpoint entries refuse appended paths;
 entries ending in `/` cover a family (ADR 0064).
 
+Meta observations and xAI/Antigravity subscription reads use four additional
+individual endpoints (ADR 0065). Meta's key endpoint requires the stored DCA token,
+so only this probe downloads its selected credential server-side; a fail-closed
+attempt audit precedes the download and exchange. It can mint a key upstream, but
+only subscription/window fields are decoded and no returned key is retained or
+written back. Its transport, HTTP and decoding errors never quote raw payloads.
+The other probes use CPA's token substitution. xAI reads its subscription only
+after CLI billing succeeds, preserving independent billing fields; Antigravity
+reads `loadCodeAssist` and no longer assumes Pro on a failed tier observation.
+Supplemental subscription failures preserve successful usage readings. Meta's
+optional `subscription_active` distinguishes false from an unknown reading, and
+the console displays an explicit inactive state beside the plan.
+
 A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no
 probe is reported with `refresh_supported: false` rather than as a failed fetch.

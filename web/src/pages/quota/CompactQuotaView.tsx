@@ -61,6 +61,9 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
       <div className={styles.head}>
         {quotaStatusTag(item, t)}
         {planText && <span className={styles.plan}>{planText}</span>}
+        {item.plan?.subscription_active === false && (
+          <span className={styles.plan} data-subscription-inactive="true">{t('quota.subscription_inactive')}</span>
+        )}
         {availableCredits > 0 && (
           <span className={styles.credit} title={t('omc.quota_credit_available_hint')}>
             <ThunderboltOutlined /> {t('omc.quota_credit_available', { n: availableCredits })}

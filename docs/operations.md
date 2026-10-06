@@ -328,6 +328,29 @@ uses credential type, provider and file name; the console does not download the
 token to detect an account system or retry the token against the other host.
 Neither the browser nor Agent/MCP can supply an arbitrary upstream target.
 
+## Meta quota and live subscription tiers
+
+A Meta Muse quota refresh requires a stored credential with a valid `dca_token`.
+OMC downloads that credential server-side and sends a fixed POST to
+`https://api.meta.ai/muse-code/key`; runtime-only files and missing DCA tokens are
+not replaced with an LLM API key. This endpoint can mint a key while reporting
+quota. OMC discards returned keys and account fields, does not update the stored
+credential, and records an attempt audit before downloading or calling it.
+Audit unavailability refuses the operation. Batch refresh trims and deduplicates
+auth indexes before auditing or exchanging keys, preserving first-seen order
+and refreshing at most ten distinct credentials. The reading includes the usage window,
+weekly window, plan name and explicit active/inactive state when supplied. Missing
+shares are unknown, not a zero-used or fully-available quota.
+
+xAI subscription names are read from fixed `/v1/user?include=subscription` and
+`/v1/settings` requests on `cli-chat-proxy.grok.com` after a successful CLI billing
+read. API-key health fallback does not initiate these additional subscription
+requests. Antigravity tiers come from the daily host's `loadCodeAssist` endpoint,
+with paid tier taking precedence over current tier. If these supplemental reads
+fail, usage remains readable: xAI keeps its billing fallback, while Antigravity
+shows an unknown tier rather than assuming Pro. New endpoints are individually
+allowlisted and neither console nor Agent/MCP accepts a caller-chosen URL (ADR 0065).
+
 ## Credential management actions
 
 `POST /api/v1/management/auth-files/refresh` accepts `name` and `auth_index` for

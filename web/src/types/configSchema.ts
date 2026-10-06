@@ -997,8 +997,8 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     placeholderKey: '0',
     keywords: ['codex', 'stream', 'bootstrap', 'timeout'],
   },
-  // providers: Codex Live media relay. `ice-servers` is deliberately absent: its TURN
-  // credentials are never returned by CPA's configuration API, so the editor cannot show them.
+  // CPA's JSON view redacts TURN secrets but preserves omitted ones on writes
+  // with matching URL arrays. ICE editing needs explicit keep/replace/clear states.
   {
     id: 'codexLiveEnabled',
     sectionId: 'providers',

@@ -462,8 +462,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   'agent.capability.quota_list': ["查看配额", "Read quotas"],
   'agent.capability.quota_list.description': [
-    "读取各凭据的配额窗口与观测时间；缺失或过期的观测不代表额度为零。",
-    "Reads quota windows and when they were observed; a missing or stale observation is not zero quota.",
+    "读取各凭据的套餐名称、档位、配额窗口与观测时间；缺失或过期的观测不代表额度为零。",
+    "Reads subscription plan names and tiers, quota windows and when they were observed; a missing or stale observation is not zero quota.",
   ],
   'agent.capability.quota_redeem_credit': ["兑换重置额度", "Redeem a reset credit"],
   'agent.capability.quota_redeem_credit.description': [
@@ -472,8 +472,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   'agent.capability.quota_refresh': ["刷新配额", "Refresh a quota"],
   'agent.capability.quota_refresh.description': [
-    "刷新一个凭据的配额观测；不会重置或消耗额度。",
-    "Refreshes one credential's quota observation; it does not reset or spend credits.",
+    "刷新一个凭据的配额观测；不会重置或消耗额度。Meta 刷新使用密钥交换接口，可能在上游生成密钥；返回的密钥会被丢弃。",
+    "Refreshes one credential's quota observation; it does not reset or spend credits. Meta uses a key-exchange endpoint that may mint an upstream key; returned keys are discarded.",
   ],
   'agent.capability.requests_cost_breakdown': ["解释请求费用", "Explain a request's cost"],
   'agent.capability.requests_cost_breakdown.description': [
@@ -2565,6 +2565,7 @@ const DICT: Record<string, [string, string]> = {
   'quota.hours_ago': ['小时前', 'hours ago'],
   'quota.recover_at': ['预计恢复时间: {time}', 'Expected recovery: {time}'],
   'quota.retry_after': ['建议重试间隔: {seconds}秒', 'Retry after: {seconds}s'],
+  'quota.subscription_inactive': ['订阅未生效', 'Subscription inactive'],
   'quota.col_plan': ['套餐', 'Plan'],
   'quota.col_renewal': ['续期时间', 'Renewal'],
   'quota.renewal_snapshot': ['未实时核实', 'not verified live'],

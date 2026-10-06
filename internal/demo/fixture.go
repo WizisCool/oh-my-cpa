@@ -850,6 +850,10 @@ func quotaPayloads(now time.Time) map[string]any {
 				},
 			},
 		},
+		xaiSubscriptionURL:         map[string]any{"subscriptionTier": "SUPERGROK"},
+		xaiSettingsURL:             map[string]any{"subscription_tier_display": "SuperGrok"},
+		antigravitySubscriptionURL: map[string]any{"currentTier": map[string]any{"id": "free-tier"}, "paidTier": map[string]any{"id": "g1-pro-tier"}},
+		metaUsageURL:               map[string]any{"subs_tier_name": "Muse Pro", "is_subs_active": true, "subs_usage": map[string]any{"window": map[string]any{"used_percent": 28, "window_duration_mins": 300, "resets_at": now.Add(3 * time.Hour).Unix()}, "weekly": map[string]any{"used_percent": 46, "resets_at": now.Add(4 * 24 * time.Hour).Unix()}}},
 		antigravityUsageURL: map[string]any{
 			"groups": []map[string]any{{
 				"displayName": "Gemini models",
@@ -877,6 +881,7 @@ func quotaPayloadKeys() []string {
 	return []string{
 		codexUsageURL, codexResetCreditsURL, codexSubscriptionURL, claudeUsageURL, claudeProfileURL,
 		kimiUsageURL, xaiUsageURL, antigravityUsageURL, devinUsageURL,
+		xaiSubscriptionURL, xaiSettingsURL, antigravitySubscriptionURL, metaUsageURL,
 	}
 }
 
@@ -897,7 +902,11 @@ const (
 	// The monthly billing read is the first one the quota service tries for xAI, so
 	// it is the one that has to answer; the paid-account probe behind it is never
 	// reached once this succeeds.
-	xaiUsageURL = "https://cli-chat-proxy.grok.com/v1/billing"
+	xaiSubscriptionURL         = "https://cli-chat-proxy.grok.com/v1/user"
+	xaiSettingsURL             = "https://cli-chat-proxy.grok.com/v1/settings"
+	antigravitySubscriptionURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+	metaUsageURL               = "https://api.meta.ai/muse-code/key"
+	xaiUsageURL                = "https://cli-chat-proxy.grok.com/v1/billing"
 	// Antigravity is queried through a list of regional hosts and the first is used,
 	// which is what makes this one the fixture's answer.
 	antigravityUsageURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"

@@ -70,6 +70,8 @@ export interface QuotaExtraUsage {
 }
 
 export interface QuotaPlan {
+  /** Whether the provider reports an active subscription; absent when unknown. */
+  subscription_active?: boolean;
   plan_type: string;
   plan_label: string;
   tier: 'elite' | 'premium' | 'standard' | 'free' | 'unknown';

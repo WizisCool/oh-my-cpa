@@ -364,6 +364,12 @@ See [ADR 0044](adr/0044-browser-connections-subscribe-to-server-owned-runs.md).
 ## Quota capacity output
 
 `quota_list` and `quota_refresh` expose the same safe window results as the console.
+Their `plan` projection contains only `plan_type`, `plan_label`, `tier` and optional
+`subscription_active`; false denotes an explicit inactive subscription, while an
+absent field means unknown. The projection includes live xAI/Antigravity tiers and
+Meta plan readings, not credential metadata, raw responses or minted keys. Meta
+refresh uses its key-exchange endpoint and can mint a key upstream; the refresh
+tool description states this side effect, and returned keys are discarded (ADR 0065).
 No new capability or permission is needed: listing remains a read and refreshing
 remains a low-risk write. Their tool descriptions identify these as estimates rather
 than balances or routing instructions.
