@@ -203,7 +203,6 @@ export function useProviderManagement({
         options: EMPTY_MODEL_OPTIONS_DRAFT,
       },
     ]);
-    setExpandedModelIds((prev) => new Set([...prev, newId]));
     setTimeout(() => {
       const el = document.getElementById(`model-card-${newId}`);
       if (el) {

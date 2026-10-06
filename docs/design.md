@@ -764,6 +764,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Rows are separated by subtle 1px hairline dividers (`border-bottom: 1px solid var(--border-soft)`).
    - Clear structure: entity name and identifier on the left, technical metadata / provider in the middle, and direct interactive controls on the right (e.g. switch toggles, action buttons).
 2. **Unified Credential Workspace Density**
+   - An identified `credential_quota` cooldown is explained by the existing CPA cooldown status tooltip, without a second red banner. Unrecognized cooldown reasons remain visible in the overview; the Quota tab retains the complete reason and action-failure diagnostics.
    - OAuth sign-in, credential management and quota reading share one credential collection. The list presents a scan-first overview: identity, management state and metadata, quota condition, plan, observation age and the credential's own model family as its five-hour and weekly windows - each a labelled bar carrying its share, with its reset on the line below. A group's window is named from the period it covers when the provider sends no kind, so the row reads in the console's language whatever the provider labelled. The row carries one visible action beside its enable switch; models, editing, a quota refresh, a cooldown release, download and delete sit in the row menu, because a row is a reading and not a stack of buttons. A menu entry names its action and never the file name, which would stretch the menu to whatever the longest credential is called; the file name belongs to the confirmation, where it identifies the target. A refresh reports itself once, as a toast: a run without a failure is an acknowledgement that leaves on its own, and a run with a failing target is a report toast that lists each target's reason and stays until it is closed. Redeeming a banked reset credit is not a row action at all: it is irreversible and spends an entitlement, so only the Drawer's Quota tab offers it, beside the credit expiries it consumes. One Details action opens the complete reading - every family, credit, cooldown and diagnostic - in the credential Drawer. The overview floor is six complete credential records at 1440x900: the row is allowed its height, because reading a credential matters more than fitting as many of them as possible. The Drawer separates Quota, Configuration and Models into tabs; only the selected task is visible. Configuration drafts survive tab changes and remain guarded when closing from any tab. Safe fields and models are fetched only when their respective tabs are selected. Search stays visible, additional filters are disclosed on demand, and pagination owns page size. Provider tabs show populated families plus the selected family; empty providers remain available in Connect. Record boundaries are visible, status colors remain semantic, and model/group labels and ordering survive full quota rendering.  Full quota completeness is verified in the Quota tab, including six model/group windows, with no horizontal overflow in the list or Drawer at 320px. Compact window footers wrap long capacity estimates, including previous-cycle token-only values in full-digit style, within their own window rather than clipping digits or widening the page.
 3. **Task-Dependent Density**
    - Monitoring and high-frequency telemetry (Dashboard, Live Logs, Request Records): High density, compact, tabular monospace alignment.
@@ -1221,9 +1222,15 @@ spinner cannot tell working from stuck; its pip pulses as an
 indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as
 keyboard-reachable buttons that fill the composer without sending.
 
+### Model-row disclosure
+
+Adding a provider custom model creates a collapsed row: its request model and optional alias are immediately editable, while image capability and reasoning-effort controls open only through the row's disclosure action. Existing row expansion is preserved.
+
 ## 6. antd theme wiring (themeConfig.ts)
 
 Non-obvious decisions, keep these when editing:
+
+Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/chartTooltip.ts`: content-sized columns, 8px decorative swatches and 6px gutters keep each marker, optional name, value and optional share together. Timestamp headings do not stretch those tracks; names align on the left and numeric edges on the right across rows. Full names and exact values remain available in escaped titles. Existing palette, font and motion tokens are unchanged.
 
 - `colorPrimary: accentHover` (`#0077b8` in OMC Dark, `#004770` in OMC Light) — filled controls
   use the deeper step; `colorInfo/colorLink: accent` (`#00a2fb` / `#005d8f`). This is why buttons
@@ -1551,6 +1558,8 @@ still carry a large `scrollTop` — would re-collapse the header on the first fr
 of the very gesture that was expanding it.
 
 ### Wheel and keys glide; a finger is never smoothed
+
+Native option popups (`overflow-y: auto`, including the Playground model picker) retain browser-owned wheel scrolling even when they share the list library's holder structure. Their scroll listener mirrors offsets through deferred React state, so a second offset writer can undo progress. Only a holder with hidden overflow and that structure receives synthetic wheel steps; structural similarity alone does not establish virtual scrolling.
 
 A notched mouse wheel delivers a scroll as 100px jumps, and whether the browser animates them is the
 operating system's call — Windows readers who switch "Animation effects" off get steps, and the

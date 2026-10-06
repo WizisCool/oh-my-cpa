@@ -147,6 +147,10 @@ and hidden-tab suspension are logic tests, while the Agent probe checks visible 
 light Stop border. Stream-coalescing probes exclude only elapsed-label mutations, not answer
 mutations, because the clock does not publish through the transcript's run hook.
 
+### Console readout and disclosure regressions
+
+The existing `dashboard-charts` and `dashboard-model-panels` probes measure compact tooltip gutters, row centers, marker/name columns and numeric edges, including the donut's shared readout, while logic tests cover escaped full names, exact values and localized units. `scroll-smoothing` exercises native Playground model popups with the list library's shared holder structure, repeated/reversed notches, filtering and reopening, alongside the virtual time-zone popup and request list. `provider-model-picker` verifies newly added custom models remain collapsed until explicit disclosure; `oauth-management` and the automatically discovered quota-cooldown logic suite distinguish recognized quota conditions from unexpected reasons and preserve full Drawer diagnostics.
+
 ### Dashboard model-view regressions
 
 The existing `dashboard-model-panels-states` probe owns window selection, manual refresh,

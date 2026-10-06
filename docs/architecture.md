@@ -755,6 +755,8 @@ row as `client_request_id` for correlation instead.
 
 ## 3. Frontend shape
 
+The console scroll engine distinguishes native option lists by their computed overflow, not merely the shared holder DOM structure. Library-native `auto`/`scroll` holders retain browser-owned wheel scrolling because their deferred React offset reconciliation would race frame-by-frame writes; ordinary native regions still glide through `scrollTop`, and hidden-overflow virtual holders are driven through their wheel handler. This keeps nonvirtualized Select popups scrollable without bypassing the request-list virtualizer.
+
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
 Query for server state.
 

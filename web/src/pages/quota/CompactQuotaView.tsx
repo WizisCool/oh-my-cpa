@@ -14,6 +14,7 @@ import {
 import { quotaRemainingStroke } from './quotaThresholds';
 import { orderQuotaWindows, pickCompactQuotaWindows, quotaWindowKindOf } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
+import { compactCooldownDiagnostic } from './quotaCooldown';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import styles from './QuotaPresentation.module.css';
@@ -47,7 +48,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
   const { style: tokenStyle } = useTokenDisplayStyle();
   const windows = pickCompactQuotaWindows(orderQuotaWindows(item.windows ?? []));
   const planText = item.plan?.plan_label;
-  const isCooling = item.active_cooldown?.is_active;
+  const cooldownDiagnostic = compactCooldownDiagnostic(item);
   const availableCredits = item.reset_credits?.available_count ?? 0;
 
   return (
@@ -72,11 +73,11 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
         <span className={styles.observed}>{formatObservedAgo(item.observed_at_ms, nowMS, t)}</span>
       </div>
 
-      {isCooling && (
+      {cooldownDiagnostic && (
         <div className={`${styles['rec-banner']} ${styles['rec-banner-danger']}`}>
           <span className={styles['banner-dot']} style={{ background: 'var(--danger)' }} />
           <div className={styles['rec-text']}>
-            {item.active_cooldown?.reason || t('quota.cooldown_active_desc')}
+            {cooldownDiagnostic}
           </div>
         </div>
       )}

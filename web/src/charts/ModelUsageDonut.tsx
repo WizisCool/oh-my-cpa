@@ -9,7 +9,7 @@ import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartThem
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
-import { escapeTooltipText } from './chartTooltip';
+import { renderChartTooltip } from './chartTooltip';
 
 export interface ModelUsageDonutProps {
   groups: DashboardModelUsage[];
@@ -147,14 +147,19 @@ export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({
                     // The item is named from the datum by the mark's own tooltip spec above, so it already
                     // carries the group's label; only the value needs the console's unit style.
                     const name = item.name ?? '';
-                    const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
                     // The readout states the three things a slice is being judged on, in the order the
                     // ranked list beside the ring prints them: which group it is, how much it moved, and
                     // what share of the window that is. The share is derived from the same total the
                     // centre reports, so a slice's percentage and the ring's own reading cannot disagree.
                     const value = item.value ?? 0;
                     const exact = `${formatTokensFull(value)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
-                    return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span><span class="omc-tip-share">${formatModelShare(value, totalTokens)}</span></div></div>`;
+                    return renderChartTooltip(undefined, [{
+                      name,
+                      color: item.color,
+                      value: `${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+                      exact,
+                      share: formatModelShare(value, totalTokens),
+                    }]);
                   },
                 },
               }}

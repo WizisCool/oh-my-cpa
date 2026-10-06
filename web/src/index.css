@@ -1277,16 +1277,22 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-family: var(--font-mono) !important;
 }
 
-/* The app-owned readout the model panels render through the tooltip's `render`. */
-.omc-tip { display: flex; flex-direction: column; gap: 2px; }
+/* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
+   Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
+.omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .omc-tip-time { color: var(--muted); margin-bottom: 2px; }
-.omc-tip-row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
-.omc-tip-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.omc-tip-name { color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.omc-tip-value { color: var(--fg-2); margin-left: auto; white-space: nowrap; }
-/* The share closes the readout, in a column of its own so a value that grows or shrinks does not
-   move it: the ring's hover and the ranked list print the same two figures in the same order. */
-.omc-tip-share { color: var(--muted); min-width: 42px; text-align: right; }
+.omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; }
+.omc-tip-rows.has-names { grid-template-columns: max-content minmax(0, max-content) max-content; }
+.omc-tip-rows.has-shares { grid-template-columns: max-content max-content max-content; }
+.omc-tip-rows.has-names.has-shares { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
+.omc-tip-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; font-variant-numeric: tabular-nums; }
+.omc-tip-swatch { grid-column: 1; width: 8px; height: 8px; border-radius: 2px; }
+.omc-tip-name { grid-column: 2; color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.omc-tip-value { grid-column: 2; color: var(--fg-2); white-space: nowrap; text-align: right; }
+.omc-tip-rows.has-names .omc-tip-value { grid-column: 3; }
+/* Reserve a share track only for readouts that report it. */
+.omc-tip-share { grid-column: 3; color: var(--muted); white-space: nowrap; text-align: right; }
+.omc-tip-rows.has-names .omc-tip-share { grid-column: 4; }
 
 .model-alert, .model-stale-alert { margin-top: 12px; }
 
