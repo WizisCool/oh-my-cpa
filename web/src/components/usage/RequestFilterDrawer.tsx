@@ -1,16 +1,22 @@
 import React from 'react';
-import { Button, Drawer, Input, InputNumber, Segmented, Select, Tooltip } from 'antd';
+import { Button, Drawer, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
 import type {
   UsageCostFilter,
   UsageFacetValue,
   UsageFacets,
+  UsageRegexField,
   UsageResultFilter,
   UsageServedFilter,
 } from '../../types/usageEvents';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
 import { ResultMarker } from './ResultMarker';
 import type { EventFilterKey } from '../../types/usageEventQuery';
-import { parseUsageRangeBound } from '../../types/usageEvents';
+import {
+  USAGE_REGEX_FIELDS,
+  formatUsageRegex,
+  parseUsageRangeBound,
+  parseUsageRegex,
+} from '../../types/usageEvents';
 import type { RangeFieldKey, RangeBound } from '../../types/usageEventFilters';
 import type { UsageEventsFilterDraft, UsageEventsView } from '../../types/usageEventFilters';
 import {
@@ -22,6 +28,7 @@ import {
 } from '../../types/usageEventFilters';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import './RequestFilterDrawer.css';
 
 /**
@@ -76,12 +83,22 @@ const ALIAS_FACETS: FacetSpec[] = [
   { key: 'model_alias', facet: 'model_aliases', labelKey: 'events.model_alias' },
 ];
 
+/** What the reader calls each field a pattern can be matched against. */
+export const REGEX_FIELD_LABELS: Record<UsageRegexField, string> = {
+  model: 'events.col_model',
+  model_alias: 'events.model_alias',
+  response_model: 'events.served_model',
+  provider: 'events.provider',
+  endpoint: 'events.endpoint',
+  ua: 'events.col_ua',
+  request_id: 'events.col_request_id',
+};
+
 const TEXT_FIELDS: Array<{ key: EventFilterKey; labelKey: string }> = [
   { key: 'ua', labelKey: 'events.col_ua' },
   { key: 'endpoint', labelKey: 'events.endpoint' },
   { key: 'request_id', labelKey: 'events.col_request_id' },
 ];
-
 export interface RequestFilterDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -93,6 +110,7 @@ export interface RequestFilterDrawerProps {
   /** Labels the provider dimension with the operator's name for that line; the
    *  stored value stays CPA's key, which is what the filter is applied on. */
   providerName: (providerKey: string) => string;
+  renderFacetMark: FacetMarkRenderer;
   /** Called once with the validated draft when the operator applies it. */
   onApply: (view: UsageEventsView) => void;
 }
@@ -113,6 +131,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   facetsFailed,
   credentialName,
   providerName,
+  renderFacetMark,
   onApply,
 }) => {
   const t = useT();
@@ -122,6 +141,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   // were just written to and visibly revert them. The browser suite pins this pair.
   useOverlayHistory({ isOpen: open, onClose });
   const [draft, setDraft] = React.useState<UsageEventsFilterDraft>(EMPTY_FILTER_DRAFT);
+  const [pendingRegexField, setPendingRegexField] = React.useState<UsageRegexField>('model');
 
   /**
    * Identity of the committed view. A draft is only ever valid against the view it
@@ -243,6 +263,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         value={draft.multi[spec.key] ?? []}
         onChange={(values) => setMulti(spec.key, values as string[])}
         options={facetOptions(spec)}
+        optionRender={(option) => renderFacetOption(renderFacetMark, spec.key, option)}
         maxTagCount="responsive"
         allowClear
         // A comma is a legal character in an alias, so it must not be a token
@@ -266,6 +287,47 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         onPressEnter={handleApply}
       />,
     );
+
+  // The pattern and its field are one committed value. The field is also kept
+  // here, because a reader picks it before typing and an empty pattern is no
+  // filter - without this the choice would reset on every cleared input.
+  const committedRegex = parseUsageRegex(draft.text.regex);
+  const regexField = committedRegex?.field ?? pendingRegexField;
+  const regexRow = row(
+    'events.regex',
+    'req-regex-pattern',
+    <>
+      <Space.Compact className="req-filter-regex">
+        <Select<UsageRegexField>
+          className="req-filter-regex-field"
+          aria-label={t('events.regex_field')}
+          value={regexField}
+          popupMatchSelectWidth={false}
+          onChange={(field) => {
+            setPendingRegexField(field);
+            setText('regex', formatUsageRegex(field, committedRegex?.pattern ?? ''));
+          }}
+          options={USAGE_REGEX_FIELDS.map((field) => ({ value: field, label: t(REGEX_FIELD_LABELS[field]) }))}
+        />
+        <Input
+          id="req-regex-pattern"
+          className="req-filter-regex-pattern"
+          aria-label={t('events.regex')}
+          placeholder="^claude-.*-(opus|sonnet)"
+          value={committedRegex?.pattern ?? ''}
+          allowClear
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          status={errors.regex ? 'error' : undefined}
+          onChange={(event) => setText('regex', formatUsageRegex(regexField, event.target.value))}
+          onPressEnter={handleApply}
+        />
+      </Space.Compact>
+      <p className="req-filter-hint">{t('events.regex_hint')}</p>
+    </>,
+    ['regex'],
+  );
 
   const rangeRow = (key: 'latency' | 'tokens' | 'cost', labelKey: string, unit: string) => {
     // Cost is a nano-dollar decimal, which no number input can represent without
@@ -461,6 +523,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         <>
           {ROUTING_FACETS.map(multiRow)}
           {TEXT_FIELDS.map(textRow)}
+          {regexRow}
         </>
       )}
 

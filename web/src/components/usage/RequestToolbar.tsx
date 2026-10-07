@@ -14,6 +14,7 @@ import type {
   UsageFacets,
   UsageResultFilter,
 } from '../../types/usageEvents';
+import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
 
@@ -29,6 +30,7 @@ interface RequestToolbarProps {
   facetsFailed: boolean;
   credentials: CredentialIndex;
   resolveProviderName: (providerKey: string | null | undefined) => string;
+  renderFacetMark: FacetMarkRenderer;
   filterCount: number;
   onOpenFilters: () => void;
   hasActiveFilter: boolean;
@@ -58,6 +60,7 @@ export function RequestToolbar({
   facetsFailed,
   credentials,
   resolveProviderName,
+  renderFacetMark,
   filterCount,
   onOpenFilters,
   hasActiveFilter,
@@ -90,6 +93,7 @@ export function RequestToolbar({
         allowClear
         maxTagCount="responsive"
         showSearch={{ optionFilterProp: 'label' }}
+        optionRender={(option) => renderFacetOption(renderFacetMark, key, option)}
         onChange={(next) => onFilterChange(key, next as string[])}
         options={mergeFacetOptions(
           values,

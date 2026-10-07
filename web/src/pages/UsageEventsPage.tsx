@@ -24,6 +24,7 @@ import { useT } from '../i18n';
 import {
   usageEventParams,
   isUsageFacetsResponse,
+  parseUsageRegex,
   type UsageEvent,
   type UsageEventPage,
 } from '../types/usageEvents';
@@ -61,6 +62,15 @@ import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
 import { RequestPagination } from '../components/usage/RequestPagination';
 import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
+import { REGEX_FIELD_LABELS } from '../components/usage/RequestFilterDrawer';
+import { createFacetMarkRenderer } from '../components/usage/RequestFacetMark';
+import { RequestSelectionBar } from '../components/usage/RequestSelectionBar';
+import { RequestExportDialog } from '../components/usage/RequestExportDialog';
+import {
+  loadedSelectionState,
+  setLoadedSelection,
+  toggleSelection,
+} from '../components/usage/requestSelection';
 import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -97,7 +107,6 @@ export const UsageEventsPage: React.FC = () => {
     colWidths,
     gridTemplate,
     gridMinWidth,
-    scrollbarGutter,
     hasCustomWidths,
     handleResizeStart,
     handleResetColumn,
@@ -154,6 +163,13 @@ export const UsageEventsPage: React.FC = () => {
   } = liveEdge;
   const [selected, setSelected] = React.useState<number | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
+  // The records picked for export, kept as the rows themselves rather than their
+  // ids: a selection outlives the page it was made on, and a poll may replace the
+  // loaded rows before the image is drawn.
+  const [selection, setSelection] = React.useState<ReadonlyMap<number, UsageEvent>>(() => new Map());
+  const [isExportOpen, setIsExportOpen] = React.useState(false);
+  /** The row last clicked without Shift, which a Shift click extends from. */
+  const selectionAnchorRef = React.useRef<number | null>(null);
 
   const isQueryEnabled = isEnabled;
   const facetParams = usageEventParams(facetWindow);
@@ -250,6 +266,27 @@ export const UsageEventsPage: React.FC = () => {
   const latestItems = displayedPage?.items;
   observeLatest(latestItems);
   const events = liveEdge.heldItems ?? latestItems ?? [];
+
+  // Read through a ref so the row's toggle keeps one identity: a new callback per
+  // poll would re-render every memoized row on screen.
+  const eventsRef = React.useRef(events);
+  eventsRef.current = events;
+  const handleToggleSelect = React.useCallback((id: number, isRange: boolean) => {
+    const anchorId = selectionAnchorRef.current;
+    setSelection((previous) => toggleSelection(previous, eventsRef.current, id, anchorId, isRange));
+    if (!isRange || anchorId === null) selectionAnchorRef.current = id;
+  }, []);
+  const handleToggleAll = React.useCallback((isSelected: boolean) => {
+    setSelection((previous) => setLoadedSelection(previous, eventsRef.current, isSelected));
+  }, []);
+  const clearSelection = React.useCallback(() => {
+    selectionAnchorRef.current = null;
+    setSelection((previous) => (previous.size === 0 ? previous : new Map()));
+  }, []);
+  // A selection belongs to the view it was made in. Paging keeps it; a different
+  // filter or window shows other records, and rows nobody can see must not ride
+  // along into an export.
+  React.useEffect(clearSelection, [clearSelection, signature]);
   const pendingCount = pendingArrivals(result.data?.arrived_count);
 
   // Safe file metadata only: never download credential contents for the stream.
@@ -284,6 +321,10 @@ export const UsageEventsPage: React.FC = () => {
     () => createProviderNameResolver(configuredProviders),
     [configuredProviders],
   );
+  const renderFacetMark = React.useMemo(
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos }),
+    [credentials, providerIcons, configuredProviders, pluginLogos],
+  );
 
   /**
    * A chip names the dimension and the value it holds, in the operator's words.
@@ -307,6 +348,7 @@ export const UsageEventsPage: React.FC = () => {
     ua: 'events.filter_chip_ua',
     endpoint: 'events.filter_chip_endpoint',
     request_id: 'events.filter_chip_request_id',
+    regex: 'events.filter_chip_regex',
     latency_min: 'events.filter_chip_latency_min',
     latency_max: 'events.filter_chip_latency_max',
     tokens_min: 'events.filter_chip_tokens_min',
@@ -319,6 +361,14 @@ export const UsageEventsPage: React.FC = () => {
 
   const describeChip = React.useCallback(
     (key: EventFilterKey, values: string[]): { label: string; display?: string } => {
+      if (key === 'regex') {
+        const regex = parseUsageRegex(values[0]);
+        return {
+          label: regex
+            ? t(chipLabels.regex, { field: t(REGEX_FIELD_LABELS[regex.field]), val: regex.pattern })
+            : (values[0] ?? ''),
+        };
+      }
       // Which value to show is decided in `chipDisplay`: the stored value is a
       // fingerprint for the credential and caller dimensions and a provider key for
       // the provider dimension, and each resolves to the form the operator
@@ -552,6 +602,7 @@ export const UsageEventsPage: React.FC = () => {
             onTimeWindowChange={setTimeWindow}
             onResultChange={setResult}
             committedParams={committedParams}
+            renderFacetMark={renderFacetMark}
             onFilterChange={setFilter}
             facets={facets.data?.facets}
             facetsFailed={facets.isError}
@@ -579,6 +630,7 @@ export const UsageEventsPage: React.FC = () => {
             facetsFailed={facets.isError}
             credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
             providerName={providerName}
+            renderFacetMark={renderFacetMark}
             onApply={(next) => {
               // Apply replaces every filter dimension, so a keystroke queued in the
               // search box must not land on top of the applied view.
@@ -602,16 +654,26 @@ export const UsageEventsPage: React.FC = () => {
           {
             '--req-grid-columns': gridTemplate,
             '--req-min-width': `${gridMinWidth}px`,
-            '--req-gutter': `${scrollbarGutter}px`,
           } as React.CSSProperties
         }
       >
+        {selection.size > 0 && (
+          <RequestSelectionBar
+            count={selection.size}
+            isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
+            onSelectLoaded={() => handleToggleAll(true)}
+            onClear={clearSelection}
+            onExport={() => setIsExportOpen(true)}
+          />
+        )}
         <div className="request-table-scroll-area" onWheel={handleWheel}>
           <RequestStreamHeader
             colWidths={colWidths}
             handleResizeStart={handleResizeStart}
             handleResetColumn={handleResetColumn}
             handleResizeKeyDown={handleResizeKeyDown}
+            selectionState={loadedSelectionState(selection, events)}
+            onToggleAll={handleToggleAll}
           />
           <div ref={listHost} className="request-list-host">
             <RequestTooltipLayer hostRef={listHost} />
@@ -638,6 +700,8 @@ export const UsageEventsPage: React.FC = () => {
                     pluginLogos={pluginLogos}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
+                    isChecked={selection.has(event.id)}
+                    onToggleSelect={handleToggleSelect}
                   />
                 )}
               />
@@ -697,6 +761,16 @@ export const UsageEventsPage: React.FC = () => {
         onClose={() => setSelected(null)}
         events={events}
         onSelectEvent={setSelected}
+      />
+      <RequestExportDialog
+        open={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        selection={selection}
+        colWidths={colWidths}
+        credentials={credentials}
+        providerIcons={providerIcons}
+        configuredProviders={configuredProviders}
+        pluginLogos={pluginLogos}
       />
     </div>
   );

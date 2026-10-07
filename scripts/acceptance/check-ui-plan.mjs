@@ -84,7 +84,7 @@ const SCENARIO_PATHS = [
   // in this one page, so they move together.
   {
     prefix: 'web/src/components/usage/requestColumns',
-    scenarios: ['column-alignment', 'request-list-interactions', 'mobile-console'],
+    scenarios: ['column-alignment', 'request-list-interactions', 'request-export', 'request-facet-marks', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/usage/',
@@ -93,6 +93,8 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'request-export',
+      'request-facet-marks',
       'scroll-smoothing',
       'request-list-touch',
       'overlay-back',
@@ -107,6 +109,8 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'request-export',
+      'request-facet-marks',
       'request-list-touch',
       'mobile-console',
     ],

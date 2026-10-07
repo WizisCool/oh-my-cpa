@@ -12,13 +12,17 @@ import {
 } from './requestColumns';
 
 /**
- * The request list's column layout: the widths the operator dragged or nudged,
- * the grid those widths project to, and the scrollbar gutter the header has to
- * pad so its tracks line up with the rows'.
+ * The request list's column layout: the widths the operator dragged or nudged
+ * and the grid those widths project to.
  *
- * It is one hook because the four are one mechanism: a width the operator set is
- * persisted by the same gesture that measured it, and the grid and the gutter are
- * derived from what is on screen rather than from the preference document.
+ * The header and the rows are separate grids on one track list. Neither reserves
+ * a scrollbar gutter: the virtual list draws its own overlay scrollbar and loses
+ * no width to a native one, so padding the header for one moves its tracks off
+ * the rows'.
+ *
+ * It is one hook because a width the operator set is persisted by the same
+ * gesture that measured it, and the grid is derived from what is on screen
+ * rather than from the preference document.
  */
 export function useRequestColumnLayout() {
 
@@ -45,20 +49,6 @@ export function useRequestColumnLayout() {
     [colWidths],
   );
   const gridMinWidth = React.useMemo(() => computeGridMinWidth(colWidths), [colWidths]);
-
-  // The row list scrolls vertically and therefore loses a scrollbar's worth of
-  // inner width that the header never loses. Measuring the real gutter (rather
-  // than assuming a platform width) lets the header pad exactly that much, so
-  // column boundaries line up on Windows, macOS overlay scrollbars and touch.
-  const [scrollbarGutter, setScrollbarGutter] = React.useState(0);
-  React.useEffect(() => {
-    const probe = document.createElement('div');
-    probe.style.cssText =
-      'position:absolute;top:-9999px;left:-9999px;width:64px;height:64px;overflow:scroll;';
-    document.body.appendChild(probe);
-    setScrollbarGutter(Math.max(0, probe.offsetWidth - probe.clientWidth));
-    probe.remove();
-  }, []);
 
   const handleResizeStart = React.useCallback(
     (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
@@ -156,7 +146,6 @@ export function useRequestColumnLayout() {
     colWidths,
     gridTemplate,
     gridMinWidth,
-    scrollbarGutter,
     hasCustomWidths: Object.keys(colWidths).length > 0,
     handleResizeStart,
     handleResetColumn,

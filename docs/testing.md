@@ -267,7 +267,7 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 
 - `scripts/test-request-timestamp.ts` pins the row's two labels against the existing
   dayjs interpretation across fractional offsets, date rollovers, milliseconds and both
-  DST boundaries, and counts one conversion per instant. The `column-alignment` probe
+  DST boundaries, and asserts that formatting a row constructs no zoned date. The `column-alignment` probe
   changes the shared timezone while a request row stays mounted, detecting a stale memo
   without replacing the DOM node. That subscription claim requires the browser.
 - `scripts/test-theme-presets.ts` pins the Listy estimate to the request row's CSS
@@ -477,6 +477,19 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   `deploy/cloudflare/worker.test.mjs` verifies usage/reference bounds rebase together without
   changing amounts or basis. The demo freshness digest includes quota parsing, estimation,
   repository joins and observation seeding through `scripts/demo-inputs.mjs`.
+
+### Request selection and export coverage
+
+What an export may contain is a logic claim: `scripts/test-request-export.ts` builds the image's
+sheet and the JSON document from records and asserts that a redacted account, key or request id
+is absent from every string either would carry, alongside the selection rules (Shift runs,
+page-scoped select-all, the row cap, the canvas ceiling). The `request-export` probe covers only
+what needs a browser: a tick does not open the record, select-all reaches unmounted rows, the
+header checkbox sits over the rows', the canvas is drawn and redrawn when a redaction changes,
+and both formats download. `request-facet-marks` compares a provider option's mark with the mark on the rows it filters,
+using a provider with artwork of its own so a mark resolved from the wrong key is a different
+picture. `column-alignment` emulates a classic scrollbar so the header and the
+rows are compared at the width a desktop gives them.
 
 ### Built request-record filter coverage
 

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import dayjs, { configureTimeZone } from '../web/src/utils/time.ts';
 import { formatRequestTimestamp } from '../web/src/components/usage/requestTimestamp.ts';
 
-test('request timestamp labels preserve milliseconds, date rollovers and DST at one conversion per instant', () => {
+test('request timestamp labels preserve milliseconds, date rollovers and DST without a zoned date per row', () => {
   const datePrototype = Object.getPrototypeOf(dayjs(0));
   const originalTz = datePrototype.tz;
   const instants = [
@@ -29,7 +29,7 @@ test('request timestamp labels preserve milliseconds, date rollovers and DST at 
         };
         try {
           assert.deepEqual(formatRequestTimestamp(timestamp), expected, `${zone}: ${timestamp}`);
-          assert.equal(conversions, 1, 'both formats reuse the same zoned instant');
+          assert.equal(conversions, 0, 'rows format through the shared zone formatter');
         } finally { datePrototype.tz = originalTz; }
       }
     }

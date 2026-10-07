@@ -251,6 +251,71 @@ Totals belong where the whole window is in scope: the dashboard tiles, and the
 detail drawer for one request. If a per-page figure is ever needed again, it
 belongs in the footer next to the page count, stated as a page figure.
 
+### Filter options carry the mark their rows carry
+
+A model, provider or credential option in the filter bar and in the "More filters" drawer is
+led by a 16px mark: a model takes its maker's mark by Model Square's rule (the generic box
+glyph in `--muted` where no maker is known), and a provider or credential is resolved through
+the request row's own resolver, so a custom icon set on the providers page or a plugin's logo
+is the same picture in the option and in the rows it leaves on screen. The label stays the
+searchable text and takes the truncation; the mark never shrinks. Closed vocabularies of words
+(auth type, reasoning effort, service tier, executor) get no mark.
+
+### The pattern filter
+
+"More filters" ends its text fields with one compound control: a field select joined to a
+pattern input in the mono face. It is one filter - one chip ("Model matches ^claude-"),
+one count, one removal - because a pattern without its field means nothing. The hint under
+it states the three things a reader cannot guess: the syntax is RE2, the match is anywhere
+in the field, and it is case-sensitive unless the pattern starts with `(?i)`. The panel
+refuses only what is certain before a round trip (length, lookaround, backreferences); the
+server is the authority on the rest.
+
+### Selecting requests and exporting them
+
+Every row leads with a checkbox in its own 20px track, and the header's checkbox speaks for
+the loaded page. A tick never opens the record under it; Shift extends the run from the last
+plain click, selecting or clearing it. The selection survives paging and is dropped when the
+filters or the window change, because it would then name rows the reader can no longer see.
+
+- **The checkbox is drawn from the palette, not left to the browser.** A native box is the
+  system's own fill in either theme. Resting: `--bg` with a 1px `--muted` edge (a control's
+  boundary clears 3:1 where `--border`, a divider, does not). Ticked or mixed: the
+  filled-control step `--accent-hover` with an `--accent-on` tick, `--accent-active` on hover -
+  the same pair the primary button uses, legible in both themes. Under forced colours it
+  returns to the system's drawing.
+- **The selection bar exists only while something is selected.** It states the count, repeats
+  "select all" (the stacked layout has no header row), clears, and carries the one primary
+  action, Export. It sits inside the list's frame above the header, so the columns do not move.
+- **The header carries no scrollbar gutter.** The virtual list draws its own overlay scrollbar
+  and gives up no width to one, so the header and the rows are the same grid at the same width.
+  Padding the header for a native scrollbar shifted every flexible track progressively.
+- **Columns are separated by 16px.** Right-aligned numerics end on the same edge as their
+  header, and the gap keeps a right-aligned figure from touching the left-aligned column after it.
+
+Export offers two formats under one set of redaction choices:
+
+| Format | For | Contents |
+| --- | --- | --- |
+| Image (PNG) | Showing people what a model or a source did | The list's columns as a sheet, under the wordmark and a caption (count, time). The newest 100 selected rows. |
+| JSON | A program | Stored values (milliseconds, counts, dollars), every selected row, with a `schema` name and the list of what was redacted. |
+
+- **Redaction is by what a reader could learn.** OAuth account names and keys (the caller's key
+  and the provider key that answered) are withheld by default; request ids and whole columns on
+  request. The source and the model stay, because they are the point of sharing.
+- **A redacted value is a neutral bar** (`--fg` at 20%, 96x10px, 2px radius), not a substitute
+  label, and it is absent from the export's data rather than covered: the sheet is built without
+  it before anything is drawn, and the JSON field is omitted.
+- **The image is drawn, not captured.** The sheet is painted on a canvas from the palette, so a
+  hundred rows cost one paint instead of a clone of several thousand elements, and the preview
+  is the canvas that is saved. It is wider than the list (1480px minimum, at up to 2x) so no
+  column is cramped, and uses the list's own marks: provider artwork, the result pill, the
+  cache-rate badge, the non-streaming and substituted-model glyphs.
+
+A non-streaming response is marked with the crossed-out broadcast glyph (`NonStreamOutlined`)
+and labelled "Non-streaming response". The stacked-boxes glyph belongs to Model Square and is
+not reused for it.
+
 ### Cache-rate scale
 
 The request list's cache-rate badge is the one continuous reading in the app:
@@ -1719,6 +1784,13 @@ component token (22px font height plus twice 23px block padding). Its wrapper pa
 is overridden to zero by `web/src/pages/UsageEventsPage.css`: this projection supplies
 a sizing hint, while the existing row CSS owns visible spacing. Actual item and
 group-header heights are still measured, including the taller phone rows.
+
+Each row declares `contain: layout style`. The list measures every mounted row after
+each commit, and without containment measuring one row lays out the rows around it;
+nothing a row draws depends on its neighbours, so the boundary costs no geometry. A row
+is therefore the containing block for anything positioned inside it: row-level popups
+belong to the list (the shared tooltip) or to a portal, never to an absolutely
+positioned child that must escape the row.
 
 The list is virtualized, so the browser cannot scroll it for a finger, and the library's own touch
 emulation ran up to four times ahead of the finger: it restarted a fixed-interval coast after every

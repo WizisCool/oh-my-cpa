@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
@@ -12,12 +13,16 @@ import (
 type UsageInput struct {
 	FromMS      int64    `json:"from_ms,omitempty" jsonschema:"Inclusive epoch milliseconds; defaults to 24 hours before to_ms"`
 	ToMS        int64    `json:"to_ms,omitempty" jsonschema:"Exclusive epoch milliseconds; defaults to current time"`
-	Providers   []string `json:"providers,omitempty"`
-	Models      []string `json:"models,omitempty"`
+	Providers   []string `json:"providers,omitempty" jsonschema:"Exact provider keys"`
+	Models      []string `json:"models,omitempty" jsonschema:"Exact model names; for a pattern use regex"`
 	CallPoints  []string `json:"call_points,omitempty"`
 	ClientKeys  []string `json:"client_keys,omitempty"`
 	Credentials []string `json:"credentials,omitempty"`
 	Status      string   `json:"status,omitempty" jsonschema:"success or failed; omit for both"`
+	Search      string   `json:"search,omitempty" jsonschema:"Literal substring of request id, provider, model, endpoint or user agent"`
+	RegexField  string   `json:"regex_field,omitempty" jsonschema:"model, model_alias, response_model, provider, endpoint, ua or request_id"`
+	Regex       string   `json:"regex,omitempty" jsonschema:"RE2 pattern matched against regex_field, e.g. ^claude-.*-(opus|sonnet)"`
+	MinLatency  int64    `json:"min_latency_ms,omitempty" jsonschema:"Slow requests only"`
 	GroupBy     string   `json:"group_by,omitempty" jsonschema:"provider, model, call_point, client_key, credential, status, all"`
 	IsTrend     bool     `json:"is_trend,omitempty"`
 	Limit       int      `json:"limit,omitempty"`
@@ -44,6 +49,14 @@ func (input UsageInput) filter(ctx context.Context) (repository.UsageEventFilter
 	if input.Status != "" && input.Status != "success" && input.Status != "failed" {
 		return repository.UsageEventFilter{}, errors.New("invalid_parameters")
 	}
+	// A pattern the repository would refuse is refused here by name, so the model
+	// reads why its call failed instead of a generic storage error.
+	if err := repository.ValidateUsageRegex(input.RegexField, input.Regex); err != nil {
+		return repository.UsageEventFilter{}, errors.New("invalid_regex: " + strings.TrimPrefix(err.Error(), repository.ErrUsageFilterInvalid.Error()+": "))
+	}
+	if input.MinLatency < 0 || len(input.Search) > 256 {
+		return repository.UsageEventFilter{}, errors.New("invalid_parameters")
+	}
 	for _, values := range [][]string{input.Providers, input.Models, input.CallPoints, input.ClientKeys, input.Credentials} {
 		if len(values) > 20 {
 			return repository.UsageEventFilter{}, errors.New("invalid_parameters")
@@ -56,7 +69,12 @@ func (input UsageInput) filter(ctx context.Context) (repository.UsageEventFilter
 	if limit > 100 {
 		limit = 100
 	}
-	return repository.UsageEventFilter{InstanceID: "default", FromMS: input.FromMS, ToMS: input.ToMS - 1, Providers: input.Providers, Models: input.Models, ModelAliases: input.CallPoints, APIGroupKeys: input.ClientKeys, AuthIndexes: input.Credentials, Result: input.Status, Cursor: input.Cursor, Limit: limit}, nil
+	filter := repository.UsageEventFilter{InstanceID: "default", FromMS: input.FromMS, ToMS: input.ToMS - 1, Providers: input.Providers, Models: input.Models, ModelAliases: input.CallPoints, APIGroupKeys: input.ClientKeys, AuthIndexes: input.Credentials, Result: input.Status, Cursor: input.Cursor, Limit: limit}
+	filter.Search, filter.RegexField, filter.RegexPattern = input.Search, input.RegexField, input.Regex
+	if input.MinLatency > 0 {
+		filter.MinLatencyMS = &input.MinLatency
+	}
+	return filter, nil
 }
 func (s *Service) AnalyzeUsage(ctx context.Context, input UsageInput) (Analysis, error) {
 	filter, err := input.filter(ctx)
@@ -93,7 +111,14 @@ type RequestItem struct {
 	IsFailed    bool     `json:"is_failed"`
 	Tokens      int64    `json:"tokens"`
 	LatencyMS   int64    `json:"latency_ms"`
+	TTFTMS      *int64   `json:"ttft_ms,omitempty"`
 	CostUSD     *float64 `json:"cost_usd,omitempty"`
+	// RequestID is CPA's id for the request, which is what an operator searches by.
+	RequestID string `json:"request_id,omitempty"`
+	// ServedModel is set only when the upstream served a different model than was requested.
+	ServedModel string `json:"served_model,omitempty"`
+	// UserAgent is the client product label, already redacted and shortened at ingestion.
+	UserAgent string `json:"user_agent,omitempty"`
 }
 
 func projectRequest(row repository.UsageEventRow) RequestItem {
@@ -101,7 +126,18 @@ func projectRequest(row repository.UsageEventRow) RequestItem {
 	if row.ModelAlias != nil && *row.ModelAlias != "" {
 		callPoint = *row.ModelAlias
 	}
-	return RequestItem{row.ID, row.TimestampMS, safeLabel(row.Provider), safeLabel(row.Model), safeLabel(callPoint), row.Failed, row.Tokens.TotalTokens, row.LatencyMS, row.CostUSD}
+	item := RequestItem{
+		ID: row.ID, TimestampMS: row.TimestampMS, Provider: safeLabel(row.Provider), Model: safeLabel(row.Model),
+		CallPoint: safeLabel(callPoint), IsFailed: row.Failed, Tokens: row.Tokens.TotalTokens,
+		LatencyMS: row.LatencyMS, TTFTMS: row.TTFTMS, CostUSD: row.CostUSD, RequestID: safeLabel(row.RequestID),
+	}
+	if row.ModelSubstituted {
+		item.ServedModel = safeLabel(row.ResponseModel)
+	}
+	if row.UserAgent != nil {
+		item.UserAgent = safeLabel(*row.UserAgent)
+	}
+	return item
 }
 
 type RequestPage struct {
@@ -126,7 +162,7 @@ func (s *Service) registerUsage(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := read(registry, "requests_list", "Page through individual request records matching the filters. For counts, totals or trends use usage_aggregate instead.", func(ctx context.Context, input UsageInput) (RequestPage, error) {
+	if err := read(registry, "requests_list", "Page through individual request records matching the filters, newest first. For counts, totals or trends use usage_aggregate with the same filters.", func(ctx context.Context, input UsageInput) (RequestPage, error) {
 		filter, err := input.filter(ctx)
 		if err != nil {
 			return RequestPage{}, err

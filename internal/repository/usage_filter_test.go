@@ -410,6 +410,53 @@ func TestListUsageEventsEndpointAndUserAgentSubstring(t *testing.T) {
 	}
 }
 
+func TestListUsageEventsRegexMatchesOneField(t *testing.T) {
+	repo := filterTestRepository(t)
+
+	filter := filterTestFilter()
+	filter.RegexField, filter.RegexPattern = "endpoint", `/v1/(messages|embeddings)$`
+	if keys := listFilterEventKeys(t, repo, filter); !containsKeys(keys, "beta") {
+		t.Fatalf("anchored alternation = %v", keys)
+	}
+
+	// A pattern is not a substring: the dot here is "any character", which the
+	// literal endpoint filter above would never match.
+	filter = filterTestFilter()
+	filter.RegexField, filter.RegexPattern = "ua", `^codex.cli`
+	if keys := listFilterEventKeys(t, repo, filter); !containsKeys(keys, "alpha") {
+		t.Fatalf("user agent pattern = %v", keys)
+	}
+
+	// The pattern narrows together with the other dimensions, not instead of them.
+	filter = filterTestFilter()
+	filter.RegexField, filter.RegexPattern = "endpoint", `relay\.example`
+	filter.UserAgent = "codex-cli"
+	if keys := listFilterEventKeys(t, repo, filter); !containsKeys(keys, "alpha") {
+		t.Fatalf("pattern AND substring = %v", keys)
+	}
+
+	// A field without a pattern is no filter.
+	filter = filterTestFilter()
+	filter.RegexField = "model"
+	if keys := listFilterEventKeys(t, repo, filter); len(keys) != 4 {
+		t.Fatalf("an empty pattern must not narrow, got %v", keys)
+	}
+
+	for name, invalid := range map[string][2]string{
+		"unknown field":    {"api_group_key", "x"},
+		"fingerprinted":    {"source", "x"},
+		"not RE2":          {"model", `(?=lookahead)`},
+		"unbalanced":       {"model", `(`},
+		"over the ceiling": {"model", strings.Repeat("a", MaxUsageRegexLength+1)},
+	} {
+		filter = filterTestFilter()
+		filter.RegexField, filter.RegexPattern = invalid[0], invalid[1]
+		if _, err := repo.ListUsageEvents(context.Background(), filter); !errors.Is(err, ErrUsageFilterInvalid) {
+			t.Fatalf("%s: want ErrUsageFilterInvalid, got %v", name, err)
+		}
+	}
+}
+
 // source and api_group_key are fingerprinted at the persistence boundary, so the
 // console filters them by the stored value it was shown, never by the plaintext
 // an operator might guess. This is the property that keeps a raw caller key out

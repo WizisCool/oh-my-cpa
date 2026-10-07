@@ -784,7 +784,7 @@ Query for server state.
 | `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. `CpaLogPanel` renders into a host element it moves to the document body for its fullscreen viewer, because a routed page sits inside a transformed container that would confine `position: fixed`. Wire types and pure helpers (line parsing, the filters and their per-value counts) live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, direct settings action and an overflow menu for safe external links and confirmed removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys and CPA's `store` install record carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pluginRuntime.ts` waits for the gateway to load or unload a switched plugin. `pages/PluginsPage.tsx` owns the tab, which is the path (`/plugins`, `/plugins/store`, `/plugins/settings`), and reads the store only once its tab is opened. `pluginPages.ts` turns the plugin list into the pages plugins registered; `AppLayout` lists them in the navigation's Plugins group, reading the plugin list once per shell, and `pages/PluginPageHost.tsx` shows one at `/plugin-pages/<id>/<n>` in a frame on the plugin host, inside a console-written parent document that states the colour mode as `data-theme` (ADR 0060) |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` and `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048) and the export of selected requests (`requestSelection.ts` decides the selection and what a redaction withholds, `requestSheetModel.ts` lays the image out as data, `requestExportJson.ts` builds the JSON document, and only `requestSheetPainter.ts` touches a canvas - so what an export can contain is asserted without a browser), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message
@@ -964,11 +964,16 @@ position to the browser-clamped end once per mount, rather than synchronously re
 whole dashboard's pending layout. Refreshes preserve the operator's scroll position.
 See `docs/performance.md` for the measured audit and remaining bottlenecks.
 
-Request rows generate their short label and millisecond-precision tooltip from one
-zoned instant in `web/src/components/usage/requestTimestamp.ts`. The row memo retains
-both strings until its timestamp or the shared display timezone changes, so selection
-and unit-style changes do not repeat timezone conversion. The underlying dayjs timezone
-implementation and wire timestamps remain unchanged.
+Request rows generate their short label and millisecond-precision tooltip in
+`web/src/components/usage/requestTimestamp.ts` from one `Intl.DateTimeFormat` that is
+built per display timezone and shared by every row, so mounting a row while scrolling
+does not resolve the zone again. The row memo retains both strings until its timestamp
+or the shared display timezone changes, so selection and unit-style changes do not
+repeat the formatting. Wire timestamps are unchanged.
+
+`ProviderBrandIcon` subscribes to the plugin list only for deployment custom artwork on
+a provider with keys, the one case plugin ownership decides. A catalog mark renders
+without a query observer, which matters where one mark mounts per request row.
 
 Request cells carry their exact tooltip label as a data attribute instead of creating
 an antd trigger tree per cell. `web/src/components/usage/RequestTooltip.tsx` delegates
@@ -1636,11 +1641,24 @@ drill-down links written before multi-select existed working unchanged.
 | Identity search | `q` | literal substring across the columns in `usageEventSearchColumns` |
 | Endpoint, user agent | `endpoint`, `ua` | literal substring |
 | Request id | `request_id` | exact |
+| Pattern | `regex` as `field:pattern` | RE2, unanchored, against one of `model`, `model_alias`, `response_model`, `provider`, `endpoint`, `ua`, `request_id`; a missing value matches as the empty string |
 | Latency / tokens | `latency_min`…`tokens_max` | inclusive integer bounds |
 | Cost | `cost_min`, `cost_max` | inclusive bounds in decimal USD, at most nine fractional digits |
 | Price availability | `cost` | `priced` (`cost_nanos IS NOT NULL`) or `unpriced` |
 | Served model | `served` | `substituted` (`model_substituted = 1`) or `matched` (an upstream-reported model that is the requested one); a record whose upstream reported no model is in neither |
 | Result | `result` | `all`, `success`, `failed` |
+
+The pattern filter is the one place a caller's text is executed rather than compared,
+and three choices keep that safe. The engine is Go's `regexp` (RE2), registered as SQLite's
+`REGEXP` function in `internal/repository/usage_regex.go`, so matching is linear in the
+input and a pattern cannot stall a scan; patterns are capped at 256 characters and compiled
+once per distinct pattern. The field is a name looked up in a closed map, never text placed
+in the statement, and the fingerprinted columns (`source`, the caller key) are absent from
+it because no pattern a reader writes can describe a fingerprint. And the field and pattern
+travel as one parameter, so neither can be applied without the other. An unknown field, an
+oversized pattern or one RE2 refuses (lookaround, backreferences) is a 400 with the reason.
+User functions belong to the driver instance the SQLite package registers, which is why
+`openGatedPool` wraps that instance instead of constructing its own.
 
 Three properties are load-bearing rather than incidental:
 

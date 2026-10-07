@@ -137,6 +137,27 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
 
 export const CHEVRON_TRACK_WIDTH = 14;
 
+/**
+ * The space between neighbouring tracks, and the row's inline padding. A
+ * right-aligned figure ends where its track ends and a left-aligned label starts
+ * where the next begins, so this gap is all that separates the cache rate from
+ * the caller key beside it; at 12px the two read as one value.
+ */
+export const REQUEST_GRID_GAP = 16;
+export const REQUEST_PAD_INLINE = 12;
+
+/** The leading track that holds each row's selection checkbox. */
+export const SELECT_TRACK_WIDTH = 20;
+
+/** Which fixed tracks surround the data columns: the list has both, an exported sheet neither. */
+export interface RequestGridChrome {
+  hasSelection: boolean;
+  hasChevron: boolean;
+}
+
+export const LIST_GRID_CHROME: RequestGridChrome = { hasSelection: true, hasChevron: true };
+export const SHEET_GRID_CHROME: RequestGridChrome = { hasSelection: false, hasChevron: false };
+
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
 
 export type RequestColumnWidths = Partial<Record<RequestColumnId, number>>;
@@ -181,12 +202,15 @@ export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
 
 /**
  * buildGridTemplateColumns constructs the CSS grid-template-columns specification
- * for the 11 data columns plus the fixed action chevron track.
+ * for the 11 data columns plus the fixed selection and action chevron tracks.
  * If a column has a manual override, it renders as a fixed pixel track (e.g. 210px).
  * If no override exists and flexGrow > 0, it renders as minmax(minWidth, flexGrow fr) for adaptive sizing.
  * If no override exists and flexGrow === 0, it renders as defaultWidth px.
  */
-export function buildGridTemplateColumns(widths: RequestColumnWidths = {}): string {
+export function buildGridTemplateColumns(
+  widths: RequestColumnWidths = {},
+  chrome: RequestGridChrome = LIST_GRID_CHROME,
+): string {
   const tracks = REQUEST_COLUMNS.map((col) => {
     const manualWidth = widths[col.id];
     if (manualWidth !== undefined && Number.isFinite(manualWidth)) {
@@ -199,7 +223,8 @@ export function buildGridTemplateColumns(widths: RequestColumnWidths = {}): stri
     return `${col.defaultWidth}px`;
   });
 
-  tracks.push(`${CHEVRON_TRACK_WIDTH}px`);
+  if (chrome.hasSelection) tracks.unshift(`${SELECT_TRACK_WIDTH}px`);
+  if (chrome.hasChevron) tracks.push(`${CHEVRON_TRACK_WIDTH}px`);
   return tracks.join(' ');
 }
 
@@ -216,8 +241,9 @@ export function buildGridTemplateColumns(widths: RequestColumnWidths = {}): stri
  */
 export function computeGridMinWidth(
   widths: RequestColumnWidths = {},
-  gap = 12,
-  paddingInline = 12,
+  gap = REQUEST_GRID_GAP,
+  paddingInline = REQUEST_PAD_INLINE,
+  chrome: RequestGridChrome = LIST_GRID_CHROME,
 ): number {
   const total = REQUEST_COLUMNS.reduce((sum, col) => {
     const manual = widths[col.id];
@@ -225,9 +251,15 @@ export function computeGridMinWidth(
       return sum + Math.min(col.maxWidth, Math.max(col.minWidth, manual));
     }
     return sum + (col.flexGrow > 0 ? col.minWidth : col.defaultWidth);
-  }, CHEVRON_TRACK_WIDTH);
-  const gaps = REQUEST_COLUMNS.length * gap; // one gap between each data column and the chevron track
-  return Math.round(total + gaps + paddingInline * 2);
+  }, 0);
+  const fixedTracks = [
+    chrome.hasSelection ? SELECT_TRACK_WIDTH : null,
+    chrome.hasChevron ? CHEVRON_TRACK_WIDTH : null,
+  ].filter((width): width is number => width !== null);
+  // One gap between each pair of neighbouring tracks, data and fixed alike.
+  const gaps = (REQUEST_COLUMNS.length + fixedTracks.length - 1) * gap;
+  const fixed = fixedTracks.reduce((sum, width) => sum + width, 0);
+  return Math.round(total + fixed + gaps + paddingInline * 2);
 }
 
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -397,11 +398,32 @@ func TestUsageEventListPreservesExplicitNonStreamingFlag(t *testing.T) {
 
 func TestUsageEventsRejectBadLimits(t *testing.T) {
 	client, baseURL, _ := startDashboardTestServer(t, nil)
-	for _, suffix := range []string{"limit=0", "limit=-5", "limit=abc", "result=maybe"} {
+	for _, suffix := range []string{
+		"limit=0", "limit=-5", "limit=abc", "result=maybe",
+		"regex=x", "regex=model:", "regex=client_ip:x", "regex=model:%28", "regex=model:a&regex=model:b",
+	} {
 		response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h&"+suffix)
 		if response.StatusCode != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d body %s", suffix, response.StatusCode, payload)
 		}
+	}
+}
+
+func TestUsageEventsAcceptAFieldPattern(t *testing.T) {
+	client, baseURL, _ := startDashboardTestServer(t, nil)
+	// The pattern keeps its own colons and anchors; only the first colon separates it from the field.
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h&regex="+url.QueryEscape(`model:^(?i)no-such:model$`))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var page struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(payload, &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("a pattern nothing matches returned %d records", len(page.Items))
 	}
 }
 

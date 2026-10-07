@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 import { sleep } from '../probe.mjs';
 import { until } from '../harness.mjs';
 
@@ -64,6 +66,19 @@ export const alignmentFacets = {
  * "text-align matches" would not notice.
  */
 export async function columnAlignment({ base, page, check }) {
+  // Headless Chromium draws no scrollbars, so a desktop's classic 14px scrollbar is emulated for
+  // any code that measures one. The virtual list draws its own overlay scrollbar and loses no
+  // width to a native one, so a header that pads a measured gutter drifts off the rows' tracks.
+  await page.addInitScript(() => {
+    const clientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    Object.defineProperty(Element.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        const width = clientWidth.get.call(this);
+        return this instanceof HTMLElement && this.style.overflow === 'scroll' ? Math.max(0, width - 14) : width;
+      },
+    });
+  });
   await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
 
@@ -248,7 +263,8 @@ export async function columnAlignment({ base, page, check }) {
     const header = document.querySelector('.request-table-header');
     const row = document.querySelector('.request-row');
     if (!header || !row) return { ok: false, reason: 'missing header or row' };
-    const headerCells = Array.from(header.querySelectorAll('.req-th')).map((n) => Math.round(n.getBoundingClientRect().left));
+    // The selection track is compared by `request-export`; here the cells are the data columns.
+    const headerCells = Array.from(header.querySelectorAll('.req-th:not(.req-th-select)')).map((n) => Math.round(n.getBoundingClientRect().left));
     const rowCells = Array.from(row.querySelectorAll('.req-col')).map((n) => Math.round(n.getBoundingClientRect().left));
     const compared = Math.min(headerCells.length, rowCells.length);
     const drift = [];
@@ -730,4 +746,166 @@ export function refreshRecords() {
     await page.getByText(/Sync incomplete/i).first().waitFor({ timeout: 10_000 });
     check('a pull that could not drain CPA is reported, not shown as success', true);
   };
+}
+
+/**
+ * The alignment records with what an export has to withhold: two OAuth accounts
+ * (one of them answering twice) and a provider key on the API-key rows.
+ */
+export const exportRecords = alignmentRecords.map((record, index) =>
+  index < 3
+    ? { ...record, auth_type: 'oauth', auth_index: index === 1 ? 'oauth-b' : 'oauth-a', source: index === 1 ? 'second@example.com' : 'first@example.com' }
+    : { ...record, provider_key_mask: 'sk-up••••••••4321' });
+
+/**
+ * Picking requests and exporting them as an image.
+ *
+ * The selection is browser work because its failure modes are: a tick that also
+ * opens the record under it, a "select all" that only reaches the rows the
+ * virtual list has mounted, and a checkbox column that shifts the header off the
+ * rows. The export is here for what needs a real canvas and a real download: the
+ * sheet is drawn, a redaction redraws it, and both formats reach the disk. What a
+ * redacted export may contain is asserted on its data in `scripts/test-request-export.ts`.
+ */
+export async function requestExport({ base, page, check }) {
+  await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  const rowBox = (index) => page.locator('.request-row').nth(index).locator('.req-select-box');
+  const count = page.locator('.request-selection-count');
+
+  await rowBox(0).click();
+  await count.waitFor();
+  check('ticking a row selects it without opening the record',
+    (await count.innerText()).includes('1') && (await page.locator('.ant-drawer-open').count()) === 0,
+    await count.innerText());
+
+  await rowBox(2).click({ modifiers: ['Shift'] });
+  await until(async () => (await count.innerText()).includes('3'), { label: 'a Shift click extends the selection' })
+    .then(() => check('a Shift click selects the run between the two rows', true))
+    .catch(async () => check('a Shift click selects the run between the two rows', false, await count.innerText()));
+
+  const mounted = await page.locator('.request-row').count();
+  await page.locator('.req-th-select .req-select-box').click();
+  await until(async () => (await count.innerText()).includes(String(exportRecords.length)), { label: 'select all' })
+    .then(() => check('select all reaches every loaded record, mounted or not', mounted <= exportRecords.length, `mounted ${mounted}`))
+    .catch(async () => check('select all reaches every loaded record, mounted or not', false, await count.innerText()));
+
+  const boxes = await page.evaluate(() => {
+    const centre = (node) => {
+      const box = node.getBoundingClientRect();
+      return Math.round(box.left + box.width / 2);
+    };
+    return {
+      header: centre(document.querySelector('.req-th-select .req-select-box')),
+      row: centre(document.querySelector('.request-row .req-select-box')),
+    };
+  });
+  check('the header checkbox sits over the rows\' checkboxes', Math.abs(boxes.header - boxes.row) <= 1, JSON.stringify(boxes));
+
+  await page.getByTestId('req-export-open').click();
+  const sheet = page.getByTestId('req-export-sheet');
+  const painted = page.locator('[data-testid="req-export-sheet"][data-painted]');
+  await painted.waitFor();
+  // What the sheet may contain is a logic-suite claim about its data. What only a
+  // browser can show is that the canvas was drawn at all, and redrawn on a change.
+  const readCanvas = () => sheet.evaluate((canvas) => {
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    const colours = new Set();
+    let digest = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      const colour = (data[offset] << 16) | (data[offset + 1] << 8) | data[offset + 2];
+      if (colours.size < 64) colours.add(colour);
+      digest = (Math.imul(digest, 31) + colour) | 0;
+    }
+    return { width: canvas.width, height: canvas.height, colours: colours.size, digest, shown: canvas.clientWidth };
+  });
+  const drawn = await readCanvas();
+  check('the preview is a drawn sheet, fitted to the dialog', drawn.colours > 8 && drawn.width > drawn.shown && drawn.shown > 0,
+    JSON.stringify(drawn));
+
+  await page.locator('.req-export-masks .ant-checkbox-wrapper', { hasText: /^(请求 ID|Request IDs)$/ }).click();
+  await until(async () => (await painted.count()) === 1 && (await readCanvas()).digest !== drawn.digest, { label: 'the sheet is redrawn' })
+    .then(() => check('changing a redaction redraws the sheet', true))
+    .catch(() => check('changing a redaction redraws the sheet', false));
+
+  const canvasSize = await readCanvas();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('req-export-download').click(),
+  ]);
+  const image = fs.readFileSync(await download.path());
+  const isPng = image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const pixels = { width: image.readUInt32BE(16), height: image.readUInt32BE(20) };
+  check('the download is a PNG named for the requests', isPng && /^requests-\d{8}-\d{6}\.png$/.test(download.suggestedFilename()),
+    download.suggestedFilename());
+  check('the image is the previewed canvas, pixel for pixel in size',
+    pixels.width === canvasSize.width && pixels.height === canvasSize.height, JSON.stringify({ pixels, canvasSize }));
+
+  await page.locator('.req-export-format .ant-segmented-item', { hasText: 'JSON' }).click();
+  const preview = page.getByTestId('req-export-json');
+  await preview.waitFor();
+  const previewText = await preview.innerText();
+  check('the JSON preview carries the redaction the image had',
+    previewText.includes(LONG_MODEL) && !previewText.includes('example.com') && !previewText.includes(exportRecords[0].request_id),
+    previewText.slice(0, 200));
+  const [jsonDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('req-export-download').click(),
+  ]);
+  const exported = JSON.parse(fs.readFileSync(await jsonDownload.path(), 'utf8'));
+  check('the JSON download holds every selected record',
+    /^requests-\d{8}-\d{6}\.json$/.test(jsonDownload.suggestedFilename()) && exported.count === exportRecords.length &&
+    exported.requests.length === exportRecords.length && exported.redacted.includes('request_id'),
+    JSON.stringify({ name: jsonDownload.suggestedFilename(), count: exported.count, redacted: exported.redacted }));
+}
+
+/** Facets for the mark probe: a model whose maker is known, one whose maker is not, and the rows' provider. */
+export const markFacets = {
+  ...alignmentFacets,
+  models: [{ value: 'gpt-5', requests: 7 }, { value: LONG_MODEL, requests: 5 }],
+  providers: [{ value: 'gemini', requests: 12 }],
+};
+
+/** Rows from a provider with artwork of its own, so a mark resolved from the wrong key is a different picture. */
+export const markRecords = alignmentRecords.map((record) => ({ ...record, provider: 'gemini' }));
+
+/**
+ * A filter option carries the mark its rows carry.
+ *
+ * The claim is about two renders agreeing - the option in a popup and the row in
+ * the list - which only the page can show: the same provider resolved through a
+ * second path would still type-check and still draw *a* picture.
+ */
+export async function facetMarks({ base, page, check }) {
+  await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  const markOf = (scope) => scope.evaluate((node) => {
+    const image = node.querySelector('img');
+    if (image) return `img:${image.getAttribute('src')}`;
+    // A mark with no colour artwork is a masked silhouette, not an image.
+    const silhouette = Array.from(node.querySelectorAll('span')).find((span) => span.style.mask || span.style.webkitMask);
+    if (silhouette) return `mask:${silhouette.style.mask || silhouette.style.webkitMask}`;
+    const glyph = node.querySelector('svg');
+    return glyph ? `svg:${glyph.getAttribute('class') ?? ''}:${glyph.innerHTML.length}` : 'none';
+  });
+  const optionMark = async (control, text) => {
+    await page.locator(`.request-filters .req-facet-select:has([aria-label="${control}"])`).click();
+    const option = page.locator('.ant-select-dropdown:visible .ant-select-item-option', { hasText: text });
+    await option.waitFor();
+    const mark = await markOf(option.locator('.req-facet-option-mark'));
+    await page.keyboard.press('Escape');
+    return mark;
+  };
+
+  const known = await optionMark('Model', 'gpt-5');
+  const unknown = await optionMark('Model', LONG_MODEL);
+  check("a model option shows its maker's mark", /openai/i.test(known), known);
+  check('a model nobody made a mark for shows the generic glyph, not a blank', unknown.startsWith('svg:') && unknown !== known, unknown);
+
+  const rowMark = await markOf(page.locator('.request-row').last().locator('.req-col-provider'));
+  const providerOption = await optionMark('Provider', /./);
+  check('a provider option shows the mark its rows show', rowMark !== 'none' && providerOption === rowMark,
+    JSON.stringify({ rowMark, providerOption }));
 }

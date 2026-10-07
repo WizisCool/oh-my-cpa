@@ -98,3 +98,27 @@
   align-items: center;
   gap: 8px;
 }
+
+/* The pattern's field and the pattern are one control: the field keeps its own width and the
+   pattern takes the rest, in the mono face a pattern is read in. */
+.req-filter-regex {
+  display: flex;
+  width: 100%;
+}
+.req-filter-regex-field {
+  flex: none;
+  min-width: 116px;
+}
+.req-filter-regex-pattern {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.req-filter-regex-pattern input {
+  font-family: var(--font-mono);
+}
+.req-filter-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}

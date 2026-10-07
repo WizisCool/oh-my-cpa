@@ -1,7 +1,7 @@
 import { usePluginProviderOwnership } from '../hooks/usePluginOAuthLogos';
 import { api } from '../api/client';
 import { useCustomIcons } from '../hooks/useCustomIcons';
-import { customIconID, resolveProviderArtwork } from '../types/customIcons';
+import { customIconID, resolveProviderArtwork, type CustomIcon } from '../types/customIcons';
 import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { isRenderableLogoURL } from '../types/pluginOAuthProviders';
@@ -80,6 +80,36 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   );
 });
 
+/**
+ * The artwork behind a provider mark as a URL, for a surface that draws marks
+ * itself instead of rendering this component - the exported request sheet.
+ *
+ * It follows the component's own order - a plugin's logo, then custom artwork,
+ * then the catalog - so a mark is the same picture wherever it appears. `isMono`
+ * marks a silhouette the caller has to fill with the foreground colour.
+ */
+export function resolveMarkArtwork(
+  iconId: string | undefined,
+  logo: string | undefined,
+  customIcons: readonly CustomIcon[] = [],
+): { url: string; isMono: boolean } | null {
+  const trimmedLogo = (logo || '').trim();
+  if (trimmedLogo && isRenderableLogoURL(trimmedLogo)) return { url: trimmedLogo, isMono: false };
+  const customID = customIconID(iconId);
+  if (customID) {
+    const icon = customIcons.find((item) => item.id === customID);
+    return icon ? { url: api.customIconURL(customID, icon.revision), isMono: false } : null;
+  }
+  const metadata = iconId ? TOC_BY_ID.get(iconId) : undefined;
+  if (!iconId || !metadata) return null;
+  const slug = lobeIconSlug(iconId);
+  const isColor = metadata.hasColor && !WHITE_GLYPH_COLOR_ICONS.has(iconId);
+  return {
+    url: `${import.meta.env.BASE_URL}lobe-icons/${slug}${isColor ? '-color' : ''}.svg`,
+    isMono: !isColor,
+  };
+}
+
 const CustomIconImage: React.FC<LobeIconProps & { id: string }> = ({ id, size, className, style, loading }) => {
   const { data } = useCustomIcons();
   const icon = data?.find((item) => item.id === id);
@@ -117,18 +147,30 @@ export interface ProviderBrandIconProps {
  * the shared chunk this code is bundled into, and the bundle budget pins that chunk
  * by name (`Lobe icon JS`, derived from this file).
  */
-export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
-  providerKeys = [],
+export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = (props) => {
+  // Plugin ownership only decides anything for deployment custom artwork. Asking for
+  // it unconditionally would subscribe every catalog mark to the plugin query, and a
+  // request list mounts one mark per row while it scrolls.
+  const needsOwnership = Boolean(customIconID(props.iconId)) && (props.providerKeys?.length ?? 0) > 0;
+  return needsOwnership ? <PluginAwareBrandIcon {...props} /> : <BrandIconArtwork {...props} isOwned={false} isOwnershipUnknown={false} />;
+};
+
+const PluginAwareBrandIcon: React.FC<ProviderBrandIconProps> = (props) => {
+  const ownership = usePluginProviderOwnership(props.providerKeys ?? [], true);
+  return <BrandIconArtwork {...props} isOwned={ownership.isOwned} isOwnershipUnknown={ownership.isUnknown} />;
+};
+
+const BrandIconArtwork: React.FC<ProviderBrandIconProps & { isOwned: boolean; isOwnershipUnknown: boolean }> = ({
   fallbackIconId,
   iconId,
   logo,
   size,
   className,
   style,
+  isOwned,
+  isOwnershipUnknown,
 }) => {
-  const isCustom = Boolean(customIconID(iconId));
-  const ownership = usePluginProviderOwnership(providerKeys, isCustom && providerKeys.length > 0);
-  const fallback = resolveProviderArtwork(iconId, fallbackIconId, Boolean(logo), ownership.isOwned, ownership.isUnknown);
+  const fallback = resolveProviderArtwork(iconId, fallbackIconId, Boolean(logo), isOwned, isOwnershipUnknown);
   const [isLogoBroken, setIsLogoBroken] = useState(false);
 
   // A swapped logo (a plugin upgrade, or a provider whose plugin changed) starts

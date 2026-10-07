@@ -108,6 +108,9 @@ export const MenuFoldOutlined = createIcon(Lucide.PanelLeftClose, 'anticon-menu-
 export const MenuUnfoldOutlined = createIcon(Lucide.PanelLeftOpen, 'anticon-menu-unfold');
 export const MessageOutlined = createIcon(Lucide.MessageSquarePlus, 'anticon-message');
 export const MoonOutlined = createIcon(Lucide.Moon, 'anticon-moon');
+// A request answered in one payload. A struck broadcast mark, because the stream is what is absent;
+// the boxes glyph belongs to Model Square.
+export const NonStreamOutlined = createIcon(Lucide.RadioOff, 'anticon-non-stream');
 export const MoreOutlined = createIcon(Lucide.MoreHorizontal, 'anticon-more');
 export const NodeIndexOutlined = createIcon(Lucide.Network, 'anticon-node-index');
 export const PauseCircleOutlined = createIcon(Lucide.PauseCircle, 'anticon-pause-circle');
