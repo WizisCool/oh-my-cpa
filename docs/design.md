@@ -1276,7 +1276,10 @@ in code, a small dismiss - on a `--border-soft` rule.
 
 A finished answer's foot states its status, duration and start time, its rounds and calls, and the
 tokens the gateway reported, and carries copy and "export this answer" (HTML) as muted icon
-actions. The head's Export menu saves the whole conversation as an HTML page, a PNG image or JSON.
+actions. The newest answer's foot leads those with retry and edit when its turn changed nothing;
+editing returns the message's words to the composer under a muted "editing" row with a dismiss.
+A text file attached to a message (ADR 0074) is a 28px hairline chip of name and remove in the
+composer, and a 26px chip of paperclip, name and `--meta` size above the sent bubble. The head's Export menu saves the whole conversation as an HTML page, a PNG image or JSON.
 
 **An exported conversation is the workspace, not a report about it.** The HTML page and the PNG are
 drawn from the resolved palette and the embedded mono face (`web/src/agent/conversationStyles.ts`), so

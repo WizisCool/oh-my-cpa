@@ -96,6 +96,8 @@ export interface AgentForwardedProps {
   model: string;
   client_key_fingerprint: string;
   reasoning_effort?: string;
+  /** The newest turn this message takes the place of: a retry or an edit. */
+  replace_turn?: string;
 }
 
 export interface AgentRunRequest {

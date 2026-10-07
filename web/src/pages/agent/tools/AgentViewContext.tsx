@@ -28,6 +28,12 @@ export interface AgentViewState {
   selectCall: (id: string) => void;
   /** Present while a run is in flight. */
   activity?: AgentActivity;
+  /** The newest turn's id when it may be retried or edited; empty otherwise. */
+  replaceableTurnID?: string;
+  /** Asks the newest turn's question again in its place. */
+  retryTurn?: () => void;
+  /** Puts the newest turn's message back in the composer; sending it replaces the turn. */
+  editTurn?: () => void;
 }
 
 const EMPTY: AgentViewState = {

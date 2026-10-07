@@ -4,7 +4,7 @@ import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartBy
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
-import { CheckOutlined, ClockCircleOutlined, CopyOutlined, DatabaseOutlined, FileTextOutlined, RightOutlined } from '../../components/icons';
+import { CheckOutlined, ClockCircleOutlined, CopyOutlined, DatabaseOutlined, EditOutlined, FileTextOutlined, PaperClipOutlined, ReloadOutlined, RightOutlined } from '../../components/icons';
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
@@ -19,6 +19,7 @@ import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { failureKey, formatClock, formatDuration, isAwaitingAnswer, statusTone, turnDuration, turnLabelKey } from './state';
 import type { AgentMessageCustom } from './thread';
+import { formatBytes } from '../../utils/format';
 import { useAgentView } from './tools/AgentViewContext';
 import { ToolFallback } from './tools/registry';
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
@@ -29,11 +30,26 @@ const USER_PART_COMPONENTS = { Text: () => <MessagePartPrimitive.Text smooth={fa
 
 /** The operator's message. */
 export function AgentUserMessage() {
+  const files = useAuiState(state => (state.message.metadata?.custom as AgentMessageCustom | undefined)?.files);
+  const hasText = useAuiState(state => state.message.parts.some(part => part.type === 'text' && part.text.length > 0));
   return (
     <MessagePrimitive.Root className={workspace['message']} data-role="user">
-      <div className={clsx(workspace['user-bubble'], workspace['user-text'])} data-aui-quote-selectable>
-        <MessagePrimitive.Parts components={USER_PART_COMPONENTS} />
-      </div>
+      {!!files?.length && (
+        <div className={styles['sent-files']} data-testid="agent-sent-files">
+          {files.map((file, index) => (
+            <span key={`${file.name}:${index}`} className={styles['sent-file']}>
+              <PaperClipOutlined aria-hidden="true" />
+              <span className={styles['sent-file-name']}>{file.name}</span>
+              <span className={styles['sent-file-size']}>{formatBytes(file.bytes)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {hasText && (
+        <div className={clsx(workspace['user-bubble'], workspace['user-text'])} data-aui-quote-selectable>
+          <MessagePrimitive.Parts components={USER_PART_COMPONENTS} />
+        </div>
+      )}
     </MessagePrimitive.Root>
   );
 }
@@ -106,6 +122,7 @@ function TurnFooter({ turn }: { turn: Turn }) {
   const duration = turnDuration(turn);
   const clock = formatClock(turn.started_at_ms, lang);
   const calls = turn.traces.length;
+  const { replaceableTurnID, retryTurn, editTurn } = useAgentView();
   return (
     <div className={workspace['message-foot']}>
       <span className={workspace['status']}>
@@ -126,6 +143,16 @@ function TurnFooter({ turn }: { turn: Turn }) {
       )}
       <span className={workspace['foot-spacer']} />
       <ActionBarPrimitive.Root className={workspace['foot-actions']}>
+        {replaceableTurnID === turn.id && (
+          <>
+            <Tooltip title={t('agent.turn.retry')}>
+              <Button type="text" size="small" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
+            </Tooltip>
+            <Tooltip title={t('agent.turn.edit')}>
+              <Button type="text" size="small" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
+            </Tooltip>
+          </>
+        )}
         <Tooltip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
             <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>

@@ -37,8 +37,13 @@ export interface AgentRunControls {
   errorCode: string;
   /** When the current run started, so the activity strip can count from the run rather than from the message. */
   startedAtMS: number;
-  /** Sends a new message. Resolves when the run settles; rejects when the server refused it before accepting. */
-  send: (message: string) => Promise<void>;
+  /** The stored turn the current run's message replaces, hidden while the run is in flight. */
+  replacedTurnID: string;
+  /**
+   * Sends a new message, optionally in place of the newest turn. Resolves when the run settles;
+   * rejects when the server refused it before accepting.
+   */
+  send: (message: string, replaceTurn?: string) => Promise<void>;
   /** Continues the stored turn from the interrupts the operator has decided. */
   resume: (interruptIDs: string[]) => Promise<void>;
   stop: () => void;
@@ -84,6 +89,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   const [frame, setFrame] = React.useState<RunFrame>(EMPTY_FRAME);
   const [errorCode, setErrorCode] = React.useState('');
   const [startedAtMS, setStartedAtMS] = React.useState(0);
+  const [replacedTurnID, setReplacedTurnID] = React.useState('');
 
   const controllerRef = React.useRef<AbortController>();
   const runIDRef = React.useRef('');
@@ -116,7 +122,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     if (controller && runIDRef.current) void cancelRun('agent', runIDRef.current, controller.signal).catch(() => {});
   }, []);
 
-  const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string) => {
+  const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string, replaceTurn = '') => {
     const { conversation: current, model, fingerprint, reasoningEffort, language, pageContext } = optionsRef.current;
     if (controllerRef.current || !current) throw new RunRejectedError('agent_busy', message);
     const isResume = message === '';
@@ -130,6 +136,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     setErrorCode('');
     setStartedAtMS(recoveryID ? current.turns.find(turn => turn.status === 'running')?.started_at_ms ?? Date.now() : Date.now());
     setPendingMessage(message);
+    setReplacedTurnID(replaceTurn);
     setIsRunning(true);
     let rejection: RunRejectedError | undefined;
 
@@ -146,6 +153,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
           model,
           client_key_fingerprint: fingerprint,
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+          ...(replaceTurn ? { replace_turn: replaceTurn } : {}),
         },
         ...(isResume ? { resume: resume.map(interruptId => ({ interruptId, status: 'resolved' as const })) } : {}),
       }, controller.signal, () => {
@@ -190,6 +198,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
       setFrame(EMPTY_FRAME);
       setIsResuming(false);
       setPendingMessage('');
+      setReplacedTurnID('');
       if (controllerRef.current === controller) controllerRef.current = undefined;
       setIsRunning(false);
       // A run that reported its final snapshot has already been written to the cache, and the
@@ -223,7 +232,8 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     frame,
     errorCode,
     startedAtMS,
-    send: React.useCallback((message: string) => execute(message, []), [execute]),
+    replacedTurnID,
+    send: React.useCallback((message: string, replaceTurn?: string) => execute(message, [], undefined, replaceTurn), [execute]),
     resume: React.useCallback((interruptIDs: string[]) => execute('', interruptIDs), [execute]),
     stop,
     clearError: React.useCallback(() => setErrorCode(''), []),

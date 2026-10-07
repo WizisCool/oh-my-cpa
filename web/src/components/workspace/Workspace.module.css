@@ -857,6 +857,28 @@
   object-fit: cover;
 }
 
+/* A file is a name, so its chip is a row with the remove control after the name rather than a
+   thumbnail with one laid over its corner. */
+.attachment[data-kind='file'] {
+  gap: 4px;
+  max-width: 240px;
+  min-height: 28px;
+  padding-left: 8px;
+}
+
+.attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment[data-kind='file'] .attachment-remove:global(.ant-btn) {
+  position: static;
+  flex-shrink: 0;
+  background: transparent;
+}
+
 .attachment-remove:global(.ant-btn) {
   position: absolute;
   top: 2px;

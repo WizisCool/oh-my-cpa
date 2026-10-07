@@ -641,3 +641,64 @@ func TestSaveMakesRoomWhileATurnIsRunning(t *testing.T) {
 		t.Fatalf("omitted %d turns %d", conversation.Omitted, len(conversation.Turns))
 	}
 }
+
+// TestRuntimeReplacesOnlyATurnThatChangedNothing: a retry or an edit drops the newest turn and
+// asks again, so the model must not see the dropped exchange, and a turn that prepared or ran a
+// change must stay in the record.
+func TestRuntimeReplacesOnlyATurnThatChangedNothing(t *testing.T) {
+	runtime := newTestRuntime(t)
+	for _, permission := range []string{"read", "write"} {
+		err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_" + permission, Description: "fixture", Version: 1, Permission: permission, Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (struct{}, error) {
+			return struct{}{}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seen []gateway.AgentMessage
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(_ context.Context, _ string, messages []gateway.AgentMessage, _ []gateway.AgentTool, _ func(gateway.Event) error) (gateway.AgentReply, error) {
+			seen = messages
+			return gateway.AgentReply{Content: "Answer"}, nil
+		}), nil
+	}
+	run := func(input Input) (Conversation, error) {
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.ConversationID, input.Revision, input.Model, input.Fingerprint = current.ID, current.Revision, "fixture", "key"
+		err = runtime.Run(context.Background(), input, func(Event) error { return nil })
+		current, _ = runtime.Current(context.Background())
+		return current, err
+	}
+	first, err := run(Input{Message: "first wording"})
+	if err != nil || len(first.Turns) != 1 {
+		t.Fatalf("first run: %+v %v", first, err)
+	}
+	if _, err = run(Input{Message: "again", ReplaceTurn: "not-the-newest"}); err == nil || err.Error() != "resource_conflict" {
+		t.Fatalf("replaced a turn that is not the newest: %v", err)
+	}
+	replaced, err := run(Input{Message: "second wording", ReplaceTurn: first.Turns[0].ID})
+	if err != nil || len(replaced.Turns) != 1 || replaced.Turns[0].User != "second wording" || replaced.Turns[0].ID == first.Turns[0].ID {
+		t.Fatalf("replacement: %+v %v", replaced, err)
+	}
+	for _, message := range seen {
+		if strings.Contains(message.Content, "first wording") {
+			t.Fatalf("the model was shown the replaced message: %+v", seen)
+		}
+	}
+	turn := replaced.Turns[0]
+	turn.Traces = []Trace{{ID: "a", Name: RENDER_TABLE}, {ID: "b", Name: "fixture_read"}}
+	if !runtime.isReplaceable(turn) {
+		t.Fatal("a turn that only read and drew is replaceable")
+	}
+	turn.Traces = append(turn.Traces, Trace{ID: "c", Name: "fixture_write"})
+	if runtime.isReplaceable(turn) {
+		t.Fatal("a turn that called a write is not replaceable")
+	}
+	turn.Traces, turn.Status = nil, "pending"
+	if runtime.isReplaceable(turn) {
+		t.Fatal("a turn waiting on the operator is not replaceable")
+	}
+}

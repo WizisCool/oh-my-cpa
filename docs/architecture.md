@@ -217,7 +217,7 @@ is assembled server-side - a client cannot inject tool results, approvals, or hi
 
 `POST /agent/run` speaks AG-UI 1.0 (ADR 0041). `internal/agui` decodes a strict `RunAgentInput` -
 one user message or a `resume` list naming the interrupts it continues from, never history, state
-or tool results; the key, model, effort and the revision the page last saw as `forwardedProps`;
+or tool results; the key, model, effort, the revision the page last saw and, for a retry or an edit, the newest turn the message replaces (`replace_turn`, honoured only when `isReplaceable` finds the turn settled and read-only) as `forwardedProps`;
 the console language and, from the assistant dock, where the operator is (`console_page`, `console_selection`, `console_range`; ADR 0073) as the only `context` entries - and `internal/api/agent_http.go` translates the
 runtime's transport-independent events onto the stream. `RUN_STARTED` is sent only once the turn
 is persisted, so a run refused before that emits `RUN_ERROR` alone and the console hands the
@@ -272,7 +272,7 @@ The workspace above that loop is `web/src/pages/agent`, on assistant-ui's `Exter
 over the shared shell in `web/src/components/workspace`. `AgentWorkspace` is mounted twice: by the
 `/agent` route, and by `web/src/components/assistant` as a lazily loaded dock that `AppLayout`
 renders beside every other page (ADR 0073). Both read the one stored conversation and rejoin the
-one server-side run. The dock adds page context: `web/src/agent/pageContext.ts` names the page from
+one server-side run. The dock adds page context: Text files attached in the composer are folded into the message by `web/src/pages/agent/attachments.ts` (ADR 0074), so the server stores and resumes them as part of the one string it already keeps. `web/src/agent/pageContext.ts` names the page from
 the route and holds what the mounted page declared with `usePageContext`; `PageContext.valid` in
 `internal/agent/prompt.go` checks the same closed shape before the prompt states it. The framework-free run layer is
 `web/src/agent/`: the request builder and event parser (`protocol.ts`), the chunk-safe SSE reader
@@ -351,6 +351,7 @@ and an operator needs to know which one did:
 | --- | --- | --- |
 | Request budget | The model's reference context window at `agent.REQUEST_BYTES_PER_TOKEN` (2) bytes a token; `agent.DEFAULT_CONTEXT_TOKENS` (128,000) when unlisted; at most `agent.MAX_REQUEST_BYTES` (768 KiB) | One assembled request, including its tool declarations |
 | `agent.MAX_TOOL_SCHEMA_BYTES` | 64 KiB | The catalogue's share of that request |
+| `agent.MAX_MESSAGE_BYTES` | 48 KiB | One operator message, attached text files included (ADR 0074) |
 
 Three properties hold across the loop:
 

@@ -612,6 +612,93 @@ export async function agentViews({ base, page, check, expectProblem }) {
  * `ask_question` takes the composer's place: the agent's options, a typed answer beside them, and
  * sending the reply continues the run.
  */
+export async function agentReplace({ base, page, check }) {
+  const answered = (id, user, reply, traces = []) => ({ id, user, reply, parts: [...traces.map(trace => ({ type: 'tool', trace_id: trace.id })), { type: 'text', content: reply }], status: 'success', started_at_ms: Date.now() - 500, ended_at_ms: Date.now(), traces });
+  let conversation = { ...initial(), revision: 2, turns: [answered('turn-old', 'Which provder fails most?', 'First answer.', [{ id: 'call-list', name: 'providers_list', arguments: '{}', result: { status: 'success', data: {} } }])] };
+  const runs = [];
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/run', async route => {
+    const body = JSON.parse(route.request().postData());
+    runs.push(body);
+    const reply = runs.length === 1 ? 'Second answer.' : 'Third answer.';
+    const turn = answered(`turn-${runs.length}`, body.messages[0].content, reply);
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [turn] };
+    await route.fulfill({ contentType: 'text/event-stream', body: sse([started(turn.id), step(1), ...text(`message-${runs.length}`, reply), snapshot(conversation), finished()]) });
+  });
+  await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
+  const workspace = page.locator('[data-testid="agent-page"]');
+  await workspace.getByText('First answer.', { exact: true }).waitFor();
+
+  await workspace.getByRole('button', { name: 'Retry', exact: true }).click();
+  await workspace.getByText('Second answer.', { exact: true }).waitFor();
+  check('a retry asks the same question in the turn\'s place', runs[0].messages[0].content === 'Which provder fails most?' && runs[0].forwardedProps.replace_turn === 'turn-old', JSON.stringify(runs[0].forwardedProps));
+  check('the replaced answer is gone', await workspace.getByText('First answer.', { exact: true }).count() === 0);
+
+  await workspace.getByRole('button', { name: 'Edit and resend', exact: true }).click();
+  const composer = workspace.locator('textarea[name="input"]');
+  await until(async () => await composer.inputValue() === 'Which provder fails most?', { label: 'the message to return to the composer' });
+  check('editing says that sending replaces the message', await page.locator('[data-testid="agent-editing"]').isVisible());
+  await composer.fill('Which provider fails most?');
+  await page.keyboard.press('Enter');
+  await workspace.getByText('Third answer.', { exact: true }).waitFor();
+  check('an edit sends the new wording in the turn\'s place', runs[1].messages[0].content === 'Which provider fails most?' && runs[1].forwardedProps.replace_turn === 'turn-1', JSON.stringify(runs[1].forwardedProps));
+  check('the editing notice goes once the message is sent', await page.locator('[data-testid="agent-editing"]').count() === 0);
+
+  // A turn that changed something is part of the record: it can be neither retried nor edited.
+  conversation = { ...conversation, revision: conversation.revision + 1, turns: [answered('turn-write', 'Disable it', 'Disabled.', [{ id: 'call-write', name: 'providers_set_status', arguments: '{}', result: { status: 'success', data: {} } }])] };
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await workspace.getByText('Disabled.', { exact: true }).waitFor();
+  check('a turn that made a change offers no retry or edit', await workspace.getByRole('button', { name: 'Retry', exact: true }).count() === 0 && await workspace.getByRole('button', { name: 'Edit and resend', exact: true }).count() === 0);
+}
+
+export async function agentAttach({ base, page, check }) {
+  let conversation = initial();
+  const runs = [];
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/run', async route => {
+    const body = JSON.parse(route.request().postData());
+    runs.push(body);
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-file', user: body.messages[0].content, reply: 'Two errors.', parts: [{ type: 'text', content: 'Two errors.' }], status: 'success', started_at_ms: Date.now() - 500, ended_at_ms: Date.now(), traces: [] }] };
+    await route.fulfill({ contentType: 'text/event-stream', body: sse([started('turn-file'), step(1), ...text('message-file', 'Two errors.'), snapshot(conversation), finished()]) });
+  });
+  await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
+  const workspace = page.locator('[data-testid="agent-page"]');
+  await workspace.locator('[data-testid="agent-empty"]').waitFor();
+  // The composer opens the system picker on demand; there is no file input in the page to fill.
+  const attach = async file => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), workspace.getByRole('button', { name: 'Attach a text file', exact: true }).click()]);
+    await chooser.setFiles(file);
+  };
+
+  // A binary file is refused where it is added, so it can never reach a model as text.
+  await attach({ name: 'core.bin', mimeType: 'application/octet-stream', buffer: Buffer.from([0, 1, 2, 255, 254, 0]) });
+  await page.locator('.omc-toast-warning').waitFor();
+  check('a file that is not text is refused', await workspace.getByText('core.bin', { exact: true }).count() === 0);
+
+  await attach({ name: 'gateway.log', mimeType: 'text/plain', buffer: Buffer.from('ERROR upstream timeout\nERROR upstream reset\n') });
+  await workspace.getByText('gateway.log', { exact: true }).waitFor();
+  const composer = workspace.locator('textarea[name="input"]');
+  await composer.fill('How many errors?');
+  await page.keyboard.press('Enter');
+  await workspace.getByText('Two errors.', { exact: true }).waitFor();
+  const sent = runs[0]?.messages[0]?.content ?? '';
+  check('the file travels inside the message as a named block', sent.startsWith('How many errors?') && sent.includes('<file name="gateway.log">\nERROR upstream timeout') && sent.trimEnd().endsWith('</file>'), sent);
+  const files = workspace.locator('[data-testid="agent-sent-files"]');
+  await files.waitFor();
+  const bubble = await workspace.locator('[data-role="user"]').first().innerText();
+  check('the sent message shows the file by name, not its content', (await files.innerText()).includes('gateway.log') && bubble.includes('How many errors?') && !bubble.includes('upstream timeout'), bubble);
+
+  // Editing shows the words alone; the file stays with the message and goes out again.
+  await workspace.getByRole('button', { name: 'Edit and resend', exact: true }).click();
+  await until(async () => await composer.inputValue() === 'How many errors?', { label: 'the words to return to the composer' });
+  check('an edited message names the file it still carries', (await page.locator('[data-testid="agent-editing"]').innerText()).includes('gateway.log'));
+  await composer.fill('How many distinct errors?');
+  await page.keyboard.press('Enter');
+  await until(() => runs.length === 2, { label: 'the edited message to be sent' });
+  const resent = runs[1].messages[0].content;
+  check('the edit replaces the turn and keeps its file', runs[1].forwardedProps.replace_turn === 'turn-file' && resent.startsWith('How many distinct errors?') && resent.includes('<file name="gateway.log">'), resent);
+}
+
 export async function agentDock({ base, page, check }) {
   const runs = [];
   let conversation = initial();

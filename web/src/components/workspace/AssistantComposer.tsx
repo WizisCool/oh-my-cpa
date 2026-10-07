@@ -55,7 +55,7 @@ export interface AssistantComposerProps {
   /** A line under the composer: the cost or privacy boundary the operator is about to cross. */
   note?: React.ReactNode;
   /** Offered when the runtime has an attachment adapter: the picker's label and the remove label. */
-  attachments?: { addLabel: string; removeLabel: string };
+  attachments?: { addLabel: string; removeLabel: string; icon?: React.ReactNode };
   /** Offered when the runtime queues messages sent during a run. */
   queue?: { title: string; removeLabel: string };
   /** Offered when the page has commands or names to complete: `/` and `@` open a list above the box. */
@@ -201,7 +201,7 @@ function ComposerSurface({
   const addAttachment = attachments && (
     <Tooltip title={attachments.addLabel}>
       <ComposerPrimitive.AddAttachment asChild>
-        <Button type="text" size="small" aria-label={attachments.addLabel} icon={<PictureOutlined />} />
+        <Button type="text" size="small" aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
       </ComposerPrimitive.AddAttachment>
     </Tooltip>
   );
@@ -240,8 +240,10 @@ function ComposerSurface({
           <ComposerPrimitive.AttachmentDropzone className={styles['dropzone']}>
             <ComposerPrimitive.Attachments>
               {({ attachment }) => (
-                <AttachmentPrimitive.Root className={styles['attachment']} key={attachment.id}>
-                  {attachment.file && attachment.type === 'image' ? <AttachmentThumb file={attachment.file} name={attachment.name} /> : <AttachmentPrimitive.Name />}
+                <AttachmentPrimitive.Root className={styles['attachment']} data-kind={attachment.type === 'image' ? 'image' : 'file'} key={attachment.id}>
+                  {attachment.file && attachment.type === 'image'
+                    ? <AttachmentThumb file={attachment.file} name={attachment.name} />
+                    : <span className={styles['attachment-name']}><AttachmentPrimitive.Name /></span>}
                   <AttachmentPrimitive.Remove asChild>
                     <Button type="text" size="small" className={styles['attachment-remove']} aria-label={attachments.removeLabel} icon={<CloseOutlined />} />
                   </AttachmentPrimitive.Remove>

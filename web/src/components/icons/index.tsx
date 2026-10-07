@@ -114,6 +114,7 @@ export const NonStreamOutlined = createIcon(Lucide.RadioOff, 'anticon-non-stream
 export const MoreOutlined = createIcon(Lucide.MoreHorizontal, 'anticon-more');
 export const NodeIndexOutlined = createIcon(Lucide.Network, 'anticon-node-index');
 export const PauseCircleOutlined = createIcon(Lucide.PauseCircle, 'anticon-pause-circle');
+export const PaperClipOutlined = createIcon(Lucide.Paperclip, 'anticon-paper-clip');
 export const PictureOutlined = createIcon(Lucide.Image, 'anticon-picture');
 export const PuzzleOutlined = createIcon(Lucide.Puzzle, 'anticon-puzzle');
 export const PlayCircleOutlined = createIcon(Lucide.PlayCircle, 'anticon-play-circle');

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createMessageQueue, useExternalStoreRuntime } from '@assistant-ui/react';
-import type { AssistantRuntime, ThreadMessageLike } from '@assistant-ui/react';
+import type { AssistantRuntime, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react';
 import type { Conversation } from '../../agent/types';
 import { decideOperation } from './api';
 import type { Operation } from './state';
@@ -19,6 +19,13 @@ interface AgentRuntimeOptions {
   onRejected: (text: string, code: string) => void;
   /** An operation the operator just decided; the page records it and continues the run. */
   onDecided: (operation: Operation) => void;
+  /**
+   * The turn the next sent message replaces, when the operator is editing it, and the files that
+   * turn's message carried, which go out again after the new wording. Read at send time.
+   */
+  takeReplaceTarget: () => { turnID: string; files: string };
+  /** Text files the composer may attach (ADR 0074). */
+  attachments: AttachmentAdapter;
 }
 
 /**
@@ -29,9 +36,9 @@ interface AgentRuntimeOptions {
  * through a callback into OMC's code. A new message, a stop, an approval, an answer: each one
  * lands in `useAgentRun` or on the decision endpoint, never in state the framework owns.
  */
-export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDisabled, onRejected, onDecided }: AgentRuntimeOptions): AssistantRuntime {
-  const callbacksRef = React.useRef({ run, onRejected, onDecided });
-  callbacksRef.current = { run, onRejected, onDecided };
+export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDisabled, onRejected, onDecided, takeReplaceTarget, attachments }: AgentRuntimeOptions): AssistantRuntime {
+  const callbacksRef = React.useRef({ run, onRejected, onDecided, takeReplaceTarget });
+  callbacksRef.current = { run, onRejected, onDecided, takeReplaceTarget };
 
   // Messages sent while a run is in flight wait here and go out, in order, once it settles. The
   // server runs one turn at a time, so the queue never interrupts: it has no cancel to steer with,
@@ -39,8 +46,9 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
   const queue = React.useMemo(() => {
     const created = createMessageQueue({
       run: message => {
-        const text = appendMessageText(message);
-        void callbacksRef.current.run.send(text)
+        const target = callbacksRef.current.takeReplaceTarget();
+        const text = [appendMessageText(message), target.files].filter(Boolean).join('\n\n');
+        void callbacksRef.current.run.send(text, target.turnID || undefined)
           .catch((cause: unknown) => {
             if (cause instanceof RunRejectedError) {
               // A refusal is likely to refuse the next message for the same reason, so the queue
@@ -72,7 +80,14 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
     wasRunningRef.current = run.isRunning;
   }, [run.isRunning, queue]);
 
-  const turns = conversation?.turns;
+  // A retried or edited message takes the newest turn's place, so that turn leaves the transcript
+  // as soon as the run starts instead of standing above its own replacement. A refused run clears
+  // the id, and the turn - which the server never dropped - is back.
+  const replacedTurnID = run.isRunning ? run.replacedTurnID : '';
+  const turns = React.useMemo(
+    () => (replacedTurnID ? conversation?.turns.filter(turn => turn.id !== replacedTurnID) : conversation?.turns),
+    [conversation?.turns, replacedTurnID],
+  );
   const stored = React.useMemo(() => storedMessages(turns ?? []), [turns]);
   const live = React.useMemo<LiveRun | undefined>(
     () => (run.isRunning ? { frame: run.frame, pendingMessage: run.pendingMessage, isResuming: run.isResuming } : undefined),
@@ -87,6 +102,7 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
     isDisabled,
     isSendDisabled,
     queue: queue.adapter,
+    adapters: { attachments },
     // With a queue, the runtime hands every send to it; `onNew` is only the adapter's required
     // fallback and routes the same way.
     onNew: async message => {

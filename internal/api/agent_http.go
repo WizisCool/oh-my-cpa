@@ -216,6 +216,8 @@ type agentForwardedProps struct {
 	Model           string `json:"model"`
 	Fingerprint     string `json:"client_key_fingerprint"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// ReplaceTurn is the newest turn a retried or edited message takes the place of.
+	ReplaceTurn string `json:"replace_turn,omitempty"`
 }
 
 // The context entries a run may carry (ADR 0041, extended by ADR 0073): the console's reading
@@ -237,7 +239,8 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, 64<<10)
+	// A message may be 48 KiB of text whose line breaks and quotes double in JSON.
+	request.Body = http.MaxBytesReader(writer, request.Body, 128<<10)
 	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true, AGENT_CONTEXT_PAGE: true, AGENT_CONTEXT_SELECTION: true, AGENT_CONTEXT_RANGE: true}})
 	var props agentForwardedProps
 	if err == nil {
@@ -259,6 +262,7 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		Model:           props.Model,
 		ReasoningEffort: props.ReasoningEffort,
 		Language:        wire.Context[AGENT_CONTEXT_LANGUAGE],
+		ReplaceTurn:     props.ReplaceTurn,
 		DisplayTools:    wire.Tools,
 		Page: agent.PageContext{
 			Page:      wire.Context[AGENT_CONTEXT_PAGE],

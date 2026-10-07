@@ -430,6 +430,9 @@ the configuration workbench.
   column behind a hairline from 1280px, an overlay on the page's right edge below that, a
   Back-aware sheet on a phone; toggled from the header or Ctrl/Cmd+J. The page it will speak
   about is a muted, dismissible row above the input.
+- **Retry, edit, files**: the newest answer's foot offers retry and edit while its turn changed
+  nothing; an edit shows a muted "editing" row above the input. Attached text files (ADR 0074) are hairline name chips in the composer and above
+  the sent bubble.
 - **Follow-ups**: up to three questions the model offered, as plain lines under the newest answer
   that fill the composer without sending.
 - **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates

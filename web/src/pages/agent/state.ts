@@ -6,6 +6,7 @@ import { languageLocale } from '../../i18n/language';
 export type {
   AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
 } from '../../agent/types';
+import { isDisplayTool } from '../../agent/types';
 import type { CapabilityReceipt, Conversation, DisplayView, Trace, Turn, TurnPart } from '../../agent/types';
 
 export interface Operation {
@@ -313,6 +314,18 @@ export function formatClock(milliseconds: number | undefined, lang: Lang): strin
 export function turnDuration(turn: Turn): number | undefined {
   if (!turn.started_at_ms || !turn.ended_at_ms) return undefined;
   return turn.ended_at_ms - turn.started_at_ms;
+}
+
+/**
+ * The newest turn's id when a retry or an edit may take its place: it is settled, and everything
+ * it called only read or drew. The server applies the same rule (`isReplaceable`), so this decides
+ * only whether the actions are offered. A call the directory does not list counts as a change.
+ */
+export function replaceableTurnID(conversation: Conversation | undefined, capabilities: readonly { name: string; permission: string }[]): string {
+  const last = conversation?.turns.at(-1);
+  if (!last || last.status === 'running' || last.status === 'pending') return '';
+  const isHarmless = (name: string) => isDisplayTool(name) || capabilities.some(item => item.name === name && item.permission === 'read');
+  return last.traces.every(trace => isHarmless(trace.name)) ? last.id : '';
 }
 
 export function isAwaitingApproval(conversation: Conversation | undefined): boolean {

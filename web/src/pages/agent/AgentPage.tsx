@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
 import {
-  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, FullscreenOutlined, LayoutOutlined, MessageOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
+  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, EditOutlined, FullscreenOutlined, LayoutOutlined, MessageOutlined, PaperClipOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
 } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import type { ComposerTriggers } from '../../components/workspace/AssistantComposer';
@@ -34,9 +34,10 @@ import { ExternalAgentGuide } from './ExternalAgentGuide';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
 import { QuestionPanel } from './interrupts/QuestionPanel';
+import { AgentTextFileAdapter, splitAttachedFiles } from './attachments';
 import { useAgentThreadRuntime } from './runtime';
 import {
-  AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, failureKey, isAwaitingApproval, parseAgentTarget, pendingOperationID,
+  AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, failureKey, isAwaitingApproval, parseAgentTarget, pendingOperationID, replaceableTurnID,
 } from './state';
 import type { AgentTarget, Conversation, Operation } from './state';
 import { mergeLiveTurn } from './thread';
@@ -45,7 +46,7 @@ import type { AgentViewState } from './tools/AgentViewContext';
 import { AGENT_AUI_CONFIG } from './tools/registry';
 import { RunRejectedError, useAgentRun } from './useAgentRun';
 import styles from './AgentPage.module.css';
-import { LoadFailure, Notice } from '../../components/feedback';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
 
 /**
  * Starting questions, not templates.
@@ -258,9 +259,33 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
     if (decidedElsewhere && !isRunning && isAwaiting) continueAfter(decidedElsewhere);
   }, [decidedElsewhere, isRunning, isAwaiting, continueAfter]);
 
+  // Editing the newest message: its text is back in the composer, and the next send replaces its
+  // turn. Held by turn id, so a conversation that has moved on forgets it without being told.
+  const replaceableID = replaceableTurnID(session.data, capabilities.data ?? []);
+  const canReplace = !!replaceableID && !isRunning && !isDemo && isFullyConfigured;
+  const [editTarget, setEditTarget] = React.useState('');
+  const editingTurnID = editTarget && editTarget === replaceableID ? editTarget : '';
+  // The composer shows the message's words; the files it carried stay attached to the edit.
+  const editedMessage = React.useMemo(() => splitAttachedFiles(editingTurnID ? session.data?.turns.at(-1)?.user ?? '' : ''), [editingTurnID, session.data]);
+  const editingRef = React.useRef({ turnID: editingTurnID, files: editedMessage.blocks });
+  editingRef.current = { turnID: editingTurnID, files: editedMessage.blocks };
+
+  // The adapter lives as long as the workspace, so it reaches the current toast and language
+  // through a ref rather than being rebuilt - and losing its attached files - when either changes.
+  const toast = useToast();
+  const refuseFileRef = React.useRef(() => {});
+  refuseFileRef.current = () => toast.warning(t('agent.attach.invalid'));
+  const fileAdapter = React.useMemo(() => new AgentTextFileAdapter(() => refuseFileRef.current()), []);
+
   const runtime = useAgentThreadRuntime({
     conversation: session.data,
     run,
+    attachments: fileAdapter,
+    takeReplaceTarget: React.useCallback(() => {
+      const target = editingRef.current;
+      setEditTarget('');
+      return target;
+    }, []),
     isDisabled: isDemo || !session.data,
     isSendDisabled: isDemo || !isFullyConfigured || isAwaiting,
     onRejected: React.useCallback((text: string, code: string) => {
@@ -276,6 +301,21 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
     const composer = runtime.thread.composer;
     if (!composer.getState().text) composer.setText(rejection.text);
   }, [rejection, runtime]);
+
+  const newestTurn = session.data?.turns.at(-1);
+  const retryTurn = React.useCallback(() => {
+    if (!newestTurn) return;
+    setEditTarget('');
+    void run.send(newestTurn.user, newestTurn.id).catch((cause: unknown) => {
+      if (cause instanceof RunRejectedError) setRejection({ code: cause.code, text: '' });
+    });
+  }, [newestTurn, run]);
+  const editTurn = React.useCallback(() => {
+    if (!newestTurn) return;
+    setEditTarget(newestTurn.id);
+    runtime.thread.composer.setText(splitAttachedFiles(newestTurn.user).text);
+    focusComposer();
+  }, [newestTurn, runtime, focusComposer]);
 
   const reset = async () => {
     if (!session.data || isRunning) return;
@@ -333,7 +373,10 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
       isThinking: frame.parts.at(-1)?.type === 'thought',
       runningCall,
     } : undefined,
-  }), [traces, capabilities.data, openOperation, selectedCallID, selectCall, isRunning, frame, startedAtMS, runningCall]);
+    replaceableTurnID: canReplace ? replaceableID : '',
+    retryTurn,
+    editTurn,
+  }), [traces, capabilities.data, openOperation, selectedCallID, selectCall, isRunning, frame, startedAtMS, runningCall, canReplace, replaceableID, retryTurn, editTurn]);
 
   // ── exports ────────────────────────────────────────────────────────────────
 
@@ -512,6 +555,19 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
     </ComposerPrimitive.Quote>
   );
 
+  const editChip = editingTurnID ? (
+    <div className={styles['context-chip']} data-testid="agent-editing">
+      <EditOutlined aria-hidden="true" />
+      <span className={styles['context-text']}>
+        {t('agent.turn.editing')}
+        {editedMessage.files.map(file => <React.Fragment key={file.name}> · <code>{file.name}</code></React.Fragment>)}
+      </span>
+      <Tooltip title={t('agent.turn.edit_cancel')}>
+        <Button type="text" size="small" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />
+      </Tooltip>
+    </div>
+  ) : null;
+
   const contextChip = sentContext ? (
     <div className={styles['context-chip']} data-testid="agent-context">
       <LayoutOutlined aria-hidden="true" />
@@ -634,7 +690,7 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
                 sendLabel={t(isRunning ? 'agent.queue.send' : 'agent.send')}
                 stopLabel={t('agent.stop')}
                 blockedReason={isAwaiting ? t('agent.operation.hint') : undefined}
-                header={<>{approvalHint}{contextChip}{quote}</>}
+                header={<>{approvalHint}{editChip}{contextChip}{quote}</>}
                 footerStart={(
                   <ReasoningEffortPicker
                     value={reasoningEffort}
@@ -644,6 +700,7 @@ export function AgentWorkspace({ variant = 'page', pageContext, isActive = true,
                 )}
                 footerEnd={<ContextReadout usedTokens={turns.at(-1)?.usage?.context_tokens} windowTokens={referenceContextWindow(reference.data, model)} />}
                 note={t('agent.data_notice')}
+                attachments={{ addLabel: t('agent.attach.add'), removeLabel: t('agent.attach.remove'), icon: <PaperClipOutlined /> }}
                 queue={{ title: t('agent.queue.title'), removeLabel: t('agent.queue.remove') }}
                 triggers={triggers}
               />

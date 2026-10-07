@@ -22,7 +22,7 @@ const PROTOCOL_VERSION = "1.0"
 
 const (
 	MAX_ID_CHARS         = 128
-	MAX_MESSAGE_BYTES    = 16 << 10
+	MAX_MESSAGE_BYTES    = 48 << 10
 	MAX_TOOLS            = 8
 	MAX_CONTEXT_ENTRIES  = 4
 	MAX_CONTEXT_VALUE    = 128

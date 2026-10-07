@@ -145,6 +145,10 @@ type Conversation struct {
 // names the operations it continues from, which must be exactly the ones the last turn is waiting
 // on. Language is the console's reading language, used only as the reply language's default.
 // DisplayTools are validated against the server's own set; their schemas are never the client's.
+// MAX_MESSAGE_BYTES bounds one operator message, attached text files included (ADR 0074). The
+// AG-UI decoder applies the same bound to the envelope before the message reaches the runtime.
+const MAX_MESSAGE_BYTES = 48 << 10
+
 type Input struct {
 	ConversationID  string
 	Revision        int64
@@ -158,6 +162,8 @@ type Input struct {
 	DisplayTools []string
 	// Page is where in the console the operator sent the message from (ADR 0073).
 	Page PageContext
+	// ReplaceTurn names the newest turn the message takes the place of, for a retry or an edit.
+	ReplaceTurn string
 }
 
 // Event is one step of a run as the runtime sees it, independent of any wire protocol: the API
@@ -301,7 +307,7 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 	if input.Revision != conversation.Revision || input.ConversationID != conversation.ID {
 		return repository.ErrAgentConflict
 	}
-	if strings.TrimSpace(input.Model) == "" || len(input.Model) > 512 || len(input.Message) > 16<<10 {
+	if strings.TrimSpace(input.Model) == "" || len(input.Model) > 512 || len(input.Message) > MAX_MESSAGE_BYTES {
 		return errors.New("invalid_parameters")
 	}
 	if input.ReasoningEffort != "" && !gateway.ValidReasoningEffort(input.ReasoningEffort) {
@@ -328,6 +334,13 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		if len(conversation.Turns) > 0 && conversation.Turns[len(conversation.Turns)-1].Status == "pending" {
 			return errors.New("confirmation_pending")
 		}
+		if input.ReplaceTurn != "" {
+			last := len(conversation.Turns) - 1
+			if last < 0 || conversation.Turns[last].ID != input.ReplaceTurn || !r.isReplaceable(conversation.Turns[last]) {
+				return errors.New("resource_conflict")
+			}
+			conversation.Turns = conversation.Turns[:last]
+		}
 		conversation.Fingerprint = input.Fingerprint
 		conversation.Model = input.Model
 		// A resumption continues the turn with the effort it started with; only a new message
@@ -336,7 +349,7 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		conversation.AnchorMS = time.Now().UnixMilli()
 		conversation.Turns = append(conversation.Turns, Turn{ID: capability.NewID(), User: input.Message, Status: "running", Traces: []Trace{}, StartedMS: time.Now().UnixMilli(), Messages: []gateway.AgentMessage{{Role: "user", Content: input.Message}}})
 	} else {
-		if len(conversation.Turns) == 0 {
+		if len(conversation.Turns) == 0 || input.ReplaceTurn != "" {
 			return errors.New("invalid_parameters")
 		}
 		last := conversation.Turns[len(conversation.Turns)-1]
@@ -376,6 +389,26 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		return err
 	}
 	return emit(Event{Type: "finished", Conversation: &conversation, Interrupts: r.interrupts(saveCtx, &conversation.Turns[len(conversation.Turns)-1])})
+}
+
+// isReplaceable reports whether a turn can be dropped for a retry or an edit without the
+// conversation misstating what happened: it is settled, and everything it called only read or
+// drew. A turn that prepared or ran a change stays, because the audit trail and the operator's
+// own memory both hold that it took place.
+func (r *Runtime) isReplaceable(turn Turn) bool {
+	if turn.Status == "running" || turn.Status == "pending" || len(turn.Pending) > 0 {
+		return false
+	}
+	for _, trace := range turn.Traces {
+		if displayTools[trace.Name] != nil {
+			continue
+		}
+		definition, err := r.Executor.Registry.Lookup(trace.Name, PRINCIPAL)
+		if err != nil || definition.Permission != "read" {
+			return false
+		}
+	}
+	return true
 }
 
 // checkResume admits a resumption only for the operations the turn is actually waiting on, and only
