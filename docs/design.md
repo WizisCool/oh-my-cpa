@@ -1236,8 +1236,22 @@ a chart is drawn. While a display call resolves, or when the server refused its 
 ordinary call row.
 
 A finished answer's foot states its status, duration and start time, its rounds and calls, and the
-tokens the gateway reported, and carries copy and "export this answer" (Markdown) as muted icon
-actions. The head's Export menu saves the whole conversation as a Markdown report or as JSON.
+tokens the gateway reported, and carries copy and "export this answer" (HTML) as muted icon
+actions. The head's Export menu saves the whole conversation as an HTML page, a PNG image or JSON.
+
+**An exported conversation is the workspace, not a report about it.** The HTML page and the PNG are
+drawn from the resolved palette and the embedded mono face (`web/src/agent/conversationStyles.ts`), so
+an export in an operator's own palette is in that palette. The page keeps the workspace's anatomy -
+the 760px reading column, the right-aligned operator bubble on `--surface`, the 7px status pip, quiet
+12px heads and feet - under a head of wordmark, hairline and title, and a one-line masthead (model,
+turns, tokens, export time). Reasoning and the capability chain are disclosures with a rotating
+chevron and a 1px `--border` rail; a code block is a `--surface` frame whose head names the language;
+a display view is a `--surface` figure with a Chart / Data switch. Charts are inline SVG on the series
+palette: `--border` grid rules, a `--muted` zero baseline and tick text, round tick values, and a
+legend of 8px swatches with `--fg-2` labels - series colour never tints text. A pie is a ring beside a
+ledger of label, value and share. A failure is a bordered note with a 2px `--danger` edge. The PNG is
+the same document as an 840px card at 2x with 40px margins: controls, carets and reasoning are left
+out and the capability chain is shown open, because a picture has nothing to click.
 
 **A prepared operation is decided where it was raised** (ADR 0043): a card under the call, on
 `--surface` with a 1px border and a 2px `--warn` rule on its leading edge (`--danger` for a

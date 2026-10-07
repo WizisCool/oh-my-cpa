@@ -43,8 +43,7 @@ import type { RunFrame } from '../web/src/agent/runReducer.ts';
 import { buildRunInput, parseAgentEvent } from '../web/src/agent/protocol.ts';
 import type { AgentEvent } from '../web/src/agent/protocol.ts';
 import { readSSE } from '../web/src/agent/sse.ts';
-import { conversationMarkdown, csvCell, exportFileName, playgroundMarkdown, rowsToMarkdown, turnAnswerMarkdown, viewToCSV } from '../web/src/agent/export.ts';
-import type { ExportLabels } from '../web/src/agent/export.ts';
+import { csvCell, exportFileName, rowsToMarkdown, viewToCSV } from '../web/src/agent/export.ts';
 import { agentThreadMessages, appendMessageText, mergeLiveTurn, storedMessages, toolCallPart, turnMessageStatus } from '../web/src/pages/agent/thread.ts';
 
 let passed = 0;
@@ -454,11 +453,6 @@ check('a chart is read in long form, a time-bucketed axis as time, and gaps are 
 
 // ── exports ────────────────────────────────────────────────────────────────────
 
-const labels: ExportLabels = {
-  title: 'Agent', model: 'Model', exportedAt: 'Exported', operator: 'Operator', answer: 'Answer', calls: 'Calls',
-  status: status => status, capability: name => (name === 'usage_aggregate' ? 'Usage' : ''), duration: ms => `${ms}ms`, failure: code => `failed ${code}`,
-};
-
 check('a CSV cell is quoted when it must be, and a formula is never executable', () => {
   assert.equal(csvCell('plain'), 'plain');
   assert.equal(csvCell('a,b'), '"a,b"');
@@ -474,48 +468,12 @@ check('a Markdown table neutralises pipes and line breaks inside cells', () => {
   assert.equal(rowsToMarkdown(['k'], [{ k: 'a|b\nc' }]), '| k |\n| --- |\n| a\\|b c |');
 });
 
-check('an answer exports its text, its charts as data and its calls in brief, without reasoning', () => {
-  const answer = turnAnswerMarkdown({
-    status: 'error',
-    code: 'budget_exceeded',
-    reply: '',
-    parts: [
-      { type: 'thought', content: 'private working' },
-      { type: 'tool', trace_id: 'u' },
-      { type: 'tool', trace_id: 'c' },
-      { type: 'text', content: 'Traffic is flat.' },
-    ],
-    traces: [
-      { id: 'u', name: 'usage_aggregate', arguments: '{"is_trend":true}', result: { status: 'success' }, started_at_ms: 1, ended_at_ms: 41 },
-      { id: 'c', name: 'render_chart', result: { status: 'success' }, view: { kind: 'chart', title: 'Requests', columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }] } },
-    ],
-  }, labels);
-  assert.equal(answer.includes('private working'), false);
-  assert.equal(answer, [
-    'Calls\n\n- `usage_aggregate` · Usage · success · 40ms\n  `{"is_trend":true}`\n- `render_chart` · success',
-    'Traffic is flat.',
-    '> failed budget_exceeded (`budget_exceeded`)',
-  ].join('\n\n'));
-  const report = conversationMarkdown({ id: 'c', revision: 1, model: 'm1', client_key_fingerprint: 'private-export-fingerprint-7e219c', omitted: 0, turns: [turn({ user: 'How?', reply: 'Fine.', status: 'success' })] }, labels, new Date(Date.UTC(2026, 8, 29)));
-  assert.equal(report.startsWith('# Agent\n\n- Model: `m1`\n- Exported: 2026-09-29T00:00:00.000Z\n\n---\n\n## Operator\n\nHow?\n\n## Answer · success\n\nFine.'), true, report);
-  assert.equal(report.includes('private-export-fingerprint-7e219c'), false, 'the key fingerprint is not part of the report');
-  assert.equal(report.includes('client_key'), false);
-});
-
-check('a Playground export names the model and parameters each answer ran with', () => {
-  const report = playgroundMarkdown([{ user: 'Hi', imageCount: 1, reply: 'Hello', model: 'm', status: 'success', parameters: { temperature: 0.2, system_prompt: undefined } }], {
-    title: 'Playground', exportedAt: 'Exported', operator: 'Operator', answer: 'Answer', model: 'Model', parameters: 'Parameters', images: count => `${count} image`, status: status => status,
-  }, new Date(0));
-  assert.equal(report.includes('- Parameters: `temperature=0.2`'), true, report);
-  assert.equal(report.includes('_1 image_'), true);
-});
-
 check('an export file name is sortable and safe on every file system', () => {
   assert.equal(exportFileName('Requests / 24h', 'csv', new Date(2026, 8, 29, 7, 5, 9)), 'requests-24h-20260929-070509.csv');
-  assert.equal(exportFileName('', 'md', new Date(2026, 0, 1)), 'export-20260101-000000.md');
+  assert.equal(exportFileName('', 'html', new Date(2026, 0, 1)), 'export-20260101-000000.html');
 });
 
-check('only a successful turn publishes display figures, and their export follows the calls', () => {
+check('only a successful turn publishes display figures', () => {
   const view = { kind: 'chart', title: 'Requests', chart: { type: 'column', x: 'day', y: ['n'] }, columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }], source: { call_id: 'q', path: 'rows' } } as const;
   const display: Trace = { id: 'd', name: 'render_chart', arguments: '{}', result: { status: 'success', data: { rendered: true } }, view };
   const plain: Trace = { id: 'r', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: {} } };
@@ -525,8 +483,7 @@ check('only a successful turn publishes display figures, and their export follow
     assert.deepEqual(completedDisplayViews({ ...base, status, code: status === 'error' ? 'failed' : status }), []);
   }
   assert.deepEqual(completedDisplayViews(undefined), []);
-  const markdown = turnAnswerMarkdown({ ...base, parts: [{ type: 'tool', trace_id: 'd' }, { type: 'text', content: 'Done.' }] }, labels);
-  assert.equal(markdown, ['Calls\n\n- `render_chart` · success', 'Done.', '**Requests**\n\n| day | n |\n| --- | --- |\n| mon | 2 |'].join('\n\n'));
+
 });
 
 check('an agent category axis keeps model names horizontal and ellipsises them', () => {

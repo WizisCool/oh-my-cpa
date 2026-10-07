@@ -14,7 +14,7 @@ import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffor
 import { TargetPicker } from '../../components/workspace/TargetPicker';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
 import workspace from '../../components/workspace/Workspace.module.css';
-import { conversationMarkdown, exportFileName } from '../../agent/export';
+import { exportFileName } from '../../agent/export';
 import type { Trace } from '../../agent/types';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { usePreference } from '../../hooks/usePreference';
@@ -27,7 +27,8 @@ import { failureCode, getCapabilities, getOperation, getSession, resetSession } 
 import { CallDetails } from './CallDetails';
 import { CapabilityDirectory } from './CapabilityDirectory';
 import { ExternalAgentGuide } from './ExternalAgentGuide';
-import { useExportLabels } from './exportLabels';
+import { agentSnapshot } from '../../agent/conversationSnapshot';
+import { useConversationExport } from '../../components/workspace/useConversationExport';
 import { QuestionPanel } from './interrupts/QuestionPanel';
 import { useAgentThreadRuntime } from './runtime';
 import {
@@ -74,7 +75,8 @@ export function AgentPage() {
   const [localError, setLocalError] = React.useState('');
   const [rejection, setRejection] = React.useState<{ code: string; text: string }>();
   const targetPref = usePreference<AgentTarget>(AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, parseAgentTarget);
-  const exportLabels = useExportLabels();
+  const { isExporting, exportSnapshot } = useConversationExport('agent');
+  const [isExportMenuOpen, setIsExportMenuOpen] = React.useState(false);
 
   const session = useQuery({ queryKey: ['agent-session'], queryFn: ({ signal }) => getSession(signal) });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: ({ signal }) => getCapabilities(signal) });
@@ -262,14 +264,14 @@ export function AgentPage() {
 
   // ── exports ────────────────────────────────────────────────────────────────
 
-  const exportConversation = (format: 'markdown' | 'json') => {
+  const exportConversation = (format: 'html' | 'image' | 'json') => {
     if (!session.data) return;
     const now = new Date();
     if (format === 'json') {
       saveBlob(new Blob([`${JSON.stringify(session.data, null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-agent', 'json', now));
       return;
     }
-    saveBlob(new Blob([conversationMarkdown(session.data, exportLabels, now)], { type: 'text/markdown;charset=utf-8' }), exportFileName('omc-agent', 'md', now));
+    void exportSnapshot(agentSnapshot(session.data), format);
   };
 
   // ── frame ──────────────────────────────────────────────────────────────────
@@ -337,16 +339,23 @@ export function AgentPage() {
         />
       </Tooltip>
       <Dropdown
-        disabled={turns.length === 0}
+        trigger={['click']}
+        open={isExportMenuOpen}
+        onOpenChange={setIsExportMenuOpen}
+        disabled={turns.length === 0 || isRunning || isExporting}
         menu={{
           items: [
-            { key: 'markdown', label: t('agent.export.markdown') },
+            { key: 'html', label: t('agent.export.html') },
+            { key: 'image', label: t('agent.export.image') },
             { key: 'json', label: t('agent.export.json') },
           ],
-          onClick: ({ key }) => exportConversation(key as 'markdown' | 'json'),
+          onClick: ({ key }) => {
+            setIsExportMenuOpen(false);
+            exportConversation(key as 'html' | 'image' | 'json');
+          },
         }}
       >
-        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} disabled={turns.length === 0}>
+        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting}>
           <span className={styles['action-label']}>{t('agent.export')}</span>
         </Button>
       </Dropdown>

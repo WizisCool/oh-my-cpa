@@ -8,7 +8,8 @@ import { CheckOutlined, ClockCircleOutlined, CopyOutlined, DatabaseOutlined, Fil
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
-import { exportFileName, turnAnswerMarkdown } from '../../agent/export';
+import { agentSnapshot } from '../../agent/conversationSnapshot';
+import { useConversationExport } from '../../components/workspace/useConversationExport';
 import { completedDisplayViews } from '../../agent/types';
 import type { Turn } from '../../agent/types';
 import { DisplayFigure } from './tools/DisplayCall';
@@ -16,8 +17,6 @@ import { useI18n } from '../../i18n';
 import { capabilityTitle } from '../../i18n/capabilities';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { saveBlob } from '../../utils/download';
-import { useExportLabels } from './exportLabels';
 import { failureKey, formatClock, formatDuration, isAwaitingAnswer, statusTone, turnDuration, turnLabelKey } from './state';
 import type { AgentMessageCustom } from './thread';
 import { useAgentView } from './tools/AgentViewContext';
@@ -98,12 +97,12 @@ function ActivityStrip() {
   );
 }
 
-/** A settled turn's facts and its actions: copy the answer, export it as Markdown. */
+/** A settled turn's facts and actions share the conversation's portable export. */
 function TurnFooter({ turn }: { turn: Turn }) {
   useTimeZone();
   const { t, lang } = useI18n();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const labels = useExportLabels();
+  const { isExporting, exportSnapshot } = useConversationExport('agent');
   const duration = turnDuration(turn);
   const clock = formatClock(turn.started_at_ms, lang);
   const calls = turn.traces.length;
@@ -136,12 +135,10 @@ function TurnFooter({ turn }: { turn: Turn }) {
           </ActionBarPrimitive.Copy>
         </Tooltip>
         <Tooltip title={t('agent.export.answer')}>
-          <ActionBarPrimitive.ExportMarkdown
-            asChild
-            onExport={() => saveBlob(new Blob([turnAnswerMarkdown(turn, labels)], { type: 'text/markdown;charset=utf-8' }), exportFileName('omc-agent-answer', 'md', new Date()))}
-          >
-            <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} />
-          </ActionBarPrimitive.ExportMarkdown>
+          <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
+            disabled={isExporting || turn.status === 'running'}
+            onClick={() => void exportSnapshot(agentSnapshot({ id: '', revision: 0, model: '', client_key_fingerprint: '', omitted: 0, turns: [turn] }), 'html')}
+          />
         </Tooltip>
       </ActionBarPrimitive.Root>
     </div>
