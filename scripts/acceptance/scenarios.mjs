@@ -69,8 +69,10 @@ import {
   alignmentFacets,
   alignmentRecords,
   columnAlignment,
+  exportRecords,
   interactionRecords,
   refreshRecords,
+  requestExport,
   requestListInteractions,
 } from './probes/usageRecords.mjs';
 
@@ -696,6 +698,22 @@ export const SCENARIOS = [
       ],
     },
     run: requestListInteractions,
+  },
+  {
+    id: 'request-export',
+    name: 'requests are picked, redacted by column and exported as an image',
+    options: {
+      routes: [
+        ...systemFixtures(),
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: exportRecords, has_more: false, limit: 50 })],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 12, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+      ],
+    },
+    run: requestExport,
   },
   {
     id: 'scroll-smoothing',

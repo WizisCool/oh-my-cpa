@@ -478,6 +478,17 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   changing amounts or basis. The demo freshness digest includes quota parsing, estimation,
   repository joins and observation seeding through `scripts/demo-inputs.mjs`.
 
+### Request selection and export coverage
+
+What an export may contain is a logic claim: `scripts/test-request-export.ts` builds the image's
+sheet and the JSON document from records and asserts that a redacted account, key or request id
+is absent from every string either would carry, alongside the selection rules (Shift runs,
+page-scoped select-all, the row cap, the canvas ceiling). The `request-export` probe covers only
+what needs a browser: a tick does not open the record, select-all reaches unmounted rows, the
+header checkbox sits over the rows', the canvas is drawn and redrawn when a redaction changes,
+and both formats download. `column-alignment` emulates a classic scrollbar so the header and the
+rows are compared at the width a desktop gives them.
+
 ### Built request-record filter coverage
 
 The built request-record filter flow explicitly selects a 50-record page in its

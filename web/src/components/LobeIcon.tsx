@@ -1,7 +1,7 @@
 import { usePluginProviderOwnership } from '../hooks/usePluginOAuthLogos';
 import { api } from '../api/client';
 import { useCustomIcons } from '../hooks/useCustomIcons';
-import { customIconID, resolveProviderArtwork } from '../types/customIcons';
+import { customIconID, resolveProviderArtwork, type CustomIcon } from '../types/customIcons';
 import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { isRenderableLogoURL } from '../types/pluginOAuthProviders';
@@ -79,6 +79,36 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
     />
   );
 });
+
+/**
+ * The artwork behind a provider mark as a URL, for a surface that draws marks
+ * itself instead of rendering this component - the exported request sheet.
+ *
+ * It follows the component's own order - a plugin's logo, then custom artwork,
+ * then the catalog - so a mark is the same picture wherever it appears. `isMono`
+ * marks a silhouette the caller has to fill with the foreground colour.
+ */
+export function resolveMarkArtwork(
+  iconId: string | undefined,
+  logo: string | undefined,
+  customIcons: readonly CustomIcon[] = [],
+): { url: string; isMono: boolean } | null {
+  const trimmedLogo = (logo || '').trim();
+  if (trimmedLogo && isRenderableLogoURL(trimmedLogo)) return { url: trimmedLogo, isMono: false };
+  const customID = customIconID(iconId);
+  if (customID) {
+    const icon = customIcons.find((item) => item.id === customID);
+    return icon ? { url: api.customIconURL(customID, icon.revision), isMono: false } : null;
+  }
+  const metadata = iconId ? TOC_BY_ID.get(iconId) : undefined;
+  if (!iconId || !metadata) return null;
+  const slug = lobeIconSlug(iconId);
+  const isColor = metadata.hasColor && !WHITE_GLYPH_COLOR_ICONS.has(iconId);
+  return {
+    url: `${import.meta.env.BASE_URL}lobe-icons/${slug}${isColor ? '-color' : ''}.svg`,
+    isMono: !isColor,
+  };
+}
 
 const CustomIconImage: React.FC<LobeIconProps & { id: string }> = ({ id, size, className, style, loading }) => {
   const { data } = useCustomIcons();

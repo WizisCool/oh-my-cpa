@@ -54,6 +54,7 @@ export const PROBE_WEIGHTS = {
   'pricing-book': 6,
   'pricing-request-list': 2,
   'request-list-interactions': 4,
+  'request-export': 5,
   'request-list-touch': 10,
   'scroll-smoothing': 30,
   'plugin-management': 4,

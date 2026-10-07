@@ -4,7 +4,7 @@ import { Button, Descriptions, Drawer, Empty, Modal, Tabs, Tooltip } from 'antd'
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
-  BlockOutlined,
+  NonStreamOutlined,
   CopyOutlined,
   DownloadOutlined,
   DownOutlined,
@@ -235,7 +235,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 {isNonStreamingEvent(event) && (
                   <Tooltip title={t('events.non_stream_hint')}>
                     <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
-                      <BlockOutlined />
+                      <NonStreamOutlined />
                     </span>
                   </Tooltip>
                 )}

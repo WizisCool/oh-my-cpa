@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
-import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
+import { NonStreamOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -44,6 +44,10 @@ export interface RequestRowProps {
   pluginLogos?: PluginOAuthLogos;
   onOpen: (id: number) => void;
   isSelected?: boolean;
+  /** Whether the row's checkbox is ticked. */
+  isChecked?: boolean;
+  /** A tick on the row's checkbox; `isRange` is a Shift click. */
+  onToggleSelect: (id: number, isRange: boolean) => void;
 }
 
 export const RequestRow = React.memo<RequestRowProps>(
@@ -55,6 +59,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     pluginLogos = {},
     onOpen,
     isSelected = false,
+    isChecked = false,
+    onToggleSelect,
   }) => {
     const timeZone = useTimeZone();
     const t = useT();
@@ -119,7 +125,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       <div
         role="button"
         tabIndex={0}
-        className={`request-row${isSelected ? ' is-selected' : ''}`}
+        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
         onClick={() => onOpen(event.id)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
@@ -130,6 +136,22 @@ export const RequestRow = React.memo<RequestRowProps>(
         }}
         aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
       >
+        {/* The row opens the record; the checkbox picks it instead, so neither a
+            click nor a key on it may reach the row. */}
+        <label
+          className="req-select"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="req-select-box"
+            checked={isChecked}
+            aria-label={t('events.select_row', { id: event.request_id || event.id })}
+            onChange={(e) => onToggleSelect(event.id, (e.nativeEvent as MouseEvent).shiftKey === true)}
+          />
+        </label>
+
         {/* Column 1: timestamp */}
         <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
           <RequestTooltip title={fullTime}>
@@ -219,7 +241,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             {isNonStreamingEvent(event) && (
               <RequestTooltip title={t('events.non_stream_hint')}>
                 <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
-                  <BlockOutlined />
+                  <NonStreamOutlined />
                 </span>
               </RequestTooltip>
             )}

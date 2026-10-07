@@ -61,6 +61,13 @@ import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
 import { RequestPagination } from '../components/usage/RequestPagination';
 import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
+import { RequestSelectionBar } from '../components/usage/RequestSelectionBar';
+import { RequestExportDialog } from '../components/usage/RequestExportDialog';
+import {
+  loadedSelectionState,
+  setLoadedSelection,
+  toggleSelection,
+} from '../components/usage/requestSelection';
 import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -97,7 +104,6 @@ export const UsageEventsPage: React.FC = () => {
     colWidths,
     gridTemplate,
     gridMinWidth,
-    scrollbarGutter,
     hasCustomWidths,
     handleResizeStart,
     handleResetColumn,
@@ -154,6 +160,13 @@ export const UsageEventsPage: React.FC = () => {
   } = liveEdge;
   const [selected, setSelected] = React.useState<number | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
+  // The records picked for export, kept as the rows themselves rather than their
+  // ids: a selection outlives the page it was made on, and a poll may replace the
+  // loaded rows before the image is drawn.
+  const [selection, setSelection] = React.useState<ReadonlyMap<number, UsageEvent>>(() => new Map());
+  const [isExportOpen, setIsExportOpen] = React.useState(false);
+  /** The row last clicked without Shift, which a Shift click extends from. */
+  const selectionAnchorRef = React.useRef<number | null>(null);
 
   const isQueryEnabled = isEnabled;
   const facetParams = usageEventParams(facetWindow);
@@ -250,6 +263,27 @@ export const UsageEventsPage: React.FC = () => {
   const latestItems = displayedPage?.items;
   observeLatest(latestItems);
   const events = liveEdge.heldItems ?? latestItems ?? [];
+
+  // Read through a ref so the row's toggle keeps one identity: a new callback per
+  // poll would re-render every memoized row on screen.
+  const eventsRef = React.useRef(events);
+  eventsRef.current = events;
+  const handleToggleSelect = React.useCallback((id: number, isRange: boolean) => {
+    const anchorId = selectionAnchorRef.current;
+    setSelection((previous) => toggleSelection(previous, eventsRef.current, id, anchorId, isRange));
+    if (!isRange || anchorId === null) selectionAnchorRef.current = id;
+  }, []);
+  const handleToggleAll = React.useCallback((isSelected: boolean) => {
+    setSelection((previous) => setLoadedSelection(previous, eventsRef.current, isSelected));
+  }, []);
+  const clearSelection = React.useCallback(() => {
+    selectionAnchorRef.current = null;
+    setSelection((previous) => (previous.size === 0 ? previous : new Map()));
+  }, []);
+  // A selection belongs to the view it was made in. Paging keeps it; a different
+  // filter or window shows other records, and rows nobody can see must not ride
+  // along into an export.
+  React.useEffect(clearSelection, [clearSelection, signature]);
   const pendingCount = pendingArrivals(result.data?.arrived_count);
 
   // Safe file metadata only: never download credential contents for the stream.
@@ -602,16 +636,26 @@ export const UsageEventsPage: React.FC = () => {
           {
             '--req-grid-columns': gridTemplate,
             '--req-min-width': `${gridMinWidth}px`,
-            '--req-gutter': `${scrollbarGutter}px`,
           } as React.CSSProperties
         }
       >
+        {selection.size > 0 && (
+          <RequestSelectionBar
+            count={selection.size}
+            isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
+            onSelectLoaded={() => handleToggleAll(true)}
+            onClear={clearSelection}
+            onExport={() => setIsExportOpen(true)}
+          />
+        )}
         <div className="request-table-scroll-area" onWheel={handleWheel}>
           <RequestStreamHeader
             colWidths={colWidths}
             handleResizeStart={handleResizeStart}
             handleResetColumn={handleResetColumn}
             handleResizeKeyDown={handleResizeKeyDown}
+            selectionState={loadedSelectionState(selection, events)}
+            onToggleAll={handleToggleAll}
           />
           <div ref={listHost} className="request-list-host">
             <RequestTooltipLayer hostRef={listHost} />
@@ -638,6 +682,8 @@ export const UsageEventsPage: React.FC = () => {
                     pluginLogos={pluginLogos}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
+                    isChecked={selection.has(event.id)}
+                    onToggleSelect={handleToggleSelect}
                   />
                 )}
               />
@@ -697,6 +743,16 @@ export const UsageEventsPage: React.FC = () => {
         onClose={() => setSelected(null)}
         events={events}
         onSelectEvent={setSelected}
+      />
+      <RequestExportDialog
+        open={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        selection={selection}
+        colWidths={colWidths}
+        credentials={credentials}
+        providerIcons={providerIcons}
+        configuredProviders={configuredProviders}
+        pluginLogos={pluginLogos}
       />
     </div>
   );

@@ -251,6 +251,51 @@ Totals belong where the whole window is in scope: the dashboard tiles, and the
 detail drawer for one request. If a per-page figure is ever needed again, it
 belongs in the footer next to the page count, stated as a page figure.
 
+### Selecting requests and exporting them
+
+Every row leads with a checkbox in its own 20px track, and the header's checkbox speaks for
+the loaded page. A tick never opens the record under it; Shift extends the run from the last
+plain click, selecting or clearing it. The selection survives paging and is dropped when the
+filters or the window change, because it would then name rows the reader can no longer see.
+
+- **The checkbox is drawn from the palette, not left to the browser.** A native box is the
+  system's own fill in either theme. Resting: `--bg` with a 1px `--muted` edge (a control's
+  boundary clears 3:1 where `--border`, a divider, does not). Ticked or mixed: the
+  filled-control step `--accent-hover` with an `--accent-on` tick, `--accent-active` on hover -
+  the same pair the primary button uses, legible in both themes. Under forced colours it
+  returns to the system's drawing.
+- **The selection bar exists only while something is selected.** It states the count, repeats
+  "select all" (the stacked layout has no header row), clears, and carries the one primary
+  action, Export. It sits inside the list's frame above the header, so the columns do not move.
+- **The header carries no scrollbar gutter.** The virtual list draws its own overlay scrollbar
+  and gives up no width to one, so the header and the rows are the same grid at the same width.
+  Padding the header for a native scrollbar shifted every flexible track progressively.
+- **Columns are separated by 16px.** Right-aligned numerics end on the same edge as their
+  header, and the gap keeps a right-aligned figure from touching the left-aligned column after it.
+
+Export offers two formats under one set of redaction choices:
+
+| Format | For | Contents |
+| --- | --- | --- |
+| Image (PNG) | Showing people what a model or a source did | The list's columns as a sheet, under the wordmark and a caption (count, time). The newest 100 selected rows. |
+| JSON | A program | Stored values (milliseconds, counts, dollars), every selected row, with a `schema` name and the list of what was redacted. |
+
+- **Redaction is by what a reader could learn.** OAuth account names and keys (the caller's key
+  and the provider key that answered) are withheld by default; request ids and whole columns on
+  request. The source and the model stay, because they are the point of sharing.
+- **A redacted value is a neutral bar** (`--fg` at 20%, 96x10px, 2px radius), not a substitute
+  label, and it is absent from the export's data rather than covered: the sheet is built without
+  it before anything is drawn, and the JSON field is omitted.
+- **The image is drawn, not captured.** The sheet is painted on a canvas from the palette, so a
+  hundred rows cost one paint instead of a clone of several thousand elements, and the preview
+  is the canvas that is saved. It is wider than the list (1480px minimum, at up to 2x) so no
+  column is cramped, and uses the list's own marks: provider artwork, the result pill, the
+  cache-rate badge, the non-streaming and substituted-model glyphs.
+
+A non-streaming response is marked with the crossed-out broadcast glyph (`NonStreamOutlined`)
+and labelled "Non-streaming response". The stacked-boxes glyph belongs to Model Square and is
+not reused for it.
+
 ### Cache-rate scale
 
 The request list's cache-rate badge is the one continuous reading in the app:
