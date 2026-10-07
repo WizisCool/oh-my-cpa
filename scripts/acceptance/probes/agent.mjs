@@ -203,6 +203,30 @@ export async function agentExternal({ base, page, check }) {
     decisions.length === 1 && decisions[0].approve === true && await card.count() === 0 && (await outcome.innerText()).trim() === 'Done',
     JSON.stringify(decisions));
 
+  // A read that fails is not a request that is gone: the screen says so and retries in place.
+  const unreadID = 'c'.repeat(48);
+  const goneID = 'd'.repeat(48);
+  // A flag, not a count: StrictMode's second mount repeats the first read.
+  let isUnreadable = true;
+  await page.route(`**/agent/operations/${unreadID}`, route => {
+    return isUnreadable
+      ? fulfillFixture(route, { status: 500, json: { error: 'internal_error' } })
+      : route.fulfill({ json: { ...operation, id: unreadID, status: 'pending', result: { status: 'pending' } } });
+  });
+  await page.goto(`${base}/authorize/${unreadID}`, { waitUntil: 'domcontentloaded' });
+  const failure = screen.getByTestId('agent-authorize-failed');
+  await failure.waitFor();
+  check('a failed read keeps the request heading instead of calling it expired',
+    await page.getByRole('heading', { name: 'Authorize an external agent' }).count() === 1);
+  isUnreadable = false;
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
+  await card.waitFor();
+  check('retrying a failed read shows the request', await failure.count() === 0);
+
+  await page.route(`**/agent/operations/${goneID}`, route => fulfillFixture(route, { status: 404, json: { error: 'operation_not_found' } }));
+  await page.goto(`${base}/authorize/${goneID}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'This authorization request was not found or has expired' }).waitFor();
+
   // A mistyped address is answered on the screen, without asking the server about it.
   await page.goto(`${base}/authorize/not-an-operation`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'This authorization request was not found or has expired' }).waitFor();

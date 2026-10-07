@@ -764,4 +764,5 @@ a session cookie and a wrong key are refused, the catalogue omits the Agent-only
 a caller cannot choose where its approval link points. The guide's snippets, endpoint and
 plain-HTTP warning are pure functions asserted in `scripts/test-agent-workspace.ts`; the
 `agent-external` probe opens an approval link's authorization screen, allows the operation,
-checks a malformed address, and reads the guide and its client tiles in the Agent side panel.
+retries a failed read in place, tells a missing operation and a malformed address apart from it, and
+reads the guide and its client tiles in the Agent side panel.

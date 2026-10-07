@@ -6,7 +6,8 @@ import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
 import { ParagraphPlaceholder } from '../../components/common/ContentPlaceholder';
 import { PreferenceMenus } from '../../components/common/PreferenceMenus';
-import { Notice } from '../../components/feedback';
+import { ApiError } from '../../api/client';
+import { LoadFailure, Notice } from '../../components/feedback';
 import { CheckCircleOutlined, CloseCircleOutlined, RobotOutlined, SwapOutlined } from '../../components/icons';
 import { LobeIcon } from '../../components/LobeIcon';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
@@ -59,7 +60,11 @@ export function AuthorizePage() {
   }, [operationID, queryClient]);
 
   const data = operation.data;
-  const isMissing = !isDemo && (!operationID || operation.isError);
+  // Only the server's own "no such operation" means the request is gone; any other failed read
+  // may succeed on the next attempt, and telling the operator to start over would be wrong.
+  const isGone = operation.error instanceof ApiError && operation.error.status === 404;
+  const isMissing = !isDemo && (!operationID || isGone);
+  const isUnread = canRead && operation.isError && !isGone && !data;
   const isExternal = data?.adapter !== 'agent';
   const isPending = data?.status === 'pending';
   const title = isMissing ? t('agent.authorize.missing') : t(isExternal ? 'agent.authorize.title' : 'agent.authorize.title.agent');
@@ -87,6 +92,14 @@ export function AuthorizePage() {
 
           {isDemo && <Notice tone="info" title={t('agent.connect.demo')} data-testid="agent-authorize-demo" />}
           {isMissing && <p className={styles['intro']}>{t('agent.authorize.missing.hint')}</p>}
+          {isUnread && (
+            <LoadFailure
+              title={t('agent.authorize.failed')}
+              error={operation.error}
+              onRetry={() => void operation.refetch()}
+              data-testid="agent-authorize-failed"
+            />
+          )}
           {canRead && operation.isPending && <ParagraphPlaceholder rows={4} />}
 
           {data && (

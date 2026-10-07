@@ -74,7 +74,7 @@ rates, and later price changes do not alter past records.
 ### Automate
 
 A built-in Agent and a remote MCP endpoint operate the console through declared capabilities.
-Changes run only after approval.
+Changes beyond low-risk writes run only after approval.
 
 </td>
 </tr>
@@ -408,9 +408,10 @@ The binary carries a stdio bridge that forwards to the console:
 
 </details>
 
-An external agent can read state and prepare an operation, but cannot approve it, submit
-a secret or complete an OAuth sign-in: a prepared change returns a link that opens its
-approval in the console. The management key is administrator-equivalent, so connect only
+An external agent reads state and makes low-risk writes, such as display names and
+preferences, directly. Every other change it can only prepare: it cannot approve the
+operation, submit a secret or complete an OAuth sign-in, and the prepared change returns a
+link that opens its approval in the console. The management key is administrator-equivalent, so connect only
 trusted agents, and serve the console over HTTPS before connecting one remotely.
 [`docs/agent-capabilities.md`](docs/agent-capabilities.md) is the contract.
 
