@@ -15,6 +15,11 @@ import styles from '../AgentPage.module.css';
 export interface ApprovalCardProps {
   operation: Operation | undefined;
   capability?: Capability;
+  /**
+   * `consent` is the card on the authorization screen, which states the request and its permission
+   * itself: the card then carries only the preview, the private input and the decision.
+   */
+  variant?: 'inline' | 'consent';
   /** The framework's approval response; resolves once the decision is recorded. */
   respond: (response: ToolApprovalResponse) => Promise<void>;
 }
@@ -29,7 +34,7 @@ export interface ApprovalCardProps {
  * an OAuth hand-off - is collected here and goes only to the decision endpoint; deciding continues
  * the run without a separate step.
  */
-export function ApprovalCard({ operation, capability, respond }: ApprovalCardProps) {
+export function ApprovalCard({ operation, capability, variant = 'inline', respond }: ApprovalCardProps) {
   const { t } = useI18n();
   const [secret, setSecret] = React.useState('');
   const [oauth, setOAuth] = React.useState<{ url: string; user_code: string }>();
@@ -46,6 +51,7 @@ export function ApprovalCard({ operation, capability, respond }: ApprovalCardPro
 
   const permission = operation.permission ?? capability?.permission ?? 'write';
   const isDestructive = permission === 'destructive';
+  const isConsent = variant === 'consent';
   const entries = previewEntries(operation.preview.changes);
   const description = capabilityDescription(operation.capability, capability?.description ?? '', t);
   const canApprove = !pendingAction
@@ -83,16 +89,21 @@ export function ApprovalCard({ operation, capability, respond }: ApprovalCardPro
     <section
       className={styles['approval']}
       data-destructive={isDestructive || undefined}
+      data-variant={variant}
       data-testid="agent-authorization"
       data-approval-id={operation.id}
       aria-label={t('agent.operation.title')}
       tabIndex={-1}
     >
-      <header className={styles['approval-head']}>
-        <span className={styles['approval-title']}>{t('agent.operation.title')}</span>
-        <Tag color={isDestructive ? 'error' : 'warning'}>{t(`agent.permission.${permission}`)}</Tag>
-      </header>
-      <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
+      {!isConsent && (
+        <>
+          <header className={styles['approval-head']}>
+            <span className={styles['approval-title']}>{t('agent.operation.title')}</span>
+            <Tag color={isDestructive ? 'error' : 'warning'}>{t(`agent.permission.${permission}`)}</Tag>
+          </header>
+          <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
+        </>
+      )}
       {description && <p className={styles['approval-description']}>{description}</p>}
       <dl className={styles['operation-fields']}>
         <div className={styles['operation-field-row']}>

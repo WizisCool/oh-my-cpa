@@ -39,6 +39,7 @@ If GitHub Private Vulnerability Reporting is unavailable, you may contact the ma
 When evaluating potential vulnerabilities, please keep the following security boundaries in mind:
 
 - **Single System Credential**: The only administrator login credential is the CPA Management Key (`OMCPA_CPA_MANAGEMENT_KEY`). Entering the key at login derives an HMAC-signed `HttpOnly` session cookie (`SameSite=Strict`).
+- **External Agents Hold the Same Credential**: The management key is also accepted as a bearer token, only on the capability endpoints (`/api/v1/capabilities`) and the MCP endpoint (`/api/mcp`), with the login throttle applied. That caller can read and prepare operations but never approve one, submit a secret or complete OAuth: approval requires a browser session and refuses requests carrying an `Authorization` header.
 - **Secret Separation**: The storage encryption key (`OMCPA_MASTER_KEY`) encrypts credentials and raw usage payloads at rest via AES-GCM. Losing it permanently prevents decryption.
 - **Sanitized Projections**: Ordinary API responses use strict DTO allowlists and redact secrets (displaying only fingerprints or masks).
 - **Audited Administrative Surfaces**: Operations that intentionally access or modify secrets (such as viewing raw YAML source or revealing client API keys) require active admin sessions, CSRF / same-origin validation, and are recorded to the append-only `audit_events` log.

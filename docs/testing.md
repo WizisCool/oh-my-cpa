@@ -752,3 +752,17 @@ version-feedback flow and health-anomaly states. Extracted scenarios retain the
 original assertions and establish their own navigation/fixture preconditions; page
 impact rules and negative planner cases select every affected subscenario. Timings
 are per subscenario so slow flows can be balanced without shared state.
+
+### External agent access coverage
+
+The MCP tool definition is asserted in `internal/mcpbridge/bridge_test.go` over an in-memory
+transport: the approval link on a pending result, refusal codes, error flags for `error` and
+`uncertain`, and `omc_operation_status` waiting for a decision (the poll interval is shortened,
+not slept). The same file keeps the stdio round trip and the bridge's transport refusals.
+`internal/api/agent_mcp_test.go` drives the remote endpoint with the SDK's Streamable HTTP client:
+a session cookie and a wrong key are refused, the catalogue omits the Agent-only capabilities, and
+a caller cannot choose where its approval link points. The guide's snippets, endpoint and
+plain-HTTP warning are pure functions asserted in `scripts/test-agent-workspace.ts`; the
+`agent-external` probe opens an approval link's authorization screen, allows the operation,
+retries a failed read in place, tells a missing operation and a malformed address apart from it, and
+reads the guide and its client tiles in the Agent side panel.

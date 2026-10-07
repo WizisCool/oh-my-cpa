@@ -168,6 +168,89 @@ export async function agentWorkspace({ base, page, check }) {
 }
 
 /**
+ * An external agent's approval link opens a consent screen outside the console's shell, and the
+ * Agent page's side panel tells the operator how such an agent is connected in the first place.
+ */
+export async function agentExternal({ base, page, check }) {
+  const operationID = '0123456789abcdef0123456789abcdef0123456789abcdef';
+  let operation = { id: operationID, adapter: 'mcp', capability: 'providers_delete', permission: 'destructive', status: 'pending', expires_at_ms: Date.now() + 9 * 60_000, preview: { target: 'provider-test', changes: { provider: 'provider-test' } }, result: { status: 'pending' } };
+  const decisions = [];
+  await page.route(`**/agent/operations/${operationID}`, route => route.fulfill({ json: operation }));
+  await page.route(`**/agent/operations/${operationID}/decision`, async route => {
+    decisions.push(JSON.parse(route.request().postData()));
+    operation = { ...operation, status: 'success', result: { status: 'success', invalidates: ['management-providers'] } };
+    await route.fulfill({ json: operation });
+  });
+  await page.goto(`${base}/authorize/${operationID}`, { waitUntil: 'domcontentloaded' });
+
+  const screen = page.getByTestId('agent-authorize-page');
+  const card = screen.getByTestId('agent-authorization');
+  await card.waitFor();
+  const text = await screen.innerText();
+  check('the consent screen says who asks, on which deployment, for what, and that it is destructive',
+    text.includes('Authorize an external agent') && text.includes(new URL(base).host) && text.includes('Delete a provider')
+      && text.includes('provider-test') && await screen.getByText('Destructive', { exact: true }).count() === 1 && text.includes('expires in about 9 min'),
+    text);
+  check('the consent screen stands outside the console shell', await page.locator('.ant-layout-sider, .app-breadcrumb').count() === 0);
+  const buttons = await Promise.all(['Deny', 'Allow'].map(name => card.getByRole('button', { name, exact: true }).boundingBox()));
+  check('Deny and Allow are equal targets on one row', Math.abs(buttons[0].width - buttons[1].width) <= 1 && Math.abs(buttons[0].y - buttons[1].y) <= 1, JSON.stringify(buttons));
+  const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
+  check('the consent screen fits its viewport', geometry.scroll <= geometry.width, JSON.stringify(geometry));
+  await card.getByRole('button', { name: 'Allow', exact: true }).click();
+  const outcome = screen.getByTestId('agent-authorize-outcome');
+  await outcome.waitFor();
+  check('allowing it records one approval and replaces the decision with the outcome',
+    decisions.length === 1 && decisions[0].approve === true && await card.count() === 0 && (await outcome.innerText()).trim() === 'Done',
+    JSON.stringify(decisions));
+
+  // A read that fails is not a request that is gone: the screen says so and retries in place.
+  const unreadID = 'c'.repeat(48);
+  const goneID = 'd'.repeat(48);
+  // A flag, not a count: StrictMode's second mount repeats the first read.
+  let isUnreadable = true;
+  await page.route(`**/agent/operations/${unreadID}`, route => {
+    return isUnreadable
+      ? fulfillFixture(route, { status: 500, json: { error: 'internal_error' } })
+      : route.fulfill({ json: { ...operation, id: unreadID, status: 'pending', result: { status: 'pending' } } });
+  });
+  await page.goto(`${base}/authorize/${unreadID}`, { waitUntil: 'domcontentloaded' });
+  const failure = screen.getByTestId('agent-authorize-failed');
+  await failure.waitFor();
+  check('a failed read keeps the request heading instead of calling it expired',
+    await page.getByRole('heading', { name: 'Authorize an external agent' }).count() === 1);
+  isUnreadable = false;
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
+  await card.waitFor();
+  check('retrying a failed read shows the request', await failure.count() === 0);
+
+  await page.route(`**/agent/operations/${goneID}`, route => fulfillFixture(route, { status: 404, json: { error: 'operation_not_found' } }));
+  await page.goto(`${base}/authorize/${goneID}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'This authorization request was not found or has expired' }).waitFor();
+
+  // A mistyped address is answered on the screen, without asking the server about it.
+  await page.goto(`${base}/authorize/not-an-operation`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'This authorization request was not found or has expired' }).waitFor();
+
+  await page.getByRole('link', { name: 'Open the console', exact: true }).click();
+  await page.locator('[data-testid="agent-page"]').waitFor();
+  await page.getByRole('tab', { name: 'Connect', exact: true }).click();
+  const guide = page.getByTestId('agent-connect');
+  await guide.waitFor();
+  const endpoint = `${new URL(base).origin}${new URL(base).pathname.replace(/\/$/, '')}/api/mcp`;
+  check('the guide names this deployment\'s own MCP endpoint', await guide.getByTestId('agent-connect-endpoint').innerText() === endpoint, await guide.getByTestId('agent-connect-endpoint').innerText());
+  const snippet = guide.getByTestId('agent-connect-snippet');
+  check('the default snippet connects Claude Code by URL without the key in it', (await snippet.innerText()).includes(`--transport http oh-my-cpa ${endpoint}`) && (await snippet.innerText()).includes('$OMCPA_CPA_MANAGEMENT_KEY'), await snippet.innerText());
+  const clients = guide.getByRole('radio');
+  const tiles = await clients.evaluateAll(elements => elements.map(element => ({ border: getComputedStyle(element).borderTopWidth, hasIcon: [...element.firstElementChild.children].some(mark => mark.getClientRects().length > 0), isClipped: element.scrollWidth > element.clientWidth })));
+  check('each client is a bounded tile with its own mark and an unclipped name', tiles.length === 4 && tiles.every(tile => tile.border !== '0px' && tile.hasIcon && !tile.isClipped), JSON.stringify(tiles));
+  await guide.getByRole('radio', { name: 'Codex', exact: true }).click();
+  await snippet.getByText('bearer_token_env_var').waitFor();
+  check('choosing another client swaps the snippet and marks the choice', (await snippet.innerText()).includes(`url = "${endpoint}"`) && await guide.getByRole('radio', { name: 'Codex', exact: true }).getAttribute('aria-checked') === 'true', await snippet.innerText());
+  const panel = await guide.evaluate(element => ({ width: element.clientWidth, scroll: element.scrollWidth }));
+  check('the guide fits the side panel without horizontal overflow', panel.scroll <= panel.width + 1, JSON.stringify(panel));
+}
+
+/**
  * A run that fails after the server accepted it reports a sentence with the code beneath it; one
  * the server refused before persisting anything hands the message back to the composer.
  */

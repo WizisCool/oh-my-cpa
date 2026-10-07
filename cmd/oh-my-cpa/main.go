@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,11 +15,39 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
 )
 
+const MCP_USAGE = `Usage: oh-my-cpa mcp
+
+Serves Oh My CPA's capabilities to an MCP client over standard input and output.
+A client that speaks Streamable HTTP does not need this process: it connects to
+<console URL>/api/mcp with "Authorization: Bearer <CPA management key>".
+
+Environment:
+  OMCPA_SERVER_URL          console URL including its base path, for example
+                            https://omc.example.com/omc (plain HTTP is accepted
+                            for loopback addresses only)
+  OMCPA_CPA_MANAGEMENT_KEY  the CPA management key that signs in to the console
+`
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		if len(os.Args) > 2 {
+			// Standard output is the protocol channel, so usage goes to standard error.
+			fmt.Fprint(os.Stderr, MCP_USAGE)
+			if os.Args[2] == "-h" || os.Args[2] == "--help" || os.Args[2] == "help" {
+				return
+			}
+			os.Exit(2)
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		if err := mcpbridge.Run(ctx, os.Getenv("OMCPA_SERVER_URL"), os.Getenv("OMCPA_CPA_MANAGEMENT_KEY")); err != nil {
+		if err := mcpbridge.Run(ctx, os.Getenv("OMCPA_SERVER_URL"), os.Getenv("OMCPA_CPA_MANAGEMENT_KEY"), envOr("OMCPA_VERSION", config.BuildVersion)); err != nil {
 			slog.Error("MCP bridge stopped", "error", err)
 			os.Exit(1)
 		}

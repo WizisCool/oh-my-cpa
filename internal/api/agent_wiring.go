@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ type agentState struct {
 	lastCleanup time.Time
 	catalogMu   sync.Mutex
 	catalog     *clientKeyCatalog
+	mcpMu       sync.Mutex
+	mcp         http.Handler
 }
 
 // clientKeyCatalog is the fingerprint-to-key join, held for a moment.

@@ -1,7 +1,7 @@
 # Agent capabilities
 
-The console's **Agent** page (`/agent`) and the `oh-my-cpa mcp` stdio bridge both drive
-Oh My CPA through one capability registry. This document is the contract for adding to
+The console's **Agent** page (`/agent`), the remote MCP endpoint (`/api/mcp`) and the
+`oh-my-cpa mcp` stdio bridge all drive Oh My CPA through one capability registry. This document is the contract for adding to
 it; see `docs/adr/0026-one-capability-registry-over-shared-operations.md` for why the
 registry exists in this shape.
 
@@ -29,8 +29,8 @@ Agent page ──▶ internal/agent.Runtime ──▶ CPA gateway (model + tool 
   and resumption, plus the two things that belong to the conversation rather than to OMC -
   `ask_question` and the display tools. It never touches the database, configuration, or
   the CPA client directly. The console reaches it over AG-UI (`internal/agui`, ADR 0041).
-- `internal/mcpbridge` maps the registry to MCP tools for external agents. It carries no
-  business logic and no approval policy.
+- `internal/mcpbridge` maps the registry to MCP tools for external agents, once, for
+  both MCP transports (ADR 0070). It carries no business logic and no approval policy.
 
 ## Declaring a capability
 
@@ -267,6 +267,26 @@ When a new OMC feature suits an agent:
 
 ## External agents (MCP)
 
+The registry is served to MCP clients in two ways, from one tool definition
+(`mcpbridge.NewServer`), so the two cannot differ in tools, schemas or behaviour:
+
+**Remote, by URL.** The console serves Streamable HTTP at `<console URL>/api/mcp`:
+
+```bash
+claude mcp add --transport http oh-my-cpa https://omc.example.com/omc/api/mcp \
+  --header "Authorization: Bearer $OMCPA_CPA_MANAGEMENT_KEY"
+```
+
+The endpoint accepts the management key as a bearer token only - a console session
+cookie is refused - and counts wrong keys against the login throttle. It is stateless
+and answers in plain JSON, so it works behind any reverse proxy that forwards the base
+path, and it is refused in demo mode. The Agent page's **Connect** tab shows the
+deployment's own address with configuration for Claude Code, Codex and JSON-configured
+clients.
+
+**Local, over stdio.** For clients that only speak stdio, the binary bridges to the
+capability HTTP endpoints:
+
 ```bash
 OMCPA_SERVER_URL=https://omc.example.com/omc \
 OMCPA_CPA_MANAGEMENT_KEY=<your CPA management key> \
@@ -274,17 +294,47 @@ oh-my-cpa mcp
 ```
 
 The subcommand runs before configuration, database, and CPA client initialization, so
-the bridge process opens no data directory and holds no CPA credential of its own. It
-authenticates to the capability endpoints with the management key as a bearer token;
-non-loopback URLs must be HTTPS, redirects are refused, and responses are bounded.
+the bridge process opens no data directory and holds no CPA credential of its own.
+Non-loopback URLs must be HTTPS, redirects are refused, and responses are bounded. A
+refusal from OMC reaches the agent as OMC's own code (`authentication_required`,
+`capability_unavailable`, ...); any other error body is replaced by `omc_request_refused`.
 
-MCP clients see every capability declared with the `mcp` adapter. `ask_question` (an MCP
-client has its own way to ask its user) and the read-only database queries are offered to
-the built-in Agent only.
+### What an MCP client sees
+
+- One tool per capability declared with the `mcp` adapter, with its input schema, the
+  result envelope as output schema, and annotations derived from the declaration:
+  `readOnlyHint` for `read`, `destructiveHint` for `destructive`, `openWorldHint: false`.
+  `ask_question` (an MCP client has its own way to ask its user) and the read-only
+  database queries are offered to the built-in Agent only.
+- Server instructions (`mcpbridge.SERVER_INSTRUCTIONS`) that explain the result statuses
+  and the approval flow, and the OMC build as the server version.
+- `omc_operation_status` (`operation_id`, optional `wait_seconds` up to 30): the state of
+  a prepared operation. With `wait_seconds` it re-reads until the operator decides or
+  the wait ends, so an agent does not poll in a loop. The name is reserved in the
+  registry.
+
+### Approving what an external agent prepared
+
+A high-risk call returns `status: "pending"`, the `operation_id`, and a second text item
+`Operator approval: <console URL>/authorize/<id>`. The link only names the operation.
+It opens the authorization screen (`web/src/pages/agent/AuthorizePage.tsx`), a consent
+screen outside the console's shell and behind its sign-in gate: who is asking, on which
+deployment, the capability and its permission, the prepared change, and Deny and Allow,
+with the same private
+secret and OAuth handoffs, and posts the one allow-or-deny decision to the same
+endpoint (ADR 0035). The decision endpoint requires a browser origin and refuses any
+request carrying an `Authorization` header, so the key that prepared an operation can
+never approve it.
 
 Because the management key is administrator-equivalent, an external process holding it
 can also log in to the console. Use MCP only with agents and hosts you would trust with
-the console itself, and rotate the key if that trust changes.
+the console itself, serve the console over HTTPS before connecting one remotely, and
+rotate the key if that trust changes.
+
+Tests: `internal/mcpbridge/bridge_test.go` (stdio round trip, transport refusals,
+approval link, status wait, refusal codes), `internal/api/agent_mcp_test.go` (the
+endpoint end to end: credentials, catalogue, read, prepare, status) and the
+`agent-external` browser scenario (authorization screen and guide).
 
 ### Pricing provider membership
 

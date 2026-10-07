@@ -26,6 +26,7 @@ import { AgentMessage } from './AgentMessage';
 import { failureCode, getCapabilities, getOperation, getSession, resetSession } from './api';
 import { CallDetails } from './CallDetails';
 import { CapabilityDirectory } from './CapabilityDirectory';
+import { ExternalAgentGuide } from './ExternalAgentGuide';
 import { useExportLabels } from './exportLabels';
 import { QuestionPanel } from './interrupts/QuestionPanel';
 import { useAgentThreadRuntime } from './runtime';
@@ -56,7 +57,7 @@ const EXAMPLES = [
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
 ];
 
-type PanelTab = 'directory' | 'details';
+type PanelTab = 'directory' | 'details' | 'connect';
 
 export function AgentPage() {
   const { t, lang } = useI18n();
@@ -445,6 +446,11 @@ export function AgentPage() {
                   content: <CapabilityDirectory capabilities={capabilities.data ?? []} isPending={capabilities.isPending} isError={capabilities.isError} onRetry={() => void capabilities.refetch()} />,
                 },
                 { key: 'details', label: t('agent.details'), content: <CallDetails trace={selectedTrace} /> },
+                {
+                  key: 'connect',
+                  label: t('agent.connect'),
+                  content: <ExternalAgentGuide isDemo={isDemo} />,
+                },
               ],
               activeTab: panelTab,
               onTabChange: key => setPanelTab(key as PanelTab),

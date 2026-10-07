@@ -67,7 +67,7 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 
 ### 自动化
 
-内置智能体与 MCP 服务通过预先声明的能力操作控制台，变更需经批准后执行。
+内置智能体与 MCP 服务通过预先声明的能力操作控制台，低风险写入之外的变更需经批准后执行。
 
 </td>
 </tr>
@@ -327,7 +327,42 @@ CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其�
 用量与请求分析、提供商、OAuth、配额、客户端密钥、配置与定价。读操作直接执行；
 变更先在服务端生成，在控制台点击「允许」后才执行。密钥、令牌与 OAuth 授权不会进入模型上下文。
 
-**外部 Agent。** 同一套能力也通过二进制自带的 MCP 服务提供：
+**外部 Agent。** 同一套能力通过 MCP 在 `<控制台地址>/api/mcp` 提供（Streamable HTTP），
+其他机器上的 Agent 凭地址和作为 Bearer 令牌的 CPA 管理密钥即可远程接入，Agent 一侧无需安装任何程序。
+`/agent` 侧栏的「外部接入」标签页给出当前部署的实际地址和可直接复制的配置。
+
+Claude Code：
+
+```bash
+claude mcp add --transport http oh-my-cpa https://cpa.example.com/omc/api/mcp \
+  --header "Authorization: Bearer $OMCPA_CPA_MANAGEMENT_KEY"
+```
+
+Codex（`~/.codex/config.toml`）：
+
+```toml
+[mcp_servers.oh-my-cpa]
+url = "https://cpa.example.com/omc/api/mcp"
+bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
+```
+
+以 JSON 配置的客户端，例如 Cursor：
+
+```json
+{
+  "mcpServers": {
+    "oh-my-cpa": {
+      "url": "https://cpa.example.com/omc/api/mcp",
+      "headers": { "Authorization": "Bearer <CPA 管理密钥>" }
+    }
+  }
+}
+```
+
+<details>
+<summary>仅支持 stdio 的客户端</summary>
+
+二进制自带 stdio 桥接进程，由它转发到控制台：
 
 ```json
 {
@@ -344,8 +379,11 @@ CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其�
 }
 ```
 
-外部 Agent 可以读取状态、发起操作，但不能批准操作、提交密钥或完成 OAuth 登录。
-管理密钥等同于管理员权限，只应接入可信的 Agent。
+</details>
+
+外部 Agent 可以直接读取状态和执行低风险写入（如显示名称、偏好设置）。其余变更只能发起，不能批准操作、
+提交密钥或完成 OAuth 登录：发起的变更会返回一个链接，在控制台中打开即可批准。管理密钥等同于管理员权限，只应接入可信的 Agent；
+远程接入前应先为控制台启用 HTTPS。
 能力清单与权限规则见 [`docs/agent-capabilities.md`](docs/agent-capabilities.md)。
 
 ## 配置

@@ -4,6 +4,7 @@ import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
+  Outlet,
 } from 'react-router-dom';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import enUS from 'antd/locale/en_US';
@@ -27,6 +28,7 @@ import {
   ApiKeysPage,
   DashboardPage,
   AgentPage,
+  AuthorizePage,
   PlaygroundPage,
   ModelSquarePage,
   LogsPage,
@@ -152,6 +154,13 @@ const AppRoutes: React.FC = () => {
         { path: 'plugin-pages/:pluginId/:pageIndex', element: <PluginPageHost /> },
         { path: 'system', element: <SystemPage /> },
         { path: '*', element: <Navigate to="/dashboard" replace /> },
+      ],
+    }, {
+      // The authorization screen stands outside the console's shell: see AuthorizePage.
+      element: <React.Suspense fallback={<ShellLoading />}><Outlet /></React.Suspense>,
+      errorElement: <RouteErrorPage />,
+      children: [
+        { path: 'authorize/:id', element: <AuthorizePage /> },
       ],
     }],
     { basename: config.basePath || undefined },

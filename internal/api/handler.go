@@ -174,6 +174,9 @@ func (h *Handler) routes() chi.Router {
 				authRouter.NotFound(h.notFound)
 				authRouter.MethodNotAllowed(h.methodNotAllowed)
 			})
+			apiRouter.Post("/mcp", h.serveMCP)
+			apiRouter.Get("/mcp", h.serveMCP)
+			apiRouter.Delete("/mcp", h.serveMCP)
 			apiRouter.Route("/v1", func(v1 chi.Router) {
 				v1.Use(h.requireConsoleOrCapability)
 				v1.Get("/capabilities", h.listCapabilities)

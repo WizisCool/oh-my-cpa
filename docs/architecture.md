@@ -115,7 +115,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system, model directory) used by both console handlers and capabilities | `capability`, `cpa/management`, `cpa/gateway`, `modelcatalog`, `pricing`, `quota`, `repository` |
 | `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, the sectioned system prompt, display tools, budgets, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
 | `internal/agui` | The AG-UI 1.0 wire protocol for Agent runs: strict `RunAgentInput` decoding, the event translator and SSE framing; knows nothing of OMC | — |
-| `internal/mcpbridge` | stdio MCP transport over the capability HTTP endpoints; no business logic or approval policy | `capability` |
+| `internal/mcpbridge` | MCP server definition over the capability registry, its Streamable HTTP handler and the stdio bridge over the capability HTTP endpoints; no business logic or approval policy | `capability` |
 | `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy, capability/Agent endpoints | all of the above, `internal/web` |
 | `internal/web` | `go:embed` of the built SPA, with a committed placeholder entry page for a binary built without it (ADR 0033) | — |
 | `internal/app` | Wiring, background loops, graceful shutdown | all of the above |
@@ -289,13 +289,30 @@ databases). The repository checks each statement's compiled `EXPLAIN` program ag
 column classification before running it, and bounds and masks what it returns (ADR 0036,
 `docs/agent-capabilities.md`).
 
-External agents use the same registry through `oh-my-cpa mcp`, a stdio MCP server. The
-subcommand is dispatched before configuration, database, and CPA client initialization,
-so the bridge process opens no data directory; it forwards capability discovery and
-invocation to OMC's `/api/v1/capabilities` endpoints, authenticating with the CPA
-management key as a bearer token. Non-loopback URLs must be HTTPS, redirects are
-refused, and responses are bounded. The bridge cannot approve operations, submit
-secrets, or complete OAuth - it returns the operation id and the console link instead.
+External agents use the same registry over MCP (ADR 0070). `mcpbridge.NewServer` declares
+one tool per capability offered to the `mcp` adapter, plus `omc_operation_status`, from a
+`Backend`, and two transports serve that one definition:
+
+- `POST <base>/api/mcp` (`serveMCP` in `internal/api/agent_mcp.go`) is Streamable HTTP in
+  the console process. Its backend calls `capability.Executor` directly. The route sits
+  outside `/api/v1` and its session middleware: it accepts the management key as a
+  bearer token only, spends the login throttle on a wrong one, is stateless with plain
+  JSON responses, and is refused by the demo policy.
+- `oh-my-cpa mcp` is a stdio process whose backend forwards to the `/api/v1/capabilities`
+  endpoints with the same bearer credential. The subcommand is dispatched before
+  configuration, database, and CPA client initialization, so it opens no data directory.
+  Non-loopback URLs must be HTTPS, redirects are refused, responses are bounded, and only
+  OMC's own refusal codes are repeated to the agent.
+
+Neither can approve operations, submit secrets, or complete OAuth. A prepared operation
+returns its id and a link to `<console>/authorize/<id>`. That route is
+`web/src/pages/agent/AuthorizePage.tsx`, the one console route outside `AppLayout`: a
+consent screen on the sign-in page's column (`auth-*` classes), behind the same
+`AuthGate`, that names the requester, the deployment and the capability and carries the
+approval card in its `consent` variant, posting to the same decision endpoint as the
+built-in Agent's approvals. The Agent page's Connect tab
+(`web/src/pages/agent/ExternalAgentGuide.tsx`) shows the deployment's endpoint and
+per-client configuration built by `web/src/pages/agent/connect.ts`.
 
 #### What the model loop spends, and where
 

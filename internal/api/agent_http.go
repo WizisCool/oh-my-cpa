@@ -16,6 +16,15 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 )
 
+// mcpPrincipal is the authority of a caller holding the management key: every capability
+// declared for the mcp adapter, and never approval.
+func (h *Handler) mcpPrincipal() capability.Principal {
+	principal := capability.Principal{ID: h.auth.CapabilityIdentity(), Adapter: "mcp", Allowed: map[string]bool{}}
+	for _, definition := range h.agent.executor.Registry.List(capability.Principal{Adapter: "mcp", IsAdmin: true}) {
+		principal.Allowed[definition.Name] = true
+	}
+	return principal
+}
 func (h *Handler) capabilityPrincipal(request *http.Request) (capability.Principal, bool) {
 	if authorization := request.Header.Get("Authorization"); authorization != "" {
 		if h.cfg.IsDemoMode || !strings.HasPrefix(authorization, "Bearer ") || len(authorization) > 8192 || h.auth == nil || !h.auth.KeyMatches(strings.TrimPrefix(authorization, "Bearer ")) {
@@ -24,31 +33,36 @@ func (h *Handler) capabilityPrincipal(request *http.Request) (capability.Princip
 		if h.ensureAgent() != nil {
 			return capability.Principal{}, false
 		}
-		principal := capability.Principal{ID: h.auth.CapabilityIdentity(), Adapter: "mcp", Allowed: map[string]bool{}}
-		for _, definition := range h.agent.executor.Registry.List(capability.Principal{Adapter: "mcp", IsAdmin: true}) {
-			principal.Allowed[definition.Name] = true
-		}
-		return principal, true
+		return h.mcpPrincipal(), true
 	}
 	return agent.PRINCIPAL, h.auth != nil && h.auth.Valid(request)
+}
+
+// authenticateBearer admits a request that presents the management key as a bearer token,
+// spending the sign-in throttle on a wrong one so the key cannot be guessed faster here than
+// on the login form.
+func (h *Handler) authenticateBearer(writer http.ResponseWriter, request *http.Request) bool {
+	ip := resolveClientIP(request, h.trustedProxies)
+	if h.limiter != nil && h.limiter.isLocked(ip) {
+		writePlaygroundError(writer, 429, "authentication_rate_limited")
+		return false
+	}
+	if _, ok := h.capabilityPrincipal(request); !ok {
+		if h.limiter != nil {
+			h.limiter.recordFailure(ip)
+		}
+		writePlaygroundError(writer, 401, "authentication_required")
+		return false
+	}
+	return true
 }
 func (h *Handler) requireConsoleOrCapability(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		prefix := strings.TrimRight(h.cfg.BasePath, "/") + "/api/v1/capabilities"
 		if request.Header.Get("Authorization") != "" && (request.URL.Path == prefix || strings.HasPrefix(request.URL.Path, prefix+"/")) {
-			ip := resolveClientIP(request, h.trustedProxies)
-			if h.limiter != nil && h.limiter.isLocked(ip) {
-				writePlaygroundError(writer, 429, "authentication_rate_limited")
-				return
+			if h.authenticateBearer(writer, request) {
+				next.ServeHTTP(writer, request)
 			}
-			if _, ok := h.capabilityPrincipal(request); !ok {
-				if h.limiter != nil {
-					h.limiter.recordFailure(ip)
-				}
-				writePlaygroundError(writer, 401, "authentication_required")
-				return
-			}
-			next.ServeHTTP(writer, request)
 			return
 		}
 		h.requireAuthentication(next).ServeHTTP(writer, request)

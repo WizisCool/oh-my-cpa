@@ -35,6 +35,7 @@ import {
 } from '../web/src/pages/agent/state.ts';
 import { completedDisplayViews } from '../web/src/agent/types.ts';
 import { agentChartAxis } from '../web/src/pages/agent/tools/chartAxis.ts';
+import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, isOperationID, mcpEndpoint } from '../web/src/pages/agent/connect.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
 
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../web/src/agent/runReducer.ts';
@@ -542,6 +543,32 @@ check('an unavailable recovery journal names the recovery boundary rather than a
   for (const code of ['run_not_found', 'run_expired']) assert.equal(failureKey(code), 'workspace.error.run_missing');
   assert.equal(failureKey('authentication_required'), 'agent.error.session');
   assert.equal(failureKey('response_too_large'), 'agent.error.budget');
+});
+
+check('the connection guide names this deployment\'s endpoint under any base path and keeps the key out of the snippet', () => {
+  assert.equal(mcpEndpoint('https://omc.example.com', '/omc'), 'https://omc.example.com/omc/api/mcp');
+  assert.equal(mcpEndpoint('https://omc.example.com/', '/'), 'https://omc.example.com/api/mcp');
+  assert.equal(mcpEndpoint('http://127.0.0.1:8080', '/console/'), 'http://127.0.0.1:8080/console/api/mcp');
+  for (const client of CONNECT_CLIENTS) {
+    const { code, lang } = connectSnippet(client, 'https://omc.example.com', '/omc', 'KEY');
+    // The stdio bridge is given the console address; every other client is given the endpoint.
+    assert.ok(code.includes(client === 'stdio' ? '"OMCPA_SERVER_URL": "https://omc.example.com/omc"' : 'https://omc.example.com/omc/api/mcp'), client);
+    if (lang === 'json') assert.doesNotThrow(() => JSON.parse(code), client);
+  }
+  assert.match(connectSnippet('claude', 'https://omc.example.com', '/omc', 'KEY').code, /--transport http oh-my-cpa \S+ \\\n {2}--header "Authorization: Bearer \$OMCPA_CPA_MANAGEMENT_KEY"$/);
+  assert.match(connectSnippet('codex', 'https://omc.example.com', '/omc', 'KEY').code, /^bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"$/m);
+  assert.equal(JSON.parse(connectSnippet('other', 'https://omc.example.com', '/omc', 'KEY').code).mcpServers['oh-my-cpa'].headers.Authorization, 'Bearer <KEY>');
+});
+
+check('plain HTTP is flagged only where the key would leave the machine', () => {
+  for (const origin of ['http://omc.example.com', 'http://192.168.1.20:8080', 'http://127.evil.example']) assert.equal(isInsecureOrigin(origin), true, origin);
+  for (const origin of ['https://omc.example.com', 'http://localhost:5173', 'http://127.0.0.1:8080', 'http://[::1]:8080', 'not a url']) assert.equal(isInsecureOrigin(origin), false, origin);
+});
+
+check('an approval address is read only for a well-formed operation id', () => {
+  const id = '0123456789abcdef0123456789abcdef0123456789abcdef';
+  assert.equal(isOperationID(id), true);
+  for (const value of ['', `${id}0`, id.toUpperCase(), '..', 'session']) assert.equal(isOperationID(value), false, value);
 });
 
 console.log(`\n${passed} assertions passed`);
