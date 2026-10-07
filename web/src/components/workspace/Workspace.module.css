@@ -812,11 +812,6 @@
   padding: 0;
 }
 
-.is-labelled.send-button:global(.ant-btn) {
-  width: auto;
-  padding: 0 12px;
-}
-
 /* Blocked, but still clickable: the runtime makes the final call on live state (AssistantComposer). */
 .send-button:global(.ant-btn)[aria-disabled='true'],
 .send-button:global(.ant-btn)[aria-disabled='true']:hover {

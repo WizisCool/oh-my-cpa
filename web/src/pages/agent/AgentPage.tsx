@@ -38,7 +38,7 @@ import type { AgentTarget, Conversation, Operation } from './state';
 import { mergeLiveTurn } from './thread';
 import { AgentViewContext } from './tools/AgentViewContext';
 import type { AgentViewState } from './tools/AgentViewContext';
-import { AgentToolUIs } from './tools/registry';
+import { AGENT_AUI_CONFIG } from './tools/registry';
 import { RunRejectedError, useAgentRun } from './useAgentRun';
 import styles from './AgentPage.module.css';
 import { LoadFailure, Notice } from '../../components/feedback';
@@ -424,8 +424,7 @@ export function AgentPage() {
   const selectedTrace = selectedCallID ? traces.get(selectedCallID) : undefined;
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <AgentToolUIs />
+    <AssistantRuntimeProvider runtime={runtime} config={AGENT_AUI_CONFIG}>
       <AgentViewContext.Provider value={view}>
         <div ref={pageRef} className={styles['page']}>
           <WorkspaceLayout
@@ -476,7 +475,7 @@ export function AgentPage() {
             ) : (
               <AssistantThread
                 empty={empty}
-                latestLabel={t('pg.latest')}
+                latestLabel={t('conversation.latest')}
                 testId="agent-transcript"
                 toolbar={(
                   <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>

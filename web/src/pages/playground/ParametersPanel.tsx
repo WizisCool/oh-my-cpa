@@ -36,8 +36,8 @@ function NumberParameter({ id, label, value, min, max, step, restingValue, onCha
       <div className={workspace['field-label']}>
         <label htmlFor={id}>{label}</label>
         {!isUnset && (
-          <Tooltip title={t('pg.model_default')}>
-            <Button type="text" size="small" aria-label={`${t('pg.model_default')}: ${label}`} icon={<UndoOutlined />} onClick={() => onChange(null)} />
+          <Tooltip title={t('conversation.model_default')}>
+            <Button type="text" size="small" aria-label={`${t('conversation.model_default')}: ${label}`} icon={<UndoOutlined />} onClick={() => onChange(null)} />
           </Tooltip>
         )}
       </div>
@@ -78,7 +78,7 @@ export interface ParametersPanelProps {
 export const ParametersPanel = React.memo(function ParametersPanel({ parameters, defaultUserAgent, onChange, onReset }: ParametersPanelProps) {
   const { t } = useI18n();
   const reasoningOptions = React.useMemo(
-    () => REASONING_EFFORTS.map(value => ({ value, label: t(`pg.reasoning_effort.${value}`) })),
+    () => REASONING_EFFORTS.map(value => ({ value, label: t(`conversation.reasoning_effort.${value}`) })),
     [t],
   );
   const isCustomBodyValid = readCustomBody(parameters.customBody).ok;
@@ -129,20 +129,20 @@ export const ParametersPanel = React.memo(function ParametersPanel({ parameters,
             max={2147483647}
             precision={0}
             value={parameters.maxTokens}
-            placeholder={t('pg.model_default')}
+            placeholder={t('conversation.model_default')}
             onChange={next => onChange({ maxTokens: typeof next === 'number' ? next : null })}
           />
         </div>
         <div className={workspace['field']}>
-          <label className={workspace['field-label']} htmlFor="playground-reasoning-effort">{t('pg.reasoning_effort')}</label>
+          <label className={workspace['field-label']} htmlFor="playground-reasoning-effort">{t('conversation.reasoning_effort')}</label>
           {/* Free text as well as the presets: providers name effort levels their own way, and a
               value this list does not know is still forwarded as typed. */}
           <AutoComplete
             id="playground-reasoning-effort"
-            aria-label={t('pg.reasoning_effort')}
+            aria-label={t('conversation.reasoning_effort')}
             allowClear
             value={parameters.reasoningEffort}
-            placeholder={t('pg.model_default')}
+            placeholder={t('conversation.model_default')}
             options={reasoningOptions}
             onChange={next => onChange({ reasoningEffort: (next ?? '').trim() })}
           />

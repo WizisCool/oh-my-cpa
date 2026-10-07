@@ -255,8 +255,8 @@ server stores (`runReducer.ts`) and the exports (`export.ts`). `useAgentRun.ts` 
 publishes its frame on a 40ms cadence; `thread.ts` converts the stored conversation and the live
 frame to thread messages; `runtime.ts` is the one module that knows assistant-ui's runtime API, and
 routes every framework action - send, stop, approve, answer - back into OMC's code. A message sent
-during a run waits in a queue behind it. Capability calls render through a tool UI registry
-(`tools/`): one row per call, grouped into a collapsible chain, with its arguments and the receipt
+during a run waits in a queue behind it. Capability calls render through a toolkit of
+render-only `backend` entries (`tools/registry.tsx`) handed to the runtime provider: one row per call, grouped into a collapsible chain, with its arguments and the receipt
 the model received in the side panel's details tab (`CallDetails.tsx`); display calls render as a
 lazily loaded chart or a table inside the answer. A prepared operation is decided on a card under
 the call that raised it (`interrupts/ApprovalCard.tsx`, ADR 0043), and an `ask_question` call is

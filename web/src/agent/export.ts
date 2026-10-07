@@ -33,23 +33,6 @@ export function viewToCSV(view: Pick<DisplayView, 'columns' | 'rows'>): string {
   return rowsToCSV(view.columns, view.rows);
 }
 
-function markdownCell(value: Cell): string {
-  if (value === null || value === undefined) return '';
-  return String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-}
-
-/** A table as GitHub-flavoured Markdown, with pipes and line breaks inside cells neutralised. */
-export function rowsToMarkdown(columns: readonly string[], rows: readonly Record<string, Cell>[]): string {
-  const head = `| ${columns.map(markdownCell).join(' | ')} |`;
-  const rule = `| ${columns.map(() => '---').join(' | ')} |`;
-  const body = rows.map(row => `| ${columns.map(column => markdownCell(row[column])).join(' | ')} |`);
-  return [head, rule, ...body].join('\n');
-}
-
-export function viewToMarkdown(view: Pick<DisplayView, 'title' | 'columns' | 'rows'>): string {
-  return `**${markdownCell(view.title)}**\n\n${rowsToMarkdown(view.columns, view.rows)}`;
-}
-
 /** `omc-agent-20260929-153012.html`: sortable, free of characters a file system refuses. */
 export function exportFileName(prefix: string, extension: string, at: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');

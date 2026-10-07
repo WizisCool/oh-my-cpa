@@ -430,7 +430,7 @@ export const PlaygroundPage: React.FC = () => {
         }}
       >
         <AssistantThread
-          latestLabel={t('pg.latest')}
+          latestLabel={t('conversation.latest')}
           testId="playground-transcript"
           empty={(
             <div className={workspace['empty']} data-testid="playground-empty">

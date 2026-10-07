@@ -1,5 +1,5 @@
 import React from 'react';
-import { ThreadPrimitive } from '@assistant-ui/react';
+import { AuiIf, ThreadPrimitive } from '@assistant-ui/react';
 import type { MessageState } from '@assistant-ui/react';
 import { ArrowDownOutlined } from '../icons';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
@@ -30,7 +30,7 @@ export function AssistantThread({ empty, latestLabel, testId, toolbar, children 
   return (
     <ThreadPrimitive.Root className={styles['conversation']}>
       <ThreadPrimitive.Viewport className={styles['transcript']} data-testid={testId} autoScroll>
-        {empty && <ThreadPrimitive.Empty>{empty}</ThreadPrimitive.Empty>}
+        {empty && <AuiIf condition={state => state.thread.isEmpty}>{empty}</AuiIf>}
         <div className={styles['transcript-column']}>
           <ThreadPrimitive.Messages>{children}</ThreadPrimitive.Messages>
         </div>

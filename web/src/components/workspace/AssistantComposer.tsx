@@ -11,8 +11,6 @@ export interface AssistantComposerProps {
   /** The textarea's accessible name. */
   inputLabel: string;
   sendLabel: string;
-  /** Draws the send label beside the glyph, for a send that means something other than "send". */
-  isSendLabelled?: boolean;
   stopLabel: string;
   /** Why sending is not possible right now, shown on the send button. */
   blockedReason?: string;
@@ -53,7 +51,6 @@ export function AssistantComposer({
   placeholder,
   inputLabel,
   sendLabel,
-  isSendLabelled = false,
   stopLabel,
   blockedReason,
   header,
@@ -89,14 +86,12 @@ export function AssistantComposer({
     <Tooltip title={canSend ? sendLabel : blockedReason}>
       <Button
         type="primary"
-        className={clsx(styles['send-button'], isSendLabelled && styles['is-labelled'])}
+        className={styles['send-button']}
         aria-label={sendLabel}
         aria-disabled={!canSend || undefined}
         icon={<ArrowUpOutlined />}
         onClick={submit}
-      >
-        {isSendLabelled ? sendLabel : null}
-      </Button>
+      />
     </Tooltip>
   );
   const stop = (

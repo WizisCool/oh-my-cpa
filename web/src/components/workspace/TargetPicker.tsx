@@ -68,8 +68,8 @@ export function TargetPicker({
     <Space.Compact className={styles['target-picker']}>
       <Select
         className={styles['key-select']}
-        aria-label={t('pg.client_key')}
-        placeholder={t('pg.client_key')}
+        aria-label={t('conversation.client_key')}
+        placeholder={t('conversation.client_key')}
         prefix={<KeyOutlined aria-hidden="true" className={styles['target-icon']} />}
         value={fingerprint || undefined}
         loading={isKeysLoading}
@@ -82,8 +82,8 @@ export function TargetPicker({
       />
       <Select
         className={styles['model-select']}
-        aria-label={t('pg.model')}
-        placeholder={t('pg.model')}
+        aria-label={t('conversation.model')}
+        placeholder={t('conversation.model')}
         value={model || undefined}
         loading={isModelsLoading}
         disabled={isDisabled || !fingerprint}

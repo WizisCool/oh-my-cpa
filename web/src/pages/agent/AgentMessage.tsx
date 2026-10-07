@@ -40,13 +40,13 @@ export function AgentUserMessage() {
 
 /**
  * Reasoning and capability calls form the answer's chain of thought; the answer text, and any
- * chart or table the agent drew, stay outside it. Display tools are registered as standalone, so
- * they break out of the chain and sit in the answer where the model put them.
+ * figures the agent drew, stay outside it. A display call is itself a step of the chain - preparing
+ * a figure is work the turn did - and its figure is published after the answer, once the turn has
+ * succeeded (ADR 0042).
  */
 const GROUP_BY = groupPartByType({
   reasoning: ['group-chain'],
   'tool-call': ['group-chain'],
-  'standalone-tool-call': [],
 });
 
 type GroupPart = { readonly type: `group-${string}`; readonly indices: readonly number[] };
@@ -85,7 +85,7 @@ function ActivityStrip() {
   const label = activity.runningCall
     ? t('agent.activity.calling', { name: capabilityTitle(activity.runningCall, t) })
     : activity.isThinking
-      ? t('pg.thinking')
+      ? t('conversation.thinking')
       : t('agent.activity.waiting');
   return (
     <div className={styles['activity']} role="status" aria-live="polite" data-testid="agent-activity">
@@ -126,9 +126,9 @@ function TurnFooter({ turn }: { turn: Turn }) {
       )}
       <span className={workspace['foot-spacer']} />
       <ActionBarPrimitive.Root className={workspace['foot-actions']}>
-        <Tooltip title={t('pg.copy_answer')}>
+        <Tooltip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
-            <Button type="text" size="small" aria-label={t('pg.copy_answer')} className={styles['copy-action']}>
+            <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
               <span className={styles['copy-idle']}><CopyOutlined /></span>
               <span className={styles['copy-done']}><CheckOutlined /></span>
             </Button>
@@ -176,7 +176,7 @@ export function AgentAssistantMessage() {
               case 'text':
                 return (
                   <div data-aui-quote-selectable>
-                    <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('pg.external_image')} />
+                    <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('conversation.external_image')} />
                   </div>
                 );
               case 'reasoning':

@@ -1,5 +1,5 @@
-import { makeAssistantToolUI } from '@assistant-ui/react';
-import type { ToolCallMessagePartProps } from '@assistant-ui/react';
+import { AuiConfig, Tools } from '@assistant-ui/react';
+import type { ToolCallMessagePartProps, Toolkit } from '@assistant-ui/react';
 import type { Trace } from '../../../agent/types';
 import { ApprovalCard } from '../interrupts/ApprovalCard';
 import type { CapabilityReceipt } from '../state';
@@ -8,12 +8,16 @@ import { CapabilityCall } from './CapabilityCall';
 import { DisplayCall } from './DisplayCall';
 
 /**
- * The Agent's tool views, registered with assistant-ui by tool name.
+ * The Agent's tool views, registered with assistant-ui as one toolkit keyed by tool name.
  *
  * Each view is an ordinary component that takes the framework's part props and reads the rest -
  * the call's trace, the registry entry, the operation it waits on - from the Agent view context.
  * Adding a view for a capability is one entry here; a capability without one is drawn by
  * `ToolFallback`, the generic call row, so a server-side addition is never invisible.
+ *
+ * Every entry is a `backend` tool with a renderer and nothing else: the server owns the catalogue
+ * and executes every call (ADR 0041), so the toolkit contributes views, never declarations the
+ * model would act on.
  */
 
 /** The call's trace, from the page's state when it has one, otherwise read off the part. */
@@ -52,15 +56,10 @@ function DisplayToolView(part: ToolCallMessagePartProps) {
   return <DisplayCall trace={trace} isSelected={selectedCallID === trace.id} onSelect={selectCall} />;
 }
 
-const RenderChartToolUI = makeAssistantToolUI({ toolName: 'render_chart', render: DisplayToolView });
-const RenderTableToolUI = makeAssistantToolUI({ toolName: 'render_table', render: DisplayToolView });
+const AGENT_TOOLKIT: Toolkit = {
+  render_chart: { type: 'backend', render: DisplayToolView },
+  render_table: { type: 'backend', render: DisplayToolView },
+};
 
-/** Mounted once inside the runtime provider; each entry registers one tool's view. */
-export function AgentToolUIs() {
-  return (
-    <>
-      <RenderChartToolUI />
-      <RenderTableToolUI />
-    </>
-  );
-}
+/** Passed to the runtime provider, which installs the toolkit's views for the thread below it. */
+export const AGENT_AUI_CONFIG = AuiConfig({ tools: Tools({ toolkit: AGENT_TOOLKIT }) });

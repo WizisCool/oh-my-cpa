@@ -27,7 +27,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
     const labels: SnapshotLabels = {
       title: t(kind === 'agent' ? 'nav.agent' : 'nav.playground'),
       operator: t('agent.export.operator'), answer: t('agent.export.answer_heading'), model: t('agent.export.model'),
-      exportedAt: t('agent.export.exported_at'), thought: t('pg.thought_process'), parameters: t('pg.parameters'),
+      exportedAt: t('agent.export.exported_at'), thought: t('conversation.thought_process'), parameters: t('pg.parameters'),
       arguments: t('agent.details.arguments'), result: t('agent.details.model_content'), data: t('agent.export.data'),
       copy: t('agent.export.copy'), copied: t('agent.export.copied'), copyFailed: t('agent.export.copy_failed'),
       search: t('agent.export.search'), expand: t('agent.export.expand'), collapse: t('agent.export.collapse'),

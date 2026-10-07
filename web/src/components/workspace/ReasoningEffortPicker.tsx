@@ -37,9 +37,9 @@ export function ReasoningEffortPicker({ value, onChange, isDisabled = false }: R
   );
   const selectedKey = value || DEFAULT_KEY;
   const mark = (key: string) => (key === selectedKey ? <CheckOutlined className={styles['effort-check']} /> : <span className={styles['effort-check']} />);
-  const labelOf = (level: string) => (REASONING_EFFORTS.includes(level) ? t(`pg.reasoning_effort.${level}`) : level);
+  const labelOf = (level: string) => (REASONING_EFFORTS.includes(level) ? t(`conversation.reasoning_effort.${level}`) : level);
   const items: MenuProps['items'] = [
-    { key: DEFAULT_KEY, icon: mark(DEFAULT_KEY), label: t('pg.model_default') },
+    { key: DEFAULT_KEY, icon: mark(DEFAULT_KEY), label: t('conversation.model_default') },
     { type: 'divider' },
     ...levels.map(level => ({ key: level, icon: mark(level), label: labelOf(level) })),
   ];
@@ -53,12 +53,12 @@ export function ReasoningEffortPicker({ value, onChange, isDisabled = false }: R
       menu={{ items, selectable: true, selectedKeys: [selectedKey], onClick: ({ key }) => onChange(key === DEFAULT_KEY ? '' : key) }}
     >
       {/* The tooltip names the control; once its menu is open the menu does, and the two would overlap. */}
-      <Tooltip title={t('pg.reasoning_effort')} open={isMenuOpen ? false : undefined}>
+      <Tooltip title={t('conversation.reasoning_effort')} open={isMenuOpen ? false : undefined}>
         <Button
           type="text"
           size="small"
           className={styles['effort-trigger']}
-          aria-label={`${t('pg.reasoning_effort')}: ${current}`}
+          aria-label={`${t('conversation.reasoning_effort')}: ${current}`}
           disabled={isDisabled}
           icon={<BulbOutlined />}
         >

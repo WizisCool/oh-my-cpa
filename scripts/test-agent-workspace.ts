@@ -19,13 +19,10 @@ import {
   pendingOperationID,
   formatDuration,
   groupCapabilities,
-  hasRawResult,
   parseAgentTarget,
   turnParts,
   previewEntries,
-  rawResultText,
   statusTone,
-  summarizeResult,
   turnDuration,
   turnLabelKey,
   argumentSummary,
@@ -43,7 +40,7 @@ import type { RunFrame } from '../web/src/agent/runReducer.ts';
 import { buildRunInput, parseAgentEvent } from '../web/src/agent/protocol.ts';
 import type { AgentEvent } from '../web/src/agent/protocol.ts';
 import { readSSE } from '../web/src/agent/sse.ts';
-import { csvCell, exportFileName, rowsToMarkdown, viewToCSV } from '../web/src/agent/export.ts';
+import { csvCell, exportFileName, viewToCSV } from '../web/src/agent/export.ts';
 import { agentThreadMessages, appendMessageText, mergeLiveTurn, storedMessages, toolCallPart, turnMessageStatus } from '../web/src/pages/agent/thread.ts';
 
 let passed = 0;
@@ -90,31 +87,6 @@ check('a duration is one number and one unit', () => {
 check('a stored turn reports its own elapsed time and nothing while it runs', () => {
   assert.equal(turnDuration(turn({ started_at_ms: 1000, ended_at_ms: 5200 })), 4200);
   assert.equal(turnDuration(turn({ started_at_ms: 1000 })), undefined);
-});
-
-check('a result digest keeps the scalars and counts the collections', () => {
-  const { fields, counts } = summarizeResult({ model: 'gpt-x', total_tokens: 1200, requests: [1, 2, 3], nested: { a: 1 } });
-  assert.deepEqual(fields, [{ label: 'model', value: 'gpt-x' }, { label: 'total_tokens', value: '1200' }]);
-  assert.deepEqual(counts, [{ label: 'requests', value: '×3' }]);
-});
-
-check('a long field is clipped so it cannot push the rest out of the digest', () => {
-  const { fields } = summarizeResult({ target: 'x'.repeat(400) });
-  assert.equal(fields.length, 1);
-  assert.ok(fields[0].value.length <= 121, fields[0].value);
-});
-
-check('the digest is bounded in count', () => {
-  const wide: Record<string, number> = {};
-  for (let index = 0; index < 40; index += 1) wide[`field_${index}`] = index;
-  assert.equal(summarizeResult(wide).fields.length, 6);
-});
-
-check('a scalar result has nothing to expand', () => {
-  assert.equal(hasRawResult({ status: 'success' }), false);
-  assert.equal(hasRawResult({ status: 'success', data: { ok: true } }), true);
-  assert.equal(hasRawResult({ status: 'error', code: 'resource_missing' }), true);
-  assert.equal(rawResultText({ status: 'error', code: 'resource_missing' }), '"resource_missing"');
 });
 
 check('the directory groups read before write before destructive', () => {
@@ -199,7 +171,6 @@ check('a question is sendable only when every question has a choice or typed tex
 check('a trace carries its capability name for the transcript to name', () => {
   const trace: Trace = { id: 't', name: 'providers_list', result: { status: 'success', data: { providers: [] } } };
   assert.equal(trace.name, 'providers_list');
-  assert.equal(summarizeResult(trace.result.data).counts[0].value, '×0');
 });
 
 check('a prepared change is laid out as fields only when it is shaped like a form', () => {
@@ -462,10 +433,6 @@ check('a CSV cell is quoted when it must be, and a formula is never executable',
   assert.equal(csvCell(-3), '-3', 'a negative number is a number');
   assert.equal(csvCell(null), '');
   assert.equal(viewToCSV({ columns: ['a', 'b'], rows: [{ a: 1, b: 'x\ny' }] }), 'a,b\r\n1,"x\ny"\r\n');
-});
-
-check('a Markdown table neutralises pipes and line breaks inside cells', () => {
-  assert.equal(rowsToMarkdown(['k'], [{ k: 'a|b\nc' }]), '| k |\n| --- |\n| a\\|b c |');
 });
 
 check('an export file name is sortable and safe on every file system', () => {

@@ -50,7 +50,7 @@ export const ReasoningBlock = React.memo(function ReasoningBlock({ text, isThink
         onClick={() => setIsOpen(value => !value)}
       >
         <BulbOutlined aria-hidden="true" />
-        <span>{t(isThinking ? 'pg.thinking' : 'pg.thought_process')}</span>
+        <span>{t(isThinking ? 'conversation.thinking' : 'conversation.thought_process')}</span>
         <RightOutlined className={styles['reasoning-caret']} aria-hidden="true" />
       </button>
       {isOpen && text ? (
@@ -64,7 +64,7 @@ export const ReasoningBlock = React.memo(function ReasoningBlock({ text, isThink
             isFollowingRef.current = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
           }}
         >
-          <ModelMarkdown content={text} isStreaming={isThinking} externalImageLabel={t('pg.external_image')} className={styles['reasoning-text']} />
+          <ModelMarkdown content={text} isStreaming={isThinking} externalImageLabel={t('conversation.external_image')} className={styles['reasoning-text']} />
         </div>
       ) : null}
     </div>

@@ -292,52 +292,6 @@ export function turnParts(turn: Turn): TurnPart[] {
   ];
 }
 
-const SUMMARY_FIELDS_MAX = 6;
-const SUMMARY_FIELD_CHARS_MAX = 120;
-
-export interface ResultField {
-  label: string;
-  value: string;
-}
-
-/**
- * The digestable scalars at the top level of a capability result.
- *
- * Capability results are documents - a page of requests, a quota window, an aggregate - and
- * dumping one as JSON under an answer buries the reply it is supposed to support. This keeps
- * the fields an operator actually reads (bounded in count and in length, so a long identifier
- * cannot push the rest out) and leaves the whole document behind the raw-result disclosure
- * that every trace already has.
- */
-export function summarizeResult(data: unknown): { fields: ResultField[]; counts: ResultField[] } {
-  const fields: ResultField[] = [];
-  const counts: ResultField[] = [];
-  if (typeof data !== 'object' || data === null) return { fields, counts };
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      counts.push({ label: key, value: `×${value.length}` });
-      continue;
-    }
-    if (value === null || typeof value === 'object') continue;
-    if (fields.length >= SUMMARY_FIELDS_MAX) continue;
-    const text = typeof value === 'string' ? value : String(value);
-    fields.push({
-      label: key,
-      value: text.length > SUMMARY_FIELD_CHARS_MAX ? `${text.slice(0, SUMMARY_FIELD_CHARS_MAX)}…` : text,
-    });
-  }
-  return { fields, counts };
-}
-
-/** True when a trace has a body worth offering behind a disclosure. */
-export function hasRawResult(receipt: CapabilityReceipt): boolean {
-  return receipt.data !== undefined || Boolean(receipt.code);
-}
-
-export function rawResultText(receipt: CapabilityReceipt): string {
-  return JSON.stringify(receipt.data ?? receipt.code, null, 2);
-}
-
 /** Durations are read as one number and one unit, never as milliseconds. */
 export function formatDuration(milliseconds: number): string {
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return '-';
