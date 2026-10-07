@@ -382,3 +382,9 @@ Meta usage sample with no token or minted key. These are catalogue lookups, not
 outbound HTTP requests; their paths are checked against the compiled quota
 allowlist. Regenerate the Worker dataset when the normalized subscription output
 changes, so the served plan labels match the Go facade (ADR 0065).
+
+### Native plugin-host routes
+
+Demo policy refuses the entire authenticated plugin host, including v0/v8 native management
+reads/writes, management HEAD and the fixed model-directory read (ADR 0067). These routes
+must not expose configuration through either Worker or Go demonstration mode.

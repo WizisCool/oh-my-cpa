@@ -245,3 +245,10 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
      ```
    - A maintenance job does not survive a restart: the process running it is gone with it.
      The console's job status is held in memory for this reason, and the page says so.
+
+### Native plugin writes
+
+Configuration-affecting trusted plugin-page native writes participate in the existing encrypted
+`cpa_config_backups` gate (ADR 0067). Caller authentication is checked before creating a
+snapshot, and snapshot failure prevents mutation. Copies use the existing retention and
+`config_changes` reason, with deduplication; no new table or migration is introduced.

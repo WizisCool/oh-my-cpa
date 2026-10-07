@@ -578,3 +578,27 @@ Credential mutation audit fault injection refuses the attempt before CPA is
 called and preserves a successful refresh/import response when outcome auditing
 fails after the upstream mutation. The gateway popup Escape probe also catches a
 retained, painted leave node under reduced motion.
+
+### Trusted native plugin-host contract
+
+`internal/cpa/management/client_plugin_host_test.go` owns fixed-origin path validation,
+credential separation, redirects, body bounds and native backup classification.
+`internal/api/management_plugin_host_test.go` covers session/CSRF protection, invalid explicit
+credentials, native config/group/model startup, namespaced state/sync, audit failure gates,
+backup failures, native-write serialization and rebasing across base paths. The fixture uses
+an independent upstream server so version probing cannot hide caller authentication defects.
+The existing built acceptance in `scripts/acceptance/configuration-plugins.mjs` exercises the
+same generic startup chain via fetch, Request, XHR and EventSource, valid/invalid credentials,
+Request POST body preservation on HTTP/1, bounded finite EventSource completion,
+no duplicate rebasing and no host-provided key
+in storage. The hosted-page check is shared with the full configuration acceptance flow
+for focused regression diagnosis. The response observer separates only exact same-origin
+native host API responses from ordinary DTO leak sweeps, while still checking native startup
+bodies for the server management key and OAuth fixture credentials; unreadable native
+response evidence fails the check, and all native response audits settle before the final
+verdict. Client/provider keys needed by native startup are permitted on that surface. `scripts/plugin-host-contract.test.mjs`
+pins both policies, including ordinary APIs, resources, similar paths, external origins and
+unexpected protected credentials as negative cases.
+No additional runner or registration list is required. Changes to this built harness require
+`pnpm verify:full`; live plugin smoke should use isolated synthetic configuration and avoid
+billable evaluation calls.

@@ -412,6 +412,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       response.end([
         '<!doctype html><html><head><meta charset="utf-8"><title>Logger Console</title></head><body>',
         '<h1 id="plugin-title">Logger Console</h1><p id="plugin-status">loading</p><p id="plugin-theme"></p>',
+        '<p id="plugin-contract">loading</p><p id="plugin-credential-status"></p>',
         '<script src="/v0/resource/plugins/fixture-logger/console.js"></script>',
         '</body></html>',
       ].join(''));
@@ -425,6 +426,26 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         "  .then((reply) => reply.json())",
         "  .then((body) => { document.getElementById('plugin-status').textContent = body.state; })",
         "  .catch((error) => { document.getElementById('plugin-status').textContent = 'failed: ' + error.message; });",
+        "window.runPluginContract = async function(credential) {",
+        "  const headers = credential === undefined ? {} : {Authorization: 'Bearer ' + credential};",
+        "  const configReply = await fetch('/v0/management/config', {headers});",
+        "  if (!configReply.ok) { await configReply.text(); document.getElementById('plugin-credential-status').textContent = String(configReply.status); return; }",
+        "  const config = await configReply.json();",
+        "  const groupPath = ['','v8','management','config','api-keys'].join('/');",
+        "  const groups = await new Promise((resolve, reject) => { const request = new XMLHttpRequest(); request.open('GET', groupPath); if (credential !== undefined) request.setRequestHeader('Authorization', 'Bearer ' + credential); request.onload = () => request.status === 200 ? resolve(JSON.parse(request.responseText)) : reject(new Error('groups ' + request.status)); request.onerror = reject; request.send(); });",
+        "  const modelsPath = ['','v1','models'].join('/');",
+        "  const modelsReply = await fetch(new Request(new URL(modelsPath, location.origin), {headers: {Authorization: 'Bearer ' + config['api-keys'][0]}}));",
+        "  const models = await modelsReply.json();",
+        "  const syncPath = ['','v0','management','plugins','fixture-logger','credentials','sync'].join('/');",
+        "  const syncReply = await fetch(new Request(new URL(syncPath, location.origin), {method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({credentials: Object.keys(groups), model_count: models.data.length})}));",
+        "  if (!syncReply.ok) throw new Error('sync ' + syncReply.status);",
+        "  await syncReply.json();",
+        "  const stateReply = await fetch('/v0/management/plugins/fixture-logger/state', {headers});",
+        "  const state = await stateReply.json();",
+        "  document.getElementById('plugin-contract').textContent = 'models ' + models.data.length + '; groups ' + Object.keys(groups).length + '; ' + state.state;",
+        "  document.getElementById('plugin-credential-status').textContent = '200';",
+        "};",
+        "runPluginContract().catch(error => { document.getElementById('plugin-contract').textContent = 'failed: ' + error.message; });",
       ].join('\n'));
       return;
     }
@@ -436,6 +457,32 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     // The plugin's own management route, registered beside CPA's and guarded by the same key.
     if (request.method === 'GET' && url.pathname === '/v0/management/fixture-logger/status') {
       json(response, 200, { state: 'logger running' });
+      return;
+    }
+    // Native plugin pages also consume v0 effective configuration and register
+    // namespaced management routes. Keep their request chain separate from the
+    // ordinary facade's v8 contract so these reads cannot mask generation mistakes.
+    if (request.method === 'GET' && url.pathname === '/v0/management/config') {
+      json(response, 200, { 'api-keys': configDoc.access?.['api-keys'] ?? [], ...Object.fromEntries(Object.entries(providerLists).map(([family, list]) => [family === 'openai-compatibility' ? family : `${family}-api-key`, list.get()])) });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v0/management/plugins/fixture-logger/credentials/sync') {
+      let payload;
+      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {}
+      if (!Array.isArray(payload?.credentials) || !payload.credentials.includes('codex') || !(payload.model_count > 0)) {
+        json(response, 400, { error: 'invalid native startup body' });
+        return;
+      }
+      json(response, 200, { status: 'synced' });
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v0/management/plugins/fixture-logger/events') {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.end('data: native event ready\n\n');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v0/management/plugins/fixture-logger/state') {
+      json(response, 200, { state: 'native startup ready' });
       return;
     }
     // A v8 gateway: operations live under /v8/management, and /v0/management answers
@@ -600,6 +647,10 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     // host. These routes translate between the two.
     const configPathMatch = /^\/v8\/management\/config\/(.+)$/.exec(url.pathname);
     const settingPath = configPathMatch ? configPathMatch[1].split('/').map(decodeURIComponent) : [];
+    if (settingPath.join('/') === 'api-keys' && request.method === 'GET') {
+      json(response, 200, Object.fromEntries(Object.entries(providerLists).map(([family, list]) => [family, groupEntries(family, list.get())])));
+      return;
+    }
     if (settingPath[0] === 'api-keys' && settingPath.length === 2 && (request.method === 'GET' || request.method === 'DELETE')) {
       const list = providerLists[settingPath[1]]?.get() ?? [];
       if (list.length === 0) {

@@ -224,3 +224,27 @@ test('a null historical Codex container resets canonical leaves without masking 
   assert.equal(document.upstream.codex['orphan-delegation-compatibility'], true);
   assert.equal(document.oauth?.providers?.codex, undefined);
 });
+
+test('native plugin startup reads effective client keys and complete provider groups', async (context) => {
+  const request = await startFixture(context);
+  for (const route of ['/v0/management/config', '/v8/management/config/api-keys']) {
+    assert.equal((await request(route, 'wrong-page-key')).status, 401);
+  }
+  const effective = await (await request('/v0/management/config', FAKE_CPA_MANAGEMENT_KEY)).json();
+  assert.deepEqual(effective['api-keys'], [FAKE_CLIENT_SECRET]);
+  assert.ok(effective['codex-api-key'].some(key => key['api-key'] === FAKE_PROVIDER_SECRET));
+  const groupsReply = await request('/v8/management/config/api-keys', FAKE_CPA_MANAGEMENT_KEY);
+  assert.equal(groupsReply.status, 200);
+  const groups = await groupsReply.json();
+  const codexGroups = await (await request('/v8/management/config/api-keys/codex', FAKE_CPA_MANAGEMENT_KEY)).json();
+  assert.deepEqual(groups.codex, codexGroups);
+  assert.ok(groups.codex.some(group => group.keys.some(key => key['api-key'] === FAKE_PROVIDER_SECRET)));
+  const modelReply = await request('/v1/models', effective['api-keys'][0]);
+  assert.equal(modelReply.status, 200);
+  assert.ok((await modelReply.json()).data.length > 0);
+  const sync = await request('/v0/management/plugins/fixture-logger/credentials/sync', FAKE_CPA_MANAGEMENT_KEY, {
+    method: 'POST', body: JSON.stringify({ credentials: Object.keys(groups), model_count: 1 }),
+  });
+  assert.equal(sync.status, 200);
+  assert.equal((await request('/v0/management/plugins/fixture-logger/state', FAKE_CPA_MANAGEMENT_KEY)).status, 200);
+});

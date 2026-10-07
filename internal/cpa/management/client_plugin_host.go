@@ -10,32 +10,27 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"unicode"
 )
 
-/**
- * The two CPA surfaces a plugin's own page is made of.
- *
- * A plugin page is a document CPA serves from `/v0/resource/plugins/<id>/`, and the
- * script in it calls the routes that plugin registered under `/v0/management/`. Neither
- * shape belongs to this client: the document and the routes are the plugin's. What this
- * file owns is where such a request may go and what it carries - the resource read never
- * carries the management key, because CPA hands a request's headers to the plugin's
- * handler and the resource routes are unauthenticated by contract.
- */
+// Trusted installed pages use CPA's native management contract. This is a bounded
+// exception to the ordinary facade's DTO projection: only this instance's fixed
+// management trees and model directory are reachable (ADR 0067).
 
 const (
 	// PluginResourcePrefix is where CPA serves the browser-navigable resources of plugins.
 	PluginResourcePrefix = "/v0/resource/plugins/"
 	// PluginRoutePrefix is where CPA serves the management routes plugins register.
-	PluginRoutePrefix = "/v0/management/"
+	PluginRoutePrefix   = "/v0/management/"
+	PluginRouteV8Prefix = "/v8/management/"
+	PluginModelsPath    = "/v1/models"
 	// PLUGIN_HOST_BODY_LIMIT bounds one plugin page request or response body.
 	PLUGIN_HOST_BODY_LIMIT = 32 * 1024 * 1024
 )
 
-// coreManagementSegments are the first path segments of CPA's own /v0/management
-// routes. A plugin cannot register a route CPA already serves, so a path below one
-// of these is never needed to reach a plugin, and it is where the raw, unmasked
-// management documents live.
+// coreManagementSegments classify native v0 writes that may save CPA's config.
+// Plugin namespaces share /plugins with core operations; their deeper routes are
+// classified separately so an evaluation does not acquire the config write gate.
 var coreManagementSegments = map[string]struct{}{
 	"anthropic-auth-url": {}, "antigravity-auth-url": {}, "api-call": {}, "api-key-usage": {},
 	"api-keys": {}, "auth-files": {}, "claude-api-key": {}, "codex-api-key": {},
@@ -64,7 +59,7 @@ type PluginHostResponse struct {
 }
 
 func cleanPluginHostPath(raw string) (string, bool) {
-	if raw == "" || len(raw) > 2048 || !strings.HasPrefix(raw, "/") || strings.ContainsAny(raw, "\\\x00\r\n") {
+	if raw == "" || len(raw) > 2048 || !strings.HasPrefix(raw, "/") || strings.ContainsAny(raw, "\\") || strings.IndexFunc(raw, unicode.IsControl) >= 0 {
 		return "", false
 	}
 	trimmed := strings.TrimRight(raw, "/")
@@ -88,21 +83,45 @@ func PluginResourcePath(raw string) (resourcePath, pluginID string, ok bool) {
 	return cleaned, pluginID, true
 }
 
-// PluginRoutePath validates a plugin management route path. A path under one of CPA's
-// own management routes is refused.
+// PluginRoutePath permits the native management trees, but never CPA's arbitrary
+// outbound api-call bridge. The target cannot be chosen as a URL or another origin.
 func PluginRoutePath(raw string) (string, bool) {
 	cleaned, ok := cleanPluginHostPath(raw)
-	if !ok || !strings.HasPrefix(cleaned, PluginRoutePrefix) {
+	if !ok {
 		return "", false
 	}
-	segment, _, _ := strings.Cut(strings.TrimPrefix(cleaned, PluginRoutePrefix), "/")
-	if segment == "" {
-		return "", false
+	for _, prefix := range []string{PluginRoutePrefix, PluginRouteV8Prefix} {
+		if !strings.HasPrefix(cleaned, prefix) {
+			continue
+		}
+		relative := strings.ToLower(strings.TrimPrefix(cleaned, prefix))
+		blocked := "api-call"
+		if prefix == PluginRouteV8Prefix {
+			blocked = "requests/api-call"
+		}
+		if relative == "" || relative == blocked || strings.HasPrefix(relative, blocked+"/") {
+			return "", false
+		}
+		return cleaned, true
 	}
-	if _, isCore := coreManagementSegments[strings.ToLower(segment)]; isCore {
-		return "", false
+	return "", false
+}
+
+// IsPluginHostNativeWrite identifies writes that must participate in the console's
+// configuration serialization and backup contract, not just native config PUTs.
+func IsPluginHostNativeWrite(method, routePath string) bool {
+	if method == http.MethodGet || method == http.MethodHead {
+		return false
 	}
-	return cleaned, true
+	if strings.HasPrefix(routePath, PluginRouteV8Prefix) {
+		return true
+	}
+	parts := strings.Split(strings.ToLower(strings.TrimPrefix(routePath, PluginRoutePrefix)), "/")
+	if parts[0] == "plugins" && len(parts) >= 3 {
+		return parts[1] == "store" || parts[2] == "enabled" || parts[2] == "config" || parts[2] == "quota"
+	}
+	_, isNative := coreManagementSegments[parts[0]]
+	return isNative
 }
 
 // PluginResource reads one plugin resource. It is sent without the management key.
@@ -111,19 +130,45 @@ func (c *Client) PluginResource(ctx context.Context, resourcePath, rawQuery stri
 	if !ok {
 		return PluginHostResponse{}, ErrPluginHostPath
 	}
-	return c.sendPluginHost(ctx, http.MethodGet, cleaned, rawQuery, header, nil, false)
+	return c.sendPluginHost(ctx, http.MethodGet, cleaned, rawQuery, header, nil, pluginHostResourceAuth)
 }
 
-// PluginRoute calls one management route a plugin registered, with the management key.
+// PluginRoute preserves explicit page credentials so CPA, not the host, decides
+// whether they are valid. Only credential-less session pages use the stored key.
 func (c *Client) PluginRoute(ctx context.Context, method, routePath, rawQuery string, header http.Header, body []byte) (PluginHostResponse, error) {
 	cleaned, ok := PluginRoutePath(routePath)
 	if !ok {
 		return PluginHostResponse{}, ErrPluginHostPath
 	}
-	return c.sendPluginHost(ctx, method, cleaned, rawQuery, header, body, true)
+	if IsPluginHostNativeWrite(method, cleaned) {
+		// Validate before using the server key to keep a snapshot: an invalid page
+		// credential must not create backups or mutate configuration.
+		verified, err := c.sendPluginHost(ctx, http.MethodGet, PluginRouteV8Prefix+"config/config-version", "", header, nil, pluginHostManagementAuth)
+		if err != nil || verified.StatusCode < 200 || verified.StatusCode >= 300 {
+			return verified, err
+		}
+		if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigChanges)); err != nil {
+			return PluginHostResponse{}, err
+		}
+	}
+	return c.sendPluginHost(ctx, method, cleaned, rawQuery, header, body, pluginHostManagementAuth)
 }
 
-func (c *Client) sendPluginHost(ctx context.Context, method, cleanedPath, rawQuery string, header http.Header, body []byte, isAuthenticated bool) (PluginHostResponse, error) {
+// PluginModels exposes only the fixed directory read, using the caller's gateway
+// credential. A management key must never be substituted for a missing client key.
+func (c *Client) PluginModels(ctx context.Context, rawQuery string, header http.Header) (PluginHostResponse, error) {
+	return c.sendPluginHost(ctx, http.MethodGet, PluginModelsPath, rawQuery, header, nil, pluginHostGatewayAuth)
+}
+
+type pluginHostAuth uint8
+
+const (
+	pluginHostResourceAuth pluginHostAuth = iota
+	pluginHostManagementAuth
+	pluginHostGatewayAuth
+)
+
+func (c *Client) sendPluginHost(ctx context.Context, method, cleanedPath, rawQuery string, header http.Header, body []byte, authentication pluginHostAuth) (PluginHostResponse, error) {
 	if c == nil {
 		return PluginHostResponse{}, errors.New("CPA client is not initialized")
 	}
@@ -139,14 +184,25 @@ func (c *Client) sendPluginHost(ctx context.Context, method, cleanedPath, rawQue
 	if err != nil {
 		return PluginHostResponse{}, fmt.Errorf("create CPA request: %w", err)
 	}
-	for name, values := range header {
-		for _, value := range values {
+	for _, name := range []string{"Accept", "Accept-Language", "Content-Type", "If-None-Match", "If-Modified-Since"} {
+		for _, value := range header.Values(name) {
 			request.Header.Add(name, value)
 		}
 	}
-	request.Header.Del("Authorization")
-	request.Header.Del("X-Management-Key")
-	if isAuthenticated {
+	if authentication != pluginHostResourceAuth {
+		credentialHeaders := []string{"Authorization"}
+		if authentication == pluginHostManagementAuth {
+			credentialHeaders = append(credentialHeaders, "X-Management-Key")
+		}
+		for _, name := range credentialHeaders {
+			if values, exists := header[http.CanonicalHeaderKey(name)]; exists {
+				request.Header[name] = append([]string(nil), values...)
+			}
+		}
+	}
+	_, hasAuthorization := request.Header["Authorization"]
+	_, hasManagementKey := request.Header["X-Management-Key"]
+	if authentication == pluginHostManagementAuth && !hasAuthorization && !hasManagementKey {
 		request.Header.Set("Authorization", "Bearer "+c.management)
 	}
 	// A redirect is the plugin's answer to the browser, not somewhere this process goes.

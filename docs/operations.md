@@ -258,15 +258,27 @@ remain unchanged.
 
 ## Plugin pages
 
-A page a CPA plugin registers is shown inside the console and loaded through
-`<base>/api/v1/plugin-host/`, which requires the console session. The server reads the
-plugin's resources from CPA and calls the plugin's own management routes with the
-management key; the key is never sent to the browser, and CPA's own management roots are
-refused there. A plugin page is same-origin with the console and therefore acts with the
-signed-in operator's authority, so install only plugins you trust: a plugin already runs
-inside the gateway process. Non-`GET` calls a page makes to its plugin are recorded in the
-audit trail as `plugin.route_call`. Nothing needs configuring, and CPA does not have to be
-reachable from the browser (ADR 0060).
+A trusted installed page loads through `<base>/api/v1/plugin-host/` behind the console
+session; CPA need not be reachable from the browser. It can use CPA-native v0/v8 management
+routes and the fixed model directory, including configuration containing client and provider
+secrets. Install only plugins you trust: the page is same-origin with the console and acts
+with the signed-in operator's authority, while the plugin already runs inside CPA.
+
+The host preserves a page's explicit Authorization or X-Management-Key so CPA rejects a wrong
+key instead of silently substituting the server key. When both headers are absent, management
+calls use the stored key; resources carry no key, and `GET /v1/models` uses only the page's
+client Authorization. OMC does not publish or store its management key in browser storage;
+a third-party page may independently ask for and store a key the operator supplies.
+
+API reads and writes are audited as `plugin.route_call` and responses are uncached.
+Configuration-affecting native writes are serialized with console writes and require a
+pre-write configuration backup; a backup failure blocks the mutation. All v8 writes and known core v0 writes are conservatively
+classified for these gates; ordinary deep plugin actions such as credential synchronization
+remain plugin-owned. Native config writes retain CPA's last-write semantics, so do
+not concurrently edit the same configuration in a plugin and an unsaved console draft.
+Cookies and Set-Cookie are excluded, redirects are not followed, and arbitrary outbound
+`api-call` bridges are refused. These routes remain unavailable in demo and are not Agent/MCP
+capabilities (ADR 0067).
 
 ## Demo mode
 
