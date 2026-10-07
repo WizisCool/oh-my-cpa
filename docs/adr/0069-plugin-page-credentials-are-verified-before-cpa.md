@@ -12,6 +12,8 @@ ADR 0067 forwarded a hosted page's explicit management credential so that CPA, n
 host, decided whether it was valid. CPA counts failed management authentications per
 client address and bans the address for 30 minutes after five failures; the ban is
 checked before the key, so a banned address is refused even with the correct key.
+Loopback clients are counted and banned like any other (CPA v8.0.17,
+`AuthenticateManagementKey`).
 
 Every hosted page reaches CPA from the Oh My CPA process. A plugin page that asks the
 operator for a management key therefore spent the console's own ban budget on each
@@ -43,10 +45,15 @@ outcome with status 401. Resource and model-directory credential rules are uncha
 A wrong key typed into a plugin page still fails visibly, which was the reason ADR 0067
 stopped replacing page credentials, and it can no longer lock the console out of CPA.
 
-The host accepts only the key stored for the instance. Another secret CPA would honour,
-such as `MANAGEMENT_PASSWORD` when it differs from the configured key, is refused on this
-surface. That is accepted: the stored key is the one every other console feature
-depends on, and the page already holds the operator's session authority.
+The host accepts only the key stored for the instance. CPA has no list of management
+keys, but it can honour up to three secrets at once: the configured
+`remote-management.secret-key`, the `MANAGEMENT_PASSWORD` environment variable, and, for
+loopback clients only, the `--password` local password. When these differ, a secret other
+than the stored one is refused on this surface although CPA would accept it. That is
+accepted: the stored key is the one every other console feature depends on, the page
+already holds the operator's session authority, and the refusal costs nothing at CPA.
+Testing an unknown credential against CPA instead would spend the very budget this
+decision protects.
 
 Local refusals are not rate limited. They require an authenticated console session,
 whose sign-in is itself throttled, and a session can already act through the host with

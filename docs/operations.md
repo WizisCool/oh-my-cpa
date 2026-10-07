@@ -269,7 +269,8 @@ Authorization or X-Management-Key with the stored CPA management key and answers
 `401` itself; the wrong key is never sent to CPA, so it cannot count toward CPA's
 failed-attempt ban (five failures ban the client address for 30 minutes, and the console
 and every hosted page share one address). Only the key stored for the instance is accepted
-there, not another secret CPA might also honour such as `MANAGEMENT_PASSWORD`. When both
+there. CPA has a single configured key, not a list, but may also honour `MANAGEMENT_PASSWORD`
+and a loopback-only `--password`; when those differ from the stored key, enter the stored one. When both
 headers are absent, management calls use the stored key; resources carry no key, and
 `GET /v1/models` uses only the page's client Authorization. OMC does not publish or store its management key in browser storage;
 a third-party page may independently ask for and store a key the operator supplies.
