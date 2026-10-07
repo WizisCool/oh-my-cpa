@@ -486,7 +486,9 @@ is absent from every string either would carry, alongside the selection rules (S
 page-scoped select-all, the row cap, the canvas ceiling). The `request-export` probe covers only
 what needs a browser: a tick does not open the record, select-all reaches unmounted rows, the
 header checkbox sits over the rows', the canvas is drawn and redrawn when a redaction changes,
-and both formats download. `column-alignment` emulates a classic scrollbar so the header and the
+and both formats download. `request-facet-marks` compares a provider option's mark with the mark on the rows it filters,
+using a provider with artwork of its own so a mark resolved from the wrong key is a different
+picture. `column-alignment` emulates a classic scrollbar so the header and the
 rows are compared at the width a desktop gives them.
 
 ### Built request-record filter coverage

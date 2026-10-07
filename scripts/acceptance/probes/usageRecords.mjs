@@ -859,3 +859,53 @@ export async function requestExport({ base, page, check }) {
     exported.requests.length === exportRecords.length && exported.redacted.includes('request_id'),
     JSON.stringify({ name: jsonDownload.suggestedFilename(), count: exported.count, redacted: exported.redacted }));
 }
+
+/** Facets for the mark probe: a model whose maker is known, one whose maker is not, and the rows' provider. */
+export const markFacets = {
+  ...alignmentFacets,
+  models: [{ value: 'gpt-5', requests: 7 }, { value: LONG_MODEL, requests: 5 }],
+  providers: [{ value: 'gemini', requests: 12 }],
+};
+
+/** Rows from a provider with artwork of its own, so a mark resolved from the wrong key is a different picture. */
+export const markRecords = alignmentRecords.map((record) => ({ ...record, provider: 'gemini' }));
+
+/**
+ * A filter option carries the mark its rows carry.
+ *
+ * The claim is about two renders agreeing - the option in a popup and the row in
+ * the list - which only the page can show: the same provider resolved through a
+ * second path would still type-check and still draw *a* picture.
+ */
+export async function facetMarks({ base, page, check }) {
+  await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  const markOf = (scope) => scope.evaluate((node) => {
+    const image = node.querySelector('img');
+    if (image) return `img:${image.getAttribute('src')}`;
+    // A mark with no colour artwork is a masked silhouette, not an image.
+    const silhouette = Array.from(node.querySelectorAll('span')).find((span) => span.style.mask || span.style.webkitMask);
+    if (silhouette) return `mask:${silhouette.style.mask || silhouette.style.webkitMask}`;
+    const glyph = node.querySelector('svg');
+    return glyph ? `svg:${glyph.getAttribute('class') ?? ''}:${glyph.innerHTML.length}` : 'none';
+  });
+  const optionMark = async (control, text) => {
+    await page.locator(`.request-filters .req-facet-select:has([aria-label="${control}"])`).click();
+    const option = page.locator('.ant-select-dropdown:visible .ant-select-item-option', { hasText: text });
+    await option.waitFor();
+    const mark = await markOf(option.locator('.req-facet-option-mark'));
+    await page.keyboard.press('Escape');
+    return mark;
+  };
+
+  const known = await optionMark('Model', 'gpt-5');
+  const unknown = await optionMark('Model', LONG_MODEL);
+  check("a model option shows its maker's mark", /openai/i.test(known), known);
+  check('a model nobody made a mark for shows the generic glyph, not a blank', unknown.startsWith('svg:') && unknown !== known, unknown);
+
+  const rowMark = await markOf(page.locator('.request-row').last().locator('.req-col-provider'));
+  const providerOption = await optionMark('Provider', /./);
+  check('a provider option shows the mark its rows show', rowMark !== 'none' && providerOption === rowMark,
+    JSON.stringify({ rowMark, providerOption }));
+}

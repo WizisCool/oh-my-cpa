@@ -73,6 +73,9 @@ import {
   interactionRecords,
   refreshRecords,
   requestExport,
+  facetMarks,
+  markFacets,
+  markRecords,
   requestListInteractions,
 } from './probes/usageRecords.mjs';
 
@@ -701,7 +704,7 @@ export const SCENARIOS = [
   },
   {
     id: 'request-export',
-    name: 'requests are picked, redacted by column and exported as an image',
+    name: 'requests are picked, redacted and exported as an image or JSON',
     options: {
       routes: [
         ...systemFixtures(),
@@ -714,6 +717,22 @@ export const SCENARIOS = [
       ],
     },
     run: requestExport,
+  },
+  {
+    id: 'request-facet-marks',
+    name: 'a model, provider or credential filter option carries the mark its rows carry',
+    options: {
+      routes: [
+        ...systemFixtures(),
+        [(url) => url.pathname.endsWith('/usage/facets'), () => ({ window: { from: 0, to: Date.now(), bucket_ms: 3_600_000 }, facets: markFacets })],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: markRecords, has_more: false, limit: 50 })],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 12, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+      ],
+    },
+    run: facetMarks,
   },
   {
     id: 'scroll-smoothing',

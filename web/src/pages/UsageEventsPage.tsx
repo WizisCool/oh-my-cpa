@@ -61,6 +61,7 @@ import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
 import { RequestPagination } from '../components/usage/RequestPagination';
 import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
+import { createFacetMarkRenderer } from '../components/usage/RequestFacetMark';
 import { RequestSelectionBar } from '../components/usage/RequestSelectionBar';
 import { RequestExportDialog } from '../components/usage/RequestExportDialog';
 import {
@@ -317,6 +318,10 @@ export const UsageEventsPage: React.FC = () => {
   const providerName = React.useMemo(
     () => createProviderNameResolver(configuredProviders),
     [configuredProviders],
+  );
+  const renderFacetMark = React.useMemo(
+    () => createFacetMarkRenderer({ credentials, providerIcons, configuredProviders, pluginLogos }),
+    [credentials, providerIcons, configuredProviders, pluginLogos],
   );
 
   /**
@@ -586,6 +591,7 @@ export const UsageEventsPage: React.FC = () => {
             onTimeWindowChange={setTimeWindow}
             onResultChange={setResult}
             committedParams={committedParams}
+            renderFacetMark={renderFacetMark}
             onFilterChange={setFilter}
             facets={facets.data?.facets}
             facetsFailed={facets.isError}
@@ -613,6 +619,7 @@ export const UsageEventsPage: React.FC = () => {
             facetsFailed={facets.isError}
             credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
             providerName={providerName}
+            renderFacetMark={renderFacetMark}
             onApply={(next) => {
               // Apply replaces every filter dimension, so a keystroke queued in the
               // search box must not land on top of the applied view.

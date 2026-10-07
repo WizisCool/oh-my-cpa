@@ -56,6 +56,31 @@
   min-width: 150px;
   max-width: 320px;
 }
+/* A filter option led by the mark its rows carry. The label keeps the truncation; the mark never
+   shrinks, so a long model name cannot squeeze the picture that identifies it. */
+.req-facet-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.req-facet-option-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.req-facet-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.req-facet-generic-mark {
+  color: var(--muted);
+}
 .request-filters > .req-result-segmented {
   flex-shrink: 0;
 }

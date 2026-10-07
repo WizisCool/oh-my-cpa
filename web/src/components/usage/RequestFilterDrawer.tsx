@@ -22,6 +22,7 @@ import {
 } from '../../types/usageEventFilters';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import './RequestFilterDrawer.css';
 
 /**
@@ -81,7 +82,6 @@ const TEXT_FIELDS: Array<{ key: EventFilterKey; labelKey: string }> = [
   { key: 'endpoint', labelKey: 'events.endpoint' },
   { key: 'request_id', labelKey: 'events.col_request_id' },
 ];
-
 export interface RequestFilterDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -93,6 +93,7 @@ export interface RequestFilterDrawerProps {
   /** Labels the provider dimension with the operator's name for that line; the
    *  stored value stays CPA's key, which is what the filter is applied on. */
   providerName: (providerKey: string) => string;
+  renderFacetMark: FacetMarkRenderer;
   /** Called once with the validated draft when the operator applies it. */
   onApply: (view: UsageEventsView) => void;
 }
@@ -113,6 +114,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   facetsFailed,
   credentialName,
   providerName,
+  renderFacetMark,
   onApply,
 }) => {
   const t = useT();
@@ -243,6 +245,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         value={draft.multi[spec.key] ?? []}
         onChange={(values) => setMulti(spec.key, values as string[])}
         options={facetOptions(spec)}
+        optionRender={(option) => renderFacetOption(renderFacetMark, spec.key, option)}
         maxTagCount="responsive"
         allowClear
         // A comma is a legal character in an alias, so it must not be a token

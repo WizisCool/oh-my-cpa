@@ -251,6 +251,16 @@ Totals belong where the whole window is in scope: the dashboard tiles, and the
 detail drawer for one request. If a per-page figure is ever needed again, it
 belongs in the footer next to the page count, stated as a page figure.
 
+### Filter options carry the mark their rows carry
+
+A model, provider or credential option in the filter bar and in the "More filters" drawer is
+led by a 16px mark: a model takes its maker's mark by Model Square's rule (the generic box
+glyph in `--muted` where no maker is known), and a provider or credential is resolved through
+the request row's own resolver, so a custom icon set on the providers page or a plugin's logo
+is the same picture in the option and in the rows it leaves on screen. The label stays the
+searchable text and takes the truncation; the mark never shrinks. Closed vocabularies of words
+(auth type, reasoning effort, service tier, executor) get no mark.
+
 ### Selecting requests and exporting them
 
 Every row leads with a checkbox in its own 20px track, and the header's checkbox speaks for
