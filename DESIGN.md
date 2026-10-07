@@ -414,6 +414,15 @@ the configuration workbench.
   fill, `--meta` glyph). Send and stop share one action slot: running with an empty draft
   shows stop; an Agent draft replaces it with Queue, and queueing restores stop. Queued messages
   appear as rows above the frame in the Agent, and one line beneath naming the cost or privacy boundary.
+  In the Agent `/` (commands and prompt templates) and `@` (models, key aliases, capabilities) open
+  a shadowless `--elevated` list above the frame, mono name beside a `--muted` description; Enter
+  belongs to the highlighted row, a mention lands as the bare name, and Up on an empty box recalls
+  sent messages. A 14px ring on a `--border` track with a small mono percentage beside send states
+  the context window in use (`--meta`, `--warn` at 75%, `--danger` at 90%), absent when either
+  figure is unknown.
+- **Target**: each model is led by its maker's mark, or a neutral box when the maker is unknown.
+- **Follow-ups**: up to three questions the model offered, as plain lines under the newest answer
+  that fill the composer without sending.
 - **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates
   and the last message edits in place, replacing its turn. The Agent quote toolbar styles itself
   from theme tokens even though its portal sits outside Ant Design's variable scope.

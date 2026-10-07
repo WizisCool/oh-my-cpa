@@ -1,10 +1,43 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { AttachmentPrimitive, ComposerPrimitive, QueueItemPrimitive, useAui, useAuiState } from '@assistant-ui/react';
+import {
+  AttachmentPrimitive,
+  ComposerPrimitive,
+  QueueItemPrimitive,
+  unstable_useComposerInputHistory as useComposerInputHistory,
+  unstable_useMentionAdapter as useMentionAdapter,
+  unstable_useSlashCommandAdapter as useSlashCommandAdapter,
+  unstable_useTriggerPopoverRootContextOptional as useTriggerPopoverRootContextOptional,
+  useAui,
+  useAuiState,
+} from '@assistant-ui/react';
+import type { DirectiveFormatter } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ArrowUpOutlined, CloseOutlined, PictureOutlined } from '../icons';
 import styles from './Workspace.module.css';
+
+/** Something `/` runs: an action of the page, or a prompt it writes into the box. */
+export interface ComposerCommand {
+  /** What the operator types after the slash. */
+  id: string;
+  description: string;
+  run: () => void;
+}
+
+/** A name `@` completes: an identifier the operator would otherwise have to copy from another page. */
+export interface ComposerMention {
+  id: string;
+  label: string;
+  /** The kind of thing it names, already localized. */
+  group: string;
+}
+
+export interface ComposerTriggers {
+  commands: ComposerCommand[];
+  mentions: ComposerMention[];
+  emptyLabel: string;
+}
 
 export interface AssistantComposerProps {
   placeholder: string;
@@ -17,13 +50,30 @@ export interface AssistantComposerProps {
   /** Above the input, inside the frame: a quote, a hint. */
   header?: React.ReactNode;
   footerStart?: React.ReactNode;
+  /** A reading beside the send control, such as how full the model's context is. */
+  footerEnd?: React.ReactNode;
   /** A line under the composer: the cost or privacy boundary the operator is about to cross. */
   note?: React.ReactNode;
   /** Offered when the runtime has an attachment adapter: the picker's label and the remove label. */
   attachments?: { addLabel: string; removeLabel: string };
   /** Offered when the runtime queues messages sent during a run. */
   queue?: { title: string; removeLabel: string };
+  /** Offered when the page has commands or names to complete: `/` and `@` open a list above the box. */
+  triggers?: ComposerTriggers;
 }
+
+const NO_COMMANDS: ComposerCommand[] = [];
+const NO_MENTIONS: ComposerMention[] = [];
+
+/**
+ * A mention lands in the message as the name itself. The box is a plain textarea, so the library's
+ * directive syntax would be shown to the operator, and sent to the model, as markup around a name
+ * that is already unambiguous on its own.
+ */
+const MENTION_FORMATTER: DirectiveFormatter = {
+  serialize: item => item.label,
+  parse: text => [{ kind: 'text', text }],
+};
 
 const DESKTOP_ROWS = { minRows: 1, maxRows: 10 };
 const PHONE_ROWS = { minRows: 1, maxRows: 5 };
@@ -47,7 +97,16 @@ const PHONE_ROWS = { minRows: 1, maxRows: 5 };
  * so the box starts at one line with send - and the attachment picker - beside it, and a foot row
  * exists only when the page has a control of its own to put in it.
  */
-export function AssistantComposer({
+export function AssistantComposer(props: AssistantComposerProps) {
+  // The input reads the open list from this root, so it has to sit above the hooks that ask for it.
+  return (
+    <ComposerPrimitive.TriggerPopoverRoot>
+      <ComposerSurface {...props} />
+    </ComposerPrimitive.TriggerPopoverRoot>
+  );
+}
+
+function ComposerSurface({
   placeholder,
   inputLabel,
   sendLabel,
@@ -55,9 +114,11 @@ export function AssistantComposer({
   blockedReason,
   header,
   footerStart,
+  footerEnd,
   note,
   attachments,
   queue,
+  triggers,
 }: AssistantComposerProps) {
   const isPhone = useIsPhoneViewport();
   const aui = useAui();
@@ -74,8 +135,38 @@ export function AssistantComposer({
     aui.composer.send();
   };
 
+  const popovers = useTriggerPopoverRootContextOptional();
+  const history = useComposerInputHistory();
+  const commands = triggers?.commands ?? NO_COMMANDS;
+  const slash = useSlashCommandAdapter({
+    commands: React.useMemo(() => commands.map(command => ({
+      id: command.id,
+      label: command.id,
+      description: command.description,
+      execute: command.run,
+    })), [commands]),
+    removeOnExecute: true,
+  });
+  const mentionItems = triggers?.mentions ?? NO_MENTIONS;
+  const mention = useMentionAdapter({
+    items: React.useMemo(() => mentionItems.map(item => ({
+      id: item.id,
+      type: 'mention',
+      label: item.label,
+      description: item.group,
+    })), [mentionItems]),
+    includeModelContextTools: false,
+    formatter: MENTION_FORMATTER,
+  });
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey) return;
+    // An open list with a highlighted row owns the keys: Enter picks the row, arrows move in it.
+    if (popovers?.getActiveAria()?.highlightedItemId) return;
+    if (event.key !== 'Enter' || event.shiftKey) {
+      // Up on an empty box recalls what was sent before; the hook leaves every other key alone.
+      history.onKeyDown(event);
+      return;
+    }
     // Taken over from the primitive, whose own Enter would submit through its render-time check.
     event.preventDefault();
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -132,6 +223,18 @@ export function AssistantComposer({
           )}
         </ComposerPrimitive.Queue>
       )}
+      {triggers && (
+        <div className={styles['trigger-anchor']}>
+          <ComposerPrimitive.TriggerPopover char="/" adapter={slash.adapter} className={styles['trigger-popover']} data-testid="composer-commands">
+            <ComposerPrimitive.TriggerPopover.Action {...slash.action} />
+            <TriggerRows prefix="/" emptyLabel={triggers.emptyLabel} />
+          </ComposerPrimitive.TriggerPopover>
+          <ComposerPrimitive.TriggerPopover char="@" adapter={mention.adapter} className={styles['trigger-popover']} data-testid="composer-mentions">
+            <ComposerPrimitive.TriggerPopover.Directive {...mention.directive} />
+            <TriggerRows prefix="" emptyLabel={triggers.emptyLabel} />
+          </ComposerPrimitive.TriggerPopover>
+        </div>
+      )}
       <ComposerPrimitive.Root className={styles['composer-frame']}>
         {attachments && (
           <ComposerPrimitive.AttachmentDropzone className={styles['dropzone']}>
@@ -162,15 +265,32 @@ export function AssistantComposer({
           {isPhone && addAttachment}
           {isPhone && controls}
         </div>
-        {(!isPhone || start) && (
+        {(!isPhone || start || footerEnd) && (
           <div className={styles['composer-foot']}>
             <div className={styles['composer-foot-start']}>{start}</div>
+            {footerEnd}
             {!isPhone && controls}
           </div>
         )}
       </ComposerPrimitive.Root>
       {note && <p className={styles['composer-note']}>{note}</p>}
     </div>
+  );
+}
+
+/** The rows of an open `/` or `@` list: the name in the console's mono face, what it is beside it. */
+function TriggerRows({ prefix, emptyLabel }: { prefix: string; emptyLabel: string }) {
+  return (
+    <ComposerPrimitive.TriggerPopoverItems className={styles['trigger-rows']}>
+      {items => items.length === 0
+        ? <span className={styles['trigger-empty']}>{emptyLabel}</span>
+        : items.map((item, index) => (
+          <ComposerPrimitive.TriggerPopoverItem key={item.id} item={item} index={index} className={styles['trigger-row']}>
+            <span className={styles['trigger-name']}>{prefix}{item.label}</span>
+            {item.description && <span className={styles['trigger-description']}>{item.description}</span>}
+          </ComposerPrimitive.TriggerPopoverItem>
+        ))}
+    </ComposerPrimitive.TriggerPopoverItems>
   );
 }
 

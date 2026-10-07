@@ -38,6 +38,9 @@ type Usage struct {
 	InputTokens  int64 `json:"input_tokens,omitempty"`
 	OutputTokens int64 `json:"output_tokens,omitempty"`
 	TotalTokens  int64 `json:"total_tokens,omitempty"`
+	// ContextTokens is the input of the last round that reported one: unlike the sums, it is how
+	// much of the model's context window the conversation occupied when the turn ended.
+	ContextTokens int64 `json:"context_tokens,omitempty"`
 }
 
 func (usage *Usage) add(reported *gateway.Usage) {
@@ -46,6 +49,7 @@ func (usage *Usage) add(reported *gateway.Usage) {
 	}
 	if reported.PromptTokens != nil {
 		usage.InputTokens += *reported.PromptTokens
+		usage.ContextTokens = *reported.PromptTokens
 	}
 	if reported.CompletionTokens != nil {
 		usage.OutputTokens += *reported.CompletionTokens
@@ -89,6 +93,8 @@ type Turn struct {
 	StartedMS int64                  `json:"started_at_ms,omitempty"`
 	EndedMS   int64                  `json:"ended_at_ms,omitempty"`
 	Usage     *Usage                 `json:"usage,omitempty"`
+	// Suggestions are the follow-up questions the model offered with a finished answer.
+	Suggestions []string `json:"suggestions,omitempty"`
 	// PromptVersion is the system prompt the turn's rounds ran with.
 	PromptVersion string `json:"prompt_version,omitempty"`
 }
@@ -102,12 +108,22 @@ type Turn struct {
 // is declared to the model from the first round, so the model's tool list is the registry itself
 // and a resumption reconstructs it rather than restoring it.
 const (
-	// MAX_CONTEXT_BYTES bounds one model request, and MAX_TOOL_SCHEMA_BYTES bounds the share of
-	// it the tool declarations may take. They are separate because the tool catalogue and the
-	// conversation grow for different reasons, and a request rejected for "context too large"
-	// should not leave an operator guessing which of the two did it.
-	MAX_CONTEXT_BYTES     = 128 << 10
-	MAX_TOOL_SCHEMA_BYTES = 32 << 10
+	// A request is sized to the model it goes to: its context window in tokens, from the
+	// reference catalog, or DEFAULT_CONTEXT_TOKENS when the catalog does not list the model -
+	// the smallest window a model offered for this work can be expected to have.
+	DEFAULT_CONTEXT_TOKENS = 128_000
+	// REQUEST_BYTES_PER_TOKEN converts that window into the bytes the runtime can measure. JSON
+	// of figures and CJK text both tokenise at two to three bytes a token and prose at about
+	// four, so two keeps the request inside the window for any of them and leaves the remainder
+	// for the reply and its reasoning.
+	REQUEST_BYTES_PER_TOKEN = 2
+	// MAX_REQUEST_BYTES caps a request whatever the window: the stored conversation it is built
+	// from is itself bounded, and the gateway refuses a larger body.
+	MAX_REQUEST_BYTES = 768 << 10
+	// MAX_TOOL_SCHEMA_BYTES bounds the share of a request the tool declarations may take. It is
+	// separate because the catalogue and the conversation grow for different reasons, and a
+	// request refused for size should not leave an operator guessing which of the two did it.
+	MAX_TOOL_SCHEMA_BYTES = 64 << 10
 )
 
 type Conversation struct {
@@ -186,13 +202,15 @@ type ModelClient interface {
 	StreamAgent(ctx context.Context, model string, reasoningEffort string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error)
 }
 type Runtime struct {
-	Executor  *capability.Executor
-	Store     repository.AgentStore
-	Location  func() *time.Location
-	Slots     chan struct{}
-	Client    func(context.Context, string) (ModelClient, error)
-	mu        sync.Mutex
-	isRunning atomic.Bool
+	Executor *capability.Executor
+	Store    repository.AgentStore
+	Location func() *time.Location
+	Slots    chan struct{}
+	Client   func(context.Context, string) (ModelClient, error)
+	// ContextWindow reports the model's context window in tokens, or zero when it is unknown.
+	ContextWindow func(context.Context, string) int64
+	mu            sync.Mutex
+	isRunning     atomic.Bool
 }
 
 var PRINCIPAL = capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true}
@@ -219,7 +237,10 @@ func (r *Runtime) save(ctx context.Context, conversation *Conversation) error {
 		if len(raw) < 900<<10 {
 			break
 		}
-		if len(conversation.Turns) <= 1 || conversation.Turns[len(conversation.Turns)-1].Status == "running" {
+		// The oldest turn goes first, also while the newest is still running: refusing to make
+		// room mid-turn failed the turn a long conversation happened to be in when it crossed the
+		// limit. Only a single turn larger than the document has nothing left to give up.
+		if len(conversation.Turns) <= 1 {
 			return errors.New("conversation_budget_exceeded")
 		}
 		conversation.Turns = conversation.Turns[1:]
@@ -416,6 +437,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 	// list; paying for that lookup on every
 	// round buys nothing, because the fingerprint cannot change inside a turn.
 	clients := map[string]ModelClient{}
+	requestBudget := r.requestBudget(ctx, input.Model)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -498,38 +520,50 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 		if r.Location != nil {
 			promptContext.TimeZone = r.Location().String()
 		}
-		messages := []gateway.AgentMessage{{Role: "system", Content: SystemPrompt(promptContext)}}
-		// Include only complete previous turns, newest first within the byte budget; tool/result pairs remain intact.
-		var history []gateway.AgentMessage
-		used := 0
-		currentRaw, _ := json.Marshal(turn.Messages)
-		used += len(currentRaw)
-		if used > MAX_CONTEXT_BYTES {
-			return errors.New("context_budget_exceeded")
-		}
-		for index := len(conversation.Turns) - 2; index >= 0; index-- {
-			previous := conversation.Turns[index]
-			if previous.Status != "success" {
-				continue
-			}
-			raw, _ := json.Marshal(previous.Messages)
-			if used+len(raw) > MAX_CONTEXT_BYTES {
-				break
-			}
-			used += len(raw)
-			history = append(append([]gateway.AgentMessage{}, previous.Messages...), history...)
-		}
-		messages = append(messages, history...)
-		messages = append(messages, turn.Messages...)
 		// Every registered capability is declared from the first round. Discovery round-trips cost
 		// a whole model call each, and the registry is bounded by construction, so the model is
 		// better served by the catalogue than by a search that can only return what it already
 		// could have been told.
 		tools := append(r.toolDeclarations(), DisplayToolDeclarations(input.DisplayTools)...)
 		schemas, _ := json.Marshal(tools)
-		if len(schemas) > MAX_TOOL_SCHEMA_BYTES || used+len(schemas) > MAX_CONTEXT_BYTES {
+		if len(schemas) > MAX_TOOL_SCHEMA_BYTES {
 			return errors.New("schema_budget_exceeded")
 		}
+		system := SystemPrompt(promptContext)
+		// The conversation gets what the fixed parts of the request leave. Measuring it against
+		// the whole request instead let history fill the space the catalogue then needed, so a
+		// conversation that had merely grown long was refused on every later message.
+		budget := requestBudget - len(schemas) - len(system)
+		current, used, isFitting := fitMessages(turn.Messages, budget)
+		if !isFitting {
+			return errors.New("context_budget_exceeded")
+		}
+		messages := []gateway.AgentMessage{{Role: "system", Content: system}}
+		// Earlier successful turns, newest first. The recent ones go in whole, with their calls
+		// and results; from the first that does not fit, a turn is its question and its answer
+		// only. What was asked and concluded is small and is what a follow-up refers to, so the
+		// model keeps the thread of a long conversation after the raw results have gone.
+		var history []gateway.AgentMessage
+		isSummarising := false
+		for index := len(conversation.Turns) - 2; index >= 0; index-- {
+			previous := conversation.Turns[index]
+			if previous.Status != "success" {
+				continue
+			}
+			included := previous.Messages
+			raw, _ := json.Marshal(included)
+			if isSummarising || used+len(raw) > budget {
+				isSummarising = true
+				included = []gateway.AgentMessage{{Role: "user", Content: previous.User}, {Role: "assistant", Content: previous.Reply}}
+				if raw, _ = json.Marshal(included); previous.Reply == "" || used+len(raw) > budget {
+					break
+				}
+			}
+			used += len(raw)
+			history = append(append([]gateway.AgentMessage{}, included...), history...)
+		}
+		messages = append(messages, history...)
+		messages = append(messages, current...)
 		if err := r.save(ctx, conversation); err != nil {
 			return err
 		}
@@ -582,13 +616,58 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 		if err != nil {
 			return err
 		}
-		turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "assistant", Content: reply.Content, ToolCalls: reply.Calls})
-		if len(reply.Calls) == 0 {
+		calls, suggestions := takeSuggestions(input.DisplayTools, reply.Calls)
+		turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "assistant", Content: reply.Content, ToolCalls: calls})
+		if len(calls) == 0 {
+			// Follow-ups belong to a finished answer; ones offered before more work are stale.
+			turn.Suggestions = suggestions
 			turn.Status = "success"
 			return nil
 		}
-		turn.Pending = reply.Calls
+		turn.Pending = calls
 	}
+}
+
+// requestBudget is the size one request to the model may reach, in bytes.
+func (r *Runtime) requestBudget(ctx context.Context, model string) int {
+	tokens := int64(DEFAULT_CONTEXT_TOKENS)
+	if r.ContextWindow != nil {
+		if window := r.ContextWindow(ctx, model); window > 0 {
+			tokens = window
+		}
+	}
+	return int(min(tokens*REQUEST_BYTES_PER_TOKEN, MAX_REQUEST_BYTES))
+}
+
+// OMITTED_RESULT stands in for a capability result that no longer fits the request.
+const OMITTED_RESULT = `{"status":"omitted","detail":"This earlier result was dropped to fit the context budget. Rely on what you already concluded from it, or call the capability again with a narrower request."}`
+
+// fitMessages returns the turn's messages within the budget, and their size.
+//
+// A long investigation outgrows the budget through its own results, and failing the turn there
+// throws away every round already paid for. The oldest results are replaced with a note instead:
+// the model has usually drawn its conclusion from them rounds ago, and it is told it can ask
+// again. Only the request is shortened - the stored messages keep every result, which is what
+// display calls resolve their rows from. It reports false when the turn cannot fit even so.
+func fitMessages(stored []gateway.AgentMessage, budget int) ([]gateway.AgentMessage, int, bool) {
+	raw, _ := json.Marshal(stored)
+	if len(raw) <= budget {
+		return stored, len(raw), true
+	}
+	messages := append([]gateway.AgentMessage{}, stored...)
+	size := len(raw)
+	for index := range messages {
+		if messages[index].Role != "tool" || len(messages[index].Content) <= len(OMITTED_RESULT) {
+			continue
+		}
+		before, _ := json.Marshal(messages[index].Content)
+		messages[index].Content = OMITTED_RESULT
+		after, _ := json.Marshal(messages[index].Content)
+		if size -= len(before) - len(after); size <= budget {
+			return messages, size, true
+		}
+	}
+	return nil, 0, false
 }
 
 // appendPart extends the turn's last part when it is the same kind of text from the same round,

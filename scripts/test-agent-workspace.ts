@@ -31,6 +31,9 @@ import {
   chartSeries,
 } from '../web/src/pages/agent/state.ts';
 import { completedDisplayViews } from '../web/src/agent/types.ts';
+import { contextShare } from '../web/src/components/workspace/contextShare.ts';
+import { referenceContextWindow } from '../web/src/types/modelSquare.ts';
+import type { ModelSquareDirectory } from '../web/src/types/modelSquare.ts';
 import { agentChartAxis } from '../web/src/pages/agent/tools/chartAxis.ts';
 import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, isOperationID, mcpEndpoint } from '../web/src/pages/agent/connect.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
@@ -74,6 +77,8 @@ check('a tone is semantic, and a stop is neutral', () => {
 check('an unverified write is reported as uncertain, not as a plain failure', () => {
   assert.equal(failureKey('operation_outcome_unknown'), 'agent.error.uncertain');
   assert.equal(failureKey('agent_busy'), 'agent.error.busy');
+  // A turn stored after any budget refusal carries this code; it is not a gateway outage.
+  assert.equal(failureKey('budget_exceeded'), 'agent.error.budget');
   assert.equal(failureKey('something_new_from_a_newer_server'), 'agent.error.gateway');
 });
 
@@ -493,6 +498,28 @@ check('an approval address is read only for a well-formed operation id', () => {
   const id = '0123456789abcdef0123456789abcdef0123456789abcdef';
   assert.equal(isOperationID(id), true);
   for (const value of ['', `${id}0`, id.toUpperCase(), '..', 'session']) assert.equal(isOperationID(value), false, value);
+});
+
+check('the context readout needs both a reported input and a listed window, and takes the narrowest route', () => {
+  const reference = (context?: number) => ({ id: 'm', name: 'm', limit: { context }, modalities: {} });
+  const directory: ModelSquareDirectory = {
+    models: [], providers: [], partial: [], metadata_updated_at: '',
+    routes: [
+      { provider_id: 'a', upstream_model: 'wide', call_point: 'alias' },
+      { provider_id: 'b', upstream_model: 'narrow', call_point: 'alias' },
+      { provider_id: 'b', upstream_model: 'unlisted', call_point: 'other' },
+    ],
+    model_info: { wide: reference(400_000), narrow: reference(200_000), direct: reference(128_000), blank: reference() },
+  };
+  assert.equal(referenceContextWindow(directory, 'alias'), 200_000);
+  assert.equal(referenceContextWindow(directory, 'direct'), 128_000);
+  for (const callPoint of ['other', 'blank', 'missing', '']) assert.equal(referenceContextWindow(directory, callPoint), undefined, callPoint);
+  assert.equal(referenceContextWindow(undefined, 'alias'), undefined);
+
+  assert.equal(contextShare(50_000, 200_000), 0.25);
+  // A window the catalog understates must not print more than a full box.
+  assert.equal(contextShare(300_000, 200_000), 1);
+  for (const [used, window] of [[undefined, 200_000], [0, 200_000], [1000, undefined], [1000, 0]] as const) assert.equal(contextShare(used, window), undefined);
 });
 
 console.log(`\n${passed} assertions passed`);

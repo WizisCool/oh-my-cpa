@@ -27,6 +27,7 @@ import (
 const (
 	RENDER_CHART = "render_chart"
 	RENDER_TABLE = "render_table"
+	SUGGEST_NEXT = "suggest_next"
 
 	MAX_VIEW_ROWS        = 1000
 	MAX_INLINE_ROWS      = 200
@@ -36,6 +37,9 @@ const (
 	MAX_CHART_SERIES     = 8
 	MAX_TABLE_COLUMNS    = 12
 	MAX_SOURCE_PATH      = 256
+
+	MAX_SUGGESTIONS      = 3
+	MAX_SUGGESTION_CHARS = 80
 )
 
 var CHART_TYPES = []string{"line", "area", "column", "bar", "pie"}
@@ -50,7 +54,7 @@ type RenderChartInput struct {
 	Title  string           `json:"title" jsonschema:"Short chart title that states the metric and its window"`
 	Type   string           `json:"type" jsonschema:"line or area for a trend over time; column or bar to compare items; pie for shares of one total"`
 	Source *DataSource      `json:"source,omitempty" jsonschema:"Where the rows come from; preferred over inline"`
-	Inline []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200; only when no capability result holds them"`
+	Inline []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200"`
 	X      string           `json:"x" jsonschema:"Field for the category or time axis (the slice label for pie)"`
 	Y      []string         `json:"y" jsonschema:"1-8 numeric fields to plot; exactly one for pie"`
 	Series string           `json:"series,omitempty" jsonschema:"Optional field that splits a single y field into one line or bar per value"`
@@ -60,8 +64,12 @@ type RenderChartInput struct {
 type RenderTableInput struct {
 	Title   string           `json:"title" jsonschema:"Short table title that states what the rows are and their window"`
 	Source  *DataSource      `json:"source,omitempty" jsonschema:"Where the rows come from; preferred over inline"`
-	Inline  []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200; only when no capability result holds them"`
+	Inline  []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200"`
 	Columns []string         `json:"columns" jsonschema:"1-12 fields to show, in order"`
+}
+
+type SuggestNextInput struct {
+	Suggestions []string `json:"suggestions" jsonschema:"1-3 questions, at most 80 characters each"`
 }
 
 // ChartSpec is how a frozen chart is drawn.
@@ -91,9 +99,14 @@ type DisplayReceipt struct {
 	Fields     []string `json:"fields"`
 }
 
+// The descriptions say only what each tool is for. Referencing rows by source is stated on the
+// source field and in the system prompt's presentation section, as is how to write the answer
+// around a display; repeating either here would spend the schema budget on every round to say
+// it twice.
 const (
-	RENDER_CHART_DESCRIPTION = "Draw a chart inside your answer. Use it for a trend over time or a comparison across more than a few items. Reference a capability result with source {call_id, path} instead of copying numbers; the console draws the rows that call returned. After the chart, state the conclusion in one or two sentences; do not repeat the numbers it shows."
-	RENDER_TABLE_DESCRIPTION = "Draw a table inside your answer, for more than about five rows or more than three columns. Reference a capability result with source {call_id, path} instead of copying rows. The operator can sort it and copy it as CSV; summarise what matters in a sentence rather than restating it."
+	RENDER_CHART_DESCRIPTION = "Draw a chart inside your answer, for a trend over time or a comparison across more than a few items."
+	SUGGEST_NEXT_DESCRIPTION = "Offer follow-up questions with your final answer text, never with another tool; ends the turn."
+	RENDER_TABLE_DESCRIPTION = "Draw a table inside your answer, for more than about five rows or more than three columns. The operator can sort it and copy it as CSV."
 )
 
 type displayTool struct {
@@ -119,7 +132,12 @@ var displayTools = func() map[string]*displayTool {
 	if err != nil {
 		panic(err)
 	}
+	suggest, err := jsonschema.For[SuggestNextInput](nil)
+	if err != nil {
+		panic(err)
+	}
 	tools := map[string]*displayTool{
+		SUGGEST_NEXT: {name: SUGGEST_NEXT, description: SUGGEST_NEXT_DESCRIPTION, schema: suggest},
 		RENDER_CHART: {name: RENDER_CHART, description: RENDER_CHART_DESCRIPTION, schema: chart},
 		RENDER_TABLE: {name: RENDER_TABLE, description: RENDER_TABLE_DESCRIPTION, schema: table},
 	}
@@ -144,7 +162,7 @@ func DisplayToolNames() map[string]bool {
 // fixed order so the catalogue is stable between rounds.
 func DisplayToolDeclarations(declared []string) []gateway.AgentTool {
 	var tools []gateway.AgentTool
-	for _, name := range []string{RENDER_CHART, RENDER_TABLE} {
+	for _, name := range []string{RENDER_CHART, RENDER_TABLE, SUGGEST_NEXT} {
 		if !contains(declared, name) {
 			continue
 		}
@@ -152,6 +170,48 @@ func DisplayToolDeclarations(declared []string) []gateway.AgentTool {
 		tools = append(tools, gateway.AgentTool{Type: "function", Function: gateway.ToolDefinition{Name: tool.name, Description: tool.description, Parameters: tool.schema}})
 	}
 	return tools
+}
+
+// takeSuggestions separates suggest_next from a round's calls.
+//
+// It is a note on the answer rather than a call the turn makes: it has no result worth a model
+// round, so it never becomes a trace, a pending call or a stored tool call, and the calls that
+// remain are the ones the turn runs. The last well-formed call wins, and a malformed one is
+// dropped without a refusal, because nothing is left to read one.
+func takeSuggestions(declared []string, calls []gateway.ToolCall) ([]gateway.ToolCall, []string) {
+	if !contains(declared, SUGGEST_NEXT) {
+		return calls, nil
+	}
+	var suggestions []string
+	remaining := make([]gateway.ToolCall, 0, len(calls))
+	for _, call := range calls {
+		if call.Function.Name != SUGGEST_NEXT {
+			remaining = append(remaining, call)
+			continue
+		}
+		if parsed := parseSuggestions(call.Function.Arguments); parsed != nil {
+			suggestions = parsed
+		}
+	}
+	return remaining, suggestions
+}
+
+func parseSuggestions(arguments string) []string {
+	var input SuggestNextInput
+	if len(arguments) > capability.MAX_PAYLOAD_BYTES || strictUnmarshal([]byte(arguments), &input) != nil {
+		return nil
+	}
+	var suggestions []string
+	for _, suggestion := range input.Suggestions {
+		suggestion = strings.Join(strings.Fields(suggestion), " ")
+		if suggestion == "" || utf8.RuneCountInString(suggestion) > MAX_SUGGESTION_CHARS || contains(suggestions, suggestion) {
+			continue
+		}
+		if suggestions = append(suggestions, suggestion); len(suggestions) == MAX_SUGGESTIONS {
+			break
+		}
+	}
+	return suggestions
 }
 
 func contains(values []string, value string) bool {

@@ -48,6 +48,10 @@ func ValidReasoningEffort(value string) bool {
 	return trimmed != "" && len(trimmed) <= 64 && isPrintableASCII(trimmed)
 }
 
+// MAX_AGENT_REQUEST_BYTES is the largest body StreamAgent sends. The runtime sizes a request to
+// the model's context window; this is the ceiling above that, for a caller that did not.
+const MAX_AGENT_REQUEST_BYTES = 1 << 20
+
 // StreamAgent accepts only server-constructed messages and definitions. Incomplete tool
 // arguments never leave this method as executable calls.
 //
@@ -65,7 +69,7 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 		payload["reasoning_effort"] = effort
 	}
 	raw, err := json.Marshal(payload)
-	if err != nil || len(raw) > 256<<10 {
+	if err != nil || len(raw) > MAX_AGENT_REQUEST_BYTES {
 		return AgentReply{}, errors.New("context_budget_exceeded")
 	}
 	response, err := client.request(ctx, http.MethodPost, "/v1/chat/completions", bytes.NewReader(raw))

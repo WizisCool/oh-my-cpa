@@ -264,6 +264,44 @@
   min-width: 0;
 }
 
+/* Follow-up questions read as lines of the answer, not as a second row of buttons. */
+.follow-ups {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.follow-up {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+  transition: color var(--motion-fast);
+}
+
+.follow-up :global(.anticon) {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.follow-up:hover {
+  color: var(--accent);
+}
+
 .message-foot {
   display: flex;
   align-items: center;
@@ -647,6 +685,75 @@
   box-sizing: border-box;
 }
 
+/* The `/` and `@` lists open upward from the frame's top edge, over the conversation: the box
+   itself never moves, so a list that opens and closes while typing does not shift the thread. */
+.trigger-anchor {
+  position: relative;
+}
+
+.trigger-popover {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  left: 0;
+  z-index: 2;
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--elevated);
+}
+
+.trigger-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.trigger-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.trigger-row:hover,
+.trigger-row[data-highlighted] {
+  background: var(--border-soft);
+}
+
+.trigger-name {
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-empty {
+  padding: 5px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .composer-frame {
   display: flex;
   flex-direction: column;
@@ -795,6 +902,45 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* How full the context is: a ring and its figure, quiet until the conversation nears the limit. */
+.context-readout {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--meta);
+  cursor: default;
+}
+
+.context-ring {
+  width: 14px;
+  height: 14px;
+  /* The arc starts at twelve o'clock. */
+  transform: rotate(-90deg);
+  fill: none;
+  stroke-width: 2;
+}
+
+.context-ring-track {
+  stroke: var(--border);
+}
+
+.context-ring-value {
+  stroke: currentColor;
+  transition: stroke-dasharray var(--motion-base) var(--ease-standard);
+}
+
+.context-readout[data-tone='warning'] {
+  color: var(--warn);
+}
+
+.context-readout[data-tone='danger'] {
+  color: var(--danger);
 }
 
 .composer-note {

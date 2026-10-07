@@ -9,6 +9,7 @@ export function agentFixtures() {
   return [
     ...playgroundFixtures(),
     [url => url.pathname.endsWith('/agent/session'), initial],
+    [url => url.pathname.endsWith('/management/model-square'), () => ({ models: [], providers: [], routes: [], partial: [], metadata_updated_at: '', model_info: { 'vision-alias': { id: 'vision-alias', name: 'Vision', limit: { context: 4000 }, modalities: {} } } })],
     [url => url.pathname.endsWith('/capabilities'), () => ({ capabilities: [
       { name: 'providers_delete', description: 'Delete exactly one provider and its credentials and mappings.', permission: 'destructive', risk: 'high', version: 1, adapters: ['agent'] },
       { name: 'providers_list', description: 'List configured API providers and callable model mappings.', permission: 'read', risk: 'low', version: 1, adapters: ['agent'] },
@@ -107,9 +108,27 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent states where its data goes beside the composer', await page.getByText('Messages and the OMC data the agent reads are sent to the selected CPA model and its upstream. Do not enter secrets in chat.').isVisible());
   check('agent has no consent checkbox to tick before sending', await page.getByRole('checkbox').count() === 0);
 
+  const composer = page.getByLabel('Describe an OMC query or action');
+  // `/` and `@` open a list above the box while typing. Enter belongs to the highlighted row
+  // while a list is open, so neither completion may reach the model as a message.
+  await composer.pressSequentially('/');
+  const commands = page.locator('[data-testid="composer-commands"]');
+  await commands.getByText('/new', { exact: true }).waitFor();
+  await composer.pressSequentially('usa');
+  await commands.getByText('/new', { exact: true }).waitFor({ state: 'detached' });
+  await composer.press('Enter');
+  check('a slash command writes its prompt into the box without sending', await composer.inputValue() === 'Summarize the last 24 hours of usage by provider.' && runs.length === 0,
+    JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
+  await composer.fill('');
+  await composer.pressSequentially('Explain @providers_l');
+  await page.locator('[data-testid="composer-mentions"]').getByText('providers_list', { exact: true }).waitFor();
+  await composer.press('Enter');
+  check('a mention completes to the bare name without sending', (await composer.inputValue()).trim() === 'Explain providers_list' && runs.length === 0,
+    JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
+  await composer.fill('');
+
   await page.getByRole('button', { name: 'Reasoning effort: Default', exact: true }).click();
   await page.getByRole('menuitem', { name: 'High (high)' }).click();
-  const composer = page.getByLabel('Describe an OMC query or action');
   await composer.fill('Disable this provider');
   check('agent can send as soon as a message is typed', await page.getByRole('button', { name: 'Send', exact: true }).isEnabled());
   // The composer decides Enter itself, so the two Enters that must not send are pinned beside the
@@ -135,7 +154,7 @@ export async function agentWorkspace({ base, page, check }) {
     && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
   check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
     && request.forwardedProps.reasoning_effort === 'high' && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
-  check('agent declares only the display tools it can draw, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_chart', 'render_table'])
+  check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_chart', 'render_table', 'suggest_next'])
     && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
   check('agent tells the server the console language', request.context.length === 1 && request.context[0].description === 'console_language' && request.context[0].value === 'en', JSON.stringify(request.context));
   check('agent shows the approval inline under the call, not in a dialog', await page.getByRole('dialog').count() === 0
@@ -507,6 +526,7 @@ export async function agentViews({ base, page, check }) {
   const chartView = { kind: 'chart', title: 'Request share', chart: { type: 'column', x: 'model', y: ['requests'] }, columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
   await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [{
     id: 'turn-views', user: 'Chart requests by model', reply: 'Here they are.', status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(),
+    usage: { input_tokens: 5000, output_tokens: 200, total_tokens: 5200, context_tokens: 3200 }, suggestions: ['Compare with last week'],
     parts: [{ type: 'tool', trace_id: 'call-usage' }, { type: 'tool', trace_id: 'call-table' }, { type: 'tool', trace_id: 'call-chart' }, { type: 'text', content: 'Here they are.' }],
     traces: [
       { id: 'call-usage', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: { rows } } },
@@ -528,6 +548,14 @@ export async function agentViews({ base, page, check }) {
   await chart.getByText('Data', { exact: true }).click();
   await chart.getByText('gpt-4.1').waitFor();
   check('a chart can be read as the rows behind it', await chart.getByText('gpt-4.1').count() === 1 && await chart.locator('canvas').count() === 0);
+
+  // The fixture's catalog lists a 4,000-token window for the session's model, and the turn's last
+  // round read 3,200: the readout is the last round's input, not the turn's summed input.
+  const readout = page.locator('[data-testid="context-readout"]');
+  check('the composer states the share of the context window in use', await readout.innerText() === '80%' && await readout.getAttribute('data-tone') === 'warning',
+    `${await readout.innerText()} ${await readout.getAttribute('data-tone')}`);
+  await page.locator('[data-testid="agent-follow-ups"]').getByRole('button', { name: 'Compare with last week' }).click();
+  check('a follow-up question fills the composer without sending', await page.getByLabel('Describe an OMC query or action').inputValue() === 'Compare with last week');
 
 }
 

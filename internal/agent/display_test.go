@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -194,5 +195,62 @@ func TestDisplayDeclarationsFitTheirShare(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"enum":["line","area","column","bar","pie"]`) {
 		t.Fatalf("chart type is not enumerated: %s", raw)
+	}
+}
+
+// TestSuggestionsEndTheTurnWithoutBecomingACall: suggest_next beside the final answer is recorded on
+// the turn and costs no further model round, no trace and no stored tool call - a stored call
+// without a result would make the next turn's history invalid upstream. Offered beside real work,
+// it is dropped: the answer it would follow does not exist yet.
+func TestSuggestionsEndTheTurnWithoutBecomingACall(t *testing.T) {
+	suggest := func(arguments string) gateway.ToolCall {
+		return gateway.ToolCall{ID: "next", Type: "function", Function: gateway.ToolFunction{Name: SUGGEST_NEXT, Arguments: arguments}}
+	}
+	for name, test := range map[string]struct {
+		declared []string
+		first    []gateway.ToolCall
+		rounds   int
+		want     []string
+	}{
+		"beside the answer": {[]string{SUGGEST_NEXT}, []gateway.ToolCall{suggest(`{"suggestions":["  Compare with  last week ","Compare with last week","","By model?"]}`)}, 1, []string{"Compare with last week", "By model?"}},
+		"malformed":         {[]string{SUGGEST_NEXT}, []gateway.ToolCall{suggest(`{"suggestions":"all of them"}`)}, 1, nil},
+		"too long":          {[]string{SUGGEST_NEXT}, []gateway.ToolCall{suggest(`{"suggestions":["` + strings.Repeat("长", MAX_SUGGESTION_CHARS+1) + `"]}`)}, 1, nil},
+		"beside real work":  {[]string{SUGGEST_NEXT, RENDER_TABLE}, []gateway.ToolCall{suggest(`{"suggestions":["Stale?"]}`), {ID: "table", Type: "function", Function: gateway.ToolFunction{Name: RENDER_TABLE, Arguments: `{"title":"t","inline":[{"a":1}],"columns":["a"]}`}}}, 2, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runtime := newTestRuntime(t)
+			rounds := 0
+			runtime.Client = func(context.Context, string) (ModelClient, error) {
+				return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+					if rounds++; rounds == 1 {
+						return gateway.AgentReply{Content: "answer", Calls: test.first}, nil
+					}
+					return gateway.AgentReply{Content: "done"}, nil
+				}), nil
+			}
+			var final *Conversation
+			if err := runtime.Run(context.Background(), Input{Message: "ask", Model: "fixture", Fingerprint: "key", DisplayTools: test.declared}, func(event Event) error {
+				if event.Type == "tool_call" && event.Trace.Name == SUGGEST_NEXT {
+					t.Fatal("suggest_next was announced as a call")
+				}
+				if event.Type == "finished" {
+					final = event.Conversation
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			turn := final.Turns[0]
+			if rounds != test.rounds || turn.Status != "success" || !slices.Equal(turn.Suggestions, test.want) {
+				t.Fatalf("rounds %d status %q suggestions %q", rounds, turn.Status, turn.Suggestions)
+			}
+			for _, message := range turn.Messages {
+				for _, call := range message.ToolCalls {
+					if call.Function.Name == SUGGEST_NEXT {
+						t.Fatalf("suggest_next was stored as a tool call: %+v", message)
+					}
+				}
+			}
+		})
 	}
 }

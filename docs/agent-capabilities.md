@@ -46,8 +46,8 @@ agent has not been told about this yet".
 The consequence to keep in mind when adding capabilities is the opposite of the usual one:
 **the catalogue is paid for on every model call of every turn**, so a long description is a
 recurring cost rather than a one-off. A declaration is bounded by
-`agent.MAX_TOOL_SCHEMA_BYTES` (32 KiB) and the whole request by `agent.MAX_CONTEXT_BYTES`
-(128 KiB); a definition that pushes the catalogue past the first is a startup-time problem,
+`agent.MAX_TOOL_SCHEMA_BYTES` (64 KiB), and the whole request is sized to the selected model's
+context window; a definition that pushes the catalogue past the first is a startup-time problem,
 not a runtime one, and the runtime refuses the turn rather than truncating the list.
 
 The system prompt is paid for the same way. It is built from named sections in
@@ -161,6 +161,13 @@ result whose detail names the field to change. Views are bounded to 1000 rows, 1
 8 chart series and 96 KiB. A category axis keeps its labels horizontal and ellipsised; the tooltip carries the full value.
 
 Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
+
+`suggest_next` rides the same declaration and is not a display call. The model calls it in the
+response that carries its final answer, with one to three follow-up questions (80 characters each);
+the runtime takes it out of the round's calls before anything else reads them, so it produces no
+trace, no receipt and no extra model round, and the questions are stored on the turn as
+`suggestions`. A malformed call, or one made beside other calls - before the answer exists - is
+dropped without a refusal. The console offers the newest turn's suggestions under its answer.
 
 What this means for a new capability: a result that holds its rows as an array of objects with
 scalar fields - or, like `database_query`, as positional arrays beside a `columns` list - can be

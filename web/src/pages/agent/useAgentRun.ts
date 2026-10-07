@@ -5,7 +5,7 @@ import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys } from '../../agent/runRe
 import type { RunFrame } from '../../agent/runReducer';
 import { cancelRun, discoverRun } from '../../agent/reconnect';
 import { runAgent } from '../../agent/transport';
-import { DISPLAY_TOOLS } from '../../agent/types';
+import { DECLARED_TOOLS } from '../../agent/types';
 import type { Conversation } from '../../agent/types';
 import { createID } from '../playground/state';
 import { failureCode } from './api';
@@ -22,7 +22,7 @@ import { failureCode } from './api';
 export const AGENT_PUBLISH_INTERVAL_MS = 40;
 
 /** What the model is told each display tool is for; the schema is always the server's own. */
-const DISPLAY_TOOL_DECLARATIONS = DISPLAY_TOOLS.map(name => ({ name, description: `OMC console renders ${name}` }));
+const DISPLAY_TOOL_DECLARATIONS = DECLARED_TOOLS.map(name => ({ name, description: `OMC console renders ${name}` }));
 
 export interface AgentRunControls {
   isRunning: boolean;

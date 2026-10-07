@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
+import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAui, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -146,6 +146,31 @@ function TurnFooter({ turn }: { turn: Turn }) {
 }
 
 /**
+ * The questions the model offered after its answer, under the newest answer only: an older turn's
+ * follow-ups were about a conversation that has since moved on. Choosing one writes it into the
+ * message box rather than sending it, so the operator can still change it.
+ *
+ * The box is addressed through the thread: inside a message the bare composer scope is that
+ * message's edit composer, which nothing on this page draws.
+ */
+function FollowUps({ suggestions }: { suggestions?: string[] }) {
+  const { t } = useI18n();
+  const aui = useAui();
+  const isLast = useAuiState(state => state.message.isLast);
+  if (!isLast || !suggestions?.length) return null;
+  return (
+    <div className={workspace['follow-ups']} role="group" aria-label={t('agent.follow_ups')} data-testid="agent-follow-ups">
+      {suggestions.map(suggestion => (
+        <button key={suggestion} type="button" className={workspace['follow-up']} onClick={() => aui.thread().composer().setText(suggestion)}>
+          <RightOutlined aria-hidden="true" />
+          <span>{suggestion}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * One thread message, drawn by the role of the message it is bound to rather than the role the
  * thread's render callback saw: the runtime can place its own placeholder where a message was.
  */
@@ -202,6 +227,7 @@ export function AgentAssistantMessage() {
           </MessagePrimitive.Error>
         )}
         {isLive ? <ActivityStrip /> : turn && <TurnFooter turn={turn} />}
+        {!isLive && turn && <FollowUps suggestions={turn.suggestions} />}
       </div>
     </MessagePrimitive.Root>
   );

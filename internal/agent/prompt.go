@@ -8,7 +8,7 @@ import (
 // PROMPT_VERSION names the system prompt a turn ran with. It is recorded on the turn, so an
 // operator asking "why did it answer like that" can tell which instructions were in force; change
 // it whenever a section's wording changes.
-const PROMPT_VERSION = "2026-09-30.1"
+const PROMPT_VERSION = "2026-10-08.1"
 
 // MAX_PROMPT_BYTES bounds the system prompt. It is resent on every model round of every turn, so
 // it is a per-round cost like the tool catalogue, and a section that grows past this is a
@@ -96,6 +96,9 @@ func presentationRules(displayTools []string) string {
 		)
 	} else {
 		rules = append(rules, "Present small comparisons as short Markdown tables and summarise larger results instead of listing them.")
+	}
+	if contains(displayTools, SUGGEST_NEXT) {
+		rules = append(rules, "When a natural next question exists, call suggest_next in the same response as the final answer text; skip it for a question, a refusal or a pending operation.")
 	}
 	return strings.Join(rules, " ")
 }

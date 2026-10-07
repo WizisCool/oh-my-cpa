@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -446,7 +447,7 @@ func TestRuntimeAnnouncesACallBeforeItRuns(t *testing.T) {
 	if trace.Arguments != `{"window":"24h"}` || trace.EndedMS < trace.StartedMS || trace.StartedMS == 0 {
 		t.Fatalf("trace %+v", trace)
 	}
-	if turn.Usage == nil || turn.Usage.InputTokens != 20 || turn.Usage.OutputTokens != 10 || turn.Usage.TotalTokens != 30 || turn.PromptVersion != PROMPT_VERSION {
+	if turn.Usage == nil || turn.Usage.InputTokens != 20 || turn.Usage.OutputTokens != 10 || turn.Usage.TotalTokens != 30 || turn.Usage.ContextTokens != 10 || turn.PromptVersion != PROMPT_VERSION {
 		t.Fatalf("turn usage %+v version %q", turn.Usage, turn.PromptVersion)
 	}
 }
@@ -538,5 +539,105 @@ func TestRuntimeCurrentPreservesAnActuallyRunningTurn(t *testing.T) {
 	current, err = runtime.Current(context.Background())
 	if err != nil || current.Turns[0].Status != "success" {
 		t.Fatalf("completed: %#v %v", current, err)
+	}
+}
+
+// TestRuntimeKeepsALongConversationWithinTheRequestBudget: results are what a conversation grows
+// by, and neither a long turn nor a long history may end in a refusal. Every request stays within
+// the request budget with the catalogue and prompt counted; a turn that outgrows its share has its
+// oldest results replaced by a note in the request while the stored turn keeps them; and the
+// message after it is answered rather than refused, with that turn present as its question and
+// answer once its results no longer fit.
+func TestRuntimeKeepsALongConversationWithinTheRequestBudget(t *testing.T) {
+	runtime := newTestRuntime(t)
+	type blob struct {
+		Text string `json:"text"`
+	}
+	if err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_read", Description: "fixture", Version: 1, Permission: "read", Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (blob, error) {
+		return blob{Text: strings.Repeat("x", 24<<10)}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const READS = 8
+	// A small window, so eight results outgrow it; an unlisted model gets the default instead.
+	runtime.ContextWindow = func(_ context.Context, model string) int64 {
+		if model == "fixture" {
+			return 64_000
+		}
+		return 0
+	}
+	if budget := runtime.requestBudget(context.Background(), "unlisted"); budget != DEFAULT_CONTEXT_TOKENS*REQUEST_BYTES_PER_TOKEN {
+		t.Fatalf("default budget %d", budget)
+	}
+	if budget := runtime.requestBudget(context.Background(), "fixture"); budget != 64_000*REQUEST_BYTES_PER_TOKEN {
+		t.Fatalf("listed budget %d", budget)
+	}
+	rounds, largest, omitted, lastRequest := 0, 0, 0, ""
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(_ context.Context, _ string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error) {
+			rounds++
+			request, _ := json.Marshal(messages)
+			schemas, _ := json.Marshal(tools)
+			largest = max(largest, len(request)+len(schemas))
+			lastRequest = string(request)
+			omitted = max(omitted, strings.Count(string(request), `\"status\":\"omitted\"`))
+			if rounds <= READS {
+				return gateway.AgentReply{Calls: []gateway.ToolCall{{ID: "read-" + strconv.Itoa(rounds), Type: "function", Function: gateway.ToolFunction{Name: "fixture_read", Arguments: `{}`}}}}, nil
+			}
+			if err := emit(gateway.Event{Type: "delta", Content: "the conclusion"}); err != nil {
+				return gateway.AgentReply{}, err
+			}
+			return gateway.AgentReply{Content: "the conclusion"}, nil
+		}), nil
+	}
+	run := func(message string) Turn {
+		t.Helper()
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var final *Conversation
+		if err := runtime.Run(context.Background(), Input{ConversationID: current.ID, Revision: current.Revision, Message: message, Model: "fixture", Fingerprint: "key"}, func(event Event) error {
+			if event.Type == "finished" {
+				final = event.Conversation
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return final.Turns[len(final.Turns)-1]
+	}
+	turn := run("investigate")
+	stored, _ := json.Marshal(turn.Messages)
+	if turn.Status != "success" || omitted == 0 || strings.Contains(string(stored), "omitted") || len(stored) < READS*(24<<10) {
+		t.Fatalf("status %q code %q omitted %d stored %d", turn.Status, turn.Code, omitted, len(stored))
+	}
+	if followUp := run("and then?"); followUp.Status != "success" {
+		t.Fatalf("follow-up status %q code %q", followUp.Status, followUp.Code)
+	}
+	if !strings.Contains(lastRequest, `"investigate"`) || !strings.Contains(lastRequest, `"the conclusion"`) || strings.Contains(lastRequest, "xxxx") {
+		t.Fatalf("the earlier turn should reach the model as its question and answer alone: %s", lastRequest[max(0, len(lastRequest)-400):])
+	}
+	if budget := runtime.requestBudget(context.Background(), "fixture"); largest > budget {
+		t.Fatalf("largest request %d exceeds %d", largest, budget)
+	}
+}
+
+// TestSaveMakesRoomWhileATurnIsRunning: a stored conversation at its size limit gives up its oldest
+// turn whatever the newest is doing. Refusing while a turn ran failed whichever turn a long
+// conversation happened to be in when it crossed the limit.
+func TestSaveMakesRoomWhileATurnIsRunning(t *testing.T) {
+	runtime := newTestRuntime(t)
+	conversation := Conversation{ID: "long"}
+	for index := 0; index < 4; index++ {
+		conversation.Turns = append(conversation.Turns, Turn{ID: strconv.Itoa(index), Status: "success", Reply: strings.Repeat("x", 300<<10)})
+	}
+	conversation.Turns[3].Status = "running"
+	running := &conversation.Turns[3]
+	if err := runtime.save(context.Background(), &conversation); err != nil {
+		t.Fatal(err)
+	}
+	if conversation.Omitted == 0 || &conversation.Turns[len(conversation.Turns)-1] != running || running.ID != "3" {
+		t.Fatalf("omitted %d turns %d", conversation.Omitted, len(conversation.Turns))
 	}
 }

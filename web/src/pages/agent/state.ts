@@ -267,6 +267,8 @@ const FAILURE_KEYS: Record<string, string> = {
   run_history_full: 'agent.error.busy',
   response_too_large: 'agent.error.budget',
   gateway_unavailable: 'agent.error.gateway',
+  // The code a stored turn carries: the runtime folds every budget refusal into this one.
+  budget_exceeded: 'agent.error.budget',
   model_budget_exceeded: 'agent.error.budget',
   tool_budget_exceeded: 'agent.error.budget',
   context_budget_exceeded: 'agent.error.budget',

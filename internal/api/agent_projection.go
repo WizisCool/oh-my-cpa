@@ -17,6 +17,7 @@ type agentTurnDTO struct {
 	StartedMS     int64         `json:"started_at_ms,omitempty"`
 	EndedMS       int64         `json:"ended_at_ms,omitempty"`
 	Usage         *agent.Usage  `json:"usage,omitempty"`
+	Suggestions   []string      `json:"suggestions,omitempty"`
 	PromptVersion string        `json:"prompt_version,omitempty"`
 }
 
@@ -54,7 +55,7 @@ func agentConversationForConsole(conversation *agent.Conversation) *agentConvers
 			ID: turn.ID, User: turn.User, Reply: turn.Reply, Parts: turn.Parts,
 			Status: turn.Status, Code: turn.Code, Traces: traces, Rounds: turn.Rounds,
 			Calls: turn.Calls, StartedMS: turn.StartedMS, EndedMS: turn.EndedMS,
-			Usage: turn.Usage, PromptVersion: turn.PromptVersion,
+			Usage: turn.Usage, Suggestions: turn.Suggestions, PromptVersion: turn.PromptVersion,
 		}
 	}
 	return &agentConversationDTO{

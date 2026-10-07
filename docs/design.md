@@ -1114,6 +1114,8 @@ the gateway serves to that key - so they are drawn as one field. A key is named 
 by its mask only when it has none (§7, "Naming is a first-class action"); the open list shows both,
 which is where two similar names are told apart. Below the 900px breakpoint the target moves onto
 its own row of the head rather than into a menu: which model a message will reach is never hidden.
+A model is led by its maker's mark, in the field and in the open list, and by a neutral box when the
+maker is not recognised; the name stays the call point.
 
 **The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
@@ -1156,6 +1158,23 @@ in the Agent, entering a draft replaces stop with "Queue", and queueing clears t
 restores stop. Each queued message is a row above the frame with a remove control. Beneath the composer one line states the boundary
 the operator is about to cross: the Playground's spends the key's entitlement, the Agent's names
 what must be allowed before a message can leave.
+
+**The composer has no permanent chrome for what typing can reach.** In the Agent, `/` opens the
+page's commands (new conversation, export, and the example questions as prompts that fill the box)
+and `@` completes a name the operator would otherwise copy from another page - a model, a client
+key alias, a capability. The list opens upward from the frame's top edge on `--elevated` with a
+hairline border and no shadow, one row per entry: the name in mono, what it is in `--muted`, the
+highlighted row on `--border-soft`. Arrow keys move, Enter picks, Escape closes; while a row is
+highlighted Enter belongs to the list and cannot send. A mention lands as the bare name. Up on an
+empty box recalls the messages already sent, newest first.
+
+**How full the context is, as a ring and its figure.** Beside the Agent's send control a 14px ring
+- a 2px `--border` track with the used share drawn over it from twelve o'clock - and a percentage in
+small mono state the share of the model's context window the conversation occupied when the last
+turn ended. Both rest in `--meta` and turn `--warn` at 75% and `--danger` at 90%; the figure stays
+because an arc that small cannot show which side of a threshold it is on. The tooltip gives both
+token counts and says the window is reference information. It is absent when the gateway reported no input
+count or the reference catalog lists no window for the model: a guess would read as a measurement.
 
 **The composer starts at one line.** It grows to ten lines on desktop. At the 640px phone
 breakpoint the box grows to five lines, send - and the Playground's image picker - sits beside the
@@ -1299,7 +1318,10 @@ failed. A live run carries an activity line - the current round in `--muted` tab
 figures, what it is waiting for or which capability it is calling, and for how long - because a
 spinner cannot tell working from stuck; its pip pulses as an
 indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as
-keyboard-reachable buttons that fill the composer without sending.
+keyboard-reachable buttons that fill the composer without sending. The newest answer may end with up
+to three follow-up questions the model offered, as plain lines under a `--border-soft` rule, each
+led by a small caret and turning `--accent` on hover; choosing one fills the composer without
+sending, and they leave with the next message.
 
 ### Model-row disclosure
 

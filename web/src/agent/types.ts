@@ -58,6 +58,8 @@ export interface TurnUsage {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  /** The last round's input: what the conversation occupied of the context window. */
+  context_tokens?: number;
 }
 
 export interface Turn {
@@ -74,6 +76,8 @@ export interface Turn {
   started_at_ms?: number;
   ended_at_ms?: number;
   usage?: TurnUsage;
+  /** Follow-up questions the model offered with a finished answer. */
+  suggestions?: string[];
   prompt_version?: string;
 }
 
@@ -107,6 +111,11 @@ export interface AgentInterrupt {
 /** The display tools this console can draw; declared on every run (ADR 0042). */
 export const DISPLAY_TOOLS = ['render_chart', 'render_table'] as const;
 export type DisplayToolName = typeof DISPLAY_TOOLS[number];
+/**
+ * Everything a run declares: the tools that draw, plus `suggest_next`, which draws nothing in the
+ * transcript - the server keeps its questions on the turn instead of making it a call.
+ */
+export const DECLARED_TOOLS = [...DISPLAY_TOOLS, 'suggest_next'] as const;
 
 export function isDisplayTool(name: string): name is DisplayToolName {
   return (DISPLAY_TOOLS as readonly string[]).includes(name);

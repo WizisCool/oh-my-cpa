@@ -9,6 +9,7 @@ import {
   BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, LayoutOutlined, MessageOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
 } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
+import type { ComposerTriggers } from '../../components/workspace/AssistantComposer';
 import { AssistantThread } from '../../components/workspace/AssistantThread';
 import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffortPicker';
 import { TargetPicker } from '../../components/workspace/TargetPicker';
@@ -19,6 +20,8 @@ import type { Trace } from '../../agent/types';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { usePreference } from '../../hooks/usePreference';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
+import { referenceContextWindow } from '../../types/modelSquare';
+import { ContextReadout } from '../../components/workspace/ContextReadout';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
@@ -82,6 +85,8 @@ export function AgentPage() {
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: ({ signal }) => getCapabilities(signal) });
   // The console's own key list entry, so creating a key on the key page refreshes this selector.
   const keys = useQuery({ queryKey: ['management-client-keys'], queryFn: () => api.getClientAPIKeys() });
+  // Shared with the model directory page's cache; only the context window is read from it here.
+  const reference = useQuery({ queryKey: ['model-square'], queryFn: () => api.getModelSquare(), staleTime: 30_000 });
   const directory = useQuery({
     queryKey: ['playground-models', fingerprint],
     queryFn: ({ signal }) => api.getGatewayModels(fingerprint, signal),
@@ -273,6 +278,30 @@ export function AgentPage() {
     }
     void exportSnapshot(agentSnapshot(session.data), format);
   };
+
+  // ── composer triggers ──────────────────────────────────────────────────────
+
+  // The handlers close over this render's session; the list itself must keep its identity while
+  // the operator types, or the open list would rebuild under the highlighted row.
+  const commandHandlers = React.useRef({ reset, exportConversation });
+  commandHandlers.current = { reset, exportConversation };
+  const triggers = React.useMemo<ComposerTriggers>(() => ({
+    commands: [
+      { id: 'new', description: t('agent.new'), run: () => void commandHandlers.current.reset() },
+      { id: 'export', description: t('agent.export.html'), run: () => commandHandlers.current.exportConversation('html') },
+      ...EXAMPLES.map(example => ({
+        id: example.key.slice('agent.example.'.length),
+        description: t(example.key),
+        run: () => runtime.thread.composer.setText(t(example.key)),
+      })),
+    ],
+    mentions: [
+      ...(directory.data?.models ?? []).map(item => ({ id: `model:${gatewayCallPointOf(item)}`, label: gatewayCallPointOf(item), group: t('conversation.model') })),
+      ...(keys.data?.keys ?? []).filter(key => Boolean(key.alias)).map(key => ({ id: `key:${key.alias}`, label: key.alias as string, group: t('conversation.client_key') })),
+      ...(capabilities.data ?? []).map(capability => ({ id: `capability:${capability.name}`, label: capability.name, group: t('agent.mention.capability') })),
+    ],
+    emptyLabel: t('conversation.trigger.empty'),
+  }), [t, runtime, directory.data, keys.data, capabilities.data]);
 
   // ── frame ──────────────────────────────────────────────────────────────────
 
@@ -507,8 +536,10 @@ export function AgentPage() {
                     onChange={value => chooseTarget({ fingerprint, model, reasoningEffort: value })}
                   />
                 )}
+                footerEnd={<ContextReadout usedTokens={turns.at(-1)?.usage?.context_tokens} windowTokens={referenceContextWindow(reference.data, model)} />}
                 note={t('agent.data_notice')}
                 queue={{ title: t('agent.queue.title'), removeLabel: t('agent.queue.remove') }}
+                triggers={triggers}
               />
             )}
           </WorkspaceLayout>
