@@ -201,7 +201,7 @@ Evaluate every delivery surface independently: titles, filenames, body prose, co
 
 ## 8. Things NOT to Do
 
-- Do not bypass `internal/api` DTO allowlists to proxy raw CPA responses; do not introduce "arbitrary URL / arbitrary CPA endpoint" proxies.
+- Ordinary facade responses must retain `internal/api` DTO allowlists. The authenticated trusted Plugin Host is the bounded native-response exception in ADR 0067: fixed CPA v0/v8 management trees and GET model directory only, with credential separation, audited reads/writes and config backup/write gates. Never introduce arbitrary target URLs or outbound `api-call` proxies.
 - Do not write CPA management keys or any upstream secrets into ordinary responses, logs, preferences, frontend storage, or documentation.
 - Do not modify historical database schema without a new migration; rollbacks must be forward-only (new migration fixes), never manually edit `schema_migrations`.
 - Do not introduce frontend resources requiring a CDN; the frontend must be embeddable into a single Go binary for offline operation.

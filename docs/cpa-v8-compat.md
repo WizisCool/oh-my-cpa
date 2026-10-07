@@ -479,8 +479,8 @@ The shared login endpoint names Claude `claude`, while the console and CPA's cre
 files call it `anthropic`; `OAuthProvider.LoginProvider` carries the difference. Plugin
 login providers are served by the same endpoint.
 
-`/v0/management`, which v8 serves unchanged, is addressed only through
-`internal/cpa/management/client_v0.go`, and only to read:
+Outside the trusted Plugin Host exception (ADR 0067), `/v0/management`, which v8 serves
+unchanged, is addressed through `internal/cpa/management/client_v0.go` only to read:
 
 - the per-family credential lists (`/<family>-api-key`, `/openai-compatibility`), which
   are the only source of each upstream key's `auth-index`: the v8 configuration view is

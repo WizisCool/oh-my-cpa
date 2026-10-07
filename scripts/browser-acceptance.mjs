@@ -28,7 +28,7 @@ import { runKeyManagementAcceptance } from './acceptance/key-management.mjs';
 import { runUsageEventsAcceptance } from './acceptance/usage-events.mjs';
 import { runProvidersAcceptance } from './acceptance/providers.mjs';
 import { runObservabilityAcceptance } from './acceptance/observability.mjs';
-import { runConfigurationPluginsAcceptance } from './acceptance/configuration-plugins.mjs';
+import { auditNativePluginHostResponse, isNativePluginHostResponse, runConfigurationPluginsAcceptance } from './acceptance/configuration-plugins.mjs';
 import { runThemeBrandAcceptance } from './acceptance/theme-brand.mjs';
 import { runOAuthFlowAcceptance } from './acceptance/oauth-flow.mjs';
 
@@ -321,6 +321,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   page = await context.newPage();
   const responseBodies = [];
+  const nativeResponseAudits = [];
   const consoleErrors = [];
   const pageErrors = [];
   const requestFailures = [];
@@ -333,6 +334,12 @@ try {
   page.on('requestfailed', (request) => requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`));
   page.on('response', async (response) => {
     if (!response.url().startsWith(appURL)) return;
+    if (isNativePluginHostResponse(response.url(), appURL)) {
+      const audit = auditNativePluginHostResponse(response, [FAKE_CPA_MANAGEMENT_KEY, FAKE_ACCOUNT_SECRET], check);
+      nativeResponseAudits.push(audit);
+      await audit;
+      return;
+    }
     const type = response.headers()['content-type'] ?? '';
     if (!/(json|text|html|yaml|javascript)/i.test(type)) return;
     try { responseBodies.push(await response.text()); } catch { /* navigation may dispose a response */ }
@@ -461,6 +468,7 @@ try {
     await runOAuthFlowAcceptance({ appURL, page, check });
   }
 
+  await Promise.all(nativeResponseAudits);
   check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
   check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));
   check('same-origin requests did not fail', requestFailures.length === 0, requestFailures.join(' | '));

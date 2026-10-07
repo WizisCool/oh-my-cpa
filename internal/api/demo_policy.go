@@ -271,6 +271,15 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPatch, "/api/v1/plugin-host/v0/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
 	{http.MethodDelete, "/api/v1/plugin-host/v0/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
 
+	{http.MethodHead, "/api/v1/plugin-host/v0/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodGet, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodHead, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodPost, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodPut, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodPatch, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodDelete, "/api/v1/plugin-host/v8/management/*", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+	{http.MethodGet, "/api/v1/plugin-host/v1/models", demoRefuse, "plugin pages are disabled: plugins execute inside the gateway"},
+
 	// Gateway configuration and credential state.
 	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "configuration backups hold the gateway's secrets"},

@@ -62,3 +62,15 @@ all parent packages resolve to a patched version without it. Use
 `pnpm why <package> --recursive` to inspect consumers and `pnpm audit` to inspect
 the resolved graph. The KaTeX override crosses the minor version requested by its
 parents, so check their mathematical rendering when changing it.
+
+## Trusted plugin pages
+
+Installing a plugin authorizes its same-origin page to act as the signed-in operator.
+The authenticated Plugin Host intentionally exposes native v0/v8 management responses,
+including provider and client secrets, but never injects the stored management key into
+page resources or browser storage. Explicit credentials are preserved for CPA validation;
+model-directory requests receive only the page's client Authorization. All API reads and
+writes are audited without request payloads, path suffixes or queries, and are uncached.
+Native config writes share serialization and encrypted pre-write backups. Both outbound
+`api-call` bridges are denied. This exception does not alter ordinary DTO projections,
+Agent/MCP capabilities or demo restrictions (ADR 0067).

@@ -102,7 +102,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes (windows read on each tier's billing time zone), sync service, modes and channel multipliers | — |
 | `internal/modelcatalog` | Bundled models.dev canonical reference facts, exact source aliases and safe weight/resource links for Model Square | — |
-| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
+| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the ordinary `/v0/management` reads in `client_v0.go`, plus the bounded native Plugin Host in ADR 0067), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA client for the Playground, Agent and Model Square: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
@@ -167,23 +167,37 @@ establishes a redirect. Incomplete responses remain plugin-managed. Built-in dec
 compatibility fallback. No login is started to probe capability, and credential collection
 membership and plugin logos remain independent of connection actions.
 
-**Plugin host** (ADR 0060). A plugin can register pages: HTML resources it serves from
-CPA at `/v0/resource/plugins/<id>/...`, which call the plugin's own management routes at
-`/v0/management/<route>`. `projectPluginPages` lists them on the plugin DTO (`pages`),
-only for a running plugin and only under its own id. `internal/api/management_plugin_host.go`
-serves them behind the console session under `/api/v1/plugin-host/`:
-`servePluginResource` reads a resource without the management key, and `servePluginRoute`
-calls a plugin route with the key added server-side, auditing every non-`GET` call as
-`plugin.route_call`. `internal/cpa/management/client_plugin_host.go` owns the path rules:
-`PluginResourcePath` and `PluginRoutePath` refuse traversal and control characters, and
-`PluginRoutePath` refuses every first segment that is one of CPA's own management roots
-(`coreManagementSegments`), so the host reaches plugin routes and nothing else. This is the
-one surface that returns a body the facade did not project, because the body is the
-plugin's; the page's own credentials and cookies are dropped, only a short header
-allowlist crosses in either direction, redirects are not followed, and HTML, CSS and
-JavaScript have their CPA-root references re-based onto the host prefix so the page works
-under the console's sub-path. Demo mode refuses the whole surface.
+**Plugin host** (ADR 0067, extending ADR 0060). `projectPluginPages` lists pages only
+for running plugins and under their own resource id. `internal/api/management_plugin_host.go`
+serves them behind the console session under `/api/v1/plugin-host/`. Resources use
+`/v0/resource/plugins/<id>/...` without credentials. Management calls use the fixed CPA
+origin's `/v0/management/*` and `/v8/management/*`, including native core and namespaced
+plugin routes; the model directory is only `GET /v1/models`. Explicit Authorization and
+X-Management-Key are preserved on management calls, including empty headers. Only absent
+headers permit the stored server management key. Models receive only caller Authorization.
+Cookies and Set-Cookie never cross; redirects are not followed. Cleaned paths refuse
+traversal, backslashes and controls, and both versions' outbound `api-call` bridges are
+refused. Ordinary facade DTO allowlists remain unchanged.
 
+Native responses may contain provider and client secrets. Every API call records
+`plugin.route_call` attempt and outcome with only its fixed API surface, method and status;
+path suffixes, queries, bodies and transport errors are omitted. Failed attempt auditing
+prevents upstream execution; failed read-outcome auditing withholds the body. Audit
+refusals use the existing `audit_write_failed` error code. A successful
+write remains successful when outcome auditing fails. API responses use `no-store`.
+Native writes join `providerWriteGate`, validate caller authentication before snapshotting,
+keep the encrypted stored config with the existing backup gate, and call `afterConfigWrite`
+on success. Classification is conservative for all v8 writes and core v0 writes; ordinary
+deep plugin actions do not take the config gate. Native requests keep CPA's last-write
+semantics rather than adding OMC revision fields to the external wire contract.
+
+HTML/CSS/JavaScript references and runtime fetch, Request, XMLHttpRequest and EventSource
+requests are rebased for the same surfaces. Rebased Request bodies are buffered before
+fetching so reconstructing a Request does not turn a JSON body into an HTTP/1-incompatible
+streaming upload; method, headers, overrides and cancellation signal are retained.
+External origins and already-hosted URLs remain unchanged. The same-origin frame operates with the signed-in operator's authority; installation
+is the trust decision. Demo refuses the entire host. No model inference or arbitrary-target
+bridge is provided by this route tree.
 
 ### Agent runtime, capability registry and the MCP bridge
 
@@ -458,11 +472,12 @@ answer as `cpa_management_api`, and the console shell replaces every page with u
 guidance while it reads `unsupported` (`CpaUpgradeRequired`), or with the
 management-secret setting while it reads `disabled` (`CpaManagementDisabled`).
 
-`/v0/management` is addressed only through `internal/cpa/management/client_v0.go`, and
-only for reads: the per-family credential lists, which alone carry each upstream key's
+Outside the trusted Plugin Host exception (ADR 0067), `/v0/management` is addressed
+through `internal/cpa/management/client_v0.go` only for reads: the per-family credential lists, which alone carry each upstream key's
 `auth-index`, and the configuration file as stored (`StoredConfigYAML`), which only v0
-returns. Every configuration write goes through the v8 configuration API (ADR 0037,
-ADR 0038).
+returns. Every ordinary facade configuration write goes through the v8 configuration API
+(ADR 0037, ADR 0038). Trusted plugin pages preserve native v0/v8 write contracts with
+pre-write backups and serialization (ADR 0067).
 
 ### Configuration editing on the v8 configuration API
 

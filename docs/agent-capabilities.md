@@ -452,3 +452,10 @@ An empty list removes only that provider's rules. The wildcard `*` hides every m
 for that provider's OAuth credentials, so it must remain visible in the preview.
 These capabilities are available through the built-in Agent and stdio MCP registry,
 without a new adapter or any secret-bearing response.
+
+### Plugin-page native boundary
+
+The browser's trusted Plugin Host (ADR 0067) is not an Agent/MCP capability. It exposes native
+secret-bearing configuration only through an authenticated console session; models and
+external agents continue to use the declared sanitized capability registry and its
+confirmation/revision rules. No arbitrary native path or URL becomes a tool argument.

@@ -82,7 +82,7 @@ User-facing strings must never be hardcoded in backend responses or React compon
 - Oh My CPA uses a **terminal-flat** design language: zero box shadows (`box-shadow: none`), 4px border radii, and 1px hairline borders. Status colors (green, amber, red) are reserved strictly for semantic system health.
 
 ### 3. API & DTO Allowlisting
-- The backend enforces strict DTO allowlists in `internal/api/`. Responses must never pass through raw, unsanitized CPA payloads or arbitrary proxy responses.
+- The backend enforces strict DTO allowlists in `internal/api/`. Ordinary responses must not pass through raw, unsanitized CPA payloads. The trusted Plugin Host is the bounded native-response exception in ADR 0067, with credential separation, auditing, serialization and backups. Arbitrary target URLs remain forbidden.
 
 ---
 

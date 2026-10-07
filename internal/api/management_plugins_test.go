@@ -38,6 +38,8 @@ type pluginMockState struct {
 	routeCalls []pluginRouteCall
 	// resourceAuthorization is the Authorization header the last resource read carried.
 	resourceAuthorization string
+	nativeWrites          int
+	nativeReads           int
 	handler               *Handler
 	// hasBareInstall lists a second plugin that is installed but has no settings.
 	hasBareInstall bool
@@ -69,13 +71,47 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		configYAML:   pluginTestConfigYAML,
 	}
 
-	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		writer.Header().Set("Content-Type", "application/json")
 		path := request.URL.Path
+		credential := request.Header.Get("Authorization")
+		if parts := strings.SplitN(credential, " ", 2); len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			credential = parts[1]
+		}
+		if credential == "" {
+			credential = request.Header.Get("X-Management-Key")
+		}
+		if (strings.HasPrefix(path, "/v0/management/") || strings.HasPrefix(path, "/v8/management/")) && credential != "cpa-secret-key" {
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = writer.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
 
 		switch {
+		case path == "/v1/models":
+			if request.Header.Get("Authorization") != "Bearer synthetic-client-key" {
+				writer.WriteHeader(http.StatusUnauthorized)
+				_, _ = writer.Write([]byte(`{"error":"invalid client key"}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{"data":[{"id":"gpt-plugin-synthetic"}]}`))
+		case path == "/v8/management/config/config-version":
+			_, _ = writer.Write([]byte(`8`))
+		case path == "/v0/management/config.yaml":
+			writer.Header().Set("Content-Type", "application/yaml")
+			_, _ = writer.Write([]byte(state.configYAML))
+		case path == "/v0/management/config":
+			state.nativeReads++
+			_, _ = writer.Write([]byte(`{"api-keys":["synthetic-client-key"],"codex-api-key":[{"api-key":"synthetic-provider-key"}]}`))
+		case path == "/v8/management/config/api-keys":
+			_, _ = writer.Write([]byte(`{"codex":[{"name":"example","keys":[{"api-key":"synthetic-provider-key"}]}]}`))
+		case path == "/v0/management/auth-files/models":
+			_, _ = writer.Write([]byte(`{"models":[{"id":"gpt-plugin-synthetic"}]}`))
+		case path == "/v0/management/auth-files/status":
+			state.nativeWrites++
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/resource/plugins/logger/console":
 			state.resourceAuthorization = request.Header.Get("Authorization")
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -89,7 +125,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			_, _ = writer.Write([]byte("/v0/management/raw-bytes"))
 		case strings.HasPrefix(path, "/v0/resource/plugins/"):
 			writer.WriteHeader(http.StatusNotFound)
-		case strings.HasPrefix(path, "/v0/management/logger/"):
+		case strings.HasPrefix(path, "/v0/management/logger/") || strings.HasPrefix(path, "/v0/management/plugins/example/"):
 			body, _ := io.ReadAll(request.Body)
 			state.routeCalls = append(state.routeCalls, pluginRouteCall{
 				method: request.Method, path: path, query: request.URL.RawQuery,

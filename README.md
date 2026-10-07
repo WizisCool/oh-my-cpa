@@ -307,7 +307,7 @@ troubleshooting.
 - **Client keys**: create, name and revoke gateway API keys. Names appear in request records and filters.
 - **Model catalog**: pull model lists straight from upstream providers.
 - **Playground**: test any routed model with text and images, streamed multi-turn answers and request diagnostics.
-- **Plugins**: installed plugins, a plugin store, typed settings forms, and the pages plugins register, opened inside the console.
+- **Plugins**: installed plugins, a plugin store, typed settings forms, and trusted plugin pages with native CPA management/model-directory compatibility. See [the trust boundary](docs/operations.md#plugin-pages).
 
 </details>
 
@@ -403,7 +403,7 @@ Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (
 - **Single binary**: the React console is embedded in the Go executable.
 - **Single replica**: SQLite in WAL mode, one process per data directory.
 - **Sub-path native**: served under `/omc` by default (`OMCPA_BASE_PATH`), so it shares a host with CPA.
-- **Allowlisted facade**: the console never proxies raw CPA responses or arbitrary URLs.
+- **Allowlisted facade**: ordinary console APIs project safe DTOs; trusted plugin pages use the bounded native contract. Arbitrary target URLs remain refused.
 
 [`docs/architecture.md`](docs/architecture.md) has the module map, data flows and invariants.
 
