@@ -82,7 +82,13 @@ const toneColor = (palette: ThemePalette, tone: SheetTone): string =>
 async function loadImage(url: string): Promise<HTMLImageElement | null> {
   let objectUrl = '';
   try {
-    const source = url.startsWith('data:') ? url : (objectUrl = URL.createObjectURL(await (await fetch(url)).blob()));
+    let source = url;
+    if (!url.startsWith('data:')) {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      objectUrl = URL.createObjectURL(await response.blob());
+      source = objectUrl;
+    }
     const image = new Image();
     image.decoding = 'async';
     image.src = source;
@@ -135,6 +141,11 @@ export async function paintRequestSheet(
     if (!pending) {
       pending = loadImage(url);
       images.set(url, pending);
+      // A failed fetch is forgotten, so the next export asks again instead of
+      // drawing the neutral box for the rest of the page's life.
+      void pending.then((image) => {
+        if (!image && images.get(url) === pending) images.delete(url);
+      });
     }
     return pending;
   };

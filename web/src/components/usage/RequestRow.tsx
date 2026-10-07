@@ -148,7 +148,13 @@ export const RequestRow = React.memo<RequestRowProps>(
             className="req-select-box"
             checked={isChecked}
             aria-label={t('events.select_row', { id: event.request_id || event.id })}
-            onChange={(e) => onToggleSelect(event.id, (e.nativeEvent as MouseEvent).shiftKey === true)}
+            // A run is a pointer gesture. Space on a focused box arrives as a click
+            // too, and whether that click reports Shift differs by browser, so a
+            // keyboard toggle (detail 0) always picks the one row.
+            onChange={(e) => {
+              const click = e.nativeEvent as MouseEvent;
+              onToggleSelect(event.id, click.shiftKey === true && click.detail > 0);
+            }}
           />
         </label>
 

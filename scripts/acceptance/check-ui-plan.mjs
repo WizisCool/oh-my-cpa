@@ -109,6 +109,8 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'request-export',
+      'request-facet-marks',
       'request-list-touch',
       'mobile-console',
     ],

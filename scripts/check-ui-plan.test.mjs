@@ -39,7 +39,7 @@ test('the five request-records concerns select only their own scenarios', () => 
   // narrowing has to actually pay off.
   assert.deepEqual(
     planFor('web/src/pages/UsageEventsPage.tsx').sort(),
-    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'request-list-touch', 'search-dev-server', 'mobile-console'].sort(),
+    ['column-alignment', 'refresh-sequencing', 'request-export', 'request-facet-marks', 'request-list-interactions', 'request-list-touch', 'search-dev-server', 'mobile-console'].sort(),
   );
 });
 
