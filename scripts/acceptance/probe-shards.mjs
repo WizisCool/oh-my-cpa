@@ -13,59 +13,12 @@
  */
 
 /**
- * Seconds per scenario, as measured by a full `verify:probes` run. Only the balance
- * depends on these: a stale or missing weight moves a scenario to another shard, it
- * never drops one. A weight for a scenario that no longer exists fails the self-test.
+ * Historical scenario medians and provisional split weights are recorded with their
+ * provenance in the snapshot. They affect balance only: stale or missing weights
+ * never drop a scenario. A weight for a retired scenario fails the self-test.
  */
-export const PROBE_WEIGHTS = {
-  'mobile-console': 47,
-  agent: 11,
-  'agent-question': 5,
-  'agent-live': 5,
-  'agent-views': 4,
-  'agent-failure': 4,
-  'agent-stream': 4,
-  'agent-narrow': 4,
-  playground: 12,
-  'playground-narrow': 5,
-  'omc-settings': 23,
-  'column-alignment': 2,
-  'oauth-management': 46,
-  'icon-picker-stacking': 4,
-  'provider-icon-pick': 4,
-  'provider-model-picker': 5,
-  'dashboard-charts': 3,
-  'provider-rate-marks': 6,
-  'dashboard-chart-motion': 9,
-  'dashboard-rolling-readouts': 6,
-  'dashboard-model-panels': 6,
-  'dashboard-model-panels-states': 6,
-  'dashboard-model-panels-failure': 2,
-  'dashboard-model-panels-empty': 2,
-  'dashboard-heatmap': 13,
-  'dashboard-heatmap-pruned': 2,
-  'dashboard-heatmap-mobile': 3,
-  'dashboard-heatmap-error': 7,
-  'refresh-sequencing': 5,
-  'search-dev-server': 2,
-  'overlay-back': 22,
-  'touch-ergonomics': 16,
-  'phone-lists': 10,
-  'pricing-book': 6,
-  'pricing-request-list': 2,
-  'request-list-interactions': 4,
-  'request-export': 5,
-  'request-facet-marks': 4,
-  'request-list-touch': 10,
-  'scroll-smoothing': 30,
-  'plugin-management': 4,
-  'plugin-management-narrow': 3,
-  'logs-sources': 2,
-  'audit-trail': 1,
-  'audit-trail-narrow': 1,
-  'system-information': 38,
-  'system-information-narrow': 1,
-};
+import snapshot from './probe-weights.json' with { type: 'json' };
+export const PROBE_WEIGHTS = snapshot.weights;
 
 /** What an unmeasured scenario is assumed to cost: about the catalog's median. */
 const DEFAULT_WEIGHT = 5;

@@ -19,6 +19,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { planLogicSuites } from './logic-plan.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
@@ -27,7 +29,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * loader hook is passed to all of them; a suite that does not import application
  * modules pays nothing for it. `test-base-path.mjs` is the one JavaScript suite here.
  */
-const SUITES = [
+const DISCOVERED_SUITES = [
   ...fs.readdirSync(path.join(root, 'scripts'))
     .filter((file) => /^test-.+\.ts$/.test(file))
     .sort()
@@ -39,6 +41,16 @@ const SUITES = [
   { name: 'deploy base path', script: 'scripts/test-base-path.mjs', flags: [] },
 ];
 
+const flags = process.argv.slice(2);
+if (flags.some((flag, index) => flag !== '--files' && flag !== '--plan' && flags[index - 1] !== '--files')) throw new Error('Unknown logic-runner option');
+const filesIndex = flags.indexOf('--files');
+const files = filesIndex < 0 ? undefined : JSON.parse(flags[filesIndex + 1]);
+if (files && (!Array.isArray(files) || !files.every(file => typeof file === 'string'))) throw new Error('--files requires a JSON path array');
+const SUITES = planLogicSuites(files, DISCOVERED_SUITES, root);
+if (flags.includes('--plan')) {
+  console.log(`[logic] selected ${SUITES.length}/${DISCOVERED_SUITES.length} suites`);
+  for (const suite of SUITES) console.log(`  ${suite.script}`);
+} else {
 /** Bounded so a small machine is not asked to schedule every parser at once. */
 // Parsed with Number rather than parseInt so a malformed value falls back to the
 // default instead of being silently truncated: parseInt reads "1workers" and
@@ -115,3 +127,5 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log(`\n[logic] ${SUITES.length} suites passed in ${seconds}s (concurrency ${concurrency})`);
+
+}

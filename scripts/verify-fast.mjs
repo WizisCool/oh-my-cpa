@@ -88,6 +88,7 @@ export async function runFastChecks(argv) {
     console.log(`[fast] changes relative to ${options.base}:`);
     for (const file of files) console.log(`  ${file}`);
     for (const id of selected) console.log(`  [${id}] ${CHECK_COMMANDS[id].label}`);
+    if (selected.includes('logic')) execFileSync(process.execPath, ['scripts/test-logic.mjs', '--files', JSON.stringify(files), '--plan'], {cwd:root, stdio:'inherit'});
     return true;
   }
 
@@ -99,7 +100,7 @@ export async function runFastChecks(argv) {
     selected.map((id) => ({
       label: CHECK_COMMANDS[id].label,
       command: CHECK_COMMANDS[id].command,
-      args: CHECK_COMMANDS[id].args,
+      args: id === 'logic' ? [...CHECK_COMMANDS[id].args, '--files', JSON.stringify(files)] : CHECK_COMMANDS[id].args,
     })),
     { quiet: true },
   );

@@ -75,7 +75,7 @@ verdicts, evidence retention and build/secret prerequisites.
 The two smoke-path checks in `scripts/acceptance/usage-events/requestList.mjs` (no
 console errors and no page errors at the end of the smoke path) run in every mode
 rather than only under `--smoke`. P0 and the full run therefore contain every smoke
-assertion at the same point, which is what lets pull-request CI run P0 alone.
+assertion at the same point, while CI runs the full acceptance suite on every event (ADR 0068).
 
 ## Classes
 

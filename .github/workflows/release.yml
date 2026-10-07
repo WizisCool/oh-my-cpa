@@ -1,7 +1,8 @@
 name: Release
 on:
   push:
-    tags: ['v*']
+    tags:
+      - v*
   workflow_dispatch:
     inputs:
       tag:
@@ -10,15 +11,14 @@ on:
         type: string
 permissions:
   contents: read
-# Serialize releases so a backport cannot race a newer latest pointer.
 concurrency:
   group: docker-hub-release
   queue: max
   cancel-in-progress: false
 jobs:
-  verify:
+  identity:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 5
     outputs:
       tag: ${{ steps.plan.outputs.tag }}
       revision: ${{ steps.plan.outputs.revision }}
@@ -26,20 +26,15 @@ jobs:
       tags: ${{ steps.plan.outputs.version_tags }}
       is_latest: ${{ steps.plan.outputs.is_latest }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.2
-          cache: pnpm
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: 1.27.1
-          cache: true
+          package-manager-cache: false
       - name: Validate release identity and latest policy
         id: plan
         env:
@@ -52,13 +47,261 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           node scripts/release-plan.mjs
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - run: pnpm install --frozen-lockfile
-      - name: Install and probe Chromium
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ needs.identity.outputs.revision }}
+      - name: Verify repository anchors
+        run: |
+          # Assert foundational beta baseline and overhaul roadmap commits remain ancestors of HEAD.
+          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
+          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.1
+          cache: true
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate Actions syntax and expressions
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          pnpm verify:workflow:lint
+      - name: Verify pinned toolchain
+        run: pnpm verify:toolchain:strict
+      - name: Verify static gates
+        run: pnpm verify:static
+      - name: Cache gitleaks
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .tools/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Scan worktree and history
+        run: |
+          pnpm verify:secrets:worktree
+          pnpm verify:secrets:history
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
+    needs: identity
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.1
+          cache: true
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify pinned toolchain
+        run: pnpm verify:toolchain:strict
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Prepare Chromium and build embedded SPA
+        id: prepare
+        run: |
+          set -o pipefail
+          install_log="$(mktemp)"
+          node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
+          install_pid=$!
+          build_status=0
+          pnpm build || build_status=$?
+          go_status=0
+          if [ "${build_status}" -eq 0 ]; then
+            mkdir -p tmp
+            CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
+            seed_build_pid=$!
+            CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
+            go_status=$?
+            wait "${seed_build_pid}" || go_status=$?
+          fi
+          install_status=0
+          wait "${install_pid}" || install_status=$?
+          cat "${install_log}"
+          if [ "${build_status}" -ne 0 ]; then
+            exit "${build_status}"
+          fi
+          if [ "${go_status}" -ne 0 ]; then
+            exit "${go_status}"
+          fi
+          exit "${install_status}"
+      - name: Verify loading boundaries and report bundle growth
+        id: bundle
+        continue-on-error: true
+        env:
+          BUNDLE_BASE_SHA: ${{ needs.identity.outputs.revision }}
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm check:bundle
+      - name: Verify generated state before browser tests
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
+      - name: Verify browser harness fault detection
+        run: pnpm verify:browser:harness
+      - name: Run full built-artifact acceptance on every event
+        env:
+          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
+          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
+        run: pnpm verify:browser
+      - name: Run the demonstration's browser acceptance
+        run: pnpm verify:demo
+      - name: Upload bundle report
+        if: always() && steps.prepare.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-bundle-report
+          path: |
+            tmp/bundle/report.json
+            tmp/bundle/summary.md
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: browser-acceptance-failure
+          path: |
+            tmp/browser-acceptance-failure/
+            tmp/browser-harness-failure/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
+      - name: Require bundle verification success
+        if: always() && steps.prepare.outcome == 'success'
+        env:
+          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
+        run: test "${BUNDLE_OUTCOME}" = success
+    needs: identity
+  probes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 1
+          - 2
+          - 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Install Chromium
         run: node scripts/install-chromium.mjs
-      - name: Verify every release gate
-        run: pnpm verify:full
-      - name: Require clean generated state
-        run: test -z "$(git status --porcelain)"
+      - name: Run the probe shard
+        run: pnpm verify:probes --shard ${{ matrix.shard }}/3
+      - name: Upload probe timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: probe-timings-${{ matrix.shard }}
+          path: tmp/probe-timings/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload probe failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: probe-failure-${{ matrix.shard }}
+          path: tmp/probe-failure/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
+    needs: identity
+  probes-complete:
+    needs: probes
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every probe shard
+        env:
+          PROBES_RESULT: ${{ needs.probes.result }}
+        run: test "${PROBES_RESULT}" = success
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs:
+      - identity
+      - static
+      - browser
+      - probes-complete
+    if: always()
+    outputs:
+      tag: ${{ needs.identity.outputs.tag }}
+      revision: ${{ needs.identity.outputs.revision }}
+      image: ${{ needs.identity.outputs.image }}
+      tags: ${{ needs.identity.outputs.tags }}
+      is_latest: ${{ needs.identity.outputs.is_latest }}
+    steps:
+      - name: Require all release verification
+        env:
+          IDENTITY: ${{ needs.identity.result }}
+          STATIC: ${{ needs.static.result }}
+          BROWSER: ${{ needs.browser.result }}
+          PROBES: ${{ needs.probes-complete.result }}
+        run: |-
+          test "$IDENTITY" = success
+          test "$STATIC" = success
+          test "$BROWSER" = success
+          test "$PROBES" = success
   publish:
     needs: verify
     runs-on: ubuntu-24.04
@@ -66,16 +309,22 @@ jobs:
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          ref: ${{ needs.verify.outputs.tag }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          ref: ${{ needs.verify.outputs.revision }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.2
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - name: Build native acceptance image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           platforms: linux/amd64
@@ -91,13 +340,19 @@ jobs:
           RELEASE_TAG: ${{ needs.verify.outputs.tag }}
         run: node scripts/docker-smoke.mjs oh-my-cpa:release-test
       - name: Sign in to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           username: wiziscool
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Recheck tag at publication boundary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
       - name: Build and push multi-platform release
         id: image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -115,18 +370,24 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           ref: ${{ needs.verify.outputs.revision }}
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
         with:
           cache: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.2
           package-manager-cache: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.27.1
           cache: false
@@ -141,7 +402,7 @@ jobs:
         run: node scripts/native-release-smoke.mjs
       - name: Require clean generated state
         run: test -z "$(git status --porcelain)"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-release
           path: tmp/native-release/*
@@ -149,23 +410,38 @@ jobs:
           retention-days: 7
           compression-level: 0
   release:
-    needs: [verify, publish, native]
+    needs:
+      - verify
+      - publish
+      - native
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          ref: ${{ needs.verify.outputs.tag }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          ref: ${{ needs.verify.outputs.revision }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: native-release
           path: tmp/native-release
+      - name: Recheck tag at publication boundary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
       - name: Publish installation assets and release notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,6 +449,7 @@ jobs:
           RELEASE_IMAGE: ${{ needs.verify.outputs.image }}
           RELEASE_DIGEST: ${{ needs.publish.outputs.digest }}
           RELEASE_INDEX: /tmp/omc-releases.json
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
         run: |
           node scripts/native-release.mjs --verify
           # Recompute at publication: retries can run after a newer release completed.
@@ -189,19 +466,29 @@ jobs:
           # Attachments must finish before a new release becomes visible to update checks.
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           IS_LATEST=$(node scripts/release-plan.mjs | jq -r .isLatest)
+          node scripts/release-identity.mjs
           gh release edit "$RELEASE_TAG" --draft=false --latest="$IS_LATEST"
   promote:
-    needs: [verify, publish, release]
+    needs:
+      - verify
+      - publish
+      - release
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          ref: ${{ needs.verify.outputs.tag }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          ref: ${{ needs.verify.outputs.revision }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.2
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
       - name: Recheck newest stable release before moving Docker latest
         id: plan
         env:
@@ -212,13 +499,20 @@ jobs:
         run: |
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           node scripts/release-plan.mjs
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         if: steps.plan.outputs.is_latest == 'true'
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         if: steps.plan.outputs.is_latest == 'true'
         with:
           username: wiziscool
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Recheck tag at publication boundary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+        run: node scripts/release-identity.mjs
+        if: steps.plan.outputs.is_latest == 'true'
       - name: Promote the verified immutable digest
         if: steps.plan.outputs.is_latest == 'true'
         env:

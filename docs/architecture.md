@@ -1396,10 +1396,11 @@ case. The arrival count is resolved before the list scan, and the list result se
 is closed before the function returns. With one SQLite connection, issuing the
 count after the list could otherwise keep both statements on the same WAL
 snapshot, so a record committed between polls would remain invisible until a
-later transaction happened to replace it. The acceptance fixture covers the same
-refreshing-window path without a second process writing after the app opens the
-database: it seeds one future-dated row before startup, and a later poll admits
-that row once the sliding window reaches it.
+later transaction happened to replace it. Built acceptance precommits one dedicated
+arrival already inside the server window. Its fixture availability gate withholds
+only that row until the reader enters Hold, preserving the baseline with real API
+reads, then forwards subsequent responses unchanged. The poll therefore exercises
+the real ID-based count without depending on startup duration or a second writer.
 
 Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and the
 axis of every rollup and chart, so the list, the window and the charts all agree on
@@ -2206,14 +2207,14 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Mechanical repository gates | `pnpm test:self` | Every `*.test.mjs` under `scripts/` and `deploy/cloudflare/`, discovered: path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, both planners, the probe shards, the workflow structure and the fixed-wait ratchet. |
 | **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. Like the full probe catalog, this runs `React.StrictMode` double-invocation checks that a production build cannot expose. |
 | Cross-stack smoke | `pnpm verify:browser:smoke` | A local quick check of the thin path: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
-| Cross-stack P0 gates | `pnpm verify:browser:p0` | The pull-request gate: the smoke path and its checks, then the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
+| Focused local cross-stack acceptance | `pnpm verify:browser:p0` | An optional focused local lane: the smoke path and its checks, then the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, and the unified OAuth management workspace. |
 | Browser-only probes | `pnpm verify:probes` | The full scenario catalog on the Vite dev server with mocked routes; this is not built-artifact coverage. CI runs it as three weight-balanced shards (`--shard i/3`) on every pull request and master push. Complete local catalogs reuse that partition in sequential batches through `scripts/acceptance/probe-batches.mjs`, retaining the watchdog, all verdicts and failure artifacts. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
 | Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler served in-process, or an explicit deployment URL. Every route must complete its initial reads and render its page heading and content, with no API, transport or script errors. |
 | Go demo smoke | `pnpm verify:demo:go` | Separate coverage of the binary's demo mode: isolated settings, read-only refusals and permitted non-durable edits. This opt-in command is not part of `verify:full`. |
 
-Pull requests run the P0 gates, which contain the smoke path; master runs the whole
-cross-stack acceptance. Both then run the demo acceptance. The probe catalog is its
+Pull requests and master run the whole cross-stack acceptance and the real-browser
+harness fault-injection gate (ADR 0068). Both then run the demo acceptance. The probe catalog is its
 own sharded job on both events, behind one aggregate `probes` check (ADR 0032).
 
 ### 12.0 Development and built-artifact coverage
@@ -2242,7 +2243,7 @@ waiting, and a gate that costs minutes gets routed around:
 | --- | --- | --- |
 | Development iteration | `pnpm test:fast`, plus `pnpm check:ui` when the change touches interaction, layout or a browser lifecycle | Scope-dependent; use printed check and scenario timings |
 | Feature complete, and before declaring done or pushing | `pnpm verify` and `pnpm check:ui` | Tens of seconds of static gates plus the scenarios the change reaches |
-| Pull request | CI: static gates, P0 acceptance, the full probe catalog in shards, demo | Runs beside the author; its checks gate the merge |
+| Pull request | CI: static gates, full built acceptance, the full probe catalog in shards, demo | Runs beside the author; its checks gate the merge |
 
 `pnpm verify:full` runs everything CI runs, locally. It is for changes to the build,
 the embedded distribution, the browser harness or the workflow, and for reproducing a
@@ -2945,3 +2946,21 @@ one pure module, `web/src/types/modelSquareLedger.ts`, and rests on one contract
 A change to the price book's response, the facet's shape or cap, or the request list's
 filter names is answered in that module and `scripts/test-model-square-ledger.ts`; the page
 only renders a `ModelLedgerEntry`.
+
+### CI and release verification ownership (ADR 0068)
+
+Release identity precedes three parallel read-only verification lanes: static,
+full built-browser/demo and the whole probe catalog in three shards. The final
+`verify` aggregate rejects failed, cancelled or skipped prerequisites. Every
+publication consumer checks out the verified revision, and tag-to-commit agreement
+is resolved again at external publication boundaries. Native dependencies and build
+outputs remain fresh; this does not change ADR 0066's cache trust boundary.
+
+Local affected logic selection is conservative and development-only; final static
+verification retains automatic full-suite discovery. Browser contexts reject
+undeclared endpoints, unexpected runtime errors and outbound HTTP/WebSocket traffic.
+Vite and BrowserServer lifetimes are explicitly owned and bounded. Structured probe
+timings support reviewed deterministic shard weights rather than runtime selection.
+The independent weekly maintenance workflow owns targeted race/fuzz/advisory checks
+and Windows/macOS runtime evidence without adding network-dependent audits to PR
+gates. See `docs/testing.md` for budgets, failure ownership and registration.

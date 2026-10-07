@@ -21,7 +21,7 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | Server behaviour: handlers, DTO allowlists, redaction, auth, repository queries, migrations, write serialisation, background loops | Go test | `*_test.go` beside the package | `go test ./...` |
 | A frontend decision that is a pure function: URL/state derivation, formatting, poll and debounce policy, sorting, validation | Logic suite (`node:test`) | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
 | Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, request ordering under a held response, StrictMode double invocation | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
-| The built binary, embedded SPA, fake CPA and seeded SQLite together: sign-in, route rendering, secret boundaries, cross-stack writes | Cross-stack acceptance | the domain module under `scripts/acceptance/` | `pnpm verify:browser` (P0 subset on pull requests) |
+| The built binary, embedded SPA, fake CPA and seeded SQLite together: sign-in, route rendering, secret boundaries, cross-stack writes | Cross-stack acceptance | the domain module under `scripts/acceptance/` | `pnpm verify:browser` (full suite on pull requests and master) |
 | The public demonstration | Demo acceptance | route table in `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
 | The Go binary's own demonstration mode: isolated settings, read-only refusals, permitted non-durable edits | Go demo smoke | `scripts/demo-smoke.mjs` | `pnpm verify:demo:go` (opt-in; not part of CI or `verify:full`) |
 | A repository script or gate itself | Script self-test (`node:test`) | `scripts/<name>.test.mjs` or `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
@@ -83,9 +83,8 @@ replace those tests.
 isolated containers/volumes, waits on health-status events, and tests the actual image's
 non-root/read-only runtime, SQLite writes, normalized base paths, sign-in, embedded SPA
 and running-version endpoints. It is not part of `test:fast` or ordinary static gates.
-Release verification provisions and launch-probes Chromium with
-`scripts/install-chromium.mjs`, then runs `pnpm verify:full` before this additional
-container check. Dependency installation alone does not install the browser binary.
+Release identity is resolved first, then static, full built-browser/demo and three probe shards run on the exact revision in parallel. The `verify` aggregate requires every result to succeed before native packaging or container publication. The browser lanes provision and launch-probe Chromium with
+`scripts/install-chromium.mjs`; local parity is `pnpm verify:full`. Dependency installation alone does not install the browser binary.
 
 Native release planning, archive payloads, manifest integrity and workflow ordering
 are repository self-tests in `scripts/native-release.test.mjs` and
@@ -102,6 +101,65 @@ rechecks completeness and SHA-256 integrity after the pinned artifact transfer;
 workflow regressions reject shared pnpm/Go caches and direct cache steps in the native publication job;
 new releases remain drafts until all attachments upload and latest policy is rechecked.
 
+External reusable workflow job references, like action steps, must use immutable
+commit SHAs; same-checkout reusable workflow paths use the verified local revision.
+Timing-evidence uploads cannot soften failure with `continue-on-error`. Negative
+workflow mutations pin both boundaries.
+
+### Browser harness fault detection and ownership
+
+`scripts/acceptance/browser-guard.mjs` records page exceptions, console errors,
+transport failures and denied network origins for every page in a context. Probe
+success requires an empty unexpected-problem ledger as well as passing assertions.
+Unmatched API paths and wrong methods return 501 and record a fixture fault;
+URL-only fixture matchers describe GET reads. Write fixtures declare their method.
+Explicit failed responses use `fulfillFixture` or `abortFixture`, authorizing only
+the exact resource URL and a bounded error count. Injected render failures declare
+their own marker and React error-boundary diagnostics locally. Navigation cancellation
+(`net::ERR_ABORTED`) is not an unavailable-resource verdict.
+
+Allowed origins include scheme, host and port. HTTP and WebSocket interception
+covers popups, and service workers are blocked. Later fixture routes must fulfill or
+fallback, never continue past the guard. `pnpm verify:browser:harness` executes real
+negative scenarios through `runProbes`: unrelated passing assertions must not erase
+runtime, method, unknown-route, outbound HTTP or socket faults. It is a built-browser
+CI and full-local gate, not a script self-test; Chromium never enters `test:fast`.
+
+The probe runner owns Vite through an unpredictable readiness header, rejects port
+collisions, uses a fresh context per scenario, and retains a 120-second scenario
+budget and the 480-second batch watchdog. `scripts/acceptance/lifecycle.mjs` bounds
+shutdown and escalates owned process termination. Chromium is launched through
+BrowserServer so a stuck close has a real child process to terminate. Parallel local
+checks spool output under `tmp/check-output`, print verdicts on completion, record
+structured timings under `tmp/check-timings`, and terminate their owned process
+groups on cancellation.
+
+### Maintenance verification
+
+`.github/workflows/maintenance.yml` runs weekly and on manual dispatch with read-only
+permissions. These diagnostic lanes do not replace or delay the hermetic PR gates:
+
+- `pnpm verify:race`: full usage/CPA/Agent/MCP bridge packages with bounded package
+  concurrency; repository/API concurrency, gate, deadline, cancellation, browser-run
+  and shutdown contracts selected explicitly. Full ordinary Go tests remain mandatory.
+  The extra full repository/API race sweep exceeded the three-minute package budget
+  on the development host; the focused lane has self-tests pinning critical ownership.
+- `pnpm verify:fuzz`: three independent 10-second, two-worker budgets for URL
+  redaction, JSON secret redaction and pricing parity. Seed tests still run normally.
+- `pnpm verify:advisories`: pnpm audit and pinned govulncheck, preserving both exit
+  verdicts and logs. `scripts/advisory-triage.json` records exact identifiers, owners,
+  rationale and review deadlines; these records never suppress audit failures.
+  Fix reachable findings promptly; unrecognized findings and expired reviews require
+  maintainer investigation. Registry/database availability is not a hermetic-test input.
+- macOS and Windows host-native smoke builds the SPA before a CGO-free binary and
+  checks SQLite, nested paths, embedded assets and authentication with
+  `scripts/native-runtime-smoke.mjs`. Foreign cross-compilation alone proves none of
+  those runtime claims. Native publication still refuses shared caches.
+
+Maintenance logs are retained for 30 days. A failing lane belongs to the repository
+maintainer: distinguish an assertion/race, scanner infrastructure failure and a
+reported advisory, preserve the evidence, then rerun only that lane after remediation.
+
 ## 2. Registering a new test
 
 Discovery is automatic wherever it can be, so a test cannot be written and then never
@@ -112,18 +170,84 @@ run:
 | Go test | none |
 | Logic suite `scripts/test-*.ts` | none: `scripts/test-logic.mjs` discovers the files |
 | Script self-test `*.test.mjs` | none: `scripts/test-self.mjs` discovers them |
-| Probe scenario | an entry in `scripts/acceptance/scenarios.mjs` (unique `id`). Optionally its measured seconds in `PROBE_WEIGHTS` in `scripts/acceptance/probe-shards.mjs`, which only affects shard balance |
+| Probe scenario | an entry in `scripts/acceptance/scenarios.mjs` (unique `id`). Optionally its measured seconds in `scripts/acceptance/probe-weights.json`, which only affects shard balance |
 | New console page | a rule in `SCENARIO_PATHS` in `scripts/acceptance/check-ui-plan.mjs` naming the scenarios that load its route, or `scenarios: []` if none does. `scripts/ui-impact.test.mjs` fails until the rule exists |
 | New console read or response shape | `pnpm demo:generate` (pins `TZ=UTC` for deterministic deployment metadata), review the diff, commit the dataset (see `docs/ops/cloudflare-demo.md`) |
 
 ## 3. What to run, and when
+
+The local fast lane passes changed files to `scripts/logic-plan.mjs`, which follows
+relative runtime imports into automatically discovered suites. Unknown/unowned
+changes and infrastructure/dependency changes widen to the full suite. Suites with
+computed imports, unresolved aliases or filesystem discovery are always included;
+there is no hand-maintained suite registration map. `pnpm test:logic --plan --files
+'["web/src/utils/maskKey.ts"]'` inspects a selection. The default command and every
+final/CI static run still execute all suites.
+
+Watchdog and normal teardown share one owned cleanup promise. Shutdown closes scenario
+admission immediately, so a context disposed by the watchdog cannot start another
+scenario against an undefined browser. Cleanup failures remain failures. Failure-diagnostic capture is inside the owned
+cleanup boundary, so an artifact write cannot bypass process shutdown. Malformed
+timing JSON is preserved as an invalid artifact and fails the evidence verdict,
+while subsequent scenarios continue recording their timings.
+
+Probe samples under `tmp/probe-timings/<port>.json` include scenario ID, verdict, elapsed time
+and named steps. Failure evidence is isolated under `tmp/probe-failure/<port>/`; the negative browser harness has its own `tmp/browser-harness-failure/` and `tmp/browser-harness-timings/` namespaces. CI uploads probe samples even after failure. `pnpm report:probe-timings`
+calculates candidate median/p95 weights from compatible successful samples; it does
+not edit the snapshot. Review sample coverage and platform compatibility before
+updating `scripts/acceptance/probe-weights.json`. Provisional split scenarios are
+explicitly marked; missing weights affect balance, never discovery or coverage.
+
+
+Local full verification completes `pnpm build` before starting any Go static lane.
+Go embedding enumerates paths, so pruning stale distribution assets concurrently
+with compilation can invalidate already-discovered files. Independent CI jobs have
+separate checkouts; this local ownership rule does not serialize those jobs. The
+local runner also executes harness, built browser, probes and demo consecutively,
+retaining every verdict after a failure. Their frame/readiness assertions must not
+compete with another Chromium lane on the same host; static checks stay parallel.
+
+Built live-tail acceptance seeds its dedicated arrival inside the server's window.
+`scripts/acceptance/usage-events/arrival-fixture.mjs` withholds only that exact request
+from real list responses before Hold, fetching an extra real row to preserve the
+baseline page. Once the reader's window is stable it releases subsequent reads
+unchanged. The real API still owns ordering and ID-based arrival counts; the fixture
+controls availability rather than relying on elapsed startup time. Node tests pin
+exact endpoint scope, row/count preservation and release. Built acceptance requires
+the released request ID, not merely a newest-first timestamp, at the first rendered row. No second database writer
+or application clock override is involved.
+
+Independent worktrees can explicitly select a free port with `pnpm verify:probes --port 5183`
+or `pnpm verify:full --probe-port 5183`. Defaults remain 5180 for the catalog and 5181
+for affected UI checks. The runner never silently selects another port or trusts an
+existing listener; changing the explicit port does not alter coverage or verdicts.
+
+Demo packaging self-tests call `stageDemo` from `scripts/build-demo.mjs` with private
+temporary source/stage directories. They exercise HTML/module/font rewrites, runtime
+configuration, missing-input failures and concurrent staging without deleting the
+runtime demo assets or skipping when no product build exists. `verify:demo` retains
+built-console deep-route coverage.
+
+`pnpm benchmark:native` is an opt-in local compilation experiment, outside all gates.
+It compares serial and bounded two-worker execution of the same eight CGO-free native
+targets, checking binary build metadata. `--linux-only` narrows the experiment (not
+release coverage), and `--warm` primes every measured target before timing both cases. Default cases use
+fresh per-case build caches with existing module downloads. Reports under
+`tmp/build-benchmarks/` record source revision, dirty state, platform, CPU count,
+toolchain, cache conditions, priming and individual target verdicts. Both cases build
+from the same immutable snapshot of `cmd/`, `internal/`, `migrations/`, `go.mod` and
+`go.sum`, including embedded SPA assets. Snapshot consistency is checked before
+compilation, and failures retain their report and per-target diagnostics. Cancellation
+stops target admission, joins owned build process groups and records interrupted
+results before removing the private snapshot. Compare equivalent cache
+conditions before interpreting timings; these binaries are not publication inputs.
 
 | Moment | Command | What it does |
 | --- | --- | --- |
 | While editing | `pnpm test:fast` | Only the static checks the changed files need; the frontend type check is incremental. `--plan` prints the selection, `--base <ref>` includes committed changes |
 | While editing UI | `pnpm check:ui` | Only the probe scenarios the change can reach, on the dev server. `--plan` explains the selection; `--scenario <id>` runs one |
 | A feature is complete, and before pushing | `pnpm verify` and `pnpm check:ui` | The full static gates, the worktree secret scan and the affected browser scenarios |
-| Pull request (CI) | automatic | Static gates, secret scans, build, loading boundaries and bundle reports, the P0 cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
+| Pull request (CI) | automatic | Static gates, secret scans, build, loading boundaries and bundle reports, the full cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
 | Optional locally | `pnpm verify:full` | Everything CI runs, in one local command. Use it for changes to the build, the browser harness or the workflow, or to reproduce a CI failure |
 | Opt-in | `pnpm verify:demo:go` | The Go binary's own demo mode: a browser against a locally started binary with its own route assertions. It generates the dataset, so it is not part of CI |
 
@@ -222,7 +346,7 @@ and identity remain covered by the workspace and plugin-logo logic suites.
   warnings and navigations. A scenario that threw also prints the last of those in the job
   log. Reproduce with `pnpm check:ui --scenario <id>`.
 - Cross-stack acceptance uploads `tmp/browser-acceptance-failure/`. Reproduce with
-  `pnpm build` and `pnpm verify:browser` (or `verify:browser:p0`).
+  `pnpm build` and `pnpm verify:browser`.
 - Rerun only the failed command. A failure that passes on rerun is a flake to fix at
   its assertion, never a reason to add a retry or lengthen a wait.
 
@@ -546,7 +670,7 @@ consistent across dedicated reads, JSON configuration and runtime/stored YAML sn
 It also owns global exact, wildcard and catch-all OAuth exclusions before alias mapping,
 independent credential exclusions, unaffected static catalogs and API-key routes, and
 restoration after clearing rules.
-The existing `oauth-management` probe owns provider tab names/artwork in the picker,
+The `oauth-model-rules` probe owns provider tab names/artwork in the picker,
 independent section drafts, section-only saves, trailing-edge close placement, native Back guards and 1440/375/320px
 Drawer geometry. Built auth-file acceptance owns both sections' verified
 save/close/reopen/clear paths against fake CPA. The generated Worker dataset includes
@@ -602,3 +726,13 @@ unexpected protected credentials as negative cases.
 No additional runner or registration list is required. Changes to this built harness require
 `pnpm verify:full`; live plugin smoke should use isolated synthetic configuration and avoid
 billable evaluation calls.
+
+### Independently isolated browser scenarios
+
+The OAuth catalog separates workspace/layout, Vertex file lifecycle, model rules,
+token capacity, authorization completion, scale/batched cancellation and plugin
+connections into fresh contexts. System-information separates its primary surface,
+version-feedback flow and health-anomaly states. Extracted scenarios retain the
+original assertions and establish their own navigation/fixture preconditions; page
+impact rules and negative planner cases select every affected subscenario. Timings
+are per subscenario so slow flows can be balanced without shared state.

@@ -1,7 +1,10 @@
+import { abortFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 
 export function playgroundFixtures() {
   return [
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/usage/ingest-status'), () => ({ enabled:true, healthy:true, collector:{mode:'http_pull',captured:0,coverage_gaps:0},stats:{pending:0} })],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/usage/facets'), () => ({window:{from:0,to:Date.now(),bucket_ms:60_000}, facets:[]})],
     [url => url.pathname.endsWith('/runs/active'), () => ({ run: null })],
     [url => url.pathname.endsWith('/management/api-keys'), () => ({ keys: [{ index: 0, key: 'fixture…mask', usage_fingerprint: 'playground-identity', alias: 'Test key', alias_version: 1, length: 20, fingerprint: 'legacy-identity' }], total: 1 })],
     [url => url.pathname.endsWith('/playground/models'), () => ({ models: [{ id: 'vision-alias', call_point: 'vision-alias', vision: 'unknown' }, { id: 'text-only', call_point: 'text-only', vision: 'unknown' }] })],
@@ -281,7 +284,7 @@ async function verifyPlaygroundRecovery({ base, page, check }) {
     if (route.request().method() === 'POST') { cancelCount++; await route.fulfill({ json: { is_cancelled: true } }); return; }
     if (route.request().url().endsWith('/active')) { await route.fulfill({ json: { run: active } }); return; }
     subscriptions++;
-    if (subscriptions === 1) { await route.abort('internetdisconnected'); return; }
+    if (subscriptions === 1) { await abortFixture(route, 'internetdisconnected'); return; }
     await completion;
     active = { ...active, is_running: false };
     try { await route.fulfill({ contentType: 'text/event-stream', body: frame('meta', { started_at_ms: active.started_at_ms }) + frame('delta', { content: 'Recovered playground answer' }) + frame('done', { duration_ms: 1200, finish_reason: 'stop' }) }); } catch { /* The old subscriber was closed by reload. */ }

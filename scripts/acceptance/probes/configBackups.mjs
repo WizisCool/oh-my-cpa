@@ -42,12 +42,12 @@ export function configBackupsFixtures(log) {
     };
   }]);
   return [
-    [(url) => /\/management\/config\/backups\/\d+\/restore$/.test(url.pathname), (url, method) => {
+    [(url, method) => method === 'POST' && /\/management\/config\/backups\/\d+\/restore$/.test(url.pathname), (url, method) => {
       log.push({ kind: 'restore', method, path: url.pathname });
       isRestored = true;
       return { status: 'ok', revision: 'rev-restored' };
     }],
-    [(url) => url.pathname.endsWith('/management/config/backups/settings'), (url, method, request) => {
+    [(url, method) => method === 'PUT' && url.pathname.endsWith('/management/config/backups/settings'), (url, method, request) => {
       const body = JSON.parse(request.postData() ?? '{}');
       log.push({ kind: 'settings', method, body });
       return { settings: { ...BACKUPS.settings, retention: body.retention } };

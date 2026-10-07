@@ -1,3 +1,4 @@
+import { fulfillFixture, abortFixture } from '../browser-guard.mjs';
 import { until, settleLayout } from '../harness.mjs';
 import { sleep } from '../probe.mjs';
 
@@ -11,7 +12,7 @@ import { sleep } from '../probe.mjs';
  * per-component test: the Chinese option is present but disabled, a stored Chinese choice cannot
  * leak into an English reading, and the choice governs the dashboard rather than only the control.
  */
-export async function omcSettings({ base, page, check, context }) {
+export async function omcSettings({ base, page, check, context, expectProblem }) {
   const writes = [];
   const preferences = {};
   let shouldRejectTpsWrite = false;
@@ -22,7 +23,7 @@ export async function omcSettings({ base, page, check, context }) {
     if (route.request().method() === 'PUT') {
       const key = new URL(route.request().url()).pathname.split('/').pop();
       if (key === 'omc_tps_calculation_mode' && shouldRejectTpsWrite) {
-        return route.fulfill({ status: 503, json: { error: 'write_busy' } });
+        return fulfillFixture(route, { status: 503, json: { error: 'write_busy' } });
       }
       writes.push({ key, body: route.request().postData() });
       preferences[key] = JSON.parse(route.request().postData());
@@ -147,7 +148,9 @@ export async function omcSettings({ base, page, check, context }) {
       && (await repositoryLink.getAttribute('rel') ?? '').split(/\s+/).includes('noreferrer')
       && await repositoryLink.locator('svg.anticon-github').count() === 1,
   );
-  // Intercept the destination so the navigation claim never depends on GitHub availability.
+  // The exact, once-only popup is synthetic: it proves navigation without allowing
+  // an undeclared destination or contacting the external service.
+  expectProblem({ kind: 'outbound', url: /^https:\/\/github\.com\/WizisCool\/oh-my-cpa$/, method: 'GET', count: 1 });
   await context.route(repositoryURL, (route) => route.fulfill({ contentType: 'text/html', body: '<title>Repository</title>' }));
   const consoleURL = page.url();
   const [repositoryPage] = await Promise.all([page.waitForEvent('popup'), repositoryLink.click()]);
@@ -877,7 +880,7 @@ export async function omcSettings({ base, page, check, context }) {
   const collectPageError = (error) => pageErrors.push(String(error.message));
   page.on('pageerror', collectPageError);
   const abortCatalogChunk = async () => {
-    await page.route('**/*', (route) => (isCatalogChunk(new URL(route.request().url())) ? route.abort() : route.fallback()));
+    await page.route('**/*', (route) => (isCatalogChunk(new URL(route.request().url())) ? abortFixture(route, ) : route.fallback()));
   };
   const languageState = () => page.evaluate(() => ({
     lang: document.documentElement.lang,

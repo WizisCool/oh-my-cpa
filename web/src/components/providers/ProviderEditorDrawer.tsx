@@ -788,7 +788,7 @@ export function ProviderEditorDrawer({
                                 suffix={
                                   endpointModels.length > 0 ? (
                                     <DownOutlined className={styles['model-suffix']} />
-                                  ) : undefined
+                                  ) : <span />
                                 }
                               />
                             </AutoComplete>

@@ -55,7 +55,7 @@ To keep feedback fast and reliable, verification in Oh My CPA is structured into
 | **Development iteration** | `pnpm test:fast` | Run frequently after editing code. It runs only the checks affected by your current working tree changes. Use `--plan` to inspect scope and `--base <ref>` to include committed changes. |
 | **UI fast-path** | `pnpm check:ui` | Run when modifying frontend components, layout, or browser lifecycles (runs against dev server + mock APIs without full build). |
 | **Feature completion and before pushing** | `pnpm verify` and `pnpm check:ui` | Toolchain verification, Go vet/tests, fresh frontend type checking, pure logic suites, antd lint, i18n validation and secret scanning, plus the browser scenarios your change can reach. |
-| **Pull request (CI)** | automatic | Production build and budgets, P0 cross-stack acceptance, the whole dev-server probe catalog in three shards, and demo acceptance. |
+| **Pull request (CI)** | automatic | Production build and budgets, full cross-stack acceptance, the whole dev-server probe catalog in three shards, and demo acceptance. |
 | **Full local gate** | `pnpm verify:full` | Everything CI runs, locally. Use it for changes to the build, the embedded distribution, the browser harness or the workflow, and to reproduce a CI failure. |
 
 Do not rerun a gate after each edit. When a check fails, rerun that check first. Both

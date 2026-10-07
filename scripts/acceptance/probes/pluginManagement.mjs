@@ -99,7 +99,8 @@ const SETTINGS = {
 export function pluginManagementFixtures(writes) {
   const installedPlugins = structuredClone(PLUGINS);
   return [
-    [(url) => url.pathname.endsWith('/management/plugins/settings'), (url, method, request) => {
+    [(url) => url.pathname.endsWith('/plugin-host/v0/resource/plugins/request-logger/console'), () => ({ contentType: 'text/html', body: '<!doctype html><html><body>Probe plugin console</body></html>' })],
+    [(url, method) => ['GET', 'PUT'].includes(method) && url.pathname.endsWith('/management/plugins/settings'), (url, method, request) => {
       if (method === 'PUT') {
         const body = JSON.parse(request.postData() ?? '{}');
         writes.push({ kind: 'settings', body });
@@ -107,7 +108,7 @@ export function pluginManagementFixtures(writes) {
       }
       return SETTINGS;
     }],
-    [(url) => /\/management\/plugins\/[^/]+\/config$/.test(url.pathname), (url, method, request) => {
+    [(url, method) => ['GET', 'PUT'].includes(method) && /\/management\/plugins\/[^/]+\/config$/.test(url.pathname), (url, method, request) => {
       if (method === 'PUT') {
         writes.push({ kind: 'config', path: url.pathname, body: JSON.parse(request.postData() ?? '{}') });
         return { status: 'ok' };
@@ -116,12 +117,12 @@ export function pluginManagementFixtures(writes) {
         ? { id: 'request-logger', config: { enabled: true, level: 'info', 'sample-rate': 1, 'redact-headers': ['authorization'], legacy: 'kept', store: { name: 'Request Logger', version: '1.0.0', author: 'router-for-me', description: 'Installed from the official registry.', repository: 'router-for-me/request-logger' } } }
         : { id: 'quota-notifier', config: {} };
     }],
-    [(url) => /\/management\/plugin-store\/[^/]+\/install$/.test(url.pathname), (url, method, request) => {
+    [(url, method) => method === 'POST' && /\/management\/plugin-store\/[^/]+\/install$/.test(url.pathname), (url, method, request) => {
       writes.push({ kind: 'install', path: url.pathname, body: JSON.parse(request.postData() ?? '{}') });
       return { status: 'ok', id: 'team-router', version: '0.3.0', plugins_enabled: true, restart_required: false };
     }],
     [(url) => url.pathname.endsWith('/management/plugin-store'), () => STORE],
-    [(url) => /\/management\/plugins\/[^/]+$/.test(url.pathname), (url, method) => {
+    [(url, method) => method === 'DELETE' && /\/management\/plugins\/[^/]+$/.test(url.pathname), (url, method) => {
       if (method !== 'DELETE') throw new Error(`Unexpected plugin operation: ${method}`);
       const pluginId = decodeURIComponent(url.pathname.split('/').pop());
       writes.push({ kind: 'delete', path: url.pathname });

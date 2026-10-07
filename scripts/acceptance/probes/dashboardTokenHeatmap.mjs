@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 /**
  * Probes for the dashboard's token-activity grid: its day geometry and ramp, the
  * phone layout, the failure state of one panel, and the grid over pruned history.
@@ -1154,8 +1155,8 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   })();
   let failNext = false;
   await context.route('**/omc/api/**/dashboard/token-heatmap**', async (route) => {
-    if (failNext) return route.fulfill({ status: 503, json: { error: 'database is unavailable' } });
-    return route.fulfill({ status: 200, json: chartTokenHeatmap });
+    if (failNext) return fulfillFixture(route, { status: 503, json: { error: 'database is unavailable' } });
+    return fulfillFixture(route, { status: 200, json: chartTokenHeatmap });
   });
   await page2.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page2.locator('.heatmap-grid').waitFor({ timeout: 20_000 });

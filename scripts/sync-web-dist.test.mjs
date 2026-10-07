@@ -2,10 +2,9 @@
  * Tests for the embedded-distribution sync.
  *
  * The property being protected is not "the files end up copied". It is that a
- * *concurrent reader* never observes an incomplete bundle: `pnpm build` and the Go
- * gates run at the same time in `verify:full`, and the Go package embeds this
- * directory, so a missing or half-written file is a compile that embeds a bundle
- * referencing assets that are not there.
+ * HTML reader sees assets before their entry document. Go embeds the whole
+ * directory by path, so `verify:full` additionally finishes the SPA build before
+ * static Go gates: file pruning can invalidate an already-enumerated path.
  *
  * The old implementation deleted the target and copied it back, which leaves exactly
  * that window. These tests drive the real script against a fixture and assert the

@@ -23,21 +23,21 @@ import { fileURLToPath } from 'node:url';
 import { createProbeChecker } from './acceptance/probe.mjs';
 import { runProbeBatches } from './acceptance/probe-batches.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
-import { parseShard, selectShard } from './acceptance/probe-shards.mjs';
+import { selectShard } from './acceptance/probe-shards.mjs';
+
+import { parseProbeOptions } from './acceptance/probe-options.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// The dev server port is pinned and `strictPort` is on, so a collision fails loudly
-// instead of silently binding elsewhere and testing an unrelated app.
-const PORT = 5180;
+// An explicit port supports independent worktrees; strict ownership still refuses
+// collisions rather than silently binding elsewhere or testing an unrelated app.
+const { port: PORT, shard } = parseProbeOptions(process.argv.slice(2));
 
 const { check, failures } = createProbeChecker();
 
 // Every scenario, or one shard of them, in registry order. The registry supplies the
 // fixtures and the assertions; this file supplies the runner's reporting, so a scenario
 // does not have to know whether it is being run by the release gate or by the fast path.
-const shardFlag = process.argv.indexOf('--shard');
-const shard = shardFlag >= 0 ? parseShard(process.argv[shardFlag + 1]) : undefined;
 const shardIds = shard ? new Set(selectShard(SCENARIOS.map((scenario) => scenario.id), shard)) : undefined;
 const scenarios = SCENARIOS
   .filter((scenario) => !shardIds || shardIds.has(scenario.id))

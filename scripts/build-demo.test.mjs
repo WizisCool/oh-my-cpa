@@ -1,91 +1,61 @@
-import { strict as assert } from 'node:assert';
-import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { stageDemo } from './build-demo.mjs';
 
-const run = promisify(execFile);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BUILD = join(root, 'scripts', 'build-demo.mjs');
-const STAGE = join(root, 'tmp', 'cloudflare-demo', 'assets');
-
-/**
- * These test the packaging step against the real built console, because the two bugs it
- * fixes were both invisible until a browser loaded a deep route.
- *
- * A fetch of the site root proved nothing: the references it rewrites are inside a
- * JavaScript chunk and a stylesheet, and they only resolve wrongly when the document is
- * not at the root. So the assertions are about the staged FILES - which is where the
- * mistake lives - rather than about a rendered page.
- */
-
-/** Whether the product's build output is present to stage from. */
-function hasBuiltConsole() {
-  return existsSync(join(root, 'internal', 'web', 'dist', 'assets'));
+async function createFixture(context) {
+  const directory = await mkdtemp(join(tmpdir(), 'omc-demo-stage-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const sourceDirectory = join(directory, 'source');
+  const stageDirectory = join(directory, 'stage');
+  await mkdir(join(sourceDirectory, 'assets'), { recursive: true });
+  await writeFile(join(sourceDirectory, 'index.html'), '<script>window.__OMCPA_CONFIG__={};</script><script src="./assets/app.js"></script><link href="./assets/app.css">');
+  await writeFile(join(sourceDirectory, 'assets/app.js'), 'const icon = `./lobe-icons/${name}-color.svg`;');
+  await writeFile(join(sourceDirectory, 'assets/app.css'), '@font-face{src:url("./body.woff2")}');
+  await writeFile(join(sourceDirectory, '.gitkeep'), '');
+  return { directory, sourceDirectory, stageDirectory };
 }
 
-async function runBuild() {
-  const { stdout } = await run('node', [BUILD], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
-  return stdout;
-}
-
-test('the build rewrites every relative asset reference it stages', async (t) => {
-  if (!hasBuiltConsole()) {
-    // The gate runs after `pnpm build`; skipping keeps this honest rather than failing
-    // for a reason that is not the subject.
-    t.skip('no built console at internal/web/dist/assets; run pnpm build first');
-    return;
-  }
-
-  await runBuild();
-
-  const assets = join(STAGE, 'assets');
-  const files = await readdir(assets);
-  const offenders = [];
-
-  for (const name of files) {
-    if (!name.endsWith('.js') && !name.endsWith('.css')) continue;
-    const source = await readFile(join(assets, name), 'utf8');
-    // The convention that breaks a deep link: a path beginning `./` in a module or a
-    // stylesheet resolves against the current route, not the site root.
-    for (const match of source.matchAll(/[("'`]\.\/(lobe-icons|assets|[A-Za-z0-9_-]+\.woff2)/g)) {
-      offenders.push(`${name}: ${match[0].slice(1)}`);
-    }
-  }
-
-  assert.deepEqual(
-    offenders,
-    [],
-    `staged modules still reference assets relatively, so they break on a deep route:\n  ${offenders.join('\n  ')}`,
-  );
+test('demo packaging rewrites HTML, modules and styles without a product build', async context => {
+  const fixture = await createFixture(context);
+  const result = await stageDemo(fixture);
+  assert.equal(result.rewritten, 2);
+  const html = await readFile(join(fixture.stageDirectory, 'index.html'), 'utf8');
+  assert.match(html, /"demo":true/);
+  assert.match(html, /"basePath":""/);
+  assert.match(html, /"apiBaseUrl":"\/api\/v1"/);
+  assert.match(html, /src="\/assets\/app.js"/);
+  assert.match(html, /href="\/assets\/app.css"/);
+  assert.doesNotMatch(html, /(?:src|href)="\.\//);
+  assert.equal(await readFile(join(fixture.stageDirectory, 'assets/app.js'), 'utf8'), 'const icon = `/lobe-icons/${name}-color.svg`;');
+  assert.equal(await readFile(join(fixture.stageDirectory, 'assets/app.css'), 'utf8'), '@font-face{src:url("/assets/body.woff2")}');
+  assert.ok((await readFile(join(fixture.stageDirectory, '_headers'), 'utf8')).length > 0);
+  assert.ok(!(await readdir(fixture.stageDirectory)).includes('.gitkeep'));
+  assert.match(await readFile(join(fixture.sourceDirectory, 'assets/app.js'), 'utf8'), /\.\/lobe-icons/);
 });
 
-test('the staged HTML references only absolute assets', async (t) => {
-  if (!hasBuiltConsole()) {
-    t.skip('no built console; run pnpm build first');
-    return;
+test('concurrent packaging owns only its supplied stage and preserves sibling runtime assets', async context => {
+  const first = await createFixture(context);
+  const second = await createFixture(context);
+  const runtimeStage = join(first.directory, 'runtime');
+  await mkdir(runtimeStage);
+  await writeFile(join(runtimeStage, 'index.html'), 'live runtime');
+  await mkdir(first.stageDirectory);
+  await writeFile(join(first.stageDirectory, 'stale.txt'), 'old artifact');
+  await Promise.all([stageDemo(first), stageDemo(second)]);
+  assert.equal(await readFile(join(runtimeStage, 'index.html'), 'utf8'), 'live runtime');
+  assert.ok(!(await readdir(first.stageDirectory)).includes('stale.txt'));
+  for (const fixture of [first, second]) {
+    assert.match(await readFile(join(fixture.stageDirectory, 'index.html'), 'utf8'), /"demo":true/);
   }
-
-  await runBuild();
-  const html = await readFile(join(STAGE, 'index.html'), 'utf8');
-  const relative = [...html.matchAll(/(?:src|href)="\.\//g)].map((m) => m[0]);
-  assert.deepEqual(relative, [], `the staged index still has relative references: ${relative.join(', ')}`);
 });
 
-test('the staged page is marked as the demonstration', async (t) => {
-  if (!hasBuiltConsole()) {
-    t.skip('no built console; run pnpm build first');
-    return;
-  }
-
-  await runBuild();
-  const html = await readFile(join(STAGE, 'index.html'), 'utf8');
-  // The console reads this in its first frame to decide whether to show demonstration
-  // notices; without it the page renders as an ordinary console.
-  assert.match(html, /"demo":\s*true/, 'the runtime configuration does not mark the page as a demonstration');
-  assert.match(html, /"basePath":\s*""/, 'the demonstration is served from the root, not a sub-path');
-  assert.match(html, /"apiBaseUrl":\s*"\/api\/v1"/, 'the API base is not the demonstration’s');
+test('missing builds and missing runtime markers fail packaging', async context => {
+  const fixture = await createFixture(context);
+  await rm(join(fixture.sourceDirectory, 'index.html'));
+  await assert.rejects(stageDemo(fixture), /no built console/);
+  await writeFile(join(fixture.sourceDirectory, 'index.html'), '<html></html>');
+  await assert.rejects(stageDemo(fixture), /no runtime configuration/);
 });

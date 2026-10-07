@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 import { checkDashboardTooltipRows } from './dashboardCharts.mjs';
 
@@ -933,7 +934,7 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
     if (route.request().method() !== 'PUT') return route.fallback();
     hasPreferenceWriteStarted = true;
     await preferenceWriteGate;
-    return route.fulfill({ status: 500, json: { error: 'preference write refused' } });
+    return fulfillFixture(route, { status: 500, json: { error: 'preference write refused' } });
   };
   // Page routes precede context routes, so the held response owns the request before the shared mock.
   await page.route(preferenceRoute, refusePreferenceWrite);
@@ -963,7 +964,7 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
   await context.route('**/omc/api/**/dashboard/models**', async (route) => {
     // A failure *after* data existed. The panels must keep what they have, because replacing a month of
     // ranking with an error card because one poll timed out is worse than showing slightly old data.
-    return route.fulfill({ status: 503, json: { error: 'database is unavailable' } });
+    return fulfillFixture(route, { status: 503, json: { error: 'database is unavailable' } });
   });
   await page.locator('.terminal-page-head button .anticon-reload').first().click();
   let staleReported = false;
@@ -992,7 +993,7 @@ export async function dashboardModelPanelFailures({ base, page, check }) {
   // Nothing was ever read, so there is no panel to keep: the card must say so and offer the retry rather
   // than leaving a skeleton up forever.
   await page.route('**/omc/api/**/dashboard/models**', async (route) => {
-    return route.fulfill({ status: 503, json: { error: 'database is unavailable' } });
+    return fulfillFixture(route, { status: 503, json: { error: 'database is unavailable' } });
   });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.model-alert').first().waitFor({ timeout: 20_000 });
@@ -1010,7 +1011,9 @@ export async function dashboardModelPanelFailures({ base, page, check }) {
     (await page.locator('.model-trend canvas').count()) === 0,
     `canvases=${await page.locator('.model-trend canvas').count()}`,
   );
-  // The rest of the page is unaffected: the panels are a separate read with a separate failure.
+  // The independent KPI renderer is lazy and can settle after the failed model read.
+  await until(async () => (await page.locator('.chart-slot canvas').count()) === 6
+    && (await page.locator('.heatmap-grid').count()) === 1, { label: 'independent dashboard visualizations rendered' });
   check(
     'the KPI tiles and the activity grid still render while the model panels are unavailable',
     (await page.locator('.chart-slot canvas').count()) === 6 && (await page.locator('.heatmap-grid').count()) === 1,

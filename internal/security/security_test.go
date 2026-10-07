@@ -1,6 +1,8 @@
 package security
 
 import (
+	"encoding/json"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -327,4 +329,44 @@ func TestRedactTextCatchesBareVendorPrefixes(t *testing.T) {
 			t.Errorf("RedactText(%q) = %q, want it unchanged", input, got)
 		}
 	}
+}
+
+func FuzzPublicURLRemovesAuthoritySecrets(f *testing.F) {
+	for _, value := range []string{"HTTPS://user:pass@example.test/v1?token=secret#fragment", "//host/path", "mailto:secret@example.test", "https://example.test/%2F"} {
+		f.Add(value)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		public := PublicURL(value)
+		if public == "" {
+			return
+		}
+		parsed, err := url.Parse(public)
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.ForceQuery {
+			t.Fatalf("public URL retained request-specific data: %q", public)
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			t.Fatalf("unexpected public scheme: %q", parsed.Scheme)
+		}
+	})
+}
+
+func FuzzRedactJSONPreservesShapeAndRemovesKnownSecrets(f *testing.F) {
+	f.Add("ordinary note")
+	f.Add("Authorization: Bearer fixture-secret")
+	f.Add("quoted \" text and controls\n")
+	f.Fuzz(func(t *testing.T, note string) {
+		const secret = "fixture-fuzz-sensitive-value"
+		payload, err := json.Marshal(map[string]any{"api_key": secret, "note": note, "nested": []any{map[string]string{"token": secret}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		redacted, err := RedactJSON(payload, secret)
+		if err != nil || !json.Valid(redacted) || strings.Contains(string(redacted), secret) {
+			t.Fatalf("redaction violated JSON or secret boundary: %v", err)
+		}
+		var document map[string]any
+		if err := json.Unmarshal(redacted, &document); err != nil || len(document) != 3 {
+			t.Fatal("redaction changed the document shape")
+		}
+	})
 }

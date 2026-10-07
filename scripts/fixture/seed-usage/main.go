@@ -223,14 +223,12 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 	callerKey.APIKeyMask = security.MaskSecret(fixtureClientKey)
 	callerKey.Source = "fixture-caller"
 	events = append(events, callerKey)
-	// A fixture-only late arrival: the row is committed before the app starts but
-	// its request time is outside the initial window for a short interval. The
-	// sliding window admits it on a later poll, which exercises the live-tail
-	// path without writing to SQLite from a second process while the app holds a
-	// read snapshot.
+	// The browser fixture gates this newest, last-ingested row until Hold is
+	// established. Its timestamp is already in the window so release does not
+	// depend on application startup speed or a second database writer.
 	events = append(events, fixtureEvent(
 		"fixture-future-arrival",
-		now.Add(20*time.Second),
+		now.Add(-time.Second),
 		shortLatencyMS+50,
 		false,
 	))

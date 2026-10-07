@@ -1,3 +1,4 @@
+import { abortFixture } from '../browser-guard.mjs';
 import { checkWaitingActivity } from './loadingProgress.mjs';
 
 const FAILURE_MARKER = 'Cannot read properties of undefined (reading model)';
@@ -11,7 +12,7 @@ const READINGS = [
   { lang: 'ms', theme: 'omc-dark', width: 1280, title: 'Halaman ini tidak dapat dimuatkan', reload: 'Muat semula halaman', home: 'Ke papan pemuka' },
 ];
 
-async function checkRouteRecovery({ base, page, context, check, errors }, failureMode) {
+async function checkRouteRecovery({ base, page, context, check, errors, expectProblem }, failureMode) {
   await context.addInitScript(() => {
     window.__OMCPA_CONFIG__ = { basePath: '/omc', apiBaseUrl: '/omc/api/v1', mediaBaseUrl: '/omc/media', version: 'route-error-test-build' };
   });
@@ -26,9 +27,19 @@ async function checkRouteRecovery({ base, page, context, check, errors }, failur
     await page.setViewportSize({ width: reading.width, height: 800 });
 
     let hasInjectedFailure = false;
+    expectProblem({kind:'console',message: failureMode === 'lazy'
+      ? /^The above error occurred in one of your React components:\n\n    at Lazy\n/
+      : /^The above error occurred in the <ConfigPage> component:/,count:8});
     const failModule = (route) => {
+      if (failureMode === 'render') {
+        expectProblem({kind:'console', message:/Cannot read properties of undefined \(reading model\)/, count:8});
+        expectProblem({kind:'pageerror', message:/^Cannot read properties of undefined \(reading model\)/, count:4});
+      } else {
+        expectProblem({kind:'console', message:/Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/pages\/ConfigPage\.tsx/, count:8});
+        expectProblem({kind:'pageerror', message:/^Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/pages\/ConfigPage\.tsx/, count:4});
+      }
       hasInjectedFailure = true;
-      if (failureMode === 'lazy') return route.abort('failed');
+      if (failureMode === 'lazy') return abortFixture(route, 'failed');
       return route.fulfill({
         contentType: 'application/javascript',
         body: `export function ConfigPage() { throw new TypeError('${FAILURE_MARKER} api_key=${PRIVATE_MARKER}'); }`,
@@ -108,8 +119,11 @@ async function checkRouteRecovery({ base, page, context, check, errors }, failur
 
 export async function routeRenderError(fixtures) {
   await checkRouteRecovery(fixtures, 'render');
-  const { base, page, context, check } = fixtures;
+  const { base, page, context, check, expectProblem } = fixtures;
   const shellModulePattern = '**/src/components/common/AppLayout.tsx*';
+  expectProblem({kind:'console',message:/^The above error occurred in (?:one of your React components:\n\n    at Lazy\n|the <AppLayout> component:)/,count:8});
+  expectProblem({kind:'console', message:/Cannot read properties of undefined \(reading model\)|Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/components\/common\/AppLayout\.tsx/,count:12});
+  expectProblem({kind:'pageerror', message:/^Cannot read properties of undefined \(reading model\)|^Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/components\/common\/AppLayout\.tsx/,count:6});
   const failShell = (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `export function AppLayout() { throw new Error('${FAILURE_MARKER}'); }`,
@@ -125,16 +139,19 @@ export async function routeRenderError(fixtures) {
 }
 export async function routeLazyError(fixtures) {
   await checkRouteRecovery(fixtures, 'lazy');
-  const { base, page, context, check, errors } = fixtures;
+  const { base, page, context, check, errors, expectProblem } = fixtures;
   const reading = READINGS[0];
   await page.evaluate(({ lang }) => localStorage.setItem('omc-lang', lang), reading);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const shellModulePattern = '**/src/components/common/AppLayout.tsx*';
+  expectProblem({kind:'console',message:/^The above error occurred in (?:one of your React components:\n\n    at Lazy\n|the <AppLayout> component:)/,count:8});
   let rejectShell;
   const shellRelease = new Promise(resolve => { rejectShell = resolve; });
+  expectProblem({kind:'console', message:/Cannot read properties of undefined \(reading model\)|Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/components\/common\/AppLayout\.tsx/,count:12});
+  expectProblem({kind:'pageerror', message:/^Cannot read properties of undefined \(reading model\)|^Failed to fetch dynamically imported module: http:\/\/127\.0\.0\.1:\d+\/omc\/src\/components\/common\/AppLayout\.tsx/,count:6});
   const failShell = async (route) => {
     await shellRelease;
-    await route.abort('failed');
+    await abortFixture(route, 'failed');
   };
   await context.route(shellModulePattern, failShell);
   try {

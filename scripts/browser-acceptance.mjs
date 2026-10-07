@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+import { guardBrowserContext } from './acceptance/browser-guard.mjs';
+import { launchBrowser, closeBrowser, stopProcess, closeServer, withOwnedCleanup } from './acceptance/lifecycle.mjs';
 // Deterministic browser acceptance against an isolated fake CPA by default.
 // Set OMCPA_LIVE_CPA=1 to run the separately maintained live-system smoke.
 
@@ -69,9 +72,13 @@ const appLog = [];
 const { check, checkEventually, checkHoldsFor, checks, failures } = createChecker();
 let appProcess;
 let browser;
+let network;
 let fakeCpa;
 let appURL;
 let page;
+const consoleErrors = [];
+const pageErrors = [];
+const requestFailures = [];
 
 async function freePort() {
   return await new Promise((resolve, reject) => {
@@ -89,7 +96,7 @@ async function waitFor(url, timeoutMs = 30000) {
   let lastError;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(url, { redirect: 'manual' });
+      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(1000) });
       if (response.status > 0) return response;
     } catch (error) {
       lastError = error;
@@ -317,21 +324,22 @@ try {
   check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 
-  browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  browser = await launchBrowser(chromium, { headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+  network = await guardBrowserContext(context, [appURL]);
   page = await context.newPage();
   const responseBodies = [];
   const nativeResponseAudits = [];
-  const consoleErrors = [];
-  const pageErrors = [];
-  const requestFailures = [];
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     if (/status of 401 \(Unauthorized\)/i.test(message.text())) return;
     consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  page.on('requestfailed', (request) => requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`));
+  page.on('requestfailed', (request) => {
+    if (request.failure()?.errorText === 'net::ERR_ABORTED') return;
+    requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`);
+  });
   page.on('response', async (response) => {
     if (!response.url().startsWith(appURL)) return;
     if (isNativePluginHostResponse(response.url(), appURL)) {
@@ -469,9 +477,6 @@ try {
   }
 
   await Promise.all(nativeResponseAudits);
-  check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
-  check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));
-  check('same-origin requests did not fail', requestFailures.length === 0, requestFailures.join(' | '));
 
   await context.clearCookies();
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -490,17 +495,26 @@ try {
     failures.push(error.message);
   }
 } finally {
-  if (failures.length > 0 && page) await captureFailureDiagnostics(page);
-  if (browser) await browser.close().catch(() => {});
-  if (appProcess && appProcess.exitCode === null) {
-    appProcess.kill();
-    await new Promise((resolve) => {
-      appProcess.once('exit', resolve);
-      setTimeout(resolve, 3000).unref();
-    });
-  }
-  if (fakeCpa) await new Promise((resolve) => fakeCpa.server.close(resolve));
-  fs.rmSync(temporary, { recursive: true, force: true });
+  if (network) check('built console makes no outbound network requests', !network.problems.some(problem => problem.kind === 'outbound'));
+  await withOwnedCleanup(async () => {
+    if (failures.length > 0 && page) await captureFailureDiagnostics(page);
+  }, async () => {
+    try {
+      await closeBrowser(browser);
+      if (page) {
+        check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
+        check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));
+        check('same-origin requests did not fail', requestFailures.length === 0, requestFailures.join(' | '));
+      }
+    }
+    finally {
+      try { await stopProcess(appProcess); }
+      finally {
+        try { if (fakeCpa) await closeServer(fakeCpa.server); }
+        finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+      }
+    }
+  });
 }
 
 if (failures.length > 0) {

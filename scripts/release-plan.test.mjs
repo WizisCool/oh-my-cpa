@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import YAML from 'yaml';
 import { createReleasePlan, compareReleaseTags } from './release-plan.mjs';
 
+import { validateReleaseWorkflow } from './release-workflow.mjs';
+
 const INPUT = {tag: 'v0.1.0', packageVersion: '0.1.0', webVersion: '0.1.0', image: 'wiziscool/oh-my-cpa'};
 
 test('first stable release names the image and both version aliases, then latest', () => {
@@ -30,71 +32,6 @@ test('malformed or mismatched release identities never reach Docker or GitHub', 
   }
 });
 
-export function validateReleaseWorkflow(workflow) {
-  assert.deepEqual(workflow.on.push.tags, ['v*']);
-  assert.equal(workflow.concurrency['cancel-in-progress'], false);
-  assert.equal(workflow.concurrency.queue, 'max');
-  assert.equal(workflow.permissions.contents, 'read');
-  for (const [jobName, job] of Object.entries(workflow.jobs)) {
-    if (jobName !== 'release') assert.equal(job.permissions?.contents ?? workflow.permissions.contents, 'read');
-    for (const step of job.steps.filter(step => step.uses)) {
-      assert.match(step.uses, /@[a-f0-9]{40}$/, 'Release actions use immutable revisions');
-      if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
-    }
-  }
-  const verify = workflow.jobs.verify;
-  const installIndex = verify.steps.findIndex(step => step.run === 'pnpm install --frozen-lockfile');
-  const chromiumIndex = verify.steps.findIndex(step => step.run === 'node scripts/install-chromium.mjs');
-  const gatesIndex = verify.steps.findIndex(step => step.run === 'pnpm verify:full');
-  assert.ok(installIndex >= 0 && chromiumIndex > installIndex && gatesIndex > chromiumIndex,
-    'Fresh release runners must provision a launchable browser before running all gates');
-  const publish = workflow.jobs.publish;
-  assert.equal(publish.needs, 'verify');
-  const smokeIndex = publish.steps.findIndex(step => step.run?.includes('scripts/docker-smoke.mjs'));
-  const imageIndex = publish.steps.findIndex(step => step.id === 'image');
-  assert.ok(smokeIndex >= 0 && imageIndex > smokeIndex);
-  const imageStep = publish.steps[imageIndex];
-  assert.equal(imageStep.with.platforms, 'linux/amd64,linux/arm64');
-  assert.equal(imageStep.with.push, true);
-  assert.ok(imageStep.with['build-args'].includes('VERSION=${{ needs.verify.outputs.tag }}'));
-  assert.deepEqual(workflow.jobs.release.needs, ['verify', 'publish', 'native']);
-  assert.equal(workflow.jobs.native.needs, 'verify');
-  const nativeSteps = workflow.jobs.native.steps;
-  const nativePnpm = nativeSteps.find(step => step.uses?.startsWith('pnpm/action-setup@'));
-  const nativeNode = nativeSteps.find(step => step.uses?.startsWith('actions/setup-node@'));
-  const nativeGo = nativeSteps.find(step => step.uses?.startsWith('actions/setup-go@'));
-  assert.equal(nativePnpm.with?.cache, false, 'Published native artifacts must not restore the shared pnpm cache');
-  assert.equal(nativeNode.with['package-manager-cache'], false, 'Published native artifacts must disable automatic package caching');
-  assert.equal(nativeNode.with.cache, undefined, 'Published native artifacts must not select a dependency cache');
-  assert.equal(nativeGo.with.cache, false, 'Published native artifacts must not restore shared Go caches');
-  assert.ok(!nativeSteps.some(step => step.uses?.startsWith('actions/cache@')), 'Native publication must not add a direct shared cache');
-  assert.equal(nativeSteps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref, '${{ needs.verify.outputs.revision }}');
-  const nativeBuildIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release.mjs');
-  const nativeSmokeIndex = nativeSteps.findIndex(step => step.run === 'node scripts/native-release-smoke.mjs');
-  const nativeUploadIndex = nativeSteps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@'));
-  assert.ok(nativeBuildIndex >= 0 && nativeSmokeIndex > nativeBuildIndex && nativeUploadIndex > nativeSmokeIndex);
-  assert.equal(nativeSteps[nativeUploadIndex].with['if-no-files-found'], 'error');
-  assert.equal(nativeSteps[nativeUploadIndex].with.name, 'native-release');
-  const releaseSteps = workflow.jobs.release.steps;
-  const downloadIndex = releaseSteps.findIndex(step => step.uses?.startsWith('actions/download-artifact@'));
-  const publicationIndex = releaseSteps.findIndex(step => step.run?.includes('gh release create'));
-  assert.ok(downloadIndex >= 0 && publicationIndex > downloadIndex);
-  assert.equal(releaseSteps[downloadIndex].with.name, 'native-release');
-  const publication = releaseSteps[publicationIndex].run;
-  assert.ok(publication.includes('native-release.mjs --verify'));
-  assert.ok(publication.indexOf('native-release.mjs --verify') < publication.indexOf('gh release upload'));
-  assert.ok(publication.includes('gh release upload "$RELEASE_TAG" tmp/native-release/* --clobber'));
-  assert.ok(publication.includes('gh release create "$RELEASE_TAG" tmp/native-release/*'));
-  assert.ok(publication.includes('--generate-notes --draft --latest=false'));
-  assert.ok(publication.includes('gh release edit "$RELEASE_TAG" --draft=false --latest="$IS_LATEST"'));
-  assert.ok(publication.lastIndexOf('IS_LATEST=$(node scripts/release-plan.mjs') > publication.indexOf('gh release upload'));
-  assert.ok(publication.indexOf('gh release edit') > publication.indexOf('gh release create'));
-  assert.equal(workflow.jobs.release.permissions.contents, 'write');
-  assert.deepEqual(workflow.jobs.promote.needs, ['verify', 'publish', 'release']);
-  assert.ok(workflow.jobs.promote.steps.some(step => step.run?.includes('imagetools create')));
-  assert.equal(workflow.jobs.verify.outputs.tags, '${{ steps.plan.outputs.version_tags }}');
-  assert.ok(workflow.jobs.release.steps.some(step => step.run?.includes('gh release create')));
-}
 
 test('release pipeline gates image publishing and GitHub visibility in order', () => {
   const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
@@ -109,14 +46,14 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   delete unqueued.concurrency.queue;
   assert.throws(() => validateReleaseWorkflow(unqueued));
   const missingBrowser = structuredClone(workflow);
-  missingBrowser.jobs.verify.steps = missingBrowser.jobs.verify.steps.filter(step => step.run !== 'node scripts/install-chromium.mjs');
+  const prepare = missingBrowser.jobs.browser.steps.find(step => step.id === 'prepare');
+  prepare.run = prepare.run.replace('node scripts/install-chromium.mjs', 'true');
   assert.throws(() => validateReleaseWorkflow(missingBrowser));
-  const lateBrowser = structuredClone(workflow);
-  lateBrowser.jobs.verify.steps.push(lateBrowser.jobs.verify.steps.splice(
-    lateBrowser.jobs.verify.steps.findIndex(step => step.run === 'node scripts/install-chromium.mjs'), 1)[0]);
-  assert.throws(() => validateReleaseWorkflow(lateBrowser));
+  const missingShard = structuredClone(workflow);
+  missingShard.jobs.probes.strategy.matrix.shard.pop();
+  assert.throws(() => validateReleaseWorkflow(missingShard));
   const mutable = structuredClone(workflow);
-  mutable.jobs.verify.steps[0].uses = 'actions/checkout@v7';
+  mutable.jobs.identity.steps[0].uses = 'actions/checkout@v7';
   assert.throws(() => validateReleaseWorkflow(mutable));
   const persisted = structuredClone(workflow);
   persisted.jobs.release.steps[0].with['persist-credentials'] = true;
@@ -156,6 +93,64 @@ test('native release publication rejects shared dependency cache restoration', (
   ]) {
     const broken = structuredClone(workflow);
     alter(broken);
+    assert.throws(() => validateReleaseWorkflow(broken));
+  }
+});
+
+test('every publication consumer is pinned to the verified commit and rechecks tag identity', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  for (const name of ['publish', 'release', 'promote']) {
+    const broken = structuredClone(workflow);
+    broken.jobs[name].steps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref = 'unverified-ref';
+    assert.throws(() => validateReleaseWorkflow(broken), name);
+  }
+});
+
+test('release aggregate refuses skipped, bypassed or incomplete verification', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  for (const mutate of [
+    value => { value.jobs.verify.needs.pop(); },
+    value => { delete value.jobs.verify.if; },
+    value => { value.jobs.verify.steps[0].run = 'true'; },
+    value => { value.jobs.browser.steps.find(step => step.run === 'pnpm verify:browser').if = 'false'; },
+    value => { value.jobs.publish.steps = value.jobs.publish.steps.filter(step => step.run !== 'node scripts/release-identity.mjs'); },
+  ]) {
+    const broken = structuredClone(workflow); mutate(broken);
+    assert.throws(() => validateReleaseWorkflow(broken));
+  }
+});
+
+
+test('release verification refuses skipped, conditional and softened prerequisites', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  for (const mutate of [
+    value => { value.jobs.verify['continue-on-error'] = true; },
+    value => { value.jobs.verify.steps[0].if = 'false'; },
+    value => { value.jobs.verify.steps[0]['continue-on-error'] = true; },
+    value => { value.jobs.static.if = 'false'; },
+    value => { value.jobs.static.steps.find(step => step.run === 'pnpm verify:static').if = 'false'; },
+    value => { value.jobs.browser.steps.find(step => step.run === 'pnpm verify:browser')['continue-on-error'] = true; },
+  ]) {
+    const value = structuredClone(workflow); mutate(value);
+    assert.throws(() => validateReleaseWorkflow(value), undefined, mutate.toString());
+  }
+});
+
+
+test('identity bootstrap and publication boundary checks cannot be softened', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  const mutations = [
+    value => { value.jobs.identity.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with.cache = 'pnpm'; },
+    value => { delete value.jobs.identity.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['package-manager-cache']; },
+    value => { value.jobs.identity.steps.find(step => step.id === 'plan').if = 'false'; },
+  ];
+  for (const name of ['publish', 'native', 'release', 'promote']) {
+    mutations.push(value => { value.jobs[name].steps.find(step => step.run === 'node scripts/release-identity.mjs').if = 'false'; });
+    mutations.push(value => { value.jobs[name].steps.find(step => step.run === 'node scripts/release-identity.mjs')['continue-on-error'] = true; });
+    mutations.push(value => { value.jobs[name]['continue-on-error'] = true; });
+  }
+  for (const mutate of mutations) {
+    const broken = structuredClone(workflow); mutate(broken);
     assert.throws(() => validateReleaseWorkflow(broken));
   }
 });

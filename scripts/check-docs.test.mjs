@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkDocument, classifyPath } from './check-docs.mjs';
+import { checkDocument, classifyPath, discoverDocuments } from './check-docs.mjs';
 
 const checker = fileURLToPath(new URL('./check-docs.mjs', import.meta.url));
 
@@ -106,4 +106,26 @@ test('retired deployment templates fail documentation checks, while direct deplo
   assert.equal(findings.filter(finding => finding.kind === 'retired-reference').length, 3);
   const validRoot = fixture(t, 'Use `deploy/compose.full.yml` and `deploy/healthcheck.sh`.', ['deploy/compose.full.yml', 'deploy/healthcheck.sh']);
   assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot: validRoot }), []);
+});
+
+test('new maintained documents are automatically gated; only frozen directories are archival', t => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-doc-discovery-'));
+  t.after(() => fs.rmSync(projectRoot, {recursive:true, force:true}));
+  for (const file of ['README.md', 'docs/testing.md', 'docs/plans/new-plan.md', 'docs/adr/0067-decision.md', 'docs/releases/v0.1.3.md']) {
+    fs.mkdirSync(path.dirname(path.join(projectRoot, file)), {recursive:true});
+    fs.writeFileSync(path.join(projectRoot, file), '# document');
+  }
+  const docs = discoverDocuments(projectRoot);
+  assert.equal(docs.length,5);
+  assert.ok(!docs.find(document => document.file === 'docs/plans/new-plan.md').archival);
+  assert.ok(docs.find(document => document.file === 'docs/adr/0067-decision.md').archival);
+});
+
+
+test('frozen retired path exceptions do not exempt current documents or unknown archival paths', t => {
+  const projectRoot = fixture(t, 'See `internal/cpa/configyaml/layout_rules.go`.');
+  assert.deepEqual(checkDocument({ file: 'checked.md', archival: true }, { projectRoot }), []);
+  assert.ok(checkDocument({ file: 'checked.md' }, { projectRoot }).some(finding => finding.kind === 'missing-path'));
+  fs.writeFileSync(path.join(projectRoot, 'checked.md'), 'See `internal/cpa/configyaml/other-gone.go`.');
+  assert.ok(checkDocument({ file: 'checked.md', archival: true }, { projectRoot }).some(finding => finding.kind === 'missing-path'));
 });

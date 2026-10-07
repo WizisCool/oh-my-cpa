@@ -1,5 +1,7 @@
+import { stopProcess } from './acceptance/lifecycle.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,7 +21,7 @@ function resolveCommand(command, args) {
   return { command, args };
 }
 
-function runCheck({ label, command, args = [] }) {
+function runCheck({ label, command, args = [] }, signal) {
   const startedAt = Date.now();
   const resolved = resolveCommand(command, args);
   return new Promise((resolve) => {
@@ -28,16 +30,32 @@ function runCheck({ label, command, args = [] }) {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
+      detached: process.platform !== 'win32',
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const outputDirectory = path.join(root, 'tmp/check-output');
+    fs.mkdirSync(outputDirectory, {recursive:true});
+    const prefix = path.join(outputDirectory, `${process.pid}-${label.replace(/[^a-z0-9-]/gi, '-')}-${startedAt}`);
+    const stdoutFile = `${prefix}.stdout.log`;
+    const stderrFile = `${prefix}.stderr.log`;
+    fs.writeFileSync(stdoutFile, '');
+    fs.writeFileSync(stderrFile, '');
+    child.stdout.on('data', chunk => fs.appendFileSync(stdoutFile, chunk));
+    child.stderr.on('data', chunk => fs.appendFileSync(stderrFile, chunk));
+    const abort = () => {
+      stopProcess(child, 2000, { isGroup: true }).catch(error => fs.appendFileSync(stderrFile, `${error.message}\n`));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
     child.once('error', (error) => {
-      resolve({ label, code: 1, signal: null, stdout, stderr: `${stderr}${error.message}\n`, durationMs: Date.now() - startedAt });
+      signal.removeEventListener('abort', abort);
+      fs.appendFileSync(stderrFile, `${error.message}\n`);
+      resolve({ label, code: 1, signal: null, stdoutFile, stderrFile, durationMs: Date.now() - startedAt });
     });
-    child.once('close', (code, signal) => {
-      resolve({ label, code: code ?? 1, signal, stdout, stderr, durationMs: Date.now() - startedAt });
+    child.once('close', async (code, exitSignal) => {
+      signal.removeEventListener('abort', abort);
+      try { await stopProcess(child, 2000, { isGroup: true }); }
+      catch (error) { fs.appendFileSync(stderrFile, `${error.message}\n`); code = 1; }
+      resolve({ label, code: code ?? 1, signal: exitSignal, stdoutFile, stderrFile, durationMs: Date.now() - startedAt });
     });
   });
 }
@@ -52,19 +70,35 @@ function runCheck({ label, command, args = [] }) {
  * few thousand lines of passing tool output buries the answer. A failing check always
  * prints its full output, because that is the case the transcript exists for.
  */
-export async function runChecks(checks, { quiet = false } = {}) {
+export async function runChecks(checks, { quiet = false, signal } = {}) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
+  process.once('SIGTERM', abort);
+  process.once('SIGINT', abort);
+  let results;
+  try {
   console.log(`\n[parallel] starting ${checks.length} check(s): ${checks.map((check) => check.label).join(', ')}`);
-  const results = await Promise.all(checks.map(runCheck));
-  let failed = false;
-  for (const result of results) {
+  results = await Promise.all(checks.map(async check => {
+    const result = await runCheck(check, controller.signal);
     const seconds = (result.durationMs / 1000).toFixed(2);
-    if (result.code !== 0) failed = true;
+
     console[result.code === 0 ? 'log' : 'error'](`\n[parallel] ${result.code === 0 ? 'PASS' : 'FAIL'} ${result.label} (${seconds}s)`);
     // A passing check under `quiet` contributes its one line and nothing else; a
     // failing one contributes everything it captured.
-    if (quiet && result.code === 0) continue;
-    formatOutput(result.label, 'log', result.stdout);
-    formatOutput(result.label, 'error', result.stderr);
+    if (quiet && result.code === 0) return result;
+    formatOutput(result.label, 'log', fs.readFileSync(result.stdoutFile, 'utf8'));
+    formatOutput(result.label, 'error', fs.readFileSync(result.stderrFile, 'utf8'));
+    return result;
+  }));
+  } finally {
+    signal?.removeEventListener('abort', abort);
+    process.removeListener('SIGTERM', abort);
+    process.removeListener('SIGINT', abort);
   }
-  return !failed;
+  const timingDirectory = path.join(root, 'tmp/check-timings');
+  fs.mkdirSync(timingDirectory, {recursive:true});
+  fs.writeFileSync(path.join(timingDirectory, `${process.pid}-${Date.now()}.json`), JSON.stringify(results, null, 2) + '\n');
+  return !controller.signal.aborted && results.every(result => result.code === 0);
 }

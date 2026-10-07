@@ -14,15 +14,19 @@
  *
  * A scenario's own routes are installed on its own context through `context.route`,
  * which is per-context and therefore cannot leak into a sibling. Routes are matched
- * in reverse order of registration, so a scenario's entries are checked before the
- * shared defaults.
+ * in reverse order of registration. A single dispatcher checks scenario entries
+ * before shared defaults, with explicit method matching for writes.
  */
+import { appendProbeTiming } from './probe-timings.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { guardBrowserContext, fulfillFixture, createProblemLedger } from './browser-guard.mjs';
+import { withinBudget, createShutdownController, stopProcess, launchBrowser, closeBrowser } from './lifecycle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -101,10 +105,11 @@ export async function startVite(port) {
   // dev server that is serving happily as "did not become ready".
   const base = `http://127.0.0.1:${port}/omc`;
   const readyURL = `${base}/`;
+  const owner = randomUUID();
   const server = spawn(
     process.execPath,
-    [path.join(root, 'web/node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    { cwd: path.join(root, 'web'), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    [path.join(root, 'scripts/acceptance/vite-server.mjs'), String(port)],
+    { env: {...process.env, OMC_PROBE_OWNER:owner}, cwd: path.join(root, 'web'), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
   );
   // Captured rather than discarded: a dev server that dies on startup (a port taken
   // by something else, a syntax error in the app) reports why, and a bare "did not
@@ -118,10 +123,10 @@ export async function startVite(port) {
     }
     // `server.exitCode` is re-read on every iteration, so a Vite that lost the port
     // race after this run's pre-check is reported as itself rather than as a timeout.
-    if (await fetch(readyURL).then((response) => response.ok).catch(() => false)) return { server, base };
+    if (await fetch(readyURL, { signal: AbortSignal.timeout(1000) }).then((response) => response.ok && response.headers.get('X-OMC-Probe-Owner') === owner).catch(() => false)) return { server, base };
     await sleep(200);
   }
-  server.kill();
+  await stopProcess(server);
   throw new Error(`probe Vite server did not become ready on ${readyURL}:\n${output}`);
 }
 
@@ -182,13 +187,13 @@ export function dashboardBody(series = [], { bucketMS = 60_000, preset = '1h' } 
 export function defaultRoutes() {
   const preferences = {};
   return [
-    [(url) => url.pathname.endsWith('/api/auth/session'), () => ({ authenticated: true })],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/api/auth/session'), () => ({ authenticated: true })],
     [
       (url, method) => url.pathname.endsWith('/preferences') && method === 'GET',
       () => ({ preferences: { ...preferences } }),
     ],
     [
-      (url, method) => url.pathname.includes('/preferences/') && method !== 'GET',
+      (url, method) => url.pathname.includes('/preferences/') && method === 'PUT',
       (url, _method, request) => {
         // The key is the last path segment; the body is the document to store. The
         // shape mirrors the real endpoint closely enough for a probe that reads it
@@ -202,16 +207,23 @@ export function defaultRoutes() {
         return { ok: true };
       },
     ],
-    [(url) => url.pathname.includes('/preferences/'), () => ({ ok: true })],
-    [(url) => url.pathname.endsWith('/management/auth-files'), () => ({ files: [], total: 0 })],
-    [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [], total: 0 })],
-    [(url) => url.pathname.endsWith('/health'), () => ({ cpa_connected: true, version: 'probe', status: 'ok' })],
+
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/custom-icons'), () => ({ icons: [] })],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/management/auth-files'), () => ({ files: [], total: 0 })],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/management/providers'), () => ({ providers: [], total: 0 })],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/health'), () => ({ cpa_connected: true, version: 'probe', status: 'ok' })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/healthz', () => ({ cpa_connected: true, version: 'probe', status: 'ok' })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/plugins', () => ({ plugins: [], total: 0 })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/api-keys', () => ({ keys: [], total: 0 })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/pricing/attention', () => ({ unpriced: [] })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/models', () => ({ window: dashboardBody().window, total_tokens: 0, models: [], partial_errors: [] })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/providers', () => ({ window: dashboardBody().window, providers: [], partial_errors: [] })],
     // The shell every route mounts reads these, so they are defaults rather than
     // per-scenario fixtures.
-    [(url) => url.pathname.endsWith('/dashboard'), () => dashboardBody()],
-    [(url) => url.pathname.endsWith('/dashboard/tail'), () => dashboardBody()],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/dashboard'), () => dashboardBody()],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/dashboard/tail'), () => dashboardBody()],
     [
-      (url) => url.pathname.endsWith('/management/overview'),
+      (url, method) => method === 'GET' && url.pathname.endsWith('/management/overview'),
       () => ({
         cpa: { connected: true, version: 'probe', latency_ms: 1 },
         counts: { management_keys: 1, provider_keys: 0, credentials: 0, models: 0 },
@@ -236,29 +248,32 @@ export function defaultRoutes() {
  * Installs the API mock for one context.
  *
  * `extra` is checked before the defaults, so a scenario expresses only what it
- * changes. It is registered first and the defaults afterwards because Playwright
- * consults the most recently added route handler first - registering the defaults
- * last is what keeps the shared entries as the fallback rather than as an override.
+ * changes. One dispatcher checks scenario entries first and shared defaults last,
+ * so a default cannot override a scenario's method-specific response.
  */
-export async function installRoutes(context, extra = []) {
+export async function installRoutes(context, extra = [], ledger) {
   const table = [...extra, ...defaultRoutes()];
   await context.route('**/omc/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
     for (const [matches, respond] of table) {
-      if (!matches(url, method)) continue;
+      if ((matches.length < 2 && method !== 'GET') || !matches(url, method)) continue;
       const body = await respond(url, method, request);
       // A scenario that needs to prove something about a failing request returns a
       // `{ status, json }` envelope; everything else is a successful body. Without an
       // error path a scenario could only assert the happy state, which is how a panel
       // that hangs on a first-load failure goes unnoticed.
       if (body && typeof body === 'object' && typeof body.status === 'number' && 'json' in body) {
-        return route.fulfill({ status: body.status, json: body.json });
+        return fulfillFixture(route, { status: body.status, json: body.json });
+      }
+      if (body?.contentType && typeof body.body === 'string') {
+        return route.fulfill({ status: 200, contentType: body.contentType, body: body.body });
       }
       return route.fulfill({ status: 200, json: body });
     }
-    return route.fulfill({ status: 200, json: {} });
+    ledger?.record({ kind: 'fixture', method, url: request.url(), message: 'Undeclared API fixture' });
+    return route.fulfill({ status: 501, json: { error: 'undeclared_probe_fixture', method, path: url.pathname } });
   });
 }
 
@@ -271,7 +286,7 @@ export async function installRoutes(context, extra = []) {
  */
 export async function createProbePage(
   browser,
-  { viewport = { width: 1440, height: 1000 }, hasTouch = false } = {},
+  { viewport = { width: 1440, height: 1000 }, hasTouch = false, origins = [] } = {},
 ) {
   // `hasTouch` alone, without Playwright's `isMobile`, and that distinction is load-bearing: a
   // scenario asserting the console's touch rules needs `(pointer: coarse)` and `(hover: none)` to
@@ -279,11 +294,16 @@ export async function createProbePage(
   // one makes Chrome zoom out to fit content which overflows, and the zoom grows
   // `window.innerWidth`, which flips the very breakpoint the scenario is measuring and hides the
   // overflow that caused it.
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce', hasTouch });
+  const context = await browser.newContext({ viewport, reducedMotion: 'reduce', hasTouch, serviceWorkers: 'block' });
+  try {
+  context.setDefaultTimeout(10_000);
+  context.setDefaultNavigationTimeout(20_000);
+  const ledger = await guardBrowserContext(context, origins);
   await context.addInitScript(() => {
     // Seed only on a fresh context. addInitScript runs on every navigation and
     // reload, so unconditional writes would make a scenario's own theme choice
     // disappear exactly when it reloads to prove persistence.
+    if (!/^https?:$/.test(location.protocol)) return;
     if (!localStorage.getItem('omc-theme')) localStorage.setItem('omc-theme', 'omc-light');
     if (!localStorage.getItem('omc-lang')) localStorage.setItem('omc-lang', 'en');
   });
@@ -302,7 +322,12 @@ export async function createProbePage(
   page.on('framenavigated', (frame) => {
     if (frame === page.mainFrame()) note(`navigated: ${frame.url()}`);
   });
-  return { context, page, errors, trail };
+  return { context, page, errors, trail, ledger };
+  } catch (error) {
+    try { await withinBudget(context.close(), 2000, 'page setup cleanup'); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Probe page setup and cleanup failed'); }
+    throw error;
+  }
 }
 
 /** Collects results the way `acceptance/harness.mjs` does, for probes that assert. */
@@ -323,22 +348,20 @@ export function createProbeChecker({ quiet = false } = {}) {
   return { check, failures, count: () => count };
 }
 
-const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
-
 /**
  * The same evidence the acceptance suite keeps on failure: a screenshot, the DOM, the
  * URL and the page's errors, under `tmp/probe-failure/` so CI can upload it.
  */
-async function writeProbeDiagnostics(page, errors, trail, scenarioName) {
-  fs.mkdirSync(FAILURE_DIR, { recursive: true });
+async function writeProbeDiagnostics(page, errors, trail, scenarioName, failureDirectory) {
+  fs.mkdirSync(failureDirectory, { recursive: true });
   const slug = scenarioName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  await page.screenshot({ path: path.join(FAILURE_DIR, `${slug}.png`), fullPage: true }).catch(() => {});
+  await page.screenshot({ path: path.join(failureDirectory, `${slug}.png`), fullPage: true, timeout: 2000 }).catch(() => {});
   await page
     .content()
-    .then((html) => fs.writeFileSync(path.join(FAILURE_DIR, `${slug}.html`), html))
+    .then((html) => fs.writeFileSync(path.join(failureDirectory, `${slug}.html`), html))
     .catch(() => {});
   fs.writeFileSync(
-    path.join(FAILURE_DIR, `${slug}.log`),
+    path.join(failureDirectory, `${slug}.log`),
     [`url: ${page.url()}`, '', 'page errors:', ...errors, '', 'console and navigation:', ...trail].join('\n'),
   );
 }
@@ -354,7 +377,11 @@ async function writeProbeDiagnostics(page, errors, trail, scenarioName) {
  * Each scenario gets a fresh context and a fresh page error listener, so one
  * scenario's runtime errors cannot be attributed to another.
  */
-export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS, shouldResetDiagnostics = true }) {
+export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS, shouldResetDiagnostics = true, artifactLabel = 'probe' }) {
+  if (!/^[a-z][a-z-]*$/.test(artifactLabel)) throw new Error('Invalid probe artifact namespace');
+  const failureDirectory = path.join(root, 'tmp', `${artifactLabel}-failure`, String(port));
+  const timingDirectory = path.join(root, 'tmp', `${artifactLabel}-timings`);
+  const timingFile = path.join(timingDirectory, `${port}.json`);
   let watchdog;
 
   let server;
@@ -371,40 +398,58 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
    * caused it. The browser close is bounded, because this runs on the watchdog path too -
    * a wedged browser must not stop the watchdog from exiting.
    */
-  const shutdown = async () => {
+  const shutdownController = createShutdownController(async () => {
     const runningServer = server;
     const runningBrowser = browser;
     server = undefined;
     browser = undefined;
-    runningServer?.kill('SIGTERM');
-    await Promise.race([runningBrowser?.close().catch(() => {}), sleep(2000)]);
-    await sleep(300);
-  };
+    try { await stopProcess(runningServer); }
+    finally { await closeBrowser(runningBrowser); }
+  });
+  const shutdown = () => shutdownController.shutdown();
 
+  let activeScenario = 'startup';
+  const onSignal = async () => { try { await shutdown(); } finally { process.exit(2); } };
+  process.once('SIGTERM', onSignal);
+  process.once('SIGINT', onSignal);
   watchdog = setTimeout(async () => {
-    console.error('FAIL probe run timed out');
+    console.error(`FAIL probe run timed out during ${activeScenario}`);
     // `process.exit` skips the `finally` below, so the timed-out run used to leave its Vite
     // server listening on the probe port. Every later run then failed at startup with a port
     // conflict -- a confusing symptom that outlived the timeout it came from.
-    await shutdown();
-    process.exit(2);
+    try { await shutdown(); }
+    finally { process.exit(2); }
   }, watchdogMs);
   watchdog.unref();
 
   try {
     // Reset before the first batch starts so startup failures cannot expose stale evidence.
     // Later batches retain artifacts from this same invocation rather than erasing its failures.
-    if (shouldResetDiagnostics) fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
+    if (shouldResetDiagnostics) {
+      fs.rmSync(failureDirectory, { recursive: true, force: true });
+      fs.rmSync(timingFile, { force: true });
+    }
+    fs.mkdirSync(timingDirectory, { recursive: true });
 
     const started = await startVite(port);
     server = started.server;
     const base = started.base;
-    browser = await chromium.launch({ headless: true });
+    browser = await launchBrowser(chromium, { headless: true });
 
     for (const scenario of scenarios) {
+      if (shutdownController.isStopping) break;
+      activeScenario = scenario.id;
       const startedAt = performance.now();
       const options = scenario.options ?? {};
-      const { context, page, errors, trail } = await createProbePage(browser, options);
+      let context, page;
+      let errors = [], trail = [], ledger = createProblemLedger();
+      const steps = [];
+      const step = async (name, task) => {
+        activeScenario = `${scenario.id}/${name}`;
+        const started = performance.now();
+        try { return await task(); }
+        finally { steps.push({name, durationMs: Math.round(performance.now() - started)}); }
+      };
       // Counted per scenario so a failed check keeps the same evidence a thrown error
       // does; most probe failures are checks, and they used to leave nothing behind.
       let failedChecks = 0;
@@ -413,10 +458,13 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
         return scenario.check(name, condition, detail);
       };
       try {
-        await installRoutes(context, options.routes);
-        await scenario.run({ base, page, context, errors, check, failures });
-        if (failedChecks > 0) await writeProbeDiagnostics(page, errors, trail, scenario.name);
-        else passed += 1;
+        ({ context, page, errors, trail, ledger } = await createProbePage(browser, {...options, origins: [base]}));
+        await installRoutes(context, options.routes, ledger);
+        await withinBudget(scenario.run({ base, page, context, errors, check, failures, step, expectProblem: rule => ledger.expect(rule) }), 120_000, `scenario ${scenario.id}`);
+        const unexpected = ledger.unexpected();
+        check('no unexpected browser or fixture faults', unexpected.length === 0, JSON.stringify(unexpected));
+        if (failedChecks > 0) { failures.push(scenario.name); await writeProbeDiagnostics(page, errors, trail, scenario.name, failureDirectory); }
+
       } catch (error) {
         // The scenario name travels with the error, so a failure in a combined run
         // still says which probe it came from. The page's own errors and text are
@@ -424,24 +472,49 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
         // as a runtime error or an error banner, and a bare locator timeout hides
         // which one it was.
         console.error(`FAIL ${scenario.name}: ${error?.stack ?? error?.message ?? error}`);
+        console.error(`  browser/fixture faults: ${JSON.stringify(ledger.unexpected())}`);
         if (errors.length > 0) console.error(`  page errors: ${errors.join(' | ')}`);
         // The tail of the trail goes in the job log itself: the artifact holds all of it, but the
         // log is what a reader of a red run sees first.
         if (trail.length > 0) console.error(`  console and navigation (last ${Math.min(trail.length, 10)}):\n    ${trail.slice(-10).join('\n    ')}`);
-        await page
-          .locator('body')
+        await page?.
+          locator('body')
           .innerText()
           .then((text) => console.error(`  page text: ${JSON.stringify(text.slice(0, 400))}`))
           .catch(() => {});
-        await writeProbeDiagnostics(page, errors, trail, scenario.name);
+        if (page) await writeProbeDiagnostics(page, errors, trail, scenario.name, failureDirectory);
         failures.push(scenario.name);
       } finally {
-        await context.close().catch(() => {});
+        try {
+          if (context) await withinBudget(context.close(), 2000, 'scenario context shutdown');
+        } catch (error) {
+          console.error(`FAIL ${scenario.name} teardown: ${error.message}`);
+          if (!failures.includes(scenario.name)) failures.push(scenario.name);
+        }
+        // Closing drains pending events before the final verdict; late errors must not
+        // become another scenario's problem or disappear after its assertions passed.
+        const unexpected = ledger.unexpected();
+        if (unexpected.length > 0 && !failures.includes(scenario.name)) {
+          check('no late browser or fixture faults', false, JSON.stringify(unexpected));
+          failures.push(scenario.name);
+          fs.mkdirSync(failureDirectory, { recursive: true });
+          fs.writeFileSync(path.join(failureDirectory, `${scenario.id}.log`), JSON.stringify(unexpected, null, 2));
+        }
+        if (failedChecks === 0 && !failures.includes(scenario.name)) passed += 1;
+        try {
+          const timingError = appendProbeTiming(timingFile, { id: scenario.id, durationMs: Math.round(performance.now() - startedAt), status: failedChecks > 0 || failures.includes(scenario.name) ? 'failed' : 'passed', steps });
+          if (timingError) throw timingError;
+        } catch (error) {
+          console.error(`FAIL ${scenario.name} timing evidence: ${error.message}`);
+          failures.push(`${scenario.name} timing evidence`);
+        }
         console.log(`[probe] ${scenario.id ?? scenario.name}: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
       }
     }
   } finally {
     clearTimeout(watchdog);
+    process.removeListener('SIGTERM', onSignal);
+    process.removeListener('SIGINT', onSignal);
     await shutdown();
   }
 

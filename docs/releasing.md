@@ -111,8 +111,12 @@ the [v0.1.3 release notes](releases/v0.1.3.md).
    ```
 
 4. Follow `.github/workflows/release.yml` in Actions:
-   - **verify** validates tag/package identity and runs `pnpm verify:full`, including
-     full static, built SPA/browser, probe and demo gates plus clean generated state.
+   - **identity** validates tag/package identity and resolves the exact source commit.
+   - **static**, **browser** and **probes** verify that commit in parallel: full
+     static/secret gates, built SPA/browser/harness/demo gates and the full probe
+     catalog in three balanced shards. Generated-state cleanliness remains mandatory.
+   - **verify** is the final aggregate and accepts only success from every lane;
+     failure, cancellation or skipped prerequisites prevent publication.
    - **publish** builds a native image and runs `scripts/docker-smoke.mjs` to verify
      the actual non-root/read-only package, SQLite permissions, canonical base paths,
      health, login and version endpoints. It then builds/pushes the amd64/arm64 image
@@ -175,8 +179,30 @@ check appear fresh. See `docs/operations.md` and ADR 0019.
 Release actions use immutable upstream commit revisions, and checkout credentials
 are not persisted. GitHub release commands receive their job-scoped token explicitly.
 
-The verification runner installs and launch-probes Chromium after package installation
-and before `pnpm verify:full`, using the same provisioner as CI. If a runner-only
+The browser and probe verification runners install and launch-probe Chromium after
+package installation, using the same provisioner as CI. If a runner-only
 workflow repair is needed before publication, merge the repair and dispatch from
 `master` with the original tag. This changes orchestration, not the tagged image
 source; application changes still require a new version.
+
+## Publication identity and verification evidence
+
+Every downstream checkout uses `needs.verify.outputs.revision`, not a second tag
+checkout. `scripts/release-identity.mjs` resolves lightweight and annotated tags and
+refuses a checkout or tag that differs from that verified commit. These checks run
+at image, native, GitHub visibility and digest-promotion boundaries. A final external
+tag movement cannot be made atomic with GitHub/Docker publication; restrict tag
+movement at the repository level as well as retaining these fail-closed checks.
+
+The release verification DAG mirrors CI instead of serializing the entire local
+probe catalog inside one job. Local parity remains `pnpm verify:full`. Probe timings
+and failure diagnostics survive failed runs. `static`, `browser` and aggregate
+`probes` remain the merge-check names. Action revisions are immutable, checkout
+credentials do not persist, and the native cache isolation policy is unchanged.
+
+`pnpm verify:workflow` checks semantic publication/gate invariants with negative
+mutation self-tests. CI also installs actionlint at the version pinned in
+`scripts/lint-workflows.mjs` and runs `pnpm verify:workflow:lint`. That adapter only
+normalizes the already-validated GitHub `concurrency.queue` extension for the pinned
+actionlint schema; shell/expression structure is still checked. Shellcheck integration
+is disabled explicitly rather than claiming shellcheck coverage.

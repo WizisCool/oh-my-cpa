@@ -42,11 +42,13 @@ const BASELINE = {
   'internal/usage/ingest/polling_test.go': 1,
   'internal/usage/ingest/sync_test.go': 3,
   'scripts/acceptance/harness.mjs': 5,
+  // One rejecting budget timer; no successful assertion waits on it.
+  'scripts/acceptance/lifecycle.mjs': 1,
   // Two deadline guards and the polling cadence of the condition helpers themselves.
-  'scripts/acceptance/probe.mjs': 6,
+  'scripts/acceptance/probe.mjs': 4,
   'scripts/acceptance/probes/dashboardCharts.mjs': 5,
   'scripts/acceptance/probes/dashboardTokenHeatmap.mjs': 8,
-  'scripts/acceptance/probes/oauthManagement.mjs': 7,
+
   'scripts/acceptance/probes/omcSettings.mjs': 1,
   'scripts/acceptance/probes/overlayHistory.mjs': 1,
   'scripts/acceptance/probes/phoneLists.mjs': 1,
@@ -56,7 +58,7 @@ const BASELINE = {
   'scripts/acceptance/probes/usageRecords.mjs': 4,
   'scripts/acceptance/usage-events/filterPanel.mjs': 1,
   'scripts/acceptance/usage-events/searchAndRejections.mjs': 1,
-  'scripts/browser-acceptance.mjs': 2,
+  'scripts/browser-acceptance.mjs': 1,
   'scripts/browser-live-smoke.mjs': 22,
   // Browser test code that the scan set did not reach until the pattern widened: it drives
   // Playwright, and the `hasDemoContent` it exports runs in the page.
