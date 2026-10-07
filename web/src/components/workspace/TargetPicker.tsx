@@ -2,9 +2,9 @@ import React from 'react';
 import { Select, Space } from 'antd';
 import { useI18n } from '../../i18n';
 import type { ClientAPIKeyItem } from '../../types/providers';
-import { gatewayCallPointOf } from '../../types/gatewayModels';
 import type { GatewayModelItem } from '../../types/gatewayModels';
 import { KeyOutlined } from '../icons';
+import { ModelPicker } from './ModelPicker';
 import styles from './Workspace.module.css';
 
 export interface TargetPickerProps {
@@ -59,11 +59,6 @@ export function TargetPicker({
     const key = keys.find(item => item.usage_fingerprint === fingerprint);
     return key ? (key.alias || key.key) : undefined;
   }, [keys, fingerprint]);
-  const modelOptions = React.useMemo(
-    () => models.map(item => ({ value: gatewayCallPointOf(item), label: gatewayCallPointOf(item) })),
-    [models],
-  );
-
   return (
     <Space.Compact className={styles['target-picker']}>
       <Select
@@ -80,16 +75,11 @@ export function TargetPicker({
         popupMatchSelectWidth={false}
         onChange={onFingerprintChange}
       />
-      <Select
-        className={styles['model-select']}
-        aria-label={t('conversation.model')}
-        placeholder={t('conversation.model')}
-        value={model || undefined}
-        loading={isModelsLoading}
-        disabled={isDisabled || !fingerprint}
-        options={modelOptions}
-        showSearch={{ optionFilterProp: 'label' }}
-        popupMatchSelectWidth={false}
+      <ModelPicker
+        models={models}
+        value={model}
+        isLoading={isModelsLoading}
+        isDisabled={isDisabled || !fingerprint}
         onChange={onModelChange}
       />
     </Space.Compact>

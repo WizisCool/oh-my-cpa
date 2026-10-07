@@ -984,6 +984,26 @@
   color: var(--muted);
 }
 
+/* A model's name led by its maker's mark, in the closed field and in the list alike. */
+.model-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-mark-fallback {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .key-option {
   display: inline-flex;
   align-items: baseline;
