@@ -720,9 +720,10 @@ retained, painted leave node under reduced motion.
 ### Trusted native plugin-host contract
 
 `internal/cpa/management/client_plugin_host_test.go` owns fixed-origin path validation,
-credential separation, redirects, body bounds and native backup classification.
+credential separation, local refusal of wrong page credentials with no upstream request,
+redirects, body bounds and native backup classification.
 `internal/api/management_plugin_host_test.go` covers session/CSRF protection, invalid explicit
-credentials, native config/group/model startup, namespaced state/sync, audit failure gates,
+credentials that must cost the upstream no failed authentication, native config/group/model startup, namespaced state/sync, audit failure gates,
 backup failures, native-write serialization and rebasing across base paths. The fixture uses
 an independent upstream server so version probing cannot hide caller authentication defects.
 The existing built acceptance in `scripts/acceptance/configuration-plugins.mjs` exercises the

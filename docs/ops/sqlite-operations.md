@@ -249,6 +249,6 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 ### Native plugin writes
 
 Configuration-affecting trusted plugin-page native writes participate in the existing encrypted
-`cpa_config_backups` gate (ADR 0067). Caller authentication is checked before creating a
+`cpa_config_backups` gate (ADR 0067). A page's explicit credential is checked against the stored key (ADR 0069) before creating a
 snapshot, and snapshot failure prevents mutation. Copies use the existing retention and
 `config_changes` reason, with deduplication; no new table or migration is introduced.

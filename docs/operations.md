@@ -264,10 +264,14 @@ routes and the fixed model directory, including configuration containing client 
 secrets. Install only plugins you trust: the page is same-origin with the console and acts
 with the signed-in operator's authority, while the plugin already runs inside CPA.
 
-The host preserves a page's explicit Authorization or X-Management-Key so CPA rejects a wrong
-key instead of silently substituting the server key. When both headers are absent, management
-calls use the stored key; resources carry no key, and `GET /v1/models` uses only the page's
-client Authorization. OMC does not publish or store its management key in browser storage;
+A plugin page may ask for a management key of its own. The host compares a page's explicit
+Authorization or X-Management-Key with the stored CPA management key and answers a wrong one
+`401` itself; the wrong key is never sent to CPA, so it cannot count toward CPA's
+failed-attempt ban (five failures ban the client address for 30 minutes, and the console
+and every hosted page share one address). Only the key stored for the instance is accepted
+there, not another secret CPA might also honour such as `MANAGEMENT_PASSWORD`. When both
+headers are absent, management calls use the stored key; resources carry no key, and
+`GET /v1/models` uses only the page's client Authorization. OMC does not publish or store its management key in browser storage;
 a third-party page may independently ask for and store a key the operator supplies.
 
 API reads and writes are audited as `plugin.route_call` and responses are uncached.

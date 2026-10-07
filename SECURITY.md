@@ -68,7 +68,8 @@ parents, so check their mathematical rendering when changing it.
 Installing a plugin authorizes its same-origin page to act as the signed-in operator.
 The authenticated Plugin Host intentionally exposes native v0/v8 management responses,
 including provider and client secrets, but never injects the stored management key into
-page resources or browser storage. Explicit credentials are preserved for CPA validation;
+page resources or browser storage. An explicit page management credential is compared with the stored key inside OMC and
+never forwarded, so a wrong one cannot spend CPA's failed-attempt ban (ADR 0069);
 model-directory requests receive only the page's client Authorization. All API reads and
 writes are audited without request payloads, path suffixes or queries, and are uncached.
 Native config writes share serialization and encrypted pre-write backups. Both outbound

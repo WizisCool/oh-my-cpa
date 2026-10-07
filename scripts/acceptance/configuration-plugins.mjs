@@ -267,7 +267,7 @@ export async function runPluginHostedPageAcceptance({ appURL, page, check }) {
   await pluginFrame.evaluate(() => window.runPluginContract('invalid-plugin-management-key'));
   check('an explicit wrong plugin credential remains unauthorized', await pluginDocument.locator('#plugin-credential-status').innerText() === '401');
   await pluginFrame.evaluate(credential => window.runPluginContract(credential), FAKE_CPA_MANAGEMENT_KEY);
-  check('CPA validates an explicit valid plugin credential', await pluginDocument.locator('#plugin-credential-status').innerText() === '200');
+  check('an explicit valid plugin credential is accepted', await pluginDocument.locator('#plugin-credential-status').innerText() === '200');
   await pluginFrame.evaluate(() => {
     const source = new EventSource(['', 'v0', 'management', 'plugins', 'fixture-logger', 'events'].join('/'));
     const probe = window.pluginHostEventProbe = { source, hasFinished: false, payload: undefined };
