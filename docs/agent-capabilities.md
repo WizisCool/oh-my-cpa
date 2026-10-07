@@ -189,6 +189,15 @@ scalar fields - or, like `database_query`, as positional arrays beside a `column
 charted and tabulated with no further work. A result shaped only for prose - rows packed into
 strings, figures nested inside objects - cannot.
 
+### Page context
+
+A run sent from the assistant dock may say where the operator is (ADR 0073): `console_page`,
+`console_selection` (`kind:id`) and `console_range`, each of a closed shape checked by
+`PageContext.valid` in `internal/agent/prompt.go`. It is not a capability and grants nothing: the
+prompt states it as where the operator is looking, and the model reads the selected thing through
+the ordinary read capabilities. A page declares a selection only when a capability can look that
+identifier up.
+
 ### Read-only database queries
 
 `database_schema` lists what `database_query` may read, and `database_query` runs one SQLite

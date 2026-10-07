@@ -214,7 +214,7 @@ export function AgentAssistantMessage() {
           }}
         </MessagePrimitive.GroupedParts>
         {!isLive && completedDisplayViews(turn).length > 0 && (
-          <section data-aui-quote-selectable="false" data-testid="agent-results" aria-label={t('agent.results')}>
+          <section className={styles['results']} data-aui-quote-selectable="false" data-testid="agent-results" aria-label={t('agent.results')}>
             {completedDisplayViews(turn).map(trace => <DisplayFigure key={trace.id} view={trace.view!} />)}
           </section>
         )}

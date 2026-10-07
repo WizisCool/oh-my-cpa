@@ -1,7 +1,7 @@
 import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './probes/modelSquare.mjs';
 import { mobileConsole } from './probes/mobileConsole.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
-import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
+import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentDock, agentDockNarrow, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
  * The browser probe scenarios, as a registry rather than a script.
@@ -99,6 +99,13 @@ const pluginManagementWrites = [];
 const pricingBookWrites = [];
 const configBackupsLog = [];
 
+// The assistant is probed beside the request list, so it needs both the Agent's and the list's fixtures.
+const dockFixtures = () => [
+  ...agentFixtures(),
+  [url => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+  [url => url.pathname.includes('/usage/events'), () => ({ items: alignmentRecords, has_more: false, limit: 50 })],
+];
+
 const routeErrorFixtures = () => [
   [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
   [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
@@ -187,6 +194,8 @@ export const SCENARIOS = [
   { id: 'agent-question', name: 'Agent asks a question in the composer and continues once it is answered', options: { routes: agentFixtures() }, run: agentQuestion },
   { id: 'agent-live', name: 'Agent shows a sent message at once, queues the next one and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
   { id: 'agent-views', name: 'Agent draws display calls from their frozen rows as tables and charts', options: { routes: agentFixtures() }, run: agentViews },
+  { id: 'agent-dock', name: 'the assistant docks beside a page, says where the operator is and expands to the Agent page', options: { viewport: { width: 1440, height: 900 }, routes: dockFixtures() }, run: agentDock },
+  { id: 'agent-dock-narrow', name: 'the assistant is a sheet on a phone and follows native Back', options: { routes: dockFixtures(), viewport: { width: 375, height: 800 } }, run: agentDockNarrow },
   { id: 'agent-failure', name: 'Agent hands a refused message back and reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },
   { id: 'agent-stream', name: 'Agent coalesces a token burst into bounded repaints', options: { routes: agentFixtures() }, run: agentStream },
   { id: 'agent-narrow', name: 'Agent keeps its target visible and its side panel follows native Back on phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },

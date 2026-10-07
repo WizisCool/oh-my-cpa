@@ -212,6 +212,15 @@
 
 /* ── display views ─────────────────────────────────────────────────────────── */
 
+/* Each display is its own figure: the space between two is what tells a table from the chart
+   drawn under it. */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .view {
   display: flex;
   flex-direction: column;
@@ -252,6 +261,31 @@
 
 .view-mode-label {
   margin-left: 4px;
+}
+
+/* ── page context (ADR 0073) ───────────────────────────────────────────────── */
+
+.context-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 4px 2px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.context-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-text code {
+  color: var(--fg-2);
 }
 
 /* ── panels (ADR 0071) ─────────────────────────────────────────────────────── */

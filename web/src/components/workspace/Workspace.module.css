@@ -648,10 +648,10 @@
 
 .suggestion {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  min-height: 56px;
-  padding: 10px 12px;
+  min-height: 44px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -665,8 +665,14 @@
 }
 
 .suggestion :global(.anticon) {
-  margin-top: 3px;
+  flex-shrink: 0;
   color: var(--muted);
+  font-size: 14px;
+}
+
+.suggestion :global(.anticon) svg {
+  width: 14px;
+  height: 14px;
 }
 
 .suggestion:hover {
@@ -1240,6 +1246,52 @@
   .suggestions {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Docked beside another page the workspace is narrow on any viewport, so it takes the narrow
+   layout by class rather than by media query. */
+.is-compact .head {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 0;
+  padding: 8px 12px;
+}
+
+.is-compact .title {
+  flex: 1;
+  font-size: 14px;
+}
+
+.is-compact .actions {
+  gap: 2px;
+}
+
+.is-compact .target {
+  order: 3;
+  flex-basis: 100%;
+}
+
+.is-compact .target-picker {
+  max-width: none;
+}
+
+.is-compact .notices,
+.is-compact .composer {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.is-compact .transcript-column {
+  padding: 16px 12px 12px;
+}
+
+.is-compact .suggestions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.is-compact .empty {
+  justify-content: flex-start;
+  padding-top: 24px;
 }
 
 @media (max-width: 640px) {

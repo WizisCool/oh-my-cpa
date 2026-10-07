@@ -37,6 +37,8 @@ export interface WorkspaceLayoutProps {
   actions: React.ReactNode;
   notices?: React.ReactNode;
   aside: WorkspaceAside;
+  /** The workspace docked beside another page: the narrow layout whatever the viewport's width. */
+  isCompact?: boolean;
   children: React.ReactNode;
 }
 
@@ -54,8 +56,9 @@ export interface WorkspaceLayoutProps {
  * Below the narrow breakpoint the panel becomes a Drawer joined to the platform Back gesture, and
  * the target moves onto its own row so the model a message will reach is never hidden in a menu.
  */
-export function WorkspaceLayout({ testId, title, target, actions, notices, aside, children }: WorkspaceLayoutProps) {
-  const isNarrow = useIsNarrowViewport();
+export function WorkspaceLayout({ testId, title, target, actions, notices, aside, isCompact = false, children }: WorkspaceLayoutProps) {
+  const isNarrowViewport = useIsNarrowViewport();
+  const isNarrow = isNarrowViewport || isCompact;
   const isPhone = useIsPhoneViewport();
   const visibleViewport = useVisibleViewport(isPhone);
   const workspaceRef = React.useRef<HTMLDivElement>(null);
@@ -87,7 +90,7 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
   );
 
   return (
-    <div ref={workspaceRef} className={styles['workspace']} data-testid={testId}>
+    <div ref={workspaceRef} className={clsx(styles['workspace'], isCompact && styles['is-compact'])} data-testid={testId}>
       <header className={styles['head']}>
         <h1 className={clsx('terminal-title', styles['title'])}>{title}</h1>
         <div className={styles['target']}>{target}</div>

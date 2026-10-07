@@ -14,6 +14,8 @@
   ],
   "weights": {
     "agent": 6.0,
+    "agent-dock": 5.2,
+    "agent-dock-narrow": 3.6,
     "agent-failure": 3.6,
     "agent-live": 10.39,
     "agent-narrow": 3.96,

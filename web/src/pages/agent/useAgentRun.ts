@@ -7,6 +7,8 @@ import { cancelRun, discoverRun } from '../../agent/reconnect';
 import { runAgent } from '../../agent/transport';
 import { DECLARED_TOOLS } from '../../agent/types';
 import type { Conversation } from '../../agent/types';
+import { pageContextEntries } from '../../agent/pageContext';
+import type { PageContext } from '../../agent/pageContext';
 import { createID } from '../playground/state';
 import { failureCode } from './api';
 
@@ -50,6 +52,8 @@ interface AgentRunOptions {
   /** Empty for the model's own default. */
   reasoningEffort: string;
   language: string;
+  /** Where the operator is; sent with a new message, never with a continuation. */
+  pageContext?: PageContext;
   /** Writes a conversation the server has already persisted, so no refetch is needed for it. */
   onConversation: (conversation: Conversation) => void;
 }
@@ -113,7 +117,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   }, []);
 
   const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string) => {
-    const { conversation: current, model, fingerprint, reasoningEffort, language } = optionsRef.current;
+    const { conversation: current, model, fingerprint, reasoningEffort, language, pageContext } = optionsRef.current;
     if (controllerRef.current || !current) throw new RunRejectedError('agent_busy', message);
     const isResume = message === '';
     const runID = recoveryID ?? newRunID();
@@ -136,6 +140,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
         ...(isResume ? {} : { message: { id: newRunID(), content: message } }),
         tools: DISPLAY_TOOL_DECLARATIONS,
         language,
+        ...(isResume ? {} : { page: pageContextEntries(pageContext) }),
         forwardedProps: {
           revision: current.revision,
           model,

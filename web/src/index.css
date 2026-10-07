@@ -538,6 +538,20 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .app-shell { height: 100vh; height: 100dvh; overflow: hidden; background: var(--bg); }
 .app-body { height: 100%; min-width: 0; overflow: hidden; }
+/* The assistant dock (ADR 0073): beside the page where there is room for both, over it where
+   there is not. The 1280px line is where a 420px dock still leaves the page its working width. */
+.assistant-dock { display: flex; flex: none; height: 100%; min-width: 0; background: var(--bg); }
+.assistant-dock[hidden] { display: none; }
+.assistant-dock-panel { min-width: 0; height: 100%; max-width: 100vw; overflow: hidden; }
+.assistant-dock-resizer { position: relative; flex: none; width: 9px; margin: 0 -4px; z-index: 2; cursor: col-resize; touch-action: none; }
+.assistant-dock-resizer::before { content: ''; position: absolute; inset: 0 4px; background: var(--border); transition: background-color var(--motion-fast); }
+.assistant-dock-resizer:hover::before, .assistant-dock-resizer:focus-visible::before, .assistant-dock.is-resizing .assistant-dock-resizer::before { background: var(--accent); }
+.assistant-dock-resizer:focus-visible { outline: none; }
+.assistant-dock.is-resizing { user-select: none; }
+@media (max-width: 1279px) {
+  .assistant-dock { position: fixed; top: 0; right: 0; bottom: 0; z-index: 900; height: auto; }
+}
+.assistant-drawer .ant-drawer-body { padding: 0; }
 .app-sider { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--bg) !important; }
 /* antd wraps a Sider's children in a plain block, so the flex column above
    never reached brand / nav / foot. The nav box stayed content-sized and the

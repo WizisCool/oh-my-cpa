@@ -156,6 +156,8 @@ type Input struct {
 	Language        string
 	// DisplayTools names the display tools the console can draw for this run (ADR 0042).
 	DisplayTools []string
+	// Page is where in the console the operator sent the message from (ADR 0073).
+	Page PageContext
 }
 
 // Event is one step of a run as the runtime sees it, independent of any wire protocol: the API
@@ -312,6 +314,9 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		if displayTools[name] == nil {
 			return errors.New("invalid_parameters")
 		}
+	}
+	if !input.Page.valid() {
+		return errors.New("invalid_parameters")
 	}
 	if conversation.ID == "" {
 		conversation.ID = capability.NewID()
@@ -516,7 +521,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 			turn.Pending = turn.Pending[1:]
 		}
 		turn.Rounds++
-		promptContext := PromptContext{AnchorMS: conversation.AnchorMS, Language: input.Language, DisplayTools: input.DisplayTools}
+		promptContext := PromptContext{AnchorMS: conversation.AnchorMS, Language: input.Language, DisplayTools: input.DisplayTools, Page: input.Page}
 		if r.Location != nil {
 			promptContext.TimeZone = r.Location().String()
 		}

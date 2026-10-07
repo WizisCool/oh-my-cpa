@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
 import {
-  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, LayoutOutlined, MessageOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
+  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, FullscreenOutlined, LayoutOutlined, MessageOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
 } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import type { ComposerTriggers } from '../../components/workspace/AssistantComposer';
@@ -16,6 +16,7 @@ import { TargetPicker } from '../../components/workspace/TargetPicker';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { exportFileName } from '../../agent/export';
+import type { PageContext } from '../../agent/pageContext';
 import type { Trace } from '../../agent/types';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { usePreference } from '../../hooks/usePreference';
@@ -61,15 +62,57 @@ const EXAMPLES = [
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
 ];
 
+/**
+ * What the assistant is asked first from a given page: the question that page most often raises,
+ * ahead of the general examples. A page without an entry offers the general ones alone.
+ */
+const PAGE_STARTERS: Partial<Record<PageContext['page'], string>> = {
+  'usage/events': 'agent.starter.requests',
+  quota: 'agent.starter.quota',
+  'ai-providers': 'agent.starter.providers',
+  'api-keys': 'agent.starter.keys',
+  pricing: 'agent.starter.pricing',
+};
+const SELECTION_STARTER = 'agent.starter.selection';
+
+/** The console's own name for each page that can be context, as its navigation entry reads. */
+const PAGE_LABELS: Record<PageContext['page'], string> = {
+  dashboard: 'nav.dashboard', 'usage/events': 'nav.usage_events', quota: 'nav.quota', pricing: 'nav.pricing', 'api-keys': 'nav.api_keys',
+  'ai-providers': 'nav.providers', 'auth-files': 'nav.auth_files', 'oauth-management': 'nav.auth_files', 'model-square': 'nav.model_square',
+  logs: 'nav.logs', audit: 'nav.audit', config: 'nav.config', playground: 'nav.playground', 'omc-settings': 'nav.omc_settings',
+  plugins: 'nav.plugins', system: 'nav.system',
+};
+
 type PanelTab = 'directory' | 'details' | 'connect';
 
+export interface AgentWorkspaceProps {
+  /** `dock` is the assistant beside another page: the same session in a narrower frame. */
+  variant?: 'page' | 'dock';
+  /** Where the operator is, when the workspace is not itself the page. */
+  pageContext?: PageContext;
+  /** Whether a docked workspace is the one on screen; a closed dock stays mounted. */
+  isActive?: boolean;
+  onExpand?: () => void;
+  onClose?: () => void;
+}
+
 export function AgentPage() {
+  return <AgentWorkspace />;
+}
+
+/**
+ * The Agent's one workspace, shown as its own page or docked beside another (ADR 0073). Both read
+ * the same stored conversation and rejoin the same server-side run, so moving between them - or
+ * between pages with the dock open - never starts anything over.
+ */
+export function AgentWorkspace({ variant = 'page', pageContext, isActive = true, onExpand, onClose }: AgentWorkspaceProps) {
+  const isDock = variant === 'dock';
   const { t, lang } = useI18n();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const pageRef = React.useRef<HTMLDivElement>(null);
 
-  const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
+  const [isPanelOpen, setIsPanelOpen] = React.useState(() => !isDock && !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
   const [panelTab, setPanelTab] = React.useState<PanelTab>('directory');
   const [selectedCallID, setSelectedCallID] = React.useState('');
   const [fingerprint, setFingerprint] = React.useState('');
@@ -97,7 +140,13 @@ export function AgentPage() {
     queryClient.setQueryData(['agent-session'], conversation);
   }, [queryClient]);
 
-  const run = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, language: lang, onConversation: acceptConversation });
+  // Context the operator removed stays removed until they are somewhere else: the chip is a
+  // statement of what the next message will carry, so dismissing it must hold.
+  const contextKey = pageContext ? `${pageContext.page}|${pageContext.selection?.kind ?? ''}:${pageContext.selection?.id ?? ''}|${pageContext.range ?? ''}` : '';
+  const [dismissedContext, setDismissedContext] = React.useState('');
+  const sentContext = pageContext && dismissedContext !== contextKey ? pageContext : undefined;
+
+  const run = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, language: lang, pageContext: sentContext, onConversation: acceptConversation });
   const { isRunning, frame, errorCode, startedAtMS, clearError } = run;
 
   // ── the selector ───────────────────────────────────────────────────────────
@@ -170,6 +219,25 @@ export function AgentPage() {
   const focusComposer = React.useCallback(() => {
     requestAnimationFrame(() => pageRef.current?.querySelector<HTMLTextAreaElement>('textarea[name="input"]')?.focus({ preventScroll: true }));
   }, []);
+
+  // Opening the dock is asking to type. The composer mounts only once the conversation and its
+  // target have loaded, so the request waits for the box instead of being lost to a frame in
+  // which it is not there yet.
+  React.useEffect(() => {
+    if (!isDock || !isActive) return undefined;
+    const root = pageRef.current;
+    if (!root) return undefined;
+    const focusInput = () => {
+      const input = root.querySelector<HTMLTextAreaElement>('textarea[name="input"]');
+      if (!input || input.disabled) return false;
+      input.focus({ preventScroll: true });
+      return true;
+    };
+    if (focusInput()) return undefined;
+    const observer = new MutationObserver(() => { if (focusInput()) observer.disconnect(); });
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    return () => observer.disconnect();
+  }, [isDock, isActive]);
 
   const resumedRef = React.useRef(new Set<string>());
   const { resume } = run;
@@ -353,7 +421,19 @@ export function AgentPage() {
     </>
   );
 
-  const actions = (
+  const actions = isDock ? (
+    <>
+      <Tooltip title={t('agent.new')}>
+        <Button type="text" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning || isDemo || turns.length === 0} onClick={() => void reset()} />
+      </Tooltip>
+      <Tooltip title={t('assistant.expand')}>
+        <Button type="text" aria-label={t('assistant.expand')} icon={<FullscreenOutlined />} onClick={onExpand} />
+      </Tooltip>
+      <Tooltip title={t('assistant.close')}>
+        <Button type="text" aria-label={t('assistant.close')} icon={<CloseOutlined />} onClick={onClose} />
+      </Tooltip>
+    </>
+  ) : (
     <>
       <Tooltip title={t('common.refresh')}>
         <Button
@@ -432,14 +512,39 @@ export function AgentPage() {
     </ComposerPrimitive.Quote>
   );
 
+  const contextChip = sentContext ? (
+    <div className={styles['context-chip']} data-testid="agent-context">
+      <LayoutOutlined aria-hidden="true" />
+      <span className={styles['context-text']}>
+        {t(PAGE_LABELS[sentContext.page])}
+        {sentContext.selection && <> · <code>{sentContext.selection.label ?? (sentContext.selection.kind === 'request' ? `#${sentContext.selection.id}` : sentContext.selection.id)}</code></>}
+        {sentContext.range && <> · {sentContext.range}</>}
+      </span>
+      <Tooltip title={t('assistant.context.remove')}>
+        <Button type="text" size="small" aria-label={t('assistant.context.remove')} icon={<CloseOutlined />} onClick={() => setDismissedContext(contextKey)} />
+      </Tooltip>
+    </div>
+  ) : null;
+
+  // From another page, the questions that page raises come first.
+  const starters = [
+    ...(sentContext?.selection ? [SELECTION_STARTER] : []),
+    ...(sentContext && PAGE_STARTERS[sentContext.page] ? [PAGE_STARTERS[sentContext.page] as string] : []),
+  ];
   const empty = (
     <div className={workspace['empty']} data-testid="agent-empty">
-      <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
+      {!isDock && <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />}
       <p className={workspace['empty-text']}>{t('agent.empty.description')}</p>
       <div className={styles['examples']}>
         <span className={styles['examples-label']}>{t('agent.examples')}</span>
         <div className={workspace['suggestions']}>
-          {EXAMPLES.map(example => (
+          {starters.map(key => (
+            <ThreadPrimitive.Suggestion key={key} prompt={t(key)} send={false} className={workspace['suggestion']} data-starter="page">
+              <LayoutOutlined aria-hidden="true" />
+              <span>{t(key)}</span>
+            </ThreadPrimitive.Suggestion>
+          ))}
+          {EXAMPLES.slice(0, isDock ? 4 - starters.length : EXAMPLES.length).map(example => (
             <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={false} className={workspace['suggestion']}>
               {example.icon}
               <span>{t(example.key)}</span>
@@ -457,8 +562,9 @@ export function AgentPage() {
       <AgentViewContext.Provider value={view}>
         <div ref={pageRef} className={styles['page']}>
           <WorkspaceLayout
-            testId="agent-page"
-            title={t('nav.agent')}
+            testId={isDock ? 'assistant-workspace' : 'agent-page'}
+            title={t(isDock ? 'assistant.title' : 'nav.agent')}
+            isCompact={isDock}
             target={(
               <TargetPicker
                 keys={keys.data?.keys ?? []}
@@ -528,7 +634,7 @@ export function AgentPage() {
                 sendLabel={t(isRunning ? 'agent.queue.send' : 'agent.send')}
                 stopLabel={t('agent.stop')}
                 blockedReason={isAwaiting ? t('agent.operation.hint') : undefined}
-                header={<>{approvalHint}{quote}</>}
+                header={<>{approvalHint}{contextChip}{quote}</>}
                 footerStart={(
                   <ReasoningEffortPicker
                     value={reasoningEffort}

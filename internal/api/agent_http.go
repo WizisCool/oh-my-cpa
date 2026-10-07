@@ -218,9 +218,15 @@ type agentForwardedProps struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
-// AGENT_CONTEXT_LANGUAGE is the one context entry a run may carry: the console's reading language,
-// which the prompt uses as the reply language's default.
-const AGENT_CONTEXT_LANGUAGE = "console_language"
+// The context entries a run may carry (ADR 0041, extended by ADR 0073): the console's reading
+// language, which the prompt uses as the reply language's default, and where the operator is.
+// Anything else is refused.
+const (
+	AGENT_CONTEXT_LANGUAGE  = "console_language"
+	AGENT_CONTEXT_PAGE      = "console_page"
+	AGENT_CONTEXT_SELECTION = "console_selection"
+	AGENT_CONTEXT_RANGE     = "console_range"
+)
 
 // runAgent serves one Agent run as an AG-UI event stream (ADR 0041).
 //
@@ -232,7 +238,7 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	request.Body = http.MaxBytesReader(writer, request.Body, 64<<10)
-	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true}})
+	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true, AGENT_CONTEXT_PAGE: true, AGENT_CONTEXT_SELECTION: true, AGENT_CONTEXT_RANGE: true}})
 	var props agentForwardedProps
 	if err == nil {
 		decoder := json.NewDecoder(bytes.NewReader(wire.ForwardedProps))
@@ -254,6 +260,11 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		ReasoningEffort: props.ReasoningEffort,
 		Language:        wire.Context[AGENT_CONTEXT_LANGUAGE],
 		DisplayTools:    wire.Tools,
+		Page: agent.PageContext{
+			Page:      wire.Context[AGENT_CONTEXT_PAGE],
+			Selection: wire.Context[AGENT_CONTEXT_SELECTION],
+			Range:     wire.Context[AGENT_CONTEXT_RANGE],
+		},
 	}
 	for _, entry := range wire.Resume {
 		input.Resume = append(input.Resume, entry.InterruptID)

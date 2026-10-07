@@ -62,7 +62,7 @@ const DASHBOARD_SCENARIOS = [
   'mobile-console',
 ];
 
-const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-live', 'agent-views', 'agent-failure', 'agent-stream', 'agent-narrow', 'mobile-console'];
+const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-live', 'agent-views', 'agent-dock', 'agent-dock-narrow', 'agent-failure', 'agent-stream', 'agent-narrow', 'mobile-console'];
 
 /**
  * A source path maps to the scenarios it can affect.
@@ -73,6 +73,7 @@ const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-liv
  */
 const SCENARIO_PATHS = [
   { prefix: 'web/src/pages/agent/', scenarios: AGENT_SCENARIOS },
+  { prefix: 'web/src/components/assistant/', scenarios: ['agent-dock', 'agent-dock-narrow', 'mobile-console'] },
   { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow', 'mobile-console'] },
   // The run protocol, stream reader and exports: the Agent runs on all of it, and the Playground
   // reads its stream and writes its export with the same modules.

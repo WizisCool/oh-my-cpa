@@ -107,6 +107,8 @@ export interface AgentRunRequest {
   tools: readonly { name: string; description: string }[];
   /** The console's reading language. */
   language?: string;
+  /** Where the operator is, as allowlisted context entries (ADR 0073). */
+  page?: readonly { description: string; value: string }[];
   forwardedProps: AgentForwardedProps;
   /** The interrupts this run continues from, each already decided through the decision endpoint. */
   resume?: readonly { interruptId: string; status: 'resolved' | 'cancelled' }[];
@@ -123,7 +125,7 @@ export function buildRunInput(request: AgentRunRequest): RunAgentInput & { proto
     protocolVersion: AGENT_PROTOCOL_VERSION,
     messages: request.message ? [{ id: request.message.id, role: 'user', content: request.message.content }] : [],
     tools: request.tools.map(tool => ({ name: tool.name, description: tool.description })),
-    context: request.language ? [{ description: 'console_language', value: request.language }] : [],
+    context: [...(request.language ? [{ description: 'console_language', value: request.language }] : []), ...(request.page ?? [])],
     forwardedProps: request.forwardedProps,
     ...(request.resume?.length ? { resume: request.resume.map(entry => ({ ...entry })) } : {}),
   };

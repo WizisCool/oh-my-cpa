@@ -612,6 +612,94 @@ export async function agentViews({ base, page, check, expectProblem }) {
  * `ask_question` takes the composer's place: the agent's options, a typed answer beside them, and
  * sending the reply continues the run.
  */
+export async function agentDock({ base, page, check }) {
+  const runs = [];
+  let conversation = initial();
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/run', async route => {
+    runs.push(JSON.parse(route.request().postData()));
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-dock', user: 'Why was this request slow?', reply: 'It waited on the upstream.', parts: [{ type: 'text', content: 'It waited on the upstream.' }], status: 'success', started_at_ms: Date.now() - 500, ended_at_ms: Date.now(), traces: [] }] };
+    await route.fulfill({ contentType: 'text/event-stream', body: sse([started('turn-dock'), step(1), ...text('message-dock', 'It waited on the upstream.'), snapshot(conversation), finished()]) });
+  });
+  await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+  const dock = page.locator('[data-testid="assistant-dock"]');
+  check('the assistant is not loaded until it is opened', await dock.count() === 0);
+
+  // Open a request and close its details: the assistant is asked about it afterwards.
+  await page.locator('.request-row').first().click();
+  await page.locator('.ant-drawer-content-wrapper').first().waitFor({ state: 'visible' });
+  await page.keyboard.press('Escape');
+  await until(async () => await page.locator('.ant-drawer-content-wrapper:visible').count() === 0, { label: 'the request details to close' });
+
+  await page.keyboard.press('Control+j');
+  const workspace = page.locator('[data-testid="assistant-workspace"]');
+  await workspace.waitFor();
+  const chip = page.locator('[data-testid="agent-context"]');
+  await chip.waitFor();
+  check('the dock names the page and the request it will speak about', /Request/i.test(await chip.innerText()), await chip.innerText());
+  check('the dock offers questions about this page', await workspace.locator('[data-starter="page"]').count() > 0);
+  const composer = workspace.getByRole('textbox').last();
+  await until(async () => await composer.evaluate(box => box === document.activeElement), { label: 'the docked composer to take focus' });
+
+  const wide = await page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="assistant-dock"]').getBoundingClientRect();
+    const content = document.querySelector('.usage-events-page').getBoundingClientRect();
+    return { panelLeft: panel.left, panelRight: panel.right, contentRight: content.right, width: innerWidth, scroll: document.documentElement.scrollWidth };
+  });
+  check('a wide console makes room for the dock instead of covering the page', wide.contentRight <= wide.panelLeft + 1 && wide.panelRight <= wide.width + 1 && wide.scroll <= wide.width, JSON.stringify(wide));
+
+  await composer.fill('Why was this request slow?');
+  await page.keyboard.press('Enter');
+  await workspace.getByText('It waited on the upstream.', { exact: true }).waitFor();
+  const context = Object.fromEntries((runs[0]?.context ?? []).map(entry => [entry.description, entry.value]));
+  check('the run says which page and which request', context.console_page === 'usage/events' && /^request:\d+$/.test(context.console_selection ?? ''), JSON.stringify(runs[0]?.context));
+
+  // Removing the chip is the operator saying this question is not about the page.
+  await chip.getByRole('button').click();
+  await until(async () => await chip.count() === 0, { label: 'the context chip to go' });
+  await composer.fill('And overall?');
+  await page.keyboard.press('Enter');
+  await until(() => runs.length === 2, { label: 'the second run' });
+  check('a dismissed context is not sent', !(runs[1].context ?? []).some(entry => entry.description.startsWith('console_page') || entry.description === 'console_selection'), JSON.stringify(runs[1].context));
+
+  // Narrower than the push breakpoint the dock lies over the page, which keeps its own width.
+  await page.setViewportSize({ width: 1100, height: 800 });
+  const narrow = await page.evaluate(() => {
+    const panel = document.querySelector('[data-testid="assistant-dock"]').getBoundingClientRect();
+    const content = document.querySelector('.usage-events-page').getBoundingClientRect();
+    return { panelLeft: panel.left, panelRight: panel.right, contentRight: content.right, width: innerWidth, scroll: document.documentElement.scrollWidth };
+  });
+  check('a narrower console lays the dock over the page', narrow.contentRight > narrow.panelLeft && narrow.panelRight <= narrow.width + 1 && narrow.scroll <= narrow.width, JSON.stringify(narrow));
+
+  await page.keyboard.press('Control+j');
+  await until(async () => !(await dock.isVisible()), { label: 'the dock to close' });
+  await page.locator('[data-testid="assistant-toggle"]').click();
+  await until(async () => await dock.isVisible(), { label: 'the dock to reopen' });
+  check('the conversation is still there when the dock reopens', await workspace.getByText('It waited on the upstream.', { exact: true }).isVisible());
+
+  await workspace.getByRole('button', { name: 'Open in the Agent page', exact: true }).click();
+  await page.locator('[data-testid="agent-page"]').waitFor();
+  check('expanding opens the Agent page with the same conversation and no dock beside it',
+    new URL(page.url()).pathname.endsWith('/agent') && !(await dock.isVisible()) && await page.locator('[data-testid="assistant-toggle"]').count() === 0
+    && await page.locator('[data-testid="agent-page"]').getByText('It waited on the upstream.', { exact: true }).isVisible());
+}
+
+export async function agentDockNarrow({ base, page, check }) {
+  await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="assistant-toggle"]').click();
+  const workspace = page.locator('[data-testid="assistant-workspace"]');
+  await workspace.waitFor();
+  const geometry = await page.evaluate(() => {
+    const box = document.querySelector('[data-testid="assistant-workspace"]').getBoundingClientRect();
+    return { left: box.left, right: box.right, bottom: box.bottom, width: innerWidth, height: innerHeight, scroll: document.documentElement.scrollWidth };
+  });
+  check('the assistant fills a phone without widening it', geometry.left >= 0 && geometry.right <= geometry.width + 1 && geometry.bottom <= geometry.height + 1 && geometry.scroll <= geometry.width, JSON.stringify(geometry));
+  await page.goBack();
+  await until(async () => !(await workspace.isVisible()), { label: 'Back to dismiss the assistant' });
+  check('Back dismisses the assistant without leaving the page', new URL(page.url()).pathname.endsWith('/usage/events'));
+}
+
 export async function agentQuestion({ base, page, check }) {
   let conversation = initial();
   let operation = { id: 'question-test', capability: 'ask_question', permission: 'read', human_input: 'answer', status: 'pending', preview: { target: 'Which window?', changes: { questions: [
