@@ -172,9 +172,13 @@ for running plugins and under their own resource id. `internal/api/management_pl
 serves them behind the console session under `/api/v1/plugin-host/`. Resources use
 `/v0/resource/plugins/<id>/...` without credentials. Management calls use the fixed CPA
 origin's `/v0/management/*` and `/v8/management/*`, including native core and namespaced
-plugin routes; the model directory is only `GET /v1/models`. Explicit Authorization and
-X-Management-Key are preserved on management calls, including empty headers. Only absent
-headers permit the stored server management key. Models receive only caller Authorization.
+plugin routes; the model directory is only `GET /v1/models`. Management calls reach CPA
+only with the stored server management key. A page that sends Authorization or
+X-Management-Key, even empty, has that credential read with CPA's precedence and compared
+with the stored key in `PluginRoute`; a mismatch is answered `401` in CPA's wire shape
+before any upstream request, backup or write (ADR 0069). CPA bans a client address after
+repeated failed management authentications and every hosted page shares this process's
+address, so a page credential is never CPA's to count. Models receive only caller Authorization.
 Cookies and Set-Cookie never cross; redirects are not followed. Cleaned paths refuse
 traversal, backslashes and controls, and both versions' outbound `api-call` bridges are
 refused. Ordinary facade DTO allowlists remain unchanged.

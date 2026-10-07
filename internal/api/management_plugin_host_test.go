@@ -162,7 +162,9 @@ func TestPluginHostRequiresTheConsoleSession(t *testing.T) {
 	}
 }
 
-func TestPluginHostPreservesExplicitCredentialFailures(t *testing.T) {
+// A key mistyped into a plugin page must fail there, without becoming a failed
+// CPA authentication from the console's address (ADR 0069).
+func TestPluginHostRefusesWrongPageCredentialsBeforeCPA(t *testing.T) {
 	client, baseURL, _, state := startPluginTestServer(t)
 	for _, target := range []string{"/v0/management/plugins/example/state", "/v0/management/config", "/v8/management/config/api-keys"} {
 		for _, credential := range []struct{ header, value string }{
@@ -172,6 +174,10 @@ func TestPluginHostPreservesExplicitCredentialFailures(t *testing.T) {
 			{"X-Management-Key", ""},
 			{"X-Management-Key", "invalid-page-key"},
 		} {
+			want := `{"error":"invalid management key"}`
+			if credential.value == "" {
+				want = `{"error":"missing management key"}`
+			}
 			request, _ := http.NewRequest(http.MethodGet, baseURL+"/omc/api/v1/plugin-host"+target, nil)
 			request.Header.Set(credential.header, credential.value)
 			response, err := client.Do(request)
@@ -180,7 +186,7 @@ func TestPluginHostPreservesExplicitCredentialFailures(t *testing.T) {
 			}
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			if response.StatusCode != http.StatusUnauthorized || string(body) != `{"error":"unauthorized"}` {
+			if response.StatusCode != http.StatusUnauthorized || string(body) != want {
 				t.Fatalf("%s using %s: status=%d body=%s", target, credential.header, response.StatusCode, body)
 			}
 		}
@@ -189,6 +195,9 @@ func TestPluginHostPreservesExplicitCredentialFailures(t *testing.T) {
 	defer state.mu.Unlock()
 	if len(state.routeCalls) != 0 {
 		t.Fatalf("invalid credentials invoked the plugin: %#v", state.routeCalls)
+	}
+	if state.rejectedManagementCalls != 0 {
+		t.Fatalf("wrong page credentials cost %d failed CPA authentications", state.rejectedManagementCalls)
 	}
 }
 
@@ -319,8 +328,8 @@ func TestPluginHostNativeWriteGateAndCredentialRefusal(t *testing.T) {
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if state.nativeWrites != 0 {
-		t.Fatalf("refused native writes=%d", state.nativeWrites)
+	if state.nativeWrites != 0 || state.rejectedManagementCalls != 0 {
+		t.Fatalf("refused native writes=%d, failed CPA authentications=%d", state.nativeWrites, state.rejectedManagementCalls)
 	}
 }
 

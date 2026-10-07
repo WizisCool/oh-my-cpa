@@ -3,6 +3,7 @@ package management
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -133,20 +134,52 @@ func (c *Client) PluginResource(ctx context.Context, resourcePath, rawQuery stri
 	return c.sendPluginHost(ctx, http.MethodGet, cleaned, rawQuery, header, nil, pluginHostResourceAuth)
 }
 
-// PluginRoute preserves explicit page credentials so CPA, not the host, decides
-// whether they are valid. Only credential-less session pages use the stored key.
+// pluginHostManagementCredential reads a page's management credential with CPA's
+// own precedence: a Bearer Authorization, else the raw Authorization value, else
+// X-Management-Key. isExplicit is true when either header was sent, even empty.
+func pluginHostManagementCredential(header http.Header) (credential string, isExplicit bool) {
+	_, hasAuthorization := header["Authorization"]
+	_, hasManagementKey := header["X-Management-Key"]
+	credential = header.Get("Authorization")
+	if scheme, token, found := strings.Cut(credential, " "); found && strings.EqualFold(scheme, "bearer") {
+		credential = token
+	}
+	if credential == "" {
+		credential = header.Get("X-Management-Key")
+	}
+	return credential, hasAuthorization || hasManagementKey
+}
+
+// refusedPluginHostCredential answers a wrong page credential in CPA's wire shape.
+func refusedPluginHostCredential(credential string) PluginHostResponse {
+	message := "invalid management key"
+	if credential == "" {
+		message = "missing management key"
+	}
+	return PluginHostResponse{
+		StatusCode: http.StatusUnauthorized,
+		Header:     http.Header{"Content-Type": {"application/json; charset=utf-8"}},
+		Body:       []byte(`{"error":"` + message + `"}`),
+	}
+}
+
+// PluginRoute judges an explicit page credential here and never sends it to CPA.
+// CPA counts failed management authentications per client address and bans the
+// address; every hosted page shares this process's address, so a key mistyped
+// into a plugin's own prompt would otherwise lock the whole console out of CPA.
+// A page that sends no credential acts with the session's stored key.
 func (c *Client) PluginRoute(ctx context.Context, method, routePath, rawQuery string, header http.Header, body []byte) (PluginHostResponse, error) {
 	cleaned, ok := PluginRoutePath(routePath)
 	if !ok {
 		return PluginHostResponse{}, ErrPluginHostPath
 	}
+	if c == nil {
+		return PluginHostResponse{}, errors.New("CPA client is not initialized")
+	}
+	if credential, isExplicit := pluginHostManagementCredential(header); isExplicit && subtle.ConstantTimeCompare([]byte(credential), []byte(c.management)) != 1 {
+		return refusedPluginHostCredential(credential), nil
+	}
 	if IsPluginHostNativeWrite(method, cleaned) {
-		// Validate before using the server key to keep a snapshot: an invalid page
-		// credential must not create backups or mutate configuration.
-		verified, err := c.sendPluginHost(ctx, http.MethodGet, PluginRouteV8Prefix+"config/config-version", "", header, nil, pluginHostManagementAuth)
-		if err != nil || verified.StatusCode < 200 || verified.StatusCode >= 300 {
-			return verified, err
-		}
 		if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigChanges)); err != nil {
 			return PluginHostResponse{}, err
 		}
@@ -189,21 +222,15 @@ func (c *Client) sendPluginHost(ctx context.Context, method, cleanedPath, rawQue
 			request.Header.Add(name, value)
 		}
 	}
-	if authentication != pluginHostResourceAuth {
-		credentialHeaders := []string{"Authorization"}
-		if authentication == pluginHostManagementAuth {
-			credentialHeaders = append(credentialHeaders, "X-Management-Key")
-		}
-		for _, name := range credentialHeaders {
-			if values, exists := header[http.CanonicalHeaderKey(name)]; exists {
-				request.Header[name] = append([]string(nil), values...)
-			}
-		}
-	}
-	_, hasAuthorization := request.Header["Authorization"]
-	_, hasManagementKey := request.Header["X-Management-Key"]
-	if authentication == pluginHostManagementAuth && !hasAuthorization && !hasManagementKey {
+	switch authentication {
+	case pluginHostManagementAuth:
+		// Always the stored key: a page's own header is judged in PluginRoute and
+		// must not reach CPA's failed-attempt counter.
 		request.Header.Set("Authorization", "Bearer "+c.management)
+	case pluginHostGatewayAuth:
+		if values, exists := header["Authorization"]; exists {
+			request.Header["Authorization"] = append([]string(nil), values...)
+		}
 	}
 	// A redirect is the plugin's answer to the browser, not somewhere this process goes.
 	client := *c.httpClient

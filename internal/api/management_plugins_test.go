@@ -23,17 +23,19 @@ import (
 )
 
 type pluginMockState struct {
-	mu            sync.Mutex
-	enabledCalls  map[string]bool
-	deleted       string
-	installed     string
-	installQuery  string
-	installBody   map[string]any
-	configs       map[string]map[string]any
-	configYAML    string
-	configPuts    int
-	configWrites  []string
-	deleteBlocked bool
+	mu           sync.Mutex
+	enabledCalls map[string]bool
+	deleted      string
+	installed    string
+	installQuery string
+	installBody  map[string]any
+	configs      map[string]map[string]any
+	configYAML   string
+	// rejectedManagementCalls counts what CPA would charge to its ban budget.
+	rejectedManagementCalls int
+	configPuts              int
+	configWrites            []string
+	deleteBlocked           bool
 	// routeCalls records what reached the plugin's own management routes.
 	routeCalls []pluginRouteCall
 	// resourceAuthorization is the Authorization header the last resource read carried.
@@ -84,6 +86,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			credential = request.Header.Get("X-Management-Key")
 		}
 		if (strings.HasPrefix(path, "/v0/management/") || strings.HasPrefix(path, "/v8/management/")) && credential != "cpa-secret-key" {
+			state.rejectedManagementCalls++
 			writer.WriteHeader(http.StatusUnauthorized)
 			_, _ = writer.Write([]byte(`{"error":"unauthorized"}`))
 			return

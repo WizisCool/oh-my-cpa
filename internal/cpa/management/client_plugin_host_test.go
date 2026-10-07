@@ -110,8 +110,11 @@ func TestPluginHostTransportKeepsCredentialsOnTheirSurface(t *testing.T) {
 	if _, err := client.PluginResource(context.Background(), "/v0/resource/plugins/example/ui", "q=one%20two", callerHeaders); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.PluginRoute(context.Background(), http.MethodGet, "/v0/management/plugins/example/state", "q=one%20two", callerHeaders, nil); err != nil {
-		t.Fatal(err)
+	// CPA reads Authorization first, so this page's credential is the valid key and
+	// the stray X-Management-Key is never consulted.
+	managementHeaders := http.Header{"Authorization": {"Bearer synthetic-server-key"}, "X-Management-Key": {"explicit-management-key"}, "Cookie": {"console=session"}}
+	if response, err := client.PluginRoute(context.Background(), http.MethodGet, "/v0/management/plugins/example/state", "q=one%20two", managementHeaders, nil); err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("valid page credential: status=%d err=%v", response.StatusCode, err)
 	}
 	if _, err := client.PluginModels(context.Background(), "q=one%20two", callerHeaders); err != nil {
 		t.Fatal(err)
@@ -122,8 +125,8 @@ func TestPluginHostTransportKeepsCredentialsOnTheirSurface(t *testing.T) {
 	if calls[0].authorization != "" || calls[0].managementKey != "" || calls[0].cookie != "" {
 		t.Fatalf("resource leaked credentials: %#v", calls[0])
 	}
-	if calls[1].authorization != "Bearer caller-key" || calls[1].managementKey != "explicit-management-key" || calls[1].cookie != "" {
-		t.Fatalf("management call replaced credentials: %#v", calls[1])
+	if calls[1].authorization != "Bearer synthetic-server-key" || calls[1].managementKey != "" || calls[1].cookie != "" {
+		t.Fatalf("management call carried page headers to CPA: %#v", calls[1])
 	}
 	if calls[2].authorization != "Bearer caller-key" || calls[2].managementKey != "" || calls[2].cookie != "" {
 		t.Fatalf("gateway call leaked management credentials: %#v", calls[2])
@@ -132,6 +135,70 @@ func TestPluginHostTransportKeepsCredentialsOnTheirSurface(t *testing.T) {
 		if call.query != "q=one%20two" {
 			t.Fatalf("query changed: %#v", call)
 		}
+	}
+}
+
+// CPA bans a client address after repeated failed management authentications,
+// and every hosted page reaches CPA from this process's address.
+func TestPluginHostJudgesPageCredentialsWithoutSpendingCPAAttempts(t *testing.T) {
+	var managementCalls, rejectedByCPA int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer synthetic-server-key" || request.Header.Get("X-Management-Key") != "" {
+			rejectedByCPA++
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if request.URL.Path == "/v8/management/config/config-version" {
+			writer.Write([]byte("8"))
+			return
+		}
+		managementCalls++
+		writer.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, "synthetic-server-key", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, refused := range []struct {
+		header http.Header
+		body   string
+	}{
+		{http.Header{"Authorization": {"Bearer wrong-key"}}, `{"error":"invalid management key"}`},
+		{http.Header{"Authorization": {"wrong-key"}}, `{"error":"invalid management key"}`},
+		{http.Header{"Authorization": {"Bearer"}}, `{"error":"invalid management key"}`},
+		{http.Header{"Authorization": {"Basic synthetic-server-key"}}, `{"error":"invalid management key"}`},
+		{http.Header{"X-Management-Key": {"wrong-key"}}, `{"error":"invalid management key"}`},
+		{http.Header{"Authorization": {"Bearer wrong-key"}, "X-Management-Key": {"synthetic-server-key"}}, `{"error":"invalid management key"}`},
+		{http.Header{"Authorization": {""}}, `{"error":"missing management key"}`},
+		{http.Header{"X-Management-Key": {""}}, `{"error":"missing management key"}`},
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodPut} {
+			response, err := client.PluginRoute(context.Background(), method, "/v0/management/config", "", refused.header, nil)
+			if err != nil || response.StatusCode != http.StatusUnauthorized || string(response.Body) != refused.body {
+				t.Fatalf("%s %#v: status=%d body=%s err=%v", method, refused.header, response.StatusCode, response.Body, err)
+			}
+		}
+	}
+	if managementCalls != 0 || rejectedByCPA != 0 {
+		t.Fatalf("refused page credentials reached CPA: calls=%d rejected=%d", managementCalls, rejectedByCPA)
+	}
+	accepted := []http.Header{
+		{},
+		{"Authorization": {"Bearer synthetic-server-key"}},
+		{"Authorization": {"bearer synthetic-server-key"}},
+		{"Authorization": {"synthetic-server-key"}},
+		{"X-Management-Key": {"synthetic-server-key"}},
+		{"Authorization": {""}, "X-Management-Key": {"synthetic-server-key"}},
+	}
+	for _, header := range accepted {
+		response, err := client.PluginRoute(context.Background(), http.MethodGet, "/v0/management/config", "", header, nil)
+		if err != nil || response.StatusCode != http.StatusOK {
+			t.Fatalf("%#v: status=%d err=%v", header, response.StatusCode, err)
+		}
+	}
+	if managementCalls != len(accepted) || rejectedByCPA != 0 {
+		t.Fatalf("accepted page credentials: calls=%d rejected=%d", managementCalls, rejectedByCPA)
 	}
 }
 

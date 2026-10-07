@@ -13,8 +13,9 @@ import (
 
 // The plugin host supplies the native CPA contract to trusted installed pages.
 // Unlike ordinary console DTOs, management responses may contain secrets; reads
-// and writes are audited. Caller credentials are validated by CPA, resource reads
-// carry none, and gateway models use only the page's client key (ADR 0067).
+// and writes are audited. A page's own management credential is judged against
+// the stored key before CPA is called (ADR 0069), resource reads carry none, and
+// gateway models use only the page's client key (ADR 0067).
 
 // PLUGIN_HOST_ROUTE is the host's mount point below `/api/v1`.
 const PLUGIN_HOST_ROUTE = "/plugin-host"
@@ -28,7 +29,7 @@ var pluginHostResponseHeaders = []string{
 }
 
 // pluginHostRequestHeaders are the headers of the page's request a plugin may need.
-// Cookies never cross this boundary. Explicit credentials cross only for API calls.
+// Cookies never cross this boundary. Explicit credentials are read only for API calls.
 var pluginHostRequestHeaders = []string{"Accept", "Accept-Language", "Content-Type", "If-None-Match", "If-Modified-Since", "Authorization", "X-Management-Key"}
 
 // pluginHostReference finds absolute references to the supported CPA trees.
