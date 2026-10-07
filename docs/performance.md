@@ -320,6 +320,32 @@ reduces component work but does not remove this synchronous layout hotspot or th
 roughly 450 ms route task. Active tooltip behavior is pinned by the request interaction
 and timezone probes; no endpoint, response shape or database policy changed.
 
+## Round six: request rows while scrolling
+
+Measured on October 7, 2026 (UTC) against the dev server with 4x CPU throttling,
+wheel-scrolling a 100-row request list end to end under a CPU profile and a trace.
+Unthrottled, the same scroll holds 60 frames per second with no long task; the
+throttled run is what exposes per-row cost.
+
+| Cost | Before | After |
+| --- | ---: | ---: |
+| Native layout, style and paint time (`(program)`) | about 5.1 s | about 3.4 s |
+| `formatRequestTimestamp`, inclusive | 296 ms | 20 ms |
+| react-query observer per row (`useQuery` under `ProviderBrandIcon`) | 95 ms | 16 ms |
+
+Three changes produce these numbers. Each row declares `contain: layout style`, so
+measuring one row no longer lays out its neighbours. The row timestamp is formatted by
+one `Intl.DateTimeFormat` per display timezone rather than a zoned dayjs instance per
+row. `ProviderBrandIcon` creates a plugin-list observer only for deployment custom
+artwork.
+
+What remains is the virtual list's own height collection: after each commit it reads
+`offsetHeight` and the computed margins of every mounted row, about 1.3 s of self time
+in the throttled run, and the throttled frame distribution is still set by it (roughly
+45% of frames over 33 ms). It is library behaviour and was left alone. The figures are
+dev-server figures, which overstate React's share; they were not repeated against a
+production build.
+
 ## Remaining work, in priority order
 
 1. **Dashboard page commit and layout.** The third-round responsiveness harness
@@ -338,7 +364,7 @@ and timezone probes; no endpoint, response shape or database policy changed.
    latency labeling would make the System readout easier to interpret. Treat that as a
    distinct behavior/copy change, with its API and localization tests.
 
-The five rounds reduce render work and improve responsiveness and transfer/query cost without claiming to
+The six rounds reduce render work and improve responsiveness and transfer/query cost without claiming to
 remove every main-thread stall. Follow-up work should retain the same throttle and
 report both first-visible content and meaningful interaction readiness.
 

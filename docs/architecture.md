@@ -964,11 +964,16 @@ position to the browser-clamped end once per mount, rather than synchronously re
 whole dashboard's pending layout. Refreshes preserve the operator's scroll position.
 See `docs/performance.md` for the measured audit and remaining bottlenecks.
 
-Request rows generate their short label and millisecond-precision tooltip from one
-zoned instant in `web/src/components/usage/requestTimestamp.ts`. The row memo retains
-both strings until its timestamp or the shared display timezone changes, so selection
-and unit-style changes do not repeat timezone conversion. The underlying dayjs timezone
-implementation and wire timestamps remain unchanged.
+Request rows generate their short label and millisecond-precision tooltip in
+`web/src/components/usage/requestTimestamp.ts` from one `Intl.DateTimeFormat` that is
+built per display timezone and shared by every row, so mounting a row while scrolling
+does not resolve the zone again. The row memo retains both strings until its timestamp
+or the shared display timezone changes, so selection and unit-style changes do not
+repeat the formatting. Wire timestamps are unchanged.
+
+`ProviderBrandIcon` subscribes to the plugin list only for deployment custom artwork on
+a provider with keys, the one case plugin ownership decides. A catalog mark renders
+without a query observer, which matters where one mark mounts per request row.
 
 Request cells carry their exact tooltip label as a data attribute instead of creating
 an antd trigger tree per cell. `web/src/components/usage/RequestTooltip.tsx` delegates

@@ -572,6 +572,7 @@
   cursor: pointer;
   font-size: 12px;
   position: relative;
+  contain: layout style;
   transition: background var(--motion-fast) ease;
 }
 

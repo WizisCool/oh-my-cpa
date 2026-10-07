@@ -147,18 +147,30 @@ export interface ProviderBrandIconProps {
  * the shared chunk this code is bundled into, and the bundle budget pins that chunk
  * by name (`Lobe icon JS`, derived from this file).
  */
-export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
-  providerKeys = [],
+export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = (props) => {
+  // Plugin ownership only decides anything for deployment custom artwork. Asking for
+  // it unconditionally would subscribe every catalog mark to the plugin query, and a
+  // request list mounts one mark per row while it scrolls.
+  const needsOwnership = Boolean(customIconID(props.iconId)) && (props.providerKeys?.length ?? 0) > 0;
+  return needsOwnership ? <PluginAwareBrandIcon {...props} /> : <BrandIconArtwork {...props} isOwned={false} isOwnershipUnknown={false} />;
+};
+
+const PluginAwareBrandIcon: React.FC<ProviderBrandIconProps> = (props) => {
+  const ownership = usePluginProviderOwnership(props.providerKeys ?? [], true);
+  return <BrandIconArtwork {...props} isOwned={ownership.isOwned} isOwnershipUnknown={ownership.isUnknown} />;
+};
+
+const BrandIconArtwork: React.FC<ProviderBrandIconProps & { isOwned: boolean; isOwnershipUnknown: boolean }> = ({
   fallbackIconId,
   iconId,
   logo,
   size,
   className,
   style,
+  isOwned,
+  isOwnershipUnknown,
 }) => {
-  const isCustom = Boolean(customIconID(iconId));
-  const ownership = usePluginProviderOwnership(providerKeys, isCustom && providerKeys.length > 0);
-  const fallback = resolveProviderArtwork(iconId, fallbackIconId, Boolean(logo), ownership.isOwned, ownership.isUnknown);
+  const fallback = resolveProviderArtwork(iconId, fallbackIconId, Boolean(logo), isOwned, isOwnershipUnknown);
   const [isLogoBroken, setIsLogoBroken] = useState(false);
 
   // A swapped logo (a plugin upgrade, or a provider whose plugin changed) starts

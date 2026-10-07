@@ -1785,6 +1785,13 @@ is overridden to zero by `web/src/pages/UsageEventsPage.css`: this projection su
 a sizing hint, while the existing row CSS owns visible spacing. Actual item and
 group-header heights are still measured, including the taller phone rows.
 
+Each row declares `contain: layout style`. The list measures every mounted row after
+each commit, and without containment measuring one row lays out the rows around it;
+nothing a row draws depends on its neighbours, so the boundary costs no geometry. A row
+is therefore the containing block for anything positioned inside it: row-level popups
+belong to the list (the shared tooltip) or to a portal, never to an absolutely
+positioned child that must escape the row.
+
 The list is virtualized, so the browser cannot scroll it for a finger, and the library's own touch
 emulation ran up to four times ahead of the finger: it restarted a fixed-interval coast after every
 move, and that coast kept firing while the finger was still down. The console moves the list itself

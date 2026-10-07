@@ -267,7 +267,7 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 
 - `scripts/test-request-timestamp.ts` pins the row's two labels against the existing
   dayjs interpretation across fractional offsets, date rollovers, milliseconds and both
-  DST boundaries, and counts one conversion per instant. The `column-alignment` probe
+  DST boundaries, and asserts that formatting a row constructs no zoned date. The `column-alignment` probe
   changes the shared timezone while a request row stays mounted, detecting a stale memo
   without replacing the DOM node. That subscription claim requires the browser.
 - `scripts/test-theme-presets.ts` pins the Listy estimate to the request row's CSS
