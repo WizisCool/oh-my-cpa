@@ -281,6 +281,9 @@ async function downloadBlob(url: string): Promise<Blob> {
   return response.blob();
 }
 
+/** The largest preference body sent with `keepalive`; see `api.putPreference`. */
+const KEEPALIVE_PREFERENCE_BYTES = 8 * 1024;
+
 export async function requestResponse(path: string, options: RequestInit = {}): Promise<Response> {
   const { apiBaseUrl } = getAppConfig();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
@@ -462,8 +465,17 @@ export const api = {
     return { ...data.preferences, omc_server_timezone: data.time_zone?.server_timezone ?? 'UTC' };
   },
 
+  /**
+   * A preference is often the last thing changed before a reload, and a reload cancels every
+   * ordinary request still in flight - the choice would be shown, then gone. `keepalive` lets the
+   * browser finish the write after the page that sent it is gone. It is limited to small bodies
+   * because all of a page's keepalive requests share one 64 KiB quota and a request past it is
+   * refused outright; a larger document keeps the ordinary request.
+   */
   async putPreference(key: string, value: unknown): Promise<void> {
-    await request<unknown>(`/preferences/${key}`, { method: 'PUT', body: JSON.stringify(value) });
+    const body = JSON.stringify(value);
+    const keepalive = new TextEncoder().encode(body).byteLength <= KEEPALIVE_PREFERENCE_BYTES;
+    await request<unknown>(`/preferences/${key}`, { method: 'PUT', body, keepalive });
   },
 
   /**

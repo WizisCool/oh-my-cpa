@@ -48,8 +48,15 @@ export async function playground({ base, page, check, context }) {
   await page.goto(`${base}/playground`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="playground-page"]').waitFor();
   const input = page.getByPlaceholder('Enter a message, or paste an image…');
+  check('the message box takes text before a model is chosen, and only sending waits for one', await input.isEnabled() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
   await page.getByLabel('Model', { exact: true }).click();
   await page.locator('.ant-select-item-option:visible', { hasText: 'vision-alias' }).click();
+  // Reloaded with no pause after the choice: a selection that waited out the parameter debounce
+  // before being written is dropped by a reload, which unmounts nothing.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const target = () => page.locator('[data-testid="playground-page"] header').innerText();
+  await until(async () => (await target()).includes('vision-alias'), { label: 'the chosen model after an immediate reload' });
+  check('a model chosen just before a reload is still selected after it', (await target()).includes('vision-alias'), await target());
   check('playground offers one image picker beside paste', await page.getByRole('button', { name: 'Add image', exact: true }).count() === 1);
   await input.evaluate((element, base64) => {
     const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0));
@@ -260,6 +267,11 @@ export async function playgroundNarrow({ base, page, check }) {
     return { height: frame.getBoundingClientRect().height, hasFootRow: frame.childElementCount > 1 && !isSendInline, isSendInline };
   });
   check('the playground composer has send beside the input and no separate row on a phone', !composer.hasFootRow && composer.isSendInline && composer.height <= 72, JSON.stringify(composer));
+  // No model is chosen here. A disabled message box takes no focus, which on a phone is a tap that
+  // raises no keyboard and gives no reason.
+  const input = page.getByPlaceholder('Enter a message, or paste an image…');
+  await input.click();
+  check('the playground message box takes focus on a phone before a model is chosen', await input.evaluate(element => document.activeElement === element));
 }
 
 

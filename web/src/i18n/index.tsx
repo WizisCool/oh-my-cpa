@@ -576,6 +576,7 @@ const DICT: Record<string, [string, string]> = {
   'pg.user_agent': ["User-Agent", "User-Agent"],
   'pg.custom_body': ["自定义请求体 (JSON)", "Custom request body (JSON)"],
   'pg.invalid_json': ["自定义请求体必须是有效的 JSON 对象", "Custom body must be a valid JSON object"],
+  'pg.target_required': ["请先选择密钥和模型", "Select a key and a model first"],
   'pg.thinking': ["思考中…", "Thinking…"],
   'pg.thought_process': ["思考过程", "Thought process"],
   'pg.resize_sidebar': ["拖拽调节参数面板宽度", "Drag to resize parameter panel"],
