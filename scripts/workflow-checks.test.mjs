@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import { parse } from 'yaml';
-import { validateArtifactGates, validateBrowserPhases, validateProbeJobs } from './workflow-checks.mjs';
+import { validateArtifactGates, validateBrowserPhases, validateProbeJobs, validateActionSecurity } from './workflow-checks.mjs';
 
 const workflow = parse(fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
 
@@ -32,16 +32,29 @@ test('missing, bypassed or reordered bundle verification is refused', () => {
   }
 });
 
-test('CI runs P0 on pull requests and the whole acceptance on master', () => {
-  assert.doesNotThrow(() => validateBrowserPhases(workflow.jobs.browser.steps));
+test('CI runs full built acceptance once on every event', () => {
+  validateBrowserPhases(workflow.jobs.browser.steps);
   for (const mutate of [
-    (steps) => { steps.find((step) => step.run === 'pnpm verify:browser:p0').if = "github.event_name != 'pull_request'"; },
-    (steps) => { steps.splice(steps.findIndex((step) => step.run === 'pnpm verify:browser'), 1); },
-    (steps) => { delete steps.find((step) => step.run === 'pnpm verify:browser').env; },
+    steps => { steps.find(step => step.run === 'pnpm verify:browser')['continue-on-error'] = true; },
+    steps => { steps.find(step => step.run === 'pnpm verify:browser:harness').if = 'false'; },
+    steps => { steps.find(step => step.run === 'pnpm verify:browser').if = "github.event_name != 'pull_request'"; },
+    steps => { steps.splice(steps.findIndex(step => step.run === 'pnpm verify:browser'), 1); },
+    steps => { delete steps.find(step => step.run === 'pnpm verify:browser').env; },
+    steps => { steps.push(structuredClone(steps.find(step => step.run === 'pnpm verify:browser'))); },
   ]) {
-    const steps = structuredClone(workflow.jobs.browser.steps);
-    mutate(steps);
+    const steps = structuredClone(workflow.jobs.browser.steps); mutate(steps);
     assert.throws(() => validateBrowserPhases(steps));
+  }
+});
+
+test('action pinning and credential isolation are invariant', () => {
+  validateActionSecurity(workflow);
+  for (const mutate of [
+    value => { value.jobs.static.steps[0].uses = 'actions/checkout@v7'; },
+    value => { delete value.jobs.static.steps[0].with['persist-credentials']; },
+  ]) {
+    const broken = structuredClone(workflow); mutate(broken);
+    assert.throws(() => validateActionSecurity(broken));
   }
 });
 
@@ -50,13 +63,20 @@ test('the probe catalog runs as complete shards on every event, behind one requi
   const probeRun = (jobs) => jobs.probes.steps.find((step) => /verify:probes/.test(step.run ?? ''));
   for (const mutate of [
     (jobs) => { delete jobs.probes; },
+    jobs => { jobs.probes['continue-on-error'] = true; },
+    jobs => { probeRun(jobs).if = 'false'; },
+    jobs => { probeRun(jobs)['continue-on-error'] = true; },
+    jobs => { jobs['probes-complete'].steps[0].if = 'false'; },
+    jobs => { jobs['probes-complete']['continue-on-error'] = true; },
+    jobs => { jobs.probes.steps.find(step => step.with?.path === 'tmp/probe-timings/').if = 'success()'; },
+    jobs => { jobs.probes.steps.find(step => step.with?.path === 'tmp/probe-timings/')['continue-on-error'] = true; },
     (jobs) => { jobs.probes.if = "github.event_name != 'pull_request'"; },
     (jobs) => { jobs.probes.strategy.matrix.shard.pop(); },
     (jobs) => { jobs.probes.strategy.matrix.shard = [1, 3, 2]; },
     (jobs) => { jobs.probes.strategy['fail-fast'] = true; },
     (jobs) => { probeRun(jobs).run = 'pnpm verify:probes'; },
     (jobs) => { probeRun(jobs).run = 'pnpm verify:probes --shard ${{ matrix.shard }}/4'; },
-    (jobs) => { jobs.probes.steps = jobs.probes.steps.filter((step) => step.uses !== 'actions/upload-artifact@v7'); },
+    (jobs) => { jobs.probes.steps = jobs.probes.steps.filter((step) => !step.uses?.startsWith('actions/upload-artifact@')); },
     (jobs) => { delete jobs['probes-complete']; },
     (jobs) => { delete jobs['probes-complete'].if; },
     (jobs) => { jobs['probes-complete'].steps[0].run = 'true'; },
@@ -65,4 +85,20 @@ test('the probe catalog runs as complete shards on every event, behind one requi
     mutate(jobs);
     assert.throws(() => validateProbeJobs(jobs), undefined, mutate.toString());
   }
+});
+
+test('reusable workflows cannot evade external reference pinning', () => {
+  for (const reference of ['./.github/workflows/local.yml', `owner/project/.github/workflows/shared.yml@${'a'.repeat(40)}`]) {
+    const changed = structuredClone(workflow);
+    changed.jobs.reusable = { uses: reference };
+    assert.doesNotThrow(() => validateActionSecurity(changed));
+  }
+  for (const reference of ['owner/project/.github/workflows/shared.yml@main', 'owner/project/.github/workflows/shared.yml@v1', './.github/workflows/local.yml@main']) {
+    const changed = structuredClone(workflow);
+    changed.jobs.reusable = { uses: reference };
+    assert.throws(() => validateActionSecurity(changed), /reusable workflows/);
+  }
+  const changed = structuredClone(workflow);
+  changed.jobs.probes.steps.find(step => step.with?.path === 'tmp/probe-timings/')['continue-on-error'] = false;
+  assert.doesNotThrow(() => validateProbeJobs(changed.jobs));
 });

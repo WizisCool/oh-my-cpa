@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 import { settleLayout, until } from '../harness.mjs';
 
 const KNOWN_COOLDOWN_REASON = JSON.stringify({ error: { code: 'credential_quota', message: 'Fixture quota exhausted' } });
@@ -95,8 +96,6 @@ export async function oauthManagement({ base, page, check }) {
     providerTabs.join(' | '),
   );
 
-  await verifyVertexImportDialog({ page, check });
-  await checkOAuthModelRules({ page, base, check });
 
   check('the collection presents a single overview with no density switch', (await page.locator('.oauth-management-page .ant-segmented').count()) === 0);
   const compactVisible = await page.evaluate(() => {
@@ -222,7 +221,7 @@ export async function oauthManagement({ base, page, check }) {
   await cooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
   const cooldownTooltip = page.getByRole('tooltip').filter({ hasText: 'CPA 429 rate limit protection active' });
   await cooldownTooltip.waitFor({ state: 'visible' });
-  check('the consolidated cooldown status explains the known condition', await cooldownTooltip.isVisible());
+  check('the consolidated cooldown status explains the known condition', (await cooldownTooltip.innerText()).includes('CPA 429 rate limit protection active'));
   await cooldownRow.getByRole('button', { name: /^(Details|详情):/i }).click();
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
   check('the quota drawer retains raw cooldown evidence and refresh failure diagnostics',
@@ -282,18 +281,18 @@ export async function oauthManagement({ base, page, check }) {
   await page.locator('[data-testid="oauth-credential-record"]').first().waitFor({ state: 'visible', timeout: 20_000 });
   await page.getByRole('button', { name: /OAuth sign-in/i }).click();
   await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 5000 });
-  await page.waitForTimeout(300);
+  await settleLayout(page);
   const picker = page.locator('#oauth-connect-provider');
   await picker.click();
   await page.getByTitle('Codex OAuth', { exact: true }).last().click();
   check('selecting a Connect provider makes no authorization request', oauthStarts.length === 0, `starts=${oauthStarts.length}`);
   await page.locator('[data-oauth-start="codex"]').click();
-  for (let attempt = 0; attempt < 50 && oauthStarts.length === 0; attempt += 1) {
-    await page.waitForTimeout(100);
-  }
+  await until(() => oauthStarts.length > 0, { label: 'the explicit OAuth start request' });
   check('Start authorization issues exactly one request', oauthStarts.length === 1, `starts=${oauthStarts.length}`);
-  await page.keyboard.press('Escape');
-  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  await page.getByRole('button', { name: 'Cancel Authorization', exact: true }).waitFor({ state: 'visible' });
+  // Minimize the active session through the drawer's explicit dismissal control.
+  await page.locator('.ant-drawer-open .ant-drawer-close').click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
   check(
     'a minimized authorization remains visible in the workspace strip',
     (await page.getByTestId('oauth-session-pill').count()) > 0,
@@ -396,7 +395,7 @@ export async function oauthManagement({ base, page, check }) {
     await page.getByTestId('oauth-credential-record').first().getByRole('button', { name: /^Details:/ }).click();
     const phoneDrawer = page.locator('.ant-drawer-open');
     await phoneDrawer.getByRole('tab', { name: 'Quota', exact: true }).waitFor();
-    await page.waitForTimeout(350);
+    await settleLayout(page);
     const drawerOverflow = await phoneDrawer.evaluate((drawer) => drawer.querySelector('.ant-drawer-body').scrollWidth - drawer.querySelector('.ant-drawer-body').clientWidth);
     check(`tabbed quota drawer has no horizontal overflow at ${width}px`, drawerOverflow <= 1, `overflow=${drawerOverflow}`);
     // Recorded usage and the estimate wrap onto their own lines here; neither may leave the panel.
@@ -428,10 +427,6 @@ export async function oauthManagement({ base, page, check }) {
       (await page.locator('.oauth-management-page .ant-select').count()) >= 3,
     );
   }
-  await verifyFullTokenCapacity({ base, page, check });
-  await verifyAuthorizationOutcomes({ base, page, check });
-  await verifyWorkspaceScale({ base, page, check });
-  await verifyPluginConnections({ base, page, check, oauthStarts });
 }
 
 
@@ -562,6 +557,8 @@ async function verifyPluginConnections({ base, page, check, oauthStarts }) {
 
 
 async function checkOAuthModelRules({ page, base, check }) {
+  await page.goto(`${base}/oauth-management`);
+  await page.getByTestId('oauth-management-model-rules-open').first().waitFor();
   const writes = [];
   let aliasState = { claude: [{ name: 'claude-sonnet-4', alias: 'sonnet-latest', fork: true }] };
   let exclusionState = { codex: ['gpt-5-mini', 'gpt-4*'] };
@@ -666,6 +663,11 @@ export const oauthManagementFixtures = {
   files,
   quota,
   routes: [
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/management/auth-files/safe-fields'), url => {
+      const file = files.find(file => file.name === url.searchParams.get('name'));
+      return { name:file?.name, priority:file?.priority, weight:file?.weight, note:file?.note??'', disable_cooling:false, websockets:false, using_api:false, model_aliases:[], excluded_models:[] };
+    }],
+    [(url, method) => method === 'GET' && url.pathname.endsWith('/management/auth-files/models'), () => ({models:[]})],
     [(url) => url.pathname.endsWith('/management/auth-files'), () => ({ files, total: files.length })],
     [(url) => url.pathname.endsWith('/management/quota'), () => ({
       summary: { total_credentials: quota.length, healthy_count: quota.length, warning_count: 0, exhausted_count: 0, cooldown_count: 0, attention_count: 0 },
@@ -745,7 +747,7 @@ async function verifyAuthorizationOutcomes({ base, page, check }) {
     const newFile = { ...files[0], name: 'completion-new.json', auth_index: 'completion-new' };
     const filesHandler = async (route) => {
       if (hasCompleted && outcome === 'refresh-failed') {
-        await route.fulfill({ status: 502, json: { error: 'completion list unavailable' } });
+        await fulfillFixture(route, { status: 502, json: { error: 'completion list unavailable' } });
         return;
       }
       const currentFiles = hasCompleted && outcome === 'new' ? [...files, newFile] : files;
@@ -821,12 +823,13 @@ async function verifyWorkspaceScale({ base, page, check }) {
     reads.quota += 1;
     await route.fulfill({ json: { quotas: scaleQuota, total: 48 } });
   };
+  const pendingBatches = [];
   const batchHandler = async (route) => {
     const indexes = route.request().postDataJSON().auth_indexes;
     batches.push(indexes);
     activeBatches += 1;
     peakBatches = Math.max(peakBatches, activeBatches);
-    await page.waitForTimeout(80);
+    if (batches.length === 1) await new Promise(resolve => pendingBatches.push(resolve));
     activeBatches -= 1;
     await route.fulfill({ json: { status: 'ok', quotas: indexes
       .filter((index) => index !== 'scale-13')
@@ -845,10 +848,13 @@ async function verifyWorkspaceScale({ base, page, check }) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${base}/oauth-management?page_size=48&density=compact`, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-testid="oauth-credential-record"][data-auth-index="scale-47"]').waitFor();
-    await page.waitForTimeout(200);
+    await settleLayout(page);
     check('48 credentials share collection queries without per-row model reads',
       reads.files <= 2 && reads.quota <= 2 && reads.models === 0, JSON.stringify(reads));
     await page.getByRole('button', { name: /Refresh quota \(23\)/ }).click();
+    await until(() => pendingBatches.length > 0, {label:'held quota batch'});
+    check('quota refresh starts only one batch while the first response is held', activeBatches === 1);
+    pendingBatches.splice(0).forEach(release => release());
     // This fixture run has failures, so the outcome is the report toast that lists each
     // target's reason, and it is the only toast the run raises.
     await page.getByTestId('quota-operation-report').waitFor();
@@ -915,12 +921,13 @@ async function verifyWorkspaceScale({ base, page, check }) {
       await route.fulfill({ json: { provider, flow: 'redirect',
         url: 'https://auth.example.test/authorize', state: `scale-${provider}`, session_id: `scale-${provider}` } });
     };
+    const heldPolls = [];
     const statusHandler = async (route) => {
       const state = new URL(route.request().url()).searchParams.get('state');
       pollReads[state] = (pollReads[state] ?? 0) + 1;
       pendingPolls[state] = (pendingPolls[state] ?? 0) + 1;
       if (pendingPolls[state] > 1) hasConcurrentPoll = true;
-      await page.waitForTimeout(120);
+      await new Promise(resolve => heldPolls.push(resolve));
       pendingPolls[state] -= 1;
       await route.fulfill({ json: { status: 'wait' } });
     };
@@ -938,18 +945,20 @@ async function verifyWorkspaceScale({ base, page, check }) {
     await page.getByTestId('oauth-session-pill').first().getByRole('button').click();
     await page.locator('.ant-drawer-open .ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
-    await page.waitForTimeout(3400);
+    await until(() => heldPolls.length >= 2, {label:'both minimized authorization polls held'});
     check('48 records retain two independent minimized sessions without duplicate checkers',
       starts.join('/') === 'codex/anthropic' && !hasConcurrentPoll
         && pollReads['scale-codex'] >= 1 && pollReads['scale-anthropic'] >= 1
         && (await page.getByTestId('oauth-session-pill').count()) === 2,
       JSON.stringify({ starts, pollReads, hasConcurrentPoll }));
     console.log(`OAuth scale: ${JSON.stringify({ reads, sizes: batches.map((batch) => batch.length), peakBatches, starts, pollReads })}`);
+    heldPolls.splice(0).forEach(release => release());
     // Hard navigation ends these synthetic attempts before removing their fixtures.
     await page.goto(`${base}/oauth-management?density=compact`);
     await page.unroute('**/management/oauth/start', startHandler);
     await page.unroute('**/management/oauth/status?*', statusHandler);
   } finally {
+    pendingBatches.splice(0).forEach(release => release());
     page.off('request', countModels);
     await page.unroute('**/management/auth-files', filesHandler);
     await page.unroute('**/management/quota', quotaHandler);
@@ -1006,4 +1015,29 @@ async function verifyVertexImportDialog({ page, check }) {
   check('a file read from a cancelled Vertex dialog cannot repopulate its next opening', await dialog.getByText('delayed-project', { exact: true }).count() === 0 && await dialog.getByRole('button', { name: 'Import', exact: true }).isDisabled());
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
+}
+
+export async function oauthVertexImport({base, page, check, step}) {
+  await page.goto(`${base}/oauth-management`);
+  await page.getByTestId('oauth-credential-record').first().waitFor();
+  await step('Vertex file lifecycle', () => verifyVertexImportDialog({page,check}));
+}
+export async function oauthModelRules(fixtures) {
+  await fixtures.step('model alias and exclusion writes', () => checkOAuthModelRules(fixtures));
+}
+export async function oauthTokenCapacity(fixtures) {
+  await fixtures.page.goto(`${fixtures.base}/oauth-management`);
+  await fixtures.page.getByTestId('oauth-credential-record').first().waitFor();
+  await fixtures.step('capacity formats and phone bounds', () => verifyFullTokenCapacity(fixtures));
+}
+export async function oauthAuthorizationOutcomes(fixtures) {
+  await fixtures.step('authorization completion and read failures', () => verifyAuthorizationOutcomes(fixtures));
+}
+export async function oauthWorkspaceScale(fixtures) {
+  await fixtures.step('batch quotas and cancellation', () => verifyWorkspaceScale(fixtures));
+}
+export async function oauthPluginConnections(fixtures) {
+  const oauthStarts = [];
+  fixtures.page.on('request', request => { if (request.url().includes('/management/oauth/start')) oauthStarts.push(request.url()); });
+  await fixtures.step('key and interactive plugin connections', () => verifyPluginConnections({...fixtures,oauthStarts}));
 }

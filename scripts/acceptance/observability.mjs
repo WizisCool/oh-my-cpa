@@ -83,8 +83,11 @@ export async function runObservabilityAcceptance({
     (await page.locator('.omc-toast').count()) === 1,
     `toasts=${await page.locator('.omc-toast').count()}`,
   );
-  // The report stays until it is closed; closed here so it cannot sit over the Drawer below.
-  await page.getByTestId('quota-operation-report').locator('.ant-notification-notice-close').click();
+  // Dismissal prepares the drawer assertions, not a pointer-geometry claim.
+  // Activate the exact accessible button independently of toast placement motion.
+  const closeReport = page.getByTestId('quota-operation-report').getByRole('button', { name: /Close|关闭/i });
+  await closeReport.focus();
+  await closeReport.press('Enter');
   await page.getByTestId('quota-operation-report').waitFor({ state: 'detached' });
 
   const openQuota = async (name) => {

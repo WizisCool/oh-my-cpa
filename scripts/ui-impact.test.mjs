@@ -57,7 +57,7 @@ test('dynamic imports are edges and an unresolved local import is reported', () 
 
 test('a helper selects the scenarios of the pages that import it', () => {
   const plan = planScenarios(['web/src/utils/format.ts'], ALL, impactOf(CONSOLE));
-  assert.deepEqual(new Set(plan.ids), new Set(['system-information', 'system-information-narrow', 'phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console']));
+  assert.deepEqual(new Set(plan.ids), new Set(['system-information', 'system-version-feedback', 'system-health-anomalies', 'system-information-narrow', 'phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console']));
 });
 
 test('reaching the shared layer or an unnamed routed page still selects everything', () => {

@@ -1,3 +1,5 @@
+import { ARRIVAL_REQUEST_ID } from './arrival-fixture.mjs';
+
 import {
   EVENT_AUTO_REFRESH_MS,
 } from '../../../web/src/types/usageEventCadence.ts';
@@ -19,6 +21,7 @@ export async function liveTailSection(context) {
     rowTimestamps,
     filterSuffix,
     autoRefreshSwitch,
+    releaseArrival,
   } = context;
 
 
@@ -110,29 +113,10 @@ export async function liveTailSection(context) {
   const rowsBefore = windowBefore.split('|').filter(Boolean);
   const pageLabelBefore = await page.locator('.request-pagination span').first().innerText();
 
-  // The fixture's future-dated row enters the sliding window on a later poll.
-  // No separate writer touches the database after the app has opened it, so this
-  // remains a live-tail test rather than a WAL cross-process race.
-  // The cadence is 10s, so the wait has to clear one full interval plus the request
-  // itself. This is the largest wait left in the suite.
-  //
-  // The bound is derived rather than hand-picked, and it is deliberately generous:
-  // three cadences of headroom, not one. Under CPU contention (a 2-CPU constraint,
-  // or the probes running beside this suite) a 30s bound - three intervals - was
-  // observed to expire while the page was merely slow, so the assertion reported a
-  // failure that said nothing about the code. The wait is for a positive event, so
-  // a longer bound costs nothing on a healthy machine: it returns as soon as the
-  // pill appears.
-  //
-  // Driving it with `page.clock` was tried and rejected. Installing the clock before
-  // the first navigation does make the interval fire early - 11s of app time in
-  // ~900ms - but the same mock also covers `requestAnimationFrame` and
-  // `performance.now`, which is exactly what `smoothScroll`'s gesture schedule is
-  // built from. With the clock installed the back-to-top gesture landed at 37px
-  // instead of the top, with no page error, so the one assertion this block exists
-  // for was the one it broke. Isolating the interval from the frame clock is not
-  // expressible through the Playwright clock API, and the trade was nine seconds
-  // against the correctness of a scroll assertion, so the honest wait stays.
+  // Release only after the reader's held window is stable. The next ordinary
+  // poll receives the real server's ID-based arrival count, independent of how
+  // long build, sign-in and the preceding assertions took.
+  releaseArrival();
   await page
     .locator('.req-back-to-top-btn.is-live')
     .waitFor({ state: 'visible', timeout: EVENT_AUTO_REFRESH_MS * 6 });
@@ -166,10 +150,12 @@ export async function liveTailSection(context) {
     async () => (await scroller.evaluate((node) => node.scrollTop)) <= 4,
     { detail: async () => `scrollTop=${await scroller.evaluate((node) => node.scrollTop)}` },
   );
+  const firstRequestID = () => page.locator('.request-row .req-time-sub').first().getAttribute('title');
+  await until(async () => await firstRequestID() === ARRIVAL_REQUEST_ID, { label: 'the released arrival to lead the applied backlog' });
   const newestFirst = await rowTimestamps();
   check(
     'the new record is the first row',
-    newestFirst.length > 0 && newestFirst[0] >= Math.max(...newestFirst),
+    await firstRequestID() === ARRIVAL_REQUEST_ID && newestFirst.length > 0 && newestFirst[0] >= Math.max(...newestFirst),
     `first=${newestFirst.length ? new Date(newestFirst[0]).toISOString() : 'none'}`,
   );
   // The window survives a reload. Facets and filters were reloaded repeatedly by

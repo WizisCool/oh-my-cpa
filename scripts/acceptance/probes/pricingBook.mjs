@@ -92,11 +92,11 @@ export function pricingFixtures(writes) {
   return [
     [(url) => url.pathname.endsWith('/pricing/attention'), () => ({ unpriced: ['gpt-5.4-mini-high'] })],
     [(url) => url.pathname.endsWith('/pricing/catalog'), () => ({ models: [SOL, MINI, OPUS, SONNET, ...Array.from({ length: 65 }, (_, index) => upstream(`test/catalog-model-${String(index).padStart(2, '0')}`, 1, 2))] })],
-    [(url) => /\/pricing\/models\/[^/]+\/dismiss-candidate$/.test(url.pathname), (url, method, request) => {
+    [(url, method) => method === 'POST' && /\/pricing\/models\/[^/]+\/dismiss-candidate$/.test(url.pathname), (url, method, request) => {
       writes.push({ kind: 'dismiss', model: decodeURIComponent(url.pathname.split('/').at(-2)), body: body(request) });
       return { dismissed: true };
     }],
-    [(url) => /\/pricing\/models\/[^/]+$/.test(url.pathname), (url, method, request) => {
+    [(url, method) => ['GET', 'PUT', 'DELETE'].includes(method) && /\/pricing\/models\/[^/]+$/.test(url.pathname), (url, method, request) => {
       const model = decodeURIComponent(url.pathname.split('/').at(-1));
       if (method === 'PUT') {
         writes.push({ kind: 'model', model, body: body(request) });
@@ -108,7 +108,7 @@ export function pricingFixtures(writes) {
       }
       return modelDetail(model);
     }],
-    [(url) => /\/pricing\/channels\/[^/]+$/.test(url.pathname), (url, method, request) => {
+    [(url, method) => ['PUT', 'DELETE'].includes(method) && /\/pricing\/channels\/[^/]+$/.test(url.pathname), (url, method, request) => {
       const channel = decodeURIComponent(url.pathname.split('/').at(-1));
       writes.push({ kind: method === 'DELETE' ? 'channel-delete' : 'channel', channel, body: method === 'DELETE' ? null : body(request) });
       return method === 'DELETE' ? { deleted: true } : { channel: { channel, ...body(request) } };

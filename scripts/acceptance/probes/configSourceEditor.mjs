@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { until, settleLayout } from '../harness.mjs';
@@ -281,7 +282,7 @@ async function configSourceMobile({ base, page, check }) {
     const response = responseMode === 'conflict' ? { code: 'config_conflict', current_revision: 'newer-revision' }
       : responseMode === 'failure' ? { code: 'config_backup_failed', error: 'Fixture backup unavailable' }
       : { yaml: body.yaml, revision: 'saved-mobile-revision' };
-    await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(response) });
+    await fulfillFixture(route, { status, contentType: 'application/json', body: JSON.stringify(response) });
   });
   const save = page.locator('.config-dirty-btn-save');
   const confirmSave = async () => {

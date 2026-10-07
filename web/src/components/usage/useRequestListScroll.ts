@@ -192,9 +192,6 @@ export function useRequestListScroll({
         justCollapsedFromTopRef.current = !wasClaimed;
         setIsCollapsed(true);
         listRef.current?.scrollTo({ top: 0 });
-        if (e.cancelable) {
-          e.preventDefault();
-        }
         return;
       }
 

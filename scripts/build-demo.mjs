@@ -23,7 +23,7 @@
  */
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -132,39 +132,61 @@ async function rewriteStagedModules(stage) {
   return rewritten;
 }
 
-async function main() {
+async function validateStagedModuleReferences(stage, directory = stage) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await validateStagedModuleReferences(stage, path);
+      continue;
+    }
+    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css')) continue;
+    const source = await readFile(path, 'utf8');
+    // Scan every staged module, including untouched and nested files: a successful
+    // rewrite elsewhere cannot prove a new Vite asset form is safe on deep links.
+    const leftover = source.match(/\.\/(?:(?:lobe-icons|assets)\/[^\s"'`()<>\\]*|[^\s"'`()<>\\]+\.woff2)/);
+    if (leftover) {
+      throw new Error(`staged module ${relative(stage, path)} still references an asset relatively: ${leftover[0]}`);
+    }
+  }
+}
+
+export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STAGE } = {}) {
   // The directory exists in every checkout, held by its tracked `.gitkeep`; only an
   // entry document says a build is there.
-  if (!existsSync(join(SOURCE, 'index.html'))) {
-    throw new Error(`no built console at ${SOURCE}; run pnpm build first`);
+  if (!existsSync(join(sourceDirectory, 'index.html'))) {
+    throw new Error(`no built console at ${sourceDirectory}; run pnpm build first`);
   }
 
-  await rm(STAGE, { recursive: true, force: true });
-  await mkdir(STAGE, { recursive: true });
-  await cp(SOURCE, STAGE, { recursive: true, filter: (source) => basename(source) !== '.gitkeep' });
+  await rm(stageDirectory, { recursive: true, force: true });
+  await mkdir(stageDirectory, { recursive: true });
+  await cp(sourceDirectory, stageDirectory, { recursive: true, filter: (source) => basename(source) !== '.gitkeep' });
 
   // The header rules live beside this deployment's config rather than in the built
   // console, because they describe how this host should serve the console rather than
   // anything about the console itself.
-  await cp(join(root, 'deploy', 'cloudflare', '_headers'), join(STAGE, '_headers'));
+  await cp(join(root, 'deploy', 'cloudflare', '_headers'), join(stageDirectory, '_headers'));
 
-  const index = join(STAGE, 'index.html');
+  const index = join(stageDirectory, 'index.html');
   const original = await readFile(index, 'utf8');
   await writeFile(index, rewriteHtml(original));
 
-  const rewritten = await rewriteStagedModules(STAGE);
+  const rewritten = await rewriteStagedModules(stageDirectory);
+  await validateStagedModuleReferences(stageDirectory);
   if (rewritten === 0) {
     // A build with no relative references would mean this rewrite is dead code, which is
     // worth knowing rather than assuming: it would mean the convention changed upstream.
     throw new Error('no staged module referenced an asset relatively; is this rewrite still needed?');
   }
 
-  console.log(`staged the demonstration console at ${STAGE} (${rewritten} module(s) rewritten)`);
+  return { stageDirectory, rewritten };
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(`build-demo: ${error.message}`);
-  process.exitCode = 1;
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const { stageDirectory, rewritten } = await stageDemo();
+    console.log(`staged the demonstration console at ${stageDirectory} (${rewritten} module(s) rewritten)`);
+  } catch (error) {
+    console.error(`build-demo: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

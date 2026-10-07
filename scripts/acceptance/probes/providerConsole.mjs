@@ -331,7 +331,7 @@ export function customIconProbeRoutes() {
       if (!decoded.includes('xmlns=')) decoded = decoded.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
       return { data_url: `data:image/svg+xml;base64,${Buffer.from(decoded).toString('base64')}`, mime_type: 'image/svg+xml' };
     }],
-    [(url) => url.pathname.includes('/custom-icons') && !url.pathname.endsWith('/content'), (url, method, request) => {
+    [(url, method) => ['GET', 'POST', 'PATCH', 'DELETE'].includes(method) && url.pathname.includes('/custom-icons') && !url.pathname.endsWith('/content'), (url, method, request) => {
       if (method === 'GET') return { icons: [...icons.values()] };
       const id = method === 'POST' ? iconID : url.pathname.split('/').at(-1);
       const input = method === 'DELETE' ? {} : JSON.parse(request.postData());

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { installArrivalFixture } from './usage-events/arrival-fixture.mjs';
+
 import { pastDeadline, sleep } from './harness.mjs';
 import {
   EVENT_AUTO_REFRESH_MS,
@@ -41,6 +43,21 @@ export async function runUsageEventsAcceptance({
   onSmokeComplete,
   providerMarkImage,
 }) {
+  const arrivalFixture = await installArrivalFixture(page.context(), appURL);
+  try {
+    await runUsageEventsFlow({ auditPage, appURL, page, check, checkEventually,
+      checkHoldsFor, responseBodies, providerSecrets, until, measureStable,
+      settleLayout, smokeOnly, consoleErrors, pageErrors, onSmokeComplete,
+      providerMarkImage, releaseArrival: () => arrivalFixture.release() });
+  } finally {
+    await arrivalFixture.dispose();
+  }
+}
+
+async function runUsageEventsFlow({ auditPage, appURL, page, check, checkEventually,
+  checkHoldsFor, responseBodies, providerSecrets, until, measureStable,
+  settleLayout, smokeOnly, consoleErrors, pageErrors, onSmokeComplete,
+  providerMarkImage, releaseArrival }) {
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: providerSecrets });
 
   /**
@@ -210,6 +227,7 @@ export async function runUsageEventsAcceptance({
     modelFacet,
     providerFacet,
     autoRefreshSwitch,
+    releaseArrival,
   };
 
   // The order is the order these claims have always been made in, and it is a

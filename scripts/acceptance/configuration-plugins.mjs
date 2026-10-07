@@ -334,3 +334,10 @@ export async function auditNativePluginHostResponse(response, protectedSecrets, 
     response.url(),
   );
 }
+
+export async function settleNativeResponseAudits(audits, check) {
+  const results = await Promise.allSettled(audits);
+  for (const result of results) {
+    if (result.status === 'rejected') check('native response audit completed', false, result.reason?.message ?? String(result.reason));
+  }
+}

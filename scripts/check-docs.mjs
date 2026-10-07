@@ -26,33 +26,27 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 /** Context documents under maintenance. `archival` documents are frozen
  * records: they may cite line numbers and plan-time figures. */
-export const DOCUMENTS = [
-  { file: 'AGENTS.md' },
-  { file: 'CONTEXT.md' },
-  { file: 'README.md' },
-  { file: 'README.zh-CN.md' },
-  { file: 'CONTRIBUTING.md' },
-  { file: 'SECURITY.md' },
-  { file: 'PRODUCT.md' },
-  { file: 'DESIGN.md' },
-  { file: 'docs/architecture.md' },
-  { file: 'docs/design.md' },
-  { file: 'docs/cpamc-parity.md' },
-  { file: 'docs/cpa-v8-compat.md' },
-  { file: 'docs/install.md' },
-  { file: 'docs/releasing.md' },
-  { file: 'docs/install-for-agents.md' },
-  { file: 'docs/operations.md' },
-  { file: 'docs/ops/sqlite-operations.md' },
-  { file: 'docs/ops/cloudflare-demo.md' },
-  { file: 'docs/plans/model-prices.md' },
-  { file: 'docs/testing.md' },
-  { file: 'docs/adr/0032-ci-owns-the-full-browser-catalog.md', archival: true },
-  { file: 'docs/adr/0033-embedded-console-is-not-committed.md', archival: true },
-  { file: 'docs/adr/0001-go-react-sqlite-modular-monolith.md', archival: true },
-  { file: 'docs/adr/0002-cpa-binding-and-identity-hierarchy.md', archival: true },
-  { file: 'docs/adr/0003-request-time-price-snapshots.md', archival: true },
-];
+export function discoverDocuments(projectRoot = DEFAULT_ROOT) {
+  const files = fs.readdirSync(projectRoot, {withFileTypes:true})
+    .filter(entry => entry.isFile() && entry.name.endsWith('.md')).map(entry => entry.name);
+  const visit = directory => {
+    if (!fs.existsSync(path.join(projectRoot, directory))) return;
+    for (const entry of fs.readdirSync(path.join(projectRoot, directory), {withFileTypes:true})) {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() && file.endsWith('.md')) files.push(file);
+    }
+  };
+  visit('docs');
+  return files.sort().map(file => ({file, ...(file.startsWith('docs/adr/') || file.startsWith('docs/releases/') ? {archival:true} : {})}));
+}
+export const DOCUMENTS = discoverDocuments();
+
+// Accepted decisions retain paths that existed at their frozen baseline, not today's topology.
+const ARCHIVAL_RETIRED_PATHS = new Set([
+  'docs/ops/vercel-demo.md',
+  'internal/cpa/configyaml/layout_rules.go',
+]);
 
 /** References that have already gone stale at least once. Each entry is
  * evidence for a future reviewer: the reason explains what replaced it. */
@@ -219,7 +213,7 @@ export function checkDocument({ file, archival = false }, { projectRoot = DEFAUL
     const classified = classifyPath(span);
     if (!classified) continue;
     if (!resolvePath(classified.path)) {
-      if (isExpectedAbsent(classified.path)) continue;
+      if (isExpectedAbsent(classified.path) || (archival && ARCHIVAL_RETIRED_PATHS.has(classified.path))) continue;
       const key = `missing:${classified.path}`;
       if (alreadyReported.has(key)) continue;
       alreadyReported.add(key);
@@ -237,7 +231,8 @@ export function checkDocument({ file, archival = false }, { projectRoot = DEFAUL
   return findings;
 }
 
-export function runCheck({ documents = DOCUMENTS, projectRoot = DEFAULT_ROOT, output = console } = {}) {
+export function runCheck({ documents, projectRoot = DEFAULT_ROOT, output = console } = {}) {
+  documents ??= discoverDocuments(projectRoot);
   const findings = documents.flatMap((document) => checkDocument(document, { projectRoot }));
   const countOf = (kind) => findings.filter((finding) => finding.kind === kind).length;
 

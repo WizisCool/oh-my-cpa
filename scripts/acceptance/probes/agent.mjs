@@ -1,3 +1,4 @@
+import { fulfillFixture, abortFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 import { playgroundFixtures } from './playground.mjs';
 
@@ -174,7 +175,7 @@ export async function agentFailureCopy({ base, page, check }) {
   let mode = 'rejected';
   let isDirectoryUnavailable = true;
   await page.route('**/capabilities', route => isDirectoryUnavailable
-    ? route.fulfill({ status: 502, json: { error: 'directory unavailable' } })
+    ? fulfillFixture(route, { status: 502, json: { error: 'directory unavailable' } })
     : route.fallback());
   await page.route('**/agent/run', route => {
     const body = mode === 'rejected'
@@ -534,7 +535,7 @@ async function verifyAgentRecovery({ base, page, check }) {
   await page.route('**/agent/runs/*', async route => {
     if (route.request().method() === 'POST') { cancelCount++; await route.fulfill({ json: { is_cancelled: true } }); return; }
     subscriptionCount++;
-    if (subscriptionCount === 1) { await route.abort('internetdisconnected'); return; }
+    if (subscriptionCount === 1) { await abortFixture(route, 'internetdisconnected'); return; }
     await completion;
     const finishedConversation = { ...conversation, active_run_id: undefined, revision: 3, turns: [{ ...conversation.turns[0], reply: 'Recovered complete.', status: 'success', ended_at_ms: Date.now() }] };
     conversation = finishedConversation;

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
-import { validateArtifactGates, validateBrowserPhases, validateProbeJobs } from './workflow-checks.mjs';
+import { validateArtifactGates, validateBrowserPhases, validateProbeJobs, validateActionSecurity } from './workflow-checks.mjs';
+
+import { validateReleaseWorkflow } from './release-workflow.mjs';
+import { validateMaintenanceWorkflow } from './maintenance-workflow.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = path.join(root, '.github', 'workflows', 'ci.yml');
@@ -21,18 +24,13 @@ if (document.errors.length > 0) {
   }
   const browserSteps = value.jobs.browser.steps;
   validateArtifactGates(browserSteps);
-  const requiredActions = [
-    ['static', 'actions/checkout@v7'],
-    ['static', 'actions/setup-go@v7'],
-    ['static', 'actions/setup-node@v7'],
-    ['static', 'actions/cache@v6'],
-    ['browser', 'actions/upload-artifact@v7'],
-  ];
-  for (const [jobName, action] of requiredActions) {
-    if (!value.jobs[jobName].steps.some((step) => step.uses === action)) {
-      throw new Error(`CI workflow has no ${action} step in ${jobName}`);
-    }
-  }
+  validateActionSecurity(value);
+  const releaseDocument = parseDocument(fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8'), { uniqueKeys: true });
+  if (releaseDocument.errors.length) throw new Error(releaseDocument.errors.map(error => error.message).join('\n'));
+  validateReleaseWorkflow(releaseDocument.toJS());
+  const maintenanceDocument = parseDocument(fs.readFileSync(path.join(root, '.github/workflows/maintenance.yml'), 'utf8'), { uniqueKeys: true });
+  if (maintenanceDocument.errors.length) throw new Error(maintenanceDocument.errors.map(error => error.message).join('\n'));
+  validateMaintenanceWorkflow(maintenanceDocument.toJS());
   // The browser phases and the probe shards are checked by parsed structure, with
   // negative cases in `workflow-checks.test.mjs`: a step that runs on the wrong event,
   // a shard count that leaves part of the catalog unrun, or an aggregate that passes

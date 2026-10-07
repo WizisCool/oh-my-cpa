@@ -1,0 +1,29 @@
+{
+  "reviewedOn": "2026-10-07",
+  "findings": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "owner": "WizisCool",
+      "reviewBy": "2026-11-06",
+      "disposition": "awaiting-upstream-fix",
+      "reason": "Development-only Ant Design CLI glob parsing. The CLI consumes repository-controlled paths; do not run it against untrusted patterns. The advisory names 3.0.4 as fixed, but the npm registry currently publishes only 3.0.3."
+    },
+    {
+      "id": "GHSA-wrjc-x8rr-h8h6",
+      "package": "react-router",
+      "owner": "WizisCool",
+      "reviewBy": "2026-11-06",
+      "disposition": "migration-required",
+      "reason": "The SPA uses v6. Its navigation targets are internal routes; external provider authorization uses explicit links rather than router navigation. The fixed v7 line requires a separately verified router migration. Review every newly introduced navigation target for untrusted backslashes."
+    },
+    {
+      "id": "GHSA-337j-9hxr-rhxg",
+      "package": "react-router",
+      "owner": "WizisCool",
+      "reviewBy": "2026-11-06",
+      "disposition": "not-reachable-in-current-architecture",
+      "reason": "The embedded SPA is client rendered. It has no React Router server rendering, hydration error deserialization or user-controlled server hydration payload. Reassess before introducing SSR."
+    }
+  ]
+}

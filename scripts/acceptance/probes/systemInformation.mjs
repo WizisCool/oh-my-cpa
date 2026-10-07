@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 
 /**
@@ -405,7 +406,7 @@ export async function systemInformationPage({ base, page, check }) {
     storageCardLayout.errors.join(' | '),
   );
 
-  await verifyVersionCheckFeedback({ page, base, check });
+
 
   // ── the retained terminal job is not resurrected by a reload ────────────────
   // The server keeps its last job in process memory for the life of the process, and the page
@@ -443,7 +444,7 @@ export async function systemInformationPage({ base, page, check }) {
   await page.route('**/omc/api/v1/management/system', async (route) => {
     const body = baseSystemBody();
     body.runtime = { ...body.runtime, started_at_ms: servedProcessStart };
-    await route.fulfill({ status: 200, json: { ...body, maintenance: servedMaintenance } });
+    await fulfillFixture(route, { status: 200, json: { ...body, maintenance: servedMaintenance } });
   });
 
   // The retained job must actually be what the page is being offered, or the assertion below
@@ -1088,7 +1089,7 @@ export async function systemInformationPage({ base, page, check }) {
     gridGeometry.isMaintenanceSecond,
     `second card title: ${gridGeometry.boxes?.[1]?.title}`,
   );
-  await verifySystemHealthAnomalies({ base, page, check });
+
 }
 
 
@@ -1300,14 +1301,14 @@ async function verifyVersionCheckFeedback({ page, base, check }) {
   let checkCount = 0;
   let releaseCheck;
   const pendingCheck = new Promise((resolve) => { releaseCheck = resolve; });
-  const systemHandler = async (route) => route.fulfill({ status: 200, json: body });
+  const systemHandler = async (route) => fulfillFixture(route, { status: 200, json: body });
   const checkHandler = async (route) => {
     checkCount += 1;
     if (checkCount === 1) await pendingCheck;
     body.cpa_version = {
       ...initialGateway, check_error: 'release feed unavailable', attempted_at_ms: 1790018000000,
     };
-    await route.fulfill({ status: 200, json: {
+    await fulfillFixture(route, { status: 200, json: {
       omc_version: body.omc_version, cpa_version: body.cpa_version, served_from_cache: checkCount > 1,
     } });
   };
@@ -1432,4 +1433,11 @@ async function verifySystemHealthAnomalies({ base, page, check }) {
   } finally {
     await page.unroute('**/omc/api/v1/management/system', systemHandler);
   }
+}
+
+export async function systemVersionFeedback(fixtures) {
+  await fixtures.step('automatic and manual version checks', () => verifyVersionCheckFeedback(fixtures));
+}
+export async function systemHealthAnomalies(fixtures) {
+  await fixtures.step('health anomaly projections', () => verifySystemHealthAnomalies(fixtures));
 }

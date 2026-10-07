@@ -1,3 +1,4 @@
+import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
 import { sleep } from '../probe.mjs';
@@ -653,7 +654,7 @@ export function refreshRecords() {
     // the one that responds.
     await page.route('**/omc/api/**', async (route) => {
       const url = new URL(route.request().url());
-      const fulfill = (body) => route.fulfill({ status: 200, json: body });
+      const fulfill = (body) => fulfillFixture(route, { status: 200, json: body });
       if (url.pathname.endsWith('/usage/ingest-status')) {
         return fulfill({
           enabled: true,
@@ -834,7 +835,9 @@ export async function requestExport({ base, page, check }) {
     page.waitForEvent('download'),
     page.getByTestId('req-export-download').click(),
   ]);
-  const image = fs.readFileSync(await download.path());
+  const imagePath = 'tmp/request-export-download.png';
+  await download.saveAs(imagePath);
+  const image = fs.readFileSync(imagePath);
   const isPng = image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   const pixels = { width: image.readUInt32BE(16), height: image.readUInt32BE(20) };
   check('the download is a PNG named for the requests', isPng && /^requests-\d{8}-\d{6}\.png$/.test(download.suggestedFilename()),
@@ -853,7 +856,9 @@ export async function requestExport({ base, page, check }) {
     page.waitForEvent('download'),
     page.getByTestId('req-export-download').click(),
   ]);
-  const exported = JSON.parse(fs.readFileSync(await jsonDownload.path(), 'utf8'));
+  const jsonPath = 'tmp/request-export-download.json';
+  await jsonDownload.saveAs(jsonPath);
+  const exported = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
   check('the JSON download holds every selected record',
     /^requests-\d{8}-\d{6}\.json$/.test(jsonDownload.suggestedFilename()) && exported.count === exportRecords.length &&
     exported.requests.length === exportRecords.length && exported.redacted.includes('request_id'),

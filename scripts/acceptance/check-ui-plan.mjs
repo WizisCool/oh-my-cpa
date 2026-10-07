@@ -121,7 +121,7 @@ const SCENARIO_PATHS = [
   // body names. A change to the page, or to the Markdown renderer it imports, moves that claim.
   {
     prefix: 'web/src/pages/SystemPage',
-    scenarios: ['system-information', 'system-information-narrow', 'mobile-console'],
+    scenarios: ['system-information', 'system-version-feedback', 'system-health-anomalies', 'system-information-narrow', 'mobile-console'],
   },
   // The overlay history layer and everything it is wired into. Named as one rule because the
   // claim is about the layer plus a representative overlay of each kind: the navigation sheet
@@ -187,23 +187,23 @@ const SCENARIO_PATHS = [
   // three retired pages' UI claims; overlay-back covers the shared history layer.
   {
     prefix: 'web/src/pages/oauthManagement/',
-    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
+    scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/oauthProviderLogic',
-    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
+    scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/LegacyOAuthManagementRedirect',
-    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
+    scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/components/authFiles/',
-    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
+    scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
   {
     prefix: 'web/src/pages/quota/',
-    scenarios: ['oauth-management', 'overlay-back', 'mobile-console'],
+    scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
   // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
   // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a

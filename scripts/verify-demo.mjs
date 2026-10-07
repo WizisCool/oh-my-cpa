@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { guardBrowserContext } from './acceptance/browser-guard.mjs';
+import { launchBrowser, closeBrowser, closeServer } from './acceptance/lifecycle.mjs';
 /**
  * Browser acceptance for the public demonstration.
  *
@@ -140,7 +142,7 @@ async function startLocalDemo() {
   });
 
   await new Promise((resolveReady) => server.listen(LOCAL_PORT, '127.0.0.1', resolveReady));
-  return () => server.close();
+  return () => closeServer(server);
 }
 
 const NAVIGATION_TIMEOUT_MS = 30_000;
@@ -155,8 +157,9 @@ async function main() {
   const failedRequests = [];
   const failures = [];
   try {
-    browser = await chromium.launch();
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    browser = await launchBrowser(chromium);
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+    const network = await guardBrowserContext(context, [BASE]);
     // Arrive as a returning visitor who changed the theme on an earlier visit. A console that
     // pushed that unsaved choice on load would be refused by the Worker on every page, and the
     // refusal is an API error this run already fails on.
@@ -217,8 +220,9 @@ async function main() {
         reads.dispose();
       }
     }
+    if (network.problems.some(problem => problem.kind === 'outbound')) failures.push('Demo made an undeclared outbound request');
   } finally {
-    try { await browser?.close(); } finally { await stopServer?.(); }
+    try { await closeBrowser(browser); } finally { await stopServer?.(); }
   }
 
   for (const failure of failures) console.error(`  FAIL ${failure}`);

@@ -27,28 +27,27 @@ export function validateArtifactGates(browserSteps) {
       || verdict.run !== 'test "${BUNDLE_OUTCOME}" = success' || verdict['continue-on-error']) {
     throw new Error('CI must fail the browser job on any failed or skipped bundle verdict');
   }
-  const uploadIndex = browserSteps.findIndex((step) => step.with?.name === 'bundle-report');
+  const uploadIndex = browserSteps.findIndex((step) => /^(?:release-)?bundle-report$/.test(step.with?.name ?? ''));
   const upload = browserSteps[uploadIndex];
-  if (uploadIndex <= demoIndex || upload?.uses !== 'actions/upload-artifact@v7'
+  if (uploadIndex <= demoIndex || !upload?.uses?.startsWith('actions/upload-artifact@')
       || upload.if !== "always() && steps.prepare.outcome == 'success'"
       || upload.with['if-no-files-found'] !== 'error') throw new Error('CI must retain bundle evidence even when a check fails');
 }
 
 /**
- * The browser job's test phases: pull requests run P0 (which contains the smoke path),
- * master runs the whole acceptance suite, and both reuse the prepared binary.
+ * Every event runs the full built suite against the same prepared binaries.
  */
 export function validateBrowserPhases(browserSteps) {
-  const pullRequest = "github.event_name == 'pull_request'";
-  const master = "github.event_name != 'pull_request'";
-  const p0 = browserSteps.find((step) => step.run === 'pnpm verify:browser:p0');
-  if (p0?.if !== pullRequest) throw new Error('CI workflow has no pull-request browser P0 gate');
-  const full = browserSteps.find((step) => step.run === 'pnpm verify:browser');
-  if (full?.if !== master) throw new Error('CI workflow does not run the whole browser acceptance on master');
-  for (const step of [p0, full]) {
-    if (step.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
-      throw new Error(`${step.name} does not reuse the prepared browser binary`);
-    }
+  const full = browserSteps.filter(step => step.run === 'pnpm verify:browser');
+  if (full.length !== 1 || full[0].if || full[0]['continue-on-error']) throw new Error('Every event must run full built acceptance once');
+  if (full[0].env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser'
+      || full[0].env?.OMCPA_SEED_USAGE_BINARY !== 'tmp/seed-usage-browser') {
+    throw new Error('Full acceptance must reuse both prepared binaries');
+  }
+  const harness = browserSteps.filter(step => step.run === 'pnpm verify:browser:harness');
+  if (harness.length !== 1 || harness[0].if || harness[0]['continue-on-error']) throw new Error('Browser fault-injection evidence is mandatory');
+  if (browserSteps.some(step => /verify:browser:p0|verify:browser:smoke/.test(step.run ?? ''))) {
+    throw new Error('A reduced browser lane must not replace or duplicate full acceptance');
   }
 }
 
@@ -60,7 +59,7 @@ export function validateBrowserPhases(browserSteps) {
 export function validateProbeJobs(jobs) {
   const probes = jobs.probes;
   if (!probes) throw new Error('CI workflow has no probe job');
-  if (probes.if) throw new Error('the probe job must run on pull requests and master alike');
+  if (probes.if || probes['continue-on-error']) throw new Error('the probe job must run on pull requests and master alike');
   const shards = probes.strategy?.matrix?.shard;
   if (!Array.isArray(shards) || shards.length === 0 || !shards.every((shard, index) => shard === index + 1)) {
     throw new Error('the probe matrix must list shards 1..n');
@@ -69,19 +68,36 @@ export function validateProbeJobs(jobs) {
     throw new Error('one failing probe shard must not cancel the others');
   }
   const run = probes.steps?.find((step) => /pnpm verify:probes/.test(step.run ?? ''));
-  if (run?.run !== `pnpm verify:probes --shard \${{ matrix.shard }}/${shards.length}`) {
+  if (run?.if || run?.['continue-on-error'] || run?.run !== `pnpm verify:probes --shard \${{ matrix.shard }}/${shards.length}`) {
     throw new Error(`the probe step must run shard \${{ matrix.shard }}/${shards.length}`);
   }
-  if (!probes.steps.some((step) => step.uses === 'actions/upload-artifact@v7' && step.if === 'failure()')) {
+  if (!probes.steps.some((step) => step.uses?.startsWith('actions/upload-artifact@') && step.if === 'failure()')) {
     throw new Error('the probe job does not keep failure diagnostics');
   }
+  if (!probes.steps.some(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.path === 'tmp/probe-timings/' && step.if === 'always()' && step.with['if-no-files-found'] === 'error' && !step['continue-on-error'])) throw new Error('Probe timing evidence must survive failures');
   const aggregate = jobs['probes-complete'];
   const needs = [aggregate?.needs].flat();
-  if (!aggregate || !needs.includes('probes') || !/always\(\)/.test(aggregate.if ?? '')) {
+  if (!aggregate || aggregate['continue-on-error'] || !needs.includes('probes') || aggregate.if !== 'always()') {
     throw new Error('CI workflow has no aggregate probe check that runs after every shard');
   }
   if (!aggregate.steps?.some((step) => step.env?.PROBES_RESULT === '${{ needs.probes.result }}'
-      && step.run === 'test "${PROBES_RESULT}" = success')) {
+      && step.run === 'test "${PROBES_RESULT}" = success' && !step.if && !step['continue-on-error'])) {
     throw new Error('the aggregate probe check must fail unless every shard succeeded');
+  }
+}
+
+export function validateActionSecurity(workflow) {
+  for (const job of Object.values(workflow.jobs)) {
+    if (job.uses && !/^\.\/\.github\/workflows\/[^@]+\.ya?ml$/.test(job.uses)
+        && !/^[\w.-]+\/[\w.-]+\/\.github\/workflows\/[\w./-]+@[a-f0-9]{40}$/.test(job.uses)) {
+      throw new Error('External reusable workflows must be SHA-pinned');
+    }
+    for (const step of job.steps ?? []) {
+      if (!step.uses) continue;
+      if (!/^[\w.-]+\/[\w./-]+@[a-f0-9]{40}$/.test(step.uses)) throw new Error('Actions must be SHA-pinned');
+      if (step.uses.startsWith('actions/checkout@') && step.with?.['persist-credentials'] !== false) {
+        throw new Error('Checkout credentials must not persist');
+      }
+    }
   }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { auditNativePluginHostResponse, hasPluginHostProtectedSecret, isNativePluginHostResponse } from './acceptance/configuration-plugins.mjs';
+import { auditNativePluginHostResponse, settleNativeResponseAudits, hasPluginHostProtectedSecret, isNativePluginHostResponse } from './acceptance/configuration-plugins.mjs';
 
 test('secret-bearing evidence exception is limited to exact native host API surfaces', () => {
   for (const basePath of ['', '/omc', '/console/custom']) {
@@ -44,4 +44,20 @@ test('native response audit fails on protected secrets or unreadable evidence', 
   assert.deepEqual(outcomes.map(outcome => outcome.passed), [true, false, false, false]);
   assert.match(outcomes.at(-1).label, /readable/);
   assert.equal(outcomes.at(-1).detail, url);
+});
+
+
+test('final native verdict waits for pending evidence and retains rejected audits', async () => {
+  let releaseAudit;
+  const evidence = new Promise(resolve => { releaseAudit = resolve; });
+  const outcomes = [];
+  let hasSettled = false;
+  const settlement = settleNativeResponseAudits([evidence, Promise.reject(new Error('audit interrupted'))],
+    (label, passed, detail) => outcomes.push({ label, passed, detail })).then(() => { hasSettled = true; });
+  await Promise.resolve();
+  assert.equal(hasSettled, false);
+  releaseAudit();
+  await settlement;
+  assert.equal(hasSettled, true);
+  assert.deepEqual(outcomes, [{ label: 'native response audit completed', passed: false, detail: 'audit interrupted' }]);
 });

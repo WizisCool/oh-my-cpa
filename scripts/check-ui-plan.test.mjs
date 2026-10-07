@@ -98,19 +98,19 @@ test('the shared token layer selects every surface that renders it', () => {
 test('the unified OAuth workspace selects its density scenario and overlay history', () => {
   assert.deepEqual(
     planFor('web/src/pages/oauthManagement/OAuthManagementPage.tsx'),
-    ['oauth-management', 'overlay-back', 'mobile-console'],
+    ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/components/authFiles/AuthFileDetailDrawer.tsx'),
-    ['oauth-management', 'overlay-back', 'mobile-console'],
+    ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/pages/quota/CredentialQuotaBody.tsx'),
-    ['oauth-management', 'overlay-back', 'mobile-console'],
+    ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   );
   assert.deepEqual(
     planFor('web/src/pages/LegacyOAuthManagementRedirect.tsx'),
-    ['oauth-management', 'overlay-back', 'mobile-console'],
+    ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   );
 });
 

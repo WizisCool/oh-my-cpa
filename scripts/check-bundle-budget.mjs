@@ -21,8 +21,12 @@ export function runBundleVerification({ root, environment = process.env,
     const graph = JSON.parse(fs.readFileSync(path.join(directory, 'graph.json'), 'utf8'));
     const report = analyzeBundle(path.join(root, 'web/dist'), graph, revision);
     let baseRevision = environment.BUNDLE_BASE_SHA;
-    if (!baseRevision) {
+    if (baseRevision === undefined) {
       try { baseRevision = resolveRevision('origin/master'); } catch { /* The comparison is optional; the gate is not. */ }
+    }
+    if (baseRevision === revision) {
+      warn('Bundle reference unavailable: the candidate cannot be its own baseline. Growth comparison not performed.');
+      baseRevision = '';
     }
     const reference = loadBundleReference({ root, revision: baseRevision,
       repository: environment.GITHUB_REPOSITORY, token: environment.GH_TOKEN,

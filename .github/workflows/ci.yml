@@ -25,8 +25,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Verify repository anchors
@@ -36,7 +37,7 @@ jobs:
           git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: 1.27.1
           cache: true
@@ -45,16 +46,21 @@ jobs:
       # store by executing `pnpm store path`, and the runner image ships npm and
       # Yarn but no pnpm.
       - name: Activate pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.2
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Validate Actions syntax and expressions
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          pnpm verify:workflow:lint
 
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
@@ -63,7 +69,7 @@ jobs:
         run: pnpm verify:static
 
       - name: Cache gitleaks
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .tools/gitleaks
           key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
@@ -84,19 +90,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: 1.27.1
           cache: true
 
       - name: Activate pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.2
           cache: pnpm
@@ -117,7 +125,7 @@ jobs:
       # old cost rather than a new failure mode, and a second launch failure is
       # reported instead of ignored.
       - name: Cache Playwright Chromium
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
@@ -181,21 +189,10 @@ jobs:
           git status --short
           test -z "$(git status --porcelain)"
 
-      # Pull requests clear the P0 release gates: request-record correctness and
-      # OAuth/auth-file scheduling fields. P0 runs the smoke path first and asserts
-      # its checks where smoke would stop, so one process covers both without paying
-      # for sign-in, seeding and the dashboard twice.
-      - name: Run deterministic browser P0 gates
-        if: github.event_name == 'pull_request'
-        env:
-          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
-          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser:p0
-
-      # Master runs the whole cross-stack acceptance. The dev-server probe catalog is
-      # its own sharded job below, on pull requests and master alike.
-      - name: Run browser acceptance
-        if: github.event_name != 'pull_request'
+      # The fixture is stateful; one full pass avoids a second selector contract.
+      - name: Verify browser harness fault detection
+        run: pnpm verify:browser:harness
+      - name: Run full built-artifact acceptance on every event
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
@@ -211,7 +208,7 @@ jobs:
 
       - name: Upload bundle report
         if: always() && steps.prepare.outcome == 'success'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bundle-report
           path: |
@@ -222,10 +219,12 @@ jobs:
 
       - name: Upload browser failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: browser-acceptance-failure
-          path: tmp/browser-acceptance-failure/
+          path: |
+            tmp/browser-acceptance-failure/
+            tmp/browser-harness-failure/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -256,13 +255,15 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Activate pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.2
           cache: pnpm
@@ -271,7 +272,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright Chromium
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
@@ -282,9 +283,18 @@ jobs:
       - name: Run the probe shard
         run: pnpm verify:probes --shard ${{ matrix.shard }}/3
 
+      - name: Upload probe timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: probe-timings-${{ matrix.shard }}
+          path: tmp/probe-timings/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload probe failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: probe-failure-${{ matrix.shard }}
           path: tmp/probe-failure/

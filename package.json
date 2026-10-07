@@ -80,7 +80,14 @@
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
     "verify:toolchain:strict": "node scripts/verify-toolchain.mjs --strict",
     "verify:workflow": "node scripts/validate-workflow.mjs",
-    "models:sync": "node scripts/sync-model-metadata.mjs"
+    "models:sync": "node scripts/sync-model-metadata.mjs",
+    "verify:race": "node scripts/maintenance-checks.mjs race",
+    "verify:fuzz": "node scripts/maintenance-checks.mjs fuzz",
+    "verify:advisories": "node scripts/maintenance-checks.mjs advisories",
+    "report:probe-timings": "node scripts/probe-timing-report.mjs",
+    "verify:workflow:lint": "node scripts/lint-workflows.mjs",
+    "verify:browser:harness": "node --test scripts/acceptance/browser-harness.test.mjs",
+    "benchmark:native": "node scripts/benchmark-native-builds.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",

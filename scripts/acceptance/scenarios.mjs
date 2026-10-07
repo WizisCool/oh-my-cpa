@@ -59,10 +59,10 @@ import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/p
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { requestListTouch } from './probes/requestListTouch.mjs';
-import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
+import { oauthManagement, oauthVertexImport, oauthModelRules, oauthTokenCapacity, oauthAuthorizationOutcomes, oauthWorkspaceScale, oauthPluginConnections, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
-import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
+import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import { configBackups, configBackupsFixtures } from './probes/configBackups.mjs';
 import {
@@ -227,6 +227,12 @@ export const SCENARIOS = [
     },
     run: oauthManagement,
   },
+  { id: 'oauth-vertex-import', name: 'Vertex import file lifecycle', options: {routes: oauthManagementProbeRoutes()}, run: oauthVertexImport },
+  { id: 'oauth-model-rules', name: 'OAuth model aliases and exclusions', options: {routes: oauthManagementProbeRoutes()}, run: oauthModelRules },
+  { id: 'oauth-token-capacity', name: 'OAuth token capacity formatting and phone geometry', options: {routes: oauthManagementProbeRoutes()}, run: oauthTokenCapacity },
+  { id: 'oauth-authorization-outcomes', name: 'OAuth completion identity and read-failure recovery', options: {routes: oauthManagementProbeRoutes()}, run: oauthAuthorizationOutcomes },
+  { id: 'oauth-workspace-scale', name: 'OAuth batched quota scale and cancellation', options: {routes: oauthManagementProbeRoutes()}, run: oauthWorkspaceScale },
+  { id: 'oauth-plugin-connections', name: 'OAuth key and interactive plugin connections', options: {routes: oauthManagementProbeRoutes()}, run: oauthPluginConnections },
   {
     id: 'icon-picker-stacking',
     name: 'icon picker stacking',
@@ -258,7 +264,7 @@ export const SCENARIOS = [
     name: 'a fetched catalog is picked in one step and the key field is not a password field',
     options: {
       routes: [
-        [(url) => url.pathname.endsWith('/management/providers/pull-models'), () => ({ models: pickerCatalog })],
+        [(url, method) => method === 'POST' && url.pathname.endsWith('/management/providers/pull-models'), () => ({ models: pickerCatalog })],
         [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
       ],
     },
@@ -761,6 +767,7 @@ export const SCENARIOS = [
       viewport: { width: 390, height: 664 },
       hasTouch: true,
       routes: [
+        [(url) => url.pathname.endsWith('/usage/ingest-status'), () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } })],
         [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
         [
           (url) => url.pathname.includes('/usage/events'),
@@ -808,6 +815,8 @@ export const SCENARIOS = [
     },
     run: systemInformationPage,
   },
+  { id: 'system-version-feedback', name: 'System version check feedback and held responses', options: {routes: systemFixtures()}, run: systemVersionFeedback },
+  { id: 'system-health-anomalies', name: 'System health partial reads and anomaly projections', options: {routes: systemFixtures()}, run: systemHealthAnomalies },
   {
     // A 320px screen, because the page's defects appeared there and at no wider size. The
     // failure was an overlap rather than an overflow: the card title and its action drew on

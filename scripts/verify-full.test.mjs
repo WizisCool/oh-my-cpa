@@ -15,7 +15,7 @@ test('bundle failure remains blocking but still collects browser, probes and dem
   for (const isSerial of [false, true]) {
     const result = await runFixture(['bundle'], isSerial);
     assert.equal(result.hasPassed, false);
-    assert.deepEqual(result.labels.slice(-4), ['bundle', 'browser', 'probes', 'demo']);
+    assert.deepEqual(result.labels.slice(-5), ['bundle', 'browser-harness', 'browser', 'probes', 'demo']);
   }
 });
 
@@ -55,4 +55,37 @@ test('serial fallback also serializes the static sub-gates', async () => {
   assert.ok(commands.includes('verify:static:go'));
   assert.ok(commands.includes('verify:static:frontend'));
   assert.ok(commands.includes('verify:static:repository'));
+});
+
+
+test('explicit probe port keeps every full verification phase and rejects invalid ports', async () => {
+  const commands = [];
+  assert.equal(await runFullVerification({ probePort: 5183, execute: async checks => { commands.push(...checks); return true; } }), true);
+  assert.deepEqual(commands.find(check => check.label === 'probes').args, ['verify:probes', '--port', '5183']);
+  assert.deepEqual(commands.slice(-4).map(check => check.label), ['browser-harness', 'browser', 'probes', 'demo']);
+  await assert.rejects(runFullVerification({ probePort: 0 }), /Probe port/);
+});
+
+
+test('production distribution settles before any static Go reader can embed it', async () => {
+  for (const isSerial of [false, true]) {
+    let hasBuilt = false;
+    assert.equal(await runFullVerification({ isSerial, execute: async checks => {
+      if (checks.some(check => ['static', 'static-go'].includes(check.label))) assert.equal(hasBuilt, true);
+      if (checks.some(check => check.label === 'build')) {
+        assert.deepEqual(checks.map(check => check.label), ['build']);
+        hasBuilt = true;
+      }
+      return true;
+    } }), true);
+  }
+});
+
+test('local Chromium lanes retain all verdicts without competing on the shared host', async () => {
+  const result = await runFixture(['browser-harness']);
+  assert.equal(result.hasPassed, false);
+  for (const label of ['browser-harness', 'browser', 'probes', 'demo']) {
+    assert.deepEqual(result.groups.find(group => group.includes(label)), [label]);
+  }
+  assert.deepEqual(result.groups.find(group => group.includes('static')), ['static', 'history-secrets']);
 });

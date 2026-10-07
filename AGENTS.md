@@ -64,7 +64,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 Before declaring any change complete, all of the following requirements must be satisfied:
 
 - The development loop prioritizes `pnpm test:fast`, which runs only the checks affected by the current worktree changes;
-- When a logical feature is complete, and again before declaring a task complete or pushing, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan) and `pnpm check:ui` (the browser scenarios the change can reach). CI then runs the full browser catalog before merge (ADR 0032); `pnpm verify:full` runs all of it locally and is for build, harness or workflow changes and for reproducing CI;
+- When a logical feature is complete, and again before declaring a task complete or pushing, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan) and `pnpm check:ui` (the browser scenarios the change can reach). CI then runs the full browser catalog before merge (ADR 0032, refined by ADR 0068); `pnpm verify:full` runs all of it locally and is for build, harness or workflow changes and for reproducing CI;
 - New tests follow `docs/testing.md`: lowest layer that can fail for the right reason, no fixed waits, automatic discovery instead of new registration lists;
 - All context documents triggered by the change per §2 have been updated;
 - No obsolete comments, dead references, or unlocalized user-visible strings remain.
@@ -77,7 +77,7 @@ The real cost developers pay during development is **waiting**. Verification is 
 | --- | --- | --- |
 | **Development iteration** (after editing files to confirm nothing broke) | `pnpm test:fast`; add `pnpm check:ui` if the change touches UI interactions, layout, or browser lifecycle | Scope-dependent; inspect per-check/scenario timings |
 | **Logical feature complete / before declaring done or pushing** | `pnpm verify` and `pnpm check:ui` | Tens of seconds for static gates; browser time scales with the change |
-| **Pull request** | CI: static gates, P0 acceptance, the whole probe catalog in three shards, demo | Runs beside you; branch protection requires its `static`, `browser` and `probes` checks (ADR 0032) |
+| **Pull request** | CI: static gates, full built acceptance, the whole probe catalog in three shards, demo | Runs beside you; branch protection requires its `static`, `browser` and `probes` checks (ADR 0032) |
 
 Rules:
 
@@ -90,7 +90,7 @@ Rules:
 - **Inspect the fast plan before broad work.** `pnpm test:fast --plan` shows the files and selected checks without running them. After committing, use `pnpm test:fast --base <ref>` (optionally with `--plan`) to include committed differences; the default base is `HEAD`. Selection unions the checks required by each file, so adding documentation cannot hide a migration or configuration change. Dependency changes widen both static and UI plans.
 - Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` with `scripts/acceptance/ui-impact.mjs` and `scripts/acceptance/probe-impact.mjs` (for UI scenarios); all are pinned by tests asserting they never silently select nothing, and each narrowing rule has a negative case.
 
-CI (`.github/workflows/ci.yml`) runs three jobs in parallel: static gates; the browser job (PRs run `verify:browser:p0`, which contains the smoke path; `master` runs the full `verify:browser`; both then run `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs `check:bundle` after building to enforce loading boundaries and broad anomaly ceilings, reports raw/gzip sizes and exact-base growth, and checks generated-state cleanliness before browser execution. A captured bundle failure still permits production browser/demo evidence, then a mandatory final verdict fails the job; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard).
+CI (`.github/workflows/ci.yml`) runs three verification lanes in parallel: static gates; the browser job (PRs and `master` run the full `verify:browser`, the browser-harness fault checks and `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs `check:bundle` after building to enforce loading boundaries and broad anomaly ceilings, reports raw/gzip sizes and exact-base growth, and checks generated-state cleanliness before browser execution. A captured bundle failure still permits production browser/demo evidence, then a mandatory final verdict fails the job; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard). Structured probe timings are retained for 30 days. Weekly/manual maintenance runs focused race instrumentation, bounded fuzzing, advisory audits and macOS/Windows host-native smoke (ADR 0068); publication caches remain isolated (ADR 0066).
 
 ---
 
@@ -156,7 +156,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm dev:api` / `pnpm dev:web` | Run Go/Air only, or Vite only |
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
-| `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check); `--base <ref>` includes committed changes, `--plan` prints without running |
+| `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check and conservative affected logic suites); `--base <ref>` includes committed changes, `--plan` prints without running |
 | `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
 | `pnpm check:bundle` | Check production loading boundaries and anomaly ceilings; report raw/gzip sizes and exact-base growth |
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
@@ -171,8 +171,12 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm build:demo` | Stage the built console for the demonstration: inject the runtime configuration, make asset URLs root-relative |
 | `pnpm verify:full:serial` | Serial final gate, used only for diagnosing parallel orchestration discrepancies |
 | `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
-| `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; CI's P0 run contains it |
-| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does |
+| `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; the full CI run contains it |
+| `pnpm verify:browser:harness` | Real-browser fault-injection checks for runtime errors, strict fixtures and outbound isolation; outside the fast/static lanes |
+| `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Bounded maintenance lanes; weekly and manual CI, separate from hermetic PR gates |
+| `pnpm verify:workflow:lint` | Independent pinned actionlint validation; install the version named in `scripts/lint-workflows.mjs` first |
+| `pnpm benchmark:native` | Opt-in serial/two-worker native compilation experiment; reports metadata and timings without changing publication inputs |
+| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does; `--port PORT` selects an explicit isolated listener |
 | `pnpm verify:e2e` | Build and check loading boundaries/anomaly ceilings, then run browser acceptance and browser probes |
 | `pnpm verify:secrets` | Scan worktree for secrets |
 | `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
