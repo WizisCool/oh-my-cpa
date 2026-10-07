@@ -763,4 +763,5 @@ not slept). The same file keeps the stdio round trip and the bridge's transport 
 a session cookie and a wrong key are refused, the catalogue omits the Agent-only capabilities, and
 a caller cannot choose where its approval link points. The guide's snippets, endpoint and
 plain-HTTP warning are pure functions asserted in `scripts/test-agent-workspace.ts`; the
-`agent-external` probe opens an approval link, allows it and reads the guide in the side panel.
+`agent-external` probe opens an approval link's authorization screen, allows the operation,
+checks a malformed address, and reads the guide and its client tiles in the Agent side panel.

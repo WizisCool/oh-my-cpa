@@ -89,10 +89,10 @@ func TestRemoteMCPServesTheRegistryToAManagementKeyHolder(t *testing.T) {
 		t.Fatalf("prepare: %+v %v", prepared, err)
 	}
 	link := prepared.Content[1].(*mcp.TextContent).Text
-	if !strings.HasPrefix(link, "Operator approval: "+fixture.baseURL+"/omc/agent?operation=") {
+	if !strings.HasPrefix(link, "Operator approval: "+fixture.baseURL+"/omc/authorize/") {
 		t.Fatalf("approval link: %s", link)
 	}
-	operationID := link[strings.LastIndex(link, "=")+1:]
+	operationID := link[strings.LastIndex(link, "/")+1:]
 	status, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpbridge.OPERATION_STATUS_TOOL, Arguments: map[string]any{"operation_id": operationID}})
 	if err != nil || status.IsError || !strings.Contains(status.Content[0].(*mcp.TextContent).Text, `"status":"pending"`) {
 		t.Fatalf("status: %+v %v", status, err)

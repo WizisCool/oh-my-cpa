@@ -190,8 +190,9 @@ loopback addresses, refuses redirects, opens no data directory, and prints its u
 There is no separate external credential: holding the management key is
 administrator-equivalent, so an external agent can prepare an operation and read its
 status but cannot approve it, submit secrets, or complete OAuth. A prepared change
-returns `status: "pending"` with a link to `<console URL>/agent?operation=<id>`, which
-opens its approval card for the signed-in operator; `omc_operation_status` reads the
+returns `status: "pending"` with a link to `<console URL>/authorize/<id>`, a
+standalone authorization screen where the signed-in operator (signing in first if
+needed) allows or denies that one operation; `omc_operation_status` reads the
 outcome and can wait up to 30 seconds for the decision (`wait_seconds`). The read-only database queries and `ask_question` are offered to the built-in
 Agent only. Raw SQL results and private model history are omitted from Agent session
 responses and run snapshots, and query receipts have no raw-result preview; the selected

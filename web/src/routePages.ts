@@ -24,6 +24,9 @@ export const DashboardPage = React.lazy(loadDashboardPage);
 export const loadAgentPage = createPageLoader(() => import('./pages/agent/AgentPage'), 'AgentPage');
 export const AgentPage = React.lazy(loadAgentPage);
 
+export const loadAuthorizePage = createPageLoader(() => import('./pages/agent/AuthorizePage'), 'AuthorizePage');
+export const AuthorizePage = React.lazy(loadAuthorizePage);
+
 export const loadPlaygroundPage = createPageLoader(() => import('./pages/playground/PlaygroundPage'), 'PlaygroundPage');
 export const PlaygroundPage = React.lazy(loadPlaygroundPage);
 

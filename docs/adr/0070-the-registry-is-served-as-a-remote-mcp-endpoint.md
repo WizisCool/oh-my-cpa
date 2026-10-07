@@ -41,9 +41,14 @@ Oh My CPA serves the registry over MCP's Streamable HTTP transport at
   takes `wait_seconds` (at most 30) so an agent can wait for the operator's decision in
   one call instead of holding a stream open.
 - **Approval stays in the console.** A prepared operation's result carries a link to
-  `<console>/agent?operation=<id>`, built from the address the caller reached. The Agent
-  page opens that operation on the same approval card and decision endpoint as the
-  built-in Agent's own (ADR 0035), under the operator's session.
+  `<console>/authorize/<id>`, built from the address the caller reached. It opens a
+  standalone authorization screen outside the console's shell, modelled on the consent
+  screens of the services agents already connect to: who is asking, on which
+  deployment, for which capability, the prepared change, and Deny and Allow as equal
+  targets. The operation was raised in another program, so there is no transcript to
+  place a card in (ADR 0043), and an operator arriving from a link came to answer one
+  question. The sign-in gate runs first, and the decision goes to the same endpoint as
+  the built-in Agent's approvals (ADR 0035), under the operator's session.
 - **Refused in demo mode**, like capability invocation.
 
 ## Consequences and trade-offs

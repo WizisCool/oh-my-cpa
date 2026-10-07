@@ -38,7 +38,7 @@ const SERVER_INSTRUCTIONS = `Oh My CPA (OMC) is the control plane of a CLIProxyA
 Results are JSON envelopes with a "status":
 - "success": "data" holds the result.
 - "error": "code" names the refusal and "detail", when present, says what to change. Correct the arguments and call again.
-- "pending": the change is prepared but not applied. Only the operator can approve it, in the OMC console at the link returned with the result. Give the operator that link, then call omc_operation_status with the operation_id (wait_seconds lets one call wait for the decision). Never report a pending change as done.
+- "pending": the change is prepared but not applied. Only the operator can approve it, on the OMC console page the result links to. Give the operator that link, then call omc_operation_status with the operation_id (wait_seconds lets one call wait for the decision). Never report a pending change as done.
 - "rejected": the operator denied it. Do not prepare it again unless asked.
 - "uncertain": the change may or may not have been applied. Read the current state before deciding anything; never retry blindly.
 
@@ -86,7 +86,7 @@ func NewServer(ctx context.Context, backend Backend, options Options) (*mcp.Serv
 		if base == "" {
 			return ""
 		}
-		return base + "/agent?operation=" + operationID
+		return base + "/authorize/" + operationID
 	}
 	// OMC is a closed system: no tool reaches an arbitrary external target.
 	isOpenWorld := false

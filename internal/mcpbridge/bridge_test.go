@@ -151,7 +151,7 @@ func TestPendingResultCarriesTheApprovalLinkAndRefusalsKeepTheirCode(t *testing.
 	if err != nil || result.IsError {
 		t.Fatalf("prepare: %+v %v", result, err)
 	}
-	if got := texts(result); len(got) != 2 || got[1] != "Operator approval: https://omc.example/omc/agent?operation="+operationID {
+	if got := texts(result); len(got) != 2 || got[1] != "Operator approval: https://omc.example/omc/authorize/"+operationID {
 		t.Fatalf("approval link: %v", got)
 	}
 	backend.result, backend.err = capability.Result{}, errors.New("capability_forbidden")

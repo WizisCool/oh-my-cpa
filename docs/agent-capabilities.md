@@ -316,9 +316,11 @@ refusal from OMC reaches the agent as OMC's own code (`authentication_required`,
 ### Approving what an external agent prepared
 
 A high-risk call returns `status: "pending"`, the `operation_id`, and a second text item
-`Operator approval: <console URL>/agent?operation=<id>`. The link only names the
-operation. Opened by a signed-in operator, the Agent page shows it at the top of the
-Connect tab on the same approval card as its own operations, with the same private
+`Operator approval: <console URL>/authorize/<id>`. The link only names the operation.
+It opens the authorization screen (`web/src/pages/agent/AuthorizePage.tsx`), a consent
+screen outside the console's shell and behind its sign-in gate: who is asking, on which
+deployment, the capability and its permission, the prepared change, and Deny and Allow,
+with the same private
 secret and OAuth handoffs, and posts the one allow-or-deny decision to the same
 endpoint (ADR 0035). The decision endpoint requires a browser origin and refuses any
 request carrying an `Authorization` header, so the key that prepared an operation can
@@ -332,7 +334,7 @@ rotate the key if that trust changes.
 Tests: `internal/mcpbridge/bridge_test.go` (stdio round trip, transport refusals,
 approval link, status wait, refusal codes), `internal/api/agent_mcp_test.go` (the
 endpoint end to end: credentials, catalogue, read, prepare, status) and the
-`agent-external` browser scenario (approval link and guide).
+`agent-external` browser scenario (authorization screen and guide).
 
 ### Pricing provider membership
 

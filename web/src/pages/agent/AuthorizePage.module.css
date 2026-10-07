@@ -1,0 +1,108 @@
+/* The consent screen an external agent's approval link opens. The shell, column and title are the
+   sign-in page's (`auth-*` in index.css); these are the parts only this screen has. */
+
+.card {
+  max-width: 440px;
+}
+
+.parties {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.party {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.link {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+/* The shared title leaves room for a form under it; here one sentence follows directly. */
+.card :global(.auth-title) {
+  margin-bottom: 12px;
+}
+
+.intro {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.request {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.request[data-destructive] {
+  border-top-color: var(--danger);
+}
+
+.request-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.request-title {
+  min-width: 0;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.request-name {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.outcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.outcome[data-tone='success'] { color: var(--success); }
+.outcome[data-tone='error'] { color: var(--danger); }
+.outcome[data-tone='warning'] { color: var(--warn); }
+
+.fine {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.console {
+  display: block;
+  margin-top: 20px;
+  font-size: 12px;
+  text-align: center;
+}

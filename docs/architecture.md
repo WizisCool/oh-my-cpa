@@ -305,11 +305,14 @@ one tool per capability offered to the `mcp` adapter, plus `omc_operation_status
   OMC's own refusal codes are repeated to the agent.
 
 Neither can approve operations, submit secrets, or complete OAuth. A prepared operation
-returns its id and a link to `<console>/agent?operation=<id>`; the Agent page's Connect
-tab (`web/src/pages/agent/ExternalAgentGuide.tsx`) opens that operation on the same
-approval card and decision endpoint as the built-in Agent's own, and otherwise shows
-the deployment's endpoint and client configuration built by
-`web/src/pages/agent/connect.ts`.
+returns its id and a link to `<console>/authorize/<id>`. That route is
+`web/src/pages/agent/AuthorizePage.tsx`, the one console route outside `AppLayout`: a
+consent screen on the sign-in page's column (`auth-*` classes), behind the same
+`AuthGate`, that names the requester, the deployment and the capability and carries the
+approval card in its `consent` variant, posting to the same decision endpoint as the
+built-in Agent's approvals. The Agent page's Connect tab
+(`web/src/pages/agent/ExternalAgentGuide.tsx`) shows the deployment's endpoint and
+per-client configuration built by `web/src/pages/agent/connect.ts`.
 
 #### What the model loop spends, and where
 

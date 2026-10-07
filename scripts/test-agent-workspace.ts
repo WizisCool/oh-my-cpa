@@ -35,7 +35,7 @@ import {
 } from '../web/src/pages/agent/state.ts';
 import { completedDisplayViews } from '../web/src/agent/types.ts';
 import { agentChartAxis } from '../web/src/pages/agent/tools/chartAxis.ts';
-import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, linkedOperationID, mcpEndpoint } from '../web/src/pages/agent/connect.ts';
+import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, isOperationID, mcpEndpoint } from '../web/src/pages/agent/connect.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
 
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../web/src/agent/runReducer.ts';
@@ -565,10 +565,10 @@ check('plain HTTP is flagged only where the key would leave the machine', () => 
   for (const origin of ['https://omc.example.com', 'http://localhost:5173', 'http://127.0.0.1:8080', 'http://[::1]:8080', 'not a url']) assert.equal(isInsecureOrigin(origin), false, origin);
 });
 
-check('an approval link is followed only for a well-formed operation id', () => {
+check('an approval address is read only for a well-formed operation id', () => {
   const id = '0123456789abcdef0123456789abcdef0123456789abcdef';
-  assert.equal(linkedOperationID(`?operation=${id}`), id);
-  for (const search of ['', '?operation=', `?operation=${id}0`, `?operation=${id.toUpperCase()}`, '?operation=../session']) assert.equal(linkedOperationID(search), '', search);
+  assert.equal(isOperationID(id), true);
+  for (const value of ['', `${id}0`, id.toUpperCase(), '..', 'session']) assert.equal(isOperationID(value), false, value);
 });
 
 console.log(`\n${passed} assertions passed`);

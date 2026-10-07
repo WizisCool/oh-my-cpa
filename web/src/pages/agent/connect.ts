@@ -85,8 +85,7 @@ export function connectSnippet(client: ConnectClient, origin: string, basePath: 
   }
 }
 
-/** The operation an approval link names, or '' when the query carries none worth asking the server about. */
-export function linkedOperationID(search: string): string {
-  const id = new URLSearchParams(search).get('operation') ?? '';
-  return /^[0-9a-f]{48}$/.test(id) ? id : '';
+/** Whether a path segment is shaped like an operation id, so a mistyped address is not sent to the server. */
+export function isOperationID(value: string): boolean {
+  return /^[0-9a-f]{48}$/.test(value);
 }

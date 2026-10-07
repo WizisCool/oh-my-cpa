@@ -14,6 +14,9 @@ export interface Operation {
   /** Recorded when the operation was prepared; older records carry none. */
   permission?: string;
   status: string;
+  /** Who prepared it: the built-in Agent (`agent`) or an external MCP client (`mcp`). */
+  adapter?: string;
+  expires_at_ms?: number;
   human_input?: string;
   preview: { target: string; changes?: unknown };
   result: CapabilityReceipt;
