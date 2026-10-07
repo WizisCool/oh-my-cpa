@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runWorkflowLint } from './lint-workflows.mjs';
 
-test('workflow lint discovers and validates repository files from an unrelated cwd', context => {
+test('workflow lint discovers and validates repository files from an unrelated cwd', async context => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-workflow-cwd-'));
   const original = process.cwd();
   context.after(() => { process.chdir(original); fs.rmSync(directory, { recursive: true, force: true }); });
   process.chdir(directory);
+  const { runWorkflowLint } = await import('./lint-workflows.mjs?foreign-cwd');
   const root = fileURLToPath(new URL('../', import.meta.url));
   let hasCheckedWorkflows = false;
   runWorkflowLint((command, args, options) => {

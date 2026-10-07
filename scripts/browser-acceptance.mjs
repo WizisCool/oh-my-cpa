@@ -31,7 +31,7 @@ import { runKeyManagementAcceptance } from './acceptance/key-management.mjs';
 import { runUsageEventsAcceptance } from './acceptance/usage-events.mjs';
 import { runProvidersAcceptance } from './acceptance/providers.mjs';
 import { runObservabilityAcceptance } from './acceptance/observability.mjs';
-import { auditNativePluginHostResponse, isNativePluginHostResponse, runConfigurationPluginsAcceptance } from './acceptance/configuration-plugins.mjs';
+import { auditNativePluginHostResponse, isNativePluginHostResponse, settleNativeResponseAudits, runConfigurationPluginsAcceptance } from './acceptance/configuration-plugins.mjs';
 import { runThemeBrandAcceptance } from './acceptance/theme-brand.mjs';
 import { runOAuthFlowAcceptance } from './acceptance/oauth-flow.mjs';
 
@@ -76,6 +76,7 @@ let network;
 let fakeCpa;
 let appURL;
 let page;
+const nativeResponseAudits = [];
 const consoleErrors = [];
 const pageErrors = [];
 const requestFailures = [];
@@ -329,7 +330,6 @@ try {
   network = await guardBrowserContext(context, [appURL]);
   page = await context.newPage();
   const responseBodies = [];
-  const nativeResponseAudits = [];
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     if (/status of 401 \(Unauthorized\)/i.test(message.text())) return;
@@ -501,6 +501,7 @@ try {
   }, async () => {
     try {
       await closeBrowser(browser);
+      await settleNativeResponseAudits(nativeResponseAudits, check);
       if (page) {
         check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
         check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));

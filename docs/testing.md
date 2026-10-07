@@ -734,7 +734,8 @@ for focused regression diagnosis. The response observer separates only exact sam
 native host API responses from ordinary DTO leak sweeps, while still checking native startup
 bodies for the server management key and OAuth fixture credentials; unreadable native
 response evidence fails the check, and all native response audits settle before the final
-verdict. Client/provider keys needed by native startup are permitted on that surface. `scripts/plugin-host-contract.test.mjs`
+verdict, including error-path teardown after browser shutdown; rejected audit tasks remain
+failed verdicts without bypassing owned fixture/process cleanup. Client/provider keys needed by native startup are permitted on that surface. `scripts/plugin-host-contract.test.mjs`
 pins both policies, including ordinary APIs, resources, similar paths, external origins and
 unexpected protected credentials as negative cases.
 No additional runner or registration list is required. Changes to this built harness require
