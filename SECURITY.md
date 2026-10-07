@@ -43,3 +43,22 @@ When evaluating potential vulnerabilities, please keep the following security bo
 - **Sanitized Projections**: Ordinary API responses use strict DTO allowlists and redact secrets (displaying only fingerprints or masks).
 - **Audited Administrative Surfaces**: Operations that intentionally access or modify secrets (such as viewing raw YAML source or revealing client API keys) require active admin sessions, CSRF / same-origin validation, and are recorded to the append-only `audit_events` log.
 - **No Arbitrary Upstream Proxying**: Generic `/api-call` forwarding is disabled for browser traffic to prevent SSRF.
+
+## Dependency Security Overrides
+
+Workspace-wide overrides in `pnpm-workspace.yaml` keep transitive dependencies on
+patched releases even when their parent packages still request vulnerable versions.
+`pnpm-lock.yaml` records the resolved dependency graph; regenerate it with
+`pnpm install` whenever an override changes.
+
+| Dependency | Patched version | Advisory | Dependency path |
+| --- | --- | --- | --- |
+| KaTeX | 0.18.2 | GHSA-238p-pmpm-9mq7 | Markdown and Mermaid rendering through Ant Design X |
+| sharp | 0.35.5 | GHSA-wq5f-xc86-pv6w | Wrangler / Miniflare demonstration tooling |
+| source-map-js | 1.2.2 | GHSA-68fv-2mgg-jv7q | Vite / PostCSS source-map processing |
+
+These overrides apply to every consumer in the workspace. Remove one only after
+all parent packages resolve to a patched version without it. Use
+`pnpm why <package> --recursive` to inspect consumers and `pnpm audit` to inspect
+the resolved graph. The KaTeX override crosses the minor version requested by its
+parents, so check their mathematical rendering when changing it.
