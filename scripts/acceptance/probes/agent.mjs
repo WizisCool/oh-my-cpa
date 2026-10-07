@@ -168,6 +168,43 @@ export async function agentWorkspace({ base, page, check }) {
 }
 
 /**
+ * An external agent's approval link opens the operation it names, and the same panel tells the
+ * operator how such an agent is connected in the first place.
+ */
+export async function agentExternal({ base, page, check }) {
+  const operationID = '0123456789abcdef0123456789abcdef0123456789abcdef';
+  let operation = { id: operationID, capability: 'providers_delete', permission: 'destructive', status: 'pending', preview: { target: 'provider-test', changes: { provider: 'provider-test' } }, result: { status: 'pending' } };
+  const decisions = [];
+  await page.route(`**/agent/operations/${operationID}`, route => route.fulfill({ json: operation }));
+  await page.route(`**/agent/operations/${operationID}/decision`, async route => {
+    decisions.push(JSON.parse(route.request().postData()));
+    operation = { ...operation, status: 'success', result: { status: 'success', invalidates: ['management-providers'] } };
+    await route.fulfill({ json: operation });
+  });
+  await page.goto(`${base}/agent?operation=${operationID}`, { waitUntil: 'domcontentloaded' });
+
+  // The link was followed to decide something, so the panel opens on it without a click.
+  const linked = page.getByTestId('agent-linked-operation');
+  await linked.getByTestId('agent-authorization').waitFor();
+  check('an approval link shows the prepared change and its target', (await linked.innerText()).includes('provider-test') && await linked.getByText('Destructive', { exact: true }).count() === 1, await linked.innerText());
+  await linked.getByRole('button', { name: 'Allow', exact: true }).click();
+  await linked.getByText('Done', { exact: true }).waitFor();
+  check('allowing it records one approval and settles the card', decisions.length === 1 && decisions[0].approve === true && await linked.getByTestId('agent-authorization').count() === 0, JSON.stringify(decisions));
+
+  const guide = page.getByTestId('agent-connect');
+  const origin = new URL(base).origin;
+  const endpoint = `${origin}${new URL(base).pathname.replace(/\/$/, '')}/api/mcp`;
+  check('the guide names this deployment\'s own MCP endpoint', await guide.getByTestId('agent-connect-endpoint').innerText() === endpoint, await guide.getByTestId('agent-connect-endpoint').innerText());
+  const snippet = guide.getByTestId('agent-connect-snippet');
+  check('the default snippet connects Claude Code by URL without the key in it', (await snippet.innerText()).includes(`--transport http oh-my-cpa ${endpoint}`) && (await snippet.innerText()).includes('$OMCPA_CPA_MANAGEMENT_KEY'), await snippet.innerText());
+  await guide.getByText('Codex', { exact: true }).click();
+  await snippet.getByText('bearer_token_env_var').waitFor();
+  check('choosing another client swaps the snippet', (await snippet.innerText()).includes(`url = "${endpoint}"`), await snippet.innerText());
+  const geometry = await guide.evaluate(element => ({ width: element.clientWidth, scroll: element.scrollWidth }));
+  check('the guide fits the side panel without horizontal overflow', geometry.scroll <= geometry.width + 1, JSON.stringify(geometry));
+}
+
+/**
  * A run that fails after the server accepted it reports a sentence with the code beneath it; one
  * the server refused before persisting anything hands the message back to the composer.
  */

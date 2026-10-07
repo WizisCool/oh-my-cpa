@@ -1,7 +1,7 @@
 import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './probes/modelSquare.mjs';
 import { mobileConsole } from './probes/mobileConsole.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
-import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
+import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
  * The browser probe scenarios, as a registry rather than a script.
@@ -183,6 +183,7 @@ export const SCENARIOS = [
     run: routePreloading,
   },
   { id: 'agent', name: 'Agent data notice, reasoning effort, inline one-click authorization, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
+  { id: 'agent-external', name: 'Agent opens an external agent\'s approval link and shows how to connect one over MCP', options: { routes: agentFixtures() }, run: agentExternal },
   { id: 'agent-question', name: 'Agent asks a question in the composer and continues once it is answered', options: { routes: agentFixtures() }, run: agentQuestion },
   { id: 'agent-live', name: 'Agent shows a sent message at once, queues the next one and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
   { id: 'agent-views', name: 'Agent draws display calls from their frozen rows as tables and charts', options: { routes: agentFixtures() }, run: agentViews },

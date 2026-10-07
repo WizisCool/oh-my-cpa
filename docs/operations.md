@@ -73,8 +73,9 @@ a message naming the variable.
 | `OMCPA_OMC_REPO` / `OMCPA_CPA_REPO` | `WizisCool/oh-my-cpa` / `router-for-me/CLIProxyAPI` | `owner/name` the checks read, for a fork |
 | `OMCPA_DEMO_MODE` | `false` | Serve the console from the built-in fixture; see [Demo mode](#demo-mode) |
 
-The MCP bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL` and
-`OMCPA_CPA_MANAGEMENT_KEY` only; see [Agent and MCP](#agent-and-mcp).
+The MCP stdio bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL`,
+`OMCPA_CPA_MANAGEMENT_KEY` and the optional `OMCPA_VERSION` only; the remote MCP
+endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
 
 ## Deployment constraints
 
@@ -166,14 +167,32 @@ documents needing (up to twice the database file). A job cannot outlive a restar
 page and its upstream provider; the page states this beneath the message box, and the
 choice of key, model and reasoning effort is remembered as a server-side preference.
 
-External agents connect through `oh-my-cpa mcp`, a stdio MCP server over the same
-capability registry. It reads `OMCPA_SERVER_URL` (the console URL, including any base
-path) and `OMCPA_CPA_MANAGEMENT_KEY` (the same management key that signs into the
-console); plain HTTP is accepted only for loopback addresses, redirects are refused, and
-the bridge itself opens no data directory. There is no separate external credential:
-holding the management key is administrator-equivalent, so an external agent can prepare
-an operation and read its status but cannot approve it, submit secrets, or complete
-OAuth. The read-only database queries and `ask_question` are offered to the built-in
+External agents connect over MCP to the same capability registry, in one of two ways:
+
+| Transport | Address | Credential |
+| --- | --- | --- |
+| Streamable HTTP, served by the console | `<console URL>/api/mcp`, for example `https://omc.example.com/omc/api/mcp` | `Authorization: Bearer <CPA management key>` |
+| stdio, the `oh-my-cpa mcp` bridge process | `OMCPA_SERVER_URL` (the console URL, including any base path) | `OMCPA_CPA_MANAGEMENT_KEY` |
+
+The HTTP endpoint needs nothing installed where the agent runs; the **Connect** tab of
+the `/agent` side panel shows the deployment's address and copyable client
+configuration. It accepts the management key as a bearer token only (a console session
+cookie is refused), throttles wrong keys per client address like the login form, keeps
+no MCP session, answers each request in plain JSON, and is refused in demo mode. A
+reverse proxy needs no special rule beyond forwarding the base path; serve it over
+HTTPS, because the endpoint cannot tell that TLS was terminated in front of it. Clients
+that require OAuth discovery cannot use it and use the bridge instead.
+
+The stdio bridge is for clients that only speak stdio. It accepts plain HTTP only for
+loopback addresses, refuses redirects, opens no data directory, and prints its usage for
+`oh-my-cpa mcp --help`.
+
+There is no separate external credential: holding the management key is
+administrator-equivalent, so an external agent can prepare an operation and read its
+status but cannot approve it, submit secrets, or complete OAuth. A prepared change
+returns `status: "pending"` with a link to `<console URL>/agent?operation=<id>`, which
+opens its approval card for the signed-in operator; `omc_operation_status` reads the
+outcome and can wait up to 30 seconds for the decision (`wait_seconds`). The read-only database queries and `ask_question` are offered to the built-in
 Agent only. Raw SQL results and private model history are omitted from Agent session
 responses and run snapshots, and query receipts have no raw-result preview; the selected
 model still receives the rows and may use them in its answer or an explicit chart or

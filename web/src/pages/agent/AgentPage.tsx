@@ -26,6 +26,8 @@ import { AgentMessage } from './AgentMessage';
 import { failureCode, getCapabilities, getOperation, getSession, resetSession } from './api';
 import { CallDetails } from './CallDetails';
 import { CapabilityDirectory } from './CapabilityDirectory';
+import { ExternalAgentGuide } from './ExternalAgentGuide';
+import { linkedOperationID } from './connect';
 import { useExportLabels } from './exportLabels';
 import { QuestionPanel } from './interrupts/QuestionPanel';
 import { useAgentThreadRuntime } from './runtime';
@@ -56,7 +58,7 @@ const EXAMPLES = [
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
 ];
 
-type PanelTab = 'directory' | 'details';
+type PanelTab = 'directory' | 'details' | 'connect';
 
 export function AgentPage() {
   const { t, lang } = useI18n();
@@ -64,8 +66,12 @@ export function AgentPage() {
   const isDemo = isDemoMode();
   const pageRef = React.useRef<HTMLDivElement>(null);
 
-  const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
-  const [panelTab, setPanelTab] = React.useState<PanelTab>('directory');
+  // An approval link from an external agent names the operation to decide. It opens on the tab
+  // that draws it even on a narrow viewport, where the panel otherwise starts closed: the link was
+  // followed for exactly this.
+  const [linkedOperation] = React.useState(() => linkedOperationID(window.location.search));
+  const [isPanelOpen, setIsPanelOpen] = React.useState(() => !!linkedOperation || !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
+  const [panelTab, setPanelTab] = React.useState<PanelTab>(linkedOperation ? 'connect' : 'directory');
   const [selectedCallID, setSelectedCallID] = React.useState('');
   const [fingerprint, setFingerprint] = React.useState('');
   const [model, setModel] = React.useState('');
@@ -445,6 +451,11 @@ export function AgentPage() {
                   content: <CapabilityDirectory capabilities={capabilities.data ?? []} isPending={capabilities.isPending} isError={capabilities.isError} onRetry={() => void capabilities.refetch()} />,
                 },
                 { key: 'details', label: t('agent.details'), content: <CallDetails trace={selectedTrace} /> },
+                {
+                  key: 'connect',
+                  label: t('agent.connect'),
+                  content: <ExternalAgentGuide capabilities={capabilities.data ?? []} operationID={linkedOperation} isDemo={isDemo} />,
+                },
               ],
               activeTab: panelTab,
               onTabChange: key => setPanelTab(key as PanelTab),
