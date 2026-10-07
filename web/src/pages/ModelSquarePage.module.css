@@ -34,10 +34,10 @@
 
 /* A model is a name, a price and a connection - too little to fill a line of the page. Cards
    fill the section's width instead, in as many columns as fit, down to one on a phone. */
-.model-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 8px; padding: 12px 0 0; margin: 0; list-style: none; }
+.model-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; padding: 12px 0 0; margin: 0; list-style: none; }
 .model-row {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-content: space-between; row-gap: 6px; min-width: 0;
-  padding: 6px 4px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 4px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
   transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
 }
 .model-row:hover { background: var(--hover); border-color: var(--fg-2); }
