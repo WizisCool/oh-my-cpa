@@ -44,8 +44,14 @@ const DISCOVERED_SUITES = [
 const flags = process.argv.slice(2);
 if (flags.some((flag, index) => flag !== '--files' && flag !== '--plan' && flags[index - 1] !== '--files')) throw new Error('Unknown logic-runner option');
 const filesIndex = flags.indexOf('--files');
-const files = filesIndex < 0 ? undefined : JSON.parse(flags[filesIndex + 1]);
-if (files && (!Array.isArray(files) || !files.every(file => typeof file === 'string'))) throw new Error('--files requires a JSON path array');
+let files;
+if (filesIndex >= 0) {
+  const operand = flags[filesIndex + 1];
+  if (operand === undefined || operand.startsWith('--')) throw new Error('--files requires a JSON path array');
+  try { files = JSON.parse(operand); }
+  catch { throw new Error('--files requires a JSON path array'); }
+  if (!Array.isArray(files) || !files.every(file => typeof file === 'string')) throw new Error('--files requires a JSON path array');
+}
 const SUITES = planLogicSuites(files, DISCOVERED_SUITES, root);
 if (flags.includes('--plan')) {
   console.log(`[logic] selected ${SUITES.length}/${DISCOVERED_SUITES.length} suites`);

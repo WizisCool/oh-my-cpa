@@ -169,13 +169,16 @@ test('missing or empty local base reference does not disable the bundle gate', (
   fs.renameSync(path.join(root, 'web/assets'), path.join(dist, 'assets'));
   fs.renameSync(path.join(root, 'index.html'), path.join(dist, 'index.html'));
   fs.writeFileSync(path.join(root, 'tmp/bundle/graph.json'), JSON.stringify(graph));
-  for (const hasOrigin of [false, true]) {
+  for (const environment of [{}, { BUNDLE_BASE_SHA: '' }]) {
     const calls = [];
-    const hasPassed = runBundleVerification({ root, environment: { BUNDLE_BASE_SHA: '' },
-      resolveRevision: (reference) => { calls.push(reference); if (reference === 'origin/master' && !hasOrigin) throw new Error('no upstream'); return REVISION; },
-      log: () => {}, warn: () => {} });
+    const warnings = [];
+    const hasPassed = runBundleVerification({ root, environment,
+      resolveRevision: reference => { calls.push(reference); return REVISION; },
+      log: () => {}, warn: message => warnings.push(message) });
     assert.equal(hasPassed, true);
-    assert.deepEqual(calls, ['HEAD', 'origin/master']);
+    assert.deepEqual(calls, environment.BUNDLE_BASE_SHA === undefined ? ['HEAD', 'origin/master'] : ['HEAD']);
+    assert.ok(warnings.some(message => message.includes('unavailable')));
+    if (environment.BUNDLE_BASE_SHA === undefined) assert.ok(warnings.some(message => message.includes('own baseline')));
   }
 });
 

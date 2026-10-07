@@ -132,7 +132,10 @@ shutdown and escalates owned process termination. Chromium is launched through
 BrowserServer so a stuck close has a real child process to terminate. Parallel local
 checks spool output under `tmp/check-output`, print verdicts on completion, record
 structured timings under `tmp/check-timings`, and terminate their owned process
-groups on cancellation.
+groups on cancellation. At each run start, recognized output/timing files older than
+30 days are pruned only if their owning PID is inactive; recent success and failure
+evidence, live owners and unrelated files are preserved.
+`scripts/parallel-checks.test.mjs` pins this retention boundary.
 
 ### Maintenance verification
 
@@ -149,6 +152,8 @@ permissions. These diagnostic lanes do not replace or delay the hermetic PR gate
 - `pnpm verify:advisories`: pnpm audit and pinned govulncheck, preserving both exit
   verdicts and logs. `scripts/advisory-triage.json` records exact identifiers, owners,
   rationale and review deadlines; these records never suppress audit failures.
+  An expired or unreadable triage document adds its own failed verdict/log while
+  both scanners still run and preserve their independent diagnostics.
   Fix reachable findings promptly; unrecognized findings and expired reviews require
   maintainer investigation. Registry/database availability is not a hermetic-test input.
 - macOS and Windows host-native smoke builds the SPA before a CGO-free binary and
@@ -499,7 +504,10 @@ actual served bytes or browser-performance measurements. Growth greater than bot
 CI selects the exact PR base or preceding push revision's successful push report,
 with `scripts/bundle-reference.json` as a one-commit bootstrap. Missing/expired
 artifacts are reported as unavailable, not replaced by a different revision.
-Locally, `BUNDLE_BASE_SHA` defaults to `origin/master`; `BUNDLE_BASELINE` supplies
+Locally, an omitted `BUNDLE_BASE_SHA` defaults to `origin/master`; an explicit empty
+value disables comparison, as release verification does until it resolves a previous
+release baseline. The candidate itself is not a valid comparison base.
+`BUNDLE_BASELINE` supplies
 a saved report for that exact revision. GitHub retrieval additionally requires
 `GITHUB_REPOSITORY` and `GH_TOKEN`. JSON and Markdown evidence live in `tmp/bundle/`
 and CI retains reports for 30 days. The JSON includes per-file raw/gzip sizes and
@@ -513,6 +521,12 @@ Self-tests are automatically discovered:
   compression calculations, advisory growth and every hard-ceiling boundary.
 - `scripts/bundle-baseline.test.mjs`: exact SHA/event/conclusion selection, bootstrap
   and explicit references, artifact retrieval and missing/invalid evidence.
+- `scripts/lint-workflows.test.mjs`: repository-relative workflow discovery from an
+  unrelated working directory, with injected actionlint execution.
+- `scripts/test-logic-runner.test.mjs`: actionable `--files` operand/schema failures
+  before any suite execution and conservative planning for an explicit empty list.
+- `scripts/build-demo.test.mjs`: private source/stage fixtures, real packaging and
+  recursive rejection of residual relative assets/fonts in every staged JS/CSS module.
 - `scripts/workflow-checks.test.mjs`: independent browser evidence and a mandatory
   final bundle outcome verdict, retained reports and existing browser/probe gates.
 - `scripts/verify-full.test.mjs`: injected runner failures, prerequisites, all

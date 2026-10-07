@@ -59,3 +59,54 @@ test('missing builds and missing runtime markers fail packaging', async context 
   await writeFile(join(fixture.sourceDirectory, 'index.html'), '<html></html>');
   await assert.rejects(stageDemo(fixture), /no runtime configuration/);
 });
+
+test('demo packaging rejects relative assets in an otherwise unchanged staged module', async context => {
+  const fixture = await createFixture(context);
+  await writeFile(join(fixture.sourceDirectory, 'assets/unhandled.js'), 'const asset = "./assets/new.svg";');
+  await assert.rejects(stageDemo(fixture), error => {
+    assert.match(error.message, /staged module .*unhandled\.js still references an asset relatively/);
+    assert.match(error.message, /\.\/assets\/new\.svg/);
+    return true;
+  });
+});
+
+for (const { path, content, reference } of [
+  { path: 'runtime.js', content: 'const icon = `./lobe-icons/${name}.svg`;', reference: './lobe-icons/' },
+  { path: 'runtime.css', content: '@font-face{src:url(./body.woff2)}', reference: './body.woff2' },
+  { path: 'assets/chunks/deep/icons.js', content: 'const icon = "./lobe-icons/new.svg";', reference: './lobe-icons/' },
+  { path: 'assets/chunks/deep/app.css', content: 'body{background:url("./assets/new.svg")}', reference: './assets/' },
+  { path: 'assets/font.css', content: '@font-face{src:url("./body.variable.woff2")}', reference: './body.variable.woff2' },
+  { path: 'assets/chunks/deep/font.css', content: '@font-face{src:url("./fonts/body.woff2")}', reference: './fonts/body.woff2' },
+  { path: 'assets/chunks/deep/font.js', content: 'const font = "./字体.woff2";', reference: './字体.woff2' },
+]) {
+  test(`demo packaging rejects uncovered relative references in ${path}`, async context => {
+    const fixture = await createFixture(context);
+    const segments = path.split('/');
+    await mkdir(join(fixture.sourceDirectory, ...segments.slice(0, -1)), { recursive: true });
+    await writeFile(join(fixture.sourceDirectory, path), content);
+    await assert.rejects(stageDemo(fixture), error => {
+      assert.ok(error.message.includes(`staged module ${join(...segments)} still references an asset relatively`), error.message);
+      assert.ok(error.message.includes(reference), error.message);
+      return true;
+    });
+  });
+}
+
+test('demo packaging preserves safe root and nested modules that need no asset rewrite', async context => {
+  const fixture = await createFixture(context);
+  const modules = [
+    { path: 'runtime.js', content: 'import "./chunk.js"; const icon = "/lobe-icons/test.svg";' },
+    { path: 'assets/chunks/deep/app.js', content: 'import "./sibling.js"; const asset = "/assets/new.svg";' },
+    { path: 'assets/chunks/deep/app.css', content: '@font-face{src:url("/assets/body.woff2")}body{background:url("/assets/new.svg")}' },
+  ];
+  for (const { path, content } of modules) {
+    await mkdir(join(fixture.sourceDirectory, ...path.split('/').slice(0, -1)), { recursive: true });
+    await writeFile(join(fixture.sourceDirectory, path), content);
+  }
+  const result = await stageDemo(fixture);
+  assert.equal(result.rewritten, 2);
+  for (const { path, content } of modules) {
+    assert.equal(await readFile(join(fixture.stageDirectory, path), 'utf8'), content);
+    assert.equal(await readFile(join(fixture.sourceDirectory, path), 'utf8'), content);
+  }
+});

@@ -154,3 +154,11 @@ test('identity bootstrap and publication boundary checks cannot be softened', ()
     assert.throws(() => validateReleaseWorkflow(broken));
   }
 });
+
+test('release bundle reporting explicitly has no exact base rather than comparing the candidate to itself', () => {
+  const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.jobs.browser.steps.find(step => step.id === 'bundle').env.BUNDLE_BASE_SHA, '');
+  const changed = structuredClone(workflow);
+  changed.jobs.browser.steps.find(step => step.id === 'bundle').env.BUNDLE_BASE_SHA = '${{ needs.identity.outputs.revision }}';
+  assert.throws(() => validateReleaseWorkflow(changed), /bundle baseline/i);
+});

@@ -29,3 +29,32 @@ test('the bounded race selection owns repository and API concurrency/cancellatio
     for (const contract of contracts) { assert.ok(names.includes(contract)); assert.ok(matcher.test(contract), contract); }
   }
 });
+
+test('stale or unreadable advisory ownership fails the verdict but retains both scanner logs', context => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-triage-evidence-'));
+  context.after(() => fs.rmSync(outputDirectory, { recursive: true, force: true }));
+  for (const message of ['advisory needs a renewed review', 'invalid triage JSON']) {
+    const calls = [];
+    const hasPassed = runMaintenanceChecks('advisories', (command, args) => {
+      calls.push(command);
+      return { status: 0, stdout: `${command} evidence`, stderr: '' };
+    }, outputDirectory, { reportTriage: () => { throw new Error(message); } });
+    assert.equal(hasPassed, false);
+    assert.deepEqual(calls, ['pnpm', 'go']);
+    assert.match(fs.readFileSync(path.join(outputDirectory, 'advisories-triage.log'), 'utf8'), new RegExp(message));
+    assert.match(fs.readFileSync(path.join(outputDirectory, 'advisories-0.log'), 'utf8'), /pnpm evidence/);
+    assert.match(fs.readFileSync(path.join(outputDirectory, 'advisories-1.log'), 'utf8'), /go evidence/);
+  }
+});
+
+test('valid advisory ownership never suppresses a failed audit', context => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-audit-evidence-'));
+  context.after(() => fs.rmSync(outputDirectory, { recursive: true, force: true }));
+  const calls = [];
+  assert.equal(runMaintenanceChecks('advisories', command => {
+    calls.push(command);
+    return { status: command === 'pnpm' ? 1 : 0, stdout: 'scanner evidence' };
+  }, outputDirectory, { reportTriage: () => {} }), false);
+  assert.deepEqual(calls, ['pnpm', 'go']);
+  assert.match(fs.readFileSync(path.join(outputDirectory, 'advisories-triage.log'), 'utf8'), /PASS/);
+});

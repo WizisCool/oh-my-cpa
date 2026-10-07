@@ -6,6 +6,29 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+const CHECK_ARTIFACT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+function isProcessAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { if (error.code === 'ESRCH') return false; return true; }
+}
+
+export function pruneCheckArtifacts(directory, { now = Date.now(), isOwnerAlive = isProcessAlive } = {}) {
+  if (!fs.existsSync(directory)) return;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const match = entry.name.match(/^([1-9]\d*)-(?:.*\.(?:stdout|stderr)\.log|\d+\.json)$/);
+    if (!match) continue;
+    const file = path.join(directory, entry.name);
+    try {
+      // Keep recent diagnostics of either verdict, and never unlink a live owner's
+      // output. Unknown files and permission-denied owners are not ours to prune.
+      if (now - fs.statSync(file).mtimeMs < CHECK_ARTIFACT_RETENTION_MS || isOwnerAlive(Number(match[1]))) continue;
+      fs.unlinkSync(file);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+}
+
 function formatOutput(label, stream, output) {
   if (!output) return;
   const lines = output.replace(/\n$/, '').split('\n');
@@ -71,6 +94,7 @@ function runCheck({ label, command, args = [] }, signal) {
  * prints its full output, because that is the case the transcript exists for.
  */
 export async function runChecks(checks, { quiet = false, signal } = {}) {
+  for (const directory of ['tmp/check-output', 'tmp/check-timings']) pruneCheckArtifacts(path.join(root, directory));
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });

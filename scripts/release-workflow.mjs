@@ -37,6 +37,8 @@ export function validateReleaseWorkflow(workflow) {
     assert.ok(!job.if && !job['continue-on-error']);
     assert.equal(job.steps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref, '${{ needs.identity.outputs.revision }}');
   }
+  const bundle = workflow.jobs.browser.steps.find(step => step.id === 'bundle');
+  assert.equal(bundle.env?.BUNDLE_BASE_SHA, '', 'Release bundle baseline must explicitly be unavailable, never the candidate itself');
   validateArtifactGates(workflow.jobs.browser.steps);
   validateBrowserPhases(workflow.jobs.browser.steps);
   validateProbeJobs(workflow.jobs);

@@ -16,17 +16,27 @@ export const MAINTENANCE_CHECKS = {
   ],
   advisories: [['pnpm',['audit','--json']],['go',['run','golang.org/x/vuln/cmd/govulncheck@v1.8.0','-json','./...']]],
 };
-export function runMaintenanceChecks(mode, execute = spawnSync, outputDirectory = 'tmp/maintenance') {
+export function runMaintenanceChecks(mode, execute = spawnSync, outputDirectory = 'tmp/maintenance', { reportTriage = reportAdvisoryTriage } = {}) {
   if (!MAINTENANCE_CHECKS[mode]) throw new Error(`Unknown maintenance mode: ${mode}`);
-  if (mode === 'advisories') reportAdvisoryTriage();
   fs.mkdirSync(outputDirectory,{recursive:true});
+  let hasPassedTriage = true;
+  if (mode === 'advisories') {
+    try {
+      reportTriage();
+      fs.writeFileSync(path.join(outputDirectory, 'advisories-triage.log'), 'PASS advisory ownership records\n');
+    } catch (error) {
+      hasPassedTriage = false;
+      fs.writeFileSync(path.join(outputDirectory, 'advisories-triage.log'), `FAIL ${error.message}\n`);
+      console.error(`[maintenance] FAIL advisory ownership: ${error.message}`);
+    }
+  }
   const results = MAINTENANCE_CHECKS[mode].map(([command,args],index)=>{
     const result=execute(command,args,{encoding:'utf8',timeout:240_000,maxBuffer:16*1024*1024,env:{...process.env,CGO_ENABLED:mode==='race'?'1':'0'}});
     fs.writeFileSync(path.join(outputDirectory, `${mode}-${index}.log`),`${result.stdout??''}\n${result.stderr??''}\n${result.error?.message??''}`);
     console.log(`[maintenance] ${result.status===0?'PASS':'FAIL'} ${command} ${args.join(' ')}`);
     return result.status===0 && !result.error;
   });
-  return results.every(Boolean);
+  return hasPassedTriage && results.every(Boolean);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode,option,...extra]=process.argv.slice(2);

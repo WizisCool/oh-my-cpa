@@ -23,7 +23,7 @@
  */
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -132,6 +132,24 @@ async function rewriteStagedModules(stage) {
   return rewritten;
 }
 
+async function validateStagedModuleReferences(stage, directory = stage) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await validateStagedModuleReferences(stage, path);
+      continue;
+    }
+    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.css')) continue;
+    const source = await readFile(path, 'utf8');
+    // Scan every staged module, including untouched and nested files: a successful
+    // rewrite elsewhere cannot prove a new Vite asset form is safe on deep links.
+    const leftover = source.match(/\.\/(?:(?:lobe-icons|assets)\/[^\s"'`()<>\\]*|[^\s"'`()<>\\]+\.woff2)/);
+    if (leftover) {
+      throw new Error(`staged module ${relative(stage, path)} still references an asset relatively: ${leftover[0]}`);
+    }
+  }
+}
+
 export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STAGE } = {}) {
   // The directory exists in every checkout, held by its tracked `.gitkeep`; only an
   // entry document says a build is there.
@@ -153,6 +171,7 @@ export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STA
   await writeFile(index, rewriteHtml(original));
 
   const rewritten = await rewriteStagedModules(stageDirectory);
+  await validateStagedModuleReferences(stageDirectory);
   if (rewritten === 0) {
     // A build with no relative references would mean this rewrite is dead code, which is
     // worth knowing rather than assuming: it would mean the convention changed upstream.

@@ -2,7 +2,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runChecks } from './parallel-checks.mjs';
+import { runChecks, pruneCheckArtifacts } from './parallel-checks.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -72,4 +72,23 @@ test('a completed detached check cannot leave an inherited worker running', asyn
   };
   const { until } = await import('./acceptance/harness.mjs');
   await until(() => !isRunning(), { label: 'owned descendant exited', timeoutMs: 2000 });
+});
+
+
+test('artifact retention removes only expired files belonging to inactive owners', context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-check-retention-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const now = Date.now();
+  const old = new Date(now - 31 * 24 * 60 * 60 * 1000);
+  const expired = ['111-failed-check-1.stdout.log', '111-failed-check-1.stderr.log', '111-1.json'];
+  const retained = ['222-live-1.stdout.log', '222-1.json', '111-recent-failure-2.stderr.log', 'foreign.log'];
+  for (const name of [...expired, ...retained]) {
+    fs.writeFileSync(path.join(directory, name), 'diagnostic evidence');
+    if (!name.includes('recent')) fs.utimesSync(path.join(directory, name), old, old);
+  }
+  fs.mkdirSync(path.join(directory, '111-directory-1.stdout.log'));
+  pruneCheckArtifacts(directory, { now, isOwnerAlive: pid => pid === 222 });
+  for (const name of expired) assert.equal(fs.existsSync(path.join(directory, name)), false);
+  for (const name of retained) assert.equal(fs.readFileSync(path.join(directory, name), 'utf8'), 'diagnostic evidence');
+  assert.ok(fs.statSync(path.join(directory, '111-directory-1.stdout.log')).isDirectory());
 });

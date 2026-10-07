@@ -159,8 +159,9 @@ step fails after the image upload, retry the failed job, not an unrelated versio
 New releases remain drafts if an attachment upload fails; update checks ignore them. Docker `latest` promotion follows
 GitHub publication; if promotion fails, versioned pulls still work and only that job
 needs retrying.
-`workflow_dispatch` also accepts an existing verified tag for recovery; checkout uses
-that tag and the image revision names its actual commit, not the dispatch branch.
+`workflow_dispatch` also accepts an existing verified tag for recovery. The identity
+job resolves that tag; verification and publication consumers check out its resolved
+revision, not the dispatch branch. The image revision names that verified commit.
 Latest decisions are re-evaluated at publication/promotion, so retrying an old run
 after a newer release cannot downgrade the latest pointers. Re-running the release-assets step verifies and replaces all native and installation attachments for the same
 source without creating a duplicate release. Do not delete/recreate a version tag to
@@ -206,3 +207,9 @@ mutation self-tests. CI also installs actionlint at the version pinned in
 normalizes the already-validated GitHub `concurrency.queue` extension for the pinned
 actionlint schema; shell/expression structure is still checked. Shellcheck integration
 is disabled explicitly rather than claiming shellcheck coverage.
+
+Release bundle verification explicitly leaves the exact comparison base empty until
+a previous release baseline is resolved. It reports growth as unavailable rather
+than comparing a candidate to itself; loading boundaries and anomaly ceilings still
+produce mandatory verdicts. An omitted local comparison base may use `origin/master`,
+but the candidate itself is never a valid growth baseline.

@@ -161,7 +161,8 @@ jobs:
         id: bundle
         continue-on-error: true
         env:
-          BUNDLE_BASE_SHA: ${{ needs.identity.outputs.revision }}
+          # No previous release baseline is resolved here; growth is explicitly unavailable.
+          BUNDLE_BASE_SHA: ''
           GH_TOKEN: ${{ github.token }}
         run: pnpm check:bundle
       - name: Verify generated state before browser tests
