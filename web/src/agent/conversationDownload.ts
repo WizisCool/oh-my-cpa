@@ -6,6 +6,8 @@ import { conversationHTML } from './conversationHtml';
 import type { SnapshotDocumentOptions } from './conversationHtml';
 import { SNAPSHOT_IMAGE_SCALE, SNAPSHOT_IMAGE_WIDTH, snapshotImageSlices } from './conversationSnapshot';
 
+const SNAPSHOT_LOAD_TIMEOUT_MS = 15_000;
+
 function readDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -41,7 +43,12 @@ async function snapshotImages(html: string): Promise<Blob[]> {
   frame.setAttribute('sandbox', 'allow-same-origin');
   frame.setAttribute('aria-hidden', 'true');
   frame.style.cssText = `position:fixed;left:-100000px;top:0;width:${SNAPSHOT_IMAGE_WIDTH}px;height:1px;border:0;pointer-events:none`;
-  const loaded = new Promise<void>(resolve => { frame.onload = () => resolve(); });
+  // A document that never loads must fail the export; a pending promise would keep the menu disabled until a reload.
+  let loadTimer: number | undefined;
+  const loaded = new Promise<void>((resolve, reject) => {
+    frame.onload = () => resolve();
+    loadTimer = window.setTimeout(() => reject(new Error('Snapshot document timed out')), SNAPSHOT_LOAD_TIMEOUT_MS);
+  });
   frame.srcdoc = html.replace(/<script>[\s\S]*?<\/script>/g, '');
   document.body.append(frame);
   try {
@@ -85,7 +92,7 @@ async function snapshotImages(html: string): Promise<Blob[]> {
       blobs.push(blob);
     }
     return blobs;
-  } finally { frame.remove(); }
+  } finally { window.clearTimeout(loadTimer); frame.remove(); }
 }
 
 export async function downloadConversation(options: SnapshotDocumentOptions, format: 'html' | 'image', prefix: string): Promise<void> {

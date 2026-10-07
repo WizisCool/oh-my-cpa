@@ -77,18 +77,23 @@ export function agentSnapshot(conversation: Conversation): ConversationSnapshot 
 
 /** Keep each turn's original parameters; the current composer can name a different request. */
 export function playgroundSnapshot(turns: readonly PlaygroundTurn[]): ConversationSnapshot {
-  return { omitted: 0, turns: turns.map(turn => ({
-    user: turn.user.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
-    images: turn.user.content.flatMap(part => part.type === 'image_url' ? [part.image_url.url] : []),
-    blocks: [...((turn.thought ?? extractThinking(turn.reply).thought) ? [{ kind: 'thought' as const, text: turn.thought ?? extractThinking(turn.reply).thought! }] : []), { kind: 'text' as const, text: turn.thought !== undefined ? turn.reply : extractThinking(turn.reply).reply }],
-    status: turn.status, code: turn.error?.code, model: effectiveModel(turn.request),
-    startedAt: turn.serverStartedAt ?? turn.startedAt, duration: turn.durationMS,
-    usage: turn.usage ? { ...turn.usage } : undefined,
-    parameters: snapshotValue({ system_prompt: turn.request.system_prompt, temperature: turn.request.temperature,
-      top_p: turn.request.top_p, max_tokens: turn.request.max_tokens, reasoning_effort: turn.request.reasoning_effort,
-      user_agent: turn.request.user_agent, custom_body: turn.request.custom_body }) as Record<string, unknown>,
-    views: [],
-  })) };
+  return { omitted: 0, turns: turns.map(turn => {
+    // The same rule PlaygroundTurn draws by: a reasoning channel, even an empty one, means the reply carries no inline thinking.
+    const inline = extractThinking(turn.reply);
+    const thought = turn.thought ?? inline.thought;
+    return {
+      user: turn.user.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'),
+      images: turn.user.content.flatMap(part => part.type === 'image_url' ? [part.image_url.url] : []),
+      blocks: [...(thought ? [{ kind: 'thought' as const, text: thought }] : []), { kind: 'text' as const, text: turn.thought !== undefined ? turn.reply : inline.reply }],
+      status: turn.status, code: turn.error?.code, model: effectiveModel(turn.request),
+      startedAt: turn.serverStartedAt ?? turn.startedAt, duration: turn.durationMS,
+      usage: turn.usage ? { ...turn.usage } : undefined,
+      parameters: snapshotValue({ system_prompt: turn.request.system_prompt, temperature: turn.request.temperature,
+        top_p: turn.request.top_p, max_tokens: turn.request.max_tokens, reasoning_effort: turn.request.reasoning_effort,
+        user_agent: turn.request.user_agent, custom_body: turn.request.custom_body }) as Record<string, unknown>,
+      views: [],
+    };
+  }) };
 }
 
 export interface ImageSlice { top: number; height: number }
