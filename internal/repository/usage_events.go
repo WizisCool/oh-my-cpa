@@ -112,7 +112,11 @@ type UsageEventFilter struct {
 
 	// RequestID looks up one request by its CPA id exactly.
 	RequestID string
-	Result    string
+	// RegexField and RegexPattern match one free-form field against an RE2
+	// pattern; see usageRegexColumns for the fields. An empty pattern is no filter.
+	RegexField   string
+	RegexPattern string
+	Result       string
 
 	// Numeric bounds are inclusive and nil means "this side is not filtering".
 	// They are pointers because 0 is a meaningful bound: max_cost=0 selects the
@@ -831,6 +835,15 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		}
 		where = append(where, clause)
 		args = append(args, clauseArgs...)
+	}
+
+	regexClause, regexArgs, err := usageEventRegexClause(filter.RegexField, filter.RegexPattern)
+	if err != nil {
+		return nil, nil, err
+	}
+	if regexClause != "" {
+		where = append(where, regexClause)
+		args = append(args, regexArgs...)
 	}
 
 	if search := strings.TrimSpace(filter.Search); search != "" {

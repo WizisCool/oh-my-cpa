@@ -4,7 +4,9 @@ import {
   USAGE_MULTI_FILTER_KEYS,
   USAGE_RANGE_FILTER_KEYS,
   formatUsageRangeBound,
+  parseUsageRegex,
   usageRangeParamKey,
+  usageRegexProblem,
 } from './usageEvents';
 import { EVENT_FILTER_KEYS, USAGE_RANGE_MAX, parseUsageRangeBound } from './usageEventQuery';
 import type { EventFilterKey } from './usageEventQuery';
@@ -195,6 +197,9 @@ export function validateFilterDraft(draft: UsageEventsFilterDraft): Record<strin
       : Number(min) > Number(max);
     if (reversed) errors[field.key] = 'events.range_reversed';
   }
+  const regex = parseUsageRegex(draft.text.regex);
+  const regexProblem = regex && usageRegexProblem(regex.pattern);
+  if (regexProblem) errors.regex = regexProblem;
   return errors;
 }
 

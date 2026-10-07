@@ -273,9 +273,61 @@ export const USAGE_MULTI_FILTER_KEYS = [
 ] as const;
 export type UsageMultiFilterKey = (typeof USAGE_MULTI_FILTER_KEYS)[number];
 
-/** Dimensions that hold one literal substring rather than a chosen value. */
-export const USAGE_TEXT_FILTER_KEYS = ['q', 'endpoint', 'ua', 'request_id'] as const;
+/** Dimensions that hold one typed value - a literal substring, or the pattern filter - rather than a chosen one. */
+export const USAGE_TEXT_FILTER_KEYS = ['q', 'endpoint', 'ua', 'request_id', 'regex'] as const;
 export type UsageTextFilterKey = (typeof USAGE_TEXT_FILTER_KEYS)[number];
+
+/**
+ * The fields the pattern filter can be matched against, in the order the panel
+ * offers them. The server holds the same closed list; a field outside it is
+ * refused there, so this one only decides what the panel can express.
+ */
+export const USAGE_REGEX_FIELDS = [
+  'model',
+  'model_alias',
+  'response_model',
+  'provider',
+  'endpoint',
+  'ua',
+  'request_id',
+] as const;
+export type UsageRegexField = (typeof USAGE_REGEX_FIELDS)[number];
+
+/** The server's ceiling on a pattern, mirrored so the panel can say so before a round trip. */
+export const USAGE_REGEX_MAX_LENGTH = 256;
+
+/**
+ * The pattern filter travels as one `field:pattern` value, so a field and a
+ * pattern can never be separated - by a chip removed, a link edited, or a reset
+ * that knew one key and not the other. Everything after the first colon is the
+ * pattern, which may itself contain colons.
+ */
+export function parseUsageRegex(value: string | undefined): { field: UsageRegexField; pattern: string } | undefined {
+  const separator = (value ?? '').indexOf(':');
+  if (separator < 1) return undefined;
+  const field = value!.slice(0, separator);
+  const pattern = value!.slice(separator + 1);
+  if (!pattern || !(USAGE_REGEX_FIELDS as readonly string[]).includes(field)) return undefined;
+  return { field: field as UsageRegexField, pattern };
+}
+
+export function formatUsageRegex(field: UsageRegexField, pattern: string): string {
+  return pattern ? `${field}:${pattern}` : '';
+}
+
+/**
+ * Why a pattern cannot be sent, as a translation key, or undefined when it can.
+ *
+ * The server matches with RE2, which this cannot reproduce: JavaScript's engine
+ * accepts lookaround RE2 refuses and refuses inline flags RE2 accepts. So only
+ * what is certain is reported here - the length, and the two constructs RE2 has
+ * no form of - and the server stays the authority on everything else.
+ */
+export function usageRegexProblem(pattern: string): string | undefined {
+  if (pattern.length > USAGE_REGEX_MAX_LENGTH) return 'events.regex_too_long';
+  if (/\(\?<?[=!]|\\[1-9]/.test(pattern)) return 'events.regex_unsupported';
+  return undefined;
+}
 
 /** Inclusive numeric bounds. `min`/`max` are separate keys because either side
  *  may stand alone, and a bound of zero is a real bound rather than "unset". */

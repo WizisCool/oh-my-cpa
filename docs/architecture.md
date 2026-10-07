@@ -1636,11 +1636,24 @@ drill-down links written before multi-select existed working unchanged.
 | Identity search | `q` | literal substring across the columns in `usageEventSearchColumns` |
 | Endpoint, user agent | `endpoint`, `ua` | literal substring |
 | Request id | `request_id` | exact |
+| Pattern | `regex` as `field:pattern` | RE2, unanchored, against one of `model`, `model_alias`, `response_model`, `provider`, `endpoint`, `ua`, `request_id`; a missing value matches as the empty string |
 | Latency / tokens | `latency_min`…`tokens_max` | inclusive integer bounds |
 | Cost | `cost_min`, `cost_max` | inclusive bounds in decimal USD, at most nine fractional digits |
 | Price availability | `cost` | `priced` (`cost_nanos IS NOT NULL`) or `unpriced` |
 | Served model | `served` | `substituted` (`model_substituted = 1`) or `matched` (an upstream-reported model that is the requested one); a record whose upstream reported no model is in neither |
 | Result | `result` | `all`, `success`, `failed` |
+
+The pattern filter is the one place a caller's text is executed rather than compared,
+and three choices keep that safe. The engine is Go's `regexp` (RE2), registered as SQLite's
+`REGEXP` function in `internal/repository/usage_regex.go`, so matching is linear in the
+input and a pattern cannot stall a scan; patterns are capped at 256 characters and compiled
+once per distinct pattern. The field is a name looked up in a closed map, never text placed
+in the statement, and the fingerprinted columns (`source`, the caller key) are absent from
+it because no pattern a reader writes can describe a fingerprint. And the field and pattern
+travel as one parameter, so neither can be applied without the other. An unknown field, an
+oversized pattern or one RE2 refuses (lookaround, backreferences) is a 400 with the reason.
+User functions belong to the driver instance the SQLite package registers, which is why
+`openGatedPool` wraps that instance instead of constructing its own.
 
 Three properties are load-bearing rather than incidental:
 

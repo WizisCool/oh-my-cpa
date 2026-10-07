@@ -357,6 +357,24 @@ func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) 
 		*entry.target = value
 	}
 
+	// One parameter carries the field and the pattern as `field:pattern`, so a
+	// pattern can never be applied to a field it was not written for by a link
+	// that lost half of a pair. It is read whole: it is not a list to be split or
+	// deduplicated, and everything after the first colon is the pattern.
+	if patterns := query["regex"]; len(patterns) > 1 {
+		return filter, errors.New("regex accepts a single value")
+	}
+	if raw := query.Get("regex"); raw != "" {
+		field, pattern, isPair := strings.Cut(raw, ":")
+		if !isPair || pattern == "" {
+			return filter, errors.New("regex must be field:pattern")
+		}
+		filter.RegexField, filter.RegexPattern = strings.ToLower(strings.TrimSpace(field)), pattern
+		if err := repository.ValidateUsageRegex(filter.RegexField, filter.RegexPattern); err != nil {
+			return filter, errors.New(strings.TrimPrefix(err.Error(), repository.ErrUsageFilterInvalid.Error()+": "))
+		}
+	}
+
 	numeric := []struct {
 		key    string
 		target **int64

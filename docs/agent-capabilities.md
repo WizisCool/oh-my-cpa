@@ -327,6 +327,28 @@ rather than as a failed approval. Tests in
 `internal/operations/pricing_test.go` cover both adapters, the refusals, the dry run
 and the breakdown's schema.
 
+### Usage and request filters
+
+`usage_aggregate`, `usage_compare` and `requests_list` share one input, so a question
+narrowed for a list is narrowed the same way for a total. Beyond the exact dimensions
+(`providers`, `models`, `call_points`, `client_keys`, `credentials`, `status`) it takes
+`search` (a literal substring, at most 256 characters), `min_latency_ms`, and a pattern:
+`regex_field` (one of `model`, `model_alias`, `response_model`, `provider`, `endpoint`,
+`ua`, `request_id`) with `regex`, an RE2 pattern of at most 256 characters. A pattern
+without a known field, or one RE2 refuses, fails with `invalid_regex: <reason>` so the
+model can correct the call; other malformed input stays `invalid_parameters`. All three
+are low-risk reads with no secret or OAuth handoff.
+
+A request item carries `request_id`, `ttft_ms`, `user_agent` (the product label already
+redacted at ingestion) and, only when the upstream served a different model,
+`served_model`, alongside provider, model, call point, tokens, latency and cost. Raw
+logs, client addresses, key masks and credential names stay out. The field descriptions
+are kept short on purpose: the input is repeated in three tools and the catalogue has a
+size budget (`TestAgentCatalogueFitsTheSchemaBudget`). Tests cover the filter mapping and
+each refusal (`internal/operations/validation_test.go`), the matching itself
+(`internal/repository/usage_filter_test.go`) and the HTTP parameter
+(`internal/api/usage_events_test.go`).
+
 ### Timezone capabilities
 
 `timezone_get` is a low-risk read returning the optional manual override, deployment timezone and effective IANA timezone. `timezone_set` is a low-risk write accepting `{ "timezone": "Asia/Kuala_Lumpur" }`; an empty string restores the deployment timezone. Both are available to Agent and MCP administrators under the existing capability policy. The write shares the preference repository's validation and commit-before-publication rule, returns `invalid_timezone` for an invalid name, and invalidates `preferences` and `timezone` readers. No secret or OAuth handoff is involved. Tests cover validated writes, reads through both adapters and refusal without changing the runtime calendar.

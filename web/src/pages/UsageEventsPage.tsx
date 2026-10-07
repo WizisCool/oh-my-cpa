@@ -24,6 +24,7 @@ import { useT } from '../i18n';
 import {
   usageEventParams,
   isUsageFacetsResponse,
+  parseUsageRegex,
   type UsageEvent,
   type UsageEventPage,
 } from '../types/usageEvents';
@@ -61,6 +62,7 @@ import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
 import { RequestPagination } from '../components/usage/RequestPagination';
 import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
+import { REGEX_FIELD_LABELS } from '../components/usage/RequestFilterDrawer';
 import { createFacetMarkRenderer } from '../components/usage/RequestFacetMark';
 import { RequestSelectionBar } from '../components/usage/RequestSelectionBar';
 import { RequestExportDialog } from '../components/usage/RequestExportDialog';
@@ -346,6 +348,7 @@ export const UsageEventsPage: React.FC = () => {
     ua: 'events.filter_chip_ua',
     endpoint: 'events.filter_chip_endpoint',
     request_id: 'events.filter_chip_request_id',
+    regex: 'events.filter_chip_regex',
     latency_min: 'events.filter_chip_latency_min',
     latency_max: 'events.filter_chip_latency_max',
     tokens_min: 'events.filter_chip_tokens_min',
@@ -358,6 +361,14 @@ export const UsageEventsPage: React.FC = () => {
 
   const describeChip = React.useCallback(
     (key: EventFilterKey, values: string[]): { label: string; display?: string } => {
+      if (key === 'regex') {
+        const regex = parseUsageRegex(values[0]);
+        return {
+          label: regex
+            ? t(chipLabels.regex, { field: t(REGEX_FIELD_LABELS[regex.field]), val: regex.pattern })
+            : (values[0] ?? ''),
+        };
+      }
       // Which value to show is decided in `chipDisplay`: the stored value is a
       // fingerprint for the credential and caller dimensions and a provider key for
       // the provider dimension, and each resolves to the form the operator

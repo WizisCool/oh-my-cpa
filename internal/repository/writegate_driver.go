@@ -65,7 +65,20 @@ func (c gatedConnector) Driver() driver.Driver { return c.inner }
 // openGatedPool opens a pool over the given DSN, sharing one gate with every other pool
 // opened with the same gate.
 func openGatedPool(dsn string, gate *writeGate) *sql.DB {
-	return sql.OpenDB(gatedConnector{inner: &sqlitedriver.Driver{}, gate: gate, dsn: dsn})
+	return sql.OpenDB(gatedConnector{inner: registeredSQLiteDriver(), gate: gate, dsn: dsn})
+}
+
+// registeredSQLiteDriver returns the driver instance the SQLite package registers under
+// its own name. User-defined SQL functions (the REGEXP implementation in usage_regex.go)
+// are attached to that instance and to no other, so a driver value constructed here
+// would open connections on which they do not exist.
+func registeredSQLiteDriver() driver.Driver {
+	pool, err := sql.Open("sqlite", "")
+	if err != nil {
+		return &sqlitedriver.Driver{}
+	}
+	defer pool.Close()
+	return pool.Driver()
 }
 
 // gatedDSN appends the connection pragmas the driver applies itself.

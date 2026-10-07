@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,29 @@ func TestAnalysisUsesFixedHalfOpenWindow(t *testing.T) {
 	}
 	if _, err = (UsageInput{FromMS: 200, ToMS: 100}).filter(ctx); err == nil {
 		t.Fatal("negative window")
+	}
+}
+func TestUsageInputCarriesPatternAndSearchIntoTheFilter(t *testing.T) {
+	ctx := capability.WithAnchor(context.Background(), 1000000000)
+	filter, err := (UsageInput{Search: "codex", RegexField: "model", Regex: "^claude-", MinLatency: 5000}).filter(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filter.Search != "codex" || filter.RegexField != "model" || filter.RegexPattern != "^claude-" ||
+		filter.MinLatencyMS == nil || *filter.MinLatencyMS != 5000 {
+		t.Fatalf("filter = %+v", filter)
+	}
+	for name, input := range map[string]UsageInput{
+		"pattern without a field": {Regex: "x"},
+		"unknown field":           {RegexField: "client_ip", Regex: "x"},
+		"not RE2":                 {RegexField: "model", Regex: "(?<=a)b"},
+	} {
+		if _, err := input.filter(ctx); err == nil || !strings.HasPrefix(err.Error(), "invalid_regex: ") {
+			t.Fatalf("%s: want invalid_regex, got %v", name, err)
+		}
+	}
+	if _, err := (UsageInput{MinLatency: -1}).filter(ctx); err == nil {
+		t.Fatal("a negative latency bound was accepted")
 	}
 }
 func TestProviderEndpointCannotCarryCredentials(t *testing.T) {

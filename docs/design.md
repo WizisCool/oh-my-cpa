@@ -261,6 +261,16 @@ is the same picture in the option and in the rows it leaves on screen. The label
 searchable text and takes the truncation; the mark never shrinks. Closed vocabularies of words
 (auth type, reasoning effort, service tier, executor) get no mark.
 
+### The pattern filter
+
+"More filters" ends its text fields with one compound control: a field select joined to a
+pattern input in the mono face. It is one filter - one chip ("Model matches ^claude-"),
+one count, one removal - because a pattern without its field means nothing. The hint under
+it states the three things a reader cannot guess: the syntax is RE2, the match is anywhere
+in the field, and it is case-sensitive unless the pattern starts with `(?i)`. The panel
+refuses only what is certain before a round trip (length, lookaround, backreferences); the
+server is the authority on the rest.
+
 ### Selecting requests and exporting them
 
 Every row leads with a checkbox in its own 20px track, and the header's checkbox speaks for
