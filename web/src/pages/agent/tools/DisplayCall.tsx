@@ -6,7 +6,9 @@ import type { DisplayView, Trace } from '../../../agent/types';
 import { useI18n } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { saveBlob } from '../../../utils/download';
+import { CanvasView } from './CanvasView';
 import { CapabilityCall } from './CapabilityCall';
+import { PanelView } from './PanelView';
 import { TableView } from './TableView';
 import styles from '../AgentPage.module.css';
 
@@ -32,8 +34,14 @@ async function downloadChart(container: HTMLDivElement | null, background: strin
   if (blob) saveBlob(blob, fileName);
 }
 
-/** A display call's frozen dataset, drawn inside the answer as a chart or a table. */
+/** A display call's frozen view, drawn inside the answer by the component for its kind. */
 export function DisplayFigure({ view }: { view: DisplayView }) {
+  if (view.kind === 'panel') return <PanelView view={view} />;
+  if (view.kind === 'canvas') return <CanvasView view={view} />;
+  return <DataFigure view={view} />;
+}
+
+function DataFigure({ view }: { view: DisplayView }) {
   const { t } = useI18n();
   const { theme } = useTheme();
   const isChart = view.kind === 'chart' && !!view.chart;

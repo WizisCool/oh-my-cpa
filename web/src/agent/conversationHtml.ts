@@ -5,7 +5,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { brandDrawing, brandMarkup } from '../assets/brand/markup';
-import type { DisplayView } from './types';
+import { lucideMarkup, lucideNodes, parseIconReference } from './agentIcons';
+import type { LucideIconData } from './agentIcons';
+import { CANVAS_SANDBOX, CANVAS_TOKENS, canvasDocument } from './canvasDocument';
+import type { DisplayView, ViewBlock } from './types';
 import type { ConversationSnapshot, SnapshotTurn } from './conversationSnapshot';
 import { chartSeries } from '../pages/agent/state';
 
@@ -14,7 +17,8 @@ export interface SnapshotLabels {
   thought: string; parameters: string; arguments: string; result: string; data: string;
   copy: string; copied: string; copyFailed: string; search: string; expand: string; collapse: string;
   print: string; imageOmitted: string; privacy: string; panel: string; close: string; chart: string; usage: string;
-  noMatches: string;
+  noMatches: string; canvasOmitted: string;
+  step: (status: string) => string;
   calls: (count: number) => string;
   turns: (count: number) => string;
   tokens: (count: number) => string;
@@ -28,7 +32,8 @@ export interface SnapshotLabels {
   duration: (milliseconds: number) => string;
   number: (value: number) => string;
 }
-export interface SnapshotAppearance { variables: Record<string, string>; fontCSS?: string }
+/** `icons` is the Lucide set, passed when a panel names an icon; without it panels are drawn unadorned. */
+export interface SnapshotAppearance { variables: Record<string, string>; fontCSS?: string; icons?: LucideIconData; isDark?: boolean }
 export interface SnapshotDocumentOptions {
   snapshot: ConversationSnapshot; labels: SnapshotLabels; appearance: SnapshotAppearance; exportedAt: Date; language: string;
 }
@@ -135,7 +140,20 @@ function chartMarkup(view: DisplayView, labels: SnapshotLabels): string {
     return `<div class="chart-pie">${open(180, 180)}<circle cx="90" cy="90" r="64" fill="none" stroke="var(--border)" stroke-width="32"/>${slices}</svg>${legend(rows)}</div>`;
   }
 
-  const ticks = chartTicks(Math.min(...points.map(point => point.value)), Math.max(...points.map(point => point.value)));
+  // A stacked mark starts where the series before it at the same category ended.
+  const isStacked = !!view.chart.stacked && type !== 'line' && seriesNames.length > 1;
+  const floors = new Map<object, number>();
+  if (isStacked) {
+    const totals = new Map<string, number>();
+    for (const name of seriesNames) for (const point of points) {
+      if (point.series !== name) continue;
+      floors.set(point, totals.get(point.x) ?? 0);
+      totals.set(point.x, (totals.get(point.x) ?? 0) + point.value);
+    }
+  }
+  const from = (point: object) => floors.get(point) ?? 0;
+  const to = (point: { value: number }) => from(point) + point.value;
+  const ticks = chartTicks(Math.min(...points.map(to), ...(isStacked ? [0] : [])), Math.max(...points.map(to)));
   const low = ticks[0];
   const span = ticks.at(-1)! - low || 1;
   const seriesLegend = seriesNames.length > 1 ? legend(seriesNames.map((name, index) => `<span>${swatch(index)}${escapeHTML(name)}</span>`)) : '';
@@ -144,12 +162,12 @@ function chartMarkup(view: DisplayView, labels: SnapshotLabels): string {
     const LEFT = 148, RIGHT = 748, TOP = 6, BAND = Math.max(24, seriesNames.length * 14 + 10);
     const bottom = TOP + categories.length * BAND;
     const position = (value: number) => LEFT + (value - low) / span * (RIGHT - LEFT);
-    const thickness = (BAND - 10) / seriesNames.length;
+    const thickness = (BAND - 10) / (isStacked ? 1 : seriesNames.length);
     let marks = ticks.map(tick => `<path class="${tick === 0 ? 'zero' : 'grid'}" d="M${round(position(tick))} ${TOP}V${bottom}"/><text x="${round(position(tick))}" y="${bottom + 16}" text-anchor="middle">${escapeHTML(labels.number(tick))}</text>`).join('');
     marks += categories.map((x, index) => `<text x="${LEFT - 10}" y="${TOP + index * BAND + BAND / 2 + 4}" text-anchor="end">${escapeHTML(clip(category(x), 20))}</text>`).join('');
     marks += points.map(point => {
-      const top = TOP + categories.indexOf(point.x) * BAND + 5 + seriesNames.indexOf(point.series) * thickness;
-      return `<rect x="${round(Math.min(position(0), position(point.value)))}" y="${round(top)}" width="${round(Math.abs(position(point.value) - position(0)))}" height="${round(Math.max(2, thickness - 2))}" rx="1" fill="${seriesColor(seriesNames.indexOf(point.series))}">${tip(point)}</rect>`;
+      const top = TOP + categories.indexOf(point.x) * BAND + 5 + (isStacked ? 0 : seriesNames.indexOf(point.series) * thickness);
+      return `<rect x="${round(Math.min(position(from(point)), position(to(point))))}" y="${round(top)}" width="${round(Math.abs(position(to(point)) - position(from(point))))}" height="${round(Math.max(2, thickness - 2))}" rx="1" fill="${seriesColor(seriesNames.indexOf(point.series))}">${tip(point)}</rect>`;
     }).join('');
     return `${open(760, bottom + 24)}${marks}</svg>${seriesLegend}`;
   }
@@ -167,21 +185,23 @@ function chartMarkup(view: DisplayView, labels: SnapshotLabels): string {
     const seriesPoints = points.filter(point => point.series === name);
     const color = seriesColor(seriesIndex);
     if (type === 'column') {
-      const width = Math.min(40, band * 0.72 / seriesNames.length);
-      return seriesPoints.map(point => `<rect x="${round(horizontal(point.x) + (seriesIndex - seriesNames.length / 2) * width + 1)}" y="${round(Math.min(vertical(0), vertical(point.value)))}" width="${round(Math.max(1, width - 2))}" height="${round(Math.abs(vertical(0) - vertical(point.value)))}" rx="1" fill="${color}">${tip(point)}</rect>`).join('');
+      const width = Math.min(40, band * 0.72 / (isStacked ? 1 : seriesNames.length));
+      const offset = isStacked ? -0.5 : seriesIndex - seriesNames.length / 2;
+      return seriesPoints.map(point => `<rect x="${round(horizontal(point.x) + offset * width + 1)}" y="${round(Math.min(vertical(from(point)), vertical(to(point))))}" width="${round(Math.max(1, width - 2))}" height="${round(Math.abs(vertical(from(point)) - vertical(to(point))))}" rx="1" fill="${color}">${tip(point)}</rect>`).join('');
     }
-    const path = seriesPoints.map((point, index) => `${index ? 'L' : 'M'}${round(horizontal(point.x))} ${round(vertical(point.value))}`).join('');
-    const area = type === 'area' ? `<path d="${path}L${round(horizontal(seriesPoints.at(-1)!.x))} ${round(vertical(0))}L${round(horizontal(seriesPoints[0].x))} ${round(vertical(0))}Z" fill="${color}" opacity="0.14"/>` : '';
+    const path = seriesPoints.map((point, index) => `${index ? 'L' : 'M'}${round(horizontal(point.x))} ${round(vertical(to(point)))}`).join('');
+    const floor = [...seriesPoints].reverse().map(point => `L${round(horizontal(point.x))} ${round(vertical(from(point)))}`).join('');
+    const area = type === 'area' ? `<path d="${path}${floor}Z" fill="${color}" opacity="${isStacked ? 0.32 : 0.14}"/>` : '';
     const radius = seriesPoints.length > 32 ? 0 : 2.5;
     return `${area}<path d="${path}" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" fill="none"/>` + seriesPoints.map(point =>
-      `<circle cx="${round(horizontal(point.x))}" cy="${round(vertical(point.value))}" r="${radius || 6}" fill="${radius ? color : 'transparent'}">${tip(point)}</circle>`).join('');
+      `<circle cx="${round(horizontal(point.x))}" cy="${round(vertical(to(point)))}" r="${radius || 6}" fill="${radius ? color : 'transparent'}">${tip(point)}</circle>`).join('');
   }).join('');
   return `${open(760, BOTTOM + 26)}${marks}</svg>${seriesLegend}`;
 }
 
 const tone = (status?: string) => status === 'success' ? 'success' : status === 'error' ? 'danger' : 'muted';
 
-function renderTurn(turn: SnapshotTurn, labels: SnapshotLabels, index: number): string {
+function renderTurn(turn: SnapshotTurn, labels: SnapshotLabels, index: number, appearance: SnapshotAppearance, language: string): string {
   const images = turn.images.map(url => /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=\s]+$/i.test(url)
     ? `<img class="attachment" src="${escapeHTML(url)}" alt="${escapeHTML(labels.operator)}"/>`
     : `<span class="attachment-omitted">${icon('image', 13)}${escapeHTML(labels.imageOmitted)}</span>`).join('');
@@ -209,6 +229,8 @@ function renderTurn(turn: SnapshotTurn, labels: SnapshotLabels, index: number): 
   }
   flushChain();
   const views = turn.views.map((view, viewIndex) => {
+    if (view.kind === 'panel') return panelMarkup(view, labels, appearance.icons);
+    if (view.kind === 'canvas') return canvasMarkup(view, labels, appearance, language);
     if (view.kind !== 'chart') return `<figure><div class="figure-head"><figcaption>${escapeHTML(view.title)}</figcaption></div>${dataTable(view)}</figure>`;
     const id = `${index}-${viewIndex}`;
     return `<figure><div class="figure-head"><figcaption>${escapeHTML(view.title)}</figcaption><div class="figure-tabs"><button type="button" data-view="chart-${id}" aria-pressed="true">${escapeHTML(labels.chart)}</button><button type="button" data-view="data-${id}" aria-pressed="false">${escapeHTML(labels.data)}</button></div></div><div id="chart-${id}" class="figure-content">${chartMarkup(view, labels)}</div><div id="data-${id}" class="figure-content" hidden>${dataTable(view)}</div></figure>`;
@@ -237,6 +259,50 @@ function renderPanels(snapshot: ConversationSnapshot, labels: SnapshotLabels): s
   }).join('');
 }
 
+/** A named icon as inline markup; maker marks are files the document cannot carry, so they are left out. */
+function viewIcon(reference: string | undefined, icons: LucideIconData | undefined, size: number): string {
+  const parsed = parseIconReference(reference);
+  const nodes = parsed?.kind === 'lucide' && icons ? lucideNodes(icons, parsed.name) : undefined;
+  return nodes ? lucideMarkup(nodes, size) : '';
+}
+
+function blockMarkup(block: ViewBlock, labels: SnapshotLabels, icons: LucideIconData | undefined): string {
+  const items = block.items ?? [];
+  const text = (value: string | undefined) => escapeHTML(value ?? '');
+  switch (block.type) {
+    case 'stats':
+      return `<dl class="stats">${items.map(item => `<div class="stat" data-tone="${text(item.tone ?? 'neutral')}"><dt>${viewIcon(item.icon, icons, 13)}<span>${text(item.label)}</span></dt><dd><span>${text(item.value)}</span>${item.delta ? `<span class="stat-delta">${text(item.delta)}</span>` : ''}</dd></div>`).join('')}</dl>`;
+    case 'fields':
+      return `<dl class="fields">${items.map(item => `<div><dt>${text(item.label)}</dt><dd>${text(item.value)}</dd></div>`).join('')}</dl>`;
+    case 'callout':
+      return `<p class="callout" data-tone="${text(block.tone ?? 'info')}">${text(block.text)}</p>`;
+    case 'steps':
+      return `<ol class="steps">${items.map(item => `<li data-status="${text(item.status ?? 'pending')}"><span class="step-mark" role="img" aria-label="${escapeHTML(labels.step(item.status ?? 'pending'))}"></span><span class="step-label">${text(item.label)}</span>${item.text ? `<span class="step-text">${text(item.text)}</span>` : ''}</li>`).join('')}</ol>`;
+    case 'meters':
+      return `<div class="meters">${items.map(item => {
+        const percent = Math.round(Math.min(1, Math.max(0, item.share ?? 0)) * 100);
+        return `<div class="meter" data-tone="${text(item.tone ?? 'neutral')}"><span class="meter-label">${text(item.label)}</span><span class="meter-value">${text(item.value || `${percent}%`)}</span><span class="meter-track"><span style="width:${percent}%"></span></span></div>`;
+      }).join('')}</div>`;
+    case 'links':
+      // A saved document has no console to open, so a link is kept as the name of the page it led to.
+      return `<ul class="view-links">${items.map(item => `<li>${viewIcon(item.icon ?? 'arrow-up-right', icons, 13)}<span>${text(item.label)}</span></li>`).join('')}</ul>`;
+    default:
+      return '';
+  }
+}
+
+function panelMarkup(view: DisplayView, labels: SnapshotLabels, icons: LucideIconData | undefined): string {
+  return `<figure class="panel"><div class="figure-head"><figcaption>${escapeHTML(view.title)}</figcaption></div>${(view.blocks ?? []).map(block =>
+    `<section class="block">${block.title ? `<h4>${escapeHTML(block.title)}</h4>` : ''}${blockMarkup(block, labels, icons)}</section>`).join('')}</figure>`;
+}
+
+/** The canvas keeps running in the saved document, in the same sandbox; a picture gets a note instead. */
+function canvasMarkup(view: DisplayView, labels: SnapshotLabels, appearance: SnapshotAppearance, language: string): string {
+  const variables = Object.fromEntries(CANVAS_TOKENS.map(token => [token, appearance.variables[`--${token}`] ?? '']));
+  const frameDocument = canvasDocument({ html: view.html ?? '', rows: view.rows, variables, isDark: appearance.isDark ?? true, language });
+  return `<figure><div class="figure-head"><figcaption>${escapeHTML(view.title)}</figcaption></div><iframe class="canvas-frame" title="${escapeHTML(view.title)}" sandbox="${CANVAS_SANDBOX}" referrerpolicy="no-referrer" srcdoc="${escapeHTML(frameDocument)}"></iframe><p class="canvas-note meta">${escapeHTML(labels.canvasOmitted)}</p></figure>`;
+}
+
 export function conversationHTML({ snapshot, labels, appearance, exportedAt, language }: SnapshotDocumentOptions): string {
   // Resolved token values are data too: constrain them before putting them in the stylesheet.
   const safeVariables = Object.fromEntries(Object.entries(appearance.variables).filter(([key, value]) => /^--[a-z0-9-]+$/.test(key) && /^[#a-z0-9.,()%\s-]+$/i.test(value)));
@@ -251,5 +317,5 @@ export function conversationHTML({ snapshot, labels, appearance, exportedAt, lan
   const note = `<footer class="snapshot-foot"><p>${escapeHTML(labels.privacy)}</p></footer>`;
   const search = `<div class="search-bar" hidden>${icon('search', 14)}<input type="search" data-search aria-label="${escapeHTML(labels.search)}" placeholder="${escapeHTML(labels.search)}"><span class="search-count" data-search-count aria-live="polite"></span></div>`;
   const aside = `<aside class="aside" hidden aria-label="${escapeHTML(labels.panel)}"><header class="aside-head"><span>${escapeHTML(labels.panel)}</span>${iconButton('data-close', labels.close, 'close')}</header><section id="snapshot-info" class="panel-content"><h2>${escapeHTML(labels.title)}</h2><p class="meta">${escapeHTML(labels.privacy)}</p><div class="panel-controls"><button type="button" class="text-button" data-expand>${escapeHTML(labels.expand)}</button><button type="button" class="text-button" data-collapse>${escapeHTML(labels.collapse)}</button></div></section>${renderPanels(snapshot, labels)}</aside>`;
-  return `<!doctype html><html lang="${escapeHTML(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>${escapeHTML(labels.title)} · Oh My CPA</title><style>:root{${variables}}${appearance.fontCSS ?? ''}${SNAPSHOT_CSS}</style></head><body data-copy="${escapeHTML(labels.copy)}" data-copied="${escapeHTML(labels.copied)}" data-copy-failed="${escapeHTML(labels.copyFailed)}"><div class="workspace">${heading}${search}<div class="workspace-body"><main class="transcript"><div class="transcript-column">${masthead}${omitted}${snapshot.turns.map((turn, index) => renderTurn(turn, labels, index)).join('')}<p class="no-matches meta" hidden>${escapeHTML(labels.noMatches)}</p>${note}</div></main>${aside}</div></div><script>${SNAPSHOT_SCRIPT}</script></body></html>`;
+  return `<!doctype html><html lang="${escapeHTML(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>${escapeHTML(labels.title)} · Oh My CPA</title><style>:root{${variables}}${appearance.fontCSS ?? ''}${SNAPSHOT_CSS}</style></head><body data-copy="${escapeHTML(labels.copy)}" data-copied="${escapeHTML(labels.copied)}" data-copy-failed="${escapeHTML(labels.copyFailed)}"><div class="workspace">${heading}${search}<div class="workspace-body"><main class="transcript"><div class="transcript-column">${masthead}${omitted}${snapshot.turns.map((turn, index) => renderTurn(turn, labels, index, appearance, language)).join('')}<p class="no-matches meta" hidden>${escapeHTML(labels.noMatches)}</p>${note}</div></main>${aside}</div></div><script>${SNAPSHOT_SCRIPT}</script></body></html>`;
 }

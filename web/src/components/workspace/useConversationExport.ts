@@ -32,7 +32,8 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       copy: t('agent.export.copy'), copied: t('agent.export.copied'), copyFailed: t('agent.export.copy_failed'),
       search: t('agent.export.search'), expand: t('agent.export.expand'), collapse: t('agent.export.collapse'),
       panel: t('agent.panel'), close: t('common.close'), chart: t('agent.view.chart'), usage: t('agent.foot.tokens'),
-      noMatches: t('agent.export.no_matches'),
+      noMatches: t('agent.export.no_matches'), canvasOmitted: t('agent.export.canvas_omitted'),
+      step: status => t(`agent.view.step.${status}`),
       calls: count => t('agent.chain.used', { count }),
       turns: count => t('agent.export.turns', { count }),
       number: value => numberFormat.format(value),
@@ -48,7 +49,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
     };
     try {
       const { downloadConversation } = await import('../../agent/conversationDownload');
-      await downloadConversation({ snapshot, labels, appearance: { variables }, exportedAt, language: lang }, format, `omc-${kind}`);
+      await downloadConversation({ snapshot, labels, appearance: { variables, isDark: document.documentElement.dataset.themeMode === 'dark' }, exportedAt, language: lang }, format, `omc-${kind}`);
     } catch { toast.error(t('agent.export.failed')); }
     finally { isExportingRef.current = false; setIsExporting(false); }
   };

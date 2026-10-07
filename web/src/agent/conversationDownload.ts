@@ -1,6 +1,7 @@
 import regularFontURL from '../assets/fonts/sarasa-mono-sc-regular.woff2?url';
 import boldFontURL from '../assets/fonts/sarasa-mono-sc-bold.woff2?url';
 import { saveBlob } from '../utils/download';
+import { loadLucideIcons } from './agentIcons';
 import { exportFileName } from './export';
 import { conversationHTML } from './conversationHtml';
 import type { SnapshotDocumentOptions } from './conversationHtml';
@@ -97,7 +98,10 @@ async function snapshotImages(html: string): Promise<Blob[]> {
 
 export async function downloadConversation(options: SnapshotDocumentOptions, format: 'html' | 'image', prefix: string): Promise<void> {
   const fontCSS = await snapshotFontCSS();
-  const html = conversationHTML({ ...options, appearance: { ...options.appearance, fontCSS } });
+  // The icon set is fetched only for a conversation whose panels name one.
+  const hasIcons = options.snapshot.turns.some(turn => turn.views.some(view => view.blocks?.some(block => block.items?.some(item => item.icon) || block.type === 'links')));
+  const icons = hasIcons ? await loadLucideIcons().catch(() => undefined) : undefined;
+  const html = conversationHTML({ ...options, appearance: { ...options.appearance, fontCSS, icons } });
   if (format === 'html') {
     saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFileName(prefix, 'html', options.exportedAt));
     return;

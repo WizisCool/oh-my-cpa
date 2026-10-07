@@ -67,7 +67,7 @@ export default function ChartView({ view, containerRef }: ChartViewProps) {
       autoFit: true,
       ...(isPie
         ? { angleField: 'value', colorField: 'x', innerRadius: 0.6, label: false }
-        : { xField: 'x', yField: 'value', ...(hasSeries ? { colorField: 'series' } : {}) }),
+        : { xField: 'x', yField: 'value', ...(hasSeries ? { colorField: 'series' } : {}), ...(hasSeries && chart?.stacked ? { stack: true } : {}) }),
       scale: isPie
         ? { color: { range: data.points.map((_, index) => seriesColor(theme.palette, index)) } }
         : { color: { domain: names, range: colors }, ...(chart?.type === 'area' || chart?.type === 'line' ? {} : { y: { nice: true } }) },
@@ -92,7 +92,7 @@ export default function ChartView({ view, containerRef }: ChartViewProps) {
       plugins,
       onReady,
     };
-  }, [chart?.type, names, data, theme.palette, colors, formatX, themeMode, unit, animate, plugins, onReady]);
+  }, [chart?.type, chart?.stacked, names, data, theme.palette, colors, formatX, themeMode, unit, animate, plugins, onReady]);
 
   const Chart = CHARTS[chart?.type ?? 'column'] ?? CHARTS.column;
   return (

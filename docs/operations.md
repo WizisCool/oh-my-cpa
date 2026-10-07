@@ -87,6 +87,7 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   (NFS/CIFS).
 - **Master key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and
   payloads. Back it up securely.
+- **Framed content**: The console's document declares `frame-src 'self' blob:`. It frames plugin pages from its own origin and the Agent's sandboxed canvases (ADR 0072); a reverse proxy must not replace that policy with one that allows other frame sources.
 - **Network security**: Keep CPA on a private network or loopback interface. The supplied
   Compose files publish CPA and OMC only on loopback; use direct local access or an SSH
   tunnel. Public access requires HTTPS through operator-owned infrastructure.

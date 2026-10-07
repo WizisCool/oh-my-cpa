@@ -17,9 +17,35 @@ export interface CapabilityReceipt {
   invalidates?: string[];
 }
 
-/** A frozen display dataset (ADR 0042), stored on the call that drew it. */
+export const BLOCK_TYPES = ['stats', 'fields', 'callout', 'steps', 'meters', 'links'] as const;
+export type ViewTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+
+/** One entry of a panel block; which fields are present follows the block's type. */
+export interface ViewItem {
+  label: string;
+  value?: string;
+  delta?: string;
+  tone?: ViewTone;
+  /** A Lucide icon name, or `brand:<maker>`; resolved by the console, unknown names draw a neutral mark. */
+  icon?: string;
+  text?: string;
+  status?: 'done' | 'active' | 'pending' | 'failed';
+  share?: number;
+  /** A console page from the server's closed set, relative to the console's base path. */
+  route?: string;
+}
+
+export interface ViewBlock {
+  type: typeof BLOCK_TYPES[number];
+  title?: string;
+  tone?: ViewTone;
+  text?: string;
+  items?: ViewItem[];
+}
+
+/** A frozen display (ADR 0042, 0071, 0072), stored on the call that drew it. */
 export interface DisplayView {
-  kind: 'chart' | 'table';
+  kind: 'chart' | 'table' | 'panel' | 'canvas';
   title: string;
   chart?: {
     type: 'line' | 'area' | 'column' | 'bar' | 'pie';
@@ -27,10 +53,15 @@ export interface DisplayView {
     y: string[];
     series?: string;
     unit?: string;
+    stacked?: boolean;
   };
   columns: string[];
   rows: Record<string, string | number | boolean | null>[];
   source?: { call_id: string; path?: string };
+  /** A panel's blocks: the model's own statements, laid out by the console. */
+  blocks?: ViewBlock[];
+  /** A canvas's markup, only ever drawn inside a sandboxed frame. */
+  html?: string;
 }
 
 export interface Trace {
@@ -109,7 +140,7 @@ export interface AgentInterrupt {
 }
 
 /** The display tools this console can draw; declared on every run (ADR 0042). */
-export const DISPLAY_TOOLS = ['render_chart', 'render_table'] as const;
+export const DISPLAY_TOOLS = ['render_chart', 'render_table', 'render_view', 'render_canvas'] as const;
 export type DisplayToolName = typeof DISPLAY_TOOLS[number];
 /**
  * Everything a run declares: the tools that draw, plus `suggest_next`, which draws nothing in the

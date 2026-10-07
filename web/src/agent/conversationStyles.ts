@@ -125,6 +125,45 @@ figure .table-scroll{margin:0}
 .figure-tabs button{height:20px;padding:0 8px;border-radius:2px;color:var(--muted);font-size:12px}
 .figure-tabs button:hover{color:var(--fg)}
 .figure-tabs button[aria-pressed=true]{background:var(--surface);color:var(--fg)}
+.panel{gap:14px}
+.block{display:flex;flex-direction:column;gap:8px;min-width:0}
+.block h4{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;margin:0;border:1px solid var(--border-soft);border-radius:4px;background:var(--border-soft);overflow:hidden}
+.stat{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px 12px;background:var(--surface)}
+.stat dt{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.stat dd{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 8px;margin:0;font-size:20px;font-weight:700;line-height:1.2;overflow-wrap:anywhere}
+.stat-delta{color:var(--muted);font-size:12px;font-weight:400}
+.stat[data-tone=success] .stat-delta{color:var(--success)}.stat[data-tone=warning] .stat-delta{color:var(--warn)}.stat[data-tone=danger] .stat-delta{color:var(--danger)}
+.fields{display:flex;flex-direction:column;margin:0}
+.fields>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:6px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.fields>div:last-child{border-bottom:0}
+.fields dt{flex:none;max-width:50%;color:var(--muted)}
+.fields dd{min-width:0;margin:0;text-align:right;overflow-wrap:anywhere}
+.callout{margin:0;padding:8px 12px;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:13px}
+.callout[data-tone=success]{border-left-color:var(--success);background:color-mix(in srgb,var(--success) 7%,transparent)}
+.callout[data-tone=warning]{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
+.callout[data-tone=danger]{border-left-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent)}
+.steps{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
+.steps li{position:relative;display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:12px;padding-bottom:12px;font-size:13px}
+.steps li:last-child{padding-bottom:0}
+.steps li:not(:last-child)::before{position:absolute;top:14px;bottom:-5px;left:4px;width:1px;background:var(--border);content:""}
+.step-mark{width:9px;height:9px;margin-top:5px;border:1.5px solid var(--muted);border-radius:50%;background:var(--surface)}
+.steps li[data-status=done] .step-mark{border-color:var(--success);background:var(--success)}
+.steps li[data-status=active] .step-mark{border-color:var(--accent)}
+.steps li[data-status=failed] .step-mark{border-color:var(--danger);background:var(--danger)}
+.step-text{grid-column:2;color:var(--muted);font-size:12px}
+.meters{display:flex;flex-direction:column;gap:10px}
+.meter{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;font-size:13px}
+.meter-label{color:var(--fg-2)}
+.meter-track{grid-column:1/-1;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.meter-track span{display:block;height:100%;border-radius:2px;background:var(--accent)}
+.meter[data-tone=success] .meter-track span{background:var(--success)}.meter[data-tone=warning] .meter-track span{background:var(--warn)}.meter[data-tone=danger] .meter-track span{background:var(--danger)}
+.view-links{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.view-links li{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--border);border-radius:4px;color:var(--fg-2);font-size:12px}
+.canvas-frame{display:block;width:100%;height:160px;border:0;background:var(--surface)}
+.canvas-note{display:none;margin:0}
+.image-capture .canvas-frame{display:none}.image-capture .canvas-note{display:block}
+@media print{.canvas-frame{display:none}.canvas-note{display:block}}
 .chart{display:block;width:100%;height:auto;overflow:visible}
 .chart text{fill:var(--muted);font-size:11px;font-family:inherit;font-variant-numeric:tabular-nums}
 .chart .grid{stroke:var(--border);stroke-width:1;shape-rendering:crispEdges}

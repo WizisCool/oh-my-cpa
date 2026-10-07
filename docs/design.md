@@ -1251,7 +1251,17 @@ the chain, where the answer reads, as a figure in a hairline `--border` frame: a
 600, a sortable table with copy and download as CSV, or a chart on the dashboard's chart stack
 (series palette, shared tooltip, `chart-slot` height reservation, reduced-motion rule, horizontal ellipsised category labels with the full value in the tooltip) with a
 Chart / Data switch and a PNG download composited on `--surface`. The chart runtime loads only when
-a chart is drawn. While a display call resolves, or when the server refused its reference, it is an
+a chart is drawn. A panel (`render_view`, ADR 0071) is the same figure frame holding blocks, each drawn only
+from tokens: `stats` as tiles on one `--border-soft` hairline grid (label `--muted` 12px with an
+optional 13px icon, value 20px 600 tabular, change toned by `--success` / `--warn` / `--danger`);
+`fields` as label/value rows on `--border-soft` rules; `callout` as a 2px toned left rule on a 7-8%
+tint of the same tone; `steps` as 9px marks on a `--border` rail (filled `--success` done, ringed
+`--accent` active, hollow pending, filled `--danger` failed); `meters` as a 4px `--series-track`
+bar filled by `--accent` or the tone; `links` as 28px hairline buttons that take `--accent` on
+hover. Icons are 1.5px-stroke Lucide outlines in `currentColor`; an unresolved name is a small
+neutral circle of the same box. A canvas (`render_canvas`, ADR 0072) is the figure frame around a
+borderless sandboxed frame on `--surface`, with a Canvas / Source switch and an HTML download; its
+height follows its content between 48px and 720px. While a display call resolves, or when the server refused its reference, it is an
 ordinary call row.
 
 A finished answer's foot states its status, duration and start time, its rounds and calls, and the

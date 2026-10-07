@@ -31,6 +31,8 @@ import {
   chartSeries,
 } from '../web/src/pages/agent/state.ts';
 import { completedDisplayViews } from '../web/src/agent/types.ts';
+import { lucideMarkup, lucideNodes, parseIconReference } from '../web/src/agent/agentIcons.ts';
+import { CANVAS_MAX_HEIGHT, CANVAS_MESSAGE, CANVAS_MIN_HEIGHT, canvasDocument, canvasHeight } from '../web/src/agent/canvasDocument.ts';
 import { contextShare } from '../web/src/components/workspace/contextShare.ts';
 import { referenceContextWindow } from '../web/src/types/modelSquare.ts';
 import type { ModelSquareDirectory } from '../web/src/types/modelSquare.ts';
@@ -523,3 +525,38 @@ check('the context readout needs both a reported input and a listed window, and 
 });
 
 console.log(`\n${passed} assertions passed`);
+
+check('an icon reference is read however the model spells it, and an unknown one is simply absent', () => {
+  for (const spelling of ['trending-up', 'TrendingUp', 'trending_up', 'lucide:trending-up', ' Trending-Up ']) {
+    assert.deepEqual(parseIconReference(spelling), { kind: 'lucide', name: 'trending-up' }, spelling);
+  }
+  assert.deepEqual(parseIconReference('brand:openai'), { kind: 'brand', id: 'OpenAI' });
+  assert.equal(parseIconReference('brand:no-such-maker'), undefined);
+  assert.equal(parseIconReference(''), undefined);
+  assert.equal(parseIconReference('<svg onload=x>'), undefined);
+  const icons = { house: [['path', { d: 'M1 2' }] as [string, Record<string, string>]], home: 'house', 'bar-chart2': 'house', constructor: 'missing' };
+  assert.equal(lucideNodes(icons, 'home'), icons.house, 'a retired name leads to its replacement');
+  assert.equal(lucideNodes(icons, 'bar-chart-2'), icons.house);
+  assert.equal(lucideNodes(icons, 'toString'), undefined, 'an inherited property is not an icon');
+  assert.equal(lucideNodes(icons, 'constructor'), undefined);
+  assert.equal(lucideMarkup([['path', { d: '"><script>' }]], 12).includes('<script>'), false);
+});
+
+check('a canvas document states its policy before the model\'s markup and cannot be closed by its data', () => {
+  const html = canvasDocument({ html: '<p>drawn</p>', rows: [{ label: '</script><script>alert(1)</script>' }],
+    variables: { bg: '#121214', accent: 'red;} body{display:none', fg: '' }, isDark: true, language: 'en"><script>' });
+  assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('<p>drawn</p>'));
+  assert.ok(html.includes("default-src 'none'") && !html.includes('connect-src'), 'nothing loads: every fetch directive falls back to none');
+  assert.equal(html.split('</script>').length, 2, 'row data cannot end the script element');
+  assert.ok(html.includes('--bg:#121214') && !html.includes('display:none') && !html.includes('--fg:'));
+  assert.ok(html.startsWith('<!doctype html><html lang="enscript">'));
+});
+
+check('a canvas height report is clamped, and anything else is not a report', () => {
+  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: 300.2 }), 301);
+  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: 1e9 }), CANVAS_MAX_HEIGHT);
+  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: -5 }), CANVAS_MIN_HEIGHT);
+  for (const message of [null, 'x', { type: 'other', height: 10 }, { type: CANVAS_MESSAGE, height: '300' }, { type: CANVAS_MESSAGE, height: NaN }]) {
+    assert.equal(canvasHeight(message), undefined);
+  }
+});

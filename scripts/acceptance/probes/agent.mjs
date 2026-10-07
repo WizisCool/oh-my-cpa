@@ -154,7 +154,7 @@ export async function agentWorkspace({ base, page, check }) {
     && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
   check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
     && request.forwardedProps.reasoning_effort === 'high' && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
-  check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_chart', 'render_table', 'suggest_next'])
+  check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_canvas', 'render_chart', 'render_table', 'render_view', 'suggest_next'])
     && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
   check('agent tells the server the console language', request.context.length === 1 && request.context[0].description === 'console_language' && request.context[0].value === 'en', JSON.stringify(request.context));
   check('agent shows the approval inline under the call, not in a dialog', await page.getByRole('dialog').count() === 0
@@ -520,18 +520,43 @@ export async function agentLive({ base, page, check }) {
  * Display calls draw the rows the server froze on the trace, never the model's text: a table is a
  * table with its own CSV actions, and a chart can be read as the data behind it.
  */
-export async function agentViews({ base, page, check }) {
+export async function agentViews({ base, page, check, expectProblem }) {
   const rows = [{ model: 'gpt-4.1', requests: 120 }, { model: 'gemini-2.5', requests: 80 }];
   const tableView = { kind: 'table', title: 'Requests by model', columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
   const chartView = { kind: 'chart', title: 'Request share', chart: { type: 'column', x: 'model', y: ['requests'] }, columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
+  const panelView = { kind: 'panel', title: 'Last 24 hours', columns: [], rows: [], blocks: [
+    { type: 'stats', items: [{ label: 'Requests', value: '1,204', delta: '+12%', tone: 'success', icon: 'TrendingUp' }, { label: 'Spend', value: '$4.20', icon: 'no-such-icon' }] },
+    { type: 'callout', tone: 'warning', text: 'Two credentials are cooling down.' },
+    { type: 'steps', items: [{ label: 'Check quota', status: 'done' }, { label: 'Rotate the key', status: 'active', text: 'After the current window' }] },
+    { type: 'meters', items: [{ label: 'Daily budget', value: '$8 of $10', share: 0.8, tone: 'warning' }] },
+    { type: 'links', items: [{ label: 'Open quota', route: 'quota' }] },
+  ] };
+  // The canvas tries every way out it has; the checks below are that none of them leaves the page.
+  const canvasView = { kind: 'canvas', title: 'Routing sketch', columns: ['model', 'requests'], rows,
+    html: '<div id="mark" style="height:300px">rows <b id="count"></b></div><script>document.getElementById("count").textContent=String(OMC_DATA.length);fetch("/canvas-leak-fetch").catch(function(){});new Image().src="/canvas-leak-image";try{document.getElementById("count").dataset.cookie=String(document.cookie.length)}catch(error){document.getElementById("count").dataset.cookie="denied"}</script>' };
+  // A request the policy refuses is still announced before it fails with `csp`; one that failed any
+  // other way, or did not fail, got as far as the network.
+  const leaks = new Set();
+  page.on('request', request => { if (request.url().includes('canvas-leak')) leaks.add(request); });
+  page.on('requestfailed', request => { if (request.failure()?.errorText === 'csp') leaks.delete(request); });
+  expectProblem({ kind: 'console', message: /canvas-leak-fetch' violates the following Content Security Policy/, count: 1 });
+  expectProblem({ kind: 'console', message: /^Fetch API cannot load .*canvas-leak-fetch/, count: 1 });
+  expectProblem({ kind: 'console', message: /canvas-leak-image' violates the following Content Security Policy/, count: 1 });
+  expectProblem({ kind: 'requestfailed', url: /canvas-leak-image$/, message: /^csp$/, count: 1 });
+  expectProblem({ kind: 'console', message: /^Framing 'http:\/\/127\.0\.0\.1:9\/' violates the following Content Security Policy directive: "frame-src/, count: 1 });
+  // The harness blocks service workers by reading the property in every frame, which a frame
+  // without an origin refuses; the canvas itself never touches it.
+  expectProblem({ kind: 'pageerror', message: /Service worker is disabled because the context is sandboxed/, count: 4 });
   await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [{
     id: 'turn-views', user: 'Chart requests by model', reply: 'Here they are.', status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(),
     usage: { input_tokens: 5000, output_tokens: 200, total_tokens: 5200, context_tokens: 3200 }, suggestions: ['Compare with last week'],
-    parts: [{ type: 'tool', trace_id: 'call-usage' }, { type: 'tool', trace_id: 'call-table' }, { type: 'tool', trace_id: 'call-chart' }, { type: 'text', content: 'Here they are.' }],
+    parts: [{ type: 'tool', trace_id: 'call-usage' }, { type: 'tool', trace_id: 'call-table' }, { type: 'tool', trace_id: 'call-chart' }, { type: 'tool', trace_id: 'call-panel' }, { type: 'tool', trace_id: 'call-canvas' }, { type: 'text', content: 'Here they are.' }],
     traces: [
       { id: 'call-usage', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: { rows } } },
       { id: 'call-table', name: 'render_table', arguments: '{"title":"Requests by model"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: tableView },
       { id: 'call-chart', name: 'render_chart', arguments: '{"title":"Request share"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: chartView },
+      { id: 'call-panel', name: 'render_view', arguments: '{"title":"Last 24 hours"}', result: { status: 'success', data: { rendered: true, blocks: 5 } }, view: panelView },
+      { id: 'call-canvas', name: 'render_canvas', arguments: '{"title":"Routing sketch"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: canvasView },
     ],
   }] } }));
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
@@ -548,6 +573,30 @@ export async function agentViews({ base, page, check }) {
   await chart.getByText('Data', { exact: true }).click();
   await chart.getByText('gpt-4.1').waitFor();
   check('a chart can be read as the rows behind it', await chart.getByText('gpt-4.1').count() === 1 && await chart.locator('canvas').count() === 0);
+
+  const panel = page.locator('[data-testid="agent-view"][data-kind="panel"]');
+  await panel.locator('svg[data-icon="trending-up"]').waitFor();
+  check('a panel draws each block the model chose', await panel.getByText('1,204').count() === 1 && await panel.getByText('Two credentials are cooling down.').count() === 1
+    && await panel.getByRole('img', { name: 'In progress' }).count() === 1 && await panel.getByRole('meter', { name: 'Daily budget' }).getAttribute('aria-valuenow') === '80');
+  check('an icon is resolved from any Lucide name, and an unknown one is a neutral mark rather than a failure',
+    await panel.locator('svg[data-icon="trending-up"] path').count() >= 1 && await panel.locator('svg[data-icon="neutral"]').count() === 1);
+  check('a panel link leads to a console page under the base path', (await panel.getByRole('link', { name: 'Open quota' }).getAttribute('href') ?? '').endsWith('/omc/quota'));
+  check('a panel fits its column', await panel.evaluate(element => element.scrollWidth <= element.clientWidth));
+
+  const canvas = page.locator('[data-testid="agent-canvas"]');
+  const inner = page.frameLocator('[data-testid="agent-canvas"]');
+  await inner.locator('#count').waitFor();
+  check('a canvas is a script-only sandbox that receives its frozen rows', await canvas.getAttribute('sandbox') === 'allow-scripts' && await inner.locator('#count').innerText() === '2');
+  await page.waitForFunction(() => document.querySelector('[data-testid="agent-canvas"]')?.getBoundingClientRect().height === 300);
+  check('a canvas frame takes the height its content reports', (await canvas.boundingBox())?.height === 300);
+  check('a canvas reads the theme and has no origin of its own', await inner.locator('body').evaluate(body => getComputedStyle(body).getPropertyValue('--accent').trim() !== '' && window.origin === 'null')
+    && ['0', 'denied'].includes(await inner.locator('#count').getAttribute('data-cookie') ?? ''));
+  // Self-navigation is the one exit the frame's own policy does not close; the console's frame policy does.
+  await inner.locator('body').evaluate(() => { window.location.href = 'http://127.0.0.1:9/canvas-leak-navigation'; }).catch(() => undefined);
+  await page.waitForFunction(() => { try { return document.querySelector('[data-testid="agent-canvas"]')?.contentDocument === null; } catch { return true; } });
+  check('nothing a canvas tries reaches the network', leaks.size === 0, [...leaks].map(request => request.url()).join(' '));
+  await page.locator('[data-testid="agent-view"][data-kind="canvas"]').getByText('Source', { exact: true }).click();
+  check('a canvas can be read as the markup behind it', await page.locator('[data-testid="agent-view"][data-kind="canvas"] pre').innerText().then(text => text.includes('canvas-leak-fetch')));
 
   // The fixture's catalog lists a 4,000-token window for the session's model, and the turn's last
   // round read 3,200: the readout is the last round's input, not the turn's summed input.

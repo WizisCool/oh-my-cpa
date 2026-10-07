@@ -105,7 +105,7 @@ func TestAgentCatalogueFitsTheSchemaBudget(t *testing.T) {
 		t.Fatalf("registry looks truncated: %d definitions", len(definitions))
 	}
 	// The whole catalogue a console-declared run can offer: every capability plus the display tools.
-	raw, err := json.Marshal(append(agent.ToolDeclarations(definitions), agent.DisplayToolDeclarations([]string{agent.RENDER_CHART, agent.RENDER_TABLE, agent.SUGGEST_NEXT})...))
+	raw, err := json.Marshal(append(agent.ToolDeclarations(definitions), agent.DisplayToolDeclarations([]string{agent.RENDER_CHART, agent.RENDER_TABLE, agent.RENDER_VIEW, agent.RENDER_CANVAS, agent.SUGGEST_NEXT})...))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ const applySearch=()=>{const query=search.value.trim().toLocaleLowerCase();const
 const closeSearch=()=>{search.value='';applySearch();searchBar.hidden=true};
 const copyText=async text=>{if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(text);const input=document.createElement('textarea');input.value=text;input.style.cssText='position:fixed;opacity:0';document.body.append(input);input.select();const copied=document.execCommand('copy');input.remove();if(!copied)throw Error('copy')};
 search.addEventListener('input',applySearch);
+addEventListener('message',event=>{const frame=all('iframe.canvas-frame').find(item=>item.contentWindow===event.source);const height=event.data&&event.data.type==='omc-canvas-height'?Number(event.data.height):NaN;if(frame&&Number.isFinite(height))frame.style.height=Math.min(720,Math.max(48,Math.ceil(height)))+'px'});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'){closePanel();closeSearch()}if(event.key==='/'&&!/^(INPUT|TEXTAREA)$/.test(event.target.tagName)){event.preventDefault();searchBar.hidden=false;search.focus()}});
 document.addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;
 if(button.hasAttribute('data-toggle-panel')){if(panel.hidden)showPanel('snapshot-info');else closePanel()}

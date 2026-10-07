@@ -254,6 +254,312 @@
   margin-left: 4px;
 }
 
+/* ── panels (ADR 0071) ─────────────────────────────────────────────────────── */
+
+.panel {
+  gap: 14px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.block-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Figures share one hairline grid instead of each sitting in its own box. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stat-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.stat-delta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.stat[data-tone='success'] .stat-delta { color: var(--success); }
+.stat[data-tone='warning'] .stat-delta { color: var(--warn); }
+.stat[data-tone='danger'] .stat-delta { color: var(--danger); }
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.field dt {
+  flex: none;
+  max-width: 50%;
+  color: var(--muted);
+}
+
+.field dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.callout {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.callout[data-tone='success'] {
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success) 7%, transparent);
+}
+
+.callout[data-tone='warning'] {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+
+.callout[data-tone='danger'] {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The rail is each step's own left edge, so it joins the marks whatever a step's height. */
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  column-gap: 12px;
+  padding-bottom: 12px;
+  font-size: 13px;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:not(:last-child)::before {
+  position: absolute;
+  top: 14px;
+  bottom: -5px;
+  left: 4px;
+  width: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.step-mark {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.step[data-status='done'] .step-mark {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.step[data-status='active'] .step-mark {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.step[data-status='failed'] .step-mark {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.step-label {
+  color: var(--fg);
+}
+
+.step[data-status='pending'] .step-label {
+  color: var(--fg-2);
+}
+
+.step-text {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  font-size: 13px;
+}
+
+.meter-label {
+  min-width: 0;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-value {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--series-track);
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.meter[data-tone='success'] .meter-fill { background: var(--success); }
+.meter[data-tone='warning'] .meter-fill { background: var(--warn); }
+.meter[data-tone='danger'] .meter-fill { background: var(--danger); }
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-2);
+  font-size: 12px;
+  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.link:hover,
+.link:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── canvases (ADR 0072) ───────────────────────────────────────────────────── */
+
+.canvas-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--surface);
+}
+
+.canvas-source {
+  max-height: 360px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ── call details ──────────────────────────────────────────────────────────── */
 
 .details {

@@ -420,6 +420,11 @@ the configuration workbench.
   sent messages. A 14px ring on a `--border` track with a small mono percentage beside send states
   the context window in use (`--meta`, `--warn` at 75%, `--danger` at 90%), absent when either
   figure is unknown.
+- **Views**: a display call is a figure in a hairline frame. Beside charts and tables, a panel
+  (ADR 0071) stacks token-drawn blocks - figure tiles on one `--border-soft` grid, label/value
+  rows, a toned-rule callout, steps on a rail, 4px meters, hairline page links - with 1.5px Lucide
+  outline icons and a neutral circle for an unresolved name; a canvas (ADR 0072) is a borderless
+  sandboxed frame on `--surface` with a Canvas / Source switch.
 - **Target**: each model is led by its maker's mark, or a neutral box when the maker is unknown.
 - **Follow-ups**: up to three questions the model offered, as plain lines under the newest answer
   that fill the composer without sending.

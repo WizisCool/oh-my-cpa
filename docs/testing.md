@@ -177,6 +177,7 @@ run:
 | Script self-test `*.test.mjs` | none: `scripts/test-self.mjs` discovers them |
 | Probe scenario | an entry in `scripts/acceptance/scenarios.mjs` (unique `id`). Optionally its measured seconds in `scripts/acceptance/probe-weights.json`, which only affects shard balance |
 | New console page | a rule in `SCENARIO_PATHS` in `scripts/acceptance/check-ui-plan.mjs` naming the scenarios that load its route, or `scenarios: []` if none does. `scripts/ui-impact.test.mjs` fails until the rule exists |
+| Lucide package version change | `pnpm icons:generate`, commit `web/src/generated/lucideIcons.json`; `scripts/generate-lucide-icons.test.mjs` fails until the file matches the installed package |
 | New console read or response shape | `pnpm demo:generate` (pins `TZ=UTC` for deterministic deployment metadata), review the diff, commit the dataset (see `docs/ops/cloudflare-demo.md`) |
 
 ## 3. What to run, and when

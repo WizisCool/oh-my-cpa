@@ -59,6 +59,8 @@ function DisplayToolView(part: ToolCallMessagePartProps) {
 const AGENT_TOOLKIT: Toolkit = {
   render_chart: { type: 'backend', render: DisplayToolView },
   render_table: { type: 'backend', render: DisplayToolView },
+  render_view: { type: 'backend', render: DisplayToolView },
+  render_canvas: { type: 'backend', render: DisplayToolView },
 };
 
 /** Passed to the runtime provider, which installs the toolkit's views for the thread below it. */

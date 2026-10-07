@@ -11,7 +11,7 @@ const LABELS: SnapshotLabels = {
   title: 'OMC conversation', operator: 'Operator', answer: 'Answer', model: 'Model', exportedAt: 'Exported',
   thought: 'Reasoning', parameters: 'Parameters', arguments: 'Arguments', result: 'Result', data: 'Data',
   copy: 'Copy', copied: 'Copied', copyFailed: 'Copy failed', search: 'Search conversation', expand: 'Expand details',
-  panel: 'Side panel', close: 'Close', chart: 'Chart', usage: 'Tokens', noMatches: 'No turns match', turns: count => `${count} turns`,
+  panel: 'Side panel', close: 'Close', chart: 'Chart', usage: 'Tokens', noMatches: 'No turns match', canvasOmitted: 'Canvas in HTML export', step: status => `step-${status}`, turns: count => `${count} turns`,
   axisTime: milliseconds => `time-${milliseconds}`, number: value => String(value), calls: count => `Used ${count} capabilities`, tokens: count => `${count} tokens`,
   collapse: 'Collapse details', print: 'Print', imageOmitted: 'Image omitted', privacy: 'Snapshot; share with care',
   omitted: count => `${count} omitted turns`, status: status => status, capability: name => name,
@@ -129,4 +129,44 @@ test('the exported control script parses as standalone JavaScript', () => {
   const script = htmlFor().match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
   assert.doesNotThrow(() => new vm.Script(script));
+});
+
+test('a panel is exported block by block, with its named icons inlined and nothing of the model\'s read as markup', () => {
+  const panel: DisplayView = { kind: 'panel', title: 'Last 24 hours', columns: [], rows: [], blocks: [
+    { type: 'stats', items: [{ label: 'Requests', value: '1,204', delta: '+12%', tone: 'success', icon: 'TrendingUp' }, { label: 'Maker', value: '2', icon: 'brand:OpenAI' }] },
+    { type: 'callout', tone: 'warning', text: '<img src=x onerror=alert(1)>' },
+    { type: 'steps', items: [{ label: 'Check quota', status: 'done' }, { label: 'Rotate key', status: 'pending', text: 'After the window' }] },
+    { type: 'meters', items: [{ label: 'Budget', share: 0.8, tone: 'warning' }] },
+    { type: 'links', title: 'Next', items: [{ label: 'Open quota', route: 'quota' }] },
+  ] };
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [{ id: 'display', name: 'render_view', result: { status: 'success' }, view: panel }] }] };
+  const icons = { 'trending-up': [['path', { d: 'M16 7h6v6' }]], 'arrow-up-right': [['path', { d: 'M7 7h10v10' }]] } as const;
+  const html = conversationHTML({ snapshot: agentSnapshot(conversation), labels: LABELS, exportedAt: new Date(0), language: 'en',
+    appearance: { variables: { '--bg': '#121214' }, icons: icons as never } });
+  assert.ok(html.includes('<path d="M16 7h6v6"/>') && html.includes('1,204') && html.includes('+12%'));
+  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;') && !html.includes('<img src=x'));
+  assert.ok(html.includes('aria-label="step-done"') && html.includes('After the window'));
+  assert.ok(html.includes('<span class="meter-value">80%</span>') && html.includes('style="width:80%"'));
+  assert.ok(html.includes('Open quota') && !/href="[^#"]/.test(html), 'a saved document links nowhere outside itself');
+});
+
+test('a canvas is exported inside the same sandbox, with its markup only ever in the frame\'s own document', () => {
+  const canvas: DisplayView = { kind: 'canvas', title: 'Flow', columns: ['n'], rows: [{ n: 1 }], html: '<script>document.title="</scr"+"ipt>"</script><p id="mark">drawn</p>' };
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [{ id: 'display', name: 'render_canvas', result: { status: 'success' }, view: canvas }] }] };
+  const html = htmlFor(agentSnapshot(conversation));
+  const frame = /<iframe class="canvas-frame"[^>]*sandbox="allow-scripts"[^>]*srcdoc="([^"]*)"><\/iframe>/.exec(html);
+  assert.ok(frame, 'the canvas is a sandboxed frame');
+  assert.ok(!html.includes('<p id="mark">'), 'the markup is not part of the exported document itself');
+  assert.ok(frame[1].includes('&lt;p id=&quot;mark&quot;&gt;drawn') && frame[1].includes('Content-Security-Policy'));
+  assert.ok(html.includes('Canvas in HTML export'));
+});
+
+test('a stacked chart is exported as one mark per category, each series starting where the last ended', () => {
+  const stacked: DisplayView = { kind: 'chart', title: 'Stacked', chart: { type: 'column', x: 'day', y: ['a', 'b'], stacked: true }, columns: ['day', 'a', 'b'], rows: [{ day: 'Mon', a: 4, b: 6 }] };
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [{ id: 'display', name: 'render_chart', result: { status: 'success' }, view: stacked }] }] };
+  const rects = [...htmlFor(agentSnapshot(conversation)).matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="([\d.]+)" rx="1" fill/g)].map(match => match.slice(1).map(Number));
+  assert.equal(rects.length, 2);
+  assert.equal(rects[0][0], rects[1][0], 'both series share the category\'s column');
+  assert.ok(Math.abs(rects[1][1] + rects[1][2] - rects[0][1]) < 0.02, 'the second series sits on the first');
+  assert.ok(Math.abs(rects[1][2] / rects[0][2] - 1.5) < 0.02);
 });

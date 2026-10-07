@@ -148,7 +148,8 @@ secrets.
 
 ### Display tools
 
-`render_chart` and `render_table` are how the Agent shows data rather than retelling it (ADR 0042).
+`render_chart` and `render_table` are how the Agent shows data rather than retelling it (ADR 0042);
+`render_view` and `render_canvas` are how it gives an answer a shape (ADR 0071, ADR 0072).
 `internal/agent` owns them, and they are offered only when the client declares that it can draw
 them - the console does, the MCP bridge does not. They are not capabilities: they change nothing,
 never pass through the executor and never interrupt a run.
@@ -158,9 +159,23 @@ server resolves the reference, projects and checks the named fields, freezes the
 call's trace, and returns a receipt (`rendered`, `rows`, `fields`) instead of the rows. `inline` rows
 (at most 200) are for figures the model derived itself. A refusal is an `invalid_tool_arguments`
 result whose detail names the field to change. Views are bounded to 1000 rows, 12 table columns,
-8 chart series and 96 KiB. A category axis keeps its labels horizontal and ellipsised; the tooltip carries the full value.
+8 chart series and 96 KiB. A category axis keeps its labels horizontal and ellipsised; the tooltip carries the full value. `stacked` stacks the series of an area, column or bar chart.
 
-Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
+`render_view` draws a **panel**: a title and one to eight blocks from a closed vocabulary - `stats`,
+`fields`, `callout`, `steps`, `meters`, `links` - of at most twelve items each. Every block shares
+one JSON shape, so the schema stays small; `resolveView` enforces which fields a type reads, drops
+the rest and refuses unknown ones. A panel's text and figures are the model's own statements, laid
+out by the console, not resolved rows. An `icon` is any Lucide name or `brand:<maker>`: the server
+checks only its shape, and the console draws a neutral mark for a name it cannot resolve. A `links`
+item names a console page from `CONSOLE_ROUTES`, never a URL.
+
+`render_canvas` draws the model's own HTML, SVG and script (at most 48 KiB, two per turn), with
+`source` and `fields` resolved and frozen like a chart's rows and handed to the markup as
+`window.OMC_DATA`. The server stores the markup as written and never sanitises it; the console only
+ever shows it in a `sandbox="allow-scripts"` frame whose document forbids every network load, and
+the console's `frame-src` policy stops the frame from navigating away (ADR 0072).
+
+Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, picks the one display that fits best when structure is clearer than sentences (a panel for a summary, a chart or table for rows, a canvas only as the last resort), uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
 
 `suggest_next` rides the same declaration and is not a display call. The model calls it in the
 response that carries its final answer, with one to three follow-up questions (80 characters each);
@@ -205,7 +220,7 @@ session reads, final snapshots and streamed query receipts omit raw query data; 
 also omits the private model history and queued model calls. This applies to restored sessions as
 well as new runs. Query status, diagnostics, SQL arguments and timing remain inspectable. The
 full result stays in the server-side conversation for subsequent model rounds and explicit
-`render_chart` / `render_table` calls. This is a browser-preview boundary, not an upstream-data
+`render_chart` / `render_table` / `render_canvas` calls. This is a browser-preview boundary, not an upstream-data
 restriction: the selected model still receives query rows and may quote them in its answer or
 choose them for a final display.
 
