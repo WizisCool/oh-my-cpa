@@ -2766,7 +2766,11 @@ with.
 
 The single latest session is persisted server-side in `ui_preferences` as `playground_session`,
 allowing operators to resume the target, parameters and conversation across devices and reloads.
-It is written when a turn settles and after parameter edits pause, never while a turn streams.
+It is written when a turn settles, at once when the key or model changes, and after parameter edits
+pause, never while a turn streams; `pagehide` writes an edit still inside its pause. A preference
+write of at most 8 KiB is sent with `keepalive` (`api.putPreference`), so a reload that follows a
+choice does not cancel it. The message box takes text whenever the page is not a demonstration;
+only sending waits for a key and a model, and the send button names what is missing.
 Starting a new conversation discards stored turns. Large image payloads are redacted before
 persistence to conserve storage budget. Neither conversation nor prompts enter client-side
 `localStorage` or `sessionStorage`. Markdown rendering uses `@ant-design/x-markdown` with raw HTML

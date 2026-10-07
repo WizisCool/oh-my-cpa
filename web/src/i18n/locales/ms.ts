@@ -380,6 +380,7 @@ export const MS: Readonly<Record<string, string>> = {
   "pg.user_agent": "User-Agent",
   "pg.custom_body": "Badan permintaan tersuai (JSON)",
   "pg.invalid_json": "Badan permintaan tersuai mestilah objek JSON yang sah",
+  "pg.target_required": "Pilih kunci dan model dahulu",
   "pg.thinking": "Sedang berfikir…",
   "pg.thought_process": "Proses pemikiran",
   "pg.resize_sidebar": "Seret untuk ubah saiz panel parameter",

@@ -380,6 +380,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "pg.user_agent": "User-Agent",
   "pg.custom_body": "自訂請求內文 (JSON)",
   "pg.invalid_json": "自訂請求內文必須是有效的 JSON 物件",
+  "pg.target_required": "請先選擇金鑰和模型",
   "pg.thinking": "思考中…",
   "pg.thought_process": "思考過程",
   "pg.resize_sidebar": "拖曳調整參數面板寬度",

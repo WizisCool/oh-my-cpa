@@ -149,8 +149,10 @@ export const PlaygroundPage: React.FC = () => {
     return () => controller.abort();
   }, [isDemo, hydration.session, keys.isSuccess, recover, restoreRunTarget]);
   // A streaming turn changes every 40ms, so nothing is written while one runs. A turn that has just
-  // settled is written at once - the reader may reload the moment it ends - and an edit to the
-  // parameters waits for typing to pause. A write whose document matches the last one is skipped.
+  // settled and a newly chosen key or model are written at once - the reader may reload the moment
+  // either happens, and a reload unmounts nothing, so a write still inside its pause would be
+  // dropped - and an edit to the parameters waits for typing to pause. A write whose document
+  // matches the last one is skipped.
   const { set: persistSession } = sessionPref;
   const lastWrittenRef = React.useRef('');
   const pendingRef = React.useRef<PlaygroundSession>();
@@ -164,9 +166,17 @@ export const PlaygroundPage: React.FC = () => {
     lastWrittenRef.current = serialized;
     void persistSession(document);
   }, [persistSession]);
+  const persistedTargetRef = React.useRef<Target>();
   React.useEffect(() => {
     if (isDemo || !isHydrated || !isRecoveryChecked || isRunning) return;
     pendingRef.current = sessionDocument(target, parameters, turns, lastRunID);
+    // The first pass sees the restored target, which the server already holds.
+    const previousTarget = persistedTargetRef.current ?? target;
+    persistedTargetRef.current = target;
+    if (previousTarget.fingerprint !== target.fingerprint || previousTarget.model !== target.model) {
+      flushSession();
+      return;
+    }
     const timer = setTimeout(flushSession, wasRunningRef.current ? 0 : PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [isDemo, isHydrated, isRecoveryChecked, isRunning, flushSession, target, parameters, turns, lastRunID]);
@@ -176,9 +186,18 @@ export const PlaygroundPage: React.FC = () => {
     wasRunningRef.current = isRunning;
   }, [isRunning]);
   // Leaving the page while an edit is still inside its pause writes it rather than dropping it.
+  // `pagehide` covers the departures that unmount nothing: a reload, a closed tab, a phone
+  // switching apps.
   const flushRef = React.useRef(flushSession);
   flushRef.current = flushSession;
-  React.useEffect(() => () => flushRef.current(), []);
+  React.useEffect(() => {
+    const flush = () => flushRef.current();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
 
   // ── actions ────────────────────────────────────────────────────────────────
 
@@ -246,7 +265,9 @@ export const PlaygroundPage: React.FC = () => {
   const runtime = usePlaygroundThreadRuntime({
     turns,
     isRunning,
-    isDisabled: isDemo || !isTargetReady || !isRecoveryChecked,
+    // Only sending waits for a target. A disabled message box takes no focus, and on a phone that
+    // is a tap that raises no keyboard and shows no reason why.
+    isDisabled: isDemo,
     isSendDisabled: isDemo || !isTargetReady || !isRecoveryChecked || !customBody.ok,
     attachments: attachmentAdapter,
     onSend: submit,
@@ -437,7 +458,7 @@ export const PlaygroundPage: React.FC = () => {
           inputLabel={t('pg.input')}
           sendLabel={t('pg.send')}
           stopLabel={t('pg.stop')}
-          blockedReason={!customBody.ok ? t('pg.invalid_json') : undefined}
+          blockedReason={!isTargetReady ? t('pg.target_required') : !customBody.ok ? t('pg.invalid_json') : undefined}
           attachments={{ addLabel: t('pg.add_image'), removeLabel: t('pg.remove_image') }}
         />
       </WorkspaceLayout>
