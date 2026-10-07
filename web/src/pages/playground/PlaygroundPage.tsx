@@ -11,7 +11,9 @@ import { AssistantThread } from '../../components/workspace/AssistantThread';
 import { TargetPicker } from '../../components/workspace/TargetPicker';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
 import workspace from '../../components/workspace/Workspace.module.css';
-import { exportFileName, playgroundMarkdown } from '../../agent/export';
+import { exportFileName } from '../../agent/export';
+import { playgroundSnapshot } from '../../agent/conversationSnapshot';
+import { useConversationExport } from '../../components/workspace/useConversationExport';
 import { saveBlob } from '../../utils/download';
 import { usePreference } from '../../hooks/usePreference';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
@@ -28,7 +30,7 @@ import { PlaygroundImageAdapter } from './attachments';
 import { usePlaygroundThreadRuntime } from './runtime';
 import {
   buildChatRequest, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, DEFAULT_PLAYGROUND_SESSION,
-  effectiveModel, hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
+  hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
   PLAYGROUND_SESSION_PREFERENCE, readCustomBody, sessionDocument, usageLink,
 } from './state';
 import type { Content, Message, PlaygroundParameters, PlaygroundSession, Turn } from './state';
@@ -57,6 +59,8 @@ interface Target {
 }
 
 export const PlaygroundPage: React.FC = () => {
+  const { isExporting, exportSnapshot } = useConversationExport('playground');
+  const [isExportMenuOpen, setIsExportMenuOpen] = React.useState(false);
   const { t } = useI18n();
   const navigate = useNavigate();
   const isDemo = isDemoMode();
@@ -291,36 +295,13 @@ export const PlaygroundPage: React.FC = () => {
     setNotice('');
   };
 
-  const exportConversation = (format: 'markdown' | 'json') => {
+  const exportConversation = (format: 'html' | 'image' | 'json') => {
     const now = new Date();
     if (format === 'json') {
       saveBlob(new Blob([`${JSON.stringify(sessionDocument(target, parameters, turns, lastRunID), null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-playground', 'json', now));
       return;
     }
-    const markdown = playgroundMarkdown(turns.map(turn => ({
-      user: turn.user.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n'),
-      imageCount: turn.user.content.filter(part => part.type === 'image_url').length,
-      reply: turn.reply,
-      model: effectiveModel(turn.request),
-      status: turn.status,
-      parameters: {
-        system_prompt: turn.request.system_prompt,
-        temperature: turn.request.temperature,
-        top_p: turn.request.top_p,
-        max_tokens: turn.request.max_tokens,
-        reasoning_effort: turn.request.reasoning_effort,
-      },
-    })), {
-      title: t('pg.export.title'),
-      exportedAt: t('agent.export.exported_at'),
-      operator: t('agent.export.operator'),
-      answer: t('agent.export.answer_heading'),
-      model: t('agent.export.model'),
-      parameters: t('pg.parameters'),
-      images: count => t('pg.export.images', { count: String(count) }),
-      status: status => t(`pg.status.${status}`),
-    }, now);
-    saveBlob(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), exportFileName('omc-playground', 'md', now));
+    void exportSnapshot(playgroundSnapshot(turns), format);
   };
 
   const onParametersChange = React.useCallback((patch: Partial<PlaygroundParameters>) => {
@@ -364,16 +345,23 @@ export const PlaygroundPage: React.FC = () => {
         />
       </Tooltip>
       <Dropdown
-        disabled={turns.length === 0 || isRunning}
+        trigger={['click']}
+        open={isExportMenuOpen}
+        onOpenChange={setIsExportMenuOpen}
+        disabled={turns.length === 0 || isRunning || isExporting}
         menu={{
           items: [
-            { key: 'markdown', label: t('agent.export.markdown') },
+            { key: 'html', label: t('agent.export.html') },
+            { key: 'image', label: t('agent.export.image') },
             { key: 'json', label: t('agent.export.json') },
           ],
-          onClick: ({ key }) => exportConversation(key as 'markdown' | 'json'),
+          onClick: ({ key }) => {
+            setIsExportMenuOpen(false);
+            exportConversation(key as 'html' | 'image' | 'json');
+          },
         }}
       >
-        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} disabled={turns.length === 0 || isRunning}>
+        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting}>
           <span className={styles['action-label']}>{t('agent.export')}</span>
         </Button>
       </Dropdown>

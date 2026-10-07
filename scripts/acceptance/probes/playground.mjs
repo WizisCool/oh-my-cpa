@@ -1,3 +1,4 @@
+import { checkConversationExport } from './conversation-export.mjs';
 import { abortFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 
@@ -117,6 +118,7 @@ export async function playground({ base, page, check, context }) {
   const viewRequest = answer => answer.getByRole('button', { name: 'View in request records', exact: true });
   check('a turn CPA named links to its request record', await viewRequest(page.locator('[data-testid="playground-answer"]').first()).isEnabled());
   check('model output does not fetch external images or execute HTML', external.length === 0 && !await page.evaluate(() => window.__playgroundInjected), external.join(','));
+  await checkConversationExport({ page, check, kind: 'playground', expectedText: 'A streamed answer' });
   await page.getByLabel('System prompt', { exact: true }).fill('Changed system prompt');
   await page.getByRole('tab', { name: 'Turn diagnostics', exact: true }).click();
   await page.getByRole('tab', { name: 'Request', exact: true }).click();

@@ -261,8 +261,8 @@ the model received in the side panel's details tab (`CallDetails.tsx`); display 
 lazily loaded chart or a table inside the answer. A prepared operation is decided on a card under
 the call that raised it (`interrupts/ApprovalCard.tsx`, ADR 0043), and an `ask_question` call is
 answered in a panel that takes the composer's place (`interrupts/QuestionPanel.tsx`); deciding
-either one resumes the run (ADR 0035). A conversation, or one answer, exports as Markdown, and the
-conversation as JSON; a table as CSV, a chart as PNG. The presentation rules - status vocabulary,
+either one resumes the run (ADR 0035). A conversation exports as a self-contained HTML page, a PNG image or JSON, and one answer as HTML;
+a table as CSV, a chart as PNG (see "Conversation exports" below). The presentation rules - status vocabulary,
 failure copy, argument summaries, chart series, change preview - are pure functions in `state.ts`,
 `thread.ts` and `web/src/agent/`, which is what lets `scripts/test-agent-workspace.ts` assert them
 without a browser.
@@ -808,7 +808,7 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through a toast (`useToast`), which needs the antd `App` context. In demo mode it neither pushes nor adopts: the theme stays in the visitor's browser |
 | `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The Playground's `pages/playground/api.ts` and the Agent's `agent/transport.ts` wrap `requestResponse` and `agent/sse.ts` for their SSE routes, without duplicating auth or retry policy |
-| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the browser-side exports (`export.ts`: Markdown, CSV with formula guarding, file names) |
+| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the browser-side exports (`export.ts`: CSV with formula guarding, Markdown tables, file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the auth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useProgressTask` (counts a component's lifetime, such as a Suspense fallback's, as loading-bar work), `useCustomIcons` (shared revisioned custom-icon metadata), `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useVisibleViewport` (effect-owned usable-viewport bounds; pure policy in `types/visibleViewport.ts`), `useFocusedRegion` (in-place workspace isolation and focus cleanup), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
@@ -2761,8 +2761,21 @@ the parameters panel and the turn inspector. `runtime.ts` is its `ExternalStore`
 regenerating the last answer and editing the last message all land in `usePlaygroundRun`, which
 keeps its one-request-at-a-time rule and its OpenAI-shaped protocol. Pure request rules - building
 the request, reading the custom body, the stored session's shape, the turn an edit produces - live
-in `state.ts`. The conversation exports as Markdown with the model and parameters each answer ran
+in `state.ts`. The conversation exports as HTML, PNG or JSON with the model and parameters each answer ran
 with.
+
+**Conversation exports.** The Agent and the Playground share one export path
+(`web/src/components/workspace/useConversationExport.ts`). `conversationSnapshot.ts` projects what the
+page displays into a `ConversationSnapshot` - never the stored session - and drops execution
+identities (key fingerprints, tokens, operation and run ids) at any depth. `conversationHtml.ts` renders
+that snapshot to one HTML string: the palette's resolved tokens as custom properties, the console's
+font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, charts as
+inline SVG, and a Content-Security-Policy that allows no network. Its only script is the fixed
+`conversationControls.ts` (search, side panel, copy, table sorting, print). The PNG is the same
+document laid out as an 840px share card in a sandboxed, script-free iframe and rasterized through an
+SVG `foreignObject` at 2x (`conversationDownload.ts`); a long transcript becomes several numbered
+files, each cut at a block boundary by `snapshotImageSlices`. The download module is loaded on demand,
+so the Markdown renderer's server build stays out of the workspace chunk.
 
 The single latest session is persisted server-side in `ui_preferences` as `playground_session`,
 allowing operators to resume the target, parameters and conversation across devices and reloads.

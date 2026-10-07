@@ -404,6 +404,11 @@ the configuration workbench.
 - **Model output**: tables in a hairline frame; fenced code with a language head and copy action,
   highlighted only for allowlisted languages after the fence closes, in a palette-ink syntax theme
   that never borrows the semantic hues. Raw HTML is escaped and images are links.
+- **Conversation exports**: the HTML page and the PNG are the workspace in the resolved palette and
+  the embedded mono face, not a report about it: the same reading column, bubble, pip, disclosures
+  and code frames under a wordmark head and a one-line masthead. Charts are inline SVG on the series
+  palette with `--border` grid rules and swatch legends; series colour never tints text. The PNG is an
+  840px card at 2x without controls or reasoning, its capability chain shown open.
 - **Composer**: assistant-ui's composer with Ant Design controls; Enter and the send button as one
   gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--surface`
   fill, `--meta` glyph). Send and stop share one action slot: running with an empty draft

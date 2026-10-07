@@ -1,3 +1,4 @@
+import { checkConversationExport } from './conversation-export.mjs';
 import { fulfillFixture, abortFixture } from '../browser-guard.mjs';
 import { until } from '../harness.mjs';
 import { playgroundFixtures } from './playground.mjs';
@@ -153,6 +154,7 @@ export async function agentWorkspace({ base, page, check }) {
   const settledChain = page.locator('[data-testid="agent-chain"]');
   check('a finished capability chain folds behind the answer', await settledChain.getByRole('button').first().getAttribute('aria-expanded') === 'false');
   check('agent offers a new conversation once there is one to replace', await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled());
+  await checkConversationExport({ page, check, kind: 'agent', expectedText: 'The approved operation completed.' });
   await page.reload();
   await page.getByText('The approved operation completed.').waitFor();
   const selection = () => page.locator('[data-testid="agent-page"] header').innerText();
