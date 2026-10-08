@@ -37,11 +37,14 @@ type Operation struct {
 	revision    int64
 }
 type Executor struct {
-	Registry      *Registry
-	Store         repository.AgentStore
-	Authorize     func(context.Context, string, string) bool
-	VerifyHuman   func(context.Context, Operation, bool) error
-	mu            sync.Mutex
+	Registry    *Registry
+	Store       repository.AgentStore
+	Authorize   func(context.Context, string, string) bool
+	VerifyHuman func(context.Context, Operation, bool) error
+	mu          sync.Mutex
+	// live holds the operations this process is executing right now, so a concurrent read can
+	// tell work in progress from a record a crash left behind.
+	live          sync.Map
 	admissionOnce sync.Once
 	admission     chan struct{}
 }
@@ -101,6 +104,8 @@ func (e *Executor) Invoke(ctx context.Context, p Principal, name string, raw jso
 		return e.execute(ctx, p, definition, canonical, "", "", NewID()), nil
 	}
 	operation := Operation{ID: NewID(), PrincipalID: p.ID, Adapter: p.Adapter, SessionID: sessionID, Capability: name, Permission: definition.Permission, Version: definition.Version, Arguments: canonical, Status: "executing", ExpiresAtMS: time.Now().Add(7 * 24 * time.Hour).UnixMilli()}
+	e.live.Store(operation.ID, struct{}{})
+	defer e.live.Delete(operation.ID)
 	revision, err := e.Store.Save(ctx, "operation", operation.ID, 0, time.Now().Add(7*24*time.Hour), operation)
 	if err != nil {
 		return Result{}, err
@@ -129,6 +134,17 @@ func (e *Executor) Get(ctx context.Context, p Principal, id string) (Operation, 
 	operation.revision = revision
 	if operation.Status == "pending" && operation.ExpiresAtMS <= time.Now().UnixMilli() {
 		operation.Status = "expired"
+	}
+	if operation.Status == "executing" {
+		if _, isLive := e.live.Load(id); isLive {
+			return operation, nil
+		}
+		// The executor leaves live only after recording the outcome, so a record that still says
+		// executing on a second read was orphaned rather than caught between the two steps.
+		if revision, err = e.Store.Load(ctx, "operation", id, &operation); err != nil {
+			return operation, errors.New("operation_not_found")
+		}
+		operation.revision = revision
 	}
 	// An executing record is never replayed after a crash: its remote commit may have succeeded.
 	if operation.Status == "executing" {
@@ -198,6 +214,8 @@ func (e *Executor) Decide(ctx context.Context, admin Principal, id string, appro
 			return operation, err
 		}
 	}
+	e.live.Store(id, struct{}{})
+	defer e.live.Delete(id)
 	operation.Status = "executing"
 	operation.revision, err = e.Store.Save(ctx, "operation", id, operation.revision, time.Now().Add(7*24*time.Hour), operation)
 	if err != nil {

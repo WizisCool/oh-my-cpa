@@ -270,7 +270,9 @@ How `check:ui` chooses scenarios (`scripts/acceptance/check-ui-plan.mjs`):
 - A translation catalog edit that only adds entries selects nothing; changing or
   removing existing copy selects every scenario.
 - A probe module or registry edit selects the scenarios that use it
-  (`scripts/acceptance/probe-impact.mjs`); an edit to the probe runner selects all.
+  (`scripts/acceptance/probe-impact.mjs`); an edit to the probe runner, or to any module the runner imports, selects all. Every
+  path under `scripts/acceptance/` is attributed this way rather than from a list of
+  names, so a new helper cannot select nothing.
 
 Complete local catalogs in `check:ui` and unsharded `verify:probes` reuse the existing three-way
 partition as sequential batches through `scripts/acceptance/probe-batches.mjs`. Every selected

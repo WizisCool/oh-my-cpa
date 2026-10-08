@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 const MAX_MODEL_PULL_REDIRECTS = 10
@@ -125,7 +128,14 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 				"code":  "model_pull_redirect_refused",
 			})
 		default:
-			writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %v", err))
+			// The upstream's own words are useful to the operator, but a relay that
+			// echoes the request back would hand the stored key to a caller who
+			// supplied only a provider id.
+			secrets := []string{apiKey}
+			for _, value := range headers {
+				secrets = append(secrets, value)
+			}
+			writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %s", security.RedactText(err.Error(), secrets...)))
 		}
 		return
 	}
@@ -227,80 +237,80 @@ func setModelPullAuthHeaders(req *http.Request, apiKey, protocol string) {
 	}
 }
 
+// MODEL_DIRECTORY_LIMIT_BYTES bounds a pulled model directory; a larger body is refused, not truncated.
+const MODEL_DIRECTORY_LIMIT_BYTES = 2 * 1024 * 1024
+
+var errModelDirectoryUnrecognized = errors.New("upstream did not return a model list")
+
+// parseModelsResponse reads the three directory shapes upstreams publish: OpenAI's
+// `{"data":[...]}`, `{"models":[...]}` and a bare array. An empty list in one of those
+// shapes is a real answer; anything else - an error document, `null`, a truncated or
+// oversized body - is refused, because reporting it as "no models" would let a failed
+// pull look like an upstream that offers nothing.
 func parseModelsResponse(r io.Reader) ([]string, error) {
-	data, err := io.ReadAll(io.LimitReader(r, 2*1024*1024))
+	data, err := io.ReadAll(io.LimitReader(r, MODEL_DIRECTORY_LIMIT_BYTES+1))
 	if err != nil {
 		return nil, err
 	}
-
-	var oaiResp struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
+	if len(data) > MODEL_DIRECTORY_LIMIT_BYTES {
+		return nil, fmt.Errorf("%w: response exceeds %d bytes", errModelDirectoryUnrecognized, MODEL_DIRECTORY_LIMIT_BYTES)
 	}
-	if err := json.Unmarshal(data, &oaiResp); err == nil && len(oaiResp.Data) > 0 {
-		models := make([]string, 0, len(oaiResp.Data))
-		seen := make(map[string]bool)
-		for _, m := range oaiResp.Data {
-			id := strings.TrimSpace(m.ID)
-			if id != "" && !seen[id] {
-				seen[id] = true
-				models = append(models, id)
-			}
-		}
-		return models, nil
+	entries, err := modelDirectoryEntries(data)
+	if err != nil {
+		return nil, err
 	}
-
-	var objResp struct {
-		Models []json.RawMessage `json:"models"`
-	}
-	if err := json.Unmarshal(data, &objResp); err == nil && len(objResp.Models) > 0 {
-		models := make([]string, 0, len(objResp.Models))
-		seen := make(map[string]bool)
-		for _, raw := range objResp.Models {
-			var str string
-			if json.Unmarshal(raw, &str) == nil && str != "" {
-				if !seen[str] {
-					seen[str] = true
-					models = append(models, str)
-				}
-				continue
-			}
+	models := make([]string, 0, len(entries))
+	seen := make(map[string]bool, len(entries))
+	for _, raw := range entries {
+		var name string
+		if json.Unmarshal(raw, &name) != nil {
 			var item struct {
 				ID   string `json:"id"`
 				Name string `json:"name"`
 			}
-			if json.Unmarshal(raw, &item) == nil {
-				val := firstNonEmpty(item.ID, item.Name)
-				if val != "" && !seen[val] {
-					seen[val] = true
-					models = append(models, val)
-				}
+			if json.Unmarshal(raw, &item) != nil {
+				continue
+			}
+			name = firstNonEmpty(item.ID, item.Name)
+		}
+		name = strings.TrimSpace(name)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			models = append(models, name)
+		}
+	}
+	return models, nil
+}
+
+func modelDirectoryEntries(data []byte) ([]json.RawMessage, error) {
+	var entries []json.RawMessage
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && trimmed[0] == '[' {
+		if err := json.Unmarshal(trimmed, &entries); err != nil {
+			return nil, errModelDirectoryUnrecognized
+		}
+		return entries, nil
+	}
+	var document struct {
+		Data   json.RawMessage `json:"data"`
+		Models json.RawMessage `json:"models"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, errModelDirectoryUnrecognized
+	}
+	for _, list := range []json.RawMessage{document.Data, document.Models} {
+		if trimmed := bytes.TrimSpace(list); len(trimmed) > 0 && trimmed[0] == '[' {
+			if err := json.Unmarshal(trimmed, &entries); err != nil {
+				return nil, errModelDirectoryUnrecognized
+			}
+			if len(entries) > 0 {
+				return entries, nil
 			}
 		}
-		if len(models) > 0 {
-			return models, nil
-		}
 	}
-
-	var arrResp []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+	if entries == nil {
+		return nil, errModelDirectoryUnrecognized
 	}
-	if err := json.Unmarshal(data, &arrResp); err == nil && len(arrResp) > 0 {
-		models := make([]string, 0, len(arrResp))
-		seen := make(map[string]bool)
-		for _, item := range arrResp {
-			val := firstNonEmpty(item.ID, item.Name)
-			if val != "" && !seen[val] {
-				seen[val] = true
-				models = append(models, val)
-			}
-		}
-		return models, nil
-	}
-
-	return []string{}, nil
+	return entries, nil
 }
 
 // isModelPullURLAllowed keeps the operator's upstream key off public plaintext links

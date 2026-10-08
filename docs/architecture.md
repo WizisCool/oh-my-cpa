@@ -477,7 +477,9 @@ Properties to preserve when changing this code:
 
 Oh My CPA requires CPA v8.0.0 or later (ADR 0034, superseding ADR 0028; the mapping and
 measurements are in `docs/cpa-v8-compat.md`). The management client addresses
-`/v8/management` for every operation. Whether a gateway serves it is observed, never
+`/v8/management` for every operation and never follows a redirect: the management key
+rides on every request, so a redirect is returned to the caller as the response it is
+rather than replayed to wherever the gateway points. Whether a gateway serves it is observed, never
 inferred from a version string: `Client.SupportsManagementV8` reads
 `/v8/management/config/config-version` and requires the value `8`; when that route is
 missing, `/v0/management/debug` tells an older gateway (`unsupported`) from one whose
@@ -1217,7 +1219,8 @@ Five properties are deliberate:
   waited for the next flush tick; and a single pop would report a clean sync with
   an older backlog still queued.
 - The decode barrier is scoped by a watermark (`MAX(usage_inboxes.id)` taken after
-  the pass). Waiting for `pending == 0` instead would only finish during a lull,
+  the pass), and its discard count by the same value read before the pass, so the
+  result describes this sync's own captures. Waiting for `pending == 0` instead would only finish during a lull,
   because records keep arriving while the refresh runs.
 - `synced` requires that nothing captured at or below the watermark was parked as
   undecodable. A poison payload leaves no event, so a barrier that ignored
@@ -1225,6 +1228,16 @@ Five properties are deliberate:
 
 The endpoint answers with `synced` plus the reason it could not sync, and an
 already-running sync gets a 409 rather than queueing a second identical drain.
+`auth_rejected` describes this sync's own failure, or the collector's current one
+when the collector is not running; an authentication failure the collector has since
+recovered from is history, not a verdict.
+
+Collector status separates the current state from that history: `failing` is set by
+a failed capture and cleared by the next successful one, while `last_error` keeps
+the most recent message. `healthy` requires a working mode, a running collector and
+`failing` unset. A subscription that closes hands the payloads it already received
+to the inbox before reconnecting, and so does a collector that is shutting down;
+CPA's queue is destructive, so a batch dropped at either point is gone.
 
 ### Who resolves the request list's window
 
@@ -2005,7 +2018,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Loop | Owner | Failure behaviour |
 | --- | --- | --- |
 | HTTP server | `app.Run` | Fatal; shutdown drains 10s |
-| Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers |
+| Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers. `Run` returns only after every stage has stopped, and `app.Run` waits for it before the database closes, whichever loop ended first |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
 | Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |

@@ -14,6 +14,10 @@ export const INPUTS = [
   'internal/demo/fixture.go',
   'internal/demo/seed.go',
   'internal/demo/quota.go',
+  // The audit trail, capture status and release feed are served from these directly.
+  'internal/demo/audit.go',
+  'internal/demo/ingest.go',
+  'internal/demo/release.go',
   'internal/api/management_quota.go',
   'internal/api/management_oauth_excluded_models.go',
   'internal/api/management_oauth_model_aliases.go',

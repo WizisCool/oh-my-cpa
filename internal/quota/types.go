@@ -95,6 +95,9 @@ type CodexResetCreditsInfo struct {
 	ApplicableAvailableCount int                `json:"applicable_available_count"`
 	Credits                  []CodexResetCredit `json:"credits,omitempty"`
 	Error                    string             `json:"error,omitempty"`
+	// hasAvailableCount separates a published zero from a payload that states no
+	// count, which the wire value alone cannot do.
+	hasAvailableCount bool
 }
 
 // ActiveCooldown represents CPA-correlated cooldown or rate-limit event for an auth index.

@@ -115,6 +115,9 @@ Rules that are not optional:
   automatically.
 - A write whose result fails output validation is also `uncertain`, because the change
   may already have been applied.
+- An operation this process is executing right now reads as `executing`. Only an
+  `executing` record nothing is running - one a restart left behind - reads as
+  `uncertain`.
 
 Pricing is the worked example of a revision-bound write. `pricing_set` decides how
 one model is priced (`auto`, `linked` to an OpenRouter id, or `custom` rates with

@@ -180,7 +180,11 @@ type Status struct {
 	ControlFrames int64  `json:"control_frames"`
 	CoverageGaps  int64  `json:"coverage_gaps"`
 	LastError     string `json:"last_error,omitempty"`
-	// AuthRejected marks that the last failure was CPA refusing the key, which
+	// Failing is true from a failed collection attempt until a pass next
+	// succeeds. LastError is history and stays after recovery, so it cannot
+	// answer "is collection working now"; this does.
+	Failing bool `json:"failing,omitempty"`
+	// AuthRejected marks that the failure in force is CPA refusing the key, which
 	// the UI should surface as an actionable configuration error.
 	AuthRejected  bool       `json:"auth_rejected,omitempty"`
 	LastCaptureAt *time.Time `json:"last_capture_at,omitempty"`
@@ -272,6 +276,9 @@ func (r *CaptureRequest) hasOutcome() bool {
 // maxSubscribeFailures bounds repeated subscription attempts before auto mode
 // degrades to batch pulling.
 const maxSubscribeFailures = 3
+
+// finalFlushTimeout bounds the write of a batch still buffered when a subscription ends.
+const finalFlushTimeout = 3 * time.Second
 
 // NewRunner builds a collector. upstream and sink are required; errorSink may be
 // nil when CPA error collection is not wanted.
@@ -380,6 +387,9 @@ func (r *Runner) normalizeCapture(request *CaptureRequest) *CaptureRequest {
 // and the pipeline's decode barrier is the only place that knows whether they
 // did.
 func (r *Runner) completeCapture(request *CaptureRequest, outcome CaptureOutcome) {
+	if outcome.Err == nil {
+		r.markWorking()
+	}
 	if request == nil {
 		return
 	}
@@ -439,7 +449,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		case mode == "":
 			// Nothing answered the probe: CPA is likely down.
-			r.recordError(err)
+			r.recordErrorAt(err, false)
 			if !sleepContext(ctx, allFailed) {
 				return nil
 			}
@@ -543,6 +553,7 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 	}
 
 	r.setMode(ModeSubscribe, "")
+	r.markWorking()
 	r.logger.Info("usage ingest subscribed", "instance", r.instanceID)
 
 	backfill := time.NewTicker(r.config.BackfillInterval)
@@ -551,6 +562,19 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 	defer flush.Stop()
 
 	batch := make([]string, 0, r.config.BatchSize)
+	// A subscription delivers each record once and suppresses CPA's enqueue, so a
+	// record already received exists nowhere else. Whatever ends this loop - a
+	// closed stream, a failed pass, cancellation - what is still buffered is
+	// written first, under its own deadline because ctx may be the reason for
+	// leaving; flush records a coverage gap if even that fails.
+	defer func() {
+		if len(batch) == 0 {
+			return
+		}
+		finalCtx, cancel := context.WithTimeout(context.Background(), finalFlushTimeout)
+		defer cancel()
+		_ = r.flush(finalCtx, ModeSubscribe, &batch)
+	}()
 	captureErrors := func() error {
 		if errorStream == nil {
 			return nil
@@ -575,10 +599,7 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_ = r.flush(shutdownCtx, ModeSubscribe, &batch)
 			_ = captureErrors()
-			cancel()
 			return nil
 		case payload, ok := <-stream.Messages():
 			if !ok {
@@ -649,6 +670,10 @@ func (r *Runner) syncSubscribe(collect, work context.Context, messages <-chan st
 			if !ok {
 				outcome.Drained = false
 				outcome.Err = errors.New("usage subscription closed by CPA")
+				// What arrived before the close is still this pass's to persist.
+				if err := r.flush(collect, ModeSubscribe, batch); err != nil {
+					outcome.Err = err
+				}
 				return r.finishCapture(outcome, before)
 			}
 			if err := r.capture(collect, ModeSubscribe, payload, batch); err != nil {
@@ -725,6 +750,7 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 		if errFlush := r.flush(ctx, mode, &batch); errFlush != nil {
 			return errFlush
 		}
+		r.markWorking()
 		delay := idle.nextDelay(len(items), r.config.BatchSize)
 		if delay <= 0 {
 			continue
@@ -885,10 +911,23 @@ func (r *Runner) setRunning(running bool) {
 	r.status.Running = running
 }
 
+// recordError notes a fault the collector carries on through - a malformed error
+// notification, a failed backfill beside a live subscription - without calling
+// collection itself failed.
 func (r *Runner) recordError(err error) {
-	r.recordErrorAt(err, false)
+	if err == nil {
+		return
+	}
+	now := time.Now().UTC()
+	r.mu.Lock()
+	r.status.LastError = err.Error()
+	r.status.LastErrorAt = &now
+	r.mu.Unlock()
 }
 
+// recordErrorAt records a failed collection attempt. The classification is the
+// newest failure's own: an outage that follows a refused key is an outage, and
+// reporting it as a bad key would send the operator to fix the wrong thing.
 func (r *Runner) recordErrorAt(err error, severe bool) {
 	if err == nil {
 		return
@@ -897,9 +936,16 @@ func (r *Runner) recordErrorAt(err error, severe bool) {
 	r.mu.Lock()
 	r.status.LastError = err.Error()
 	r.status.LastErrorAt = &now
-	if severe {
-		r.status.AuthRejected = true
-	}
+	r.status.Failing = true
+	r.status.AuthRejected = severe
+	r.mu.Unlock()
+}
+
+// markWorking records that a pass reached CPA and persisted what it found.
+func (r *Runner) markWorking() {
+	r.mu.Lock()
+	r.status.Failing = false
+	r.status.AuthRejected = false
 	r.mu.Unlock()
 }
 

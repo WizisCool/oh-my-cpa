@@ -29,8 +29,8 @@ type PipelineStatus struct {
 	Maintenance MaintenanceStatus             `json:"maintenance"`
 	Stats       repository.UsagePipelineStats `json:"stats"`
 	RecentGaps  []repository.IngestGap        `json:"recent_gaps,omitempty"`
-	// Healthy is false when nothing has been captured and the collector is not
-	// reporting a working mode, so the UI can say so plainly.
+	// Healthy is true only while a selected collector is running and its newest
+	// attempt did not fail, so the UI can say plainly when usage is not arriving.
 	Healthy bool `json:"healthy"`
 }
 
@@ -48,18 +48,27 @@ func NewPipeline(runner *Runner, processor *Processor, maintenance *Maintenance,
 // Runner exposes the collector for wiring and tests.
 func (p *Pipeline) Runner() *Runner { return p.runner }
 
-// Run starts every stage and blocks until the context is cancelled.
+// Run starts every stage and blocks until the context is cancelled or a stage
+// exits, then stops the rest and returns only once all of them have.
+//
+// The join is the point: the caller closes the database and the upstream after
+// Run returns, and a collector still writing its last received batch at that
+// moment would lose records CPA no longer holds.
 func (p *Pipeline) Run(ctx context.Context) error {
+	stageCtx, stop := context.WithCancel(ctx)
+	defer stop()
 	errs := make(chan error, 3)
+	var stages sync.WaitGroup
 	launch := func(fn func(context.Context) error) {
-		// A method value on a nil receiver is not a nil func, so the stage has to
-		// be checked before its method is taken: integrations that run without
-		// rollup maintenance must not panic at start-up.
-		if fn == nil {
-			return
-		}
-		go func() { errs <- fn(ctx) }()
+		stages.Add(1)
+		go func() {
+			defer stages.Done()
+			errs <- fn(stageCtx)
+		}()
 	}
+	// A method value on a nil receiver is not a nil func, so each stage is checked
+	// before its method is taken: integrations that run without rollup
+	// maintenance must not panic at start-up.
 	if p.runner != nil {
 		launch(p.runner.Run)
 	}
@@ -70,14 +79,16 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		launch(p.maintenance.Run)
 	}
 
+	var err error
 	select {
 	case <-ctx.Done():
-		return nil
-	case err := <-errs:
+	case err = <-errs:
 		// Any stage exiting is abnormal while the parent lives: surface it so
 		// the caller can shut the app down instead of silently losing data.
-		return err
 	}
+	stop()
+	stages.Wait()
+	return err
 }
 
 // Status aggregates every stage plus the stored-data summary.
@@ -101,7 +112,8 @@ func (p *Pipeline) Status(ctx context.Context) (PipelineStatus, error) {
 		gaps, _ := p.store.ListIngestGaps(ctx, "default", 10)
 		status.RecentGaps = gaps
 	}
-	status.Healthy = status.Collector.Mode != "" && status.Collector.Mode != ModeOff
+	status.Healthy = status.Collector.Mode != "" && status.Collector.Mode != ModeOff &&
+		status.Collector.Running && !status.Collector.Failing
 	return status, nil
 }
 
@@ -173,11 +185,20 @@ func (p *Pipeline) RefreshNow(ctx context.Context) (RefreshNowResult, error) {
 	}
 	defer p.releaseRefresh()
 
+	// Rows above this mark are the ones this pass captures.
+	floor, err := p.store.LatestUsageInboxID(ctx)
+	if err != nil {
+		result.Error = security.RedactText(err.Error())
+		return result, err
+	}
 	outcome, err := p.runner.CaptureNow(ctx)
 	result.Mode = string(outcome.Mode)
 	result.Captured = outcome.Captured
-	result.AuthRejected = p.runner.Status().AuthRejected
 	if err != nil {
+		// The pass's own error says why it failed. Only a request the collector
+		// never served - it is parked - falls back to the reason it is parked.
+		result.AuthRejected = isAuthRejection(err) ||
+			(errors.Is(err, ErrCollectorNotRunning) && p.runner.Status().AuthRejected)
 		result.Error = security.RedactText(err.Error())
 		return result, err
 	}
@@ -202,12 +223,20 @@ func (p *Pipeline) RefreshNow(ctx context.Context) (RefreshNowResult, error) {
 		result.Error = security.RedactText(err.Error())
 		return result, err
 	}
+	// The drain only sees what it discards itself. The background decoder can
+	// give up on one of this pass's records before the drain starts, so the
+	// pass's own rows are counted instead of a before/after difference.
+	result.Failed, err = p.store.CountUndecodableUsageInboxBetween(ctx, floor, watermark)
+	if err != nil {
+		result.Error = security.RedactText(err.Error())
+		return result, err
+	}
 	switch {
 	case drain.Pending > 0:
 		result.DecodeIncomplete = true
 		result.Error = "captured records are still being decoded"
 		return result, nil
-	case drain.Failed > 0:
+	case result.Failed > 0:
 		// Nothing will ever be stored for these, so claiming a clean sync would
 		// promise records the request list can never show.
 		result.Error = "some captured records could not be decoded"

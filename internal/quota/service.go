@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // Official Upstream URLs
@@ -365,7 +366,10 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 	}
 
 	if fetchErr != nil {
-		result.Error = fetchErr.Error()
+		// The text is a provider's own, relayed through CPA, which substitutes the
+		// credential into the request: an upstream that echoes its input would
+		// otherwise put that token in a stored and displayed reading.
+		result.Error = security.RedactText(fetchErr.Error())
 		if prior != nil && len(prior.Windows) > 0 {
 			result.Status = "stale"
 			result.ObservedAtMS = prior.ObservedAtMS
@@ -516,7 +520,9 @@ func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.Au
 		Credits:                  usageCredits.Credits,
 		Error:                    usageCredits.Error,
 	}
-	if dedicated.AvailableCount > 0 {
+	// The dedicated endpoint is the authority on the count, so a zero it states
+	// replaces a positive figure left over in the usage payload.
+	if dedicated.hasAvailableCount {
 		merged.AvailableCount = dedicated.AvailableCount
 	} else if merged.AvailableCount == 0 && len(dedicated.Credits) > 0 {
 		merged.AvailableCount = len(dedicated.Credits)

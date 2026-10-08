@@ -60,9 +60,15 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 	return &Client{
 		baseURL:    baseURL,
 		management: managementKey,
-		httpClient: &http.Client{Timeout: timeout, Transport: transport},
+		// Every request carries the stored management key, and net/http forwards
+		// Authorization to a redirect on the same hostname, whatever its port or
+		// scheme. CPA's management API never redirects, so a 3xx is returned as the
+		// answer instead of followed: the key reaches the configured origin only.
+		httpClient: &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: refuseRedirect},
 	}, nil
 }
+
+func refuseRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func (c *Client) BaseURL() string { return c.baseURL }
 

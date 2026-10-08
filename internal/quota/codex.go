@@ -644,9 +644,11 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 // whose reset_type (when projected) targets codex_rate_limits and whose status
 // is "available", so consumed/expired credits never inflate the reset count.
 func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary) *CodexResetCreditsInfo {
-	availVal, _ := toFloat(resetCreditsRaw.AvailableCount)
+	availVal, hasAvailableCount := toFloat(resetCreditsRaw.AvailableCount)
 	if availVal == 0 {
-		availVal, _ = toFloat(resetCreditsRaw.AvailableCountAlt)
+		var hasAlternate bool
+		availVal, hasAlternate = toFloat(resetCreditsRaw.AvailableCountAlt)
+		hasAvailableCount = hasAvailableCount || hasAlternate
 	}
 
 	appVal, _ := toFloat(resetCreditsRaw.ApplicableAvailableCount)
@@ -679,6 +681,7 @@ func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary)
 		AvailableCount:           int(availVal),
 		ApplicableAvailableCount: int(appVal),
 		Credits:                  credits,
+		hasAvailableCount:        hasAvailableCount,
 	}
 }
 

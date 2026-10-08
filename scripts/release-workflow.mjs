@@ -13,6 +13,11 @@ export function validateReleaseWorkflow(workflow) {
       if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
     }
   }
+  for (const job of Object.values(workflow.jobs)) {
+    for (const step of job.steps.filter(step => step.run?.includes('> "$RELEASE_INDEX"'))) {
+      assert.match(step.run, /^(?:\s*#.*\n)*\s*set -o pipefail\n/, 'A failed release inventory download must fail the step, not read as an empty inventory');
+    }
+  }
   validateActionSecurity(workflow);
   const identity = workflow.jobs.identity;
   assert.ok(!identity.if && !identity['continue-on-error']);

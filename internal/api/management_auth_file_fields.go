@@ -17,10 +17,27 @@ import (
 // errAuthFileFieldsNotVerified reports a field write whose persisted state could not be confirmed.
 var errAuthFileFieldsNotVerified = errors.New("field update could not be verified")
 
+// errAuthFileIdentityStale reports a selector whose name no longer belongs to the stated auth index.
+var errAuthFileIdentityStale = errors.New("auth file changed; reload and try again")
+
 // applyManagementAuthFileFields patches one auth file's safe metadata and verifies the
 // runtime projection before reporting success. CPA answers a PATCH as soon as it is
 // accepted, so a dropped priority, weight or note would otherwise be reported as saved.
+//
+// CPA addresses the PATCH by name alone. A caller that also states an auth index is
+// naming one particular credential, so that identity is checked before the write: a
+// name reused by a replacement would otherwise be patched first and reported as a
+// mismatch afterwards.
 func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *management.Client, name, authIndex string, fields map[string]any) (map[string]any, error) {
+	if strings.TrimSpace(authIndex) != "" {
+		current, err := client.AuthFiles(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := findManagementAuthFile(current.Files, name, authIndex); !ok {
+			return nil, errAuthFileIdentityStale
+		}
+	}
 	if _, err := client.PatchAuthFileFields(ctx, name, fields); err != nil {
 		return nil, err
 	}
@@ -115,6 +132,10 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 	payload, err := h.applyManagementAuthFileFields(request.Context(), client, validatedName, authIndex, fields)
 	if err != nil {
 		_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": err.Error()})
+		if errors.Is(err, errAuthFileIdentityStale) {
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
 		if errors.Is(err, errAuthFileFieldsNotVerified) {
 			writeError(writer, http.StatusBadGateway, err.Error())
 			return

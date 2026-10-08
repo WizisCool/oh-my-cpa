@@ -29,6 +29,9 @@ const REGISTRY = 'scripts/acceptance/scenarios.mjs';
 export const PROBE_RUNNERS = [
   'scripts/acceptance/probe.mjs',
   'scripts/acceptance/probe-batches.mjs',
+  // Imported only by the catalog entry script, which is outside the acceptance
+  // import graph, so the graph cannot attribute it to the runner.
+  'scripts/acceptance/probe-options.mjs',
   'scripts/browser-probes.mjs',
   'scripts/check-ui.mjs',
 ];
