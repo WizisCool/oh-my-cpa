@@ -337,11 +337,13 @@ func kimiRatioKind(key string) string {
 		}
 	}
 
-	// A key that names its period in words. The concrete period wins over the vague "total" qualifier
-	// that accompanies a monthly pool, so a daily total stays daily, and a week is matched before a
-	// day so a weekly spelling is not read as a daily one.
+	// A key that names its period in words. A unit alone names no period, so "hour" is read as this
+	// family's hourly window only when the key states five — and reading it otherwise would also take
+	// the five-hour slot from a pool that really is five hours. The concrete period wins over the
+	// vague "total" qualifier a monthly pool carries, so a daily total stays daily, and a week is
+	// matched before a day so a weekly spelling is not taken for a daily one.
 	switch {
-	case strings.Contains(normalized, "hour"):
+	case strings.Contains(normalized, "fivehour"):
 		return "five_hour"
 	case strings.Contains(normalized, "week"):
 		return "weekly"

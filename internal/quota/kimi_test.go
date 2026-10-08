@@ -109,6 +109,35 @@ func TestParseKimiUsageReadsQuantitiesInRatioPoolKeys(t *testing.T) {
 	}
 }
 
+// A unit on its own is not a period. A key saying "hour" does not state this family's five-hour
+// window, so reading it as one would both invent a period and take the five-hour slot from a pool
+// that really is five hours; the spellings that do state five hours keep their kind.
+func TestParseKimiUsageLeavesABareHourKeyUnclassified(t *testing.T) {
+	cases := []struct {
+		key      string
+		wantKind string
+	}{
+		{key: "limit_hour", wantKind: ""},
+		{key: "limit_hourly", wantKind: ""},
+		{key: "limit_fivehour", wantKind: "five_hour"},
+		{key: "limit_5h", wantKind: "five_hour"},
+		{key: "limit_5hour", wantKind: "five_hour"},
+	}
+	for _, testCase := range cases {
+		raw := []byte(fmt.Sprintf(`{"usages": {%q: {"used_ratio": 0.5}}}`, testCase.key))
+		windows, err := ParseKimiUsage(raw, time.Now().UnixMilli())
+		if err != nil {
+			t.Fatalf("%s: ParseKimiUsage failed: %v", testCase.key, err)
+		}
+		if len(windows) != 1 {
+			t.Fatalf("%s: len(windows) = %d, want 1", testCase.key, len(windows))
+		}
+		if windows[0].Kind != testCase.wantKind {
+			t.Errorf("%s: kind = %q, want %q", testCase.key, windows[0].Kind, testCase.wantKind)
+		}
+	}
+}
+
 // A key that names no known period keeps its own name rather than being filed under a period it
 // does not describe.
 func TestParseKimiUsageKeepsAnUnknownPoolKey(t *testing.T) {
