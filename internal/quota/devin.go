@@ -3,6 +3,7 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func devinUnixMS(value any) *int64 {
 	default:
 		return nil
 	}
-	if seconds <= 0 {
+	if seconds <= 0 || seconds > math.MaxInt64/1000 {
 		return nil
 	}
 	ms := seconds * 1000

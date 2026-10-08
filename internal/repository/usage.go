@@ -178,6 +178,24 @@ func (r *Repository) CountUndecodableUsageInboxBefore(ctx context.Context, water
 	return r.countUsageInboxBefore(ctx, InboxDiscarded, watermark)
 }
 
+// CountUndecodableUsageInboxBetween counts undecodable inbox rows above floor and
+// at or below watermark: the rows one capture pass produced, whoever discarded them.
+func (r *Repository) CountUndecodableUsageInboxBetween(ctx context.Context, floor, watermark int64) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	if watermark <= floor {
+		return 0, nil
+	}
+	var count int64
+	if err := r.SQL().QueryRowContext(ctx, `
+		SELECT COUNT(1) FROM usage_inboxes
+		WHERE status = ? AND id > ? AND id <= ?`, InboxDiscarded, floor, watermark).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count undecodable usage inbox rows: %w", err)
+	}
+	return count, nil
+}
+
 func (r *Repository) countUsageInboxBefore(ctx context.Context, status string, watermark int64) (int64, error) {
 	if r == nil || r.SQL() == nil {
 		return 0, errors.New("repository is not initialized")

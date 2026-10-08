@@ -389,17 +389,12 @@ const DOCUMENT_SHELL = 'web/index.html';
  * runner itself at "every scenario".
  */
 const PROBE_FRAMEWORK = [
-  'scripts/acceptance/probe.mjs',
-  'scripts/acceptance/scenarios.mjs',
-  // The scenario implementations. They are the claims themselves rather than the
-  // runner, but a change to one of them is exactly as unplaceable as a change to
-  // the registry that orders them: the planner cannot tell from a filename which
-  // scenario a helper two files away is shared with. Enumerating the modules would
-  // also mean a new module silently selecting nothing until someone remembered to
-  // list it, which is the failure this whole function exists to prevent.
-  'scripts/acceptance/probes/',
-  'scripts/acceptance/check-ui-plan.mjs',
-  'scripts/acceptance/ui-impact.mjs',
+  // The whole directory rather than a list of its modules: the runner's helpers
+  // (browser guard, lifecycle, batching, timings) are imported by every scenario,
+  // and a list would let one that nobody remembered to name select nothing. Which
+  // of these a scenario really runs is `probe-impact.mjs`'s question, answered from
+  // the import graph; without that context every one of them widens the plan.
+  'scripts/acceptance/',
   'scripts/browser-probes.mjs',
   'scripts/check-ui.mjs',
 ];

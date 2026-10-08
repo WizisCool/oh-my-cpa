@@ -58,6 +58,12 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   const persisted = structuredClone(workflow);
   persisted.jobs.release.steps[0].with['persist-credentials'] = true;
   assert.throws(() => validateReleaseWorkflow(persisted));
+  for (const jobName of ['identity', 'release', 'promote']) {
+    const unpiped = structuredClone(workflow);
+    const inventory = unpiped.jobs[jobName].steps.find(step => step.run?.includes('> "$RELEASE_INDEX"'));
+    inventory.run = inventory.run.replace('set -o pipefail\n', '');
+    assert.throws(() => validateReleaseWorkflow(unpiped), `${jobName} reads the release inventory through a pipe`);
+  }
 });
 
 test('native release publication rejects missing build, smoke, transfer and integrity gates', () => {

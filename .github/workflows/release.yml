@@ -43,6 +43,9 @@ jobs:
           RELEASE_INDEX: /tmp/omc-releases.json
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The default shell ignores a failed producer in a pipe, and an inventory that failed
+          # to download reads as "no releases", which would let an old tag claim latest.
+          set -o pipefail
           test "$(git describe --tags --exact-match)" = "$RELEASE_TAG"
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           node scripts/release-plan.mjs
@@ -452,6 +455,9 @@ jobs:
           RELEASE_INDEX: /tmp/omc-releases.json
           RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
         run: |
+          # The default shell ignores a failed producer in a pipe, and an inventory that failed
+          # to download reads as "no releases", which would let an old tag claim latest.
+          set -o pipefail
           node scripts/native-release.mjs --verify
           # Recompute at publication: retries can run after a newer release completed.
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
@@ -498,6 +504,9 @@ jobs:
           RELEASE_IMAGE: ${{ needs.verify.outputs.image }}
           RELEASE_INDEX: /tmp/omc-releases.json
         run: |
+          # The default shell ignores a failed producer in a pipe, and an inventory that failed
+          # to download reads as "no releases", which would let an old tag claim latest.
+          set -o pipefail
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           node scripts/release-plan.mjs
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069

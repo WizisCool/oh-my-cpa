@@ -369,6 +369,11 @@ func (a *App) Run(ctx context.Context) error {
 		serverErrors <- a.httpServer.ListenAndServe()
 	}()
 
+	// Background loops run under a context this function owns, so every way out -
+	// a signal, a failed pipeline, a failed listener - stops them the same way.
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+
 	pipelineErrors := make(chan error, 1)
 	if a.pipeline != nil {
 		go func() {
@@ -378,7 +383,7 @@ func (a *App) Run(ctx context.Context) error {
 				"batch_size", a.cfg.Usage.BatchSize,
 				"retention_days", a.cfg.Usage.RetentionDays,
 				"inbox_retention_days", a.cfg.Usage.InboxRetentionDays)
-			pipelineErrors <- a.pipeline.Run(ctx)
+			pipelineErrors <- a.pipeline.Run(runCtx)
 		}()
 	}
 
@@ -388,7 +393,7 @@ func (a *App) Run(ctx context.Context) error {
 	// reach openrouter.ai, which a public demonstration must not do.
 	if !a.cfg.IsDemoMode {
 		go func() {
-			if err := a.pricing.Run(ctx); err != nil {
+			if err := a.pricing.Run(runCtx); err != nil {
 				a.logger.Warn("pricing sync loop stopped", "error", err)
 			}
 		}()
@@ -406,34 +411,47 @@ func (a *App) Run(ctx context.Context) error {
 	if a.release != nil && a.cfg.Release.Enabled && !a.cfg.IsDemoMode {
 		go func() {
 			a.logger.Info("release check sweep started", "interval", a.cfg.Release.Interval.String())
-			if err := a.release.Run(ctx, a.cfg.Release.Interval); err != nil {
+			if err := a.release.Run(runCtx, a.cfg.Release.Interval); err != nil {
 				a.logger.Warn("release check sweep stopped", "error", err)
 			}
 		}()
 	}
 
+	var runErr error
+	hasPipelineReturned := a.pipeline == nil
 	select {
 	case err := <-pipelineErrors:
+		hasPipelineReturned = true
 		// Losing the capture loop means the dashboard stops gaining history;
 		// treat it as fatal rather than serving silently stale numbers.
 		if err != nil && !errors.Is(err, context.Canceled) {
-			return fmt.Errorf("usage pipeline stopped: %w", err)
+			runErr = fmt.Errorf("usage pipeline stopped: %w", err)
 		}
-		return nil
 	case <-ctx.Done():
-		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		a.handler.CloseBrowserRuns()
-		if err := a.httpServer.Shutdown(shutdownContext); err != nil {
-			return fmt.Errorf("shutdown HTTP server: %w", err)
-		}
-		return nil
 	case err := <-serverErrors:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+		if !errors.Is(err, http.ErrServerClosed) {
+			runErr = err
 		}
-		return err
 	}
+
+	// The caller closes the database once this returns, so the listener is shut
+	// and the pipeline joined first: a request or a final ingest flush must not
+	// find the store gone.
+	stop()
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	a.handler.CloseBrowserRuns()
+	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
+		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
+	}
+	if !hasPipelineReturned {
+		select {
+		case <-pipelineErrors:
+		case <-shutdownContext.Done():
+			a.logger.Warn("usage pipeline did not stop before the shutdown deadline")
+		}
+	}
+	return runErr
 }
 
 func (a *App) Close() error {

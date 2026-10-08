@@ -346,12 +346,9 @@ func (db *DB) createMigrationBackup(ctx context.Context, migrationVersion int) e
 	if free < minimum {
 		return fmt.Errorf("insufficient free space for migration backup: %d bytes available, %d required", free, minimum)
 	}
-	if _, err := db.SQL.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
-		return fmt.Errorf("checkpoint database before migration backup: %w", err)
-	}
-	plaintext, err := os.ReadFile(databasePath)
+	plaintext, err := db.snapshotForBackup(ctx, backupDir)
 	if err != nil {
-		return fmt.Errorf("read database for migration backup: %w", err)
+		return err
 	}
 	ciphertext, nonce, err := config.Cipher.Encrypt(plaintext)
 	if err != nil {
@@ -383,6 +380,29 @@ func (db *DB) createMigrationBackup(ctx context.Context, migrationVersion int) e
 		return fmt.Errorf("retain migration backups: %w", err)
 	}
 	return nil
+}
+
+// snapshotForBackup returns the database as one consistent file image.
+//
+// Copying the main file after a checkpoint is not that: a reader holding a WAL
+// snapshot makes the checkpoint report busy and leave committed frames in the
+// log, so the copy is a readable database that is missing recent writes.
+// VACUUM INTO reads through the WAL inside one read transaction instead.
+func (db *DB) snapshotForBackup(ctx context.Context, backupDir string) ([]byte, error) {
+	scratch, err := os.MkdirTemp(backupDir, ".snapshot-")
+	if err != nil {
+		return nil, fmt.Errorf("create migration backup snapshot directory: %w", err)
+	}
+	defer os.RemoveAll(scratch)
+	snapshotPath := filepath.Join(scratch, "snapshot.db")
+	if _, err := db.SQL.ExecContext(ctx, `VACUUM INTO ?`, snapshotPath); err != nil {
+		return nil, fmt.Errorf("snapshot database before migration backup: %w", err)
+	}
+	plaintext, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read database snapshot for migration backup: %w", err)
+	}
+	return plaintext, nil
 }
 
 // BackupArtifact describes a completed encrypted backup.

@@ -484,7 +484,7 @@ func (r *Repository) CorrelatedErrorEvents(ctx context.Context, authIndex string
 		var retryable, disabled, unavailable, exceeded int
 		if errScan := rows.Scan(&item.ID, &item.InstanceID, &item.EventKey, &item.Provider,
 			&item.Model, &item.AuthIndex, &item.StatusCode, &item.Code, &item.Body,
-			&retryable, &item.AuthStatus, &disabled, &unavailable, &item.QuotaExceeded,
+			&retryable, &item.AuthStatus, &disabled, &unavailable, &exceeded,
 			&item.QuotaReason, &item.NextRetryAfterMS, &item.NextRecoverAtMS,
 			&item.BackoffLevel, &item.TimestampMS); errScan != nil {
 			return items, fmt.Errorf("scan correlated error: %w", errScan)

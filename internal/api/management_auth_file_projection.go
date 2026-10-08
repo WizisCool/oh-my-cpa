@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 func projectManagementAuthFile(file management.AuthFile) managementAuthFileResponse {
@@ -14,7 +15,7 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		Type:          boundedText(firstNonEmpty(file.Type, file.Provider), managementAuthFileFieldLimit),
 		Provider:      boundedText(file.Provider, managementAuthFileFieldLimit),
 		Status:        boundedText(file.Status, managementAuthFileFieldLimit),
-		StatusMessage: boundedText(file.StatusMessage, managementAuthFileFieldLimit),
+		StatusMessage: boundedText(security.RedactText(file.StatusMessage), managementAuthFileFieldLimit),
 		Disabled:      file.Disabled,
 		Unavailable:   file.Unavailable,
 		RuntimeOnly:   file.RuntimeOnly,
@@ -77,10 +78,12 @@ func projectQuota(raw map[string]any) *managementQuotaObservation {
 				break
 			}
 			key = boundedText(key, 128)
-			if key == "" {
+			// Signals are an open map CPA fills from provider responses, so a
+			// credential-named entry is dropped rather than trusted to be a counter.
+			if key == "" || security.IsSensitiveKey(key) {
 				continue
 			}
-			result.Signals[key] = boundedText(fmt.Sprint(value), managementAuthFileFieldLimit)
+			result.Signals[key] = boundedText(security.RedactText(fmt.Sprint(value)), managementAuthFileFieldLimit)
 		}
 	}
 	if result.ObservedAt == "" && len(result.Signals) == 0 {

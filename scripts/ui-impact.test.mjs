@@ -191,6 +191,24 @@ test('the real registry can be attributed', () => {
   assert.equal(result.ids.size, 0);
 });
 
+test('every module the real runner imports selects the whole catalog', () => {
+  // Read from the runner's own imports rather than a list, so a helper added to it
+  // tomorrow is held to the same rule without anyone naming it here.
+  const acceptanceFiles = execFileSync('git', ['ls-files', 'scripts/acceptance'], { encoding: 'utf8' }).split('\n').filter((file) => file.endsWith('.mjs'));
+  const read = (file) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+  const probeChange = (files) => planProbeChange(files, { readBase: read, readCurrent: read, acceptanceFiles });
+  const helpers = ['scripts/acceptance/probe.mjs', 'scripts/acceptance/probe-batches.mjs', 'scripts/browser-probes.mjs']
+    .flatMap((runner) => [...read(runner).matchAll(/from '\.\/(?:acceptance\/)?([\w-]+\.mjs)'/g)].map(([, name]) => `scripts/acceptance/${name}`))
+    .filter((file) => fs.existsSync(file) && file !== 'scripts/acceptance/scenarios.mjs' && file !== 'scripts/acceptance/probe-shards.mjs');
+  assert.ok(helpers.includes('scripts/acceptance/browser-guard.mjs') && helpers.includes('scripts/acceptance/lifecycle.mjs'), helpers.join(', '));
+  for (const file of new Set(helpers)) {
+    assert.deepEqual(planScenarios([file], ALL, { probeChange }).ids, ALL, `${file} runs inside every scenario`);
+    assert.deepEqual(planScenarios([file], ALL).ids, ALL, `${file} widens without attribution context`);
+  }
+  // The negative case: cross-stack acceptance code is in the same directory and no probe runs it.
+  assert.deepEqual(planScenarios(['scripts/acceptance/providers.mjs'], ALL, { probeChange }).ids, []);
+});
+
 test('the real phone sweep and unrelated probes retain separate attribution', () => {
   const acceptanceFiles = fs.readdirSync('scripts/acceptance/probes').filter((file) => file.endsWith('.mjs'))
     .map((file) => `scripts/acceptance/probes/${file}`);

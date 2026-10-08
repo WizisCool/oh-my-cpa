@@ -232,10 +232,9 @@ func (c *Client) sendPluginHost(ctx context.Context, method, cleanedPath, rawQue
 			request.Header["Authorization"] = append([]string(nil), values...)
 		}
 	}
-	// A redirect is the plugin's answer to the browser, not somewhere this process goes.
-	client := *c.httpClient
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	response, err := client.Do(request)
+	// The client never follows a redirect, so one a plugin issues is passed on as its
+	// answer to the browser rather than somewhere this process goes.
+	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return PluginHostResponse{}, fmt.Errorf("CPA request failed: %w", err)
 	}
