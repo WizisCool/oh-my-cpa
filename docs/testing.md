@@ -586,6 +586,20 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   selection and caret movement in normal and focused editing; record that evidence separately.
 
 
+### Quota reading coverage
+
+`internal/quota` owns what each provider's documents mean. That includes the xAI pair
+(a credits document supplying the window with the ledger's figures kept beside it, either
+document usable alone, a pair with no config failing), Kimi's counted limits and ratio
+pools (the period read from each pool's key, a counted limit winning its own period, an
+unknown key keeping its name, either ratio scale), and a Codex standard window taking its
+identity from the period the payload states. The same package owns the empty reading: a
+successful refresh that published no window is `unpublished`, it survives evaluation and a
+snapshot round trip, and a later window replaces it. `scripts/test-quota-empty-state.ts`
+owns which copy a credential with no window carries, and `scripts/test-oauth-workspace.ts`
+owns its triage bucket. The rendering of those readings stays with the existing
+`oauth-management` probe.
+
 ### Quota capacity coverage
 
 - `internal/quota/capacity_scope_test.go` owns complete family/exact identity matching,

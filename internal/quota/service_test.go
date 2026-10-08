@@ -406,6 +406,11 @@ func TestServiceAllProvidersContract(t *testing.T) {
 	if !calledURLs[XaiBillingMonthlyURL] {
 		t.Errorf("expected xAI billing URL to be called")
 	}
+	// The credits document is the one that carries a subscription's own window, so a read that
+	// skipped it left every SuperGrok credential looking like it had no usage.
+	if !calledURLs[XaiBillingWeeklyURL] {
+		t.Errorf("expected xAI credits URL to be called")
+	}
 	if calledHeaders[XaiBillingMonthlyURL]["Authorization"] != "Bearer $TOKEN$" {
 		t.Errorf("expected CPA credential marker on xai call, got %q", calledHeaders[XaiBillingMonthlyURL]["Authorization"])
 	}
@@ -700,5 +705,60 @@ func TestCodexRenewalKeepsUsageExpiryUnlabeledWhenProbeFails(t *testing.T) {
 	}
 	if res.Plan.ExpiresSource != "" {
 		t.Errorf("ExpiresSource = %q, want it unset: the value is live-read but not from the subscription endpoint", res.Plan.ExpiresSource)
+	}
+}
+
+// A read that succeeded without publishing a window is not a credential nobody has read. The
+// marker travels on the observation so the console can say what happened instead of asking for the
+// read that just came back empty.
+func TestUnpublishedReadingIsNotAnUnreadCredential(t *testing.T) {
+	nowMS := time.Now().UnixMilli()
+
+	marked := &NormalizedQuota{Status: QuotaStatusUnpublished}
+	EvaluateStatusAndRecommendation(marked, nowMS)
+	if marked.Status != QuotaStatusUnpublished || marked.Recommendation.Status != QuotaStatusUnpublished {
+		t.Fatalf("status = %q / %q, want the empty reading preserved", marked.Status, marked.Recommendation.Status)
+	}
+	if marked.Recommendation.Action == "refresh" {
+		t.Errorf("an empty reading must not be re-requested: %+v", marked.Recommendation)
+	}
+
+	// Without the marker nothing distinguishes the credential from an unread one, and that reading
+	// still asks for a refresh.
+	unread := &NormalizedQuota{}
+	EvaluateStatusAndRecommendation(unread, nowMS)
+	if unread.Status != "idle" || unread.Recommendation.Action != "refresh" {
+		t.Fatalf("unread = %q / %+v, want idle asking for a refresh", unread.Status, unread.Recommendation)
+	}
+
+	// The marker is not sticky: a later read that carries a window is graded on its own terms.
+	remaining := 90.0
+	recovered := &NormalizedQuota{Status: QuotaStatusUnpublished, Windows: []QuotaWindow{{RemainingPercent: &remaining}}}
+	EvaluateStatusAndRecommendation(recovered, nowMS)
+	if recovered.Status != "healthy" {
+		t.Fatalf("status = %q, want healthy", recovered.Status)
+	}
+}
+
+func TestRefreshMarksAReadThatPublishedNoWindow(t *testing.T) {
+	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		// A provider that answers, and publishes no window in the document it answers with.
+		return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"config":{}}`)}, nil
+	}}
+
+	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{
+		AuthIndex: "xai-empty",
+		Name:      "xai-empty.json",
+		Type:      "xai",
+		Provider:  "xai",
+	}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != QuotaStatusUnpublished {
+		t.Fatalf("status = %q, want %q", result.Status, QuotaStatusUnpublished)
+	}
+	if len(result.Windows) != 0 || result.Error != "" {
+		t.Fatalf("result = %+v, want an empty reading without an error", result)
 	}
 }

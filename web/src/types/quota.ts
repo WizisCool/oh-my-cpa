@@ -115,7 +115,7 @@ export interface ActiveCooldown {
 }
 
 export interface QuotaRecommendation {
-  status: 'healthy' | 'warning' | 'exhausted' | 'cooldown' | 'needs_reauth' | 'credits_available' | 'idle';
+  status: 'healthy' | 'warning' | 'exhausted' | 'cooldown' | 'needs_reauth' | 'credits_available' | 'idle' | 'unpublished';
   priority: 'critical' | 'high' | 'medium' | 'low' | 'none';
   action: 'refresh' | 'clear_cooldown' | 'redeem_credit' | 'reauth' | 'none';
   reason: string;
@@ -133,7 +133,7 @@ export interface QuotaItem {
   type: string;
   provider: string;
   disabled: boolean;
-  status: 'idle' | 'loading' | 'healthy' | 'warning' | 'exhausted' | 'cooldown' | 'error' | 'stale';
+  status: 'idle' | 'loading' | 'healthy' | 'warning' | 'exhausted' | 'cooldown' | 'error' | 'stale' | 'unpublished';
   observed_at_ms: number;
   plan?: QuotaPlan;
   windows: QuotaWindow[];

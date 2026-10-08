@@ -691,6 +691,7 @@ func TestFixtureQuotaURLsAreTheOnesTheQuotaServiceMayCall(t *testing.T) {
 		quota.ClaudeProfileURL,
 		quota.KimiUsageURL,
 		quota.XaiBillingMonthlyURL,
+		quota.XaiBillingWeeklyURL,
 		strings.Split(quota.XaiSubscriptionURL, "?")[0],
 		quota.XaiSettingsURL,
 		quota.AntigravitySubscriptionURL,

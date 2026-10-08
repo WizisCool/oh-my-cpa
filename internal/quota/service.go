@@ -375,6 +375,11 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 		} else {
 			result.Status = "error"
 		}
+	} else if len(result.Windows) == 0 {
+		// The read succeeded and the provider published no window. Recording that separately is
+		// what keeps the console from reporting the credential as one nobody has read and asking
+		// for the read that just came back empty; see QuotaStatusUnpublished.
+		result.Status = QuotaStatusUnpublished
 	}
 
 	EvaluateStatusAndRecommendation(result, nowMS)
@@ -638,8 +643,14 @@ func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, 
 	return ParseKimiUsage(normBody, nowMS)
 }
 
-// fetchXaiQuota prefers the free billing endpoint; the paid-account health probe
-// is the fallback for credentials the billing endpoint does not recognise.
+// fetchXaiQuota reads the CLI's two billing documents, and falls back to the paid-account health
+// probe for credentials neither document recognises.
+//
+// The credits document carries the subscription's own window while the plain one carries the
+// metered ledger, and a subscription account publishes nothing in the ledger. Reading only the
+// ledger reported every SuperGrok credential as having no usage at all — the plan label still
+// arrived from the subscription endpoints, which is what made the empty reading look like a
+// missing one rather than a read that found nothing.
 func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"x-xai-token-auth":      "xai-grok-cli",
@@ -648,15 +659,23 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 		"Accept":                "*/*",
 	})
 
+	creditsResp, creditsErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingWeeklyURL, headers, "")
+	var creditsBody []byte
+	if creditsErr == nil && creditsResp.StatusCode == 200 {
+		creditsBody, _ = creditsResp.NormalizedBody()
+	}
+
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingMonthlyURL, headers, "")
+	var monthlyBody []byte
 	if err == nil && resp.StatusCode == 200 {
-		if normBody, bErr := resp.NormalizedBody(); bErr == nil {
-			plan, windows, parseErr := ParseXaiBilling(normBody, nowMS)
-			if parseErr == nil {
-				s.applyXaiSubscription(ctx, file, headers, plan)
-			}
-			return plan, windows, parseErr
-		}
+		monthlyBody, _ = resp.NormalizedBody()
+	}
+
+	// A document that is missing or unreadable is not a failure on its own: whichever one the
+	// account publishes is the reading. Only a pair that yields no plan at all falls through.
+	if plan, windows, parseErr := ParseXaiBillingDocuments(creditsBody, monthlyBody, nowMS); parseErr == nil {
+		s.applyXaiSubscription(ctx, file, headers, plan)
+		return plan, windows, nil
 	}
 
 	paidHeaders := management.WithQuotaCredential(map[string]string{
@@ -672,12 +691,18 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 		return plan, []QuotaWindow{}, nil
 	}
 
-	if resp.StatusCode != 0 {
+	// Neither document carried a plan and the paid probe did not recognise the credential either,
+	// so the reason to report is whichever read actually failed. A billing read that answered is
+	// not that reason, which is why the status test comes before the transport one.
+	if resp.StatusCode != 0 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
 		normBody, _ := resp.NormalizedBody()
 		return nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if creditsErr != nil {
+		return nil, nil, creditsErr
 	}
 	return nil, nil, errors.New("xAI quota fetch failed")
 }

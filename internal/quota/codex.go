@@ -179,6 +179,28 @@ func parseWindowDurationHours(seconds float64) float64 {
 	return math.Round((seconds/3600.0)*10) / 10
 }
 
+// standardWindowIdentity names the credential's own limit from the duration upstream metered.
+//
+// Every period the console can localize is recognized here, so a plan whose window is not the
+// usual five-hour one is described by the limit it actually has rather than by the slot the
+// payload delivered it in. The id follows the period for the same reason: it keys the cycle
+// calculations, and a monthly window filed under the five-hour id would have its cycles read as
+// five-hour cycles. A duration that names no known period keeps the slot's own name.
+func standardWindowIdentity(winSec float64, slotID, slotLabel string) (id, label, kind string) {
+	switch {
+	case winSec >= FiveHourSeconds-600 && winSec <= FiveHourSeconds+600:
+		return "five_hour", "5小时用量上限 (5-Hour)", "five_hour"
+	case winSec >= DailySeconds-3600 && winSec <= DailySeconds+3600:
+		return "daily", "每日用量上限 (Daily)", "daily"
+	case winSec >= WeeklySeconds-3600 && winSec <= WeeklySeconds+3600:
+		return "weekly", "每周用量上限 (Weekly)", "weekly"
+	case winSec >= MonthlySeconds-86400 && winSec <= MonthlySeconds+86400:
+		return "monthly", "月度用量上限 (Monthly)", "monthly"
+	default:
+		return slotID, slotLabel, "custom"
+	}
+}
+
 // windowPeriodName names a window from the period it covers. A provider may move the same
 // metered limit to a different window - Codex reports its reserve limit with a weekly
 // primary window - so a label that hardcodes the slot would describe a period the payload
@@ -479,15 +501,13 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		label := defaultLabel
 		kind := "custom"
 		if scope == "standard" && model == "" {
-			if winSec >= WeeklySeconds-3600 && winSec <= WeeklySeconds+3600 {
-				label = "每周用量上限 (Weekly)"
-				id = "weekly"
-				kind = "weekly"
-			} else if winSec >= FiveHourSeconds-600 && winSec <= FiveHourSeconds+600 {
-				label = "5小时用量上限 (5-Hour)"
-				id = "five_hour"
-				kind = "five_hour"
-			}
+			// The slot a limit arrived in is not its period. A free plan reports its monthly limit as
+			// the primary window, so reading that slot as five-hour described a 30-day limit as
+			// "5-Hour" while the window's own reset said otherwise, and it also filed the window
+			// under an id that every cycle-keyed calculation then read as a five-hour one. The
+			// duration the payload states is authoritative; the slot's own name is only the fallback
+			// for a payload that states no duration.
+			id, label, kind = standardWindowIdentity(winSec, id, label)
 		} else if scope == "model" {
 			kind = "model_scoped"
 			// The limit is named after the model, and the period comes from what upstream

@@ -467,6 +467,8 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
 			if snapshot, ok := snapshots[authIndex]; ok {
 				normalized.ObservedAtMS = snapshot.ObservedAtMS
+				// See buildQuotaOverview: an empty reading survives only through the stored status.
+				normalized.Status = snapshot.Status
 				if plan := planFromSnapshot(snapshot); plan != nil {
 					normalized.Plan = plan
 				}
@@ -587,6 +589,10 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 
 		if snapshot, ok := latestSnapshots[authIndex]; ok {
 			normalized.ObservedAtMS = snapshot.ObservedAtMS
+			// The stored status is what the last read produced, and an empty reading is only
+			// knowable from it: without it the evaluation below recomputes the credential as one
+			// nobody has read, and the console asks for a repeat of a read that already happened.
+			normalized.Status = snapshot.Status
 			if plan := planFromSnapshot(snapshot); plan != nil {
 				normalized.Plan = plan
 			}

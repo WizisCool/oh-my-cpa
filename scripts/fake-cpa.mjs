@@ -985,12 +985,16 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         return;
       }
       if (targetURL.includes('cli-chat-proxy.grok.com') || targetURL.includes('x.ai')) {
+        // The credits document carries a subscription's own window; the ledger beside it carries
+        // the account's metered spending. They are two reads on one path, told apart by the query,
+        // and the credits one is what publishes usage for a subscription account.
+        const credits = targetURL.includes('format=credits');
         json(response, 200, {
           status_code: 200,
           header: { 'content-type': ['application/json'] },
-          body: {
-            config: { credit_usage_percent: 30.0, monthly_limit: 10000, used: 3000 },
-          },
+          body: credits
+            ? { config: { credit_usage_percent: 30.0, current_period: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: new Date(Date.now() - 7 * 86400000).toISOString(), end: new Date(Date.now() + 86400000).toISOString() } } }
+            : { config: { monthly_limit: 10000, used: 3000 } },
         });
         return;
       }

@@ -553,17 +553,21 @@ func (u *Upstream) serveAPICall(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	target := strings.TrimSpace(payload.URL)
-	// The catalogue is keyed by endpoint, so a read carrying a scoping query (the
-	// Codex subscription probe sends account_id) still resolves to that endpoint's
-	// fixture body. Stripping the query cannot widen what is answered: the request
-	// is resolved against the catalogue and never dialled either way.
-	if index := strings.IndexAny(target, "?#"); index >= 0 {
-		target = target[:index]
+	// A catalogue entry may name an endpoint together with its scoping query, because the same path
+	// can answer two different documents: the xAI credits read is `/v1/billing?format=credits`
+	// while the metered ledger is `/v1/billing`. The exact URL is therefore tried first, and the
+	// query is stripped only as the fallback, which is how a read carrying a scoping parameter (the
+	// Codex subscription probe sends account_id) still resolves to its endpoint's fixture body.
+	// Neither step widens what is answered: the request is resolved against the catalogue and never
+	// dialled either way.
+	stripped := target
+	if index := strings.IndexAny(stripped, "?#"); index >= 0 {
+		stripped = stripped[:index]
 	}
 	// One demonstration credential has no live subscription read. It exists so the
 	// quota card's unverified-snapshot rendering is exercised by browser acceptance,
 	// instead of that branch being reachable only when a real provider read fails.
-	if target == codexSubscriptionURL && subscriptionUnavailable[payload.AuthIndex] {
+	if stripped == codexSubscriptionURL && subscriptionUnavailable[payload.AuthIndex] {
 		// CPA reports an upstream failure inside a 200 envelope, so the fixture has to
 		// fail the same way rather than through the HTTP status.
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{
@@ -575,6 +579,9 @@ func (u *Upstream) serveAPICall(writer http.ResponseWriter, request *http.Reques
 	}
 	body, ok := u.fixture.quota[target]
 	if !ok {
+		body, ok = u.fixture.quota[stripped]
+	}
+	if !ok {
 		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{
 			"error": "demo mode: no upstream request is performed",
 		})
@@ -582,7 +589,7 @@ func (u *Upstream) serveAPICall(writer http.ResponseWriter, request *http.Reques
 	}
 	// The renewal answer is per credential, so one page shows both the seat that
 	// renews and the seat that ends at its term.
-	if target == codexSubscriptionURL {
+	if stripped == codexSubscriptionURL {
 		if row, isRow := body.(map[string]any); isRow {
 			marked := make(map[string]any, len(row)+1)
 			for key, value := range row {

@@ -129,6 +129,21 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		}
 	}
 
+	// A provider that answered without publishing a window is a different observation from a
+	// credential nobody has read yet. The caller seeds the marker from the last reading, and it
+	// survives here because the console would otherwise report the credential as never read and
+	// invite the operator to repeat a read that just succeeded.
+	if q.Status == QuotaStatusUnpublished {
+		q.Status = QuotaStatusUnpublished
+		q.Recommendation = QuotaRecommendation{
+			Status:   QuotaStatusUnpublished,
+			Priority: "low",
+			Action:   "none",
+			Reason:   "上游未发布配额窗口，读取本身已成功",
+		}
+		return
+	}
+
 	q.Status = "idle"
 	q.Recommendation = QuotaRecommendation{
 		Status:   "idle",

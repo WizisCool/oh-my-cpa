@@ -785,7 +785,11 @@ func usageBucketsPerProvider(now time.Time) map[string]map[string]map[string]any
 // api.anthropic.com.
 func quotaPayloads(now time.Time) map[string]any {
 	resetAt := now.Add(2*time.Hour + 14*time.Minute).UTC().Format(time.RFC3339)
-	weeklyReset := now.Add(4*24*time.Hour + 6*time.Hour).UTC().Format(time.RFC3339)
+	weeklyResetInstant := now.Add(4*24*time.Hour + 6*time.Hour)
+	weeklyReset := weeklyResetInstant.UTC().Format(time.RFC3339)
+	// The credits document states the span its percentage covers, and the service reads the window's
+	// length from it rather than assuming one, so the fixture states a whole week.
+	creditsPeriodStart := weeklyResetInstant.Add(-7 * 24 * time.Hour).UTC().Format(time.RFC3339)
 	return map[string]any{
 		codexUsageURL: map[string]any{
 			"plan_type": "pro",
@@ -838,16 +842,23 @@ func quotaPayloads(now time.Time) map[string]any {
 				}},
 			},
 		},
-		xaiUsageURL: map[string]any{
+		// The credits document is the subscription's own window and the ledger beside it is the
+		// account's metered spending. They are two reads on one path, and only the credits one
+		// publishes a percentage for a subscription account.
+		xaiCreditsURL: map[string]any{
 			"config": map[string]any{
 				"creditUsagePercent": 28.5,
-				"monthlyLimit":       map[string]any{"val": 20000},
-				"used":               map[string]any{"val": 5700},
-				"currentPeriod":      map[string]any{"type": "monthly", "start": now.Add(-18 * 24 * time.Hour).Format(time.RFC3339), "end": weeklyReset},
+				"currentPeriod":      map[string]any{"type": "USAGE_PERIOD_TYPE_WEEKLY", "start": creditsPeriodStart, "end": weeklyReset},
 				"productUsage": []map[string]any{
 					{"product": "grok-4", "usagePercent": 31.2},
 					{"product": "grok-4-fast", "usagePercent": 14.8},
 				},
+			},
+		},
+		xaiUsageURL: map[string]any{
+			"config": map[string]any{
+				"monthlyLimit": map[string]any{"val": 20000},
+				"used":         map[string]any{"val": 5700},
 			},
 		},
 		xaiSubscriptionURL:         map[string]any{"subscriptionTier": "SUPERGROK"},
@@ -880,7 +891,7 @@ func quotaPayloads(now time.Time) map[string]any {
 func quotaPayloadKeys() []string {
 	return []string{
 		codexUsageURL, codexResetCreditsURL, codexSubscriptionURL, claudeUsageURL, claudeProfileURL,
-		kimiUsageURL, xaiUsageURL, antigravityUsageURL, devinUsageURL,
+		kimiUsageURL, xaiUsageURL, xaiCreditsURL, antigravityUsageURL, devinUsageURL,
 		xaiSubscriptionURL, xaiSettingsURL, antigravitySubscriptionURL, metaUsageURL,
 	}
 }
@@ -907,6 +918,9 @@ const (
 	antigravitySubscriptionURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
 	metaUsageURL               = "https://api.meta.ai/muse-code/key"
 	xaiUsageURL                = "https://cli-chat-proxy.grok.com/v1/billing"
+	// The credits document shares the ledger's path and is told apart by its query, which is why the
+	// catalogue may name an endpoint with one.
+	xaiCreditsURL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 	// Antigravity is queried through a list of regional hosts and the first is used,
 	// which is what makes this one the fixture's answer.
 	antigravityUsageURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"

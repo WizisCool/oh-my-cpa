@@ -380,12 +380,22 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   them.
 - **Quota Window**: One metered period of a provider credential's quota (for
   Codex, the 5-hour and weekly windows), each carrying its own used share. A
+  window's period is the one its payload states, never the slot it arrived in: a
+  Codex free plan reports a monthly limit as its primary window, and that window's
+  id, label and length then follow the stated duration, because the id keys every
+  cycle calculation. A
   provider flag that marks a whole rate limit as reached (Codex
   `limit_reached` / `allowed: false`) does not say which window tripped, so it
   never overrides a window's own reading: it pins to 100% only a window that
   reports no usage, or, when every window reports usage below 100 because
   upstream rounds, the most used one. Pinning every window would show the weekly
   quota as spent whenever the 5-hour window runs out.
+- **Unpublished Quota Reading**: A quota observation a provider answered without
+  publishing any window — the endpoint replied successfully, and the document
+  carried nothing this deployment can meter. It is recorded and preserved as its
+  own status instead of as an absence, so the console never asks the operator to
+  repeat the read that just came back empty; a credential nobody has read keeps the
+  idle reading that does ask for one.
 - **Estimated Window Capacity**: What a whole Quota Window is worth: usage this
   deployment recorded in the indicated cycle and metered model scope divided by
   the share upstream reports as used. It is capacity at 100%, not a forecast of
