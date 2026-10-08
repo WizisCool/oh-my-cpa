@@ -1,5 +1,6 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
+import type { QuotaItem } from '../../types/quota';
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -103,7 +104,33 @@ export function quotaResetCountdown(
   return t('quota.recovered');
 }
 
-/** The localized name of a window kind, falling back to whatever the provider labelled it. */
+/** The message an empty window list carries, as the dictionary key that states it. */
+export type QuotaEmptyStateKey =
+  | 'quota.credential_disabled'
+  | 'quota.no_live_probe'
+  | 'quota.usage_not_published'
+  | 'quota.not_observed_yet';
+
+/**
+ * Which message a credential with no window carries.
+ *
+ * The cases are exclusive and ordered by who owns the reason: a disabled credential is not read at
+ * all, a provider without a live probe has nothing to read, and the last two are both readings that
+ * happened — upstream answered and published no window, or nobody has read the credential yet.
+ * Those two must not share copy, because one of them is worth repeating and the other already ran.
+ */
+export function quotaEmptyStateKey(
+  item: Pick<QuotaItem, 'disabled' | 'capabilities' | 'status'>,
+): QuotaEmptyStateKey {
+  if (item.disabled) return 'quota.credential_disabled';
+  if (item.capabilities?.refresh_supported === false) return 'quota.no_live_probe';
+  if (item.status === 'unpublished') return 'quota.usage_not_published';
+  return 'quota.not_observed_yet';
+}
+
+/**
+ * The localized name of a window kind, falling back to whatever the provider labelled it.
+ */
 export function quotaWindowLabel(kind: string | undefined, label: string | undefined, t: TFunc): string {
   if (kind === 'five_hour') return t('quota.window_five_hour');
   if (kind === 'weekly') return t('quota.window_weekly');

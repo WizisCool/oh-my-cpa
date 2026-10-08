@@ -376,12 +376,15 @@ change, alongside the pictured credential/provider page screenshots.
 
 ### Subscription observation fixtures
 
-The in-process fixture answers the fixed xAI user/settings and Antigravity
-Code Assist endpoints alongside their usage endpoints. It also owns a projected
+The in-process fixture answers the fixed xAI user/settings, credits and ledger and
+Antigravity Code Assist endpoints alongside their usage endpoints. The xAI credits
+document shares the ledger's path and is told apart by its query, which is why the
+catalogue may name an endpoint with one and the fixture resolves the exact URL
+before falling back to the path alone. It also owns a projected
 Meta usage sample with no token or minted key. These are catalogue lookups, not
 outbound HTTP requests; their paths are checked against the compiled quota
 allowlist. Regenerate the Worker dataset when the normalized subscription output
-changes, so the served plan labels match the Go facade (ADR 0065).
+changes, so the served plan labels match the Go facade (ADR 0065, ADR 0071).
 
 ### Native plugin-host routes
 

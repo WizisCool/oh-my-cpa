@@ -1857,17 +1857,27 @@ reading tokens or trying a second host. Endpoint entries refuse appended paths;
 entries ending in `/` cover a family (ADR 0064).
 
 Meta observations and xAI/Antigravity subscription reads use four additional
-individual endpoints (ADR 0065). Meta's key endpoint requires the stored DCA token,
+individual endpoints (ADR 0065); xAI's two billing documents share one of them,
+told apart by a query that entry already admits. Meta's key endpoint requires the stored DCA token,
 so only this probe downloads its selected credential server-side; a fail-closed
 attempt audit precedes the download and exchange. It can mint a key upstream, but
 only subscription/window fields are decoded and no returned key is retained or
 written back. Its transport, HTTP and decoding errors never quote raw payloads.
-The other probes use CPA's token substitution. xAI reads its subscription only
-after CLI billing succeeds, preserving independent billing fields; Antigravity
+The other probes use CPA's token substitution. xAI reads both of its billing
+documents — the credits document carries a subscription's window and the ledger
+carries the metered monthly figures — and keeps each document's period atomic
+rather than merging one's figures into the other's window (ADR 0071). It reads its
+subscription only after CLI billing succeeds, preserving independent billing
+fields; Antigravity
 reads `loadCodeAssist` and no longer assumes Pro on a failed tier observation.
 Supplemental subscription failures preserve successful usage readings. Meta's
 optional `subscription_active` distinguishes false from an unknown reading, and
 the console displays an explicit inactive state beside the plan.
+
+A refresh that succeeds without publishing a window is recorded as an
+`unpublished` observation rather than left indistinguishable from a credential
+nobody has read, and a window's identity — its id, label and kind — comes from the
+duration the payload states rather than from the slot it arrived in (ADR 0071).
 
 A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no

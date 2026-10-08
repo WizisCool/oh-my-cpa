@@ -36,6 +36,10 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
       return <Tag color="error" style={{ margin: 0 }}>{t('quota.status_error')}</Tag>;
     case 'stale':
       return <Tag style={{ margin: 0 }}>{t('quota.status_stale')}</Tag>;
+    case 'unpublished':
+      // Distinct from idle: the read happened, and the provider published no window. The two must
+      // not share a label, because only one of them is worth repeating.
+      return <Tag style={{ margin: 0 }}>{t('quota.status_unpublished')}</Tag>;
     case 'loading':
       return <Tag color="processing" style={{ margin: 0 }}>{t('common.loading')}</Tag>;
     default:

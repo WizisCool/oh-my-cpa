@@ -169,6 +169,22 @@ test('quota conditions: idle without evidence is unobserved, not exhausted or un
   assert.equal(matchesQuotaFilter(record, 'unobserved'), true);
 });
 
+test('quota conditions: an empty reading is unobserved without asking for another read', () => {
+  // A provider that answered without publishing a window is a different status from an unread
+  // credential, and the difference is carried by the status and the card's copy. Triage keeps both
+  // in one bucket on purpose: an operator looking for a credential without a usable reading wants
+  // them together, and only the card distinguishes which of the two happened.
+  const projection = buildOAuthWorkspaceProjection(
+    [file()],
+    [quota({ status: 'unpublished', windows: [], recommendation: { status: 'unpublished', priority: 'low', action: 'none', reason: '' } })],
+    choices,
+  );
+  const record = projection.records[0];
+  assert.equal(record.quotaCondition, 'unobserved');
+  assert.equal(record.isQuotaAttention, false);
+  assert.equal(matchesQuotaFilter(record, 'unobserved'), true);
+});
+
 test('attention: stale is independently filterable and is not attention by itself', () => {
   const projection = buildOAuthWorkspaceProjection([file()], [quota({ status: 'stale' })], choices);
   const record = projection.records[0];

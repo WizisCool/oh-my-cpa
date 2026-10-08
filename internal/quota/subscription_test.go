@@ -74,8 +74,13 @@ func TestSubscriptionRequestsAndIndependentFailures(t *testing.T) {
 					switch request.URL {
 					case AntigravityQuotaURLDaily:
 						body = `{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"five","remainingFraction":0.7,"window":"5h"}]}]}`
+					case XaiBillingWeeklyURL:
+						// The credits document is the subscription's own window, and it is the only one that
+						// publishes a percentage for a subscription account. Its instants carry fractional
+						// seconds, as upstream's do.
+						body = `{"config":{"creditUsagePercent":30,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-09-17T13:32:42.093205+00:00","end":"2026-09-24T13:32:42.093205+00:00"}}}`
 					case XaiBillingMonthlyURL:
-						body = `{"config":{"creditUsagePercent":30,"monthlyLimit":{"val":10000},"used":{"val":3000}}}`
+						body = `{"config":{"monthlyLimit":{"val":10000},"used":{"val":3000}}}`
 					case AntigravitySubscriptionURL:
 						if request.Method != http.MethodPost || request.Data != `{"metadata":{"ideType":"ANTIGRAVITY"}}` {
 							t.Fatalf("unexpected subscription shape: %+v", request)
@@ -112,6 +117,20 @@ func TestSubscriptionRequestsAndIndependentFailures(t *testing.T) {
 				}
 				if provider == "xai" && (result.Plan.ExtraUsage == nil || result.Plan.ExtraUsage.UsedCreditsCents != 3000) {
 					t.Fatalf("billing details lost: %+v", result.Plan)
+				}
+				if provider == "xai" {
+					// The window comes from the credits document, and its period is the one that document
+					// states: reading the ledger alone reported this account as having no window at all.
+					window := result.Windows[0]
+					if window.ID != "xai_credit_usage" || window.UsedPercent == nil || *window.UsedPercent != 30 {
+						t.Fatalf("credit window = %+v, want the credits document's reading", window)
+					}
+					if window.PeriodHours == nil || *window.PeriodHours != 168 {
+						t.Fatalf("period = %v, want the 168 hours the payload states", window.PeriodHours)
+					}
+					if window.ResetAtMS == nil || window.ResetAccuracy != "exact" {
+						t.Fatalf("reset = %+v, want the fractional-second instant decoded", window)
+					}
 				}
 				for _, request := range calls {
 					if request.AuthIndex != file.AuthIndex || request.Header["Authorization"] != management.QuotaTokenPlaceholder {

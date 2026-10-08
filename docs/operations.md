@@ -378,6 +378,15 @@ uses credential type, provider and file name; the console does not download the
 token to detect an account system or retry the token against the other host.
 Neither the browser nor Agent/MCP can supply an arbitrary upstream target.
 
+The usage document is decoded in both shapes Kimi publishes. Counted limits
+(`limits[]`, or a lone `usage` object) carry absolute usage, and the newer ratio
+pools under `usages` state a share instead: each pool's period is read from its own
+key, with the monthly Total pool the common case for a plan without a weekly limit.
+A counted limit that already describes a period wins it, because it carries the
+absolute usage a share cannot, and a pool states no counts of its own. A pool key
+naming no known period keeps its own name as an unclassified window rather than
+being filed under a period it does not describe (ADR 0071).
+
 ## Meta quota and live subscription tiers
 
 A Meta Muse quota refresh requires a stored credential with a valid `dca_token`.
@@ -392,14 +401,26 @@ and refreshing at most ten distinct credentials. The reading includes the usage 
 weekly window, plan name and explicit active/inactive state when supplied. Missing
 shares are unknown, not a zero-used or fully-available quota.
 
-xAI subscription names are read from fixed `/v1/user?include=subscription` and
-`/v1/settings` requests on `cli-chat-proxy.grok.com` after a successful CLI billing
-read. API-key health fallback does not initiate these additional subscription
-requests. Antigravity tiers come from the daily host's `loadCodeAssist` endpoint,
-with paid tier taking precedence over current tier. If these supplemental reads
-fail, usage remains readable: xAI keeps its billing fallback, while Antigravity
-shows an unknown tier rather than assuming Pro. New endpoints are individually
-allowlisted and neither console nor Agent/MCP accepts a caller-chosen URL (ADR 0065).
+xAI reads both CLI billing documents on `cli-chat-proxy.grok.com`: the credits
+document (`/v1/billing?format=credits`), which carries a subscription's own window
+and the period that percentage belongs to, and the metered ledger (`/v1/billing`),
+which carries the account's monthly limit and spend. A subscription account
+publishes nothing in the ledger, so both are read and the period stays atomic: a
+window and its reset come from one document, and the ledger's figures arrive beside
+it as extra usage. Subscription names come from fixed
+`/v1/user?include=subscription` and `/v1/settings` requests after a successful
+billing read, and API-key health fallback does not initiate them. Antigravity tiers
+come from the daily host's `loadCodeAssist` endpoint, with paid tier taking
+precedence over current tier. If these supplemental reads fail, usage remains
+readable: xAI keeps its billing fallback, while Antigravity shows an unknown tier
+rather than assuming Pro. New endpoints are individually allowlisted and neither
+console nor Agent/MCP accepts a caller-chosen URL (ADR 0065, ADR 0071).
+
+A refresh that succeeds without publishing any window is recorded as an
+`unpublished` reading rather than as a credential nobody has read, and the console
+says so with its own status and copy. Every provider's window parser can produce
+that reading, and it is what an unrecognized upstream document shape now surfaces
+as (ADR 0071).
 
 ## Credential management actions
 

@@ -99,7 +99,7 @@ func SupportsWindowCapacity(provider string, window QuotaWindow) bool {
 		return false
 	}
 	switch window.Kind {
-	case "five_hour", "weekly":
+	case "five_hour", "daily", "weekly", "monthly":
 		return true
 	}
 	return window.ID == "five_hour" || window.ID == "seven_day"

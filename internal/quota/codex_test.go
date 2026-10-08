@@ -206,6 +206,44 @@ func TestParseCodexUsageLimitReachedPinsOnlyTheExhaustedWindow(t *testing.T) {
 	}
 }
 
+// A plan whose own window is not the usual five-hour one is described by the limit it actually
+// has. A free account reports a monthly limit as the primary window, so the slot's five-hour name
+// both mislabelled a 30-day limit and filed it under the id every cycle calculation keys on.
+func TestParseCodexUsageNamesTheStandardWindowByItsOwnPeriod(t *testing.T) {
+	raw := []byte(`{
+		"plan_type": "free",
+		"rate_limit": {
+			"allowed": true,
+			"limit_reached": false,
+			"primary_window": {"used_percent": 0, "limit_window_seconds": 2592000, "reset_at": 1793180280}
+		}
+	}`)
+
+	_, windows, _, err := ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if len(windows) != 1 {
+		t.Fatalf("len(windows) = %d, want 1", len(windows))
+	}
+	if windows[0].ID != "monthly" || windows[0].Kind != "monthly" {
+		t.Errorf("id/kind = %q/%q, want monthly/monthly", windows[0].ID, windows[0].Kind)
+	}
+	if windows[0].PeriodHours == nil || *windows[0].PeriodHours != 720 {
+		t.Errorf("PeriodHours = %v, want 720", windows[0].PeriodHours)
+	}
+
+	// The paid shape is unaffected: a five-hour primary window keeps the five-hour identity.
+	raw = []byte(`{"plan_type": "plus", "rate_limit": {"primary_window": {"used_percent": 12, "limit_window_seconds": 18000}}}`)
+	_, windows, _, err = ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if windows[0].ID != "five_hour" || windows[0].Kind != "five_hour" {
+		t.Errorf("five-hour id/kind = %q/%q, want five_hour/five_hour", windows[0].ID, windows[0].Kind)
+	}
+}
+
 func TestParseCodexResetCreditsPayload(t *testing.T) {
 	raw := []byte(`{
 		"available_count": 3,

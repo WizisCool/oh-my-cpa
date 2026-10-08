@@ -5,6 +5,7 @@ import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import {
   formatObservedAgo,
+  quotaEmptyStateKey,
   quotaRemainingPercent,
   quotaRemainingText,
   quotaResetCountdown,
@@ -129,11 +130,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
         </div>
       ) : (
         <div className={styles.empty}>
-          {item.disabled
-              ? t('quota.credential_disabled')
-              : item.capabilities?.refresh_supported === false
-                ? t('quota.no_live_probe')
-                : t('quota.not_observed_yet')}
+          {t(quotaEmptyStateKey(item))}
         </div>
       )}
     </div>

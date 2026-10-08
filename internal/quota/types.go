@@ -108,7 +108,7 @@ type ActiveCooldown struct {
 
 // QuotaRecommendation represents intelligent, actionable status and guidance.
 type QuotaRecommendation struct {
-	Status   string `json:"status"`   // "healthy", "warning", "exhausted", "cooldown", "needs_reauth", "credits_available", "idle"
+	Status   string `json:"status"`   // "healthy", "warning", "exhausted", "cooldown", "needs_reauth", "credits_available", "idle", "unpublished"
 	Priority string `json:"priority"` // "critical", "high", "medium", "low", "none"
 	Action   string `json:"action"`   // "refresh", "clear_cooldown", "redeem_credit", "reauth", "none"
 	Reason   string `json:"reason"`
@@ -121,6 +121,19 @@ type QuotaCapabilities struct {
 	ResetCreditSupported   bool `json:"reset_credit_supported"`
 }
 
+// Quota reading statuses that mean more than the window arithmetic does.
+//
+// A credential's status is recomputed on every read, so only the one that records what the last
+// read produced is persisted and consulted again.
+const (
+	// QuotaStatusUnpublished marks a read that succeeded while the provider published no quota
+	// window. It is stored on the observation and seeded back into evaluation, because it is
+	// evidence about the provider rather than about the absence of a read: without it the console
+	// cannot tell a credential whose read returned nothing from one that was never read, and it
+	// asks the operator to repeat the read that already happened.
+	QuotaStatusUnpublished = "unpublished"
+)
+
 // NormalizedQuota is the unified DTO representing all quota dimensions for a credential.
 type NormalizedQuota struct {
 	AuthIndex      string                 `json:"auth_index"`
@@ -128,7 +141,7 @@ type NormalizedQuota struct {
 	Type           string                 `json:"type"`
 	Provider       string                 `json:"provider"`
 	Disabled       bool                   `json:"disabled"`
-	Status         string                 `json:"status"` // "idle", "loading", "healthy", "warning", "exhausted", "error", "stale"
+	Status         string                 `json:"status"` // "idle", "loading", "healthy", "warning", "exhausted", "error", "stale", "unpublished"
 	ObservedAtMS   int64                  `json:"observed_at_ms"`
 	Plan           *QuotaPlan             `json:"plan,omitempty"`
 	Windows        []QuotaWindow          `json:"windows"`

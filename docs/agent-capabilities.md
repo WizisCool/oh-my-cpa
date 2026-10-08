@@ -446,6 +446,12 @@ No new capability or permission is needed: listing remains a read and refreshing
 remains a low-risk write. Their tool descriptions identify these as estimates rather
 than balances or routing instructions.
 
+A credential's `status` is `unpublished` when the provider answered without
+publishing a window. That is a reading, not a failure and not an unread credential:
+it says the read happened and the provider reported nothing to meter, so an agent
+must neither retry it on the assumption that nothing was asked nor report it as
+`idle` (ADR 0071).
+
 Each supported window can carry `usage` (current cycle's half-open range, requests,
 priced requests, tokens and locked cost), `capacity` (tokens, optional locked-cost
 estimate and rounding allowance), and `capacity_unavailable` (why the current cycle

@@ -4,7 +4,7 @@ import { Button, Popconfirm, Tag } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { formatGmtOffsetLabel, formatObservedAgo, formatSnapshotRenewalBound, formatTimeWithCountdown } from './quotaFormat';
+import { formatGmtOffsetLabel, formatObservedAgo, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey } from './quotaFormat';
 import { QuotaProgressBar } from './QuotaProgressBar';
 import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
@@ -224,11 +224,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             renderWindowRows(windows)
           ) : (
             <div className={styles['no-window']}>
-              {item.disabled
-              ? t('quota.credential_disabled')
-              : item.capabilities?.refresh_supported === false
-                ? t('quota.no_live_probe')
-                : t('quota.not_observed_yet')}
+              {t(quotaEmptyStateKey(item))}
             </div>
           )}
         </div>
