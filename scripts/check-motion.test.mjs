@@ -96,6 +96,18 @@ test('a keyframe animation without a reduced-motion counterpart is rejected', (t
   assert.deepEqual(problems(guarded), []);
 });
 
+test('a `no-preference` block is motion, so its rules still owe a token and a counterpart', (t) => {
+  const rawDuration = fixture(t, {
+    'panel.css': `@media (prefers-reduced-motion: no-preference) { .rise { animation: rise 220ms ease; } }\n@keyframes rise { from { opacity: 0; } to { opacity: 1; } }\n@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }\n`,
+  });
+  assert.match(problems(rawDuration).join('\n'), /animation uses the raw duration 220ms/);
+
+  const unguarded = fixture(t, {
+    'panel.css': `@media (prefers-reduced-motion: no-preference) { .rise { animation: rise var(--motion-base) ease; } }\n@keyframes rise { from { opacity: 0; } to { opacity: 1; } }\n`,
+  });
+  assert.match(problems(unguarded).join('\n'), /no `prefers-reduced-motion` counterpart/);
+});
+
 test('a keyframe that animates a layout property is rejected', (t) => {
   const projectRoot = fixture(t, {
     'panel.css': `.rise { animation: rise var(--motion-base) forwards; }\n@keyframes rise { from { height: 0; } to { height: 10px; } }\n@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }\n`,

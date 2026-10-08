@@ -1,13 +1,20 @@
 import React from 'react';
 import { createMessageQueue, useExternalStoreRuntime } from '@assistant-ui/react';
-import type { AssistantRuntime, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react';
-import type { Conversation } from '../../agent/types';
+import type { AppendMessage, AssistantRuntime, AttachmentAdapter, ThreadMessageLike } from '@assistant-ui/react';
+import type { Conversation, Presentation } from '../../agent/types';
 import { decideOperation } from './api';
 import type { Operation } from './state';
-import { agentThreadMessages, appendMessageText, storedMessages } from './thread';
+import { agentThreadMessages, appendMessageImages, appendMessageText, storedMessages } from './thread';
 import type { LiveRun } from './thread';
 import type { AgentRunControls } from './useAgentRun';
 import { RunRejectedError } from './useAgentRun';
+
+/** What a send carries beyond its text: the turn it replaces, that turn's files, the asked-for presentation. */
+interface AgentSendOptions {
+  turnID: string;
+  files: string;
+  present?: Presentation;
+}
 
 interface AgentRuntimeOptions {
   conversation: Conversation | undefined;
@@ -20,11 +27,13 @@ interface AgentRuntimeOptions {
   /** An operation the operator just decided; the page records it and continues the run. */
   onDecided: (operation: Operation) => void;
   /**
-   * The turn the next sent message replaces, when the operator is editing it, and the files that
-   * turn's message carried, which go out again after the new wording. Read at send time.
+   * What the next sent message carries beyond its text: the turn it replaces when the operator is
+   * editing one, the files that turn's message carried - which go out again after the new
+   * wording - and the presentation a command asked for. Read, and cleared, as the message is
+   * queued.
    */
-  takeReplaceTarget: () => { turnID: string; files: string };
-  /** Text files the composer may attach (ADR 0074). */
+  takeSendOptions: () => AgentSendOptions;
+  /** What the composer may attach: images and text files. */
   attachments: AttachmentAdapter;
 }
 
@@ -36,19 +45,28 @@ interface AgentRuntimeOptions {
  * through a callback into OMC's code. A new message, a stop, an approval, an answer: each one
  * lands in `useAgentRun` or on the decision endpoint, never in state the framework owns.
  */
-export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDisabled, onRejected, onDecided, takeReplaceTarget, attachments }: AgentRuntimeOptions): AssistantRuntime {
-  const callbacksRef = React.useRef({ run, onRejected, onDecided, takeReplaceTarget });
-  callbacksRef.current = { run, onRejected, onDecided, takeReplaceTarget };
+export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDisabled, onRejected, onDecided, takeSendOptions, attachments }: AgentRuntimeOptions): AssistantRuntime {
+  const callbacksRef = React.useRef({ run, onRejected, onDecided, takeSendOptions });
+  callbacksRef.current = { run, onRejected, onDecided, takeSendOptions };
 
   // Messages sent while a run is in flight wait here and go out, in order, once it settles. The
   // server runs one turn at a time, so the queue never interrupts: it has no cancel to steer with,
   // and a send the framework would steer ahead of the run is queued behind it like any other.
   const queue = React.useMemo(() => {
+    /**
+     * What a queued message was sent with. The options ride on the message itself, so the send
+     * that reached the queue with them is the send that goes out with them; the fallback covers a
+     * message that arrived by a path of its own.
+     */
+    const carriedSendOptions = (message: AppendMessage): AgentSendOptions => {
+      const carried = (message.metadata?.custom as { sendOptions?: AgentSendOptions } | undefined)?.sendOptions;
+      return carried ?? callbacksRef.current.takeSendOptions();
+    };
     const created = createMessageQueue({
       run: message => {
-        const target = callbacksRef.current.takeReplaceTarget();
+        const target = carriedSendOptions(message);
         const text = [appendMessageText(message), target.files].filter(Boolean).join('\n\n');
-        void callbacksRef.current.run.send(text, target.turnID || undefined)
+        void callbacksRef.current.run.send(text, { replaceTurn: target.turnID || undefined, present: target.present, images: appendMessageImages(message) })
           .catch((cause: unknown) => {
             if (cause instanceof RunRejectedError) {
               // A refusal is likely to refuse the next message for the same reason, so the queue
@@ -59,10 +77,23 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
           });
       },
     });
+    // A message's own options are read as it enters the queue, not when it is dispatched: a send
+    // that waits behind a run must go out with what the composer held when the operator sent it,
+    // not with whatever a later message left behind. `steer` shares the entry point, because the
+    // server runs one turn at a time and a steered send waits its turn like any other.
+    const stamp = (message: AppendMessage): AppendMessage => ({
+      ...message,
+      metadata: {
+        ...message.metadata,
+        custom: { ...message.metadata?.custom, sendOptions: callbacksRef.current.takeSendOptions() },
+      },
+    });
+    const enqueue = (message: AppendMessage) => created.adapter.enqueue(stamp(message));
     // Inherits from the adapter rather than copying it: the queue rewrites the adapter's item
     // lists in place, and the runtime recognises its queue by identity of this one object.
     const adapter: typeof created.adapter = Object.create(created.adapter, {
-      steer: { value: (message: Parameters<typeof created.adapter.enqueue>[0]) => created.adapter.enqueue(message) },
+      enqueue: { value: enqueue },
+      steer: { value: enqueue },
     });
     return { ...created, adapter };
   }, []);
@@ -90,8 +121,8 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
   );
   const stored = React.useMemo(() => storedMessages(turns ?? []), [turns]);
   const live = React.useMemo<LiveRun | undefined>(
-    () => (run.isRunning ? { frame: run.frame, pendingMessage: run.pendingMessage, isResuming: run.isResuming } : undefined),
-    [run.isRunning, run.frame, run.pendingMessage, run.isResuming],
+    () => (run.isRunning ? { frame: run.frame, pendingMessage: run.pendingMessage, pendingImages: run.pendingImages, replacedTurnID: run.replacedTurnID, isResuming: run.isResuming } : undefined),
+    [run.isRunning, run.frame, run.pendingMessage, run.pendingImages, run.replacedTurnID, run.isResuming],
   );
   const messages = React.useMemo(() => agentThreadMessages(conversation, stored, live), [conversation, stored, live]);
 

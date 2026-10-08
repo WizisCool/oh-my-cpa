@@ -1,10 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +17,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 )
 
 func detachedBrowserRequest(id, body string) *http.Request {
@@ -115,8 +122,8 @@ func TestBrowserRunShutdownJoinsInference(t *testing.T) {
 	}
 }
 
-func TestBrowserRunOutputBoundSettlesBothProtocols(t *testing.T) {
-	for _, kind := range []string{"agent", "playground"} {
+func TestPlaygroundOutputBoundSettlesItsProtocol(t *testing.T) {
+	for _, kind := range []string{"playground"} {
 		ctx, cancel := context.WithCancel(context.Background())
 		run := &browserRun{kind: kind, header: http.Header{"Content-Type": []string{"text/event-stream"}}, changed: make(chan struct{}), finished: make(chan struct{}), cancel: cancel}
 		_, _ = run.Write([]byte("data: {}\n\n"))
@@ -353,5 +360,62 @@ func TestBrowserRunBodyPermitsAreReleasedBeforeSubscriptions(t *testing.T) {
 		if run == nil || run.id != "active" || len(handler.browserRuns.bodySlots) != 0 {
 			t.Fatal("a subscription retained its body admission permit")
 		}
+	}
+}
+
+func TestAgentJournalDoesNotTerminateGrowingTasks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run := &browserRun{kind: "agent", header: http.Header{"Content-Type": []string{"text/event-stream"}}, changed: make(chan struct{}), finished: make(chan struct{}), cancel: cancel}
+	body := make([]byte, BROWSER_RUN_BYTES+1)
+	if count, err := run.Write(body); err != nil || count != len(body) || ctx.Err() != nil || run.isOverflowed {
+		t.Fatalf("count %d error %v cancelled %v", count, err, ctx.Err())
+	}
+}
+
+func TestBrowserRunAdmitsAgentImageRequests(t *testing.T) {
+	picture := image.NewNRGBA(image.Rect(0, 0, 192, 192))
+	random := rand.New(rand.NewPCG(1, 2))
+	for i := range picture.Pix {
+		picture.Pix[i] = byte(random.Uint32())
+	}
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, picture); err != nil {
+		t.Fatal(err)
+	}
+	data := base64.StdEncoding.EncodeToString(encoded.Bytes())
+	if err := gateway.ValidateImage("data:image/png;base64," + data); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"messages":[{"id":"fixture-message","role":"user","content":[{"type":"binary","mimeType":"image/png","data":"` + data + `"}]}]}`
+	if len(body) <= 64<<10 || len(body) > MAX_AGENT_RUN_BYTES {
+		t.Fatalf("image fixture does not exercise managed admission: %d bytes", len(body))
+	}
+	handler := &Handler{}
+	defer handler.CloseBrowserRuns()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/agent/run", strings.NewReader(body))
+	request.Header.Set("X-OMC-Run-ID", "image-request")
+	handler.startBrowserRun("agent", func(writer http.ResponseWriter, request *http.Request) {
+		received, err := io.ReadAll(request.Body)
+		if err != nil || string(received) != body {
+			t.Errorf("image body changed during handoff: %v", err)
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}, recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("supported image refused before handler: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestBrowserRunRejectsOversizedAgentBodies(t *testing.T) {
+	handler := &Handler{}
+	defer handler.CloseBrowserRuns()
+	recorder := httptest.NewRecorder()
+	handler.startBrowserRun("agent", func(http.ResponseWriter, *http.Request) {
+		t.Error("oversized body reached the handler")
+	}, recorder, detachedBrowserRequest("oversized-image-request", strings.Repeat(" ", MAX_AGENT_RUN_BYTES+1)))
+	if recorder.Code != http.StatusRequestEntityTooLarge || !strings.Contains(recorder.Body.String(), "request_too_large") {
+		t.Fatalf("oversized body was not refused: %d %s", recorder.Code, recorder.Body.String())
 	}
 }

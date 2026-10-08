@@ -23,6 +23,15 @@
 
 import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
 
+// Conversation objects use foreground transparency rather than authored colours, so every
+// preset and custom palette keeps the same relationship to the conversation's ground.
+// Live labels sweep this same foreground over secondary ink; motion adds no palette colour.
+export const THREAD_FILL_SHARES = { field: 5, fieldHover: 8, hairline: 12 } as const;
+
+// Printed output and controls share the console geometry; larger conversation objects keep
+// a modest hierarchy without introducing a separate rounded visual language.
+export const THREAD_RADII = { document: 4, control: 4, surface: 6, thread: 8 } as const;
+
 export type ThemeMode = 'dark' | 'light';
 
 export const THEME_MODES: readonly ThemeMode[] = ['dark', 'light'];

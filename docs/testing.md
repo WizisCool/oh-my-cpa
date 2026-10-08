@@ -286,6 +286,17 @@ Never add a skip switch or narrow a planner rule to make a slow run go away. If 
 selection is wider than the change warrants, add a path rule or a scenario mapping,
 with a test in `scripts/ui-impact.test.mjs` or `scripts/check-ui-plan.test.mjs`.
 
+Agent data-reference and context-efficiency assertions belong in Go tests beside
+`internal/agent`: `data_sources_test.go` covers stable, conversation-scoped handles, SQL positional
+and empty rows, metadata bounds, value-free source descriptions, actionable schema errors and
+repair feedback. A fixture-model integration verifies that metadata stays out of console events,
+completed turns stop replaying raw results, and a later Canvas resolves the original dataset
+without another read. Operation refusals, uncertain outcomes, image references, source priorities
+and omission notices survive bounded summaries; stored history remains unchanged.
+`prompt_test.go` pins domain/window/cost-evidence guidance, configured alias semantics and the
+prompt budget including escaped identity metadata. These need neither Chromium nor live model
+calls and are automatically discovered by the existing Go test lane.
+
 Agent/Playground recovery assertions belong at the lowest boundary that owns the behaviour:
 channel-driven facade tests for execution lifetime and replay, injectable transport logic tests
 for connection failures, and the existing `agent-live` / `playground` probes for actual browser
@@ -294,9 +305,43 @@ and hidden-tab suspension are logic tests, while the Agent probe checks visible 
 light Stop border. Stream-coalescing probes exclude only elapsed-label mutations, not answer
 mutations, because the clock does not publish through the transcript's run hook.
 
+Image-admission fault injection in `internal/agent/runtime_test.go` covers a later image's
+validation/storage failure and the initial session INSERT/UPDATE failing. It checks that only
+newly admitted images are removed and that a failed replacement retains the previous turn's
+images. Reset fault injection also covers pending-operation refusal and a failed reset
+session save: the original conversation and its referenced images must remain readable.
+`internal/api/browser_runs_test.go` admits a validated image request larger than the former
+text-only envelope with `X-OMC-Run-ID`, checking that the wrapper preserves the body for the
+handler; a separate case refuses bodies above the shared limit. These persistence and admission assertions belong in Go, not in browser upload probes.
+
+### Inline displays and rolling reasoning
+
+`internal/agent/display_test.go` validates the optional `render_ui.frame`, absent-field card
+compatibility, frozen `none`, and readable refusal of invalid values. The Agent workspace logic
+suite verifies that a frameless canvas changes only its ground while retaining the same sandbox
+policy; the theme logic suite pins the thread radius and foreground-fill projections.
+The existing `agent-views` probe owns multiple figures interleaved with answer text, removal from
+the capability chain, and the frameless figure's ground, border, title treatment and accessible
+name, plus focus restoration after closing full screen. The existing `agent-stream` probe observes
+reasoning before adding a capability call to the same part group, checks that the timeline preserves the page, and verifies that the reasoning
+caret follows its disclosure state. It also holds a valid AG-UI response stream at observable boundaries to assert short-text readability, one live
+thinking label, phase/elapsed-only activity, and separate title/body/activity geometry. It checks
+the 900ms glyph-only highlight and reduced-motion fallback, incremental Markdown and delayed
+content-layout following, phone reflow, manual scrollback (including a same-frame layout commit
+before its scroll event), resumption at the bottom, live disclosure remounts after scrollback,
+folding on completion and reopening settled text. Reasoning start/end fixtures carry the same
+required message IDs as the protocol. No fixed delay or additional runner is needed.
+The attachment probe asserts the normalized WebP wire payload rather than the original upload's
+encoding. Conversation exports still gather views after the answer text, as recorded in ADR 0082.
+
 ### Console readout and disclosure regressions
 
-The phone header breakpoint sweep observes layout completion after each viewport resize before counting rendered controls, including the 640/641px boundary. The check still requires the exact three-tool phone and six-tool desktop shapes.
+The existing `agent` probe checks composer pickers' keyboard navigation, confirmation and focus
+restoration, the compact reasoning menu, primary parameter names with secondary localized
+descriptions, the regular-weight trigger and the selected-row fill.
+The automatically discovered composer-picker logic suite owns navigation indexing.
+
+The phone header breakpoint sweep observes layout completion after each viewport resize before counting rendered controls, including the 640/641px boundary. The check still requires the exact two-tool phone and five-tool desktop shapes.
 
 The existing `dashboard-charts` and `dashboard-model-panels` probes measure compact tooltip gutters, row centers, marker/name columns and numeric edges, including the donut's shared readout, while logic tests cover escaped full names, exact values and localized units. `scroll-smoothing` exercises native Playground model popups with the list library's shared holder structure, repeated/reversed notches, filtering and reopening, alongside the virtual time-zone popup and request list. `provider-model-picker` verifies newly added custom models remain collapsed until explicit disclosure; `oauth-management` and the automatically discovered quota-cooldown logic suite distinguish recognized quota conditions from unexpected reasons, use the generic explanation for blank cooldown tooltips and preserve full Drawer diagnostics.
 
@@ -387,7 +432,9 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 
 - The existing `dashboard-heatmap` probe owns active popup anchor geometry, one-popup
   ownership, its cell's ARIA description, pointer/keyboard dismissal, focus restoration,
-  rapid switching, active-cell data refresh and route cleanup. It instruments scroll extent getters before navigation
+  rapid switching, active-cell data refresh and route cleanup. After rapid switching it waits for
+  the final cell's active state and its own visible ARIA-linked popup, not an outgoing tooltip;
+  anchor, popup-count and DOM-identity assertions still run afterward. It instruments scroll extent getters before navigation
   to detect synchronous mount measurements; these portal, focus and layout claims require
   Chromium rather than a pure logic test. The phone scenario continues to own initial
   today visibility, swiping and scroll preservation through a refresh.
@@ -782,4 +829,23 @@ a caller cannot choose where its approval link points. The guide's snippets, end
 plain-HTTP warning are pure functions asserted in `scripts/test-agent-workspace.ts`; the
 `agent-external` probe opens an approval link's authorization screen, allows the operation,
 retries a failed read in place, tells a missing operation and a malformed address apart from it, and
-reads the guide and its client tiles in the Agent side panel.
+reads the guide and its client tiles in the Agent's drawer.
+
+### Inline interactive component coverage
+
+The existing `agent-views` probe owns tall-content growth and shrinkage without root scrollbars,
+shared component corner geometry, local filtering over frozen rows and `OMC.compose` drafting
+without sending. The existing `agent-stream` probe holds an argument stream to prove that the
+inline preview appears before the tool call ends, model scripts and inline event handlers
+remain inactive in the preview, and the completed sandboxed component keeps its framing. `internal/agent/display_test.go` owns
+the new inline default, explicit card selection and framing validation;
+`scripts/test-agent-workspace.ts` owns draft framing selection and bounded height messages.
+`scripts/test-conversation-export.ts` also pins inline framing and conversation ground in HTML
+exports while retaining historical card framing. These extend existing owners without adding a
+runner, registration list or planner rule.
+
+Agent demo readiness checks its visible welcome identity and content rather than the generic
+page-title header. Demo acceptance then opens the capability drawer and requires a concrete
+capability before closing it. `scripts/demo-readiness.test.mjs` pins the dedicated identity,
+missing content and loading/hidden negative cases while retaining the ordinary-page heading
+checks.

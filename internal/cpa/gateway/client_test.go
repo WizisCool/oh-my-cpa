@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -139,6 +140,25 @@ func TestUpstreamErrorNeverIncludesBody(t *testing.T) {
 		t.Fatalf("unsafe error %s", encoded)
 	}
 }
+
+func TestRequestTooLargeKeepsItsCause(t *testing.T) {
+	for _, status := range []int{413, 400} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			client := makeClient(t, func(writer http.ResponseWriter, request *http.Request) {
+				writer.WriteHeader(status)
+				if status == 400 {
+					io.WriteString(writer, `{"error":{"code":"request_too_large","message":"details withheld"}}`)
+				}
+			})
+			_, err := client.ListModels(context.Background())
+			var gatewayError *Error
+			if !errors.As(err, &gatewayError) || gatewayError.Code != "request_too_large" {
+				t.Fatalf("error %v", err)
+			}
+		})
+	}
+}
+
 func TestRedirectIsNeverFollowed(t *testing.T) {
 	var calls atomic.Int64
 	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))

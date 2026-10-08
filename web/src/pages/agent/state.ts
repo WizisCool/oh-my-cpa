@@ -7,7 +7,7 @@ export type {
   AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
 } from '../../agent/types';
 import { isDisplayTool } from '../../agent/types';
-import type { CapabilityReceipt, Conversation, DisplayView, Trace, Turn, TurnPart } from '../../agent/types';
+import type { CapabilityReceipt, Conversation, Trace, Turn, TurnPart } from '../../agent/types';
 
 export interface Operation {
   id: string;
@@ -268,7 +268,18 @@ const FAILURE_KEYS: Record<string, string> = {
   run_history_full: 'agent.error.busy',
   response_too_large: 'agent.error.budget',
   gateway_unavailable: 'agent.error.gateway',
-  // The code a stored turn carries: the runtime folds every budget refusal into this one.
+  request_too_large: 'agent.error.request_too_large',
+  context_length_exceeded: 'agent.error.context',
+  upstream_rejected: 'agent.error.upstream_rejected',
+  upstream_stream_rejected: 'agent.error.upstream_refused',
+  upstream_rate_limited: 'agent.error.rate_limited',
+  gateway_auth_failed: 'agent.error.upstream_auth',
+  model_or_endpoint_missing: 'agent.error.model',
+  model_not_found: 'agent.error.model',
+  unsupported_parameter: 'agent.error.parameter_unsupported',
+  unsupported_output: 'agent.error.output',
+  invalid_image: 'pg.error.image',
+  // Compatibility for stored failures from earlier runtime versions.
   budget_exceeded: 'agent.error.budget',
   model_budget_exceeded: 'agent.error.budget',
   tool_budget_exceeded: 'agent.error.budget',
@@ -407,42 +418,4 @@ export function callDuration(trace: Pick<Trace, 'started_at_ms' | 'ended_at_ms'>
   if (!trace.started_at_ms) return undefined;
   const end = trace.ended_at_ms ?? nowMS;
   return end === undefined ? undefined : Math.max(0, end - trace.started_at_ms);
-}
-
-export interface ChartPoint {
-  x: string;
-  series: string;
-  value: number;
-}
-
-/** An epoch in milliseconds from 1973 on: a time-bucket key, not a count. */
-const EPOCH_MS_FLOOR = 1e11;
-
-/**
- * A frozen chart's rows in long form: one point per x, series and value.
- *
- * Several y fields become one series each; a `series` field splits a single y into one series per
- * value; one y alone is a single unnamed series. An x axis whose every value is an epoch in
- * milliseconds - the shape a time-bucketed aggregate returns - is read as time. Missing values are
- * left out rather than drawn as zero, which would invent a dip.
- */
-export function chartSeries(view: Pick<DisplayView, 'chart' | 'rows'>): { points: ChartPoint[]; isTime: boolean } {
-  const chart = view.chart;
-  if (!chart) return { points: [], isTime: false };
-  const points: ChartPoint[] = [];
-  for (const row of view.rows) {
-    const x = row[chart.x] === null || row[chart.x] === undefined ? '' : String(row[chart.x]);
-    if (chart.series) {
-      const value = row[chart.y[0]];
-      if (typeof value === 'number') points.push({ x, series: String(row[chart.series] ?? ''), value });
-      continue;
-    }
-    for (const field of chart.y) {
-      const value = row[field];
-      if (typeof value === 'number') points.push({ x, series: chart.y.length > 1 ? field : '', value });
-    }
-  }
-  const xs = points.map(point => point.x);
-  const isTime = chart.type !== 'pie' && xs.length > 0 && xs.every(x => /^\d+$/.test(x) && Number(x) >= EPOCH_MS_FLOOR);
-  return { points, isTime };
 }

@@ -807,7 +807,18 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   await page.evaluate((days) => {
     for (const day of days) document.querySelector(`.heatmap-cell[data-day="${day}"]`).click();
   }, switchDays);
-  await tooltip.waitFor({ state: 'visible' });
+  // An outgoing popup can still be visible before React commits the last selection. Wait for
+  // the final cell's own description and content, leaving count and identity checks below.
+  await page.waitForFunction(({ day, href }) => {
+    const cell = document.querySelector(`.heatmap-cell[data-day="${day}"]`);
+    if (!cell?.classList.contains('ant-tooltip-open')) return false;
+    const description = document.getElementById(cell.getAttribute('aria-describedby'));
+    const tip = description?.querySelector('.heatmap-tip');
+    const popper = tip?.closest('.heatmap-tip-popper');
+    return Boolean(popper && !popper.classList.contains('ant-tooltip-hidden') &&
+      getComputedStyle(tip).visibility === 'visible' && tip.getBoundingClientRect().width > 0 &&
+      tip.querySelector('.heatmap-tip-link')?.getAttribute('href') === href);
+  }, { day: busiest.day, href: expectedHref });
   const switched = await busiestCell.evaluate((cell) => ({
     anchors: document.querySelectorAll('.heatmap-tooltip-anchor').length,
     popups: document.querySelectorAll('.heatmap-tip-popper:not(.ant-tooltip-hidden)').length,

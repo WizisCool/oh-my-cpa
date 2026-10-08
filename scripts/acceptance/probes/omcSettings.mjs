@@ -779,7 +779,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   const geometryInChinese = await headerActionGeometry();
   check(
     'the header actions are measured before the language switch',
-    geometryInChinese.split(' ').length === 6,
+    geometryInChinese.split(' ').length === 5,
     `geometry=${JSON.stringify(geometryInChinese)}`,
   );
 

@@ -44,6 +44,7 @@ import {
   resolvedBuiltInPalette,
   type ThemeCore,
 } from '../web/src/theme/palette.ts';
+import { SNAPSHOT_CSS } from '../web/src/agent/conversationStyles.ts';
 import { contrastRatio, normalizeHex } from '../web/src/theme/colorMath.ts';
 import {
   DEFAULT_THEME_PREFERENCES,
@@ -55,7 +56,7 @@ import {
   sameThemePreferences,
   writeStoredThemePreferences,
 } from '../web/src/theme/themePreference.ts';
-import { createThemeConfig, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+import { createThemeConfig, MOTION_LIVE_TEXT, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireWeb = createRequire(new URL('../web/package.json', import.meta.url));
@@ -191,6 +192,18 @@ for (const mode of ['dark', 'light'] as const) {
   assert.equal(missing.mode, mode, 'and falls back within its own mode');
 }
 
+for (const definition of BUILT_IN_PALETTES) {
+  const palette = resolvedBuiltInPalette(definition.id).palette;
+  const variables = themePaletteCssVariables(palette);
+  assert.equal(variables['--motion-live-text'], `${MOTION_LIVE_TEXT.duration}ms`, `${definition.id} keeps the same live-label cadence`);
+  for (const [name, share] of [['field', 5], ['field-hover', 8], ['hairline', 12]] as const) {
+    assert.equal(variables[`--thread-${name}`], `color-mix(in srgb, var(--fg) ${share}%, transparent)`);
+  }
+  for (const [name, radius] of [['document', 4], ['control', 4], ['surface', 6], ['thread', 8]] as const) {
+    assert.equal(variables[`--radius-${name}`], `${radius}px`);
+  }
+}
+
 // Every resolved palette has a label the dictionary owns - the two custom ones included - so no
 // palette can reach the header's tooltip or a settings card as an untranslated string.
 for (const definition of BUILT_IN_PALETTES) {
@@ -302,13 +315,13 @@ assert.ok(isPaletteRef('custom') && isPaletteRef('forest') && !isPaletteRef('tre
 // ── the mirrors ──────────────────────────────────────────────────────────────
 
 /** The custom properties of one rule block in the stylesheet, as written. */
-function cssBlockVariables(selector: string): Record<string, string> {
-  const start = css.indexOf(selector);
+function cssBlockVariables(selector: string, stylesheet = css): Record<string, string> {
+  const start = stylesheet.indexOf(selector);
   assert.ok(start >= 0, `index.css declares ${selector}`);
-  const open = css.indexOf('{', start);
-  const close = css.indexOf('}', open);
+  const open = stylesheet.indexOf('{', start);
+  const close = stylesheet.indexOf('}', open);
   const variables: Record<string, string> = {};
-  for (const match of css.slice(open, close).matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
+  for (const match of stylesheet.slice(open, close).matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
     variables[`--${match[1]}`] = match[2].trim();
   }
   return variables;
@@ -317,6 +330,11 @@ function cssBlockVariables(selector: string): Record<string, string> {
 // The light block inherits every variable it does not redeclare from `:root`, so the fallback a
 // light visitor actually gets is the two blocks merged - which is also how an alias inherited from
 // `:root` still lands on the right token.
+const snapshotVariables = cssBlockVariables(':root {', SNAPSHOT_CSS);
+for (const [name, radius] of [['document', 4], ['control', 4], ['surface', 6], ['thread', 8]] as const) {
+  assert.equal(snapshotVariables[`--radius-${name}`], `${radius}px`, `HTML exports keep the ${name} geometry`);
+}
+
 const rootVariables = cssBlockVariables(':root {');
 const lightVariables = { ...rootVariables, ...cssBlockVariables(":root[data-theme-mode='light'] {") };
 
@@ -424,6 +442,8 @@ const stylesheetToken = (name: string): number => {
   assert.ok(match, `web/src/index.css defines --motion-${name}`);
   return toMilliseconds(match[1], `--motion-${name}`);
 };
+assert.deepEqual(MOTION_LIVE_TEXT, { duration: 900, easing: 'linear' }, 'a live-label crossing lasts 900ms');
+assert.equal(stylesheetToken('live-text'), MOTION_LIVE_TEXT.duration, 'the live-label loop agrees before and after theme hydration');
 const antdMotion = createThemeConfig(resolvedBuiltInPalette('omc-dark')).token;
 assert.equal(stylesheetToken('fast'), toMilliseconds(antdMotion?.motionDurationFast, 'motionDurationFast'),
   '--motion-fast is the fast token Ant Design animates with');

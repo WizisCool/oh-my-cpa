@@ -17,7 +17,7 @@ export interface ModelPickerProps {
 }
 
 /** The maker's mark for a call point, read from its name; an unrecognised name gets a neutral box. */
-function ModelMark({ callPoint }: { callPoint: string }) {
+export function ModelMark({ callPoint }: { callPoint: string }) {
   const manufacturer = resolveModelManufacturer(callPoint);
   const iconId = manufacturer.modelIconId || manufacturer.iconId;
   return iconId

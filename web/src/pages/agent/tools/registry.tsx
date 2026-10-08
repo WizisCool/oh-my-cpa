@@ -33,12 +33,12 @@ function useTrace(part: ToolCallMessagePartProps): Trace {
 
 /** The generic call row, with the approval card under it while the call waits on the operator. */
 export function ToolFallback(part: ToolCallMessagePartProps) {
-  const { capabilities, pendingOperation, selectedCallID, selectCall } = useAgentView();
+  const { capabilities, pendingOperation } = useAgentView();
   const trace = useTrace(part);
   const approval = part.approval;
   const isOpen = !!approval && approval.approved === undefined;
   return (
-    <CapabilityCall trace={trace} isSelected={selectedCallID === trace.id} onSelect={selectCall}>
+    <CapabilityCall trace={trace}>
       {isOpen && (
         <ApprovalCard
           operation={pendingOperation?.id === approval.id ? pendingOperation : undefined}
@@ -51,15 +51,12 @@ export function ToolFallback(part: ToolCallMessagePartProps) {
 }
 
 function DisplayToolView(part: ToolCallMessagePartProps) {
-  const { selectedCallID, selectCall } = useAgentView();
-  const trace = useTrace(part);
-  return <DisplayCall trace={trace} isSelected={selectedCallID === trace.id} onSelect={selectCall} />;
+  return <DisplayCall trace={useTrace(part)} />;
 }
 
 const AGENT_TOOLKIT: Toolkit = {
-  render_chart: { type: 'backend', render: DisplayToolView },
-  render_table: { type: 'backend', render: DisplayToolView },
   render_view: { type: 'backend', render: DisplayToolView },
+  render_ui: { type: 'backend', render: DisplayToolView },
   render_canvas: { type: 'backend', render: DisplayToolView },
 };
 

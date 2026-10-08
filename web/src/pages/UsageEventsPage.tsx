@@ -75,7 +75,6 @@ import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
-import { usePageContext } from '../agent/pageContext';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
@@ -163,12 +162,6 @@ export const UsageEventsPage: React.FC = () => {
     schedulePageNavigationReset,
   } = liveEdge;
   const [selected, setSelected] = React.useState<number | null>(null);
-  // The request whose details are open is what "this request" means to the assistant.
-  // The assistant is asked about a request after its details are closed as often as while they
-  // are open, so the context is the request last opened here, not the one open right now.
-  const [lastOpened, setLastOpened] = React.useState<number | null>(null);
-  if (selected !== null && selected !== lastOpened) setLastOpened(selected);
-  usePageContext({ selection: lastOpened === null ? undefined : { kind: 'request', id: String(lastOpened) } });
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
   // The records picked for export, kept as the rows themselves rather than their
   // ids: a selection outlives the page it was made on, and a poll may replace the

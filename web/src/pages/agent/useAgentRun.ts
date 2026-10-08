@@ -6,9 +6,8 @@ import type { RunFrame } from '../../agent/runReducer';
 import { cancelRun, discoverRun } from '../../agent/reconnect';
 import { runAgent } from '../../agent/transport';
 import { DECLARED_TOOLS } from '../../agent/types';
-import type { Conversation } from '../../agent/types';
-import { pageContextEntries } from '../../agent/pageContext';
-import type { PageContext } from '../../agent/pageContext';
+import type { Conversation, Presentation } from '../../agent/types';
+import { toBrowserTime } from '../../types/serverClock';
 import { createID } from '../playground/state';
 import { failureCode } from './api';
 
@@ -30,6 +29,8 @@ export interface AgentRunControls {
   isRunning: boolean;
   /** The message the current run was started with, shown until the server's stored turn replaces it. */
   pendingMessage: string;
+  /** The images that message carries, as the data URLs they were read into. */
+  pendingImages: readonly string[];
   /** Whether the current run continues the stored turn that was waiting on a decision. */
   isResuming: boolean;
   /** What the run has produced so far. */
@@ -43,12 +44,24 @@ export interface AgentRunControls {
    * Sends a new message, optionally in place of the newest turn. Resolves when the run settles;
    * rejects when the server refused it before accepting.
    */
-  send: (message: string, replaceTurn?: string) => Promise<void>;
+  send: (message: string, options?: SendOptions) => Promise<void>;
   /** Continues the stored turn from the interrupts the operator has decided. */
   resume: (interruptIDs: string[]) => Promise<void>;
   stop: () => void;
   clearError: () => void;
 }
+
+/** What one sent message asks beyond its text. */
+export interface SendOptions {
+  /** The newest turn the message takes the place of: a retry or an edit. */
+  replaceTurn?: string;
+  /** The presentation a composer command asked the answer to take. */
+  present?: Presentation;
+  /** Images sent with the message, as data URLs. */
+  images?: readonly string[];
+}
+
+const NO_IMAGES: readonly string[] = [];
 
 interface AgentRunOptions {
   conversation: Conversation | undefined;
@@ -57,8 +70,7 @@ interface AgentRunOptions {
   /** Empty for the model's own default. */
   reasoningEffort: string;
   language: string;
-  /** Where the operator is; sent with a new message, never with a continuation. */
-  pageContext?: PageContext;
+  tokenStyle: string;
   /** Writes a conversation the server has already persisted, so no refetch is needed for it. */
   onConversation: (conversation: Conversation) => void;
 }
@@ -85,6 +97,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   const queryClient = useQueryClient();
   const [isRunning, setIsRunning] = React.useState(false);
   const [pendingMessage, setPendingMessage] = React.useState('');
+  const [pendingImages, setPendingImages] = React.useState(NO_IMAGES);
   const [isResuming, setIsResuming] = React.useState(false);
   const [frame, setFrame] = React.useState<RunFrame>(EMPTY_FRAME);
   const [errorCode, setErrorCode] = React.useState('');
@@ -115,17 +128,23 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     const controller = controllerRef.current;
     controller?.abort();
     controllerRef.current = undefined;
-  }, []);
+    // Leaving mid-run leaves a cached conversation from before the run: it has no running turn and
+    // names no run to rejoin, and a return inside the cache's fresh window would draw it as the
+    // whole truth. Dropped, the next visit reads the server's conversation and rejoins the run.
+    if (controller) queryClient.removeQueries({ queryKey: ['agent-session'] });
+  }, [queryClient]);
 
   const stop = React.useCallback(() => {
     const controller = controllerRef.current;
     if (controller && runIDRef.current) void cancelRun('agent', runIDRef.current, controller.signal).catch(() => {});
   }, []);
 
-  const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string, replaceTurn = '') => {
-    const { conversation: current, model, fingerprint, reasoningEffort, language, pageContext } = optionsRef.current;
+  // `isMessage` rather than a non-empty text: a message may be images alone, and a retry of one
+  // sends no words at all.
+  const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string, { replaceTurn = '', present, images = NO_IMAGES }: SendOptions = {}, isMessage = false) => {
+    const { conversation: current, model, fingerprint, reasoningEffort, language, tokenStyle } = optionsRef.current;
     if (controllerRef.current || !current) throw new RunRejectedError('agent_busy', message);
-    const isResume = message === '';
+    const isResume = !isMessage;
     const runID = recoveryID ?? newRunID();
     runIDRef.current = runID;
     const controller = new AbortController();
@@ -134,8 +153,12 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     setFrame(EMPTY_FRAME);
     setIsResuming(isResume);
     setErrorCode('');
-    setStartedAtMS(recoveryID ? current.turns.find(turn => turn.status === 'running')?.started_at_ms ?? Date.now() : Date.now());
+    // A run started here is counted on this browser's clock. A recovered one started on the
+    // server's, so its stamp is brought onto this clock first and never read as the future.
+    const recoveredAtMS = recoveryID ? current.turns.find(turn => turn.status === 'running')?.started_at_ms : undefined;
+    setStartedAtMS(recoveredAtMS ? Math.min(toBrowserTime(recoveredAtMS), Date.now()) : Date.now());
     setPendingMessage(message);
+    setPendingImages(images);
     setReplacedTurnID(replaceTurn);
     setIsRunning(true);
     let rejection: RunRejectedError | undefined;
@@ -144,16 +167,17 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
       const events = runAgent({
         threadId: current.id,
         runId: runID,
-        ...(isResume ? {} : { message: { id: newRunID(), content: message } }),
+        ...(isResume ? {} : { message: { id: newRunID(), content: message, images } }),
         tools: DISPLAY_TOOL_DECLARATIONS,
         language,
-        ...(isResume ? {} : { page: pageContextEntries(pageContext) }),
+        tokenStyle,
         forwardedProps: {
           revision: current.revision,
           model,
           client_key_fingerprint: fingerprint,
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           ...(replaceTurn ? { replace_turn: replaceTurn } : {}),
+          ...(present ? { present } : {}),
         },
         ...(isResume ? { resume: resume.map(interruptId => ({ interruptId, status: 'resolved' as const })) } : {}),
       }, controller.signal, () => {
@@ -198,6 +222,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
       setFrame(EMPTY_FRAME);
       setIsResuming(false);
       setPendingMessage('');
+      setPendingImages(NO_IMAGES);
       setReplacedTurnID('');
       if (controllerRef.current === controller) controllerRef.current = undefined;
       setIsRunning(false);
@@ -228,12 +253,13 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   return {
     isRunning,
     pendingMessage,
+    pendingImages,
     isResuming,
     frame,
     errorCode,
     startedAtMS,
     replacedTurnID,
-    send: React.useCallback((message: string, replaceTurn?: string) => execute(message, [], undefined, replaceTurn), [execute]),
+    send: React.useCallback((message: string, options?: SendOptions) => execute(message, [], undefined, options, true), [execute]),
     resume: React.useCallback((interruptIDs: string[]) => execute('', interruptIDs), [execute]),
     stop,
     clearError: React.useCallback(() => setErrorCode(''), []),

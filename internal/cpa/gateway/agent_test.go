@@ -2,8 +2,12 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -77,5 +81,92 @@ func TestAgentStreamSeparatesReasoningAndForwardsEffort(t *testing.T) {
 	}
 	if _, err := client.StreamAgent(context.Background(), "model", "bad\neffort", nil, nil, func(Event) error { return nil }); err == nil {
 		t.Fatal("a control character in the effort level was accepted")
+	}
+}
+
+// A message with images is multi-part content; one without stays the plain string every provider
+// accepts, and an image no longer loaded is said to be missing rather than silently dropped.
+func TestAgentWireMessagesCarryImagesAsParts(t *testing.T) {
+	wire, imageBytes := agentWireMessages([]AgentMessage{
+		{Role: "system", Content: "s"},
+		{Role: "user", Content: "What is this?", Images: []AgentImage{{ID: "a", URL: "data:image/png;base64,AAAA"}, {ID: "b"}}},
+	})
+	raw, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[{"role":"system","content":"s"},{"content":[{"type":"text","text":"What is this?"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}},{"type":"text","text":"` + IMAGE_UNAVAILABLE + `"}],"role":"user"}]`
+	if string(raw) != want || imageBytes != len("data:image/png;base64,AAAA") {
+		t.Fatalf("wire %s (%d image bytes)", raw, imageBytes)
+	}
+}
+
+func TestAgentContextErrorsInHTTPAndStreamAreStructured(t *testing.T) {
+	for _, isStream := range []bool{false, true} {
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if isStream {
+				writer.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(writer, "data: {\"error\":{\"type\":\"context_window_exceeded\",\"param\":\"messages\",\"message\":\"sensitive prompt excerpt\"}}\n\n")
+			} else {
+				writer.WriteHeader(400)
+				fmt.Fprint(writer, `{"error":{"code":"prompt_too_long","param":"messages","message":"sensitive prompt excerpt"}}`)
+			}
+		}))
+		client, _ := NewClient(server.URL, "key", false)
+		_, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: "q"}}, nil, func(Event) error { return nil })
+		var failure *Error
+		if !errors.As(err, &failure) || failure.Code != "context_length_exceeded" || failure.Parameter != "messages" || strings.Contains(err.Error(), "sensitive") {
+			t.Fatalf("error %+v", err)
+		}
+		server.Close()
+	}
+}
+
+// A stream error arrives after the status line, so the frame's own words decide whether another
+// attempt can help: a named transient fault is an outage, anything else is a refusal.
+func TestAgentStreamSeparatesRefusalsFromOutages(t *testing.T) {
+	for _, testCase := range []struct{ name, frame, code string }{
+		{name: "unnamed", frame: `{"error":{"message":"sensitive prompt excerpt"}}`, code: "upstream_stream_rejected"},
+		{name: "refusal", frame: `{"error":{"type":"invalid_request_error"}}`, code: "upstream_stream_rejected"},
+		{name: "outage", frame: `{"error":{"type":"server_error"}}`, code: "upstream_rejected"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprintf(writer, "data: %s\n\n", testCase.frame)
+			}))
+			client, _ := NewClient(server.URL, "key", false)
+			_, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: "q"}}, nil, func(Event) error { return nil })
+			var failure *Error
+			if !errors.As(err, &failure) || failure.Code != testCase.code || strings.Contains(err.Error(), "sensitive") {
+				t.Fatalf("error %+v", err)
+			}
+			server.Close()
+		})
+	}
+}
+
+func TestAgentDoesNotSendTokenBudgetsOrCapToolCounts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		for _, name := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
+			if _, exists := payload[name]; exists {
+				t.Errorf("token budget sent: %s", name)
+			}
+		}
+		writer.Header().Set("Content-Type", "text/event-stream")
+		for index := 0; index < 32; index++ {
+			fmt.Fprintf(writer, "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":%d,\"id\":\"call-%d\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]}}]}\n\n", index, index)
+		}
+		fmt.Fprint(writer, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer server.Close()
+	client, _ := NewClient(server.URL, "key", false)
+	reply, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: strings.Repeat("x", 2<<20)}}, nil, func(Event) error { return nil })
+	if err != nil || len(reply.Calls) != 32 {
+		t.Fatalf("calls %d err %v", len(reply.Calls), err)
 	}
 }

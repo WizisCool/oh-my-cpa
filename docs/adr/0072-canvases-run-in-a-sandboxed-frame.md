@@ -1,9 +1,14 @@
 # ADR 0072: Canvases run in a sandboxed frame
 
 - Status: Accepted
+- Amended by
+  [ADR 0073](0073-charts-and-tables-are-canvases-and-a-command-can-hold-an-answer-to-one.md),
+  which names this tool `render_ui` and retires `render_canvas` to stored traces, and by
+  [ADR 0083](0083-agent-runs-retain-the-work-the-task-needs.md), which removes the
+  display-count ceiling below.
 - Date: 2026-10-08
 - Extends [ADR 0042](0042-display-tools-draw-referenced-frozen-data.md) and
-  [ADR 0071](0071-panels-are-a-block-vocabulary-with-open-icons.md): `render_canvas`
+  [ADR 0079](0079-panels-are-a-block-vocabulary-with-open-icons.md): `render_canvas`
   is the fourth display tool, for what the other three cannot express.
 
 ## Context

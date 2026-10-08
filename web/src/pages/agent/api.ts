@@ -1,4 +1,5 @@
 import { ApiError, requestResponse } from '../../api/client';
+import { observeServerClock } from '../../types/serverClock';
 import type { Capability, Conversation, Operation, QuestionReply } from './state';
 
 /**
@@ -13,7 +14,10 @@ import type { Capability, Conversation, Operation, QuestionReply } from './state
  */
 
 export async function getSession(signal?: AbortSignal): Promise<Conversation> {
-  return (await requestResponse('/agent/session', { signal })).json();
+  const response = await requestResponse('/agent/session', { signal });
+  // The turns below carry the server's timestamps; this is where its clock is read to count from them.
+  observeServerClock(response);
+  return response.json();
 }
 
 export async function resetSession(revision: number): Promise<Conversation> {
@@ -67,4 +71,27 @@ export function failureCode(error: unknown): string {
 export async function getCapabilities(signal?: AbortSignal): Promise<Capability[]> {
   const body = await (await requestResponse('/capabilities', { signal })).json() as { capabilities?: Capability[] };
   return body.capabilities ?? [];
+}
+
+/**
+ * The bytes of the images a conversation's turns reference, as data URLs keyed by image id. An
+ * export embeds them so the file stands on its own; one that cannot be read is left out of the map
+ * and of the export rather than failing it.
+ */
+export async function readTurnImages(turns: readonly { images?: readonly { id: string }[] }[]): Promise<Map<string, string>> {
+  const read = new Map<string, string>();
+  await Promise.all(turns.flatMap(turn => turn.images ?? []).map(async image => {
+    try {
+      const blob = await (await requestResponse(`/agent/images/${encodeURIComponent(image.id)}`)).blob();
+      read.set(image.id, await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('image unreadable'));
+        reader.readAsDataURL(blob);
+      }));
+    } catch {
+      // Left out: the export says what the conversation holds, minus what could not be read.
+    }
+  }));
+  return read;
 }

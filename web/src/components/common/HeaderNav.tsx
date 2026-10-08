@@ -14,14 +14,12 @@ interface HeaderNavProps {
   onDiscover?: () => void;
   onLogout?: () => void;
   isLoggingOut?: boolean;
-  /** An action that leads the cluster on every width: the assistant's toggle. */
-  leading?: React.ReactNode;
 }
 
 /**
- * The shell's right-hand actions: assistant, repository, refresh, theme, language, sign out.
+ * The shell's right-hand actions: repository, refresh, theme, language, sign out.
  *
- * Phones keep the assistant and refresh direct and disclose labelled tools; desktop controls remain fixed-width.
+ * Phones keep refresh direct and disclose labelled tools; desktop controls remain fixed-width.
  * Every desktop action is a fixed-width control. Sign out is an icon button rather than a
  * labelled one because its label is the only text here that changes length with the
  * language - "退出" beside "Sign out" - and a button that resizes on a language switch
@@ -47,7 +45,6 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   onDiscover,
   onLogout,
   isLoggingOut = false,
-  leading,
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
@@ -59,7 +56,6 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
     return (
       <div className="app-header-actions">
         {isDemo && <span className="demo-chip" role="note" title={t('demo.badge_tooltip')}>{t('demo.badge')}</span>}
-        {leading}
         <Button type="text" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
         <ActionMenu label={t('header.tools')}>
           <span className="action-menu-label">{t('header.theme')}</span>
@@ -92,7 +88,6 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           </span>
         </Tooltip>
       )}
-      {leading}
       <Tooltip title={t('header.open_repository')}>
         <Button
           type="text"

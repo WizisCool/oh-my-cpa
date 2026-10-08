@@ -28,7 +28,6 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
 import { RouteLoading } from './PageLoading';
-import { AssistantDockFrame } from '../assistant/AssistantDockFrame';
 import { CpaUpgradeRequired } from './CpaUpgradeRequired';
 import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -181,8 +180,6 @@ function isNarrowViewport(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
 }
 
-const ASSISTANT_SHORTCUT = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘J' : 'Ctrl+J';
-
 export const AppLayout: React.FC = () => {
   const t = useT();
   const toast = useToast();
@@ -192,20 +189,6 @@ export const AppLayout: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
-
-  // The assistant is the Agent beside another page, so on the Agent's own page there is nothing
-  // to dock. Its open state outlives route changes: a run in progress keeps streaming into it.
-  const [isAssistantOpen, setIsAssistantOpen] = React.useState(false);
-  const hasAssistant = location.pathname !== '/agent';
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'j' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
-      event.preventDefault();
-      setIsAssistantOpen(isOpen => !isOpen);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   // The sheet is an overlay like any other: Back puts it away rather than leaving the route,
   // which on a phone is what the hardware button is expected to do. Gated on `isMobile`
@@ -423,19 +406,6 @@ export const AppLayout: React.FC = () => {
             />
           </div>
           <HeaderNav
-            leading={hasAssistant && (
-              <Tooltip title={`${t('assistant.title')} (${ASSISTANT_SHORTCUT})`}>
-                <Button
-                  type="text"
-                  icon={<RobotOutlined />}
-                  aria-label={t('assistant.title')}
-                  aria-pressed={isAssistantOpen}
-                  aria-keyshortcuts="Control+J Meta+J"
-                  data-testid="assistant-toggle"
-                  onClick={() => setIsAssistantOpen(isOpen => !isOpen)}
-                />
-              </Tooltip>
-            )}
             isDiscovering={false}
             onDiscover={() => { void queryClient.invalidateQueries(); toast.success(t('common.refresh')); }}
             onLogout={() => logoutMutation.mutate()}
@@ -469,7 +439,6 @@ export const AppLayout: React.FC = () => {
           </div>
         </Content>
       </Layout>
-      {hasAssistant && <AssistantDockFrame isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />}
       {isMobile && (
         /* The sheet carries the same three parts as the rail - brand, nav, foot - because it is the
            rail at a phone width, not a menu of links. Its width is bounded in `vw` as well as `px:`

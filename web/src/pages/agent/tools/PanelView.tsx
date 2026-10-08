@@ -5,7 +5,7 @@ import { AgentIcon } from './AgentIcon';
 import styles from '../AgentPage.module.css';
 
 /**
- * A panel (ADR 0071): the blocks a model chose, drawn from the console's own tokens. The model
+ * A panel (ADR 0079): the blocks a model chose, drawn from the console's own tokens. The model
  * decides what to say and in which block; every pixel of how a block looks is decided here, which
  * is what lets a view follow a theme switch and stay legible at any width.
  */

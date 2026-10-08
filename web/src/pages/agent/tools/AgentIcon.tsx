@@ -6,7 +6,7 @@ import { LobeIcon } from '../../../components/LobeIcon';
 let loadedIcons: LucideIconData | undefined;
 
 /**
- * An icon a panel named (ADR 0071): a maker's mark, or any Lucide icon drawn from the lazily
+ * An icon a panel named (ADR 0079): a maker's mark, or any Lucide icon drawn from the lazily
  * loaded set. While the set loads, and for a name nothing answers to, the slot holds a neutral
  * mark of the same size, so a view's layout never depends on whether its icons resolved.
  */

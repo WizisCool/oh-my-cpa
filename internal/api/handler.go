@@ -183,6 +183,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/capabilities/invoke", h.invokeCapability)
 				v1.Get("/capabilities/operations/{id}", h.getCapabilityOperation)
 				v1.Get("/agent/session", h.currentAgent)
+				v1.Get("/agent/images/{id}", h.agentImage)
 				v1.Post("/agent/session/reset", h.resetAgent)
 				v1.Post("/agent/run", h.startAgentRun)
 				v1.Get("/agent/operations/{id}", h.getCapabilityOperation)

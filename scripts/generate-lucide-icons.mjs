@@ -8,7 +8,7 @@ const require = createRequire(path.join(root, 'web', 'package.json'));
 export const LUCIDE_ICONS_PATH = path.join(root, 'web', 'src', 'generated', 'lucideIcons.json');
 
 /**
- * The Agent's panels name icons freely (ADR 0071), so the console needs the whole Lucide set at
+ * The Agent's panels name icons freely (ADR 0079), so the console needs the whole Lucide set at
  * hand - but only as drawing data, and only once a panel asks for one. Importing the set as React
  * components would put two thousand modules in the startup graph, and importing each on demand
  * would embed two thousand chunks in the binary. One generated JSON document, loaded lazily, is

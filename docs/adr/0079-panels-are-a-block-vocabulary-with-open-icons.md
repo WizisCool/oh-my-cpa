@@ -1,8 +1,14 @@
-# ADR 0071: Panels are a block vocabulary with open icons
+# ADR 0079: Panels are a block vocabulary with open icons
 
 - Status: Accepted
+- Superseded for new calls by
+  [ADR 0073](0073-charts-and-tables-are-canvases-and-a-command-can-hold-an-answer-to-one.md),
+  [ADR 0085](0085-a-generated-ui-is-composed-from-components-and-drawn-as-it-is-written.md) and
+  [ADR 0087](0087-new-generated-interfaces-default-to-inline-components.md): `render_view` is
+  retired to the stored traces that already name it, and the block vocabulary below is what those
+  stored panels are drawn from. A new display is one `render_ui` call.
 - Date: 2026-10-08
-- Extends [ADR 0042](0042-display-tools-draw-referenced-frozen-data.md): `render_view` is a third
+- Extends [ADR 0042](0042-display-tools-draw-referenced-frozen-data.md): `render_view` was a third
   display tool. Charts and tables keep referencing their rows exactly as ADR 0042
   decided; nothing there changes.
 

@@ -14,7 +14,6 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -416,7 +415,7 @@ func (h *Handler) ensureAgent() error {
 		h.agent.executor = executor
 		h.agent.runtime = &agent.Runtime{Executor: executor, Store: store, Location: h.repo.Timezone().Location, Slots: h.playgroundSlots, Client: func(ctx context.Context, fingerprint string) (agent.ModelClient, error) {
 			return h.inferenceClient(ctx, fingerprint)
-		}, ContextWindow: h.agentContextWindow}
+		}}
 		h.agent.oauth = map[string]management.OAuthAuthURLResponse{}
 	})
 	if h.agent.err == nil && h.agent.cleanupMu.TryLock() {
@@ -446,38 +445,4 @@ func (h *Handler) ensureAgent() error {
 		}
 	}
 	return h.agent.err
-}
-
-// agentContextWindow is the context window, in tokens, the reference catalog lists for a call
-// point, or zero when it lists none.
-//
-// A call point that is itself a catalog name is answered without leaving the process. One that is
-// an alias or a prefixed route is resolved through the model directory, which asks CPA; that is
-// bounded, and any failure reads as unknown so the turn runs on the default window rather than
-// waiting on a lookup. Several routes can serve one call point, and the smallest of their windows
-// is the one a request is sure to fit.
-func (h *Handler) agentContextWindow(ctx context.Context, callPoint string) int64 {
-	if model, exists := modelcatalog.DEFAULT_CATALOG.Match(callPoint); exists && model.Limit.Context > 0 {
-		return model.Limit.Context
-	}
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	directory, err := h.operationsService().ListModelSquare(ctx, operations.ModelSquareQuery{})
-	if err != nil {
-		return 0
-	}
-	var window int64
-	for _, route := range directory.Routes {
-		if route.CallPoint != callPoint {
-			continue
-		}
-		identity := route.UpstreamModel
-		if identity == "" {
-			identity = route.CallPoint
-		}
-		if model, exists := directory.ModelInfo[identity]; exists && model.Limit.Context > 0 && (window == 0 || model.Limit.Context < window) {
-			window = model.Limit.Context
-		}
-	}
-	return window
 }

@@ -39,9 +39,7 @@ export async function mobileConsole({ base, page, check, errors }) {
           hasReachableControls: controls.every((box) => box.left >= 0 && box.right <= innerWidth && box.width >= 32),
         };
       });
-      // The assistant's toggle joins refresh and More everywhere but on the Agent's own page.
-      const headerTools = route === '/agent' ? 2 : 3;
-      check(`${route} fits ${width}px with ${headerTools} reachable header tools`, geometry.overflow <= 1 && geometry.headerOverflow <= 1 && geometry.actions === headerTools && geometry.hasReachableControls, JSON.stringify(geometry));
+      check(`${route} fits ${width}px with two reachable header tools`, geometry.overflow <= 1 && geometry.headerOverflow <= 1 && geometry.actions === 2 && geometry.hasReachableControls, JSON.stringify(geometry));
       check(`${route} has no recovery fallback at ${width}px`, await page.locator('#route-error-title').count() === 0);
       if (route === '/dashboard') {
         const pageTools = page.locator('.terminal-page-actions').getByRole('button', { name: 'More', exact: true });
@@ -66,7 +64,7 @@ export async function mobileConsole({ base, page, check, errors }) {
     await page.setViewportSize({ width, height: 900 });
     await settleLayout(page);
     const count = await page.locator('.app-header-actions > .ant-btn').count();
-    check(`header changes once at the phone boundary (${width}px)`, count === (width <= 640 ? 3 : 6), `tools=${count}`);
+    check(`header changes once at the phone boundary (${width}px)`, count === (width <= 640 ? 2 : 5), `tools=${count}`);
     const hasSheetTrigger = await page.locator('.app-header-left button').isVisible();
     check(`navigation remains reachable at ${width}px`, hasSheetTrigger);
   }

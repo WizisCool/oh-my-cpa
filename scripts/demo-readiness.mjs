@@ -3,7 +3,7 @@ export const DEMO_ROUTES = [
   { path: '/dashboard', heading: '仪表盘', reads: ['/management/dashboard'], content: '.dashboard-grid .dashboard-tile' },
   { path: '/model-square', heading: '模型广场', reads: ['/management/model-square', '/pricing', '/usage/facets'], content: '.model-square-page [data-model-identity]' },
   { path: '/playground', heading: '操练场', reads: ['/management/api-keys'], content: '[data-testid="playground-empty"]' },
-  { path: '/agent', heading: '智能体', reads: ['/agent/session', '/capabilities'], content: '[data-testid="agent-directory"]', detail: 'providers_list' },
+  { path: '/agent', heading: 'Oh My CPA', headingSelector: '[data-testid="agent-empty"] [aria-label="Oh My CPA"]', reads: ['/agent/session', '/capabilities'], content: '[data-testid="agent-empty"]' },
   // Nothing can be prepared in the demonstration, so the page states that instead of reading an operation.
   { path: '/authorize/:id', heading: '授权外部 Agent', reads: [], content: '[data-testid="agent-authorize-demo"]' },
   { path: '/ai-providers', heading: 'AI 提供商', reads: ['/management/providers'], content: '.providers-page .ant-table-row' },
@@ -59,8 +59,8 @@ export function watchDemoReads(page, base, reads, timeout = 30_000) {
 /** Runs in Chromium: sidebar labels or a mounted loading shell are not page content. */
 export function hasDemoContent(route) {
   const isVisible = (element) => Boolean(element && element.getClientRects().length > 0);
-  const heading = [...document.querySelectorAll('h1.terminal-title')]
-    .some((element) => isVisible(element) && element.textContent.includes(route.heading));
+  const heading = [...document.querySelectorAll(route.headingSelector ?? 'h1.terminal-title')]
+    .some((element) => isVisible(element) && (element.textContent.includes(route.heading) || element.getAttribute?.('aria-label') === route.heading));
   const content = document.querySelector(route.content);
   const isLoading = [...document.querySelectorAll('.ant-spin-spinning, .ant-skeleton, .request-loading, [aria-busy="true"]')]
     .some(isVisible);

@@ -17,11 +17,15 @@ import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ArrowUpOutlined, CloseOutlined, PictureOutlined } from '../icons';
 import styles from './Workspace.module.css';
 
-/** Something `/` runs: an action of the page, or a prompt it writes into the box. */
+/**
+ * Something `/` runs: an action of the page, or a setting of the next message. A command is listed
+ * only while it can run, so the list never offers a row that would do nothing.
+ */
 export interface ComposerCommand {
   /** What the operator types after the slash. */
   id: string;
   description: string;
+  icon?: React.ReactNode;
   run: () => void;
 }
 
@@ -49,15 +53,19 @@ export interface AssistantComposerProps {
   blockedReason?: string;
   /** Above the input, inside the frame: a quote, a hint. */
   header?: React.ReactNode;
+  /** What the next message carries beyond its text, as removable chips above the input. */
+  chips?: React.ReactNode;
   footerStart?: React.ReactNode;
-  /** A reading beside the send control, such as how full the model's context is. */
+  /** Beside the send control: what the message is sent with, such as the model. */
   footerEnd?: React.ReactNode;
   /** A line under the composer: the cost or privacy boundary the operator is about to cross. */
   note?: React.ReactNode;
+  /** A reading under the composer, opposite the note, such as how full the model's context is. */
+  status?: React.ReactNode;
   /** Offered when the runtime has an attachment adapter: the picker's label and the remove label. */
   attachments?: { addLabel: string; removeLabel: string; icon?: React.ReactNode };
   /** Offered when the runtime queues messages sent during a run. */
-  queue?: { title: string; removeLabel: string };
+  queue?: { summary: (count: number) => string; removeLabel: string };
   /** Offered when the page has commands or names to complete: `/` and `@` open a list above the box. */
   triggers?: ComposerTriggers;
 }
@@ -96,6 +104,10 @@ const PHONE_ROWS = { minRows: 1, maxRows: 5 };
  * On a phone the conversation is most of the screen and the keyboard takes half of what is left,
  * so the box starts at one line with send - and the attachment picker - beside it, and a foot row
  * exists only when the page has a control of its own to put in it.
+ *
+ * The frame holds what a message is made of and sent with - attach, the page's own choice such as
+ * the model, send - and nothing that only reports: readings sit under it with the note, and `/`
+ * and `@` are taught by the placeholder rather than by buttons.
  */
 export function AssistantComposer(props: AssistantComposerProps) {
   // The input reads the open list from this root, so it has to sit above the hooks that ask for it.
@@ -113,9 +125,11 @@ function ComposerSurface({
   stopLabel,
   blockedReason,
   header,
+  chips,
   footerStart,
   footerEnd,
   note,
+  status,
   attachments,
   queue,
   triggers,
@@ -125,6 +139,7 @@ function ComposerSurface({
   const isRunning = useAuiState(state => state.thread.isRunning);
   const canSend = useAuiState(state => state.composer.canSend);
   const hasQueue = useAuiState(state => state.thread.capabilities.queue);
+  const queuedCount = useAuiState(state => state.composer.queue.length);
   const hasDraft = useAuiState(state => state.composer.text.trim().length > 0 || state.composer.attachments.length > 0);
   const shouldShowStop = isRunning && (!hasQueue || !hasDraft);
 
@@ -173,22 +188,21 @@ function ComposerSurface({
     submit();
   };
 
+  // Send and stop are one round primary-filled button whose glyph changes: the single filled shape in the
+  // frame, so the eye finds the action without reading the row.
   const send = (
     <Tooltip title={canSend ? sendLabel : blockedReason}>
-      <Button
-        type="primary"
-        className={styles['send-button']}
-        aria-label={sendLabel}
-        aria-disabled={!canSend || undefined}
-        icon={<ArrowUpOutlined />}
-        onClick={submit}
-      />
+      <button type="button" className={styles['send-button']} aria-label={sendLabel} aria-disabled={!canSend || undefined} onClick={submit}>
+        <ArrowUpOutlined aria-hidden="true" />
+      </button>
     </Tooltip>
   );
   const stop = (
     <Tooltip title={stopLabel}>
       <ComposerPrimitive.Cancel asChild>
-        <Button className={styles['stop-button']} aria-label={stopLabel} icon={<span className={styles['stop-glyph']} aria-hidden="true" />} />
+        <button type="button" className={styles['send-button']} data-action="stop" aria-label={stopLabel}>
+          <span className={styles['stop-glyph']} aria-hidden="true" />
+        </button>
       </ComposerPrimitive.Cancel>
     </Tooltip>
   );
@@ -201,33 +215,46 @@ function ComposerSurface({
   const addAttachment = attachments && (
     <Tooltip title={attachments.addLabel}>
       <ComposerPrimitive.AddAttachment asChild>
-        <Button type="text" size="small" aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
+        <Button type="text" shape="circle" className={styles['attach-button']} aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
       </ComposerPrimitive.AddAttachment>
     </Tooltip>
   );
   // On a phone the picker sits beside send, so an attachment alone never costs the box a row.
-  const start = (footerStart || (addAttachment && !isPhone)) ? <>{!isPhone && addAttachment}{footerStart}</> : null;
+  const start = (footerStart || (addAttachment && !isPhone)) ? (
+    <>
+      {!isPhone && addAttachment}
+      {footerStart}
+    </>
+  ) : null;
+  const iconOf = React.useMemo(() => new Map(commands.map(command => [command.id, command.icon])), [commands]);
 
   return (
     <div className={clsx(styles['composer'], isPhone && styles['is-phone'])}>
-      {queue && (
-        <ComposerPrimitive.Queue>
-          {({ queueItem }) => (
-            <div className={styles['queue-item']} data-testid="composer-queue-item" key={queueItem.id}>
-              <span className={styles['queue-label']}>{queue.title}</span>
-              <QueueItemPrimitive.Text className={styles['queue-text']} />
-              <QueueItemPrimitive.Remove asChild>
-                <Button type="text" size="small" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
-              </QueueItemPrimitive.Remove>
-            </div>
-          )}
-        </ComposerPrimitive.Queue>
+      {/* Messages sent during a run wait in a tray on the box they were typed in, in the order
+          they will go out, each one removable until its turn comes. */}
+      {queue && queuedCount > 0 && (
+        <div className={styles['queue']} data-testid="composer-queue">
+          <div className={styles['queue-head']} role="status">{queue.summary(queuedCount)}</div>
+          <ComposerPrimitive.Queue>
+            {({ queueItem }) => (
+              <div className={styles['queue-item']} data-testid="composer-queue-item" key={queueItem.id}>
+                <ArrowUpOutlined className={styles['queue-mark']} aria-hidden="true" />
+                <QueueItemPrimitive.Text className={styles['queue-text']} />
+                <Tooltip title={queue.removeLabel}>
+                  <QueueItemPrimitive.Remove asChild>
+                    <Button type="text" size="small" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
+                  </QueueItemPrimitive.Remove>
+                </Tooltip>
+              </div>
+            )}
+          </ComposerPrimitive.Queue>
+        </div>
       )}
       {triggers && (
         <div className={styles['trigger-anchor']}>
           <ComposerPrimitive.TriggerPopover char="/" adapter={slash.adapter} className={styles['trigger-popover']} data-testid="composer-commands">
             <ComposerPrimitive.TriggerPopover.Action {...slash.action} />
-            <TriggerRows prefix="/" emptyLabel={triggers.emptyLabel} />
+            <TriggerRows prefix="/" emptyLabel={triggers.emptyLabel} iconOf={iconOf} />
           </ComposerPrimitive.TriggerPopover>
           <ComposerPrimitive.TriggerPopover char="@" adapter={mention.adapter} className={styles['trigger-popover']} data-testid="composer-mentions">
             <ComposerPrimitive.TriggerPopover.Directive {...mention.directive} />
@@ -253,6 +280,7 @@ function ComposerSurface({
           </ComposerPrimitive.AttachmentDropzone>
         )}
         {header}
+        {chips && <div className={styles['composer-chips']}>{chips}</div>}
         <div className={styles['composer-body']}>
           <ComposerPrimitive.Input
             className={styles['composer-input']}
@@ -275,19 +303,25 @@ function ComposerSurface({
           </div>
         )}
       </ComposerPrimitive.Root>
-      {note && <p className={styles['composer-note']}>{note}</p>}
+      {(note || status) && (
+        <div className={styles['composer-under']}>
+          {note && <p className={styles['composer-note']}>{note}</p>}
+          {status}
+        </div>
+      )}
     </div>
   );
 }
 
 /** The rows of an open `/` or `@` list: the name in the console's mono face, what it is beside it. */
-function TriggerRows({ prefix, emptyLabel }: { prefix: string; emptyLabel: string }) {
+function TriggerRows({ prefix, emptyLabel, iconOf }: { prefix: string; emptyLabel: string; iconOf?: Map<string, React.ReactNode> }) {
   return (
     <ComposerPrimitive.TriggerPopoverItems className={styles['trigger-rows']}>
       {items => items.length === 0
         ? <span className={styles['trigger-empty']}>{emptyLabel}</span>
         : items.map((item, index) => (
           <ComposerPrimitive.TriggerPopoverItem key={item.id} item={item} index={index} className={styles['trigger-row']}>
+            {iconOf && <span className={styles['trigger-icon']} aria-hidden="true">{iconOf.get(item.id)}</span>}
             <span className={styles['trigger-name']}>{prefix}{item.label}</span>
             {item.description && <span className={styles['trigger-description']}>{item.description}</span>}
           </ComposerPrimitive.TriggerPopoverItem>

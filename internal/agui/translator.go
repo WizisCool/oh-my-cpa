@@ -163,3 +163,11 @@ func (t *Translator) Error(code string, usage []TokenUsage) error {
 	}
 	return t.emit(Event{Type: RUN_ERROR, Message: code, Code: code, Usage: usage})
 }
+
+// Custom carries structured OMC progress without turning a retry into a new logical round.
+func (t *Translator) Custom(name string, value any) error {
+	if err := t.closeMessage(); err != nil {
+		return err
+	}
+	return t.emit(Event{Type: CUSTOM, Name: name, Value: value})
+}

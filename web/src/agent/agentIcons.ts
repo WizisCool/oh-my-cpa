@@ -1,7 +1,7 @@
 import { LOBE_ICON_CATALOG } from '../types/lobeIconCatalog';
 
 /**
- * Icons a panel names (ADR 0071).
+ * Icons a panel names (ADR 0079).
  *
  * The model is not handed a list to choose from: it writes any Lucide name, or `brand:<maker>` for
  * a maker's mark, and the console resolves it. A name nothing answers to is not an error - the
