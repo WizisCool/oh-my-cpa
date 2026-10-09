@@ -3,8 +3,9 @@
 ## Scope and baseline
 
 Baseline: `02b29672f0dde5a6aa91d88f940afbd425cdd33a` (2026-10-09).
-Work proceeds on `refactor/architecture-governance`, with no push, publication,
-access change or production connection. Preserve business decisions, DTOs, permission
+Work proceeds on `refactor/architecture-governance`. The user authorized pushing
+only this branch and opening a Draft PR to measure hosted CI; no merge, tag,
+publication, access change or production connection is authorized. Preserve business decisions, DTOs, permission
 and persistence semantics, DOM structure, styles, motion and responsive behavior.
 Observable bug fixes are separate proposals, not incidental refactoring.
 
@@ -87,7 +88,11 @@ focus, scrolling, image encoding, accessibility interactions and StrictMode race
 3. **Evidence-led runtime pilot:** select a measured CPU/allocation hotspot, retain a
    differential oracle and benchmark small/large inputs. No speculative SQL, query or
    lifecycle redesign.
-4. **Delivery:** run the appropriate static, full build/harness/browser/demo/catalog
+4. **Shared export presentation:** remove the remaining shared export hook imports
+   of Agent state and Playground errors. Move the exact presentation policies to a
+   neutral leaf, retaining page exports and separate domain vocabularies. Extend the
+   nonempty graph guard and compare real exports and screenshots.
+5. **Delivery:** run the appropriate static, full build/harness/browser/demo/catalog
    gates, scan documentation and secrets, review the diff and make atomic local commits.
    Record remaining scope and hosted after-measurement limits explicitly.
 
@@ -105,8 +110,8 @@ host activity from code effects; elapsed differences alone do not establish caus
 Successful push CI run `37915661696` on the baseline SHA: 2026-10-09 10:07:40–10:12:18
 UTC, 278 seconds workflow elapsed. Jobs started at 10:07:43 UTC: static 96 s,
 browser 269 s, probe shards 225/190/251 s, aggregate 2 s. Completed checks are not a
-measurement of the proposed changes. Post-change hosted wall time requires an approved
-push/PR and is unavailable while this work remains local.
+measurement of the proposed changes. Post-change hosted wall time will be captured from the authorized Draft PR
+after local implementation and validation.
 
 Local measurement results and commit evidence are appended as each stage completes.
 
@@ -192,3 +197,47 @@ Stage 2 completion gates: `pnpm verify`, production build, `pnpm check:bundle`
 and all 376 deterministic built-browser checks pass. CodeRabbit reviewed all 16
 staged files with zero findings; worktree secret scans and documentation validation
 pass. No hosted workflow was triggered.
+
+### Stage 3: measured OAuth sort setup
+
+The baseline name comparator repeats numeric/base-sensitive locale comparison setup
+for each comparison. Reuse one lazy `Intl.Collator` within a sort invocation, not a
+global cache: empty/singleton inputs and rankings with no name ties do no setup,
+and every new sort still resolves the runtime default locale. The same immutable
+copy, record identities, numeric defaults, tie handling and unknown-key fallback
+remain. Do not unify the separate auth-file list's plain-name ranking ties.
+
+The opt-in benchmark alternates the frozen baseline and current implementation,
+warms each three times, then records 15 samples per sort/size. Correctness tests
+cover 0/1/12/120/2,300 inputs, Unicode/combining/numeric/equivalent names and frozen
+input objects. They detect a deliberately broken numeric comparator. Tests pass in
+processes with verified default locales en-US, de-DE and tr-TR (set `LC_ALL`, not
+only `LANG`, since the host already sets a higher-priority locale).
+
+Warm medians on this host, 2,300 credentials (milliseconds):
+
+| Mode | Node baseline | Node current | Chromium baseline | Chromium current |
+| --- | ---: | ---: | ---: | ---: |
+| Name ascending | 157.79 | 7.23 | 172.4 | 9.4 |
+| Name descending | 159.87 | 7.15 | 177.1 | 9.5 |
+| Requests descending | 122.83 | 5.69 | 127.6 | 7.8 |
+| Priority descending | 142.99 | 6.54 | 150.2 | 8.8 |
+| Weight descending | 151.14 | 7.13 | 167.7 | 9.7 |
+
+Node name-ascending medians at 12/120 records are 0.232/2.831 ms baseline versus
+0.021/0.133 ms current. Chromium checks every resulting key order against the
+baseline. These are CPU microbenchmarks, not full-page rendering/TTI or CI speedup
+claims. Paired-process maximum RSS is essentially flat: 176,536 KiB before versus
+176,000 KiB after; terminal heap samples depend on GC phase and are not retention
+measurements. The benchmark optionally provides an untimed post-GC heap sample.
+All raw samples include engine, platform, locale and resource metadata.
+
+
+Stage 3 completion evidence: all seven affected fast checks and `pnpm verify` pass;
+all nine affected browser scenarios pass (182.6 s runner / 188.47 s command wall,
+74.58/27.88 s user/system CPU, maximum individual-child RSS 451,708 KiB). OAuth
+desktop and phone screenshots are byte-identical to the baseline. CodeRabbit reviewed
+all seven staged files with zero findings; documentation and diff checks pass.
+The optional GC experiment reports current retained heap 10,484,280 to 10,484,864
+bytes after 150 sorts: no evidence of a retained collator cache. This single-process
+observation is not a universal memory bound.

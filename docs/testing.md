@@ -876,3 +876,17 @@ page-title header. Demo acceptance then opens the capability drawer and requires
 capability before closing it. `scripts/demo-readiness.test.mjs` pins the dedicated identity,
 missing content and loading/hidden negative cases while retaining the ordinary-page heading
 checks.
+
+### Opt-in sorting measurements
+
+`scripts/test-oauth-sort.ts` compares every OAuth workspace sort with the frozen
+baseline oracle in `scripts/fixtures/oauth-sort.ts`, including empty/singleton inputs,
+Unicode/numeric/equivalent labels, missing numeric defaults, stable ties, unknown-key
+fallback and immutable input/record identity. These are logic claims; OAuth browser
+scenarios retain responsive rows, filters, file actions, quota refresh and authorization
+wiring. `scripts/benchmark-oauth-sort.ts` is opt-in, not discovered as a test. Run it
+with `node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/benchmark-oauth-sort.ts`;
+it alternates both implementations on the same fixtures and reports warm median/p95
+plus process/locale/resource metadata without timing thresholds in correctness gates.
+Add `--expose-gc` for a separate post-GC retained-heap sample; GC never runs inside
+the timed comparisons.
