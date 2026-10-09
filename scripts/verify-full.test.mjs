@@ -55,6 +55,7 @@ test('serial fallback also serializes the static sub-gates', async () => {
   assert.ok(commands.includes('verify:static:go'));
   assert.ok(commands.includes('verify:static:frontend'));
   assert.ok(commands.includes('verify:static:repository'));
+  assert.ok(commands.includes('verify:probes --workers 1'));
 });
 
 

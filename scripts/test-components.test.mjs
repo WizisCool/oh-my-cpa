@@ -60,3 +60,10 @@ test('integration tests stay outside product source discovery but inside type ch
   assert.ok(componentTestFiles().some(file => file.endsWith('.component.test.tsx')));
   assert.ok(componentTestFiles().some(file => file.endsWith('.contract.test.ts')));
 });
+
+
+test('test-only frontend paths do not invent browser reachability', async () => {
+  const { planScenarios } = await import('./acceptance/check-ui-plan.mjs');
+  assert.deepEqual(planScenarios(['web/tests/preferences.contract.test.ts'], ['representative']).ids, []);
+  assert.ok(planChecks(['web/tests/preferences.contract.test.ts']).includes('components'));
+});

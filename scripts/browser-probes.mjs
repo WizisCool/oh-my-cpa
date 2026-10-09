@@ -15,7 +15,8 @@
  * Run it with `pnpm verify:probes`; it is also part of `pnpm verify:full`. CI runs
  * it as `pnpm verify:probes --shard i/n`, one disjoint, weight-balanced part of the
  * catalog per job (see `acceptance/probe-shards.mjs`). Complete local catalogs execute those
- * partitions sequentially, keeping the same watchdog and retaining every scenario verdict.
+ * partitions sequentially, with two independent contexts per batch, the same watchdog
+ * and every scenario verdict. `--workers 1` reproduces the same catalog serially.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,7 +32,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // An explicit port supports independent worktrees; strict ownership still refuses
 // collisions rather than silently binding elsewhere or testing an unrelated app.
-const { port: PORT, shard } = parseProbeOptions(process.argv.slice(2));
+const { port: PORT, shard, workers } = parseProbeOptions(process.argv.slice(2));
 
 const { check, failures } = createProbeChecker();
 
@@ -48,7 +49,7 @@ if (shard) {
 
 const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
 const startedAt = Date.now();
-const { passed, failures: runFailures } = await runProbeBatches({ port: PORT, scenarios, batchCount: shard ? 1 : 3 });
+const { passed, failures: runFailures } = await runProbeBatches({ port: PORT, concurrency: workers, scenarios, batchCount: shard ? 1 : 3 });
 
 // A scenario that threw rather than asserted is reported through the same channel as
 // a failed check, so the exit code reflects it either way.

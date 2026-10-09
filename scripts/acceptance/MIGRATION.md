@@ -205,3 +205,14 @@ refuses malformed JSON and includes timezone metadata. Its prior `{ok:true}` and
 malformed-JSON-as-null responses were fixture drift, not authorized product behavior.
 Strict unknown/method harness faults, context isolation and existing scenario
 assertions are unchanged.
+
+## Phase-two browser execution ownership
+
+No assertion leaves Chromium in this scheduling change. Two bounded scenario
+workers share only the existing batch-owned Vite/Chromium, never a page, context,
+fixture store, storage, cookie jar or fault ledger. Serial reproduction runs the
+same catalog. Recovery locale cases reuse their already verified home landing
+instead of repeating an initial navigation; all real failure/reload/home and engine
+claims remain. Queue and real-browser fault tests cover both schedules, late-fault
+verdicts and peer release after setup failure. Measurements and trade-offs are
+recorded in `docs/plans/architecture-governance.md` and ADR 0091.

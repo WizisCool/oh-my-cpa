@@ -17,6 +17,7 @@
  * in reverse order of registration. A single dispatcher checks scenario entries
  * before shared defaults, with explicit method matching for writes.
  */
+import { runScenarioQueue } from './probe-scheduler.mjs';
 import { appendProbeTiming } from './probe-timings.mjs';
 import { createPreferenceFixture } from './preferences-fixture.mjs';
 import { spawn } from 'node:child_process';
@@ -364,10 +365,14 @@ async function writeProbeDiagnostics(page, errors, trail, scenarioName, failureD
  * is worse than one that reports all four. The caller's exit code reflects every
  * failure.
  *
+ * Scheduling may overlap two contexts; verdicts are collated in catalog order
+ * and teardown joins every admitted worker before shared resources close.
  * Each scenario gets a fresh context and a fresh page error listener, so one
  * scenario's runtime errors cannot be attributed to another.
  */
-export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS, shouldResetDiagnostics = true, artifactLabel = 'probe' }) {
+export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS, shouldResetDiagnostics = true, artifactLabel = 'probe', concurrency = 1 }) {
+  if (concurrency !== 1 && concurrency !== 2) throw new Error('Probe concurrency must be one or two');
+  if (new Set(scenarios.map(scenario => scenario.id)).size !== scenarios.length) throw new Error('Probe runs require unique scenario IDs');
   if (!/^[a-z][a-z-]*$/.test(artifactLabel)) throw new Error('Invalid probe artifact namespace');
   const failureDirectory = path.join(root, 'tmp', `${artifactLabel}-failure`, String(port));
   const timingDirectory = path.join(root, 'tmp', `${artifactLabel}-timings`);
@@ -376,8 +381,7 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
 
   let server;
   let browser;
-  const failures = [];
-  let passed = 0;
+  const outcomes = new Map();
 
   /**
    * Releases what the run holds, in the order that matters. Idempotent, because both the
@@ -398,12 +402,12 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
   });
   const shutdown = () => shutdownController.shutdown();
 
-  let activeScenario = 'startup';
+  const activeScenarios = new Map();
   const onSignal = async () => { try { await shutdown(); } finally { process.exit(2); } };
   process.once('SIGTERM', onSignal);
   process.once('SIGINT', onSignal);
   watchdog = setTimeout(async () => {
-    console.error(`FAIL probe run timed out during ${activeScenario}`);
+    console.error(`FAIL probe run timed out during ${[...activeScenarios.values()].join(', ') || 'startup'}`);
     // `process.exit` skips the `finally` below, so the timed-out run used to leave its Vite
     // server listening on the probe port. Every later run then failed at startup with a port
     // conflict -- a confusing symptom that outlived the timeout it came from.
@@ -426,16 +430,16 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
     const base = started.base;
     browser = await launchBrowser(chromium, { headless: true });
 
-    for (const scenario of scenarios) {
-      if (shutdownController.isStopping) break;
-      activeScenario = scenario.id;
+    await runScenarioQueue(scenarios, async scenario => {
+      const failures = [];
+      activeScenarios.set(scenario.id, scenario.id);
       const startedAt = performance.now();
       const options = scenario.options ?? {};
       let context, page;
       let errors = [], trail = [], ledger = createProblemLedger();
       const steps = [];
       const step = async (name, task) => {
-        activeScenario = `${scenario.id}/${name}`;
+        activeScenarios.set(scenario.id, `${scenario.id}/${name}`);
         const started = performance.now();
         try { return await task(); }
         finally { steps.push({name, durationMs: Math.round(performance.now() - started)}); }
@@ -490,7 +494,6 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
           fs.mkdirSync(failureDirectory, { recursive: true });
           fs.writeFileSync(path.join(failureDirectory, `${scenario.id}.log`), JSON.stringify(unexpected, null, 2));
         }
-        if (failedChecks === 0 && !failures.includes(scenario.name)) passed += 1;
         try {
           const timingError = appendProbeTiming(timingFile, { id: scenario.id, durationMs: Math.round(performance.now() - startedAt), status: failedChecks > 0 || failures.includes(scenario.name) ? 'failed' : 'passed', steps });
           if (timingError) throw timingError;
@@ -499,8 +502,10 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
           failures.push(`${scenario.name} timing evidence`);
         }
         console.log(`[probe] ${scenario.id ?? scenario.name}: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
+        outcomes.set(scenario.id, { passed: failedChecks === 0 && failures.length === 0, failures });
+        activeScenarios.delete(scenario.id);
       }
-    }
+    }, { concurrency, shouldStop: () => shutdownController.isStopping });
   } finally {
     clearTimeout(watchdog);
     process.removeListener('SIGTERM', onSignal);
@@ -508,5 +513,6 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
     await shutdown();
   }
 
-  return { passed, failures };
+  const records = scenarios.map(scenario => outcomes.get(scenario.id)).filter(Boolean);
+  return { passed: records.filter(record => record.passed).length, failures: records.flatMap(record => record.failures) };
 }

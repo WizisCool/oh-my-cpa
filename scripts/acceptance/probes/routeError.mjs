@@ -17,9 +17,12 @@ async function checkRouteRecovery({ base, page, context, check, errors, expectPr
     window.__OMCPA_CONFIG__ = { basePath: '/omc', apiBaseUrl: '/omc/api/v1', mediaBaseUrl: '/omc/media', version: 'route-error-test-build' };
   });
   const modulePattern = '**/src/pages/ConfigPage.tsx*';
+  await page.goto(`${base}/dashboard`);
+  await page.locator('.app-shell').waitFor();
+  // Each reading ends by proving a full-document home recovery to this ready
+  // dashboard. Reuse that verified landing page to seed the next locale instead
+  // of bootstrapping the same document again; every failure/reload/home stays.
   for (const reading of READINGS) {
-    await page.goto(`${base}/dashboard`);
-    await page.locator('.app-shell').waitFor();
     await page.evaluate(({ lang, theme }) => {
       localStorage.setItem('omc-lang', lang);
       localStorage.setItem('omc-theme', theme);

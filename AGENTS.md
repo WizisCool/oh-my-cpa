@@ -83,6 +83,7 @@ Rules:
 
 - **Do not run `verify` or `check:ui` after every individual response or single file edit.** "Logical feature complete" refers to an independently verifiable feature or fix, not a single reply or file edit.
 - **Use `pnpm check:ui` for rapid UI feedback.** It requires no `pnpm build`, no Go binary, and no fake CPA (it runs against Vite dev server + mocked endpoints), running only scenarios affected by the changes; `--list` / `--plan` can inspect the scope and rationale without launching a browser. Both this command and the full `verify:probes` catalog run on the **dev server** and can catch `React.StrictMode` double-invocation issues. Built-artifact coverage comes from cross-stack acceptance and the demo check, not from the probe catalog.
+- **Probe scheduling is bounded, not coverage selection.** Catalog entrypoints run at most two independent scenario contexts per batch; `--workers 1` keeps identical coverage serially, and `verify:full:serial` selects it explicitly. Budgets, fault ledgers and late-fault teardown remain mandatory; do not increase concurrency or waits to make a run pass.
 - **`check:ui` does not replace built-artifact acceptance.** It tests against the dev server with mock endpoints, so it cannot observe path resolution, minification, or chunk boundary defects that only appear in production artifacts. CI's browser job covers those on every pull request; run `pnpm verify:full` locally when the change touches the build, `vite.config.ts`, the embedded distribution, the browser harness or the workflow.
 - **Never add a skip switch, retry or longer wait to make a run pass or go faster.** Fix the assertion, or add a planner rule with a self-test (`docs/testing.md` §3).
 - **Do not rerun immediately if already run.** If the same unchanged code already passed a gate, reuse that result.
@@ -171,14 +172,14 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm test:demo` | Unit tests for the demonstration's Worker, routing and timestamp re-basing |
 | `pnpm dev:demo` | Serve the demonstration locally with Wrangler (requires `pnpm build:demo` first) |
 | `pnpm build:demo` | Stage the built console for the demonstration: inject the runtime configuration, make asset URLs root-relative |
-| `pnpm verify:full:serial` | Serial final gate, used only for diagnosing parallel orchestration discrepancies |
+| `pnpm verify:full:serial` | Serial final gate, including one probe worker, for resource-constrained reproduction and diagnosing orchestration discrepancies |
 | `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
 | `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; the full CI run contains it |
 | `pnpm verify:browser:harness` | Real-browser fault-injection checks for runtime errors, strict fixtures and outbound isolation; outside the fast/static lanes |
 | `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Bounded maintenance lanes; weekly and manual CI, separate from hermetic PR gates |
 | `pnpm verify:workflow:lint` | Independent pinned actionlint validation; install the version named in `scripts/lint-workflows.mjs` first |
 | `pnpm benchmark:native` | Opt-in serial/two-worker native compilation experiment; reports metadata and timings without changing publication inputs |
-| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does; `--port PORT` selects an explicit isolated listener |
+| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does; `--port PORT` selects an explicit isolated listener; `--workers 1` keeps the complete selected catalog serial |
 | `pnpm verify:e2e` | Build and check loading boundaries/anomaly ceilings, then run browser acceptance and browser probes |
 | `pnpm verify:secrets` | Scan worktree for secrets |
 | `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |

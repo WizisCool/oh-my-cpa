@@ -1,7 +1,7 @@
 import { runProbes } from './probe.mjs';
 import { assignShards } from './probe-shards.mjs';
 
-/** Keep complete local catalogs bounded without changing the watchdog or running browsers together. */
+/** Keep complete local catalogs bounded without changing the watchdog or overlapping separate browsers. */
 export async function runProbeBatches({ batchCount = 1, scenarios, ...options }, execute = runProbes) {
   const ids = scenarios.map((scenario) => scenario.id);
   if (new Set(ids).size !== ids.length) throw new Error('Probe batches require unique scenario IDs');

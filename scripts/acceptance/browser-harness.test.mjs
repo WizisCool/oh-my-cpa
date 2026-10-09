@@ -4,7 +4,7 @@ import { runProbes } from './probe.mjs';
 import { fulfillFixture } from './browser-guard.mjs';
 
 // These tests launch Chromium deliberately; they do not belong to test:fast/test:self.
-test('the runner rejects real runtime, fixture and outbound faults despite passing assertions', async () => {
+for (const concurrency of [1, 2]) test(`the runner rejects real runtime, fixture and outbound faults with ${concurrency} worker(s)`, async () => {
   const observedChecks = [];
   const check = (name, condition) => observedChecks.push({ name, condition });
   const faults = [
@@ -57,8 +57,51 @@ test('the runner rejects real runtime, fixture and outbound faults despite passi
       await popup.close();
     },
   });
-  const outcome = await runProbes({ port: 5182, scenarios, artifactLabel: 'browser-harness' });
+  const outcome = await runProbes({ port: 5182, scenarios, concurrency, artifactLabel: 'browser-harness' });
   assert.deepEqual(outcome.failures, faults.map(([id]) => `harness-${id}`));
   assert.equal(outcome.passed, 2);
   assert.equal(observedChecks.filter(entry => entry.name === 'unrelated assertion passes' && entry.condition).length, faults.length);
+});
+
+
+for (const hasSetupFailure of [false, true]) test(`concurrent context isolation (${hasSetupFailure ? 'setup failure releases peer' : 'independent state and verdicts'})`, async () => {
+  let admitted = 0;
+  let release;
+  const observedChecks = [];
+  const rendezvous = new Promise(resolve => { release = resolve; });
+  const scenarios = ['alpha', 'beta'].map(identity => ({
+    id: `isolation-${identity}`, name: `isolation-${identity}`,
+    check(name, condition) { observedChecks.push({ identity, name, condition }); },
+    async run({ base, context, page, check }) {
+      try {
+        if (hasSetupFailure && identity === 'alpha') throw new Error('injected setup failure');
+        await context.route('**/harness', route => route.fulfill({ contentType: 'text/html', body: '<h1>Context isolation</h1>' }));
+        await context.addCookies([{ name: 'identity', value: identity, url: base }]);
+        await page.goto(`${base}/harness`);
+        await page.evaluate(async identity => {
+          localStorage.setItem('identity', identity);
+          await fetch('/omc/api/v1/preferences/agent_target', { method: 'PUT', body: JSON.stringify({ identity }) });
+        }, identity);
+        admitted++;
+        if (admitted === 2) release();
+        await rendezvous;
+        const own = await page.evaluate(async () => ({
+          storage: localStorage.getItem('identity'), cookies: document.cookie,
+          preferences: (await (await fetch('/omc/api/v1/preferences')).json()).preferences,
+        }));
+        check('only this context owns its state', own.storage === identity && own.cookies === `identity=${identity}` && own.preferences.agent_target.identity === identity);
+        if (identity === 'alpha') await page.evaluate(() => console.error('isolated alpha fault'));
+      } catch (error) {
+        // Setup faults must not strand a peer at the rendezvous until its deadline.
+        release();
+        throw error;
+      }
+    },
+  }));
+  const outcome = await runProbes({ port: 5182, scenarios, concurrency: 2, artifactLabel: 'browser-harness' });
+  assert.equal(outcome.passed, 1);
+  assert.deepEqual(outcome.failures, ['isolation-alpha']);
+  const stateChecks = observedChecks.filter(entry => entry.name === 'only this context owns its state');
+  assert.deepEqual(stateChecks.map(entry => entry.identity).sort(), hasSetupFailure ? ['beta'] : ['alpha', 'beta']);
+  assert.ok(stateChecks.every(entry => entry.condition));
 });

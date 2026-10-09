@@ -579,7 +579,7 @@ Unmeasured or pending items are not completed claims.
 
 | Priority | Evidence at the merged baseline | Treatment and compatibility boundary |
 | --- | --- | --- |
-| P1 | 65 probe scenarios already share Vite/Chromium within a batch, but a complete local catalog has three batches and pays three cold Vite transform/browser setups. Each scenario still correctly gets a new context. CI has three independent machines. | Measure setup versus scenario costs before changing ownership. Keep per-scenario contexts, scenario deadlines, watchdog budgets, ledger failures and bounded teardown. Do not add Chromium concurrency on this host. |
+| P1 | 65 probe scenarios already share Vite/Chromium within a batch, but a complete local catalog has three batches and pays three cold Vite transform/browser setups. Each scenario still correctly gets a new context. CI has three independent machines. | Measure setup versus scenario costs before changing ownership. Keep per-scenario contexts, scenario deadlines, watchdog budgets, ledger failures and bounded teardown. Overlap only bounded fresh contexts after controlled fault/resource measurements; keep separate Chromium/browser lanes sequential. |
 | P1 | `defaultRoutes` returns `{ok: true}` for preference PUT, whereas `putPreference` returns `{key, value}`. The mock accepts malformed JSON as `null` and omits the real GET timezone metadata. Existing Go tests and UI probes do not compare these two contracts. | Establish a checked contract corpus against actual authenticated handlers and the real typed client. Reuse the corpus in a stateful, per-context mock. Change fixtures, not the public API or persistence rules. |
 | P1 | `usePreference` combines a real React Query subscription, reference-stable parsing, optimistic cache updates, per-key async serialization, last-intent rollback and localized feedback. Pure parser suites cannot establish their integration. The settings probe exercises one refusal through a full page/reload path. | Pilot a separately discovered simulated-DOM component layer with the real hook, QueryClient, API client and shared display provider/consumer. Assert held-response states, multiple readers, serialization, refusal/recovery and cleanup; retain actual settings wiring, reload, geometry and focus in Chromium. |
 | P2 | 185 internal Go test files, 73 logic suites, 52 repository self-test files and zero component suites. The 1,182-line typed API facade has shared transport/auth/demo/error policy. | Retain Go/Node runners. Add only the missing integration layer; do not replace logic tests or manufacture transport wrappers. Record affected selection and full CI discovery in the same change. |
@@ -712,3 +712,85 @@ frontend integration/repository gates and the worktree secret scan in 51.01 s wa
 fixture/integration-discovery/runtime-boundary tests pass. Final full built/browser/
 harness/demo and exact-head hosted evidence remain required after browser changes;
 this stage does not substitute the focused settings run for complete coverage.
+
+### Broader contract/module/resource audit
+
+| Area | Current interface and lowest useful owners | Phase-two decision and remaining risk |
+| --- | --- | --- |
+| Preferences / UI state | closed Go `knownPreferences`; raw JSON client-owned documents; `usePreference` key-local write chain and shared QueryClient | Shared corpus and rendered pilot implemented. Hook reads deduplicate in StrictMode; parsed objects remain stable under unrelated cache updates. The settled write queue is bounded by the 16 public keys, so changing global write lifetime or clearing cache is not an evidence-backed runtime optimization. |
+| Agent / AG-UI | `internal/api/agent_http.go` and projection DTOs; `web/src/agent/protocol.ts`, reducer and run connection; real agent HTTP/projection tests, existing Node protocol/reducer/reconnect suites and engine probes | Different from Playground event vocabulary. Preserve RUN/STATE/TEXT/TOOL events, snapshots, confirmation and OAuth handoffs. Browser fixtures synthesize journals; they are not complete Go-to-browser schema certification. A future small journal corpus can extend parity without replacing current projection/security tests. |
+| Playground / SSE | `internal/api/playground.go`, run state and endpoint selection; `web/src/agent/runConnection.ts`, SSE parser and Playground API adapter | Existing Go admission/deadline/cancellation/endpoint tests and Node stream/reconnect tests already own non-engine permutations. A lost POST must never be repeated; reconnect GETs retry subscriptions, and cancellation is explicit. Do not cache/reorder/refactor those paths without measured latency and journal equivalence evidence. |
+| OAuth | management lifecycle/provider registry and safe credential projection; typed OAuth DTOs; split workspace/authorization/model-rule/quota probes | Existing API tests own lifecycle and registry semantics; Chrome owns popup/keyboard/scroll/reload behavior. Repeating known sorting/leaf work is unnecessary. Default/per-scenario fixtures still have no complete shared wire corpus, so optional fields and error codes remain a documented future parity candidate. |
+| Providers | family-specific allowlisted DTOs and shared admitted write gate; typed provider client; configuration-preservation/concurrent-toggle/busy/identity tests | Existing asymmetries are deliberate: family schemas, status mutations, safe settings and OAuth metadata differ. Do not merge handlers or generic error vocabularies just because similar code exists. Complete family fixture parity is not established by the preference pilot. |
+| API client | shared request/error/auth/demo handling plus typed endpoint methods; runtime-only dependencies are existing config/audit/usage parsing leaves | File size alone does not establish a runtime bottleneck. Keep public methods and singleton error/handler identity stable; a mechanical domain split would add interfaces without demonstrated loading benefit. Node-environment integration now observes actual emitted client behavior without copying its implementation. |
+| Repository / backend | SQLite WAL, explicit admitted writes, bounded reads, projection allowlists and background-loop ownership | No new measured query/lock hot path was found in this verification-focused audit. Full static Go tests/vet remain required. No migration, lock scope, poll cadence, pricing/cache policy or cancellation lifetime is changed. |
+
+Frontend integration's production graph is clean: only `web/src` is analyzed, and
+actual tests/fixtures cannot be reached without an unresolved product import. A
+contract-only edit in `web/tests` correctly plans no browser scenario; fast checks
+still select its type/integration/self-test owners. It is not a new browser skip
+switch: introducing a product eager/lazy import of test infrastructure widens and
+fails existing boundary guards. Node logic suites remain the lower-cost default;
+use a rendered suite only when real subscriptions/state/cleanup must be observed.
+
+### Bounded browser scheduling: measured execution cost
+
+ADR 0091 adopts two workers inside one owned Vite/Chromium batch, not overlapping
+browsers, shared pages or relaxed budgets. The core runner remains serial by default;
+`check:ui` and `verify:probes` select two and accept `--workers 1`. The serial full
+runner explicitly selects one. Shard membership, all 65 scenarios, 120-second
+scenario limits, 480-second batch watchdogs and two-second context close budgets
+are unchanged. Verdicts and failures retain catalog order. Startup/active step
+names, local fault ledgers, late-event checks, diagnostics and teardown are owned
+per context; admitted peers join before normal shared shutdown.
+
+Two controlled pairs use route-render-error, route-lazy-error, playground and
+omc-settings, retaining all 276 checks. The route module is frozen from `c435b95`
+for these pairs so that removing redundant navigations is not credited to scheduling.
+Runs are sequential on the same four-logical-CPU Linux ARM64 host, with no other
+browser lane overlapping. Cache/temperature conditions are not identical; two
+pairs establish repeated direction, not a statistical confidence interval.
+
+| Measurement | One worker | Two workers | Interpretation |
+| --- | ---: | ---: | --- |
+| Pair A scenario-runner wall | 128.416 s | 90.641 s | 29.4% lower wait; 276/276 checks and 4/4 scenarios |
+| Pair A whole command / user + system CPU | 129.11 s / 123.93 s | 91.40 s / 126.56 s | CPU work is similar, not reduced |
+| Pair B scenario-runner wall | 132.094 s | 94.815 s | 28.2% lower wait; same coverage |
+| Pair B sampled process-tree peak PSS | 1,275.5 MiB | 1,622.3 MiB | about 27% higher attributable memory |
+| Pair B sampled process-tree peak RSS | 1,605.1 MiB | 2,074.3 MiB | shared pages are counted repeatedly in RSS |
+| Full 65-scenario command, merged baseline versus adopted implementation | 734.66 s | 464.58 s | 36.8% lower wall; includes both scheduling and navigation reuse |
+| Full command user + system CPU | 495.94 s | 528.95 s | about 6.7% more CPU; this is a latency trade-off |
+
+The adopted full catalog passes 65/65 in 463.8 s runner time, with sampled aggregate
+peak PSS 1,829.6 MiB / RSS 2,429.0 MiB and 11 owned processes. Sampling reads Linux
+`smaps_rollup` every 500 ms and may miss peaks. GNU time's maximum child RSS
+(599,072 KiB) is not aggregate memory. No aggregate baseline catalog sample was
+collected, so do not invent a full-catalog memory percentage. Individual scenarios
+can take longer under overlap; no timeout has been increased to conceal contention.
+There is no basis for three or more workers, and hosted total workflow wall time
+may remain dominated by built acceptance even if probe shards improve.
+
+Route recovery now initializes the first dashboard once and uses the already
+asserted full-document home recovery as the next locale's starting state. It avoids
+three redundant initial document navigations per recovery scenario while preserving
+all failure, reload, home, redirect, locale/theme, phone geometry, keyboard, focus,
+progress, secret-redaction and error assertions. This is test orchestration only.
+
+Queue/options/batch/full-runner/discovery self-tests pass 26 focused cases. Actual
+Chromium fault injection passes in both schedules: runtime exceptions, console
+errors, unknown routes, wrong methods, fulfilled undeclared outbound requests and
+sockets remain failing evidence; declared failures/popups remain healthy. Concurrent
+contexts prove isolated cookies, storage and preference stores, and a fault cannot
+fail its healthy peer. CodeRabbit reported one minor rendezvous/setup-failure risk;
+the setup failure now releases the peer and a fourth harness case explicitly
+proves this rather than waiting for the scenario deadline. Full-run harness evidence
+passes all four cases in 7.45 s Node test time.
+
+Reproduce complete coverage with `pnpm check:ui --all --workers 1` and
+`pnpm check:ui --all --workers 2`, or the unchanged hosted `verify:probes --shard i/3`
+commands. Inspect `tmp/probe-timings/5181.json` for exact-once IDs, verdicts and step
+costs. For a focused same-code comparison, select the four IDs above from
+`SCENARIOS`, call `runProbes` with `concurrency: 1` and then `2`, and count the
+checker callbacks as well as failures. Do not compare simultaneous runs or reuse a
+context to make isolation appear cheaper. Controlled logs, timing JSON, GNU time
+records and process-tree samples are retained under `tmp/phase-two` locally.

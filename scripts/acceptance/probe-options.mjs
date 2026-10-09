@@ -7,15 +7,21 @@ export function parseProbePort(value) {
   return port;
 }
 
+export function parseProbeWorkers(value) {
+  if (!/^[12]$/.test(String(value))) throw new Error('Probe workers must be one or two');
+  return Number(value);
+}
+
 export function parseProbeOptions(arguments_) {
-  const options = { port: 5180 };
+  const options = { port: 5180, workers: 2 };
   const seen = new Set();
   for (let i = 0; i < arguments_.length; i += 1) {
     const argument = arguments_[i];
-    if (!['--port', '--shard'].includes(argument) || seen.has(argument)) throw new Error(`Unknown or duplicate probe option: ${argument}`);
+    if (!['--port', '--shard', '--workers'].includes(argument) || seen.has(argument)) throw new Error(`Unknown or duplicate probe option: ${argument}`);
     seen.add(argument);
     const value = arguments_[++i];
     if (argument === '--port') options.port = parseProbePort(value);
+    else if (argument === '--workers') options.workers = parseProbeWorkers(value);
     else options.shard = parseShard(value);
   }
   return options;

@@ -279,3 +279,15 @@ Build-input ownership also requires the local full runner to finish SPA synchron
 before Go static compilation. Built live-tail acceptance now controls availability of
 one precommitted fixture row until Hold is established, then forwards real responses
 unchanged; startup duration no longer determines whether the arrival can be observed.
+
+
+### Phase-two probe scheduling evidence
+
+ADR 0091 adds a bounded two-context queue inside each existing probe batch/shard;
+full catalog membership, fault detection, watchdogs and sequential local browser
+lanes are unchanged. `verify:probes --workers 1` and `verify:full:serial` preserve
+serial diagnosis. Repeated local four-scenario comparisons reduce wall time by
+28–29% with similar CPU and higher memory; the complete local catalog falls from
+734.66 s to 464.58 s with 65/65 passing. This is not a hosted total-CI speedup claim.
+Detailed resource samples, compatibility boundaries and hosted results belong in
+`docs/plans/architecture-governance.md` rather than a second measurement ledger.

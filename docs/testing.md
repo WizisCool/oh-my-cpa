@@ -22,7 +22,7 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | A frontend decision that is a pure function: URL/state derivation, formatting, poll and debounce policy, sorting, validation | Logic suite (`node:test`) | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
 | Rendered React wiring: QueryClient subscriptions, optimistic shared state, hook async ownership and provider-to-component integration | Component integration (Vitest + jsdom + RTL) | `web/tests/**/*.component.test.tsx`, with `web/vitest.config.ts` | `pnpm test:components`, affected `test:fast`, full static/CI |
 | Typed frontend transport versus a handler-certified wire corpus: methods, paths, JSON/null/error/auth semantics | API contract (Vitest Node + Go + fixture self-test) | `web/tests/**/*.contract.test.ts`, matching `internal/api/*_test.go` and `scripts/acceptance/contracts/` | `pnpm test:components`, `go test ./...`, `pnpm test:self`; full static/CI |
-| Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, request ordering under a held response, StrictMode double invocation | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
+| Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, page-level request ordering/navigation and dev-server integration | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
 | The built binary, embedded SPA, fake CPA and seeded SQLite together: sign-in, route rendering, secret boundaries, cross-stack writes | Cross-stack acceptance | the domain module under `scripts/acceptance/` | `pnpm verify:browser` (full suite on pull requests and master) |
 | The public demonstration | Demo acceptance | route table in `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
 | The Go binary's own demonstration mode: isolated settings, read-only refusals, permitted non-durable edits | Go demo smoke | `scripts/demo-smoke.mjs` | `pnpm verify:demo:go` (opt-in; not part of CI or `verify:full`) |
@@ -204,7 +204,13 @@ CI and full-local gate, not a script self-test; Chromium never enters `test:fast
 
 The probe runner owns Vite through an unpredictable readiness header, rejects port
 collisions, uses a fresh context per scenario, and retains a 120-second scenario
-budget and the 480-second batch watchdog. `scripts/acceptance/lifecycle.mjs` bounds
+budget and the 480-second batch watchdog. Catalog entrypoints use at most two
+independent scenario contexts; `--workers 1` reproduces identical coverage serially.
+Separate built/browser/demo lanes and separate local batches still never overlap.
+Each worker owns its fixture/error/late-fault ledger and outcome; failures are
+collated in catalog order, every admitted worker is joined before shared teardown,
+and shutdown stops new admission. The browser-harness gate executes negative faults
+in both modes and proves concurrent storage/cookie/preference/fault isolation. `scripts/acceptance/lifecycle.mjs` bounds
 shutdown and escalates owned process termination. Chromium is launched through
 BrowserServer so a stuck close has a real child process to terminate. Parallel local
 checks spool output under `tmp/check-output`, print verdicts on completion, record
@@ -971,3 +977,15 @@ modules from importing page internals, with eager/lazy negative and erased-type 
 and nonempty real consumers. The existing Agent/Playground probes use `scripts/acceptance/probes/conversation-export.mjs` to
 own actual downloads, standalone HTML/image rendering, controls, privacy, browser
 encoding and responsive behavior. None of these browser claims move to Node.
+
+
+### Bounded probe scheduling
+
+`pnpm check:ui` and `pnpm verify:probes` use two independent scenario contexts per
+batch. Both accept `--workers 1` for resource-constrained hosts and diagnosis; this
+changes scheduling only, not selected IDs, assertions, waits or verdicts.
+`pnpm verify:full:serial` explicitly chooses that same serial probe path. Do not
+increase concurrency or a budget to make a run pass. Watchdog diagnostics name all
+active scenarios/steps. Existing condition-based readiness and complete hosted
+shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
+wall/CPU/memory trade-offs and retained failure ownership.
