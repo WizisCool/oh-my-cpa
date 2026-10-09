@@ -555,3 +555,60 @@ Raw local evidence is retained under `tmp/pr166-review`: red/green and mutation 
 plan comparison, paired graph timings, full-gate log/resources and the local review.
 The follow-up commit updates this ledger, `AGENTS.md`, `docs/architecture.md` and
 `docs/testing.md` alongside the selector and tests.
+
+## Phase two: component, contract and browser-cost governance
+
+### Baseline and acceptance obligations
+
+Phase two starts from merged PR #166 at
+`b5e00765ada52f9eb92335e970a4dbd673521456` (2026-10-09), on the independent
+`refactor/verification-governance-phase-two` branch. The user authorizes atomic
+commits, branch pushes and a new Draft PR for full CI evidence; merge, release,
+production access and observable behavior changes require separate authorization.
+The first-phase migration, boundary guards and sorting benchmark remain in force.
+
+The completion ledger for this phase must contain: a measured baseline and final
+feedback path; a real rendered-component/hook integration pilot with negative
+fault evidence; a real-handler/typed-client/browser-fixture contract chain;
+measured browser-cost optimization with unchanged engine coverage and isolation;
+module ownership and runtime/resource findings; synchronized testing/architecture
+conventions; full local/hosted verification; atomic commit and Draft PR evidence.
+Unmeasured or pending items are not completed claims.
+
+### Current-state audit and priorities
+
+| Priority | Evidence at the merged baseline | Treatment and compatibility boundary |
+| --- | --- | --- |
+| P1 | 65 probe scenarios already share Vite/Chromium within a batch, but a complete local catalog has three batches and pays three cold Vite transform/browser setups. Each scenario still correctly gets a new context. CI has three independent machines. | Measure setup versus scenario costs before changing ownership. Keep per-scenario contexts, scenario deadlines, watchdog budgets, ledger failures and bounded teardown. Do not add Chromium concurrency on this host. |
+| P1 | `defaultRoutes` returns `{ok: true}` for preference PUT, whereas `putPreference` returns `{key, value}`. The mock accepts malformed JSON as `null` and omits the real GET timezone metadata. Existing Go tests and UI probes do not compare these two contracts. | Establish a checked contract corpus against actual authenticated handlers and the real typed client. Reuse the corpus in a stateful, per-context mock. Change fixtures, not the public API or persistence rules. |
+| P1 | `usePreference` combines a real React Query subscription, reference-stable parsing, optimistic cache updates, per-key async serialization, last-intent rollback and localized feedback. Pure parser suites cannot establish their integration. The settings probe exercises one refusal through a full page/reload path. | Pilot a separately discovered simulated-DOM component layer with the real hook, QueryClient, API client and shared display provider/consumer. Assert held-response states, multiple readers, serialization, refusal/recovery and cleanup; retain actual settings wiring, reload, geometry and focus in Chromium. |
+| P2 | 185 internal Go test files, 73 logic suites, 52 repository self-test files and zero component suites. The 1,182-line typed API facade has shared transport/auth/demo/error policy. | Retain Go/Node runners. Add only the missing integration layer; do not replace logic tests or manufacture transport wrappers. Record affected selection and full CI discovery in the same change. |
+| P2 | Existing Node logic, Go handlers, dev probes and built acceptance already split many OAuth/Agent/Playground/Provider claims. Stream sequencing, cancellation, history, real images, layout and safety are not scalar-function assertions. | Keep existing owners and map only claims actually migrated. Additional component cases may strengthen asynchronous coverage without deleting representative browser wiring. |
+| P2 | First-stage audit already found indexed queries, bounded journals, cancellable write gates, shared transports and memoized projections; no new hot path is yet measured. | Profile focused candidates. Leave database locking, polling cadence, streaming and production caches unchanged unless a reproducible bottleneck and equivalence evidence justify a change. |
+
+Initial hosted baseline: master CI run `37938787933` on this exact SHA succeeded;
+workflow timestamps 13:42:39–13:46:41 UTC (242 s), browser job 236 s, static 93 s,
+probe jobs 196/219/187 s. This is one hosted sample, not a causal speedup claim.
+Raw metadata, baseline inventory and local catalog timing evidence live under
+`tmp/phase-two`. The current local baseline run is recorded there before edits to
+browser/product code.
+
+### Staged execution and claim ownership
+
+1. Audit current runners and take baseline evidence; record decisions here rather
+   than starting a duplicate rules document.
+2. Pilot automatically discovered React integration tests, bounded isolated workers,
+   deterministic response rendezvous and explicit cleanup. Preserve full static/CI
+   gates, the Node logic layer and all browser-only claims.
+3. Establish preference API contract parity using actual Go handlers, typed client
+   request/error handling and shared stateful fixtures. Cover method/path/status,
+   raw JSON/null values, allowlists, timezone metadata and authentication; do not
+   expand ordinary DTOs or the public preference allowlist.
+4. Optimize measured browser setup cost while retaining independent contexts,
+   unchanged assertions and fault-injection verification. Compare repeated focused
+   runs and the full catalog, including CPU and child-RSS evidence.
+5. Audit remaining module/runtime candidates, keep only demonstrated net-benefit
+   changes, then deliver full compatibility, resource and hosted CI evidence.
+
+The existing `formatDuration(119600)` result remains separate observable bug-fix
+scope. Test counts and source line counts are inventory, not success criteria.
