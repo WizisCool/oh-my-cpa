@@ -84,6 +84,7 @@ const FAILURE_KEYS: Record<string, string> = {
   conversation_budget_exceeded: 'agent.error.budget',
   agent_document_too_large: 'agent.error.budget',
   demo_operation_refused: 'demo.blocked',
+  demo_replay_only: 'demo.replay_only',
 };
 
 export function failureKey(code: string): string {
@@ -97,6 +98,7 @@ export function failureKey(code: string): string {
  * identifier; it is just not the message. Codes absent from this table read as a gateway failure.
  */
 const ERROR_KEYS: Record<string, string> = {
+  demo_replay_only: 'demo.replay_only',
   client_key_required: 'pg.error.key',
   client_key_missing: 'pg.error.key_missing',
   playground_busy: 'pg.error.busy',

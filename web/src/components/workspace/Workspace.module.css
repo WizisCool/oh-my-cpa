@@ -1863,3 +1863,41 @@
     opacity: .4;
   }
 }
+
+/* A question offered as a place to start: on the Agent's empty page, and for the one message
+   the demonstration's Playground has a recorded answer to. */
+.example {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--thread-hairline);
+  border-radius: var(--radius-thread);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+
+.example:active {
+  transform: scale(.98);
+}
+
+.example:focus-visible {
+  border-radius: var(--radius-thread);
+}
+
+.example :global(.anticon) {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.example:hover {
+  background: var(--thread-field);
+  color: var(--fg);
+}

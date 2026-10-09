@@ -12,6 +12,7 @@ import type { Conversation, Presentation } from '../../agent/types';
 import { toBrowserTime } from '../../types/serverClock';
 import { createID } from '../../utils/ids';
 import { failureCode } from './api';
+import { isDemoMode } from '../../types/demoMode';
 
 /**
  * How often a growing answer is published to the transcript.
@@ -139,7 +140,10 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
 
   const stop = React.useCallback(() => {
     const controller = controllerRef.current;
-    if (controller && runIDRef.current) void cancelRun('agent', runIDRef.current, controller.signal).catch(() => {});
+    if (!controller || !runIDRef.current) return;
+    // A replay runs in this page and has no server run to cancel: ending it is the whole stop.
+    if (isDemoMode()) controller.abort();
+    else void cancelRun('agent', runIDRef.current, controller.signal).catch(() => {});
   }, []);
 
   // `isMessage` rather than a non-empty text: a message may be images alone, and a retry of one

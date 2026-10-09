@@ -1,12 +1,12 @@
 import React from 'react';
 import { Button, Dropdown } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
-import { AssistantRuntimeProvider } from '@assistant-ui/react';
+import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
-import { DownloadOutlined, LayoutOutlined, MessageOutlined } from '../../components/icons';
+import { DownloadOutlined, LayoutOutlined, MessageOutlined, PlayCircleOutlined } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import { AssistantThread } from '../../components/workspace/AssistantThread';
 import { EndpointPicker } from '../../components/workspace/EndpointPicker';
@@ -62,7 +62,7 @@ const NO_TARGET: PlaygroundTarget = { fingerprint: '', model: '', endpoint: DEFA
 export const PlaygroundPage: React.FC = () => {
   const { isExporting, exportSnapshot } = useConversationExport('playground');
   const [isExportMenuOpen, setIsExportMenuOpen] = React.useState(false);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
   const isDemo = isDemoMode();
   // The deployment's own build names the default User-Agent in the placeholder and the copied
@@ -76,7 +76,7 @@ export const PlaygroundPage: React.FC = () => {
   const [panelTab, setPanelTab] = React.useState<PanelTab>('parameters');
   const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
   const [notice, setNotice] = React.useState('');
-  const { turns, lastRunID, isRunning, send, retry, edit, stop, recover, replaceTurns } = usePlaygroundRun();
+  const { turns, lastRunID, isRunning, send, retry, edit, stop, recover, replaceTurns } = usePlaygroundRun(lang);
 
   // The console's own key list entry, so a key created or renamed on the key page is current here.
   // Only a key with a usage fingerprint can be named to the server, so the rest are not offered.
@@ -119,7 +119,8 @@ export const PlaygroundPage: React.FC = () => {
     if (!hydration.session || hydration.key || !keys.isSuccess) return;
     const available = keys.data.map(key => key.usage_fingerprint as string);
     const stored = storedRef.current?.client_key_fingerprint;
-    const fingerprint = stored && available.includes(stored) ? stored : available.length === 1 ? available[0] : '';
+    // The demonstration always has a target: a visitor is there to see an answer, not to configure one.
+    const fingerprint = stored && available.includes(stored) ? stored : available.length === 1 || isDemo ? available[0] ?? '' : '';
     if (fingerprint) setTarget(current => (current.fingerprint ? current : { ...current, fingerprint, model: '' }));
     setHydration(state => ({ ...state, key: true, model: !fingerprint }));
   }, [hydration.session, hydration.key, keys.isSuccess, keys.data]);
@@ -134,7 +135,7 @@ export const PlaygroundPage: React.FC = () => {
   }, [hydration.key, hydration.model, models.isSuccess, models.isFetching, models.data]);
 
   // A key that serves exactly one model has nothing to choose between.
-  const onlyModel = models.data?.models.length === 1 ? gatewayCallPointOf(models.data.models[0]) : '';
+  const onlyModel = models.data && (models.data.models.length === 1 || isDemo && models.data.models.length > 0) ? gatewayCallPointOf(models.data.models[0]) : '';
   React.useEffect(() => {
     if (!target.model && onlyModel) setTarget(current => ({ ...current, model: onlyModel }));
   }, [target.model, onlyModel]);
@@ -214,8 +215,13 @@ export const PlaygroundPage: React.FC = () => {
   const isTargetReady = !!target.fingerprint && !!target.model;
 
   const submit = (text: string, images: string[]) => {
-    if (!isTargetReady || isRunning || isDemo || !customBody.ok) return;
+    if (!isTargetReady || isRunning || !customBody.ok) return;
     if (!text.trim() && images.length === 0) return;
+    // The demonstration has one recorded answer, for one message (ADR 0092).
+    if (isDemo && (text.trim() !== t('pg.demo.example') || images.length > 0)) {
+      setNotice('demo_replay_only');
+      return;
+    }
     const content: Content[] = [
       ...(text.trim() ? [{ type: 'text' as const, text }] : []),
       ...images.map(url => ({ type: 'image_url' as const, image_url: { url } })),
@@ -276,8 +282,8 @@ export const PlaygroundPage: React.FC = () => {
     isRunning,
     // Only sending waits for a target. A disabled message box takes no focus, and on a phone that
     // is a tap that raises no keyboard and shows no reason why.
-    isDisabled: isDemo,
-    isSendDisabled: isDemo || !isTargetReady || !isRecoveryChecked || !customBody.ok,
+    isDisabled: false,
+    isSendDisabled: !isTargetReady || !isRecoveryChecked || !customBody.ok,
     attachments: attachmentAdapter,
     onSend: submit,
     onReload: () => {
@@ -424,6 +430,12 @@ export const PlaygroundPage: React.FC = () => {
                   <ModelMark callPoint={target.model} />
                   <span>{target.model}</span>
                 </p>
+              )}
+              {isDemo && (
+                <ThreadPrimitive.Suggestion prompt={t('pg.demo.example')} send className={workspace['example']} data-testid="playground-demo-example">
+                  <PlayCircleOutlined aria-hidden="true" />
+                  <span>{t('pg.demo.example')}</span>
+                </ThreadPrimitive.Suggestion>
               )}
             </div>
           )}

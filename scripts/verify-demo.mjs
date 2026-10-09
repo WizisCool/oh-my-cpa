@@ -146,6 +146,8 @@ async function startLocalDemo() {
 }
 
 const NAVIGATION_TIMEOUT_MS = 30_000;
+/** A replay is paced like the run it was recorded from, so it is given longer than a navigation. */
+const REPLAY_TIMEOUT_MS = 60_000;
 
 async function main() {
   // A local server is only started when no deployment was named, and it needs the
@@ -206,6 +208,21 @@ async function main() {
           await drawer.getByTestId('agent-directory').getByText('providers_list', { exact: true }).waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
           await drawer.locator('.ant-drawer-close').click();
           await drawer.waitFor({ state: 'hidden', timeout: NAVIGATION_TIMEOUT_MS });
+        }
+        if (route.path === '/agent') {
+          // The recorded run (ADR 0092): the example sends, the run ends as a stored turn, and
+          // that turn holds the calls and the generated interface the recording carries. This is
+          // the built bundle, so it also proves the replay's lazy chunk loads from a static host.
+          await page.getByTestId('agent-empty').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          await page.locator('main button').filter({ hasText: '最近 7 天' }).first().click();
+          const turn = page.getByTestId('agent-turn');
+          await turn.waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
+          await turn.getByTestId('agent-view').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          if (await page.getByTestId('agent-rejected').count() > 0) throw new Error('the demonstration refused its own example question');
+        }
+        if (route.path === '/playground') {
+          await page.getByTestId('playground-demo-example').click();
+          await page.getByTestId('playground-answer').getByText('$0.97').waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
         }
         if (route.path === '/oauth-management') {
           await page.getByTestId('oauth-management-model-rules-open').first().click();

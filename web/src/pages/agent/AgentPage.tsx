@@ -31,6 +31,7 @@ import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 import { ContextReadout } from '../../components/workspace/ContextReadout';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
+import { writeDemoQuestion } from '../../demo/session';
 import { saveBlob } from '../../utils/download';
 import { ThreadPlaceholder } from '../../components/workspace/ThreadPlaceholder';
 import { AgentMessage } from './AgentMessage';
@@ -68,6 +69,9 @@ const EXAMPLES = [
   { key: 'agent.example.quota', icon: <DashboardOutlined aria-hidden="true" /> },
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
 ];
+
+/** The example the demonstration has a recorded run for. */
+const DEMO_REPLAY_EXAMPLE = 'agent.example.daily';
 
 /**
  * What the drawer beside the conversation shows. It is closed until something is asked of it - the
@@ -180,8 +184,14 @@ export function AgentPage() {
     if (!models || directory.isFetching) return;
     if (model && !models.some(item => gatewayCallPointOf(item) === model)) setModel('');
     // A key that serves exactly one model has nothing to choose between.
-    if (!model && models.length === 1) setModel(gatewayCallPointOf(models[0]));
-  }, [models, directory.isFetching, model]);
+    // The demonstration always has one: a visitor is there to see a run, not to configure one.
+    if (!model && (models.length === 1 || isDemo && models.length > 0)) setModel(gatewayCallPointOf(models[0]));
+  }, [models, directory.isFetching, model, isDemo]);
+  React.useEffect(() => {
+    if (!isDemo || fingerprint || !isTargetRestored || !keys.isSuccess) return;
+    const first = keys.data.keys.find(key => key.usage_fingerprint)?.usage_fingerprint;
+    if (first) setFingerprint(first);
+  }, [isDemo, fingerprint, isTargetRestored, keys.isSuccess, keys.data]);
 
   const { set: persistTarget } = targetPref;
   const chooseTarget = (change: Partial<{ fingerprint: string; model: string; reasoningEffort: string; endpoint: InferenceEndpoint }>) => {
@@ -198,6 +208,11 @@ export function AgentPage() {
       ...(next.endpoint !== DEFAULT_INFERENCE_ENDPOINT ? { endpoint: next.endpoint } : {}),
     });
   };
+
+  const replayQuestion = t(DEMO_REPLAY_EXAMPLE);
+  React.useEffect(() => {
+    if (isDemo) writeDemoQuestion(replayQuestion);
+  }, [isDemo, replayQuestion]);
 
   const turns = session.data?.turns ?? [];
   const isAwaiting = isAwaitingApproval(session.data);
@@ -275,8 +290,8 @@ export function AgentPage() {
       setPresent(undefined);
       return options;
     }, []),
-    isDisabled: isDemo || !session.data,
-    isSendDisabled: isDemo || !isFullyConfigured || isAwaiting,
+    isDisabled: !session.data,
+    isSendDisabled: !isFullyConfigured || isAwaiting,
     onRejected: React.useCallback((text: string, code: string) => {
       setRejection({ code, text });
     }, []),
@@ -309,7 +324,7 @@ export function AgentPage() {
   const reset = async () => {
     if (!session.data || isRunning) return;
     try {
-      acceptConversation(await resetSession(session.data.revision));
+      acceptConversation(await resetSession(session.data.revision, session.data));
       runtime.thread.composer.setText('');
       setLocalError('');
       setRejection(undefined);
@@ -397,7 +412,7 @@ export function AgentPage() {
       isRunning && { id: 'stop', description: t('agent.command.stop'), icon: <StopOutlined />, run: () => handlers().stop() },
       canReplace && { id: 'retry', description: t('agent.command.retry'), icon: <ReloadOutlined />, run: () => handlers().retryTurn() },
       canReplace && { id: 'edit', description: t('agent.command.edit'), icon: <EditOutlined />, run: () => handlers().editTurn() },
-      hasTurns && !isRunning && !isDemo && { id: 'new', description: t('agent.new'), icon: <MessageOutlined />, run: () => void handlers().reset() },
+      hasTurns && !isRunning && { id: 'new', description: t('agent.new'), icon: <MessageOutlined />, run: () => void handlers().reset() },
       hasTurns && !isRunning && { id: 'export', description: t('agent.command.export'), icon: <DownloadOutlined />, run: () => handlers().exportConversation('html') },
       hasTurns && !isRunning && { id: 'image', description: t('agent.command.image'), icon: <PictureOutlined />, run: () => handlers().exportConversation('image') },
       { id: 'capabilities', description: t('agent.command.capabilities'), icon: <ToolOutlined />, run: () => handlers().openPanel('directory') },
@@ -469,7 +484,7 @@ export function AgentPage() {
     <div className={styles['shell-bar']}>
       {hasTurns && (
         <LabelTip title={isPhone ? t('agent.new') : undefined}>
-          <Button type="text" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning || isDemo} onClick={() => void reset()}>
+          <Button type="text" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning} onClick={() => void reset()}>
             <span>{t('agent.new')}</span>
           </Button>
         </LabelTip>
@@ -573,10 +588,13 @@ export function AgentPage() {
       <p className={styles['hero-text']}>{t('agent.empty.description')}</p>
     </div>
   );
+  // The demonstration answers one question, from a recording (ADR 0092): it is the only example
+  // offered there, and choosing it sends it.
+  const shownExamples = isDemo ? EXAMPLES.filter(example => example.key === DEMO_REPLAY_EXAMPLE) : EXAMPLES;
   const examples = (
     <div className={styles['examples']} aria-label={t('agent.examples')}>
-      {EXAMPLES.map(example => (
-        <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={false} className={styles['example']}>
+      {shownExamples.map(example => (
+        <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={isDemo} className={workspace['example']}>
           {example.icon}
           <span>{t(example.key)}</span>
         </ThreadPrimitive.Suggestion>

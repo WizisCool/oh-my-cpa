@@ -99,6 +99,14 @@ const FORBIDDEN = [
   { pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, why: 'a private key' },
 ];
 
+/** The recordings the console replays in demonstration mode. */
+const RECORDINGS = ['web/src/demo/agentRecording.json', 'web/src/demo/playgroundRecording.json'];
+
+/** What a recording taken from a real conversation must have had removed. */
+const RECORDING_FORBIDDEN = [
+  { pattern: /hmac:[0-9a-f]{16,}/, why: 'a client key fingerprint' },
+];
+
 async function digestOfInputs() {
   const hash = createHash('sha256');
   for (const name of INPUTS) {
@@ -164,6 +172,18 @@ async function main() {
   for (const { pattern, why } of FORBIDDEN) {
     if (pattern.test(body)) {
       failures.push(`the dataset contains ${why} (${pattern})`);
+    }
+  }
+
+  // The recorded runs the demonstration replays (ADR 0092) are public for the same reason, and
+  // they began as a real deployment's conversation: a key fingerprint is the identifier a
+  // recording is most likely to carry in unnoticed.
+  for (const name of RECORDINGS) {
+    const recording = await readFile(join(root, name), 'utf8');
+    for (const { pattern, why } of [...FORBIDDEN, ...RECORDING_FORBIDDEN]) {
+      if (pattern.test(recording)) {
+        failures.push(`${name} contains ${why} (${pattern})`);
+      }
     }
   }
 

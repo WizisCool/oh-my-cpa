@@ -4,6 +4,7 @@ import { isAbortError } from '../../api/client';
 import { failureCode, streamChat } from './api';
 import { applyEvent, createID, editedTurn, retriedTurn } from './state';
 import type { Turn } from './state';
+import { isDemoMode } from '../../types/demoMode';
 
 /**
  * How often a streaming answer is published to the transcript.
@@ -41,7 +42,9 @@ export interface PlaygroundRun {
  * here rather than trusted to the button state, because the button is not the only way in (Enter,
  * a retry, a suggestion) and a double submission is a second paid request.
  */
-export function usePlaygroundRun(): PlaygroundRun {
+export function usePlaygroundRun(language?: string): PlaygroundRun {
+  const languageRef = React.useRef(language);
+  languageRef.current = language;
   const [turns, setTurns] = React.useState<Turn[]>([]);
   const [lastRunID, setLastRunID] = React.useState('');
   const lastRunIDRef = React.useRef('');
@@ -83,7 +86,7 @@ export function usePlaygroundRun(): PlaygroundRun {
         if (controllerRef.current !== controller || !liveRef.current) return;
         liveRef.current = applyEvent(liveRef.current, event);
         timerRef.current ??= setTimeout(publish, PLAYGROUND_PUBLISH_INTERVAL_MS);
-      }, { id: turn.id, turn: { keyLabel: turn.keyLabel, replaces_id: replacesID }, isRecovery, replay: () => {
+      }, { id: turn.id, turn: { keyLabel: turn.keyLabel, replaces_id: replacesID }, isRecovery, language: languageRef.current, replay: () => {
         if (controllerRef.current !== controller) return;
         liveRef.current = { ...turn, reply: '', thought: undefined, status: 'running', events: [], eventBytes: 0, isTruncated: false };
         publish();
@@ -117,7 +120,10 @@ export function usePlaygroundRun(): PlaygroundRun {
   const stop = React.useCallback(() => {
     const controller = controllerRef.current;
     const live = liveRef.current;
-    if (controller && live) void cancelRun('playground', live.id, controller.signal).catch(() => {});
+    if (!controller || !live) return;
+    // A replay runs in this page and has no server run to cancel: ending it is the whole stop.
+    if (isDemoMode()) controller.abort();
+    else void cancelRun('playground', live.id, controller.signal).catch(() => {});
   }, []);
   const recover = React.useCallback(async (signal: AbortSignal, onRecover?: (turn: Turn) => void) => {
     if (controllerRef.current) return;
