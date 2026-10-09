@@ -138,10 +138,11 @@ export async function agentWorkspace({ base, page, check }) {
     && (await present.innerText()).includes('Interactive UI') && runs.length === 0, JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
   await page.getByRole('button', { name: 'Back to the default answer format', exact: true }).click();
   check('the presentation chip is removable', await present.count() === 0);
-  // The frame holds what a message is sent with and nothing else: attach, effort, the model, send.
+  // The frame holds what a message is sent with and nothing else: attach, the endpoint, effort,
+  // the model, send.
   const frameButtons = await page.locator('[data-testid="agent-page"] form button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') ?? ''));
-  check('the composer frame offers attach, effort, the model and send only',
-    frameButtons.length === 4 && frameButtons[0] === 'Attach images or text files' && frameButtons[1].startsWith('Reasoning effort:') && frameButtons[2].startsWith('Model:') && frameButtons[3] === 'Send', JSON.stringify(frameButtons));
+  check('the composer frame offers attach, the endpoint, effort, the model and send only',
+    frameButtons.length === 5 && frameButtons[0] === 'Attach images or text files' && frameButtons[1].startsWith('Endpoint:') && frameButtons[2].startsWith('Reasoning effort:') && frameButtons[3].startsWith('Model:') && frameButtons[4] === 'Send', JSON.stringify(frameButtons));
   await composer.pressSequentially('/ui');
   await commands.getByText('/text', { exact: true }).waitFor({ state: 'detached' });
   await composer.press('Enter');
