@@ -24,6 +24,7 @@ import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useI18n } from '../../i18n';
 import { getAppConfig } from '../../types/config';
 import { isDemoMode } from '../../types/demoMode';
+import { useDemoArrivalToast } from '../../components/common/DemoNotice';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import { failureCode } from './api';
 import { playgroundErrorKey } from './errors';
@@ -64,6 +65,7 @@ export const PlaygroundPage: React.FC = () => {
   const [isExportMenuOpen, setIsExportMenuOpen] = React.useState(false);
   const { t, lang } = useI18n();
   const navigate = useNavigate();
+  useDemoArrivalToast(t('pg.demo'));
   const isDemo = isDemoMode();
   // The deployment's own build names the default User-Agent in the placeholder and the copied
   // cURL; the server resolves the value that actually leaves the process.
@@ -332,7 +334,6 @@ export const PlaygroundPage: React.FC = () => {
 
   const notices = (
     <>
-      {isDemo && <Notice tone="info" title={t('pg.demo')} />}
       {keys.isError && <LoadFailure title={t(playgroundErrorKey(failureCode(keys.error)))} onRetry={() => void keys.refetch()} />}
       {keys.isSuccess && keys.data.length === 0 && (
         <Notice tone="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />

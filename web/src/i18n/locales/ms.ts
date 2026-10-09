@@ -138,7 +138,7 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.mention.capability": "Keupayaan",
   "agent.follow_ups": "Soalan susulan",
   "agent.settings": "Tetapan Ejen",
-  "agent.demo": "Demo tidak memanggil model: hantar soalan contoh di bawah untuk memainkan semula satu larian Agent yang dirakam.",
+  "agent.demo": "Demo tidak memanggil model: hantar soalan contoh untuk memainkan semula satu larian Agent yang dirakam.",
   "agent.omitted": "Giliran lengkap terdahulu dibuang untuk mematuhi had storan.",
   "agent.message": "Huraikan pertanyaan atau tindakan OMC",
   "agent.message.placeholder": "Tanya atau bertindak pada pemasangan ini — / untuk arahan, @ untuk menyebut",

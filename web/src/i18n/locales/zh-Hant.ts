@@ -138,7 +138,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.mention.capability": "能力",
   "agent.follow_ups": "接著問",
   "agent.settings": "智慧體設定",
-  "agent.demo": "示範站不呼叫模型：傳送下方的範例問題，可重播一次真實的智慧體執行。",
+  "agent.demo": "示範站不呼叫模型：傳送範例問題，可重播一次真實的智慧體執行。",
   "agent.omitted": "較早的完整輪次已因容量限制移除。",
   "agent.message": "描述要查詢或操作的 OMC 功能",
   "agent.message.placeholder": "詢問或操作這個部署，/ 使用命令，@ 引用名稱",

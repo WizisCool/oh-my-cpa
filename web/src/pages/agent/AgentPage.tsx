@@ -32,6 +32,7 @@ import { ContextReadout } from '../../components/workspace/ContextReadout';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { writeDemoQuestion } from '../../demo/session';
+import { useDemoArrivalToast } from '../../components/common/DemoNotice';
 import { saveBlob } from '../../utils/download';
 import { ThreadPlaceholder } from '../../components/workspace/ThreadPlaceholder';
 import { AgentMessage } from './AgentMessage';
@@ -209,6 +210,7 @@ export function AgentPage() {
     });
   };
 
+  useDemoArrivalToast(t('agent.demo'));
   const replayQuestion = t(DEMO_REPLAY_EXAMPLE);
   React.useEffect(() => {
     if (isDemo) writeDemoQuestion(replayQuestion);
@@ -434,7 +436,6 @@ export function AgentPage() {
   const runError = localError || errorCode;
   const notices = (
     <>
-      {isDemo && <Notice tone="info" title={t('agent.demo')} />}
       {session.isError && (
         <LoadFailure title={t('agent.session.failed')} onRetry={() => void session.refetch()} />
       )}

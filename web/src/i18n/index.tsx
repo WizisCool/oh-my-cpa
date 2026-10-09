@@ -194,7 +194,7 @@ const DICT: Record<string, [string, string]> = {
   'agent.mention.capability': ["能力", "Capability"],
   'agent.follow_ups': ["接着问", "Follow-up questions"],
   'agent.settings': ["智能体设置", "Agent settings"],
-  'agent.demo': ["演示站不调用模型：发送下方的示例问题，可回放一次真实的智能体运行。", "The demo calls no model: send the example question below to replay a recorded Agent run."],
+  'agent.demo': ["演示站不调用模型：发送示例问题，可回放一次真实的智能体运行。", "The demo calls no model: send the example question to replay a recorded Agent run."],
   'agent.omitted': ["较早的完整轮次已因容量限制移除。", "Older complete turns were removed to stay within the storage limit."],
   'agent.message': ["描述要查询或操作的 OMC 功能", "Describe an OMC query or action"],
   'agent.message.placeholder': ["询问或操作这个部署，/ 使用命令，@ 引用名称", "Ask about or act on this deployment — / for commands, @ to mention"],

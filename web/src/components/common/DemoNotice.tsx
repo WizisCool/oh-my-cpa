@@ -42,3 +42,20 @@ export const DemoNotice: React.FC = () => {
 
   return null;
 };
+
+/**
+ * Says once, on arrival, what a page does differently in the demonstration.
+ *
+ * A toast rather than an inline notice: the sentence is about the visit, not about a region of the
+ * page, and a banner held a row of the conversation for as long as the page was open to repeat
+ * something a visitor reads once. The key keeps a second arrival from stacking a second copy.
+ */
+export function useDemoArrivalToast(message: string): void {
+  const toast = useToast();
+  const hasShownRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!isDemoMode() || hasShownRef.current) return;
+    hasShownRef.current = true;
+    toast.info(message, { key: 'omc-demo-arrival' });
+  }, [toast, message]);
+}
