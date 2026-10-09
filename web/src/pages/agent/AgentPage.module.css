@@ -1,39 +1,208 @@
 /* The Agent's own surfaces; the frame, transcript and composer are the shared workspace's
    (`components/workspace/Workspace.module.css`). */
 
-.action-label {
-  white-space: nowrap;
+/* ── shell ─────────────────────────────────────────────────────────────────── */
+
+/* The Agent is a conversation and nothing around it: no page head, no panel at rest. The shell
+   carries the reading column's measure for the shared transcript and composer inside it. */
+.shell {
+  --workspace-column: 780px;
+  --workspace-gutter: 8px;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* The page's actions sit over the conversation's top edge instead of in a ruled header. The bar
+   itself lets clicks through; only its buttons take them. */
+.shell-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 10px 16px;
+  pointer-events: none;
+}
+
+.shell-bar > * {
+  pointer-events: auto;
+}
+
+.shell-bar :global(.ant-btn) {
+  color: var(--fg-2);
+  background: var(--bg);
+}
+
+.shell-new:global(.ant-btn) {
+  gap: 8px;
+  padding-inline: 10px;
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.shell-new:global(.ant-btn:not(:disabled):hover) {
+  border-color: var(--muted);
+}
+
+/* Parts the named action from the icons after it. */
+.shell-bar-rule {
+  width: 1px;
+  height: 16px;
+  margin-inline: 4px;
+  background: var(--border);
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Clear of the floating actions, so the first message never starts under them. */
+  padding-top: 52px;
+}
+
+/* An empty conversation gathers in the middle of the page, a little above centre, where a
+   reader's eye rests. */
+.shell[data-hero] .shell-main {
+  justify-content: center;
+  padding-bottom: 12vh;
+  overflow-y: auto;
 }
 
 /* ── empty state ───────────────────────────────────────────────────────────── */
 
-.examples {
+.hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   width: 100%;
+  max-width: calc(var(--workspace-column) + 48px);
+  margin: 0 auto;
+  padding: 0 24px 20px;
+  box-sizing: border-box;
+  text-align: center;
 }
 
-.examples-label {
-  color: var(--meta);
-  font-size: 10px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
+.hero-mark {
+  max-width: min(180px, 100%);
+  margin-bottom: 14px;
+  opacity: .9;
 }
 
-/* The page wrapper only carries the element the page queries for its composer and cards; it
-   takes no part in layout. */
-.page {
-  display: contents;
+.hero-text {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-/* ── chain of thought ──────────────────────────────────────────────────────── */
+/* Starting questions, under the box they fill. */
+.examples {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: calc(var(--workspace-column) + 48px);
+  margin: 4px auto 0;
+  padding: 0 24px;
+  box-sizing: border-box;
+  transform: translateX(calc(var(--workspace-gutter) / -2));
+}
 
+.example {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--thread-hairline);
+  border-radius: var(--radius-thread);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+
+.example:active {
+  transform: scale(.98);
+}
+
+.example:focus-visible {
+  border-radius: var(--radius-thread);
+}
+
+.example :global(.anticon) {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.example:hover {
+  background: var(--thread-field);
+  color: var(--fg);
+}
+
+@media (hover: none) {
+  .shell {
+    --workspace-gutter: 0px;
+  }
+}
+
+@media (max-width: 900px) {
+  .shell-bar {
+    padding: 8px 12px;
+  }
+
+  .hero,
+  .examples {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell-main {
+    padding-top: 48px;
+  }
+
+  .shell[data-hero] .shell-main {
+    justify-content: flex-start;
+    padding-bottom: 16px;
+  }
+
+  .hero {
+    padding-top: 16px;
+  }
+
+  .examples {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* On a phone the label would crowd the actions beside it; the icon and its name for assistive
+     technology carry it. */
+  .shell-new:global(.ant-btn) > span:not(:global(.ant-btn-icon)) {
+    display: none;
+  }
+}
+
+/* ── work timeline ─────────────────────────────────────────────────────────── */
+
+/* A stretch of reasoning and calls: a summary line, and under it the steps on a rail (ADR 0084). */
 .chain {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   min-width: 0;
   font-size: 12px;
 }
@@ -41,8 +210,9 @@
 .chain-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   align-self: flex-start;
+  min-height: 24px;
   padding: 2px 0;
   border: 0;
   background: none;
@@ -53,26 +223,108 @@
   transition: color var(--motion-fast);
 }
 
-.chain-toggle:hover {
+.chain-toggle:hover,
+.chain[data-active] > .chain-toggle {
   color: var(--fg-2);
 }
 
-.chain-caret {
+/* The summary's icon stands where the rail begins, so the steps read as hanging from it. */
+.chain-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.chain-failed {
+  color: var(--danger);
+}
+
+.chain-failed::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--meta);
+}
+
+.chain-caret,
+.call-caret {
+  flex-shrink: 0;
+  color: var(--meta);
   font-size: 10px;
   transition: transform var(--motion-fast) var(--ease-standard);
 }
 
-[aria-expanded='true'] > .chain-caret {
+[aria-expanded='true'] > .chain-caret,
+[aria-expanded='true'] > .call-caret {
   transform: rotate(90deg);
 }
 
+/* The timeline and a call's detail both open by growing a grid row from nothing: the one way to
+   animate to a height that is not known in advance without measuring it in script. A closed fold
+   is hidden from focus and from assistive technology, not merely collapsed. */
+.fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  visibility: hidden;
+  transition: grid-template-rows var(--motion-base) var(--ease-standard), visibility 0s var(--motion-base);
+}
+
+.fold[data-open] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.fold-inner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The rail runs through the centre of every step's mark; each mark clears a little of it, so the
+   line reads as joining the steps rather than striking through them. */
 .chain-body {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  padding-left: 12px;
-  border-left: 1px solid var(--border);
+  padding: 6px 0 4px;
+}
+
+.chain-body::before {
+  content: '';
+  position: absolute;
+  inset-block: 0 10px;
+  left: 6.5px;
+  width: 1px;
+  background: var(--thread-hairline);
+}
+
+.chain-body [data-step-mark] {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+  outline: 3px solid var(--bg);
+}
+
+.chain-body [data-step-mark] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+/* Reasoning between calls is a step on the same rail, its text at the calls' own text edge. */
+.chain-body [data-reasoning-toggle] {
+  gap: 8px;
+  min-height: 28px;
+}
+
+.chain-body [data-reasoning-body] {
+  margin: 0 0 6px 22px;
 }
 
 /* ── capability calls ──────────────────────────────────────────────────────── */
@@ -80,7 +332,6 @@
 .call {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   min-width: 0;
 }
 
@@ -93,25 +344,29 @@
   width: 100%;
   min-width: 0;
   min-height: 28px;
-  padding: 3px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  padding: 3px 8px 3px 0;
+  border: 0;
+  border-radius: var(--radius-control);
   background: none;
   color: var(--fg-2);
   font: inherit;
   font-size: 12px;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+  transition: color var(--motion-fast);
 }
 
-.call-row:hover {
-  border-color: var(--border);
-  background: var(--surface);
+.call-row:focus-visible {
+  border-radius: var(--radius-control);
 }
 
-.is-selected > .call-row {
-  border-color: var(--accent);
+.call-row:hover .call-title,
+.call[data-open] > .call-row .call-title {
+  color: var(--fg);
+}
+
+.call-row:hover .call-caret {
+  color: var(--fg-2);
 }
 
 .call-mark {
@@ -121,35 +376,36 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  border-radius: 50%;
   color: var(--muted);
 }
 
 .call-mark:empty::before {
   content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   background: var(--meta);
 }
 
-.call-mark[data-tone='success']:empty::before { background: var(--success); }
-.call-mark[data-tone='error']:empty::before { background: var(--danger); }
+.call-mark[data-tone='success'] { color: var(--success); }
+.call-mark[data-tone='error'] { color: var(--danger); }
 .call-mark[data-tone='processing'] { color: var(--accent); }
 .call-mark[data-tone='warning'] { color: var(--warn); }
 
 .call-title {
   flex-shrink: 0;
-  color: var(--fg);
+  color: var(--fg-2);
   font-weight: 500;
+  transition: color var(--motion-fast);
 }
 
 .call-name {
-  flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--meta);
+  color: var(--fg-2);
   font-size: 11px;
 }
 
@@ -159,7 +415,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
+  /* What was typed for the machine, set as a chip so it never reads as part of the sentence. */
+  padding: 1px 6px;
+  border-radius: var(--radius-document);
+  background: var(--thread-field);
+  color: var(--fg-2);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -190,7 +450,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 2px 8px;
-  padding: 0 8px 0 30px;
+  padding: 0 8px 4px 22px;
   color: var(--muted);
   font-size: 11.5px;
   overflow-wrap: anywhere;
@@ -198,6 +458,51 @@
 
 .call-failure code {
   color: var(--danger);
+}
+
+/* What was sent and what came back, under the row and aligned to its text. */
+.call-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 2px 0 8px 22px;
+  padding: 10px 12px 12px;
+  border-radius: var(--radius-surface);
+  background: var(--thread-field);
+}
+
+.call-facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.call-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.call-section :global(h4) {
+  margin: 0;
+}
+
+/* A large receipt scrolls inside its own block rather than pushing the answer off the screen. */
+.call-section :global(pre) {
+  max-height: 280px;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold {
+    transition: none;
+  }
 }
 
 .copy-idle,
@@ -219,9 +524,40 @@
   min-width: 0;
   margin: 0;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--thread-hairline);
+  border-radius: var(--radius-document);
   background: var(--surface);
+}
+
+/* A frameless view is part of the answer, not an object in it (ADR 0082): no edge, no ground of
+   its own and no title bar. Its controls stay reachable but quiet until the reader comes to them. */
+.view[data-frame='none']:not(.view-fullscreen) {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.view[data-frame='none']:not(.view-fullscreen) .view-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.view[data-frame='none']:not(.view-fullscreen) .view-head {
+  opacity: .45;
+  transition: opacity var(--motion-fast);
+}
+
+.view[data-frame='none']:not(.view-fullscreen) .view-head:hover,
+.view[data-frame='none']:not(.view-fullscreen) .view-head:focus-within {
+  opacity: 1;
+}
+
+.view[data-frame='none']:not(.view-fullscreen) .canvas-frame {
+  background: var(--bg);
 }
 
 .view-head {
@@ -243,54 +579,402 @@
   flex: 1;
 }
 
-.view-table {
+/* A canvas filling the viewport. It sits above the console but below antd's popups (1000+), so
+   its own tooltips still show. */
+.view-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  border: 0;
+  border-radius: 0;
+  padding: 12px 16px 16px;
+}
+
+.view-fullscreen .canvas-frame,
+.view-fullscreen .canvas-source {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.view-placeholder {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-document);
+}
+
+/* ── files sent with a message (ADR 0074) ──────────────────────────────────── */
+
+.sent-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: min(80%, 640px);
+  margin-bottom: 6px;
+}
+
+.sent-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  background: var(--thread-field);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.sent-file[data-tone='accent'] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.sent-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-file-size {
+  flex-shrink: 0;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Images sent with a message: thumbnails that open at full size. */
+.sent-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: min(80%, 640px);
+}
+
+.sent-images :global(.ant-image) {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.sent-image:global(.ant-image-img) {
+  display: block;
+  width: auto;
+  max-width: 220px;
+  height: 132px;
+  object-fit: cover;
+}
+
+/* ── panels (ADR 0079) ─────────────────────────────────────────────────────── */
+
+.panel {
+  gap: 14px;
+}
+
+.block {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
 }
 
-.view-mode-label {
-  margin-left: 4px;
-}
-
-/* ── call details ──────────────────────────────────────────────────────────── */
-
-.details {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 12px 16px 24px;
-}
-
-.details-empty {
-  padding: 48px 16px;
-}
-
-.details-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.details-title {
-  color: var(--fg);
-  font-size: 14px;
+.block-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.details-section {
+/* Figures share one hairline grid instead of each sitting in its own box. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-document);
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.stat {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
 }
 
-.details-note {
-  margin: 0;
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.stat-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.stat-delta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.stat[data-tone='success'] .stat-delta { color: var(--success); }
+.stat[data-tone='warning'] .stat-delta { color: var(--warn); }
+.stat[data-tone='danger'] .stat-delta { color: var(--danger); }
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.field dt {
+  flex: none;
+  max-width: 50%;
+  color: var(--muted);
+}
+
+.field dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.callout {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.callout[data-tone='success'] {
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success) 7%, transparent);
+}
+
+.callout[data-tone='warning'] {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+
+.callout[data-tone='danger'] {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The rail is each step's own left edge, so it joins the marks whatever a step's height. */
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  column-gap: 12px;
+  padding-bottom: 12px;
+  font-size: 13px;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:not(:last-child)::before {
+  position: absolute;
+  top: 14px;
+  bottom: -5px;
+  left: 4px;
+  width: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.step-mark {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.step[data-status='done'] .step-mark {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.step[data-status='active'] .step-mark {
+  border-color: var(--accent);
+  outline: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.step[data-status='failed'] .step-mark {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.step-label {
+  color: var(--fg);
+}
+
+.step[data-status='pending'] .step-label {
+  color: var(--fg-2);
+}
+
+.step-text {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  font-size: 13px;
+}
+
+.meter-label {
+  min-width: 0;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-value {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--series-track);
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.meter[data-tone='success'] .meter-fill { background: var(--success); }
+.meter[data-tone='warning'] .meter-fill { background: var(--warn); }
+.meter[data-tone='danger'] .meter-fill { background: var(--danger); }
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-2);
+  font-size: 12px;
+  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+
+.link:hover,
+.link:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── canvases (ADR 0072) ───────────────────────────────────────────────────── */
+
+.canvas-frame {
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  border: 0;
+  background: var(--surface);
+}
+
+.canvas-source {
+  max-height: 360px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-document);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ── composer additions ────────────────────────────────────────────────────── */
@@ -342,7 +1026,7 @@
 .selection-toolbar {
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-surface);
   background: var(--elevated);
 }
 
@@ -352,16 +1036,15 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--danger);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  padding: 10px 14px;
+  border-radius: var(--radius-surface);
+  /* The state colours the whole notice faintly; an edge bar would be a second line on it. */
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   font-size: 13px;
 }
 
 .failure[data-tone='warning'] {
-  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
 .failure code {
@@ -380,31 +1063,11 @@
   font-size: 12px;
 }
 
-.activity-mark {
-  width: 7px;
-  height: 7px;
-  flex-shrink: 0;
-  border-radius: 2px;
-  background: var(--accent);
-  animation: agent-activity 1200ms ease-in-out infinite;
-}
-
-.activity-round {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .activity-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@keyframes agent-activity {
-  0%, 100% { opacity: .3; }
-  50% { opacity: 1; }
 }
 
 /* ── approval card ─────────────────────────────────────────────────────────── */
@@ -414,21 +1077,33 @@
   flex-direction: column;
   gap: 10px;
   margin-left: 22px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--warn);
-  border-radius: var(--radius-sm);
+  padding: 16px;
+  border: 1px solid var(--thread-hairline);
+  border-radius: var(--radius-thread);
   background: var(--surface);
   font-size: 13px;
 }
 
+/* A destructive request is named by its permission tag and its notice; the frame stays one line. */
 .approval[data-destructive] {
-  border-left-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
 
 .approval:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: var(--radius-thread);
+}
+
+/* What will change, as a field inside the card rather than a second box. */
+.approval .operation-fields {
+  padding: 10px 14px;
+  border-radius: var(--radius-surface);
+  background: var(--thread-field);
+}
+
+.approval .operation-actions :global(.ant-btn) {
+  border-radius: var(--radius-control);
 }
 
 .approval-head {
@@ -524,7 +1199,7 @@
   max-height: 64vh;
   padding: 14px 16px 12px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-thread);
   background: var(--surface);
   outline: none;
 }
@@ -648,7 +1323,7 @@
 .question-chip {
   padding: 0 6px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-document);
   color: var(--muted);
   font-size: 11px;
   font-weight: 400;
@@ -676,7 +1351,7 @@
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
@@ -748,7 +1423,7 @@
 
 /* "Something else" is an option row whose field opens inside it once chosen. */
 .question-other {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
 }
 
 .question-other .question-option {
@@ -1016,13 +1691,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .activity-mark {
-    animation: none;
-    opacity: .8;
-  }
-}
-
 /* ── external agents ─────────────────────────────────────────────────────── */
 
 .connect {
@@ -1140,4 +1808,55 @@
 
 .approval[data-variant='consent'] .operation-actions > * {
   flex: 1;
+}
+
+.ui-draft { padding: 12px; border-block: 1px solid var(--border); color: var(--fg-2); }
+.ui-draft pre { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
+.ui-draft button + button { margin-inline-start: 8px; }
+
+/* ── arrival ───────────────────────────────────────────────────────────────── */
+
+/* A figure, its draft and a call row each appear where they will stay: opacity and a 4px rise
+   inside `base`, with no fill mode, so a settled figure carries no transform of its own. */
+.view,
+.call {
+  animation: agent-enter var(--motion-base) var(--ease-standard);
+}
+
+@keyframes agent-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+.view-draft {
+  border-style: dashed;
+}
+
+.view-draft-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.view-draft-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.view-draft-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 168px;
+  border-radius: var(--radius-document);
+  background: var(--thread-field);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view,
+  .call {
+    animation: none;
+  }
 }

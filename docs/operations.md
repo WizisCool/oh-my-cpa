@@ -87,6 +87,7 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   (NFS/CIFS).
 - **Master key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and
   payloads. Back it up securely.
+- **Framed content**: The console's document declares `frame-src 'self' blob:`. It frames plugin pages from its own origin and the Agent's sandboxed canvases (ADR 0072); a reverse proxy must not replace that policy with one that allows other frame sources.
 - **Network security**: Keep CPA on a private network or loopback interface. The supplied
   Compose files publish CPA and OMC only on loopback; use direct local access or an SSH
   tunnel. Public access requires HTTPS through operator-owned infrastructure.
@@ -166,6 +167,21 @@ documents needing (up to twice the database file). A job cannot outlive a restar
 `/agent` sends the conversation and capability results to the CPA model selected on the
 page and its upstream provider; the page states this beneath the message box, and the
 choice of key, model and reasoning effort is remembered as a server-side preference.
+A message may carry up to four PNG, JPEG or WebP images of at most 5 MiB each, beside up
+to four text files (40 KiB together). Images are stored encrypted in `agent_documents`
+for as long as their turn is part of the conversation, are sent to the model with every
+round while they are among the conversation's newest eight, and are read back by the
+console from `GET /api/v1/agent/images/{id}` under the console session only.
+
+Agent runs and sessions are open-ended: OMC applies no token, round, tool-call, display-count,
+run-duration or session-size ceiling. Provider context/output limits and capability payload and
+security checks still apply, as do the gateway's 120-second response-header and stream-idle
+timeouts and 1 MiB SSE-line limit. Completed turns send conclusions with bounded metadata to later
+rounds, while the stored transcript is retained until reset or explicit replacement. A long
+conversation increases SQLite and backup size, serialization work, memory and upstream request
+cost. Use Stop to end active work and New conversation to release the retained transcript and
+images; monitor disk and process memory on the single replica. Image admission failure attempts
+to clean up only newly written image rows; database failures can prevent that best-effort cleanup.
 
 External agents connect over MCP to the same capability registry, in one of two ways:
 
@@ -174,8 +190,8 @@ External agents connect over MCP to the same capability registry, in one of two 
 | Streamable HTTP, served by the console | `<console URL>/api/mcp`, for example `https://omc.example.com/omc/api/mcp` | `Authorization: Bearer <CPA management key>` |
 | stdio, the `oh-my-cpa mcp` bridge process | `OMCPA_SERVER_URL` (the console URL, including any base path) | `OMCPA_CPA_MANAGEMENT_KEY` |
 
-The HTTP endpoint needs nothing installed where the agent runs; the **Connect** tab of
-the `/agent` side panel shows the deployment's address and copyable client
+The HTTP endpoint needs nothing installed where the agent runs; the **Connect** action at
+the top of `/agent` shows the deployment's address and copyable client
 configuration. It accepts the management key as a bearer token only (a console session
 cookie is refused), throttles wrong keys per client address like the login form, keeps
 no MCP session, answers each request in plain JSON, and is refused in demo mode. A
@@ -196,8 +212,8 @@ needed) allows or denies that one operation; `omc_operation_status` reads the
 outcome and can wait up to 30 seconds for the decision (`wait_seconds`). The read-only database queries and `ask_question` are offered to the built-in
 Agent only. Raw SQL results and private model history are omitted from Agent session
 responses and run snapshots, and query receipts have no raw-result preview; the selected
-model still receives the rows and may use them in its answer or an explicit chart or
-table. See `docs/agent-capabilities.md`.
+model still receives the rows and may use them in its answer or an explicit
+`render_ui` display. See `docs/agent-capabilities.md`.
 
 ## Model playground
 
@@ -241,7 +257,11 @@ resend a model call or workflow. Stop explicitly cancels that task; closing the 
 does not. The latest completed replay journal is retained for 15 minutes, until another
 run replaces it or OMC restarts. Agent keeps its authoritative transcript; Playground
 saves the recovered result into its existing latest-session preference. Results never
-recovered before journal expiry may be unavailable.
+recovered before journal expiry may be unavailable. Agent replay journals grow with output and
+have no byte ceiling or execution deadline; Playground retains its bounded journal and
+30-minute wrapper deadline (the Playground handler's 10-minute deadline still applies).
+An active Agent run therefore consumes memory until it finishes
+or is stopped, and its completed journal remains subject to the retention window above.
 
 Console-authenticated recovery endpoints under the configured API base are
 `GET /agent/runs/active`, `GET /agent/runs/{id}`, `POST /agent/runs/{id}/cancel` and

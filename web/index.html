@@ -8,6 +8,10 @@
          accessibility affordance, and the iOS focus zoom it would suppress is handled where it
          belongs instead, by giving form controls a 16px font size on coarse pointers. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Frames may only ever show this deployment's own documents. The Agent draws model-written
+         canvases in sandboxed frames (ADR 0072); the sandbox removes their origin and network, and
+         this is what stops one from navigating itself to another host with the data it was given. -->
+    <meta http-equiv="Content-Security-Policy" content="frame-src 'self' blob:" />
     <title>Oh My CPA</title>
     <!-- Injected at runtime by Oh My CPA Go server if present -->
     <script>

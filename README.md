@@ -350,12 +350,15 @@ troubleshooting.
 and operates the console: usage and request analysis, providers, OAuth, quota, client
 keys, configuration and pricing. Reads run directly. Changes are prepared server-side
 and run only after an Allow in the console. Secrets, tokens and OAuth authorization
-never enter the model's context.
+never enter the model's context. Answers can mix text with inline interactive components that
+appear while they are generated: local filters, calculators, diagrams and charts. Components
+use the console's visual system; follow-ups needing new data or actions stay in the reviewed
+conversation flow.
 
 **From an external agent.** The same capabilities are served over MCP at
 `<console URL>/api/mcp` (Streamable HTTP), so an agent on another machine connects by
 URL with the CPA management key as a bearer token. Nothing is installed on the agent's
-side. The **Connect** tab of the `/agent` side panel shows the deployment's own endpoint
+side. The **Connect** action at the top of `/agent` shows the deployment's own endpoint
 with ready-to-copy configuration.
 
 Claude Code:

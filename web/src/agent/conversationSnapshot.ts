@@ -41,8 +41,12 @@ function snapshotJSON(value: unknown): string {
   return JSON.stringify(snapshotValue(value), null, 2) ?? '';
 }
 
-/** Project the displayed contract, never the persisted session or a live operation handle. */
-export function agentSnapshot(conversation: Conversation): ConversationSnapshot {
+/**
+ * Project the displayed contract, never the persisted session or a live operation handle. A stored
+ * image is a reference; `imageData` carries the bytes of those the caller read, as data URLs, so an
+ * exported file shows them without the console behind it.
+ */
+export function agentSnapshot(conversation: Conversation, imageData: ReadonlyMap<string, string> = new Map()): ConversationSnapshot {
   return {
     omitted: conversation.omitted,
     turns: conversation.turns.map(turn => {
@@ -52,7 +56,9 @@ export function agentSnapshot(conversation: Conversation): ConversationSnapshot 
         ...(turn.reply ? [{ type: 'text' as const, content: turn.reply }] : []),
       ];
       return {
-        user: turn.user, images: [], status: turn.status, code: turn.code,
+        // One entry per stored image: bytes the caller could read, otherwise a placeholder the
+        // export draws as "image omitted" rather than silently dropping what the operator sent.
+        user: turn.user, images: (turn.images ?? []).map(image => imageData.get(image.id) ?? ''), status: turn.status, code: turn.code,
         model: conversation.model, startedAt: turn.started_at_ms,
         duration: turn.ended_at_ms !== undefined && turn.started_at_ms !== undefined ? turn.ended_at_ms - turn.started_at_ms : undefined,
         usage: turn.usage ? { ...turn.usage } : undefined,

@@ -148,7 +148,7 @@ const AssistantContent = React.memo(function AssistantContent({ turn, isLast, ca
       </div>
       {(thought || isThinking) && <ReasoningBlock text={thought} isThinking={isThinking} />}
       {reply ? (
-        <ModelMarkdown content={reply} isStreaming={isRunning} externalImageLabel={t('pg.external_image')} />
+        <ModelMarkdown content={reply} isStreaming={isRunning} externalImageLabel={t('conversation.external_image')} />
       ) : isWaiting ? (
         <div className={styles['waiting']} role="status">{t('pg.waiting')}</div>
       ) : !isRunning && !thought ? (
@@ -218,7 +218,7 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
       )}
       <span className={workspace['foot-spacer']} />
       <span className={workspace['foot-actions']}>
-        <CopyButton text={turn.reply} label={t('pg.copy_answer')} disabled={!turn.reply} />
+        <CopyButton text={turn.reply} label={t('conversation.copy_answer')} disabled={!turn.reply} />
         <Tooltip title={t(turn.requestID ? 'pg.view_requests' : 'pg.request_id_missing')}>
           <Button type="text" size="small" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
         </Tooltip>

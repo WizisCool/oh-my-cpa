@@ -103,7 +103,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes (windows read on each tier's billing time zone), sync service, modes and channel multipliers | — |
 | `internal/modelcatalog` | Bundled models.dev canonical reference facts, exact source aliases and safe weight/resource links for Model Square | — |
 | `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the ordinary `/v0/management` reads in `client_v0.go`, plus the bounded native Plugin Host in ADR 0067), configuration change sets with the pre-write backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
-| `internal/cpa/gateway` | Fixed-endpoint CPA client for the Playground, Agent and Model Square: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
+| `internal/cpa/gateway` | Fixed-endpoint CPA client for the Playground, Agent and Model Square: client-key auth, model directory, bounded SSE lines, and complete tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `iconasset`, `crypto`, `domain`, `pricing`, `security`, `usage` |
@@ -113,7 +113,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
 | `internal/capability` | Agent capability declarations, JSON Schema validation, permission/risk rules, pending-operation store, executor audit | `repository`, `crypto` |
 | `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system, model directory) used by both console handlers and capabilities | `capability`, `cpa/management`, `cpa/gateway`, `modelcatalog`, `pricing`, `quota`, `repository` |
-| `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, the sectioned system prompt, display tools, budgets, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
+| `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, the sectioned system prompt, display tools, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
 | `internal/agui` | The AG-UI 1.0 wire protocol for Agent runs: strict `RunAgentInput` decoding, the event translator and SSE framing; knows nothing of OMC | — |
 | `internal/mcpbridge` | MCP server definition over the capability registry, its Streamable HTTP handler and the stdio bridge over the capability HTTP endpoints; no business logic or approval policy | `capability` |
 | `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy, capability/Agent endpoints | all of the above, `internal/web` |
@@ -217,8 +217,9 @@ is assembled server-side - a client cannot inject tool results, approvals, or hi
 
 `POST /agent/run` speaks AG-UI 1.0 (ADR 0041). `internal/agui` decodes a strict `RunAgentInput` -
 one user message or a `resume` list naming the interrupts it continues from, never history, state
-or tool results; the key, model, effort and the revision the page last saw as `forwardedProps`;
-the console language as the one `context` entry - and `internal/api/agent_http.go` translates the
+or tool results; the key, model, effort, the revision the page last saw and, for a retry or an edit, the newest turn the message replaces (`replace_turn`, honoured only when `isReplaceable` finds the turn settled and read-only) as `forwardedProps`;
+and, when a composer command asked for one, the answer's presentation (`present`: `ui` or `text`, with legacy `canvas` accepted) as `forwardedProps`;
+the console language and its token unit style (`console_language`, `console_token_style`) as the only `context` entries - and `internal/api/agent_http.go` translates the
 runtime's transport-independent events onto the stream. `RUN_STARTED` is sent only once the turn
 is persisted, so a run refused before that emits `RUN_ERROR` alone and the console hands the
 message back to the composer. Each model round is a step; a capability call is announced
@@ -238,32 +239,86 @@ conversation: the model loop and display tools still resolve the full query resu
 and explicitly generated display views remain visible and may include data selected by the model.
 
 The turn records its output as ordered `parts` - reasoning, text and capability calls, in arrival
-order, with a new part for each model round - plus its rounds, token usage and the
-`agent.PROMPT_VERSION` it ran with. The system prompt is built from named sections (identity,
-approach, data, safety, presentation, context) in `internal/agent/prompt.go`, bounded by
-`agent.MAX_PROMPT_BYTES` because it is resent on every round. The display tools `render_chart` and
-`render_table` (`internal/agent/display.go`, ADR 0042) are offered only when the client declares
-them: the model references rows of an earlier capability result by `source {call_id, path}`, the
-server resolves and checks them, freezes the dataset on the call's trace as its `view`, and returns
-a small receipt instead of the rows. They never pass through the executor.
+order, with a new part for each model round - plus its rounds, token usage (summed over the rounds,
+and `context_tokens`, the input of the last round that reported one), any follow-up `suggestions`
+the presentation it was asked for and the `agent.PROMPT_VERSION` it ran with. The system prompt is built from named sections (identity,
+approach, data, safety, wording, presentation, context) in `internal/agent/prompt.go`, bounded by
+`agent.MAX_PROMPT_BYTES` because it is resent on every round. The wording section is what makes an
+answer read like the console beside it: things are called by their display names, alias or label
+rather than by identifiers, fields are described rather than quoted, and numbers follow fixed
+forms - grouped digits, token counts in the operator's unit style (`TOKEN_STYLES`), USD, durations,
+percentages, and clock times in the deployment's zone. Domain terms, shared half-open analysis
+windows and configured request identity are explicit; model aliases do not attest upstream identity.
+Earlier settled turns contribute their question, images, conclusion and bounded provenance
+metadata in chronological order (`buildCompletedTurnMessages`, ADR 0078), without replaying SQL,
+HTML or repair transcripts; a turn that failed or was stopped contributes too, so the writes it
+ran stay visible to the next question. Up to eight dataset references and eight recent mutation/refusal
+outcomes remain available per completed turn; references already used by a display take priority.
+Omitted outcomes are disclosed, never interpreted as write success. The active turn keeps every
+model message and result. The runtime neither truncates requests to an estimated context budget
+nor drops stored turns to meet a session size cap; actual provider context limits can still
+refuse a request. Image inclusion has its own newest-eight policy below.
+The display tool `render_ui` (`internal/agent/display.go`, ADR 0042, 0072, 0073, 0082) is offered
+only when the client declares it. `presentedTools` offers `render_ui` for `ui` (and legacy
+`canvas`) presentations, no display for `text`, and keeps declared `suggest_next` in both cases.
+A canvas references rows of an earlier
+capability result by `source {data_ref}` with top-level `fields`; the runtime supplies bounded,
+value-free `data_sources` metadata in private model messages (`internal/agent/data_sources.go`).
+Legacy `source {call_id, path}` remains accepted, with a tool-call id and a path inside result data.
+These handles grant no access outside the retained conversation. The server resolves and checks them, freezes the dataset on the call's trace as its `view`, and returns
+a small receipt instead of the rows. Display calls never pass through the executor. `render_chart`, `render_table`, `render_view`
+and `render_canvas` are withdrawn (`RETIRED_DISPLAY_TOOLS`): a stored trace that names one is still
+read as a display call, and nothing new can call or reference it. `suggest_next` is
+declared the same way but is not a call the turn makes: `takeSuggestions` removes it from a round's
+calls, so it has no trace, no stored tool call and no further model round, and its questions are
+kept on the turn only when that round ends it. Stored `render_view` panels (ADR 0079) remain
+readable alongside stored canvases (ADR 0072); new `render_ui` calls freeze the model's markup
+beside resolved rows. New calls default to inline components and persist `frame: none`,
+removing card chrome without changing the sandbox. Explicit `card` remains omitted in storage,
+so earlier views retain their original framing (ADR 0087). `AgentMessage` excludes
+displays from chain grouping and `DisplayCall` draws the draft or frozen view at the call's
+ordered part; failed displays stay diagnostic call rows. Reasoning uses the shared unframed
+`ReasoningBlock`, following the latest line until the reader scrolls up and folding on completion.
+Its effect-owned ResizeObserver tracks both the unbounded Markdown content and its scroll viewport,
+so deferred Markdown commits and reflow stay pinned after the live body reaches its height cap.
+Scroll and resize callbacks share one movement check before correcting the tail, so a layout
+commit cannot erase a pending backscroll. Shrinking content clamps the previous offset without
+mistaking that clamp for reader intent. Corrections are instant. Closing the live disclosure
+disconnects the observer, and reopening resumes at the tail. The Agent's disclosure
+names the thought process while the separate activity row owns the live phase and elapsed time.
+The console builds a canvas's document in `web/src/agent/canvasDocument.ts` - the content security policy, the theme variables,
+the frozen rows, then the kit in `web/src/agent/canvasKit.ts` (`OMC.rows`, `OMC.fmt`, `OMC.chart`,
+`OMC.table`, `OMC.diagram`, `OMC.icon` and `OMC.compose`, configured with the operator's token
+style, language and time zone; `OMC.compose` only drafts a composer message) ahead of the
+model's markup - and shows it in a script-only sandboxed `srcdoc`
+frame. Drafts draw partial markup under a fresh nonce-only script policy, allowing only the
+host bootstrap to execute: neither model scripts nor inline event handlers run until the
+completed component replaces its preview. Height observations coalesce after resize and
+mutation, growing or shrinking within 48px–16384px without retaining the previous viewport
+as a minimum. `tools/CanvasView.tsx` can portal the same figure over the viewport, and saves it as an
+image by posting a capture request the kit answers with an SVG of its own document; `canvasImage`
+validates that reply before it is rasterised. `web/index.html` declares `frame-src 'self' blob:` so that frame cannot navigate away.
+Panel icons resolve against `web/src/generated/lucideIcons.json`, generated by
+`scripts/generate-lucide-icons.mjs` and loaded on first use.
 
 The workspace above that loop is `web/src/pages/agent`, on assistant-ui's `ExternalStore` runtime
-over the shared shell in `web/src/components/workspace`. The framework-free run layer is
+over the shared shell in `web/src/components/workspace`. Text files attached in the composer are folded into the message by `web/src/pages/agent/attachments.ts` (ADR 0074), so the server stores and resumes them as part of the one string it already keeps. The composer's `/` list is built in `AgentPage.tsx` from what the page can do at that moment;
+`/ui` and `/text` hold a presentation until the next message takes it (`takeSendOptions`). The framework-free run layer is
 `web/src/agent/`: the request builder and event parser (`protocol.ts`), the chunk-safe SSE reader
 (`sse.ts`), the transport (`transport.ts`), a pure reducer that folds the events into the parts the
 server stores (`runReducer.ts`) and the exports (`export.ts`). `useAgentRun.ts` drives one run and
 publishes its frame on a 40ms cadence; `thread.ts` converts the stored conversation and the live
 frame to thread messages; `runtime.ts` is the one module that knows assistant-ui's runtime API, and
 routes every framework action - send, stop, approve, answer - back into OMC's code. A message sent
-during a run waits in a queue behind it. Capability calls render through a tool UI registry
-(`tools/`): one row per call, grouped into a collapsible chain, with its arguments and the receipt
-the model received in the side panel's details tab (`CallDetails.tsx`); display calls render as a
-lazily loaded chart or a table inside the answer. A prepared operation is decided on a card under
+during a run waits in a queue behind it. Capability calls render through a toolkit of
+render-only `backend` entries (`tools/registry.tsx`) handed to the runtime provider: one disclosure per call (`tools/CapabilityCall.tsx`), joined into a collapsible timeline, each opening its arguments and the receipt
+the model received under its own row (ADR 0084); display calls render as a
+panel or a canvas inside the answer. A prepared operation is decided on a card under
 the call that raised it (`interrupts/ApprovalCard.tsx`, ADR 0043), and an `ask_question` call is
 answered in a panel that takes the composer's place (`interrupts/QuestionPanel.tsx`); deciding
-either one resumes the run (ADR 0035). A conversation exports as a self-contained HTML page, a PNG image or JSON, and one answer as HTML;
-a table as CSV, a chart as PNG (see "Conversation exports" below). The presentation rules - status vocabulary,
-failure copy, argument summaries, chart series, change preview - are pure functions in `state.ts`,
+either one resumes the run (ADR 0035). A conversation exports as a self-contained HTML page, a PNG image or JSON, one answer as HTML,
+and one canvas as HTML or PNG (see "Conversation exports" below). The presentation rules - status vocabulary,
+failure copy, argument summaries, change preview - are pure functions in `state.ts`,
 `thread.ts` and `web/src/agent/`, which is what lets `scripts/test-agent-workspace.ts` assert them
 without a browser.
 
@@ -310,21 +365,27 @@ returns its id and a link to `<console>/authorize/<id>`. That route is
 consent screen on the sign-in page's column (`auth-*` classes), behind the same
 `AuthGate`, that names the requester, the deployment and the capability and carries the
 approval card in its `consent` variant, posting to the same decision endpoint as the
-built-in Agent's approvals. The Agent page's Connect tab
-(`web/src/pages/agent/ExternalAgentGuide.tsx`) shows the deployment's endpoint and
-per-client configuration built by `web/src/pages/agent/connect.ts`.
+built-in Agent's approvals. The Agent page's Connect action opens
+`web/src/pages/agent/ExternalAgentGuide.tsx` in a drawer, showing the deployment's endpoint
+and per-client configuration built by `web/src/pages/agent/connect.ts`.
 
 #### What the model loop spends, and where
 
-A turn has no fixed count of model rounds or capability calls: a task takes the rounds its
-work needs, and the loop checks cancellation between model calls and between calls. What is
-bounded is the cost and size of what each round may assemble, because those fail differently
-and an operator needs to know which one did:
+Agent runs have no application-level token, round, call, display-count or duration ceiling
+(ADR 0083).
+Cancellation is checked between model calls and capability calls. The provider owns its actual
+context and output limits; the reference context window is a composer readout, not an OMC
+request-sizing gate. Transport health remains bounded: the gateway waits at most 120 seconds
+for response headers and cancels an Agent stream after 120 seconds without received bytes;
+individual SSE lines remain limited to 1 MiB. Payload validation and capability security limits
+remain separate:
 
-| Bound | Limit | Counts |
+| Boundary | Limit | Counts |
 | --- | --- | --- |
-| `agent.MAX_CONTEXT_BYTES` | 128 KiB | One assembled request, including its tool declarations |
-| `agent.MAX_TOOL_SCHEMA_BYTES` | 32 KiB | The catalogue's share of that request |
+| `agent.MAX_MESSAGE_BYTES` | 48 KiB | One operator message, attached text files included (ADR 0074) |
+| Attached images | Four per message, 5 MiB each; newest eight included in a model request | Validated image content (ADR 0075) |
+| Tool catalogue regression | 64 KiB | `TestAgentCatalogueFitsTheSchemaBudget` checks declaration compactness; it is not a runtime refusal gate |
+| `agent.MAX_PROMPT_BYTES` | 6 KiB | System-prompt regression budget, including dynamic metadata |
 
 Three properties hold across the loop:
 
@@ -338,14 +399,36 @@ Three properties hold across the loop:
   memory for a short window (`agentState.catalog`), which is what keeps a `providers_list`
   call from re-reading a list CPA is concurrently mutating; the cache is dropped on the same
   lazy maintenance pass that purges expired documents.
-- **History is trimmed by whole complete turns.** Only turns with status `success`
-  contribute history, newest first, and tool/result pairs are never split.
+- **Completed history is summarized, not evicted.** Every settled turn contributes prior model
+  context, in chronological order, as conclusions and bounded metadata. That includes a turn that
+  failed, was stopped or was found stale: the writes it ran before it ended are facts the next
+  question has to see. The stored transcript and active-turn exchanges remain authoritative.
+- **A failed inference attempt is retried at most three times.** `agent.UPSTREAM_RETRIES`
+  bounds the loop; each retry first rolls the turn's streamed text and parts back to the
+  checkpoint it started from, then emits `omc.upstream_retry` (an AG-UI `CUSTOM` event carrying
+  the attempt and the authoritative parts) so the console draws no discarded draft. Deterministic
+  refusals - context overflow, oversized or invalid requests, images, a missing or unauthorized
+  model, unsupported parameters, oversized tool calls, an answer the provider ended before `stop`,
+  the unclassified 4xx statuses, plus local conflicts and refusals - are reported without a retry,
+  because a repeat would spend paid generations to reach the same answer; an unclassified 5xx is an
+  outage rather than a verdict on the request, so it keeps its retries. A stream error frame is read
+  the same way after the status line has already been sent, on the frame's own words: one that names
+  a transient fault (a server error, an overload, a rate limit) keeps its retries, while one that
+  names a refusal or names nothing this gateway knows is reported as `upstream_stream_rejected` on
+  the first attempt. The failure carries the closed-vocabulary code, the upstream status when there
+  was one, the parameter it named, and whether the attempt bound was exhausted.
 
-The latest Agent session and pending or terminal operations live in `agent_documents`
-(migration 026), encrypted with `OMCPA_MASTER_KEY`. Session content is trimmed to
-older complete turns and capped; terminal operations are retained for 7 days. Purging
-is lazy: it runs during Agent requests, so the server starts no additional background
-loop for the Agent.
+The latest Agent session, images and pending or terminal operations live in `agent_documents`
+(migrations 026 and 036), encrypted with `OMCPA_MASTER_KEY`. Sessions are exempt from the
+repository's 8 MiB document bound and remain until reset or explicit turn replacement; terminal
+operations are retained for 7 days. Image admission owns only its newly saved rows: validation,
+image-storage or initial session-save failure attempts to delete those rows with a detached,
+five-second cleanup context. Reused images and images referenced by an accepted session survive
+later failures. A committed reset deletes the images of the turns it dropped on the same detached
+context, so a client that disconnects after the save cannot cancel a deletion the new transcript
+already owes. This is best-effort cleanup, not a transaction across image and session writes.
+Purging expired documents is lazy during Agent requests, with no additional background loop.
+Long conversations therefore grow database, memory and request costs; see `docs/operations.md`.
 
 ### Known coverage gaps
 
@@ -810,14 +893,14 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through a toast (`useToast`), which needs the antd `App` context. In demo mode it neither pushes nor adopts: the theme stays in the visitor's browser |
 | `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The Playground's `pages/playground/api.ts` and the Agent's `agent/transport.ts` wrap `requestResponse` and `agent/sse.ts` for their SSE routes, without duplicating auth or retry policy |
-| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the browser-side exports (`export.ts`: CSV with formula guarding, Markdown tables, file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
+| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the canvas document and kit (`canvasDocument.ts`, `canvasKit.ts`) and the browser-side exports (`export.ts`: file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the auth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useProgressTask` (counts a component's lifetime, such as a Suspense fallback's, as loading-bar work), `useCustomIcons` (shared revisioned custom-icon metadata), `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useVisibleViewport` (effect-owned usable-viewport bounds; pure policy in `types/visibleViewport.ts`), `useFocusedRegion` (in-place workspace isolation and focus cleanup), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `scrollSmoothing.ts` (the console-wide wheel and keyboard glide, ADR 0046: discrete wheel notches and scrolling keys glide over the `scroll` token, virtualized lists are driven through their own wheel handling and get a glide's first step inside the input event, so the glide adds no latency to their own jump (ADR 0047), trackpads and touch are never glided; loaded on demand by `hooks/useScrollSmoothing.ts` and switched by the `omc_scroll_smoothing` preference, whose words live in `scrollSmoothingPreference.ts` so the engine stays out of the main entry), `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below), `download.ts` (`saveBlob`, the one download path: it attaches the anchor and releases the object URL on a delay, because revoking it in the click's own task cancels the save in Firefox and Safari), `format.ts` (`formatBytes`), `loadProgress.ts` (the loading bar's pure, clock-injected model: batches, settled and pending credit, the show delay and the never-backwards smoothing), `progressController.ts` (the injected clock, scheduling and hidden/reduced-motion lifecycle) and `progressTasks.ts` (the module-level registry of non-query work in flight, and the source shape the bar reads) |
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, desktop `actions` and explicit `mobileActions`), `ActionMenu` (click-open secondary tools, focus and overlay history), `FilterDisclosure` (phone-only extra filters with selected-state summary), `timeRange/TimeRangePicker` (the one window picker the dashboard and the request list both adapt: presets first and an inline range calendar one level down, in a popover or a bottom sheet; its rules are `timeRange/rangeDraft.ts`), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `FactList` (label/value rows), `StatTiles` (counted tiles that double as a list's filter), the loading feedback (ADRs 0052 and 0054: `ProgressBar` draws rough task progress from `utils/loadProgress.ts` through `utils/progressController.ts`, with an independent CSS waiting-activity segment, `DataProgress` feeds it the non-silent queries and `utils/progressTasks.ts`; `Placeholder.tsx` holds the eager shell/sign-in kit, while `ContentPlaceholder.tsx` keeps paragraph/table compositions behind route imports; `utils/progressSources.ts` merges sources only for the loaded shell; the kit is composed by `PageLoading`, `RouteLoading`, `SuspenseFallback` and the shell's `ShellLoading`), `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); `SecretInput` (a secret that is not the console login, masked by style so the browser's password manager leaves it alone); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
-| `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `AssistantThread` (assistant-ui's thread viewport: follows the newest message while the reader is at the bottom, holds their place once they scroll away, and offers "back to latest" only then), `AssistantComposer` (assistant-ui's composer with Ant Design controls: attachments, the queue of messages sent during a run, and Enter and the send button both asking the runtime to send, because the framework's own send controls decide from state that reaches them a task after the page changed it), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (a collapsible reasoning disclosure that follows its newest output while it streams and folds when the stream ends), `ReasoningEffortPicker` and `TargetPicker` (key and call point as one joined control). The side panel takes tabs, which both pages use for their directory or parameters beside the call or turn details |
+| `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `AssistantThread` (assistant-ui's thread viewport: follows the newest message while the reader is at the bottom, holds their place once they scroll away, and offers "back to latest" only then), `AssistantComposer` (assistant-ui's composer with Ant Design controls: attachments, the queue of messages sent during a run, the `/` command and `@` mention lists a page may hand it, recall of sent messages with Up, and Enter and the send button both asking the runtime to send, because the framework's own send controls decide from state that reaches them a task after the page changed it), `ContextReadout` (the share of the model's reference context window a conversation occupies, from `contextShare.ts`), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (a collapsible reasoning disclosure that follows its newest output while it streams and folds when the stream ends), `ReasoningEffortPicker`, `ComposerPicker` (the one keyboard-navigated list behind the composer's `/` commands and `@` mentions, navigated by `pickerNavigation.ts`), `TargetChip` (the composer's target as a chip), `GenerationLoader` (the waiting figure a run in flight shows), and `TargetPicker` (key and call point as one joined control) with its `ModelPicker` (each call point led by its maker's mark). The side panel is the Playground's: its parameters beside its request debug view. The Agent has its own shell (ADR 0076), opens a call's details under the call (ADR 0084), and keeps its capability directory and connection guide in a Drawer |
 | `components/feedback/` | Every notification and failure surface (ADR 0045): `useToast` (an action's outcome, including report toasts with per-target reasons), `LoadFailure` (a region's failed read, in its place, with Retry) and `Notice` (a condition, or a refusal beside its input). `toastContent.ts` holds the pure parts - `readableReason`, grouping, lifetimes. `pnpm check:feedback` keeps raw antd `Alert`, `message`, `notification` and information-only dialogs out of the rest of `web/src` |
 | `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. `CpaLogPanel` renders into a host element it moves to the document body for its fullscreen viewer, because a routed page sits inside a transformed container that would confine `position: fixed`. Wire types and pure helpers (line parsing, the filters and their per-value counts) live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
@@ -1978,7 +2061,7 @@ account as the reading it was decided from.
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown |
 | Custom icons | `custom_icons` | Migration 032 adds durable sanitized image BLOBs, stable IDs and content revisions; confirmed deletion atomically clears matching provider overrides and deletes the asset |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions`, `pricing_match_reviews` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29. Migration 031 added `pricing_match_reviews` (the OpenRouter model last answered for a custom or linked price); match-review reads and writes refuse to run before migration 31 |
-| Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
+| Agent | `agent_documents` | Encrypted latest Agent session, capability operations and attached images (migrations 026 and 036). Sessions retain whole history until reset or explicit replacement, with no session size cap; images follow their references and are deleted only after a reset is persisted. Terminal operations are retained 7 days and purged lazily during Agent requests |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
 | CPA configuration | `cpa_config_backups`, `cpa_config_backup_settings` | Encrypted copies of the stored CPA configuration file, kept before every configuration write (migration 030, ADR 0037; migration 033 adds each copy's `layout` and `reason` and the single-row retention table, ADR 0051). v8 copies are kept to the operator's retention (default 20, 5–100), pre-v8 copies to the latest ten; `cpa_config_backups` is hidden from `database_query` |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
@@ -2742,13 +2825,16 @@ else.
 `internal/api/browser_runs.go` wraps console Agent and Playground POSTs carrying
 `X-OMC-Run-ID` with a per-workspace, notification-driven replay journal. The existing handlers
 still own validation, inference and capabilities; the wrapper owns detached lifetime, same-id
-admission, replay and explicit cancellation. `GET /{workspace}/runs/active`,
+admission, replay and explicit cancellation. Agent body admission uses the same
+`MAX_AGENT_RUN_BYTES` limit as the inner handler, including base64 image content; adding a
+run ID never narrows the uploads the handler accepts. `GET /{workspace}/runs/active`,
 `GET /{workspace}/runs/{id}` and `POST /{workspace}/runs/{id}/cancel` are console-authenticated
 (`workspace` is `agent` or `playground`). Socket loss never cancels managed execution.
-`internal/app/app.go` joins these tasks before closing dependencies. The journal is bounded to
-4 MiB plus a terminal overflow error, retains the latest completed run for 15 minutes, and has
-15-second socket heartbeats. Its 30-minute run deadline does not override Playground's existing
-10-minute deadline. Replaced/expired ids have a 24-hour, 1,024-entry tombstone admission bound.
+`internal/app/app.go` joins these tasks before closing dependencies. Each journal retains the
+latest completed run for 15 minutes and has 15-second socket heartbeats. Agent journals have
+no byte ceiling or execution deadline. Playground journals are bounded to 4 MiB plus a terminal
+overflow error; their 30-minute wrapper deadline does not override Playground's existing
+10-minute handler deadline. Replaced/expired ids have a 24-hour, 1,024-entry tombstone admission bound.
 Before buffering a managed request body, the wrapper rejects a different id while its workspace
 is active and refuses admission after shutdown. A shared four-permit gate bounds concurrent body
 reads, validation and handoff, including uploads with the same id; saturation returns HTTP 429
@@ -2792,8 +2878,8 @@ with.
 page displays into a `ConversationSnapshot` - never the stored session - and drops execution
 identities (key fingerprints, tokens, operation and run ids) at any depth. `conversationHtml.ts` renders
 that snapshot to one HTML string: the palette's resolved tokens as custom properties, the console's
-font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, charts as
-inline SVG, and a Content-Security-Policy that allows no network. Its only script is the fixed
+font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
+sandboxed frame, and a Content-Security-Policy that allows no network. Its only script is the fixed
 `conversationControls.ts` (search, side panel, copy, table sorting, print). The PNG is the same
 document laid out as an 840px share card in a sandboxed, script-free iframe and rasterized through an
 SVG `foreignObject` at 2x (`conversationDownload.ts`); a long transcript becomes several numbered
@@ -2836,7 +2922,7 @@ bodies. Missing usage stays missing. CPA ingestion remains unchanged.
 
 Admission is process-wide and non-queueing: four calls include request validation and
 credential resolution. JSON bodies are limited to 32 MiB including history; each user
-message has at most four PNG/JPEG/WebP images, each at most 5 MiB and 40 megapixels.
+message has at most four PNG/JPEG/WebP images, each at most 5 MiB and 40 megapixels. Agent images are normalized in the browser to WebP, at most 2048 pixels on the long edge and 512 KiB, before storage and replay.
 Only Base64 data URLs are accepted. Image headers are decoded without allocating pixels.
 Messages are limited to 256 including the optional system message. Responses are bounded
 to 8 MiB, individual SSE lines to 1 MiB. The browser retains at most 500 diagnostic events

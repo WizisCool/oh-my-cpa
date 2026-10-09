@@ -3,6 +3,7 @@ package agui
 // The event types OMC emits. The strings are the protocol's own; the constants exist so a typo is
 // a compile error rather than an event every consumer silently drops.
 const (
+	CUSTOM                    = "CUSTOM"
 	RUN_STARTED               = "RUN_STARTED"
 	RUN_FINISHED              = "RUN_FINISHED"
 	RUN_ERROR                 = "RUN_ERROR"
@@ -27,6 +28,8 @@ const (
 // omitted zero values serialises every event OMC emits without a type per event; the constructor
 // methods of Translator are what keep each event's required fields present.
 type Event struct {
+	Name            string         `json:"name,omitempty"`
+	Value           any            `json:"value,omitempty"`
 	Type            string         `json:"type"`
 	ThreadID        string         `json:"threadId,omitempty"`
 	RunID           string         `json:"runId,omitempty"`

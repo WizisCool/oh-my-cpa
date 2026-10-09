@@ -1,23 +1,31 @@
 package api
 
-import "github.com/oh-my-cpa/oh-my-cpa/internal/agent"
+import (
+	"github.com/oh-my-cpa/oh-my-cpa/internal/agent"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
+)
 
 // The console needs the transcript, not the model's private history. An explicit turn DTO keeps
 // query rows out of session reads and snapshots even when older stored sessions contain them.
 type agentTurnDTO struct {
-	ID            string        `json:"id"`
-	User          string        `json:"user"`
-	Reply         string        `json:"reply"`
-	Parts         []agent.Part  `json:"parts,omitempty"`
-	Status        string        `json:"status"`
-	Code          string        `json:"code,omitempty"`
-	Traces        []agent.Trace `json:"traces"`
-	Rounds        int           `json:"rounds"`
-	Calls         int           `json:"calls"`
-	StartedMS     int64         `json:"started_at_ms,omitempty"`
-	EndedMS       int64         `json:"ended_at_ms,omitempty"`
-	Usage         *agent.Usage  `json:"usage,omitempty"`
-	PromptVersion string        `json:"prompt_version,omitempty"`
+	ID            string            `json:"id"`
+	User          string            `json:"user"`
+	Reply         string            `json:"reply"`
+	Parts         []agent.Part      `json:"parts,omitempty"`
+	Status        string            `json:"status"`
+	Code          string            `json:"code,omitempty"`
+	Failure       *agent.RunFailure `json:"failure,omitempty"`
+	Traces        []agent.Trace     `json:"traces"`
+	Rounds        int               `json:"rounds"`
+	Calls         int               `json:"calls"`
+	StartedMS     int64             `json:"started_at_ms,omitempty"`
+	EndedMS       int64             `json:"ended_at_ms,omitempty"`
+	Usage         *agent.Usage      `json:"usage,omitempty"`
+	Suggestions   []string          `json:"suggestions,omitempty"`
+	PromptVersion string            `json:"prompt_version,omitempty"`
+	Present       string            `json:"present,omitempty"`
+	// Images are references; the page reads each from the image endpoint.
+	Images []gateway.AgentImage `json:"images,omitempty"`
 }
 
 type agentConversationDTO struct {
@@ -52,9 +60,9 @@ func agentConversationForConsole(conversation *agent.Conversation) *agentConvers
 		}
 		turns[i] = agentTurnDTO{
 			ID: turn.ID, User: turn.User, Reply: turn.Reply, Parts: turn.Parts,
-			Status: turn.Status, Code: turn.Code, Traces: traces, Rounds: turn.Rounds,
+			Status: turn.Status, Code: turn.Code, Failure: turn.Failure, Traces: traces, Rounds: turn.Rounds,
 			Calls: turn.Calls, StartedMS: turn.StartedMS, EndedMS: turn.EndedMS,
-			Usage: turn.Usage, PromptVersion: turn.PromptVersion,
+			Usage: turn.Usage, Suggestions: turn.Suggestions, PromptVersion: turn.PromptVersion, Present: turn.Present, Images: turn.Images,
 		}
 	}
 	return &agentConversationDTO{

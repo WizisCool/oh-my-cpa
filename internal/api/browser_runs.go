@@ -76,7 +76,7 @@ func (run *browserRun) Write(body []byte) (int, error) {
 		run.status = http.StatusOK
 		run.frozenHeader = run.header.Clone()
 	}
-	if len(run.body)+len(body) > BROWSER_RUN_BYTES {
+	if run.kind != "agent" && len(run.body)+len(body) > BROWSER_RUN_BYTES {
 		run.isOverflowed = true
 		if strings.HasPrefix(run.frozenHeader.Get("Content-Type"), "text/event-stream") {
 			terminal := "event: error\ndata: {\"code\":\"response_too_large\"}\n\n"
@@ -184,7 +184,7 @@ func (h *Handler) prepareBrowserRun(kind, id string, next http.HandlerFunc, writ
 	defer func() { <-bodySlots }()
 	limit := int64(gateway.MaxRequestBytes)
 	if kind == "agent" {
-		limit = 64 << 10
+		limit = MAX_AGENT_RUN_BYTES
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, limit))
 	if err != nil {
@@ -254,7 +254,11 @@ func (h *Handler) prepareBrowserRun(kind, id string, next http.HandlerFunc, writ
 	if existing != nil {
 		h.browserRuns.retired[kind+":"+existing.id] = time.Now()
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(request.Context()), 30*time.Minute)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(request.Context()))
+	if kind != "agent" {
+		cancel()
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(request.Context()), 30*time.Minute)
+	}
 	run := &browserRun{kind: kind, header: http.Header{}, changed: make(chan struct{}), cancel: cancel, id: id, startedAt: time.Now().UnixMilli(), digest: digest, finished: make(chan struct{})}
 	if kind == "playground" {
 		run.input = playgroundRecoveryTurn(body, id, run.startedAt)

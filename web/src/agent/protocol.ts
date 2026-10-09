@@ -1,5 +1,6 @@
 import { EventType } from '@ag-ui/core';
 import type {
+  CustomEvent,
   ReasoningEndEvent,
   ReasoningMessageContentEvent,
   ReasoningMessageEndEvent,
@@ -20,6 +21,7 @@ import type {
   ToolCallResultEvent,
   ToolCallStartEvent,
 } from '@ag-ui/core';
+import type { Presentation } from './types';
 
 /**
  * The AG-UI events OMC's Agent emits (ADR 0041). Types come from `@ag-ui/core`; only its type
@@ -28,6 +30,7 @@ import type {
  * fields the reducer reads.
  */
 export type AgentEvent =
+  | CustomEvent
   | RunStartedEvent
   | RunFinishedEvent
   | RunErrorEvent
@@ -51,6 +54,7 @@ export const AGENT_PROTOCOL_VERSION = '1.0';
 
 /** The fields each event must carry as strings for the reducer to read it. */
 const REQUIRED_STRINGS: Partial<Record<EventType, readonly string[]>> = {
+  [EventType.CUSTOM]: ['name'],
   [EventType.RUN_STARTED]: ['threadId', 'runId'],
   [EventType.RUN_FINISHED]: ['threadId', 'runId'],
   [EventType.RUN_ERROR]: ['message'],
@@ -96,20 +100,42 @@ export interface AgentForwardedProps {
   model: string;
   client_key_fingerprint: string;
   reasoning_effort?: string;
+  /** The newest turn this message takes the place of: a retry or an edit. */
+  replace_turn?: string;
+  /** The presentation a composer command asked this message's answer to take. */
+  present?: Presentation;
 }
 
 export interface AgentRunRequest {
   threadId: string;
   runId: string;
   /** The new message; absent when the run resumes interrupts. */
-  message?: { id: string; content: string };
+  message?: { id: string; content: string; /** Images sent with it, as data URLs. */ images?: readonly string[] };
   /** The display tools this console can draw. */
   tools: readonly { name: string; description: string }[];
   /** The console's reading language. */
   language?: string;
+  /** How the console writes token counts, so the answer writes them the same way. */
+  tokenStyle?: string;
   forwardedProps: AgentForwardedProps;
   /** The interrupts this run continues from, each already decided through the decision endpoint. */
   resume?: readonly { interruptId: string; status: 'resolved' | 'cancelled' }[];
+}
+
+type MessageContent = Extract<RunAgentInput['messages'][number], { role: 'user' }>['content'];
+
+/**
+ * A message's content on the wire: the plain string every message was, or parts when it carries
+ * images - or no words at all, which a retry of an image-only message sends and a string cannot say.
+ */
+function messageContent(text: string, images: readonly string[]): MessageContent {
+  if (images.length === 0 && text.trim()) return text;
+  const parts: unknown[] = text.trim() ? [{ type: 'text', text }] : [];
+  for (const image of images) {
+    const [header, data = ''] = image.split(',', 2);
+    parts.push({ type: 'binary', mimeType: header.replace(/^data:/, '').replace(/;base64$/, ''), data });
+  }
+  return parts as MessageContent;
 }
 
 /**
@@ -121,9 +147,12 @@ export function buildRunInput(request: AgentRunRequest): RunAgentInput & { proto
     threadId: request.threadId,
     runId: request.runId,
     protocolVersion: AGENT_PROTOCOL_VERSION,
-    messages: request.message ? [{ id: request.message.id, role: 'user', content: request.message.content }] : [],
+    messages: request.message ? [{ id: request.message.id, role: 'user', content: messageContent(request.message.content, request.message.images ?? []) }] : [],
     tools: request.tools.map(tool => ({ name: tool.name, description: tool.description })),
-    context: request.language ? [{ description: 'console_language', value: request.language }] : [],
+    context: [
+      ...(request.language ? [{ description: 'console_language', value: request.language }] : []),
+      ...(request.tokenStyle ? [{ description: 'console_token_style', value: request.tokenStyle }] : []),
+    ],
     forwardedProps: request.forwardedProps,
     ...(request.resume?.length ? { resume: request.resume.map(entry => ({ ...entry })) } : {}),
   };

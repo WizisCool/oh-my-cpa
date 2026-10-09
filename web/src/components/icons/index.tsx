@@ -90,6 +90,7 @@ export const FireOutlined = createIcon(Lucide.Flame, 'anticon-fire');
 export const FormatPainterOutlined = createIcon(Lucide.Paintbrush, 'anticon-format-painter');
 export const FullscreenExitOutlined = createIcon(Lucide.Minimize, 'anticon-fullscreen-exit');
 export const FullscreenOutlined = createIcon(Lucide.Maximize, 'anticon-fullscreen');
+export const ToolOutlined = createIcon(Lucide.Wrench, 'anticon-tool');
 export const WrapTextOutlined = createIcon(Lucide.WrapText, 'anticon-wrap-text');
 export const GlobalOutlined = createIcon(Lucide.Globe, 'anticon-global');
 export const HistoryOutlined = createIcon(Lucide.History, 'anticon-history');
@@ -107,6 +108,7 @@ export const LogoutOutlined = createIcon(Lucide.LogOut, 'anticon-logout');
 export const MenuFoldOutlined = createIcon(Lucide.PanelLeftClose, 'anticon-menu-fold');
 export const MenuUnfoldOutlined = createIcon(Lucide.PanelLeftOpen, 'anticon-menu-unfold');
 export const MessageOutlined = createIcon(Lucide.MessageSquarePlus, 'anticon-message');
+export const StepsOutlined = createIcon(Lucide.ListTree, 'anticon-steps');
 export const MoonOutlined = createIcon(Lucide.Moon, 'anticon-moon');
 // A request answered in one payload. A struck broadcast mark, because the stream is what is absent;
 // the boxes glyph belongs to Model Square.
@@ -114,6 +116,7 @@ export const NonStreamOutlined = createIcon(Lucide.RadioOff, 'anticon-non-stream
 export const MoreOutlined = createIcon(Lucide.MoreHorizontal, 'anticon-more');
 export const NodeIndexOutlined = createIcon(Lucide.Network, 'anticon-node-index');
 export const PauseCircleOutlined = createIcon(Lucide.PauseCircle, 'anticon-pause-circle');
+export const PaperClipOutlined = createIcon(Lucide.Paperclip, 'anticon-paper-clip');
 export const PictureOutlined = createIcon(Lucide.Image, 'anticon-picture');
 export const PuzzleOutlined = createIcon(Lucide.Puzzle, 'anticon-puzzle');
 export const PlayCircleOutlined = createIcon(Lucide.PlayCircle, 'anticon-play-circle');

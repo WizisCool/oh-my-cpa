@@ -62,7 +62,7 @@ const DASHBOARD_SCENARIOS = [
   'mobile-console',
 ];
 
-const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-live', 'agent-views', 'agent-failure', 'agent-stream', 'agent-narrow', 'mobile-console'];
+const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-live', 'agent-views', 'agent-replace', 'agent-attach', 'agent-failure', 'agent-stream', 'agent-narrow', 'mobile-console'];
 
 /**
  * A source path maps to the scenarios it can affect.

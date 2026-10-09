@@ -11,6 +11,10 @@ import (
 
 var ErrAgentConflict = errors.New("agent_revision_conflict")
 
+// MAX_AGENT_DOCUMENT_BYTES bounds non-session documents. Images use data URLs: five megabytes
+// of picture is under seven of base64. Sessions retain the conversation without a size cap.
+const MAX_AGENT_DOCUMENT_BYTES = 8 << 20
+
 // AgentStore keeps trusted execution state separate from client-editable preferences.
 // The encrypted envelope includes its identity to prevent swapping ciphertext rows.
 type AgentStore struct {
@@ -48,7 +52,7 @@ func (s AgentStore) Save(ctx context.Context, kind, id string, revision int64, e
 	if err != nil {
 		return 0, err
 	}
-	if len(payload) > 1<<20 {
+	if kind != "session" && len(payload) > MAX_AGENT_DOCUMENT_BYTES {
 		return 0, errors.New("agent_document_too_large")
 	}
 	plain, err := json.Marshal(agentEnvelope{kind, id, payload})

@@ -1,6 +1,7 @@
 import React from 'react';
-import { ThreadPrimitive } from '@assistant-ui/react';
+import { AuiIf, ThreadPrimitive } from '@assistant-ui/react';
 import type { MessageState } from '@assistant-ui/react';
+import { clsx } from 'clsx';
 import { ArrowDownOutlined } from '../icons';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import styles from './Workspace.module.css';
@@ -11,6 +12,8 @@ export interface AssistantThreadProps {
   /** Rendered inside the thread root, where a selection toolbar can scope itself. */
   toolbar?: React.ReactNode;
   latestLabel: string;
+  /** Takes only the height its content needs, for a page that centres an empty thread with its composer. */
+  isCompact?: boolean;
   testId?: string;
   /** Draws one message; the page decides how a user and an assistant message look. */
   children: (value: { message: MessageState }) => React.ReactNode;
@@ -25,12 +28,12 @@ export interface AssistantThreadProps {
  * centred reading column inside a full-width scroll box, which keeps the scrollbar at the pane's
  * edge.
  */
-export function AssistantThread({ empty, latestLabel, testId, toolbar, children }: AssistantThreadProps) {
+export function AssistantThread({ empty, latestLabel, isCompact = false, testId, toolbar, children }: AssistantThreadProps) {
   const isReducedMotion = usePrefersReducedMotion();
   return (
-    <ThreadPrimitive.Root className={styles['conversation']}>
+    <ThreadPrimitive.Root className={clsx(styles['conversation'], isCompact && styles['is-compact'])}>
       <ThreadPrimitive.Viewport className={styles['transcript']} data-testid={testId} autoScroll>
-        {empty && <ThreadPrimitive.Empty>{empty}</ThreadPrimitive.Empty>}
+        {empty && <AuiIf condition={state => state.thread.isEmpty}>{empty}</AuiIf>}
         <div className={styles['transcript-column']}>
           <ThreadPrimitive.Messages>{children}</ThreadPrimitive.Messages>
         </div>

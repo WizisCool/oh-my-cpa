@@ -1,5 +1,3 @@
-import type { DisplayView } from './types';
-
 /**
  * What a conversation exports as, built in the browser from what the page already shows.
  *
@@ -7,48 +5,6 @@ import type { DisplayView } from './types';
  * a file, so it can never carry data the page did not display. Every function is pure so its
  * escaping rules are asserted without a browser.
  */
-
-type Cell = string | number | boolean | null | undefined;
-
-/**
- * One CSV cell. Quoted when it holds a separator, a quote or a line break (RFC 4180), and a text
- * cell that a spreadsheet would read as a formula is prefixed with an apostrophe: capability results
- * carry strings other people chose - key aliases, provider notes - and a CSV opened in a spreadsheet
- * must not execute them.
- */
-export function csvCell(value: Cell): string {
-  if (value === null || value === undefined) return '';
-  let text = String(value);
-  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-export function rowsToCSV(columns: readonly string[], rows: readonly Record<string, Cell>[]): string {
-  const lines = [columns.map(csvCell).join(',')];
-  for (const row of rows) lines.push(columns.map(column => csvCell(row[column])).join(','));
-  return `${lines.join('\r\n')}\r\n`;
-}
-
-export function viewToCSV(view: Pick<DisplayView, 'columns' | 'rows'>): string {
-  return rowsToCSV(view.columns, view.rows);
-}
-
-function markdownCell(value: Cell): string {
-  if (value === null || value === undefined) return '';
-  return String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-}
-
-/** A table as GitHub-flavoured Markdown, with pipes and line breaks inside cells neutralised. */
-export function rowsToMarkdown(columns: readonly string[], rows: readonly Record<string, Cell>[]): string {
-  const head = `| ${columns.map(markdownCell).join(' | ')} |`;
-  const rule = `| ${columns.map(() => '---').join(' | ')} |`;
-  const body = rows.map(row => `| ${columns.map(column => markdownCell(row[column])).join(' | ')} |`);
-  return [head, rule, ...body].join('\n');
-}
-
-export function viewToMarkdown(view: Pick<DisplayView, 'title' | 'columns' | 'rows'>): string {
-  return `**${markdownCell(view.title)}**\n\n${rowsToMarkdown(view.columns, view.rows)}`;
-}
 
 /** `omc-agent-20260929-153012.html`: sortable, free of characters a file system refuses. */
 export function exportFileName(prefix: string, extension: string, at: Date): string {

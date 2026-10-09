@@ -13,87 +13,129 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 )
 
-// Display tools are the frontend tools of the Agent (ADR 0042): a chart or a table the console
-// draws inside the answer. They change nothing, so they never pass through the executor, never
-// prepare an operation and never interrupt a run.
+// render_ui is the Agent's model-selected presentation tool (ADR 0073, 0085, 0087):
+// sandboxed markup and local interactions drawn inside the answer. It changes nothing, so it
+// never passes through the executor, never prepares an operation and never interrupts a run.
 //
-// Their data is referenced rather than transcribed. The model names a capability call of this
+// A canvas's data is referenced rather than transcribed. The model names a capability call of this
 // conversation and a path to an array inside its result; the server resolves the reference,
-// projects the named fields and freezes the rows into the call's trace. The figures a chart shows
+// projects the named fields and freezes the rows into the call's trace. The figures a canvas plots
 // are therefore the figures a capability returned - not the model's retelling of them - and they
 // stay the same when the page reloads, whatever the deployment's data has done since. The model
 // receives a small receipt instead of the rows, which is what keeps a chart from costing its data
 // twice in tokens.
 const (
-	RENDER_CHART = "render_chart"
-	RENDER_TABLE = "render_table"
+	RENDER_VIEW   = "render_view"
+	RENDER_CANVAS = "render_canvas"
+	RENDER_UI     = "render_ui"
+	FRAME_CARD    = "card"
+	FRAME_NONE    = "none"
+	SUGGEST_NEXT  = "suggest_next"
 
 	MAX_VIEW_ROWS        = 1000
-	MAX_INLINE_ROWS      = 200
 	MAX_VIEW_BYTES       = 96 << 10
 	MAX_VIEW_TITLE_CHARS = 120
 	MAX_VIEW_FIELD_CHARS = 64
-	MAX_CHART_SERIES     = 8
-	MAX_TABLE_COLUMNS    = 12
+	MAX_CANVAS_FIELDS    = 12
 	MAX_SOURCE_PATH      = 256
+
+	MAX_ICON_CHARS = 48
+
+	// A canvas is the model's own markup, stored whole and resent inside the turn's tool call, so
+	// its payload size is validated independently of how long the investigation runs.
+	MAX_CANVAS_BYTES = 48 << 10
+	// JSON escaping and the surrounding tool arguments add a small amount of
+	// overhead beyond the HTML allowance. This is a payload boundary, not a
+	// limit on a run or conversation.
+	MAX_UI_ARGUMENT_BYTES = 128 << 10
+
+	MAX_SUGGESTIONS      = 3
+	MAX_SUGGESTION_CHARS = 80
 )
 
-var CHART_TYPES = []string{"line", "area", "column", "bar", "pie"}
+// RETIRED_DISPLAY_TOOLS are display tools a stored conversation may still name. They
+// are no longer offered, but a trace of one is still a call that changed nothing and
+// whose data is a receipt, which is what the rules about replacing a turn and referencing rows ask.
+var RETIRED_DISPLAY_TOOLS = map[string]bool{"render_chart": true, "render_table": true, RENDER_VIEW: true, RENDER_CANVAS: true}
+
+// isDisplayCall reports whether a stored trace was a display call, current or retired.
+func isDisplayCall(name string) bool {
+	return displayTools[name] != nil || RETIRED_DISPLAY_TOOLS[name]
+}
 
 // DataSource points at the rows inside one earlier capability result.
 type DataSource struct {
-	CallID string `json:"call_id" jsonschema:"The id of a successful capability call earlier in this conversation"`
-	Path   string `json:"path,omitempty" jsonschema:"Dot path to the rows inside that call's data, e.g. items, series.points, or rows for a database_query result; empty when the data itself is the array"`
+	DataRef string `json:"data_ref,omitempty" jsonschema:"Copy a data_ref from data_sources in a tool result; use this alone instead of call_id and path"`
+	CallID  string `json:"call_id,omitempty" jsonschema:"Tool-call trace id, not operation_id; prefer data_ref"`
+	Path    string `json:"path,omitempty" jsonschema:"Path rooted at result.data, e.g. data.groups for usage_aggregate or rows for database_query; not data.data.groups"`
 }
 
-type RenderChartInput struct {
-	Title  string           `json:"title" jsonschema:"Short chart title that states the metric and its window"`
-	Type   string           `json:"type" jsonschema:"line or area for a trend over time; column or bar to compare items; pie for shares of one total"`
-	Source *DataSource      `json:"source,omitempty" jsonschema:"Where the rows come from; preferred over inline"`
-	Inline []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200; only when no capability result holds them"`
-	X      string           `json:"x" jsonschema:"Field for the category or time axis (the slice label for pie)"`
-	Y      []string         `json:"y" jsonschema:"1-8 numeric fields to plot; exactly one for pie"`
-	Series string           `json:"series,omitempty" jsonschema:"Optional field that splits a single y field into one line or bar per value"`
-	Unit   string           `json:"unit,omitempty" jsonschema:"Optional unit of the y values, e.g. tokens, USD, ms, %"`
+// ViewBlock preserves stored panel content so existing conversations remain readable.
+type ViewBlock struct {
+	Type  string     `json:"type" jsonschema:"stats (headline figures), fields (label/value facts), callout (one highlighted message), steps (ordered stages), meters (shares of a limit) or links (console pages to open)"`
+	Title string     `json:"title,omitempty" jsonschema:"Optional heading"`
+	Tone  string     `json:"tone,omitempty" jsonschema:"callout: info, success, warning or danger"`
+	Text  string     `json:"text,omitempty" jsonschema:"callout: the message"`
+	Items []ViewItem `json:"items,omitempty" jsonschema:"1-12 items; every type except callout"`
 }
 
-type RenderTableInput struct {
-	Title   string           `json:"title" jsonschema:"Short table title that states what the rows are and their window"`
-	Source  *DataSource      `json:"source,omitempty" jsonschema:"Where the rows come from; preferred over inline"`
-	Inline  []map[string]any `json:"inline,omitempty" jsonschema:"Rows you derived yourself, at most 200; only when no capability result holds them"`
-	Columns []string         `json:"columns" jsonschema:"1-12 fields to show, in order"`
+type ViewItem struct {
+	Label  string   `json:"label" jsonschema:"What the item is"`
+	Value  string   `json:"value,omitempty" jsonschema:"stats, fields, meters: the figure as shown, e.g. 1,204 or $4.20"`
+	Delta  string   `json:"delta,omitempty" jsonschema:"stats: change against the previous window, e.g. +12%"`
+	Tone   string   `json:"tone,omitempty" jsonschema:"stats, meters: neutral, success, warning or danger"`
+	Icon   string   `json:"icon,omitempty" jsonschema:"stats, links: any Lucide icon name (trending-up, key-round, gauge) or brand:<maker> (brand:OpenAI)"`
+	Text   string   `json:"text,omitempty" jsonschema:"steps: detail under the label"`
+	Status string   `json:"status,omitempty" jsonschema:"steps: done, active, pending or failed"`
+	Share  *float64 `json:"share,omitempty" jsonschema:"meters: filled fraction, 0 to 1"`
+	Route  string   `json:"route,omitempty" jsonschema:"links: the console page"`
 }
 
-// ChartSpec is how a frozen chart is drawn.
-type ChartSpec struct {
-	Type   string   `json:"type"`
-	X      string   `json:"x"`
-	Y      []string `json:"y"`
-	Series string   `json:"series,omitempty"`
-	Unit   string   `json:"unit,omitempty"`
+type RenderUIInput struct {
+	Icons  []string    `json:"icons,omitempty" jsonschema:"Icon references used by OMC.icon or data-omc-icon: any Lucide name, brand:OpenAI, or custom:<id> from custom_icons_list or provider icon_id. Declare every icon used so artwork is embedded offline."`
+	Title  string      `json:"title" jsonschema:"Short title for this interactive UI"`
+	HTML   string      `json:"html" jsonschema:"Body markup with inline style and script, at most 48 KiB. It runs sandboxed with no network: nothing external loads. Theme colours are CSS variables (--bg --surface --fg --fg-2 --muted --border --accent --success --warn --danger --series-1 to --series-6). The page provides OMC.rows (the rows named by source); OMC.chart(target, {type, x, y, series, stacked, unit, rows}) with type line, area, column, bar or pie, x a field, y a list of numeric fields, and series a field that splits one y; OMC.table(target, {columns: [{field, label, unit}], rows}); OMC.diagram(target, {nodes: [{id, label, note, detail, tone, icon}], edges: [{from, to, label}]}) lays out an architecture, flow or topology and lets a node be picked to read its detail and connections; OMC.fmt(value, unit); OMC.icon(name, size) returns a DOM icon; data-omc-icon on a span mounts it automatically; OMC.compose(message) offers a follow-up draft for operator review, never executes operations. Use local controls, filters, forms and calculators when useful. Layout: the frame is about 720px wide on a desktop and 320px on a phone, its height follows the content up to 16384px. frame none supplies no padding, card ground or visible title; frame card supplies those. Use natural document height, not vh, fixed page height or a vertically scrolling page wrapper. Add no page margin or duplicate heading. Size everything to the frame: widths in %, fr or minmax() that fall to one column below 560px, no fixed width over 300px, at most three columns, no redundant nested cards, text 12px or larger, and a wide table inside an overflow-x:auto block. Compose from the frame's classes before writing CSS: omc-stack, omc-row, omc-grid (columns that fit themselves), omc-card, omc-stat (small label, b value, span note), omc-badge and omc-callout (data-tone success, warn, danger or accent), omc-kv on a dl, omc-field (a label holding an input and an output), and omc-tabs inside a data-omc-tabs block whose buttons carry data-tab and whose panels carry data-panel. Use OMC.diagram for anything with parts and connections rather than a grid of boxes; hand-drawn SVG needs a viewBox and width 100%. target is a CSS selector, unit is tokens, usd, ms, percent, bytes, time or number, and rows defaults to OMC.rows."`
+	Source *DataSource `json:"source,omitempty" jsonschema:"Rows to pass in as OMC.rows"`
+	Fields []string    `json:"fields,omitempty" jsonschema:"With source: 1-12 fields to pass"`
+	Frame  string      `json:"frame,omitempty" jsonschema:"none (default): an inline component on the conversation with no border, ground or title bar. card: a titled, bordered figure. Put frame before html so its streaming preview uses the same presentation"`
+}
+
+type SuggestNextInput struct {
+	Suggestions []string `json:"suggestions" jsonschema:"1-3 questions, at most 80 characters each"`
 }
 
 // View is a display call's frozen dataset, stored on its trace and drawn by the console.
 type View struct {
 	Kind    string           `json:"kind"`
 	Title   string           `json:"title"`
-	Chart   *ChartSpec       `json:"chart,omitempty"`
 	Columns []string         `json:"columns"`
 	Rows    []map[string]any `json:"rows"`
 	Source  *DataSource      `json:"source,omitempty"`
+	// Blocks is a panel's content (ADR 0079): the model's own statements, laid out.
+	Blocks []ViewBlock `json:"blocks,omitempty"`
+	// HTML is a canvas's markup (ADR 0072), drawn only inside the console's sandboxed frame.
+	HTML  string   `json:"html,omitempty"`
+	Icons []string `json:"icons,omitempty"`
+	// Frame is how the console sets the view into the answer (ADR 0082); empty means a card.
+	Frame string `json:"frame,omitempty"`
 }
 
 // DisplayReceipt is all the model learns from a display call: that it rendered, and the shape of
-// what it drew, so it can refer to the chart without the rows coming back to it.
+// what it drew, so it can refer to what it drew without the rows coming back to it.
 type DisplayReceipt struct {
 	IsRendered bool     `json:"rendered"`
 	Rows       int      `json:"rows"`
 	Fields     []string `json:"fields"`
+	Blocks     int      `json:"blocks,omitempty"`
 }
 
+// The descriptions say only what each tool is for. Referencing rows by source is stated on the
+// source field and in the system prompt's presentation section, as is how to write the answer
+// around a display; repeating either here would spend the schema budget on every round to say
+// it twice.
 const (
-	RENDER_CHART_DESCRIPTION = "Draw a chart inside your answer. Use it for a trend over time or a comparison across more than a few items. Reference a capability result with source {call_id, path} instead of copying numbers; the console draws the rows that call returned. After the chart, state the conclusion in one or two sentences; do not repeat the numbers it shows."
-	RENDER_TABLE_DESCRIPTION = "Draw a table inside your answer, for more than about five rows or more than three columns. Reference a capability result with source {call_id, path} instead of copying rows. The operator can sort it and copy it as CSV; summarise what matters in a sentence rather than restating it."
+	SUGGEST_NEXT_DESCRIPTION = "Offer follow-up questions with your final answer text, never with another tool; ends the turn."
+	RENDER_UI_DESCRIPTION    = "Compose an inline interactive component inside your answer using local HTML, SVG and script, reusable controls, icons and optional OMC charts or tables. Choose controls and layout that help the operator explore, compare, calculate or plan. OMC.compose offers a reviewed follow-up draft."
 )
 
 type displayTool struct {
@@ -104,24 +146,17 @@ type displayTool struct {
 }
 
 var displayTools = func() map[string]*displayTool {
-	chart, err := jsonschema.For[RenderChartInput](nil)
+	suggest, err := jsonschema.For[SuggestNextInput](nil)
 	if err != nil {
 		panic(err)
 	}
-	// Enumerated here rather than in a struct tag: the schema inference reads descriptions from
-	// tags but has no enum syntax, and a model offered the closed set picks from it.
-	types := make([]any, 0, len(CHART_TYPES))
-	for _, chartType := range CHART_TYPES {
-		types = append(types, chartType)
-	}
-	chart.Properties["type"].Enum = types
-	table, err := jsonschema.For[RenderTableInput](nil)
+	ui, err := jsonschema.For[RenderUIInput](nil)
 	if err != nil {
 		panic(err)
 	}
 	tools := map[string]*displayTool{
-		RENDER_CHART: {name: RENDER_CHART, description: RENDER_CHART_DESCRIPTION, schema: chart},
-		RENDER_TABLE: {name: RENDER_TABLE, description: RENDER_TABLE_DESCRIPTION, schema: table},
+		SUGGEST_NEXT: {name: SUGGEST_NEXT, description: SUGGEST_NEXT_DESCRIPTION, schema: suggest},
+		RENDER_UI:    {name: RENDER_UI, description: RENDER_UI_DESCRIPTION, schema: ui},
 	}
 	for _, tool := range tools {
 		if tool.resolved, err = tool.schema.Resolve(nil); err != nil {
@@ -133,18 +168,14 @@ var displayTools = func() map[string]*displayTool {
 
 // DisplayToolNames is the set of display tools a run request may declare.
 func DisplayToolNames() map[string]bool {
-	names := map[string]bool{}
-	for name := range displayTools {
-		names[name] = true
-	}
-	return names
+	return map[string]bool{RENDER_UI: true, SUGGEST_NEXT: true}
 }
 
 // DisplayToolDeclarations projects the declared display tools into the model's tool list, in a
 // fixed order so the catalogue is stable between rounds.
 func DisplayToolDeclarations(declared []string) []gateway.AgentTool {
 	var tools []gateway.AgentTool
-	for _, name := range []string{RENDER_CHART, RENDER_TABLE} {
+	for _, name := range []string{RENDER_UI, SUGGEST_NEXT} {
 		if !contains(declared, name) {
 			continue
 		}
@@ -152,6 +183,48 @@ func DisplayToolDeclarations(declared []string) []gateway.AgentTool {
 		tools = append(tools, gateway.AgentTool{Type: "function", Function: gateway.ToolDefinition{Name: tool.name, Description: tool.description, Parameters: tool.schema}})
 	}
 	return tools
+}
+
+// takeSuggestions separates suggest_next from a round's calls.
+//
+// It is a note on the answer rather than a call the turn makes: it has no result worth a model
+// round, so it never becomes a trace, a pending call or a stored tool call, and the calls that
+// remain are the ones the turn runs. The last well-formed call wins, and a malformed one is
+// dropped without a refusal, because nothing is left to read one.
+func takeSuggestions(declared []string, calls []gateway.ToolCall) ([]gateway.ToolCall, []string) {
+	if !contains(declared, SUGGEST_NEXT) {
+		return calls, nil
+	}
+	var suggestions []string
+	remaining := make([]gateway.ToolCall, 0, len(calls))
+	for _, call := range calls {
+		if call.Function.Name != SUGGEST_NEXT {
+			remaining = append(remaining, call)
+			continue
+		}
+		if parsed := parseSuggestions(call.Function.Arguments); parsed != nil {
+			suggestions = parsed
+		}
+	}
+	return remaining, suggestions
+}
+
+func parseSuggestions(arguments string) []string {
+	var input SuggestNextInput
+	if len(arguments) > capability.MAX_PAYLOAD_BYTES || strictUnmarshal([]byte(arguments), &input) != nil {
+		return nil
+	}
+	var suggestions []string
+	for _, suggestion := range input.Suggestions {
+		suggestion = strings.Join(strings.Fields(suggestion), " ")
+		if suggestion == "" || utf8.RuneCountInString(suggestion) > MAX_SUGGESTION_CHARS || contains(suggestions, suggestion) {
+			continue
+		}
+		if suggestions = append(suggestions, suggestion); len(suggestions) == MAX_SUGGESTIONS {
+			break
+		}
+	}
+	return suggestions
 }
 
 func contains(values []string, value string) bool {
@@ -189,7 +262,7 @@ func renderDisplay(conversation *Conversation, name, arguments string) (capabili
 	if err != nil || len(raw) > MAX_VIEW_BYTES {
 		return capability.Result{Status: "error", Code: "tool_result_too_large", Detail: "the referenced rows are too large to draw; aggregate them first"}, nil
 	}
-	receipt, _ := json.Marshal(DisplayReceipt{IsRendered: true, Rows: len(view.Rows), Fields: view.Columns})
+	receipt, _ := json.Marshal(DisplayReceipt{IsRendered: true, Rows: len(view.Rows), Fields: view.Columns, Blocks: len(view.Blocks)})
 	return capability.Result{Status: "success", Data: receipt}, raw
 }
 
@@ -198,7 +271,8 @@ func resolveDisplay(conversation *Conversation, name, arguments string) (View, e
 	if tool == nil {
 		return View{}, errors.New("capability_forbidden")
 	}
-	if len(arguments) > capability.MAX_PAYLOAD_BYTES {
+	// Allow JSON escaping of the declared HTML payload while bounding one tool argument.
+	if len(arguments) > MAX_UI_ARGUMENT_BYTES {
 		return View{}, errors.New("tool_input_too_large")
 	}
 	var value any
@@ -212,21 +286,23 @@ func resolveDisplay(conversation *Conversation, name, arguments string) (View, e
 		return View{}, errors.New("invalid_tool_arguments")
 	}
 	var plain any
-	if json.Unmarshal(generic, &plain) != nil || tool.resolved.Validate(plain) != nil {
-		return View{}, refuse("the arguments do not match the %s schema", name)
+	if json.Unmarshal(generic, &plain) != nil {
+		return View{}, refuse("arguments must be a JSON object matching %s", name)
 	}
-	if name == RENDER_CHART {
-		var input RenderChartInput
+	if err := tool.resolved.Validate(plain); err != nil {
+		if detail := describeArgumentFailure(tool.schema, plain, "arguments"); detail != "" {
+			return View{}, refuse("%s", detail)
+		}
+		return View{}, refuse("the arguments do not match the %s schema; check the declared field types", name)
+	}
+	if name == RENDER_UI {
+		var input RenderUIInput
 		if err := strictUnmarshal(generic, &input); err != nil {
 			return View{}, err
 		}
-		return resolveChart(conversation, input)
+		return resolveUI(conversation, input)
 	}
-	var input RenderTableInput
-	if err := strictUnmarshal(generic, &input); err != nil {
-		return View{}, err
-	}
-	return resolveTable(conversation, input)
+	return View{}, errors.New("capability_forbidden")
 }
 
 func strictUnmarshal(raw []byte, target any) error {
@@ -238,59 +314,80 @@ func strictUnmarshal(raw []byte, target any) error {
 	return nil
 }
 
-func resolveChart(conversation *Conversation, input RenderChartInput) (View, error) {
-	if !contains(CHART_TYPES, input.Type) {
-		return View{}, refuse("type must be one of %s", strings.Join(CHART_TYPES, ", "))
+// viewIcon checks an icon reference's shape and nothing else. Which names exist is the console's
+// knowledge - the whole Lucide set and the maker marks, both of which grow without this package
+// changing - so an unknown name is drawn as a neutral mark there instead of failing the view here.
+func viewIcon(icon string) (string, error) {
+	icon = strings.TrimSpace(icon)
+	if len(icon) > MAX_ICON_CHARS {
+		return "", refuse("icon must be at most %d characters", MAX_ICON_CHARS)
 	}
-	if len(input.Y) == 0 || len(input.Y) > MAX_CHART_SERIES {
-		return View{}, refuse("y must name 1-%d fields", MAX_CHART_SERIES)
-	}
-	if input.Type == "pie" && (len(input.Y) != 1 || input.Series != "") {
-		return View{}, refuse("a pie takes exactly one y field and no series")
-	}
-	if input.Series != "" && len(input.Y) != 1 {
-		return View{}, refuse("series splits a single y field; name one y field or drop series")
-	}
-	if utf8.RuneCountInString(input.Unit) > 16 {
-		return View{}, refuse("unit must be at most 16 characters")
-	}
-	fields := append([]string{input.X}, input.Y...)
-	if input.Series != "" {
-		fields = append(fields, input.Series)
-	}
-	view, err := resolveRows(conversation, input.Title, input.Source, input.Inline, fields)
-	if err != nil {
-		return View{}, err
-	}
-	for _, row := range view.Rows {
-		for _, field := range input.Y {
-			switch row[field].(type) {
-			case json.Number, nil:
-			default:
-				return View{}, refuse("y field %q must be numeric", field)
-			}
+	for _, char := range icon {
+		isAllowed := char == '-' || char == ':' || char == '.' || char == '_' ||
+			(char >= '0' && char <= '9') || (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+		if !isAllowed {
+			return "", refuse("icon is a Lucide name such as trending-up, brand:<maker>, or custom:<id>")
 		}
 	}
-	view.Kind = "chart"
-	view.Chart = &ChartSpec{Type: input.Type, X: input.X, Y: input.Y, Series: input.Series, Unit: strings.TrimSpace(input.Unit)}
-	return view, nil
+	return icon, nil
 }
 
-func resolveTable(conversation *Conversation, input RenderTableInput) (View, error) {
-	if len(input.Columns) == 0 || len(input.Columns) > MAX_TABLE_COLUMNS {
-		return View{}, refuse("columns must name 1-%d fields", MAX_TABLE_COLUMNS)
+func viewText(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func viewTitle(title string) (string, error) {
+	title = strings.TrimSpace(title)
+	if title == "" || utf8.RuneCountInString(title) > MAX_VIEW_TITLE_CHARS {
+		return "", refuse("title must be 1-%d characters", MAX_VIEW_TITLE_CHARS)
 	}
-	view, err := resolveRows(conversation, input.Title, input.Source, input.Inline, input.Columns)
+	return title, nil
+}
+
+// resolveUI freezes a canvas: the model's markup as written, and the rows it asked to read.
+//
+// The markup is not sanitised, because nothing here could do so reliably and the console does not
+// depend on it: a canvas is only ever drawn inside a sandboxed frame with no origin and no network
+// (ADR 0072). Payload validation protects the display boundary, not a task budget.
+func resolveUI(conversation *Conversation, input RenderUIInput) (View, error) {
+	title, err := viewTitle(input.Title)
 	if err != nil {
 		return View{}, err
 	}
-	view.Kind = "table"
+	if strings.TrimSpace(input.HTML) == "" || len(input.HTML) > MAX_CANVAS_BYTES {
+		return View{}, refuse("html must be 1-%d bytes", MAX_CANVAS_BYTES)
+	}
+	for _, icon := range input.Icons {
+		if reference, err := viewIcon(icon); err != nil || reference == "" {
+			return View{}, refuse("icons must be nonempty references of at most %d characters", MAX_ICON_CHARS)
+		}
+	}
+	if input.Frame != "" && input.Frame != FRAME_CARD && input.Frame != FRAME_NONE {
+		return View{}, refuse("frame must be %s or %s", FRAME_CARD, FRAME_NONE)
+	}
+	view := View{Title: title, Columns: []string{}, Rows: []map[string]any{}}
+	switch {
+	case input.Source != nil:
+		if len(input.Fields) == 0 || len(input.Fields) > MAX_CANVAS_FIELDS {
+			return View{}, refuse("fields must name 1-%d fields of the source rows; put fields beside source and copy names from data_sources.fields", MAX_CANVAS_FIELDS)
+		}
+		if view, err = resolveRows(conversation, title, input.Source, input.Fields); err != nil {
+			return View{}, err
+		}
+	case len(input.Fields) > 0:
+		return View{}, refuse("fields needs a source")
+	}
+	view.Kind, view.HTML, view.Icons = "ui", input.HTML, input.Icons
+	// Freeze the inline default explicitly; absent frame on an earlier stored view still means card.
+	if input.Frame != FRAME_CARD {
+		view.Frame = FRAME_NONE
+	}
 	return view, nil
 }
 
-// resolveRows reads the rows a display call names - from a referenced result or inline - and keeps
-// only the named fields, which must exist and hold scalars.
-func resolveRows(conversation *Conversation, title string, source *DataSource, inline []map[string]any, fields []string) (View, error) {
+// resolveRows reads the rows a display call references and keeps only the named fields, which must
+// exist and hold scalars.
+func resolveRows(conversation *Conversation, title string, source *DataSource, fields []string) (View, error) {
 	title = strings.TrimSpace(title)
 	if title == "" || utf8.RuneCountInString(title) > MAX_VIEW_TITLE_CHARS {
 		return View{}, refuse("title must be 1-%d characters", MAX_VIEW_TITLE_CHARS)
@@ -302,30 +399,14 @@ func resolveRows(conversation *Conversation, title string, source *DataSource, i
 		}
 		seen[field] = true
 	}
-	var rows []any
-	switch {
-	case source != nil && inline != nil:
-		return View{}, refuse("give either source or inline, not both")
-	case source != nil:
-		found, err := referencedRows(conversation, *source)
-		if err != nil {
-			return View{}, err
-		}
-		rows = found
-	case inline != nil:
-		if len(inline) > MAX_INLINE_ROWS {
-			return View{}, refuse("inline holds at most %d rows; reference a capability result instead", MAX_INLINE_ROWS)
-		}
-		// Inline rows arrive as decoded maps; re-read them with number preservation so a value
-		// is drawn exactly as the model wrote it.
-		raw, _ := json.Marshal(inline)
-		decoder := json.NewDecoder(bytes.NewReader(raw))
-		decoder.UseNumber()
-		if decoder.Decode(&rows) != nil {
-			return View{}, errors.New("invalid_tool_arguments")
-		}
-	default:
-		return View{}, refuse("give source {call_id, path} or inline rows")
+	resolved, err := resolveDataReference(conversation, *source)
+	if err != nil {
+		return View{}, err
+	}
+	source = &resolved
+	rows, err := referencedRows(conversation, *source)
+	if err != nil {
+		return View{}, err
 	}
 	if len(rows) > MAX_VIEW_ROWS {
 		return View{}, refuse("the array holds %d rows, more than %d; aggregate it first", len(rows), MAX_VIEW_ROWS)
@@ -366,7 +447,7 @@ func resolveRows(conversation *Conversation, title string, source *DataSource, i
 // data is a receipt, not rows.
 //
 // Rows are objects, or positional arrays beside a `columns` list naming their fields - the shape
-// `database_query` returns, and the most flexible source a chart can have - which are read into
+// `database_query` returns, and the most flexible source a canvas can have - which are read into
 // objects here so the rest of resolution sees one shape.
 func referencedRows(conversation *Conversation, source DataSource) ([]any, error) {
 	if source.CallID == "" || len(source.Path) > MAX_SOURCE_PATH {
@@ -382,9 +463,16 @@ func referencedRows(conversation *Conversation, source DataSource) ([]any, error
 		}
 	}
 	if trace == nil {
-		return nil, refuse("no capability call %q in this conversation", source.CallID)
+		for _, turn := range conversation.Turns {
+			for _, candidate := range turn.Traces {
+				if candidate.Result.OperationID == source.CallID && candidate.Result.Status == "success" && !isDisplayCall(candidate.Name) {
+					return nil, refuse("source.call_id names an operation_id; the tool-call id is %q. Prefer source {data_ref} from data_sources", candidate.ID)
+				}
+			}
+		}
+		return nil, refuse("no capability call %q in this conversation; choose source {data_ref} from data_sources", source.CallID)
 	}
-	if displayTools[trace.Name] != nil || trace.Result.Status != "success" || len(trace.Result.Data) == 0 {
+	if isDisplayCall(trace.Name) || trace.Result.Status != "success" || len(trace.Result.Data) == 0 {
 		return nil, refuse("call %q has no successful capability result to draw", source.CallID)
 	}
 	var data any
@@ -403,7 +491,7 @@ func referencedRows(conversation *Conversation, source DataSource) ([]any, error
 			}
 			parent = object
 			if current, ok = object[segment]; !ok {
-				return nil, refuse("path %q: no field %q in call %q", source.Path, segment, source.CallID)
+				return nil, refuse("source.path %q has no field %q in call %q; path starts inside result.data (usage_aggregate: data.groups). Prefer source {data_ref}", source.Path, segment, source.CallID)
 			}
 		}
 	}

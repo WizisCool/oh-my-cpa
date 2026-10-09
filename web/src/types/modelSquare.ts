@@ -102,6 +102,21 @@ export function resolveModelManufacturer(identity: string, metadata?: ModelRefer
   return maker;
 }
 
+/**
+ * The context window the reference catalog lists for a call point, or undefined when it lists none.
+ *
+ * A call point can route to several upstream models; the smallest window among them is the one a
+ * conversation is sure to fit, whichever route the gateway picks.
+ */
+export function referenceContextWindow(directory: ModelSquareDirectory | undefined, callPoint: string): number | undefined {
+  if (!directory || !callPoint) return undefined;
+  const identities = [callPoint, ...directory.routes.filter(route => route.call_point === callPoint).map(route => route.upstream_model)];
+  const windows = identities
+    .map(identity => directory.model_info[identity]?.limit.context)
+    .filter((window): window is number => typeof window === 'number' && window > 0);
+  return windows.length > 0 ? Math.min(...windows) : undefined;
+}
+
 export interface ModelSquareEntry {
   identity: string;
   manufacturer: ModelManufacturer;

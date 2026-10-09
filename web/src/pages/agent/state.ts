@@ -6,7 +6,8 @@ import { languageLocale } from '../../i18n/language';
 export type {
   AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
 } from '../../agent/types';
-import type { CapabilityReceipt, Conversation, DisplayView, Trace, Turn, TurnPart } from '../../agent/types';
+import { isDisplayTool } from '../../agent/types';
+import type { CapabilityReceipt, Conversation, Trace, Turn, TurnPart } from '../../agent/types';
 
 export interface Operation {
   id: string;
@@ -267,6 +268,19 @@ const FAILURE_KEYS: Record<string, string> = {
   run_history_full: 'agent.error.busy',
   response_too_large: 'agent.error.budget',
   gateway_unavailable: 'agent.error.gateway',
+  request_too_large: 'agent.error.request_too_large',
+  context_length_exceeded: 'agent.error.context',
+  upstream_rejected: 'agent.error.upstream_rejected',
+  upstream_stream_rejected: 'agent.error.upstream_refused',
+  upstream_rate_limited: 'agent.error.rate_limited',
+  gateway_auth_failed: 'agent.error.upstream_auth',
+  model_or_endpoint_missing: 'agent.error.model',
+  model_not_found: 'agent.error.model',
+  unsupported_parameter: 'agent.error.parameter_unsupported',
+  unsupported_output: 'agent.error.output',
+  invalid_image: 'pg.error.image',
+  // Compatibility for stored failures from earlier runtime versions.
+  budget_exceeded: 'agent.error.budget',
   model_budget_exceeded: 'agent.error.budget',
   tool_budget_exceeded: 'agent.error.budget',
   context_budget_exceeded: 'agent.error.budget',
@@ -292,52 +306,6 @@ export function turnParts(turn: Turn): TurnPart[] {
   ];
 }
 
-const SUMMARY_FIELDS_MAX = 6;
-const SUMMARY_FIELD_CHARS_MAX = 120;
-
-export interface ResultField {
-  label: string;
-  value: string;
-}
-
-/**
- * The digestable scalars at the top level of a capability result.
- *
- * Capability results are documents - a page of requests, a quota window, an aggregate - and
- * dumping one as JSON under an answer buries the reply it is supposed to support. This keeps
- * the fields an operator actually reads (bounded in count and in length, so a long identifier
- * cannot push the rest out) and leaves the whole document behind the raw-result disclosure
- * that every trace already has.
- */
-export function summarizeResult(data: unknown): { fields: ResultField[]; counts: ResultField[] } {
-  const fields: ResultField[] = [];
-  const counts: ResultField[] = [];
-  if (typeof data !== 'object' || data === null) return { fields, counts };
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      counts.push({ label: key, value: `×${value.length}` });
-      continue;
-    }
-    if (value === null || typeof value === 'object') continue;
-    if (fields.length >= SUMMARY_FIELDS_MAX) continue;
-    const text = typeof value === 'string' ? value : String(value);
-    fields.push({
-      label: key,
-      value: text.length > SUMMARY_FIELD_CHARS_MAX ? `${text.slice(0, SUMMARY_FIELD_CHARS_MAX)}…` : text,
-    });
-  }
-  return { fields, counts };
-}
-
-/** True when a trace has a body worth offering behind a disclosure. */
-export function hasRawResult(receipt: CapabilityReceipt): boolean {
-  return receipt.data !== undefined || Boolean(receipt.code);
-}
-
-export function rawResultText(receipt: CapabilityReceipt): string {
-  return JSON.stringify(receipt.data ?? receipt.code, null, 2);
-}
-
 /** Durations are read as one number and one unit, never as milliseconds. */
 export function formatDuration(milliseconds: number): string {
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return '-';
@@ -357,6 +325,18 @@ export function formatClock(milliseconds: number | undefined, lang: Lang): strin
 export function turnDuration(turn: Turn): number | undefined {
   if (!turn.started_at_ms || !turn.ended_at_ms) return undefined;
   return turn.ended_at_ms - turn.started_at_ms;
+}
+
+/**
+ * The newest turn's id when a retry or an edit may take its place: it is settled, and everything
+ * it called only read or drew. The server applies the same rule (`isReplaceable`), so this decides
+ * only whether the actions are offered. A call the directory does not list counts as a change.
+ */
+export function replaceableTurnID(conversation: Conversation | undefined, capabilities: readonly { name: string; permission: string }[]): string {
+  const last = conversation?.turns.at(-1);
+  if (!last || last.status === 'running' || last.status === 'pending') return '';
+  const isHarmless = (name: string) => isDisplayTool(name) || capabilities.some(item => item.name === name && item.permission === 'read');
+  return last.traces.every(trace => isHarmless(trace.name)) ? last.id : '';
 }
 
 export function isAwaitingApproval(conversation: Conversation | undefined): boolean {
@@ -438,42 +418,4 @@ export function callDuration(trace: Pick<Trace, 'started_at_ms' | 'ended_at_ms'>
   if (!trace.started_at_ms) return undefined;
   const end = trace.ended_at_ms ?? nowMS;
   return end === undefined ? undefined : Math.max(0, end - trace.started_at_ms);
-}
-
-export interface ChartPoint {
-  x: string;
-  series: string;
-  value: number;
-}
-
-/** An epoch in milliseconds from 1973 on: a time-bucket key, not a count. */
-const EPOCH_MS_FLOOR = 1e11;
-
-/**
- * A frozen chart's rows in long form: one point per x, series and value.
- *
- * Several y fields become one series each; a `series` field splits a single y into one series per
- * value; one y alone is a single unnamed series. An x axis whose every value is an epoch in
- * milliseconds - the shape a time-bucketed aggregate returns - is read as time. Missing values are
- * left out rather than drawn as zero, which would invent a dip.
- */
-export function chartSeries(view: Pick<DisplayView, 'chart' | 'rows'>): { points: ChartPoint[]; isTime: boolean } {
-  const chart = view.chart;
-  if (!chart) return { points: [], isTime: false };
-  const points: ChartPoint[] = [];
-  for (const row of view.rows) {
-    const x = row[chart.x] === null || row[chart.x] === undefined ? '' : String(row[chart.x]);
-    if (chart.series) {
-      const value = row[chart.y[0]];
-      if (typeof value === 'number') points.push({ x, series: String(row[chart.series] ?? ''), value });
-      continue;
-    }
-    for (const field of chart.y) {
-      const value = row[field];
-      if (typeof value === 'number') points.push({ x, series: chart.y.length > 1 ? field : '', value });
-    }
-  }
-  const xs = points.map(point => point.x);
-  const isTime = chart.type !== 'pie' && xs.length > 0 && xs.every(x => /^\d+$/.test(x) && Number(x) >= EPOCH_MS_FLOOR);
-  return { points, isTime };
 }

@@ -1,18 +1,9 @@
-import React from 'react';
-import { Button, Dropdown, Tooltip } from 'antd';
-import type { MenuProps } from 'antd';
-import { BulbOutlined, CheckOutlined, DownOutlined } from '../icons';
 import { useI18n } from '../../i18n';
+import { ComposerPicker, ComposerPickerList } from './ComposerPicker';
 import styles from './Workspace.module.css';
 
-/**
- * The effort levels offered by name. Providers spell their levels differently and some accept
- * values outside this list; a stored value that is not here is still shown and kept.
- */
+/** A stored provider-specific level stays selectable, without interpreting it as a higher rank. */
 export const REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
-
-/** The menu key for "leave it to the model", which sends no effort at all. */
-const DEFAULT_KEY = 'model-default';
 
 export interface ReasoningEffortPickerProps {
   /** Empty for the model's own default. */
@@ -21,51 +12,43 @@ export interface ReasoningEffortPickerProps {
   isDisabled?: boolean;
 }
 
-/**
- * A reasoning-effort choice that sits in the composer's foot.
- *
- * It is a quiet text button naming the current level rather than a labelled select: the level is
- * set once and read often, and the composer is where the reader's eye already is when it matters -
- * just before sending. "Default" means the field is left out of the request, not a level of its own.
- */
+/** Explicitly named levels share the model picker's confirmation and focus behaviour. */
 export function ReasoningEffortPicker({ value, onChange, isDisabled = false }: ReasoningEffortPickerProps) {
   const { t } = useI18n();
-  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
-  const levels = React.useMemo(
-    () => (value && !REASONING_EFFORTS.includes(value) ? [...REASONING_EFFORTS, value] : REASONING_EFFORTS),
-    [value],
-  );
-  const selectedKey = value || DEFAULT_KEY;
-  const mark = (key: string) => (key === selectedKey ? <CheckOutlined className={styles['effort-check']} /> : <span className={styles['effort-check']} />);
-  const labelOf = (level: string) => (REASONING_EFFORTS.includes(level) ? t(`pg.reasoning_effort.${level}`) : level);
-  const items: MenuProps['items'] = [
-    { key: DEFAULT_KEY, icon: mark(DEFAULT_KEY), label: t('pg.model_default') },
-    { type: 'divider' },
-    ...levels.map(level => ({ key: level, icon: mark(level), label: labelOf(level) })),
-  ];
-  const current = value ? labelOf(value) : t('pg.default');
-
+  const levels = value && !REASONING_EFFORTS.includes(value) ? [...REASONING_EFFORTS, value] : REASONING_EFFORTS;
+  const labelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.effort.label.${level}`) : level;
+  const parameterLabelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.effort.parameter.${level}`) : level;
+  const accessibleLabelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.reasoning_effort.${level}`) : level;
   return (
-    <Dropdown
-      trigger={['click']}
-      disabled={isDisabled}
-      onOpenChange={setIsMenuOpen}
-      menu={{ items, selectable: true, selectedKeys: [selectedKey], onClick: ({ key }) => onChange(key === DEFAULT_KEY ? '' : key) }}
+    <ComposerPicker
+      label={t('conversation.reasoning_effort')}
+      valueLabel={value ? parameterLabelOf(value) : t('pg.default')}
+      testId="effort-chip"
+      contentTestId="effort-popover"
+      isDisabled={isDisabled}
+      className={styles['effort-chip']}
+      surfaceClassName={styles['effort-surface']}
     >
-      {/* The tooltip names the control; once its menu is open the menu does, and the two would overlap. */}
-      <Tooltip title={t('pg.reasoning_effort')} open={isMenuOpen ? false : undefined}>
-        <Button
-          type="text"
-          size="small"
-          className={styles['effort-trigger']}
-          aria-label={`${t('pg.reasoning_effort')}: ${current}`}
-          disabled={isDisabled}
-          icon={<BulbOutlined />}
-        >
-          <span className={styles['effort-value']}>{current}</span>
-          <DownOutlined className={styles['effort-caret']} aria-hidden="true" />
-        </Button>
-      </Tooltip>
-    </Dropdown>
+      {close => (
+        <>
+          <div className={styles['picker-head']}><span>{t('conversation.reasoning_effort')}</span></div>
+          <ComposerPickerList
+            label={t('conversation.reasoning_effort')}
+            value={value}
+            shouldShowSelectionMark={false}
+            options={[
+              { value: '', label: t('conversation.model_default') },
+              ...levels.map(level => ({
+                value: level,
+                label: parameterLabelOf(level),
+                accessibleLabel: accessibleLabelOf(level),
+                detail: labelOf(level) === parameterLabelOf(level) ? undefined : labelOf(level),
+              })),
+            ]}
+            onSelect={next => { onChange(next); close(); }}
+          />
+        </>
+      )}
+    </ComposerPicker>
   );
 }

@@ -19,6 +19,9 @@ export interface RunFrame {
   /** Calls this run started or resolved; a call still executing has the `running` status. */
   traces: Trace[];
   round: number;
+  retry?: number;
+  /** A retry checkpoint carries the whole authoritative turn, including pre-resume parts. */
+  hasAuthoritativeParts?: boolean;
   snapshot?: Conversation;
   interrupts: AgentInterrupt[];
   errorCode: string;
@@ -126,20 +129,43 @@ export function applyAgentEvent(frame: RunFrame, event: AgentEvent): RunFrame {
   switch (event.type) {
     case EventType.RUN_STARTED:
       return { ...frame, isAccepted: true, threadId: event.threadId, turnId: typeof metadata.turn_id === 'string' ? metadata.turn_id : '' };
+    case EventType.CUSTOM: {
+      if (event.name !== 'omc.upstream_retry' || !event.value || typeof event.value !== 'object') return frame;
+      const retry = (event.value as Record<string, unknown>).retry;
+      const parts = (event.value as Record<string, unknown>).parts;
+      if (!(typeof retry === 'number' && Number.isInteger(retry) && retry >= 1 && retry <= 3)) return frame;
+      if (!Array.isArray(parts)) return { ...frame, retry };
+      // The checkpoint replaces the whole turn, so calls the discarded attempt had already
+      // started leave with the text it streamed: keeping them would leave a `running` trace
+      // nothing ever settles, and the activity strip would report a call that is already gone.
+      const checkpoint = parts as TurnPart[];
+      const referenced = new Set(checkpoint.filter(part => part.type === 'tool' && part.trace_id).map(part => part.trace_id));
+      return {
+        ...frame,
+        retry,
+        parts: checkpoint,
+        messageParts: {},
+        hasAuthoritativeParts: true,
+        traces: frame.traces.filter(trace => referenced.has(trace.id)),
+      };
+    }
     case EventType.STEP_STARTED:
-      return { ...frame, round: numberOf(metadata.round) ?? frame.round + 1 };
+      return { ...frame, retry: undefined, round: numberOf(metadata.round) ?? frame.round + 1 };
     case EventType.TEXT_MESSAGE_START:
       return openMessage(frame, event.messageId, 'text');
     case EventType.TEXT_MESSAGE_CONTENT:
-      return appendMessage(frame, event.messageId, 'text', event.delta);
+      return appendMessage({ ...frame, retry: undefined }, event.messageId, 'text', event.delta);
     case EventType.REASONING_MESSAGE_START:
       return event.messageId in frame.messageParts ? frame : openMessage(frame, event.messageId, 'thought');
     case EventType.REASONING_MESSAGE_CONTENT:
-      return appendMessage(frame, event.messageId, 'thought', event.delta);
+      return appendMessage({ ...frame, retry: undefined }, event.messageId, 'thought', event.delta);
     case EventType.TOOL_CALL_START: {
       const startedAt = numberOf(metadata.started_at_ms);
+      // A retried request can begin with a call; the strip stops reporting the retry once the
+      // replacement attempt names what it is doing.
       return {
         ...frame,
+        retry: undefined,
         parts: frame.parts.some(part => part.type === 'tool' && part.trace_id === event.toolCallId)
           ? frame.parts
           : [...frame.parts, { type: 'tool', trace_id: event.toolCallId }],

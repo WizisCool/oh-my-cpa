@@ -9,9 +9,11 @@ package agui
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -22,7 +24,9 @@ const PROTOCOL_VERSION = "1.0"
 
 const (
 	MAX_ID_CHARS         = 128
-	MAX_MESSAGE_BYTES    = 16 << 10
+	MAX_MESSAGE_BYTES    = 48 << 10
+	MAX_MESSAGE_IMAGES   = 4
+	MAX_IMAGE_BYTES      = 5 << 20
 	MAX_TOOLS            = 8
 	MAX_CONTEXT_ENTRIES  = 4
 	MAX_CONTEXT_VALUE    = 64
@@ -34,6 +38,9 @@ const (
 // ErrInvalidInput is the one refusal the decoder reports. The caller maps it to the console's
 // `invalid_parameters` code; which rule failed is not something a browser can act on differently.
 var ErrInvalidInput = errors.New("invalid_parameters")
+
+// ErrRequestTooLarge distinguishes an exhausted HTTP body limit from malformed protocol input.
+var ErrRequestTooLarge = errors.New("request_too_large")
 
 // ResumeEntry answers one interrupt of the previous run. Only its identity and status are read:
 // the decision itself went through the console's own decision endpoint, so no secret or answer
@@ -47,8 +54,13 @@ type ResumeEntry struct {
 type RunInput struct {
 	ThreadID string
 	RunID    string
-	// Message is the one new user message, empty when the run resumes an interrupted one.
+	// HasMessage reports that the run carries a new user message rather than resuming one.
+	HasMessage bool
+	// Message is the new message's text. It may be empty beside images, or for a message that
+	// takes the place of a turn and keeps the images that turn carried.
 	Message string
+	// Images are the pictures sent with the message.
+	Images []Image
 	// Tools names the frontend tools the client can render, each drawn from the allowed set.
 	Tools []string
 	// Context holds the allowed context entries by description.
@@ -64,6 +76,21 @@ type Limits struct {
 	Tools map[string]bool
 	// Context is the set of context descriptions the server reads.
 	Context map[string]bool
+}
+
+// Image is one picture of a message, as AG-UI's binary input content carries it.
+type Image struct {
+	MediaType string
+	// Data is the image's bytes in standard base64.
+	Data string
+}
+
+// wirePart is one entry of a multi-part message: AG-UI's text or binary input content.
+type wirePart struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	Data     string `json:"data,omitempty"`
 }
 
 type wireMessage struct {
@@ -106,7 +133,14 @@ func DecodeRunInput(reader io.Reader, limits Limits) (RunInput, error) {
 	var wire wireInput
 	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&wire) != nil || decoder.Decode(new(any)) != io.EOF {
+	if err := decoder.Decode(&wire); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			return RunInput{}, ErrRequestTooLarge
+		}
+		return RunInput{}, ErrInvalidInput
+	}
+	if decoder.Decode(new(any)) != io.EOF {
 		return RunInput{}, ErrInvalidInput
 	}
 	if wire.ProtocolVersion != PROTOCOL_VERSION || !isIdentifier(wire.RunID) || len(wire.ThreadID) > MAX_ID_CHARS {
@@ -120,13 +154,42 @@ func DecodeRunInput(reader io.Reader, limits Limits) (RunInput, error) {
 		return RunInput{}, ErrInvalidInput
 	}
 	for _, message := range wire.Messages {
+		if message.Role != "user" || !isIdentifier(message.ID) {
+			return RunInput{}, ErrInvalidInput
+		}
+		// A message is a string, or AG-UI's parts when it carries images. The parts form may have
+		// no text: the pictures can be the whole question, and a retry repeats a turn whose images
+		// the server already holds. Whether the turn ends up with anything to ask is the runtime's
+		// check, because only it knows what the replaced turn carried.
 		var content string
-		if message.Role != "user" || !isIdentifier(message.ID) || json.Unmarshal(message.Content, &content) != nil {
+		if json.Unmarshal(message.Content, &content) == nil {
+			if strings.TrimSpace(content) == "" {
+				return RunInput{}, ErrInvalidInput
+			}
+		} else {
+			var parts []wirePart
+			decoder := json.NewDecoder(bytes.NewReader(message.Content))
+			decoder.DisallowUnknownFields()
+			if decoder.Decode(&parts) != nil || len(parts) > MAX_MESSAGE_IMAGES+1 {
+				return RunInput{}, ErrInvalidInput
+			}
+			hasText := false
+			for _, part := range parts {
+				switch {
+				case part.Type == "text" && !hasText && part.MimeType == "" && part.Data == "":
+					hasText = true
+					content = part.Text
+				case part.Type == "binary" && part.Text == "" && part.MimeType != "" && len(part.MimeType) <= 64 && part.Data != "" && len(part.Data) <= base64.StdEncoding.EncodedLen(MAX_IMAGE_BYTES) && len(input.Images) < MAX_MESSAGE_IMAGES:
+					input.Images = append(input.Images, Image{MediaType: part.MimeType, Data: part.Data})
+				default:
+					return RunInput{}, ErrInvalidInput
+				}
+			}
+		}
+		if len(content) > MAX_MESSAGE_BYTES {
 			return RunInput{}, ErrInvalidInput
 		}
-		if strings.TrimSpace(content) == "" || len(content) > MAX_MESSAGE_BYTES {
-			return RunInput{}, ErrInvalidInput
-		}
+		input.HasMessage = true
 		input.Message = content
 	}
 	if len(wire.Tools) > MAX_TOOLS {
@@ -158,7 +221,7 @@ func DecodeRunInput(reader io.Reader, limits Limits) (RunInput, error) {
 	input.ForwardedProps = wire.ForwardedProps
 	// A run either says something new or continues an interrupted one; doing both at once would
 	// leave it unclear which the model's next round answers.
-	if len(wire.Resume) > MAX_RESUME_ENTRIES || len(wire.Resume) > 0 && input.Message != "" || len(wire.Resume) == 0 && input.Message == "" {
+	if len(wire.Resume) > MAX_RESUME_ENTRIES || len(wire.Resume) > 0 && input.HasMessage || len(wire.Resume) == 0 && !input.HasMessage {
 		return RunInput{}, ErrInvalidInput
 	}
 	for _, entry := range wire.Resume {

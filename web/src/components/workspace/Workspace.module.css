@@ -1,6 +1,7 @@
 /* The conversation workspace shared by the Playground and the Agent (design §5, "Conversation
    workspaces"). Every colour is a palette token and every duration a motion token; nothing here
-   adds a shadow, a gradient or a radius the console does not already use. */
+   adds a shadow or a decorative gradient. Shape follows the thread scale of ADR 0081: printed
+   matter, controls, floating surfaces and the composer each take their own radius. */
 
 /* ── frame ─────────────────────────────────────────────────────────────────── */
 
@@ -8,6 +9,9 @@
   /* The reading column: long enough for a code block, short enough that a line of prose is read
      without the eye losing its place. */
   --workspace-column: 760px;
+  /* The width the transcript's scrollbar gutter takes (the console's scrollbars are 8px). What
+     sits under the transcript reserves the same, so the composer's edges meet the answers'. */
+  --workspace-gutter: 8px;
   height: 100%;
   min-height: 0;
   display: flex;
@@ -129,6 +133,18 @@
   flex-direction: column;
 }
 
+/* A thread that only holds a page's greeting takes the height of it, so the page can centre the
+   greeting and the composer together. */
+.is-compact {
+  flex: 0 0 auto;
+}
+
+.is-compact .transcript {
+  flex: 0 0 auto;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
 .transcript {
   flex: 1;
   min-height: 0;
@@ -175,10 +191,9 @@
 
 .user-bubble {
   max-width: min(80%, 640px);
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  padding: 8px 14px;
+  border-radius: var(--radius-thread);
+  background: var(--thread-field);
   color: var(--fg);
 }
 
@@ -194,7 +209,7 @@
   padding: 0 12px;
   transform: translateX(-50%);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--elevated);
   color: var(--fg-2);
   font: inherit;
@@ -264,6 +279,43 @@
   min-width: 0;
 }
 
+/* Follow-up questions are objects the reader presses, so each rests on the page as its own
+   rounded slip; spacing separates them from the answer, not a rule. */
+.follow-ups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.follow-up {
+  max-width: 100%;
+  padding: 6px 14px;
+  border: 1px solid var(--thread-hairline);
+  border-radius: var(--radius-thread);
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+
+.follow-up:hover {
+  background: var(--thread-field);
+  color: var(--fg);
+}
+
+.follow-up:active {
+  transform: scale(.98);
+}
+
+.follow-up:focus-visible {
+  border-radius: var(--radius-thread);
+}
+
 .message-foot {
   display: flex;
   align-items: center;
@@ -294,7 +346,12 @@
 }
 
 .foot-actions :global(.ant-btn) {
+  border-radius: 50%;
   color: var(--muted);
+}
+
+.foot-actions :global(.ant-btn:focus-visible) {
+  border-radius: 50%;
 }
 
 .foot-actions :global(.ant-btn:not(:disabled):hover) {
@@ -319,7 +376,7 @@
   max-height: 160px;
   object-fit: contain;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: var(--bg);
 }
 
@@ -330,6 +387,7 @@
 /* ── reasoning ─────────────────────────────────────────────────────────────── */
 
 .reasoning {
+  min-width: 0;
   font-size: 12px;
 }
 
@@ -352,28 +410,50 @@
   color: var(--fg-2);
 }
 
+.reasoning-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .reasoning-caret {
   font-size: 10px;
   transition: transform var(--motion-fast) var(--ease-standard);
 }
 
-[aria-expanded='true'] > .reasoning-caret {
+[aria-expanded='true'] > .reasoning-caret,
+[aria-expanded='true'] > .reasoning-mark > .reasoning-caret {
   transform: rotate(90deg);
 }
 
+/* Reasoning is written straight on the page, in a quieter ink than the answer. It is a window
+   onto the newest lines: only history hidden above the viewport dissolves at its top edge.
+   Short content and text the operator scrolls back to read retain their full ink. */
 .reasoning-body {
+  max-height: 320px;
   margin-top: 6px;
-  padding: 2px 0 2px 12px;
-  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-width: thin;
 }
 
-.reasoning-text {
+.reasoning-content {
+  display: flow-root;
+}
+
+.is-thinking .reasoning-body {
+  max-height: 168px;
+}
+
+.is-thinking .reasoning-body[data-following][data-hidden-history] {
+  mask-image: linear-gradient(to bottom, transparent, currentColor 32px);
+}
+
+.reasoning-text.markdown {
   color: var(--fg-2);
   font-size: 12.5px;
   line-height: 1.6;
-  max-height: 320px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 /* ── markdown ──────────────────────────────────────────────────────────────── */
@@ -453,7 +533,7 @@
   overflow-x: auto;
   margin: 0 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-document);
 }
 
 .table-scroll table {
@@ -615,7 +695,7 @@
   min-height: 56px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--fg-2);
   font: inherit;
@@ -645,13 +725,93 @@
   margin: 0 auto;
   padding: 8px 24px 16px;
   box-sizing: border-box;
+  transform: translateX(calc(var(--workspace-gutter) / -2));
+}
+
+/* The `/` and `@` lists open upward from the frame's top edge, over the conversation: the box
+   itself never moves, so a list that opens and closes while typing does not shift the thread. */
+.trigger-anchor {
+  position: relative;
+}
+
+.trigger-popover {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  left: 0;
+  z-index: 2;
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--elevated);
+}
+
+.trigger-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.trigger-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.trigger-row:hover,
+.trigger-row[data-highlighted] {
+  background: var(--border-soft);
+}
+
+.trigger-icon {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
+  color: var(--muted);
+}
+
+.trigger-name {
+  flex-shrink: 0;
+  min-width: 96px;
+  max-width: 60%;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-empty {
+  padding: 5px 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .composer-frame {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-thread);
   background: var(--surface);
   transition: border-color var(--motion-fast);
 }
@@ -668,7 +828,7 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 12px 12px 4px 14px;
+  padding: 14px 14px 6px 16px;
 }
 
 .composer-input {
@@ -698,6 +858,52 @@
 .composer-input:disabled {
   cursor: not-allowed;
   color: var(--muted);
+}
+
+/* What the next message carries beyond its text. */
+.composer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.composer-chips:empty {
+  display: none;
+}
+
+.composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.composer-chip[data-tone='accent'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.composer-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-chip :global(.ant-btn) {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  color: inherit;
 }
 
 .composer-controls {
@@ -731,7 +937,7 @@
   max-width: 180px;
   min-height: 40px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: var(--bg);
   font-size: 12px;
   overflow: hidden;
@@ -744,6 +950,28 @@
   object-fit: cover;
 }
 
+/* A file is a name, so its chip is a row with the remove control after the name rather than a
+   thumbnail with one laid over its corner. */
+.attachment[data-kind='file'] {
+  gap: 4px;
+  max-width: 240px;
+  min-height: 28px;
+  padding-left: 8px;
+}
+
+.attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment[data-kind='file'] .attachment-remove:global(.ant-btn) {
+  position: static;
+  flex-shrink: 0;
+  background: transparent;
+}
+
 .attachment-remove:global(.ant-btn) {
   position: absolute;
   top: 2px;
@@ -754,21 +982,42 @@
   background: var(--elevated);
 }
 
+/* The queue is a tray resting on the box: the same hairline, open at the bottom where it meets
+   the frame, so queued messages read as waiting to go into it. */
+.queue {
+  display: flex;
+  flex-direction: column;
+  margin: 0 14px -1px;
+  padding: 6px 6px 8px;
+  border: 1px solid var(--thread-hairline);
+  border-bottom: 0;
+  border-radius: var(--radius-surface) var(--radius-surface) 0 0;
+  background: var(--thread-field);
+  font-size: 12px;
+}
+
+.queue-head {
+  padding: 2px 6px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .queue-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-  padding: 4px 4px 4px 10px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+  min-height: 28px;
+  padding: 0 2px 0 6px;
+  border-radius: var(--radius-control);
   color: var(--fg-2);
+  animation: workspace-enter var(--motion-base) var(--ease-standard);
 }
 
-.queue-label {
+.queue-mark {
   flex-shrink: 0;
-  color: var(--muted);
+  color: var(--meta);
+  font-size: 12px;
 }
 
 .queue-text {
@@ -777,6 +1026,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-item {
+    animation: none;
+  }
 }
 
 .composer-foot {
@@ -797,52 +1052,115 @@
   gap: 8px;
 }
 
+/* How full the context is: a ring and its figure, quiet until the conversation nears the limit. */
+.context-readout {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--meta);
+  cursor: default;
+}
+
+.context-ring {
+  width: 14px;
+  height: 14px;
+  /* The arc starts at twelve o'clock. */
+  transform: rotate(-90deg);
+  fill: none;
+  stroke-width: 2;
+}
+
+.context-ring-track {
+  stroke: var(--border);
+}
+
+.context-ring-value {
+  stroke: currentColor;
+  transition: stroke-dasharray var(--motion-base) var(--ease-standard);
+}
+
+.context-readout[data-tone='warning'] {
+  color: var(--warn);
+}
+
+.context-readout[data-tone='danger'] {
+  color: var(--danger);
+}
+
+.composer-under {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+
+.composer-under .context-readout {
+  margin-left: auto;
+}
+
 .composer-note {
-  margin: 8px 0 0;
+  min-width: 0;
+  margin: 0;
   color: var(--meta);
   font-size: 11px;
   line-height: 1.5;
   text-align: center;
 }
 
-.send-button:global(.ant-btn) {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
+/* The picker opens a menu of things to add, so it reads as a quiet round `+` rather than an icon
+   of one kind of file. */
+.attach-button:global(.ant-btn) {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  color: var(--fg-2);
+  font-size: 16px;
 }
 
-.is-labelled.send-button:global(.ant-btn) {
-  width: auto;
-  padding: 0 12px;
+/* Send and stop: the one filled shape in the frame, on the fill every primary action uses
+   (`--accent-hover`, the step `colorPrimary` maps to), so each palette colours it. */
+.send-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-hover);
+  color: var(--accent-on);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), transform var(--motion-fast);
+}
+
+.send-button:hover {
+  background: var(--accent-active);
+}
+
+.send-button:active {
+  transform: scale(.96);
+}
+
+/* The console's focus ring squares its corners; this control is a circle. */
+.send-button:focus-visible {
+  border-radius: 50% !important;
 }
 
 /* Blocked, but still clickable: the runtime makes the final call on live state (AssistantComposer). */
-.send-button:global(.ant-btn)[aria-disabled='true'],
-.send-button:global(.ant-btn)[aria-disabled='true']:hover {
-  border-color: var(--border);
-  background: var(--surface);
+.send-button[aria-disabled='true'],
+.send-button[aria-disabled='true']:hover {
+  background: var(--border);
   color: var(--meta);
-  box-shadow: none;
   cursor: not-allowed;
-}
-
-.stop-button:global(.ant-btn) {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
-  color: var(--danger);
-  border-color: var(--border);
-  background: var(--surface);
-  box-shadow: none;
-}
-
-.stop-button:global(.ant-btn):hover,
-.stop-button:global(.ant-btn):active {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--surface);
 }
 
 .stop-glyph {
@@ -853,31 +1171,307 @@
   background: currentColor;
 }
 
-/* The reasoning-effort choice in the composer's foot: a quiet control that names its level. */
-.effort-trigger:global(.ant-btn) {
+/* Model and reasoning are two settings of one message: the same trigger, surface and rows.
+   Open controls gain a hairline; selection stays ink, leaving accent for keyboard focus. */
+.picker-trigger:global(.ant-btn) {
   gap: 6px;
   height: 28px;
+  min-width: 0;
   padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   color: var(--fg-2);
   font-size: 12px;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
-.effort-value {
+.picker-trigger:global(.ant-btn):not(:disabled):hover,
+.picker-trigger:global(.ant-btn)[aria-expanded='true'] {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+/* An unset choice is a prompt to pick one, not a system-health state: it takes foreground
+   ink and the hairline stays with the open control, so amber keeps meaning warning. */
+.picker-trigger[data-state='unset']:global(.ant-btn) {
+  color: var(--fg);
+}
+
+.target-chip:global(.ant-btn) {
+  max-width: 240px;
+}
+
+.picker-trigger-icon,
+.picker-option-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--muted);
+}
+
+.picker-trigger[data-state='pending']:global(.ant-btn) {
+  cursor: progress;
+}
+
+/* Holds the width of a typical model name, so the name that replaces it moves little. */
+.picker-trigger-pending {
+  width: 104px;
+  height: 8px;
+  border-radius: var(--radius-control);
+  background: var(--border);
+}
+
+.picker-trigger-value {
+  min-width: 0;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.effort-caret {
-  color: var(--muted);
+.target-chip .picker-trigger-value {
+  max-width: none;
+}
+
+.picker-caret {
+  flex-shrink: 0;
+  color: var(--meta);
   font-size: 10px;
 }
 
-.effort-check {
-  display: inline-block;
-  width: 12px;
-  color: var(--accent);
+/* These panels use the console's surface step and hairline rather than floating-card shadows. */
+.picker-popover :global(.ant-popover-container),
+.picker-popover :global(.ant-popover-inner) {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+/* The surface never outgrows the room on the side it opens to, which the trigger measures: its
+   head and key row keep their height and the list between them takes what is left, so a short
+   window scrolls the list instead of clipping it. */
+.picker-surface {
+  display: flex;
+  flex-direction: column;
+  width: min(304px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.picker-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.picker-head,
+.picker-search,
+.picker-key {
+  flex-shrink: 0;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.picker-head :global(.ant-btn) {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+
+.picker-count {
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.picker-refresh:global(.ant-btn) {
+  margin-left: auto;
+}
+
+.picker-search {
+  margin: 8px 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.picker-search:focus-within {
+  border-color: var(--accent);
+}
+
+.picker-search :global(.ant-input-affix-wrapper) {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.picker-search :global(.ant-input-prefix) {
+  color: var(--muted);
+}
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 4px;
+}
+
+.picker-option {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+.picker-option:hover,
+.picker-option:focus-visible {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.picker-option[aria-selected='true'] {
+  background: var(--selected-inset);
+  color: var(--fg);
+}
+
+.picker-option[aria-selected='true'] .picker-option-name {
+  font-weight: 600;
+}
+
+.picker-option[data-value=''] {
+  margin-bottom: 4px;
+}
+
+.picker-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-option-detail {
+  flex-shrink: 0;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.picker-option-check {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--fg);
+}
+
+.picker-empty {
+  padding: 20px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* The key names the list's scope; it is secondary to choosing the model itself. */
+.picker-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+.picker-key:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.picker-key-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.picker-key-label {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.picker-key-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+  .picker-option {
+    min-height: 44px;
+  }
+}
+
+.effort-surface {
+  width: min(180px, calc(100vw - 32px));
+}
+
+.effort-surface .picker-option-detail {
+  color: var(--muted);
+}
+
+.effort-chip .picker-trigger-value {
+  font-weight: 400;
+}
+
+/* A pinned setting looks pinned: the value takes the disabled ink with the rest of its trigger. */
+.effort-chip:not(:disabled) .picker-trigger-value {
+  color: var(--fg);
 }
 
 /* ── side panel ────────────────────────────────────────────────────────────── */
@@ -989,6 +1583,26 @@
   color: var(--muted);
 }
 
+/* A model's name led by its maker's mark, in the closed field and in the list alike. */
+.model-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-mark-fallback {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .key-option {
   display: inline-flex;
   align-items: baseline;
@@ -1031,8 +1645,15 @@
   padding: 0 8px 4px;
 }
 
-.is-phone .composer-note {
+.is-phone .target-chip:global(.ant-btn) {
+  max-width: 170px;
+}
+
+.is-phone .composer-under {
   margin-top: 4px;
+}
+
+.is-phone .composer-note {
   font-size: 10.5px;
   line-height: 1.4;
 }
@@ -1040,6 +1661,10 @@
 /* ── narrow & touch ────────────────────────────────────────────────────────── */
 
 @media (hover: none) {
+  .workspace {
+    --workspace-gutter: 0px;
+  }
+
   .latest:hover {
     color: var(--fg-2);
     border-color: var(--border);
@@ -1101,5 +1726,164 @@
 @media (prefers-reduced-motion: reduce) {
   .latest {
     animation: none;
+  }
+}
+
+/* ── work in flight ────────────────────────────────────────────────────────── */
+
+/* A label for work that is still running: a glint a few glyphs wide crosses the text and nothing
+   else (ADR 0080). The glyphs are painted once, by a background clipped to them: the label's own
+   ink with the glint as a second layer moved across it. Masking the element to its text instead
+   drew every glyph through its own outline, which squared the anti-aliased edge and left thin,
+   pale strokes - barely legible as dark ink on a light ground. Repainting one short line is the
+   whole cost. Where a text clip is unavailable, and under reduced motion, the label is plain text. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  @media (prefers-reduced-motion: no-preference) {
+    .live-text {
+      --live-text-band: 3.2em;
+      --live-text-glint: var(--fg);
+      display: inline-block;
+      /* The glint is the same width whatever the label's length: sized to the label, it lit most
+         of a long one at once and read as a slow wash rather than a highlight passing through. */
+      background-image:
+        linear-gradient(100deg, transparent, var(--live-text-glint) 50%, transparent),
+        linear-gradient(currentColor, currentColor);
+      background-size: var(--live-text-band) 100%, 100% 100%;
+      background-repeat: no-repeat;
+      background-position: calc(0px - var(--live-text-band)) 0, 0 0;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: live-text-sweep var(--motion-live-text) linear infinite;
+    }
+  }
+}
+
+/* From clear of the leading edge to clear of the trailing one. */
+@keyframes live-text-sweep {
+  to { background-position: calc(100% + var(--live-text-band)) 0, 0 0; }
+}
+
+/* The questions a settled answer offers arrive one after another rather than as a block. */
+.follow-up {
+  animation: workspace-enter var(--motion-base) var(--ease-standard) backwards;
+  animation-delay: calc(var(--follow-up-row, 0) * var(--motion-fast));
+}
+
+@keyframes workspace-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* ── first load of a stored conversation ───────────────────────────────────── */
+
+.thread-placeholder {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: calc(var(--workspace-column) + 48px);
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.thread-placeholder-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.thread-placeholder-question {
+  align-self: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-text {
+    animation: none;
+  }
+
+  .follow-up {
+    animation: none;
+  }
+}
+
+/* ── arriving text and generation ──────────────────────────────────────────── */
+
+/* The markdown renderer wraps each arriving run of text in a span that names its own fade. The
+   thread replaces that fade with its own: new words land in the accent and settle into the ink,
+   so the eye finds the end of the answer without a jump (ADR 0080). */
+@media (prefers-reduced-motion: no-preference) {
+  .markdown :global(span[style*='x-markdown-fade-in']) {
+    animation: stream-arrive var(--motion-base) var(--ease-standard) both !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .markdown :global(span[style*='x-markdown-fade-in']) {
+    animation: none !important;
+  }
+}
+
+/* Only the newest few words are ever mid-fade: the accent is where a run starts, not a colour it
+   holds, so a fast stream trails a short tail instead of a paragraph of tinted text. */
+@keyframes stream-arrive {
+  from {
+    opacity: .2;
+    color: var(--accent);
+  }
+}
+
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+  vertical-align: -0.15em;
+  animation: stream-caret 1200ms ease-in-out infinite;
+}
+
+@keyframes stream-caret {
+  50% { opacity: .25; }
+}
+
+.generation-loader {
+  --loader-cell: 7px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, var(--loader-cell));
+  gap: calc(var(--loader-cell) / 2);
+  flex-shrink: 0;
+}
+
+.generation-loader[data-size='mark'] {
+  --loader-cell: 3px;
+  gap: 2px;
+}
+
+.generation-loader-cell {
+  width: var(--loader-cell);
+  height: var(--loader-cell);
+  border-radius: 50%;
+  background: var(--fg);
+  opacity: .15;
+  /* One shared cycle, entered by each cell at its own step, so the nine cells need no timer. */
+  animation: generation-loader 2700ms linear infinite;
+  animation-delay: calc(var(--loader-phase) * -300ms);
+}
+
+@keyframes generation-loader {
+  0%, 30% { opacity: .9; }
+  38%, 94% { opacity: .15; }
+  100% { opacity: .9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-caret {
+    animation: none;
+  }
+
+  .generation-loader-cell {
+    animation: none;
+    opacity: .4;
   }
 }

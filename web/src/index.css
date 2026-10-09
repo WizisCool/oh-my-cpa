@@ -107,6 +107,17 @@
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
   --radius-sm: 4px;
+  /* Conversation shape stays close to the console's 4px geometry: document frames and
+     controls share it, floating surfaces use 6px, and the composer and bubbles use 8px.
+     Foreground fills group content without adding a border; theme hydration projects
+     the same values from THREAD_RADII and THREAD_FILL_SHARES. */
+  --radius-document: 4px;
+  --radius-control: 4px;
+  --radius-surface: 6px;
+  --radius-thread: 8px;
+  --thread-field: color-mix(in srgb, var(--fg) 5%, transparent);
+  --thread-field-hover: color-mix(in srgb, var(--fg) 8%, transparent);
+  --thread-hairline: color-mix(in srgb, var(--fg) 12%, transparent);
   /* The inset step for a control that sits on an elevated panel. "One step
      down from the popover" is --bg in dark and --surface in light, so the two
      modes disagree and the components should not have to know. */
@@ -123,6 +134,8 @@
   /* §7's `float`: a click already said "open", so a floating panel only fades. antd has no token for
      it, which is why this one is the console's own. */
   --motion-float: 60ms;
+  /* The glyph-only work-in-flight loop uses the same period in every palette. */
+  --motion-live-text: 900ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 

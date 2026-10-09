@@ -3,9 +3,12 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -216,11 +219,46 @@ type agentForwardedProps struct {
 	Model           string `json:"model"`
 	Fingerprint     string `json:"client_key_fingerprint"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// ReplaceTurn is the newest turn a retried or edited message takes the place of.
+	ReplaceTurn string `json:"replace_turn,omitempty"`
+	// Present is the presentation a composer command asked this message's answer to take.
+	Present string `json:"present,omitempty"`
 }
 
-// AGENT_CONTEXT_LANGUAGE is the one context entry a run may carry: the console's reading language,
-// which the prompt uses as the reply language's default.
-const AGENT_CONTEXT_LANGUAGE = "console_language"
+// The context entries a run may carry (ADR 0041): the console's reading language, which the prompt
+// uses as the reply language's default, and how the console writes token counts, so an answer
+// writes them the way the pages beside it do. Anything else is refused.
+const (
+	AGENT_CONTEXT_LANGUAGE    = "console_language"
+	AGENT_CONTEXT_TOKEN_STYLE = "console_token_style"
+)
+
+// MAX_AGENT_RUN_BYTES bounds a run request: the message's text and its images.
+const MAX_AGENT_RUN_BYTES = 128<<10 + agui.MAX_MESSAGE_IMAGES*(agui.MAX_IMAGE_BYTES/3*4+1024)
+
+// agentImage serves one image of the current conversation to the page that shows it. The bytes
+// are the operator's own upload, already validated as an image of the declared type; they are
+// served as that type only, never sniffed, and sandboxed so opening one directly runs nothing.
+func (h *Handler) agentImage(writer http.ResponseWriter, request *http.Request) {
+	if !h.readyAgent(writer) {
+		return
+	}
+	url, err := h.agent.runtime.Image(request.Context(), chi.URLParam(request, "id"))
+	header, encoded, _ := strings.Cut(url, ",")
+	content, decodeErr := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || decodeErr != nil || len(content) == 0 {
+		writePlaygroundError(writer, 404, "resource_not_found")
+		return
+	}
+	writer.Header().Set("Content-Type", strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64"))
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	// An image never changes under its identifier, and the identifier dies with its turn.
+	writer.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	writer.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'none'; sandbox")
+	writer.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	writer.WriteHeader(200)
+	_, _ = writer.Write(content)
+}
 
 // runAgent serves one Agent run as an AG-UI event stream (ADR 0041).
 //
@@ -231,8 +269,10 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, 64<<10)
-	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true}})
+	// A message may be 48 KiB of text whose line breaks and quotes double in JSON, beside four
+	// images of five megabytes each in base64.
+	request.Body = http.MaxBytesReader(writer, request.Body, MAX_AGENT_RUN_BYTES)
+	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true, AGENT_CONTEXT_TOKEN_STYLE: true}})
 	var props agentForwardedProps
 	if err == nil {
 		decoder := json.NewDecoder(bytes.NewReader(wire.ForwardedProps))
@@ -242,7 +282,11 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		}
 	}
 	if err != nil {
-		writePlaygroundError(writer, 400, "invalid_parameters")
+		if errors.Is(err, agui.ErrRequestTooLarge) {
+			writePlaygroundError(writer, http.StatusRequestEntityTooLarge, "request_too_large")
+		} else {
+			writePlaygroundError(writer, http.StatusBadRequest, "invalid_parameters")
+		}
 		return
 	}
 	input := agent.Input{
@@ -253,7 +297,13 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		Model:           props.Model,
 		ReasoningEffort: props.ReasoningEffort,
 		Language:        wire.Context[AGENT_CONTEXT_LANGUAGE],
+		ReplaceTurn:     props.ReplaceTurn,
+		Present:         props.Present,
+		TokenStyle:      wire.Context[AGENT_CONTEXT_TOKEN_STYLE],
 		DisplayTools:    wire.Tools,
+	}
+	for _, image := range wire.Images {
+		input.Images = append(input.Images, "data:"+image.MediaType+";base64,"+image.Data)
 	}
 	for _, entry := range wire.Resume {
 		input.Resume = append(input.Resume, entry.InterruptID)
@@ -314,6 +364,9 @@ func translateAgentEvent(translator *agui.Translator, model string, event agent.
 	switch event.Type {
 	case "started":
 		return translator.Started(event.ConversationID, map[string]any{"turn_id": event.TurnID})
+	case "retry":
+		turn := event.Conversation.Turns[len(event.Conversation.Turns)-1]
+		return translator.Custom("omc.upstream_retry", map[string]any{"retry": event.Attempt, "failure": event.Failure, "parts": turn.Parts})
 	case "round":
 		return translator.Step(event.Round)
 	case "thought":

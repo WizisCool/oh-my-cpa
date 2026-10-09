@@ -165,6 +165,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm verify:demo` | Browser acceptance for the public demonstration: every console route renders, no API errors, no console errors; `OMCPA_DEMO_URL` checks a deployment instead of a local server |
 | `pnpm verify:demo:go` | The same check against the Go binary's own demonstration mode (still supported; it generates the dataset) |
 | `pnpm demo:generate` | Regenerate the demonstration's dataset from the real handlers; `--check` fails when the committed copy is stale |
+| `pnpm icons:generate` | Regenerate `web/src/generated/lucideIcons.json`, the icon data Agent displays draw from, after the Lucide package changes; a self-test pins it to the installed package |
 | `pnpm check:demo` | The demonstration's maintenance contract: coverage, freshness digest and privacy. Part of `test:self` |
 | `pnpm test:demo` | Unit tests for the demonstration's Worker, routing and timestamp re-basing |
 | `pnpm dev:demo` | Serve the demonstration locally with Wrangler (requires `pnpm build:demo` first) |

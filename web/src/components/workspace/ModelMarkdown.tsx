@@ -88,6 +88,12 @@ function Table({ children }: { children?: React.ReactNode }) {
   return <div className={styles['table-scroll']}><table>{children}</table></div>;
 }
 
+function StreamCaret() {
+  return <span className={styles['stream-caret']} aria-hidden="true" />;
+}
+
+const STREAM_TAIL = { component: StreamCaret };
+
 export interface ModelMarkdownProps {
   content: string;
   /** True while more of this text is still arriving, so an unfinished construct is not drawn as broken. */
@@ -114,7 +120,13 @@ export const ModelMarkdown = React.memo(function ModelMarkdown({ content, isStre
     pre: Pre,
     table: Table,
   }), [externalImageLabel]);
-  const streaming = React.useMemo(() => ({ hasNextChunk: isStreaming }), [isStreaming]);
+  // Arriving text fades in and a caret marks where the next words land (ADR 0080). Both are tied
+  // to the stream: with the animation left on, a stored answer would fade in as one block on mount.
+  const streaming = React.useMemo(() => ({
+    hasNextChunk: isStreaming,
+    enableAnimation: isStreaming,
+    tail: isStreaming ? STREAM_TAIL : false,
+  }), [isStreaming]);
   return (
     <XMarkdown
       content={content}

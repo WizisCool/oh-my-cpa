@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -446,7 +447,7 @@ func TestRuntimeAnnouncesACallBeforeItRuns(t *testing.T) {
 	if trace.Arguments != `{"window":"24h"}` || trace.EndedMS < trace.StartedMS || trace.StartedMS == 0 {
 		t.Fatalf("trace %+v", trace)
 	}
-	if turn.Usage == nil || turn.Usage.InputTokens != 20 || turn.Usage.OutputTokens != 10 || turn.Usage.TotalTokens != 30 || turn.PromptVersion != PROMPT_VERSION {
+	if turn.Usage == nil || turn.Usage.InputTokens != 20 || turn.Usage.OutputTokens != 10 || turn.Usage.TotalTokens != 30 || turn.Usage.ContextTokens != 10 || turn.PromptVersion != PROMPT_VERSION {
 		t.Fatalf("turn usage %+v version %q", turn.Usage, turn.PromptVersion)
 	}
 }
@@ -538,5 +539,363 @@ func TestRuntimeCurrentPreservesAnActuallyRunningTurn(t *testing.T) {
 	current, err = runtime.Current(context.Background())
 	if err != nil || current.Turns[0].Status != "success" {
 		t.Fatalf("completed: %#v %v", current, err)
+	}
+}
+
+// Active tool results remain intact regardless of reference-catalog size estimates.
+func TestRuntimeKeepsAllActiveResults(t *testing.T) {
+	runtime := newTestRuntime(t)
+	type blob struct {
+		Text string `json:"text"`
+	}
+	if err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_read", Description: "fixture", Version: 1, Permission: "read", Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (blob, error) {
+		return blob{Text: strings.Repeat("x", 24<<10)}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const READS = 8
+	rounds, largest, omitted, lastRequest := 0, 0, 0, ""
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(_ context.Context, _ string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error) {
+			rounds++
+			request, _ := json.Marshal(messages)
+			schemas, _ := json.Marshal(tools)
+			largest = max(largest, len(request)+len(schemas))
+			lastRequest = string(request)
+			omitted = max(omitted, strings.Count(string(request), `\"status\":\"omitted\"`))
+			if rounds <= READS {
+				return gateway.AgentReply{Calls: []gateway.ToolCall{{ID: "read-" + strconv.Itoa(rounds), Type: "function", Function: gateway.ToolFunction{Name: "fixture_read", Arguments: `{}`}}}}, nil
+			}
+			if err := emit(gateway.Event{Type: "delta", Content: "the conclusion"}); err != nil {
+				return gateway.AgentReply{}, err
+			}
+			return gateway.AgentReply{Content: "the conclusion"}, nil
+		}), nil
+	}
+	run := func(message string) Turn {
+		t.Helper()
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var final *Conversation
+		if err := runtime.Run(context.Background(), Input{ConversationID: current.ID, Revision: current.Revision, Message: message, Model: "fixture", Fingerprint: "key"}, func(event Event) error {
+			if event.Type == "finished" {
+				final = event.Conversation
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return final.Turns[len(final.Turns)-1]
+	}
+	turn := run("investigate")
+	stored, _ := json.Marshal(turn.Messages)
+	if turn.Status != "success" || omitted != 0 || strings.Contains(string(stored), "omitted") || len(stored) < READS*(24<<10) {
+		t.Fatalf("status %q code %q omitted %d stored %d", turn.Status, turn.Code, omitted, len(stored))
+	}
+	if followUp := run("and then?"); followUp.Status != "success" {
+		t.Fatalf("follow-up status %q code %q", followUp.Status, followUp.Code)
+	}
+	if !strings.Contains(lastRequest, `"investigate"`) || !strings.Contains(lastRequest, `"the conclusion"`) || strings.Contains(lastRequest, "xxxx") {
+		t.Fatalf("the earlier turn should reach the model as its question and answer alone: %s", lastRequest[max(0, len(lastRequest)-400):])
+	}
+	if largest < READS*(24<<10) {
+		t.Fatalf("request unexpectedly shortened: %d", largest)
+	}
+}
+
+// Server-owned transcripts retain their history while an investigation grows.
+func TestSaveKeepsHistoryWhileATurnIsRunning(t *testing.T) {
+	runtime := newTestRuntime(t)
+	conversation := Conversation{ID: "long"}
+	for index := 0; index < 4; index++ {
+		conversation.Turns = append(conversation.Turns, Turn{ID: strconv.Itoa(index), Status: "success", Reply: strings.Repeat("x", 300<<10)})
+	}
+	conversation.Turns[3].Status = "running"
+	running := &conversation.Turns[3]
+	if err := runtime.save(context.Background(), &conversation); err != nil {
+		t.Fatal(err)
+	}
+	if conversation.Omitted != 0 || len(conversation.Turns) != 4 || &conversation.Turns[len(conversation.Turns)-1] != running || running.ID != "3" {
+		t.Fatalf("omitted %d turns %d", conversation.Omitted, len(conversation.Turns))
+	}
+}
+
+// TestRuntimeReplacesOnlyATurnThatChangedNothing: a retry or an edit drops the newest turn and
+// asks again, so the model must not see the dropped exchange, and a turn that prepared or ran a
+// change must stay in the record.
+func TestRuntimeReplacesOnlyATurnThatChangedNothing(t *testing.T) {
+	runtime := newTestRuntime(t)
+	for _, permission := range []string{"read", "write"} {
+		err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_" + permission, Description: "fixture", Version: 1, Permission: permission, Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (struct{}, error) {
+			return struct{}{}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seen []gateway.AgentMessage
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(_ context.Context, _ string, messages []gateway.AgentMessage, _ []gateway.AgentTool, _ func(gateway.Event) error) (gateway.AgentReply, error) {
+			seen = messages
+			return gateway.AgentReply{Content: "Answer"}, nil
+		}), nil
+	}
+	run := func(input Input) (Conversation, error) {
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.ConversationID, input.Revision, input.Model, input.Fingerprint = current.ID, current.Revision, "fixture", "key"
+		err = runtime.Run(context.Background(), input, func(Event) error { return nil })
+		current, _ = runtime.Current(context.Background())
+		return current, err
+	}
+	first, err := run(Input{Message: "first wording"})
+	if err != nil || len(first.Turns) != 1 {
+		t.Fatalf("first run: %+v %v", first, err)
+	}
+	if _, err = run(Input{Message: "again", ReplaceTurn: "not-the-newest"}); err == nil || err.Error() != "resource_conflict" {
+		t.Fatalf("replaced a turn that is not the newest: %v", err)
+	}
+	replaced, err := run(Input{Message: "second wording", ReplaceTurn: first.Turns[0].ID})
+	if err != nil || len(replaced.Turns) != 1 || replaced.Turns[0].User != "second wording" || replaced.Turns[0].ID == first.Turns[0].ID {
+		t.Fatalf("replacement: %+v %v", replaced, err)
+	}
+	for _, message := range seen {
+		if strings.Contains(message.Content, "first wording") {
+			t.Fatalf("the model was shown the replaced message: %+v", seen)
+		}
+	}
+	turn := replaced.Turns[0]
+	turn.Traces = []Trace{{ID: "a", Name: "render_table"}, {ID: "b", Name: "fixture_read"}}
+	if !runtime.isReplaceable(turn) {
+		t.Fatal("a turn that only read and drew is replaceable")
+	}
+	turn.Traces = append(turn.Traces, Trace{ID: "c", Name: "fixture_write"})
+	if runtime.isReplaceable(turn) {
+		t.Fatal("a turn that called a write is not replaceable")
+	}
+	turn.Traces, turn.Status = nil, "pending"
+	if runtime.isReplaceable(turn) {
+		t.Fatal("a turn waiting on the operator is not replaceable")
+	}
+}
+
+func TestWithImagesKeepsTheNewestEightImagePayloads(t *testing.T) {
+	runtime := newTestRuntime(t)
+	images, err := runtime.storeImages(context.Background(), []string{fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := []gateway.AgentMessage{{Role: "user", Images: images}}
+	loaded := runtime.withImages(context.Background(), messages)
+	if loaded[0].Images[0].URL != "" {
+		t.Fatal("oldest image was loaded despite the request window")
+	}
+	for index := 1; index < len(images); index++ {
+		if loaded[0].Images[index].URL != fixturePNG {
+			t.Fatalf("image %d not loaded", index)
+		}
+	}
+}
+
+// fixturePNG is a one-pixel PNG as the data URL a console sends.
+const fixturePNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+// An image is part of the question for as long as its turn is: the model is shown its bytes on
+// every round, the conversation document holds only a reference, a retry or an edit keeps it, and
+// it is gone when the conversation is.
+func TestRuntimeKeepsAMessagesImagesBesideTheConversation(t *testing.T) {
+	runtime := newTestRuntime(t)
+	var seen []gateway.AgentMessage
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(_ context.Context, _ string, messages []gateway.AgentMessage, _ []gateway.AgentTool, _ func(gateway.Event) error) (gateway.AgentReply, error) {
+			seen = messages
+			return gateway.AgentReply{Content: "A pixel."}, nil
+		}), nil
+	}
+	run := func(input Input) (Conversation, error) {
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.ConversationID, input.Revision, input.Model, input.Fingerprint = current.ID, current.Revision, "fixture", "key"
+		err = runtime.Run(context.Background(), input, func(Event) error { return nil })
+		current, _ = runtime.Current(context.Background())
+		return current, err
+	}
+	if _, err := run(Input{Message: "x", Images: []string{"data:image/png;base64,AAAA"}}); err == nil || err.Error() != "invalid_image" {
+		t.Fatalf("bytes that are not the declared image: %v", err)
+	}
+	if _, err := run(Input{Message: "x", Images: []string{fixturePNG, fixturePNG, fixturePNG, fixturePNG, fixturePNG}}); err == nil || err.Error() != "invalid_parameters" {
+		t.Fatalf("five images: %v", err)
+	}
+	first, err := run(Input{Images: []string{fixturePNG}})
+	if err != nil || len(first.Turns) != 1 || len(first.Turns[0].Images) != 1 || first.Turns[0].User != "" {
+		t.Fatalf("an image alone is a message: %+v %v", first, err)
+	}
+	image := first.Turns[0].Images[0]
+	if image.MediaType != "image/png" || image.Bytes == 0 || len(seen) != 2 || len(seen[1].Images) != 1 || seen[1].Images[0].URL != fixturePNG {
+		t.Fatalf("the model was not shown the image: %+v %+v", image, seen)
+	}
+	stored, _ := json.Marshal(first)
+	if strings.Contains(string(stored), "iVBORw0KGgo") {
+		t.Fatal("image bytes are in the conversation document")
+	}
+	if url, err := runtime.Image(context.Background(), image.ID); err != nil || url != fixturePNG {
+		t.Fatalf("image read: %v", err)
+	}
+	if _, err := runtime.Image(context.Background(), "not-referenced"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("an unreferenced id: %v", err)
+	}
+
+	edited, err := run(Input{Message: "What colour is it?", ReplaceTurn: first.Turns[0].ID})
+	if err != nil || len(edited.Turns) != 1 || len(edited.Turns[0].Images) != 1 || edited.Turns[0].Images[0].ID != image.ID || seen[1].Images[0].URL != fixturePNG {
+		t.Fatalf("an edit keeps the turn's images: %+v %v", edited, err)
+	}
+	second, err := run(Input{Message: "And now?"})
+	if err != nil || len(seen) != 4 || len(seen[1].Images) != 1 || seen[1].Images[0].URL != fixturePNG {
+		t.Fatalf("a later turn still sees the earlier image: %+v %v", seen, err)
+	}
+	if err := runtime.Reset(context.Background(), second.Revision); err != nil {
+		t.Fatal(err)
+	}
+	var gone storedImage
+	if _, err := runtime.Store.Load(context.Background(), IMAGE_DOCUMENT, image.ID, &gone); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("a new conversation keeps the old one's image: %v", err)
+	}
+}
+
+func TestRuntimeDropsImagesWhenAdmissionFails(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		images  []string
+		trigger string
+	}{
+		{name: "later image validation", images: []string{fixturePNG, "data:image/png;base64,AAAA"}},
+		{name: "later image storage", images: []string{fixturePNG, fixturePNG}, trigger: `CREATE TRIGGER refuse_fixture_image BEFORE INSERT ON agent_documents WHEN NEW.kind='image' AND (SELECT COUNT(*) FROM agent_documents WHERE kind='image')>0 BEGIN SELECT RAISE(ABORT,'fixture_image_failure'); END`},
+		{name: "session storage", images: []string{fixturePNG}, trigger: `CREATE TRIGGER refuse_fixture_session BEFORE INSERT ON agent_documents WHEN NEW.kind='session' BEGIN SELECT RAISE(ABORT,'fixture_session_failure'); END`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			runtime := newTestRuntime(t)
+			if testCase.trigger != "" {
+				if _, err := runtime.Store.Repo.SQL().ExecContext(context.Background(), testCase.trigger); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := runtime.Run(context.Background(), Input{Message: "Inspect", Images: testCase.images, Model: "fixture", Fingerprint: "key"}, func(Event) error {
+				t.Fatal("a refused admission emitted a started event")
+				return nil
+			})
+			if err == nil {
+				t.Fatal("fault injection did not refuse admission")
+			}
+			var imageCount int
+			if err := runtime.Store.Repo.SQL().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agent_documents WHERE kind='image'`).Scan(&imageCount); err != nil {
+				t.Fatal(err)
+			}
+			if imageCount != 0 {
+				t.Fatalf("failed admission left %d image documents", imageCount)
+			}
+		})
+	}
+}
+
+func TestRuntimeFailedReplacementKeepsOnlyTheStoredImages(t *testing.T) {
+	runtime := newTestRuntime(t)
+	images, err := runtime.storeImages(context.Background(), []string{fixturePNG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := Conversation{ID: "fixture-session", Turns: []Turn{{ID: "fixture-turn", Status: "success", Images: images}}}
+	if err := runtime.save(context.Background(), &conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Store.Repo.SQL().ExecContext(context.Background(), `CREATE TRIGGER refuse_fixture_replacement BEFORE UPDATE ON agent_documents WHEN NEW.kind='session' BEGIN SELECT RAISE(ABORT,'fixture_session_failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	err = runtime.Run(context.Background(), Input{ConversationID: conversation.ID, Revision: conversation.Revision, Message: "Edited", Images: []string{fixturePNG}, ReplaceTurn: "fixture-turn", Model: "fixture", Fingerprint: "key"}, func(Event) error { return nil })
+	if err == nil {
+		t.Fatal("failed replacement was accepted")
+	}
+	var imageCount int
+	if err := runtime.Store.Repo.SQL().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agent_documents WHERE kind='image'`).Scan(&imageCount); err != nil {
+		t.Fatal(err)
+	}
+	if imageCount != 1 {
+		t.Fatalf("replacement should keep only the stored image, got %d", imageCount)
+	}
+	if url, err := runtime.Image(context.Background(), images[0].ID); err != nil || url != fixturePNG {
+		t.Fatalf("failed replacement removed the stored image: %v", err)
+	}
+}
+
+func TestRuntimeFailedResetPreservesReferencedImages(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		hasPending bool
+		trigger    string
+	}{
+		{name: "session write", trigger: `CREATE TRIGGER refuse_fixture_reset BEFORE UPDATE ON agent_documents WHEN NEW.kind='session' BEGIN SELECT RAISE(ABORT,'fixture_reset_failure'); END`},
+		{name: "pending decision", hasPending: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			runtime := newTestRuntime(t)
+			images, err := runtime.storeImages(context.Background(), []string{fixturePNG})
+			if err != nil {
+				t.Fatal(err)
+			}
+			turn := Turn{ID: "fixture-turn", Status: "success", Images: images}
+			if testCase.hasPending {
+				turn.Status = "pending"
+				turn.Traces = []Trace{{ID: "fixture-call", Result: capability.Result{Status: "pending", OperationID: "missing-operation"}}}
+			}
+			conversation := Conversation{ID: "fixture-session", Turns: []Turn{turn}}
+			if err := runtime.save(context.Background(), &conversation); err != nil {
+				t.Fatal(err)
+			}
+			if testCase.trigger != "" {
+				if _, err := runtime.Store.Repo.SQL().ExecContext(context.Background(), testCase.trigger); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := runtime.Reset(context.Background(), conversation.Revision); err == nil {
+				t.Fatal("fault injection did not refuse reset")
+			}
+			retained, err := runtime.Current(context.Background())
+			if err != nil || retained.ID != conversation.ID || retained.Revision != conversation.Revision || len(retained.Turns) != 1 {
+				t.Fatalf("failed reset changed the stored conversation: %+v %v", retained, err)
+			}
+			if url, err := runtime.Image(context.Background(), images[0].ID); err != nil || url != fixturePNG {
+				t.Fatalf("failed reset deleted a referenced image: %v", err)
+			}
+		})
+	}
+}
+
+// TestRuntimeResetDropsImagesAfterTheCallerLeaves: the transcript that no longer references an image
+// is committed before the bytes are deleted, so the deletion must survive a client that disconnects
+// in between. Cancelling it would leave an orphan nothing can read and nothing collects - a stored
+// image expires in a hundred years - which is what the cleanup context is detached for.
+func TestRuntimeResetDropsImagesAfterTheCallerLeaves(t *testing.T) {
+	runtime := newTestRuntime(t)
+	images, err := runtime.storeImages(context.Background(), []string{fixturePNG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := Conversation{ID: "fixture-session", Turns: []Turn{{ID: "fixture-turn", Status: "success", Images: images}}}
+	if err := runtime.save(context.Background(), &conversation); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runtime.dropTurnImages(ctx, conversation.Turns)
+
+	var stored storedImage
+	if _, err := runtime.Store.Load(context.Background(), IMAGE_DOCUMENT, images[0].ID, &stored); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("the cleanup kept an image the transcript no longer references: %v", err)
 	}
 }

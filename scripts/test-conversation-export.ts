@@ -2,28 +2,28 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { test } from 'node:test';
 import { agentSnapshot, playgroundSnapshot, snapshotImageSlices, snapshotValue, SNAPSHOT_IMAGE_PAGE_HEIGHT } from '../web/src/agent/conversationSnapshot.ts';
-import { chartTicks, conversationHTML } from '../web/src/agent/conversationHtml.ts';
+import { conversationHTML } from '../web/src/agent/conversationHtml.ts';
 import type { SnapshotLabels } from '../web/src/agent/conversationHtml.ts';
 import type { Conversation, DisplayView } from '../web/src/agent/types.ts';
 import type { Turn as PlaygroundTurn } from '../web/src/pages/playground/state.ts';
 
 const LABELS: SnapshotLabels = {
   title: 'OMC conversation', operator: 'Operator', answer: 'Answer', model: 'Model', exportedAt: 'Exported',
-  thought: 'Reasoning', parameters: 'Parameters', arguments: 'Arguments', result: 'Result', data: 'Data',
+  thought: 'Reasoning', parameters: 'Parameters', arguments: 'Arguments', result: 'Result',
   copy: 'Copy', copied: 'Copied', copyFailed: 'Copy failed', search: 'Search conversation', expand: 'Expand details',
-  panel: 'Side panel', close: 'Close', chart: 'Chart', usage: 'Tokens', noMatches: 'No turns match', turns: count => `${count} turns`,
-  axisTime: milliseconds => `time-${milliseconds}`, number: value => String(value), calls: count => `Used ${count} capabilities`, tokens: count => `${count} tokens`,
+  panel: 'Side panel', close: 'Close', usage: 'Tokens', noMatches: 'No turns match', canvasOmitted: 'Canvas in HTML export', step: status => `step-${status}`, turns: count => `${count} turns`,
+  number: value => String(value), calls: count => `Used ${count} capabilities`, tokens: count => `${count} tokens`,
   collapse: 'Collapse details', print: 'Print', imageOmitted: 'Image omitted', privacy: 'Snapshot; share with care',
   omitted: count => `${count} omitted turns`, status: status => status, capability: name => name,
   failure: code => `Failed ${code}`, date: milliseconds => new Date(milliseconds).toISOString(), duration: milliseconds => `${milliseconds}ms`,
 };
-const VIEW: DisplayView = { kind: 'chart', title: 'Requests', chart: { type: 'column', x: 'day', y: ['n'] }, columns: ['day', 'n'], rows: [{ day: 'Monday', n: 2 }, { day: 'Tuesday', n: 10 }] };
+const VIEW: DisplayView = { kind: 'canvas', title: 'Requests', html: '<div id="plot"></div><script>OMC.chart("#plot", { type: "column", x: "day", y: "n" })</script>', columns: ['day', 'n'], rows: [{ day: 'Monday', n: 2 }, { day: 'Tuesday', n: 10 }] };
 const CONVERSATION: Conversation = { id: 'private-session', revision: 1, model: 'test-model', client_key_fingerprint: 'private-key-fingerprint', omitted: 3,
   active_run_id: 'private-run-id', turns: [{ id: 'turn', user: 'Question', reply: 'First\n\nLast', status: 'success', started_at_ms: 100, ended_at_ms: 500,
     usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 },
     parts: [{ type: 'thought', content: 'Thought' }, { type: 'text', content: 'First' }, { type: 'tool', trace_id: 'query' }, { type: 'tool', trace_id: 'display' }, { type: 'text', content: 'Last' }],
     traces: [{ id: 'query', name: 'database_query', arguments: '{"sql":"select model from usage_events"}', result: { status: 'success', data: { rows: ['private-query-row'] }, operation_id: 'private-operation' } },
-      { id: 'display', name: 'render_chart', result: { status: 'success', data: { rendered: true } }, view: VIEW }],
+      { id: 'display', name: 'render_canvas', result: { status: 'success', data: { rendered: true } }, view: VIEW }],
   }] };
 function htmlFor(snapshot = agentSnapshot(CONVERSATION)) {
   return conversationHTML({ snapshot, labels: LABELS, exportedAt: new Date(0), language: 'en', appearance: { variables: { '--bg': '#121214', '--surface': '#1c1c1f', '--fg': '#f4f4f6', '--accent': '#00b8db' } } });
@@ -40,11 +40,11 @@ test('Agent exports ordered reasoning, calls and answers, metrics and frozen suc
   for (const secret of ['private-session', 'private-key-fingerprint', 'private-run-id', 'private-query-row', 'private-operation']) assert.equal(html.includes(secret), false, secret);
   assert.ok(html.includes('Thought') && html.includes('Monday') && html.includes('3 omitted turns'));
   assert.ok(html.indexOf('First') < html.indexOf('database_query') && html.indexOf('database_query') < html.indexOf('Last'));
-  assert.ok(html.includes('aria-label="Requests"') && html.includes('<rect'));
+  assert.ok(html.includes('<iframe class="canvas-frame"') && html.includes('title="Requests"'));
   assert.ok(html.includes('select model from usage_events'));
   snapshot.turns[0].views[0].rows[0].n = 99;
   assert.equal(VIEW.rows[0].n, 2, 'export is detached from live display data');
-  for (const status of ['running', 'pending', 'error', 'cancelled']) assert.deepEqual(agentSnapshot({ ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], status }] }).turns[0].views, []);
+  for (const status of ['running', 'pending', 'error', 'cancelled']) assert.deepEqual(agentSnapshot({ ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], status }] }).turns[0].views.map(view => view.title), [VIEW.title]);
 });
 
 test('Playground exports the original request model, images, parameters, partial reasoning and cancellation', () => {
@@ -79,20 +79,12 @@ test('HTML renders Markdown and GFM but cannot activate hostile transcript marku
   assert.ok(html.includes('data-search') && html.includes('data-sort') && html.includes('data-copy'));
 });
 
-test('all chart kinds carry their data and accessible vector marks, including zero and negative readings', () => {
-  for (const type of ['line', 'area', 'column', 'bar', 'pie'] as const) {
-    const snapshot = agentSnapshot(CONVERSATION);
-    snapshot.turns[0].views[0].chart!.type = type;
-    const html = htmlFor(snapshot);
-    assert.ok(html.includes('<svg class="chart"'), type);
-    assert.ok(html.includes('Tuesday') && html.includes('>10<'), type);
-  }
-  const snapshot = agentSnapshot(CONVERSATION);
-  snapshot.turns[0].views[0].rows = [{ day: 'zero', n: 0 }, { day: 'negative', n: -2 }];
-  assert.ok(htmlFor(snapshot).includes('negative'));
-  const timed = agentSnapshot(CONVERSATION);
-  timed.turns[0].views[0].rows = [{ day: 1791370000000, n: 1 }, { day: 1791373600000, n: 2 }];
-  assert.ok(htmlFor(timed).includes('>time-1791370000000<'), 'a time-bucketed axis reads as time, not as an epoch');
+test('a view stored by a display tool the console no longer has is left out of the export, with its call kept', () => {
+  const retired = { ...VIEW, kind: 'chart' } as unknown as DisplayView;
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [CONVERSATION.turns[0].traces[0], { id: 'display', name: 'render_chart', result: { status: 'success' as const }, view: retired }] }] };
+  const snapshot = agentSnapshot(conversation);
+  assert.deepEqual(snapshot.turns[0].views, []);
+  assert.deepEqual(snapshot.turns[0].blocks.map(block => block.kind), ['thought', 'text', 'call', 'call', 'text']);
 });
 
 test('image pagination bounds each canvas and preserves the entire long conversation', () => {
@@ -117,16 +109,66 @@ test('image pages end at a block boundary when one fits, and never shrink below 
   pages.forEach((slice, index) => assert.equal(slice.top, pages.slice(0, index).reduce((sum, previous) => sum + previous.height, 0)));
 });
 
-test('chart ticks are round, bracket the data and keep the zero baseline', () => {
-  assert.deepEqual(chartTicks(2, 10), [0, 2.5, 5, 7.5, 10]);
-  assert.deepEqual(chartTicks(120000, 260000), [0, 100000, 200000, 300000]);
-  assert.deepEqual(chartTicks(-2, 0), [-2, -1.5, -1, -0.5, 0]);
-  assert.deepEqual(chartTicks(0, 0), [0], 'an all-zero series is a baseline, not an invented scale');
-  assert.ok(chartTicks(0.1, 0.3).every(tick => String(tick).length < 6), 'no floating-point tails reach an axis label');
-});
-
 test('the exported control script parses as standalone JavaScript', () => {
   const script = htmlFor().match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
   assert.doesNotThrow(() => new vm.Script(script));
+});
+
+test('a panel is exported block by block, with its named icons inlined and nothing of the model\'s read as markup', () => {
+  const panel: DisplayView = { kind: 'panel', title: 'Last 24 hours', columns: [], rows: [], blocks: [
+    { type: 'stats', items: [{ label: 'Requests', value: '1,204', delta: '+12%', tone: 'success', icon: 'TrendingUp' }, { label: 'Maker', value: '2', icon: 'brand:OpenAI' }] },
+    { type: 'callout', tone: 'warning', text: '<img src=x onerror=alert(1)>' },
+    { type: 'steps', items: [{ label: 'Check quota', status: 'done' }, { label: 'Rotate key', status: 'pending', text: 'After the window' }] },
+    { type: 'meters', items: [{ label: 'Budget', share: 0.8, tone: 'warning' }] },
+    { type: 'links', title: 'Next', items: [{ label: 'Open quota', route: 'quota' }] },
+  ] };
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [{ id: 'display', name: 'render_view', result: { status: 'success' }, view: panel }] }] };
+  const icons = { 'trending-up': [['path', { d: 'M16 7h6v6' }]], 'arrow-up-right': [['path', { d: 'M7 7h10v10' }]] } as const;
+  const html = conversationHTML({ snapshot: agentSnapshot(conversation), labels: LABELS, exportedAt: new Date(0), language: 'en',
+    appearance: { variables: { '--bg': '#121214' }, icons: icons as never } });
+  assert.ok(html.includes('<path d="M16 7h6v6"/>') && html.includes('1,204') && html.includes('+12%'));
+  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;') && !html.includes('<img src=x'));
+  assert.ok(html.includes('aria-label="step-done"') && html.includes('After the window'));
+  assert.ok(html.includes('<span class="meter-value">80%</span>') && html.includes('style="width:80%"'));
+  assert.ok(html.includes('Open quota') && !/href="[^#"]/.test(html), 'a saved document links nowhere outside itself');
+});
+
+test('HTML exports retain inline framing and ground while historical canvases stay cards', () => {
+  for (const frame of ['none', undefined] as const) {
+    const view: DisplayView = { ...VIEW, kind: 'ui', title: 'Inline status', frame };
+    const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [
+      { id: 'display', name: 'render_ui', result: { status: 'success' }, view },
+    ] }] };
+    const html = htmlFor(agentSnapshot(conversation));
+    assert.equal(html.includes('<figure data-frame="none" aria-label="Inline status">'), frame === 'none');
+    const sourceDocument = /srcdoc="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.equal(sourceDocument.includes('body{background:var(--bg)}'), frame === 'none');
+  }
+});
+
+test('a canvas is exported inside the same sandbox, with its markup only ever in the frame\'s own document', () => {
+  const canvas: DisplayView = { kind: 'canvas', title: 'Flow', columns: ['n'], rows: [{ n: 1 }], html: '<script>document.title="</scr"+"ipt>"</script><p id="mark">drawn</p>' };
+  const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [{ id: 'display', name: 'render_canvas', result: { status: 'success' }, view: canvas }] }] };
+  const html = htmlFor(agentSnapshot(conversation));
+  const frame = /<iframe class="canvas-frame"[^>]*sandbox="allow-scripts"[^>]*srcdoc="([^"]*)"><\/iframe>/.exec(html);
+  assert.ok(frame, 'the canvas is a sandboxed frame');
+  assert.ok(!html.includes('<p id="mark">'), 'the markup is not part of the exported document itself');
+  assert.ok(frame[1].includes('&lt;p id=&quot;mark&quot;&gt;drawn') && frame[1].includes('Content-Security-Policy'));
+  assert.ok(html.includes('Canvas in HTML export'));
+});
+
+
+test('Intelligent UI embeds only offline icon assets and preserves interaction scripts in HTML', async () => {
+  const { canvasDocument, uiComposeMessage } = await import('../web/src/agent/canvasDocument.ts');
+  const document = canvasDocument({ html: '<button id="filter">Filter</button><span data-omc-icon="gauge"></span>', rows: [], variables: {}, isDark: true, language: 'en', icons: {
+    gauge: { url: 'data:image/svg+xml;charset=utf-8,%3Csvg%3E%3C/svg%3E', isMono: true },
+    custom: { url: 'data:image/png;base64,AAAA', isMono: false },
+    outbound: { url: 'https://outside.example/icon.svg', isMono: false },
+  } });
+  assert.ok(document.includes('window.OMC_ICONS') && document.includes('OMC={rows:rows') && document.includes('compose:compose'));
+  assert.ok(document.includes('data:image/png;base64,AAAA') && document.includes('data-omc-icon="gauge"'));
+  assert.ok(!document.includes('outside.example'));
+  assert.equal(uiComposeMessage({ type: 'omc-ui-compose', message: 'Compare these results' }), 'Compare these results');
+  for (const data of [null, {}, { type: 'omc-ui-compose', message: '' }, { type: 'omc-ui-compose', message: 'x'.repeat(49 * 1024) }, { type: 'send', message: 'Do it' }]) assert.equal(uiComposeMessage(data), undefined);
 });

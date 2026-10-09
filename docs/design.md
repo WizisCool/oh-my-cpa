@@ -783,6 +783,7 @@ wide table happens inside the list's frame, so the column stays where the reader
 ```text
 radius-sm     4px    inputs, buttons, tags, cards, pips (the app's radius)
 radius-lg     6px    modals/drawers outer shell only
+thread scale  4 · 4 · 6 · 8px     conversation workspaces and approval cards (ADR 0086, below)
 space scale   4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px
 section gap   32px (dashboard sections)
 card padding  20px (antd Card paddingLG)
@@ -1079,6 +1080,29 @@ narrow to read as a trend and an hour too coarse to feel like it was moving.
 
 ### Conversation workspaces
 
+**The thread uses a restrained shape and fill scale** (ADR 0081, refined by ADR 0086). A conversation is read as a document
+with a few objects resting on it, so an element is rounded by what it is, and grouped by a fill
+where the console would draw a box. Printed output and controls share the console's 4px geometry;
+floating surfaces use 6px and larger conversation objects stop at 8px:
+
+| Token | Value | What takes it |
+| --- | --- | --- |
+| `--radius-document` | 4px | printed matter: a figure, a table, a code frame, a mono argument chip |
+| `--radius-control` | 4px | what is pressed inside the thread: a call row, a picker trigger, a chip, a card's buttons |
+| `--radius-surface` | 6px | a field panel or a floating list: a card's change list, a failure note, a popover |
+| `--radius-thread` | 8px | the composer, the operator's bubble, the question panel, an approval card, a suggestion |
+| `--thread-field` / `--thread-field-hover` | `--fg` at 5% / 8% | a borderless grouping fill, and its hover |
+| `--thread-hairline` | `--fg` at 12% | the one edge an object resting on the page may have |
+
+Their pre-hydration defaults are declared in `web/src/index.css`; `THREAD_RADII` and
+`THREAD_FILL_SHARES` in `web/src/theme/palette.ts` own the radii and foreground percentages and `themePaletteCssVariables` in
+`web/src/theme/themeConfig.ts` projects the fill and radius tokens for every preset and custom palette. They apply inside the conversation workspaces and to the approval card
+wherever it is drawn; HTML conversation exports read the same `THREAD_RADII` constants.
+The rest of the console keeps the 4px radius. Rows are separated by spacing
+and a hover fill, never by a rule between each; a state colours its notice faintly and adds no
+edge bar; nothing gains a shadow. Motion stays within §7's budget, with a press scaling a pressed
+object by 2-4% over `--motion-fast`.
+
 The Playground (`/playground`) and the Agent (`/agent`) are one workspace with two bodies. The
 frame, the transcript, the composer, the reasoning disclosure, the code blocks and the side panel
 live in `web/src/components/workspace` and both pages compose them, so two surfaces one click
@@ -1114,6 +1138,8 @@ the gateway serves to that key - so they are drawn as one field. A key is named 
 by its mask only when it has none (§7, "Naming is a first-class action"); the open list shows both,
 which is where two similar names are told apart. Below the 900px breakpoint the target moves onto
 its own row of the head rather than into a menu: which model a message will reach is never hidden.
+A model is led by its maker's mark, in the field and in the open list, and by a neutral box when the
+maker is not recognised; the name stays the call point.
 
 **The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
@@ -1130,10 +1156,12 @@ return the reader to the newest message.
 
 **A message's anatomy.** The operator's message is a filled `--surface` block with a 1px border,
 aligned to the end of the column. An answer is borderless and uses the full column: a head naming
-the model and a status pip, the reasoning as a disclosure with a `--warn` rule on its edge (open
-while reasoning streams and following its newest output until the reader scrolls away, closed for an answer that already finished, the reader's own after that;
-its caret turns with the `fast` motion token and its title does not shimmer, §7 rule 3), the
-Markdown answer, and a foot. The foot states measurements - first content, duration,
+the model and a status pip, the reasoning as an unframed disclosure (open
+while reasoning streams and following its newest output until the reader scrolls away, folded when reasoning finishes and closed for an answer that already finished, the reader's own after that;
+its caret turns with the `fast` motion token). The Agent's disclosure reads "Thinking…" while the
+reasoning is written and "Thought process" once it settles, so the separate activity line names a
+phase only when nothing in the answer does; the Playground names the live phase in the disclosure. A live phase label carries the work-in-flight highlight of ADR 0080. The
+Markdown answer and a foot complete the message. The foot states measurements - first content, duration,
 tokens, TPS - with missing observations left out rather than shown as zero, and carries its actions
 as muted icon buttons with accessible names. Copy acknowledges itself by turning its glyph into a
 check mark; only a failed copy raises a toast.
@@ -1149,18 +1177,60 @@ semantic hues, because a string is not a success. Raw HTML is escaped, links ope
 console, and an image is rendered as a link rather than fetched.
 
 **The composer is one gate.** Enter and the send button reach the same submission, decided on the
-runtime's live state, and the send button reads as blocked (`--surface` fill, `--meta` glyph,
+runtime's live state, and the send button reads as blocked (`--border` fill, `--meta` glyph,
 `aria-disabled`) whenever sending is not possible, with the reason on its tooltip when the page has
-one to give. Send and stop occupy one action slot. While a turn runs with an empty draft it shows stop;
+one to give. Send and stop occupy one action slot and are one shape: a 32px circle filled with
+`--accent-hover`, its glyph in `--accent-on` - an up arrow to send, a 10px rounded square to stop;
+hover deepens the fill to `--accent-active`. It is the only filled shape in the frame and the
+console's one round button, and it takes the same fill as every other primary action so that the
+chosen palette colours it. While a turn runs with an empty draft it shows stop;
 in the Agent, entering a draft replaces stop with "Queue", and queueing clears the draft and
-restores stop. Each queued message is a row above the frame with a remove control. Beneath the composer one line states the boundary
+restores stop. Queued messages wait in a tray resting on the frame - the frame's hairline, open
+where it meets the box, on `--thread-field` - under one `--muted` line that counts them and says
+they go out when the current answer finishes; each is a row with an up arrow in `--meta`, its
+text on one ellipsized line and a remove control, arriving with the 4px rise. The model and the
+reasoning effort stay choosable during a run, because they belong to the next message; only a
+turn waiting on a decision pins them, and a pinned chip takes the disabled ink. Beneath the composer one line states the boundary
 the operator is about to cross: the Playground's spends the key's entitlement, the Agent's names
 what must be allowed before a message can leave.
+
+**`/` runs commands and `@` completes names.** In the Agent, `/` opens the page's commands, and
+every row does something: `/ui` and `/text` set how the next answer is presented,
+and the rest are the page's own actions - stop, retry, edit, new conversation, export as HTML or
+image, open the capability directory or the connection guide. A command is listed only while it
+can run, so an empty conversation offers no retry and an idle one no stop, and no row is a canned
+question. `@` completes a name the operator would otherwise copy from another page - a model, a client
+key alias, a capability. The list opens upward from the frame's top edge on `--elevated` with a
+hairline border and no shadow, one row per entry: a 16px `--muted` icon for a command, the name in
+mono, what it is in `--muted`, the highlighted row on `--border-soft`. Arrow keys move, Enter picks, Escape closes; while a row is
+highlighted Enter belongs to the list and cannot send. A mention lands as the bare name. Up on an
+empty box recalls the messages already sent, newest first. Neither has a button: the placeholder
+names both keys.
+
+**The frame holds what a message is made of and sent with, and nothing that only reports.** The
+Agent's foot has four controls: a 28px round `+` that attaches at the start, and the effort chip,
+the model chip and the send slot at the end. Readings sit under the frame, on the note's line. What the next
+message carries beyond its text sits above the input as 24px hairline chips on `--bg`, each with
+its own remove: an edit of the newest message in `--fg-2`, a presentation (`/ui`, `/text`) in
+`--accent` with an accent border. The chip leaves when the message is sent, and the sent message
+shows the presentation as a 26px `--accent` hairline chip above its bubble.
+
+**The composer's edges meet the answers'.** The transcript reserves a scrollbar gutter
+(`--workspace-gutter`, 8px, zero on touch), which shifts its centred column by half of it; the
+composer is offset by the same half so the two share their left and right edges.
+
+**How full the context is, as a ring and its figure.** Under the Agent's composer, at the end of the note's line, a 14px ring
+- a 2px `--border` track with the used share drawn over it from twelve o'clock - and a percentage in
+small mono state the share of the model's context window the conversation occupied when the last
+turn ended. Both rest in `--meta` and turn `--warn` at 75% and `--danger` at 90%; the figure stays
+because an arc that small cannot show which side of a threshold it is on. The tooltip gives both
+token counts and says the window is reference information. It is absent when the gateway reported no input
+count or the reference catalog lists no window for the model: a guess would read as a measurement.
 
 **The composer starts at one line.** It grows to ten lines on desktop. At the 640px phone
 breakpoint the box grows to five lines, send - and the Playground's image picker - sits beside the
 input instead of in a foot row, and the foot row appears only for a control that needs it (the
-Agent's reasoning effort); frame and note
+Agent's effort and model chips); frame and note
 tighten with it. On a phone the conversation already shares its height with the keyboard, and the
 desktop layout left it a strip between two bars. On desktop the action remains in the foot row. User message text has no paragraph margins
 inside its padded bubble, so one line does not acquire a second layer of vertical spacing.
@@ -1194,7 +1264,7 @@ wordmark and, once chosen, the call point it will reach.
 
 #### Agent
 
-The panel has two tabs: the capability directory and the call details. The directory is the registry itself - the same list the model is offered -
+The drawer beside the conversation holds the capability directory or the connection guide; a call's own details open in the conversation, under the call (ADR 0084). The directory is the registry itself - the same list the model is offered -
 grouped read / write / destructive in that fixed order, each group marked with a pip (`--meta`,
 `--warn`, `--danger`). It is an open list, one hairline row per capability with its description
 clamped to two lines and expanded on selection, because a card per entry made the borders louder
@@ -1208,56 +1278,93 @@ copy for reads as its identifier and registry description.
 capabilities, reason again and answer, so a turn is a sequence of segments - reasoning, answer text,
 capability calls - rather than fixed slots for each kind. The server records the sequence as the
 turn's parts, and the browser rebuilds the same parts from the stream, so the live turn and the
-stored one are identical. Each stretch of reasoning is its own disclosure where it occurred;
-consecutive reasoning and capability calls fold into one chain behind a quiet "Used N capabilities"
-toggle in `--muted` with a turning caret, open while the turn runs or waits on the operator and closed once it is done; the reader's own toggle wins either way. A turn resumed after an approval grows in place below its earlier segments
+stored one are identical. Reasoning disclosures point right when collapsed and down when expanded.
+Each stretch of reasoning is its own disclosure where it occurred;
+consecutive reasoning and capability calls form one timeline (ADR 0084): a summary line in `--muted` -
+a steps icon, "Used N capabilities", any failures counted in `--danger`, and a turning caret - with
+the steps under it on a 1px `--thread-hairline` rail that runs through each step's 14px mark. The
+timeline is open while it is the end of a running answer or a call in it waits on the operator, and
+folds to its summary once the answer has moved past it; folded mid-run, the summary reads
+"Working…" with the work-in-flight highlight. The reader's own toggle wins either way. A turn resumed after an approval grows in place below its earlier segments
 rather than appearing as a second answer, and copying the answer takes every text segment, without
 the reasoning.
 
-**A capability call is one row.** A 7px square mark in the status hue (`--meta` rest, `--success`,
-`--danger`; a spinner in `--accent` while running, a `--warn` attention glyph when the call waits on
-the operator or its outcome is partial, expired or unconfirmed), the localized title in `--fg`, the
-identifier in small mono `--meta`, the arguments in brief in mono `--muted` and ellipsized, then the
-status in words and the duration in tabular figures. The row appears the moment the call is
-announced, before it has a result. Selecting it opens the details tab - status, start and duration,
-the full arguments, and permitted result details - and marks the row as
-selected; a failed call adds its code and detail beneath the row.
+**A capability call is a disclosure.** Its row is a mark in the status hue (a `--success` check, a
+`--danger` cross, a 5px `--meta` dot at rest; a spinner in `--accent` while running, a `--warn`
+attention glyph when the call waits on the operator or its outcome is partial, expired or
+unconfirmed), the localized title in `--fg-2` - carrying the work-in-flight highlight of ADR 0080
+while the call runs - the arguments in brief as an ellipsized mono chip on `--thread-field`, the
+status in words only when it is not a plain success, the duration in tabular figures and a caret.
+The row appears the moment the call is announced, before it has a result. Opening it unfolds, under
+the row and aligned to its text, a `--thread-field` panel: the identifier in mono, the status and
+the start time, then the full arguments and the receipt the model was given as code blocks capped
+at 280px. Both the timeline and this panel open by a grid row growing within `base`. A failed call
+states its code and detail beneath the row whether or not it is open.
 
-Database queries use that same single row, with no inline result toggle or raw-result block in the
-details panel. Their status, SQL arguments and timing remain inspectable; data selected for an
-explicit display belongs in the final answer's figure.
+A database query is the same disclosure without a receipt block: its status, SQL arguments and
+timing are inspectable, its rows stay on the server, and data selected for an explicit display
+belongs in the final answer's figure.
 
-**Display calls are part of the answer.** A `render_table` or `render_chart` call is drawn outside
-the chain, where the answer reads, as a figure in a hairline `--border` frame: a title in `--fg`
-600, a sortable table with copy and download as CSV, or a chart on the dashboard's chart stack
-(series palette, shared tooltip, `chart-slot` height reservation, reduced-motion rule, horizontal ellipsised category labels with the full value in the tooltip) with a
-Chart / Data switch and a PNG download composited on `--surface`. The chart runtime loads only when
-a chart is drawn. While a display call resolves, or when the server refused its reference, it is an
-ordinary call row.
+**Display calls are part of the answer.** A `render_ui` call, or a stored legacy display, is drawn outside
+the chain at its own place among the answer parts, where the answer reads. New calls default to
+`frame: none`: a component on the conversation ground, with no frame or title bar, retaining an
+accessible title and quiet controls. Explicit `frame: card` draws a hairline `--border` frame under
+a title in `--fg` 600; stored displays retain their original framing (ADR 0082, 0087). A stored panel (`render_view`, ADR 0079) holds blocks, each drawn only
+from tokens: `stats` as tiles on one `--border-soft` hairline grid (label `--muted` 12px with an
+optional 13px icon, value 20px 600 tabular, change toned by `--success` / `--warn` / `--danger`);
+`fields` as label/value rows on `--border-soft` rules; `callout` as a 2px toned left rule on a 7-8%
+tint of the same tone; `steps` as 9px marks on a `--border` rail (filled `--success` done, ringed
+`--accent` active, hollow pending, filled `--danger` failed); `meters` as a 4px `--series-track`
+bar filled by `--accent` or the tone; `links` as 28px hairline buttons that take `--accent` on
+hover. Icons are 1.5px-stroke Lucide outlines in `currentColor`; an unresolved name is a small
+neutral circle of the same box. A generated UI (`render_ui`, with stored `render_canvas` views kept readable, ADR 0072) is the figure frame around a
+borderless sandboxed frame on `--surface`, with four quiet icon actions: view source (the same
+button, as an eye, returns to the rendered UI), save as image, download HTML, full screen. Its
+markup is composed from the frame's own components - stacks, fitting grids, cards, stats, toned
+badges and callouts, key-value lists, fields, tabs and a pickable node-and-arrow diagram - styled
+with the console's tokens and all fluid (ADR 0085). While the model is still writing it, the
+draft component draws the markup so far without executing model scripts. Card drafts show a
+dashed frame, title and "Drawing…" mark; inline drafts retain the accessible title and status
+without visible card chrome, and the finished canvas takes its place at the height
+the draft had reached. Its
+height follows its content between 48px and 16384px, measured to include overflowing content
+without using the viewport as a minimum, so it can both grow and shrink after local interactions.
+Normal content scrolls with the transcript without a nested root scrollbar; content above the
+cap scrolls on a thin bar. Component surfaces and diagram nodes use `--radius-surface` (6px);
+controls use `--radius-control` (4px), including in streamed previews and HTML exports. Charts and tables inside it are drawn by the console's kit (ADR 0073) from the theme
+variables the frame is given, so they follow the palette in both schemes: marks on the series
+palette, `--border` grid rules, `--muted` tick and legend text formatted the way the console
+formats tokens, money, durations and shares; a table with `--muted` 12px heads that sort on click,
+`--border-soft` row rules and right-aligned tabular figures. Full screen fixes the same figure over
+the viewport on `--surface` without a border, the frame filling what the title bar leaves; Escape,
+the same button or the platform's Back gesture returns it, and a dashed hairline box holds its
+place in the answer meanwhile. The saved image is the frame's own document at 2x. While a display call's
+arguments arrive it is a draft figure in that position; a refused call remains an ordinary call row.
 
 A finished answer's foot states its status, duration and start time, its rounds and calls, and the
 tokens the gateway reported, and carries copy and "export this answer" (HTML) as muted icon
-actions. The head's Export menu saves the whole conversation as an HTML page, a PNG image or JSON.
+actions. The newest answer's foot leads those with retry and edit when its turn changed nothing;
+editing returns the message's words to the composer under an "editing" chip with a dismiss.
+A text file attached to a message (ADR 0074) is a 28px hairline chip of name and remove in the
+composer, and a 26px chip of paperclip, name and `--meta` size above the sent bubble. The head's Export menu saves the whole conversation as an HTML page, a PNG image or JSON.
 
 **An exported conversation is the workspace, not a report about it.** The HTML page and the PNG are
 drawn from the resolved palette and the embedded mono face (`web/src/agent/conversationStyles.ts`), so
 an export in an operator's own palette is in that palette. The page keeps the workspace's anatomy -
-the 760px reading column, the right-aligned operator bubble on `--surface`, the 7px status pip, quiet
+the 760px reading column, the right-aligned operator bubble on the thread field at the 8px thread radius, the 7px status pip, quiet
 12px heads and feet - under a head of wordmark, hairline and title, and a one-line masthead (model,
 turns, tokens, export time). Reasoning and the capability chain are disclosures with a rotating
-chevron and a 1px `--border` rail; a code block is a `--surface` frame whose head names the language;
-a display view is a `--surface` figure with a Chart / Data switch. Charts are inline SVG on the series
-palette: `--border` grid rules, a `--muted` zero baseline and tick text, round tick values, and a
-legend of 8px swatches with `--fg-2` labels - series colour never tints text. A pie is a ring beside a
-ledger of label, value and share. A failure is a bordered note with a 2px `--danger` edge. The PNG is
+chevron, the chain indented and the reasoning set on the page in `--fg-2`; a code block is a `--surface` frame whose head names the language;
+a display view is a `--surface` figure: a panel block by block, a canvas as the sandboxed frame it
+is in the workspace. A failure is a note on an 8% `--danger` fill at 10px. The PNG is
 the same document as an 840px card at 2x with 40px margins: controls, carets and reasoning are left
 out and the capability chain is shown open, because a picture has nothing to click.
 
 **A prepared operation is decided where it was raised** (ADR 0043): a card under the call, on
-`--surface` with a 1px border and a 2px `--warn` rule on its leading edge (`--danger` for a
-destructive capability). It names the capability's permission as a tag, leads with a sentence on
+`--surface` with one `--thread-hairline` edge at the thread radius (the edge takes `--danger` at
+45% for a destructive capability). It names the capability's permission as a tag, leads with a sentence on
 what Allow and Deny do and the localized description, then the target in mono and a form-shaped
-change as label/value rows (anything deeper stays JSON), and ends with one decision, Deny or Allow;
+change as label/value rows on a field panel (anything deeper stays JSON), and ends with one decision, Deny or Allow;
 deciding continues the run (ADR 0035). A destructive capability draws Allow in the danger hue and
 adds a "cannot be undone" line; nothing is typed to confirm. Private input and the OAuth hand-off
 appear on the card when the capability needs them. While a decision is open the composer refuses to
@@ -1286,20 +1393,68 @@ turn footer for a pending question read "Awaiting your answer".
 
 Sending needs no separate grant. The line beneath the composer states that a message, and the OMC
 data the agent reads to answer it, go to the selected CPA model and its upstream (ADR 0027); sending
-is the act that line describes. The composer's foot carries the reasoning effort as a quiet text
-button naming the current level, with a menu of the named levels and "use model default", which
-leaves the field out of the request. The operator's message enters the transcript the moment it is
+is the act that line describes. Model and reasoning effort use the same 28px quiet chip,
+shadowless hairline popover on `--surface`, and named option rows (ADR 0077). A surface opens
+above its trigger, or below when the room above is under 280px and the room below is larger, and
+is capped to the room on that side less a 12px margin, so its list scrolls rather than leaving the
+window. A re-read keeps the list it is re-reading, and until the remembered target has been read
+the model chip holds a 104px placeholder instead of naming a choice. The model surface
+is 304px wide, bounded to the viewport; its list leads each call point with its maker's mark,
+adds search beyond eight names, and offers the client key as a secondary footer action that
+opens a key list in the same surface. The reasoning surface is 180px wide, with model default
+first followed by parameter names with secondary localized descriptions. Its text trigger shows the
+current parameter name (`Low`, `High`, `Max`, `xHigh`) in `--fg` at regular 400 weight.
+These display spellings are consistent across languages; request values retain their original casing.
+The current row uses `--selected-inset`,
+`--fg` and 600 weight. Model rows also use an ink-colored check. Reasoning rows pair the
+primary parameter name on the left with its localized description in `--muted` at the trailing
+edge. Identical descriptions are omitted. Desktop rows are 36px; phone and coarse-pointer
+rows are 44px. One roving tab stop follows the selected choice; arrows, Home and End browse
+without changing the request. Enter, Space or click confirms and closes; Escape closes
+without changing the value. Both return focus to the chip. Existing theme tokens are reused.
+A stored conversation's first load is a thread-shaped placeholder at the column's width. A display
+call is drawn where the model made it, between the text before and after it (ADR 0082); one the
+model is still writing is a draft figure in that place - the figure's frame
+with a dashed edge, its title once the arguments hold it, and a `--thread-field` stage holding the
+generation loader (a three-by-three field of `--fg` dots with a lit run travelling through it)
+over its label - which the settled figure replaces in place. Figures, drafts, call rows and
+follow-up questions arrive with opacity and a 4px rise inside `base`. An inline view (`frame: none`, the default for new calls) has no edge, ground or
+title bar: its canvas sits on `--bg` and its controls rest at 45% opacity until hovered or
+focused. Reasoning is written straight on the page in `--fg-2` 12.5px with no frame; while it
+arrives it is a 168px window that keeps to its newest line after Markdown commits and viewport
+reflows. The top edge fades only while following and only when history is hidden above it; short
+text and manual scrollback retain full ink. Scrolling to the bottom resumes following, and reopening
+a live disclosure shows the newest line (320px once settled and reopened). Answer text that is still
+streaming arrives from `--accent` at 20% opacity and reaches the ink over `base`, so only the
+newest few words are ever tinted, with a 2px `--accent` caret
+pulsing after its last word; both stop with the stream, and reduced motion removes them (ADR 0080).
+The operator's message enters the transcript the moment it is
 sent and the composer clears; a message the server refuses before accepting it returns to an empty
 composer. The model's reasoning streams into the live turn as the same reasoning disclosure the
 Playground uses, open while it is being written, and stays with the stored turn, kept apart from
 the answer. The key, model and effort are the operator's choice and are remembered across reloads;
 New conversation replaces the transcript and nothing else. Failure is stated
 as a sentence with its code beneath it, and a run the operator stopped reads as stopped rather than
-failed. A live run carries an activity line - the current round in `--muted` tabular
-figures, what it is waiting for or which capability it is calling, and for how long - because a
-spinner cannot tell working from stuck; its pip pulses as an
-indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as
-keyboard-reachable buttons that fill the composer without sending.
+failed. A live run carries one activity line: the generation loader at mark size and how long the
+run has taken, because a spinner cannot tell working from stuck. A phase is named where it is
+drawn - the reasoning disclosure reads "Thinking…" while it is written, a running call's row
+carries its title - so the line itself names one only when nothing in the answer does: waiting on
+the model, or retrying it. The elapsed time counts on the browser's clock; a run rejoined after
+leaving the page starts from the server's stamp brought onto that clock by the response's `Date`
+header, so a browser whose clock trails its server never shows a stalled zero. The line follows
+the reasoning body in normal document flow with the answer's 12px gap. Round counts remain in
+settled-turn measurements, not the live activity line.
+The Agent's page actions sit together at the conversation's top trailing corner: New conversation
+first, labelled and hairline-edged, once there is a conversation to replace, then a short rule and
+quiet icon actions for export, the capability directory and the connection guide. A phone keeps
+the icon and drops the label. The Playground's head carries one labelled button, New conversation,
+and quiet icon actions for export, refresh and the side panel, whose icon is
+`--accent` while the panel is open. The empty conversation offers example questions as
+keyboard-reachable buttons that fill the composer without sending, and under them one `--meta` line
+of `kbd` hints - `/` for commands, `@` for names, Up for the last message - which a phone leaves out. The newest answer may end with up
+to three follow-up questions the model offered, each a slip with a `--thread-hairline` edge at the
+thread radius that fills with `--thread-field` on hover; choosing one fills the composer without
+sending, and they leave with the next message.
 
 ### Model-row disclosure
 
@@ -1402,6 +1557,9 @@ and animation the console owns;
 two spellings of one budget cannot drift apart again. `roll` is the only token with an exception
 attached, and it is scoped to the dashboard by rules 5 and 8. `scroll` is a JavaScript-only token
 (`MOTION_SCROLL` in `themeConfig.ts`) for the input glide below; no stylesheet animates a scroll.
+The separate `--motion-live-text` token (`MOTION_LIVE_TEXT`) is a 900ms linear loop for short
+work-in-flight labels, not a state-transition budget. `themePaletteCssVariables` and the root
+stylesheet project the same period for every palette, pinned by the theme logic suite.
 
 ### The budget is enforced, not documented
 
@@ -1414,9 +1572,9 @@ one, and an exception that stops matching a rule is itself a failure — the lis
 things that were once true. Two kinds exist. A `layout` exception waives rule 1 for a disclosure,
 where a reflow is the point and the alternative is an accordion that snaps open. A `duration`
 exception waives the token requirement for a loop whose period is how long one cycle takes rather
-than a transition between two states: the heatmap's re-read bar, the icon spinner, the Agent's
-running pip, the loading bar's waiting activity and the first-load placeholders' breath. §7 handles
-those by freezing or removing them under reduced motion rather than by shortening them.
+than a transition between two states: the heatmap's re-read bar, the icon spinner, the generation
+loader, the streaming caret, the loading bar's waiting activity and the first-load placeholders'
+breath. §7 handles those by freezing or removing them under reduced motion rather than by shortening them.
 `scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
@@ -1447,6 +1605,10 @@ Hard rules:
    gradients cost frames and clash with the flat aesthetic. Placeholders are the
    console's own flat blocks (`Placeholder.tsx`), and they *breathe*: an opacity
    cycle, staggered one `base` per row, frozen under reduced motion (ADR 0052).
+   The one swept highlight is on a short text label for work still running in the
+   Agent and Playground: a 3.2em `--fg` glint crosses the label's own ink on the 900ms linear
+   `--motion-live-text` loop, both painted by one background clipped to the glyphs, so it
+   repaints one line and each glyph is drawn once at full weight (ADR 0080). Reduced motion and unsupported text masking leave plain readable text.
 4. **Suppress spinner flash.** A request that resolves quickly must never paint a
    loading indicator at all (the loading bar waits 200ms before painting).
    Background auto-refresh must not paint a loading state at all; a reading that
@@ -2058,8 +2220,8 @@ Agent activity, running capability rows and Playground running turns use isolate
 labels. A shared visible-only animation-frame clock quantizes milliseconds to 10ms and seconds
 to 0.1s; a formatted external-store snapshot limits second-scale label renders to 10Hz without
 rerendering the page or transcript. Hidden documents and settled labels schedule no frames.
-The Stop button uses the existing `--border` / `--surface` tokens and no shadow, with the existing
-`--danger` border on hover/active. This changes component usage, not the palette or token mapping.
+Stop is the composer's send slot with a square glyph (see "The composer is one gate"); it uses the
+existing `--accent-hover` / `--accent-on` tokens and no shadow. This changes component usage, not the palette or token mapping.
 
 ### Custom icon picker
 

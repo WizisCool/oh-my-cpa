@@ -14,10 +14,12 @@
   ],
   "weights": {
     "agent": 6.0,
+    "agent-attach": 3.2,
     "agent-failure": 3.6,
     "agent-live": 10.39,
     "agent-narrow": 3.96,
     "agent-question": 3.61,
+    "agent-replace": 3.8,
     "agent-stream": 2.56,
     "agent-views": 2.83,
     "audit-trail": 1.76,

@@ -1,6 +1,9 @@
+import { splitAttachedFiles } from './attachments';
+import type { AttachedFile } from './attachments';
 import type { AppendMessage, ThreadMessageLike } from '@assistant-ui/react';
 import type { RunFrame } from '../../agent/runReducer';
-import type { Conversation, Trace, Turn, TurnPart } from '../../agent/types';
+import type { Conversation, Presentation, Trace, Turn, TurnPart } from '../../agent/types';
+import { getAppConfig } from '../../types/config';
 import { extractThinking } from '../playground/state';
 import { ASK_QUESTION, turnParts } from './state';
 
@@ -22,12 +25,21 @@ type ToolCallPart = Extract<MessagePart, { type: 'tool-call' }>;
 export interface LiveRun {
   frame: RunFrame;
   pendingMessage: string;
+  pendingImages: readonly string[];
+  /** The stored turn the run's message replaces. */
+  replacedTurnID: string;
   isResuming: boolean;
 }
 
 /** The fields of a stored turn the message's own views read, carried in its metadata. */
 export interface AgentMessageCustom {
   turn?: Turn;
+  /** Files that came with a user message. */
+  files?: AttachedFile[];
+  /** The presentation a command asked this message's answer to take. */
+  present?: Presentation;
+  /** Where each image sent with a user message is read from. */
+  images?: string[];
   isLive?: boolean;
   [key: string]: unknown;
 }
@@ -38,7 +50,7 @@ export interface AgentMessageCustom {
  * step rather than adding a second one.
  */
 export function mergeLiveTurn(turn: Turn | undefined, frame: RunFrame): { parts: TurnPart[]; traces: Trace[] } {
-  const stored = turn ? turnParts(turn) : [];
+  const stored = turn && !frame.hasAuthoritativeParts ? turnParts(turn) : [];
   const storedCalls = new Set(stored.flatMap(part => (part.type === 'tool' && part.trace_id ? [part.trace_id] : [])));
   const parts = [...stored, ...frame.parts.filter(part => part.type !== 'tool' || !storedCalls.has(part.trace_id ?? ''))];
   const traces = new Map<string, Trace>();
@@ -126,12 +138,28 @@ export function turnMessageStatus(turn: Turn): NonNullable<ThreadMessageLike['st
   }
 }
 
+/** The operator's message: their words as its text, the files sent with them named beside it. */
+function userMessage(id: string, sent: string, present?: Presentation, images: readonly string[] = []): ThreadMessageLike {
+  const { text, files } = splitAttachedFiles(sent);
+  return {
+    id,
+    role: 'user',
+    content: [{ type: 'text', text }],
+    ...(files.length || present || images.length ? { metadata: { custom: { files, present, images: [...images] } satisfies AgentMessageCustom } } : {}),
+  };
+}
+
+/** Where a stored image is read from; it is served only while the conversation references it. */
+export function agentImageURL(id: string): string {
+  return `${getAppConfig().apiBaseUrl}/agent/images/${encodeURIComponent(id)}`;
+}
+
 /** The stored turns, one user and one assistant message each. */
 export function storedMessages(turns: Turn[]): ThreadMessageLike[] {
   return turns.flatMap((turn, index) => {
     const isLast = index === turns.length - 1;
     return [
-      { id: `${turn.id}:user`, role: 'user' as const, content: [{ type: 'text' as const, text: turn.user }] },
+      userMessage(`${turn.id}:user`, turn.user, turn.present, turn.images?.map(image => agentImageURL(image.id))),
       {
         id: `${turn.id}:assistant`,
         role: 'assistant' as const,
@@ -164,11 +192,14 @@ export function agentThreadMessages(conversation: Conversation | undefined, stor
       },
     ];
   }
+  // A retry or an edit keeps the replaced turn's images, which the server already holds.
+  const replaced = live.replacedTurnID ? turns.find(turn => turn.id === live.replacedTurnID) : undefined;
+  const images = live.pendingImages.length ? live.pendingImages : replaced?.images?.map(image => agentImageURL(image.id)) ?? [];
   const turnID = live.frame.turnId || 'live';
   const merged = mergeLiveTurn(undefined, live.frame);
   return [
     ...stored,
-    ...(live.pendingMessage ? [{ id: `${turnID}:user`, role: 'user' as const, content: [{ type: 'text' as const, text: live.pendingMessage }] }] : []),
+    ...(live.pendingMessage || images.length ? [userMessage(`${turnID}:user`, live.pendingMessage, undefined, images)] : []),
     {
       id: `${turnID}:assistant`,
       role: 'assistant',
@@ -184,7 +215,19 @@ export function agentThreadMessages(conversation: Conversation | undefined, stor
  * travels as a Markdown quote ahead of the question, which is how the model reads it.
  */
 export function appendMessageText(message: AppendMessage): string {
-  const text = message.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n').trim();
+  const typed = message.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n').trim();
+  // Attached files follow the operator's words, each already a `<file>` block (ADR 0074).
+  const files = (message.attachments ?? []).flatMap(attachment => attachment.content.flatMap(part => (part.type === 'text' ? [part.text] : [])));
+  const text = [typed, ...files].filter(Boolean).join('\n\n');
+  return quotedText(message, text);
+}
+
+/** The images a message sends, as the data URLs the attachment adapter read them into. */
+export function appendMessageImages(message: AppendMessage): string[] {
+  return (message.attachments ?? []).flatMap(attachment => attachment.content.flatMap(part => (part.type === 'image' ? [part.image] : [])));
+}
+
+function quotedText(message: AppendMessage, text: string): string {
   const quote = (message.metadata?.custom as { quote?: { text?: string } } | undefined)?.quote?.text?.trim();
   if (!quote) return text;
   return `${quote.split(/\r?\n/).map(line => `> ${line}`).join('\n')}\n\n${text}`;

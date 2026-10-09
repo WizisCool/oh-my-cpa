@@ -25,7 +25,57 @@ type AgentMessage struct {
 	Content    string     `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	// Images are the pictures the operator sent with a user message.
+	Images []AgentImage `json:"images,omitempty"`
 }
+
+// AgentImage names one image of a message. A stored message keeps the reference only - the
+// bytes live beside the conversation, not in it - so URL is filled in for the request being
+// built and never serialised with the message.
+type AgentImage struct {
+	ID        string `json:"id"`
+	MediaType string `json:"media_type"`
+	Bytes     int    `json:"bytes"`
+	// URL is the image as a data URL.
+	URL string `json:"-"`
+}
+
+// IMAGE_UNAVAILABLE stands where an image was sent earlier in the conversation and is no longer
+// part of the request, so the model does not answer as if it could still see it.
+const IMAGE_UNAVAILABLE = "[An image the operator attached here is no longer in view. Ask for it again if it is needed.]"
+
+// ValidateImage reports whether a data URL is an image a model may be sent: an allowed type whose
+// bytes are that type, within the size and pixel limits the Playground applies.
+func ValidateImage(dataURL string) error { return validateImage(dataURL) }
+
+// agentWireMessages is the messages as the gateway takes them, and the bytes of image data among
+// them. A message with images becomes multi-part content; every other message stays the plain
+// string it always was, which is the form every provider behind the gateway accepts.
+func agentWireMessages(messages []AgentMessage) ([]any, int) {
+	wire := make([]any, len(messages))
+	imageBytes := 0
+	for index, message := range messages {
+		if len(message.Images) == 0 {
+			wire[index] = message
+			continue
+		}
+		parts := []Content{}
+		if strings.TrimSpace(message.Content) != "" {
+			parts = append(parts, Content{Type: "text", Text: message.Content})
+		}
+		for _, image := range message.Images {
+			if image.URL == "" {
+				parts = append(parts, Content{Type: "text", Text: IMAGE_UNAVAILABLE})
+				continue
+			}
+			imageBytes += len(image.URL)
+			parts = append(parts, Content{Type: "image_url", ImageURL: &ImageURL{URL: image.URL}})
+		}
+		wire[index] = map[string]any{"role": message.Role, "content": parts}
+	}
+	return wire, imageBytes
+}
+
 type AgentTool struct {
 	Type     string         `json:"type"`
 	Function ToolDefinition `json:"function"`
@@ -55,9 +105,10 @@ func ValidReasoningEffort(value string) bool {
 // is emitted as `thought` events and never enters the reply, so it can be shown as reasoning
 // without becoming part of the conversation the next round is built from.
 func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEffort string, messages []AgentMessage, tools []AgentTool, emit func(Event) error) (AgentReply, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	payload := map[string]any{"model": model, "messages": messages, "tools": tools, "tool_choice": "auto", "stream": true, "stream_options": map[string]any{"include_usage": true}}
+	wire, _ := agentWireMessages(messages)
+	payload := map[string]any{"model": model, "messages": wire, "tools": tools, "tool_choice": "auto", "stream": true, "stream_options": map[string]any{"include_usage": true}}
 	if effort := strings.TrimSpace(reasoningEffort); effort != "" {
 		if !ValidReasoningEffort(effort) {
 			return AgentReply{}, errors.New("invalid_parameters")
@@ -65,8 +116,8 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 		payload["reasoning_effort"] = effort
 	}
 	raw, err := json.Marshal(payload)
-	if err != nil || len(raw) > 256<<10 {
-		return AgentReply{}, errors.New("context_budget_exceeded")
+	if err != nil {
+		return AgentReply{}, err
 	}
 	response, err := client.request(ctx, http.MethodPost, "/v1/chat/completions", bytes.NewReader(raw))
 	if err != nil {
@@ -82,7 +133,6 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	result := AgentReply{}
 	calls := map[int]*ToolCall{}
-	total := 0
 	finish := ""
 	var data []string
 	isDone := false
@@ -115,8 +165,11 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 			Usage *Usage          `json:"usage"`
 			Error json.RawMessage `json:"error"`
 		}
-		if json.Unmarshal([]byte(text), &chunk) != nil || len(chunk.Error) > 0 && string(chunk.Error) != "null" {
+		if json.Unmarshal([]byte(text), &chunk) != nil {
 			return &Error{Code: "invalid_gateway_response"}
+		}
+		if len(chunk.Error) > 0 && string(chunk.Error) != "null" {
+			return decodeAgentStreamError(chunk.Error)
 		}
 		for _, choice := range chunk.Choices {
 			if choice.Index != 0 {
@@ -141,8 +194,8 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 				}
 			}
 			for _, delta := range choice.Delta.ToolCalls {
-				if delta.Index < 0 || delta.Index >= 24 {
-					return errors.New("tool_budget_exceeded")
+				if delta.Index < 0 {
+					return &Error{Code: "invalid_gateway_response"}
 				}
 				call := calls[delta.Index]
 				if call == nil {
@@ -155,7 +208,7 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 				if delta.Type != "" && delta.Type != "function" {
 					return &Error{Code: "unsupported_output"}
 				}
-				if len(call.ID) > 256 || len(call.Function.Name) > 64 || len(call.Function.Arguments) > 32<<10 {
+				if len(call.ID) > 256 || len(call.Function.Name) > 64 || len(call.Function.Arguments) > 128<<10 {
 					return errors.New("tool_input_too_large")
 				}
 			}
@@ -170,10 +223,6 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 	}
 	for scanner.Scan() {
 		line := scanner.Text()
-		total += len(line)
-		if total > MaxResponseBytes {
-			return result, &Error{Code: "response_too_large"}
-		}
 		if line == "" {
 			if err := dispatch(); err != nil {
 				return result, err
@@ -208,4 +257,52 @@ func (client *Client) StreamAgent(ctx context.Context, model string, reasoningEf
 		return result, &Error{Code: "unsupported_output"}
 	}
 	return result, nil
+}
+
+// streamFailureCode maps the code or type a stream error frame carries onto the console's own
+// vocabulary. The empty string means the frame named nothing this gateway understands, which
+// decodeAgentStreamError reads as a refusal of the request.
+func streamFailureCode(code string) string {
+	switch code {
+	case "context_length_exceeded", "context_window_exceeded", "prompt_too_long":
+		return "context_length_exceeded"
+	case "request_too_large":
+		return "request_too_large"
+	case "model_not_found", "unsupported_parameter", "invalid_image":
+		return code
+	case "server_error", "api_error", "internal_error", "overloaded_error", "rate_limit_error", "service_unavailable", "timeout_error":
+		// A fault the provider names as transient is an outage, not a verdict on this request.
+		return "upstream_rejected"
+	}
+	return ""
+}
+
+// Only structured codes and known parameter names cross the inference boundary. A streaming
+// error may contain the same sensitive request excerpts as an HTTP rejection.
+//
+// The status line that would separate a refusal from an outage was already spent, so the frame's
+// own words decide: one that names a transient fault keeps the retryable `upstream_rejected`, and
+// one that names a verdict - or nothing this gateway knows - is a refusal another attempt would
+// pay for twice.
+func decodeAgentStreamError(raw json.RawMessage) *Error {
+	failure := &Error{Code: "upstream_stream_rejected"}
+	var payload struct {
+		Code  string `json:"code"`
+		Type  string `json:"type"`
+		Param string `json:"param"`
+	}
+	if json.Unmarshal(raw, &payload) != nil {
+		return &Error{Code: "invalid_gateway_response"}
+	}
+	for _, code := range []string{payload.Code, payload.Type} {
+		if classified := streamFailureCode(code); classified != "" {
+			failure.Code = classified
+			break
+		}
+	}
+	switch payload.Param {
+	case "temperature", "top_p", "max_tokens", "reasoning_effort", "model", "messages":
+		failure.Parameter = payload.Param
+	}
+	return failure
 }

@@ -1,6 +1,6 @@
 import { theme, type ThemeConfig } from 'antd';
 
-import type { ResolvedPalette, ThemePalette } from './palette';
+import { THREAD_FILL_SHARES, THREAD_RADII, type ResolvedPalette, type ThemePalette } from './palette';
 
 /**
  * The palette projected onto Ant Design, and onto the stylesheet's custom properties.
@@ -78,6 +78,9 @@ export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic
  * would stall at each one.
  */
 export const MOTION_SCROLL: MotionToken = { duration: 160, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' };
+
+/** A live label repeats this glyph-only sweep; unlike a transition, its period lasts with the work. */
+export const MOTION_LIVE_TEXT: MotionToken = { duration: 900, easing: 'linear' };
 
 export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'palette'>): ThemeConfig {
   const dark = resolved.mode === 'dark';
@@ -290,6 +293,14 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
     '--heatmap-zero-recorded': palette.heatmapZeroRecorded,
     '--heatmap-tip-link': palette.heatmapTipLink,
     '--series-track': palette.seriesTrack,
+    '--motion-live-text': `${MOTION_LIVE_TEXT.duration}ms`,
+    '--radius-document': `${THREAD_RADII.document}px`,
+    '--radius-control': `${THREAD_RADII.control}px`,
+    '--radius-surface': `${THREAD_RADII.surface}px`,
+    '--radius-thread': `${THREAD_RADII.thread}px`,
+    '--thread-field': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.field}%, transparent)`,
+    '--thread-field-hover': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.fieldHover}%, transparent)`,
+    '--thread-hairline': `color-mix(in srgb, var(--fg) ${THREAD_FILL_SHARES.hairline}%, transparent)`,
   };
   palette.series.forEach((color, index) => {
     variables[`--series-${index + 1}`] = color;

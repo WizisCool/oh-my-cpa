@@ -117,23 +117,23 @@ func readError(response *http.Response) *Error {
 		failure.Code = "model_or_endpoint_missing"
 	case 429:
 		failure.Code = "upstream_rate_limited"
+	case 413:
+		failure.Code = "request_too_large"
 	}
 	var payload struct {
-		Error struct {
-			Code  string `json:"code"`
-			Param string `json:"param"`
-		} `json:"error"`
+		Error json.RawMessage `json:"error"`
 	}
-	if json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&payload) == nil {
-		switch payload.Error.Code {
-		case "context_length_exceeded", "model_not_found", "unsupported_parameter", "invalid_image":
-			failure.Code = payload.Error.Code
+	if json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&payload) == nil && len(payload.Error) > 0 {
+		structured := decodeAgentStreamError(payload.Error)
+		// A body that named a code is more specific than the status line; the decoder's own
+		// defaults name nothing, and overwriting the status with one would lose the 4xx/5xx split
+		// the retry loop reads.
+		if structured.Code != "upstream_rejected" && structured.Code != "upstream_stream_rejected" && structured.Code != "invalid_gateway_response" {
+			failure.Code = structured.Code
 		}
-		switch payload.Error.Param {
-		case "temperature", "top_p", "max_tokens", "reasoning_effort", "model", "messages":
-			failure.Parameter = payload.Error.Param
-		}
+		failure.Parameter = structured.Parameter
 	}
+
 	return failure
 }
 func (client *Client) ListModels(ctx context.Context) ([]Model, error) {

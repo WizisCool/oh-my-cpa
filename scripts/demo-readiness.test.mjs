@@ -56,7 +56,7 @@ test('cancelling observation removes listeners and is safe more than once', () =
 });
 
 test('content readiness rejects a sidebar-only heading, loading shells and missing detail', () => {
-  const route = DEMO_ROUTES.find((candidate) => candidate.path === '/agent');
+  const route = { ...DEMO_ROUTES.find((candidate) => candidate.path === '/ai-providers'), detail: 'providers_list' };
   const visible = (textContent) => ({ textContent, getClientRects: () => [{}] });
   let headings = [];
   let loading = [];
@@ -77,6 +77,36 @@ test('content readiness rejects a sidebar-only heading, loading shells and missi
     assert.equal(hasDemoContent(route), true);
     content.getClientRects = () => [];
     assert.equal(hasDemoContent(route), false);
+  } finally {
+    if (original === undefined) delete globalThis.document;
+    else globalThis.document = original;
+  }
+});
+
+test('Agent readiness requires its welcome identity and content, not sidebar chrome', () => {
+  const route = DEMO_ROUTES.find(candidate => candidate.path === '/agent');
+  const identitySelector = '[data-testid="agent-empty"] [aria-label="Oh My CPA"]';
+  const welcomeSelector = '[data-testid="agent-empty"]';
+  const visible = () => ({ textContent: '', getClientRects: () => [{}], getAttribute: name => name === 'aria-label' ? 'Oh My CPA' : null });
+  let identities = [];
+  let loading = [];
+  let welcome;
+  const original = globalThis.document;
+  globalThis.document = {
+    querySelectorAll: selector => selector === identitySelector ? identities : selector === 'h1.terminal-title' ? [] : loading,
+    querySelector: selector => selector === welcomeSelector ? welcome : null,
+  };
+  try {
+    assert.equal(hasDemoContent(route), false, 'a page shell alone is not content');
+    identities = [visible()];
+    assert.equal(hasDemoContent(route), false, 'the welcome content must exist');
+    welcome = visible();
+    assert.equal(hasDemoContent(route), true, 'the dedicated Agent welcome is ready without a page-title heading');
+    loading = [visible()];
+    assert.equal(hasDemoContent(route), false, 'a loading surface is never ready');
+    loading = [];
+    welcome.getClientRects = () => [];
+    assert.equal(hasDemoContent(route), false, 'hidden welcome content is never ready');
   } finally {
     if (original === undefined) delete globalThis.document;
     else globalThis.document = original;

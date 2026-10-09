@@ -305,11 +305,12 @@ Depth and hierarchy are conveyed exclusively through:
 The geometric form language is compact, rectangular, and tightly controlled:
 - **Standard Radius (`--radius-sm`)**: `4px` across all interactive elements (buttons, inputs, selects, tags, and cards).
 - **Outer Shell Radius (`--radius-lg`)**: `6px` reserved strictly for modal dialogs and slide-out drawers.
+- **Thread Scale** (conversation workspaces and the approval card only, ADR 0081 refined by ADR 0086): `--radius-document` 4px for printed matter, `--radius-control` 4px for what is pressed, `--radius-surface` 6px for field panels and floating lists, `--radius-thread` 8px for the composer, the operator's bubble, cards and suggestions; grouping by `--thread-field` (`--fg` at 5%, 8% on hover) and one `--thread-hairline` edge (`--fg` at 12%), radii owned by `THREAD_RADII` (also used by HTML conversation exports), fills derived from the palette by `THREAD_FILL_SHARES` and `themePaletteCssVariables`, with pre-hydration defaults in `web/src/index.css`.
 - **Status Indicator Pip**: `7×7px` square with a `2px` micro-radius.
 - **Borders**: Uniformly `1px solid` with no beveling or pseudo-3D outlines.
 
 ### Named Rules
-**The Uniform 4px Geometry Rule.** Every interactive widget, form field, and card container in the system adheres to the 4px terminal corner radius, preserving a coherent geometric silhouette throughout the entire UI.
+**The Uniform 4px Geometry Rule.** Every interactive widget, form field, and card container in the system adheres to the 4px terminal corner radius (the conversation thread follows its own scale, above), preserving a coherent geometric silhouette throughout the entire UI.
 
 ## Components
 
@@ -399,21 +400,57 @@ the configuration workbench.
 - **Transcript**: assistant-ui's thread viewport, following the newest message while the reader is
   there and offering "back to latest" once they scroll away. The operator's message is a bordered
   `--surface` block; an answer is borderless with a model-and-status head, a reasoning disclosure
-  with a `--warn` edge (no title shimmer), Markdown in the console's own styles, and a foot of
-  measurements plus muted icon actions.
+  without a frame, Markdown in the console's own styles, and a foot of measurements plus muted
+  icon actions. The Agent's disclosure reads "Thinking…" while the reasoning is written and
+  "Thought process" once it settles; the Playground shows its live phase in the disclosure title.
 - **Model output**: tables in a hairline frame; fenced code with a language head and copy action,
   highlighted only for allowlisted languages after the fence closes, in a palette-ink syntax theme
   that never borrows the semantic hues. Raw HTML is escaped and images are links.
 - **Conversation exports**: the HTML page and the PNG are the workspace in the resolved palette and
   the embedded mono face, not a report about it: the same reading column, bubble, pip, disclosures
-  and code frames under a wordmark head and a one-line masthead. Charts are inline SVG on the series
-  palette with `--border` grid rules and swatch legends; series colour never tints text. The PNG is an
+  and code frames under a wordmark head and a one-line masthead. A canvas is exported as the sandboxed frame it is in the
+  workspace, and as a titled placeholder in the PNG. The PNG is an
   840px card at 2x without controls or reasoning, its capability chain shown open.
 - **Composer**: assistant-ui's composer with Ant Design controls; Enter and the send button as one
-  gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--surface`
-  fill, `--meta` glyph). Send and stop share one action slot: running with an empty draft
+  gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--border`
+  fill, `--meta` glyph). Send and stop share one action slot and one shape - a 32px circle filled
+  with `--accent-hover`, an up arrow or a rounded square in `--accent-on`, the console's one round button: running with an empty draft
   shows stop; an Agent draft replaces it with Queue, and queueing restores stop. Queued messages
-  appear as rows above the frame in the Agent, and one line beneath naming the cost or privacy boundary.
+  wait in a tray resting on the frame under a line that counts them, each removable, and the model and effort stay choosable during a run; one line beneath names the cost or privacy boundary.
+  In the Agent `/` (commands: `/ui` and `/text` for the next answer, and the page's own actions,
+  each listed only while it can run) and `@` (models, key aliases, capabilities) open
+  a shadowless `--elevated` list above the frame, a 16px `--muted` icon and mono name beside a
+  `--muted` description; Enter belongs to the highlighted row, a mention lands as the bare name, and
+  Up on an empty box recalls sent messages. The frame holds only what a message is sent with: the
+  Agent's foot is a round `+` that attaches, the effort chip, the model chip and the send slot. What the next message
+  carries beyond its text - an edit, a presentation - is a 24px hairline chip above the input,
+  `--accent` for a presentation, each with its own remove. The composer's edges meet the
+  transcript column's: it is offset by half the transcript's scrollbar gutter. A 14px ring on a `--border` track with a small mono percentage under the frame, at the end of the note's line, states
+  the context window in use (`--meta`, `--warn` at 75%, `--danger` at 90%), absent when either
+  figure is unknown.
+- **Views**: new display calls default to inline components at their call position.
+  `frame: none` keeps an accessible title and quiet controls without the frame or title bar;
+  explicit `frame: card` adds the hairline frame. Stored displays retain their original framing
+  (ADR 0082, 0087). A stored panel (ADR 0079) stacks token-drawn blocks - figure tiles on one `--border-soft` grid, label/value
+  rows, a toned-rule callout, steps on a rail, 4px meters, hairline page links - with 1.5px Lucide
+  outline icons and a neutral circle for an unresolved name; a canvas (ADR 0072, 0073) is a borderless
+  sandboxed frame on `--surface` with icon actions for view source (the same button returns to the rendered UI), save as image,
+  download HTML and full screen. Its charts and tables are drawn inside the frame by the console's
+  kit from the theme variables: series palette marks, `--border` grid rules, `--muted` tick text,
+  hairline table rows with tabular right-aligned figures. Markup appears progressively without
+  executing model scripts until completion. Component surfaces use the 6px surface radius,
+  controls the 4px control radius, including in previews and exports. Natural height grows
+  and shrinks with content between 48px and 16384px so normal content scrolls with the
+  transcript, not inside a nested root viewport. Local filters, forms and calculators operate
+  on frozen content; new-data or write follow-ups are reviewed in the composer. Full screen is the same figure fixed over
+  the viewport on `--surface`, left with Escape or Back; a dashed hairline box holds its place.
+- **Target**: each model is led by its maker's mark, or a neutral box when the maker is unknown.
+- **Retry, edit, files**: the newest answer's foot offers retry and edit while its turn changed
+  nothing; an edit shows an "editing" chip above the input. A message sent with a presentation carries an
+  `--accent` hairline chip naming it above its bubble. Attached text files (ADR 0074) are hairline name chips in the composer and above
+  the sent bubble.
+- **Follow-ups**: up to three questions the model offered, as plain lines under the newest answer
+  that fill the composer without sending.
 - **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates
   and the last message edits in place, replacing its turn. The Agent quote toolbar styles itself
   from theme tokens even though its portal sits outside Ant Design's variable scope.
@@ -421,22 +458,30 @@ the configuration workbench.
   diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
 - **Agent**: a capability directory as an open list grouped read / write / destructive with pips,
   each row a localized title with its mono identifier beside it;
-  call details as the panel's second tab; database queries keep their status, SQL arguments and
-  timing there, while raw query rows have no inline toggle or details preview;
   a turn drawn in the order it happened - reasoning, text and capability calls as segments, runs of
-  calls folded into a "Used N capabilities" chain that opens while the turn runs or waits and folds when it is done, each call one row (status square, title, mono
-  identifier, arguments in brief, status in words, duration) with a `--warn` attention glyph when it
-  waits on the operator or its outcome is unconfirmed; charts and tables from successful display calls drawn after the answer in a hairline frame with
-  a Chart / Data switch and CSV / PNG export, their category labels horizontal and ellipsised; an approval card
-  under the call that raised it (`--surface`, a 2px `--warn` leading edge, `--danger` when
-  destructive) with one Deny / Allow decision (Allow in the danger hue for a destructive capability),
+  reasoning and calls joined as a timeline on a hairline rail under a "Used N capabilities" summary that is open while it is the end of a running answer or waits on the operator and folds once the answer moves past it, each call a disclosure (status mark - a check once it succeeded - title,
+  arguments as a mono chip, status in words unless it simply succeeded, duration, caret) that unfolds its identifier, arguments and the model's receipt under its own row (ADR 0084), with a `--warn` attention glyph when it
+  waits on the operator or its outcome is unconfirmed; database queries keep their status, SQL arguments and
+  timing there, while raw query rows are never shown; panels and canvases from successful display calls drawn where the model made the call, in a hairline frame or frameless at the model's choice (ADR 0082); reasoning set on the page without a frame, following its newest line until the reader scrolls away, resuming at the bottom and folding on completion; page actions together at the conversation's top trailing corner - New conversation labelled first, then icon actions for export, the capability directory and the connection guide; an empty state of wordmark, one paragraph, four starting questions and a `--meta` line of `kbd` hints for `/`, `@` and Up; an approval card
+  under the call that raised it (`--surface`, one hairline edge at the 8px thread radius, tinted `--danger` when
+  destructive, its changes on a field panel) with one Deny / Allow decision (Allow in the danger hue for a destructive capability),
   and a `--warn` notice in the composer while it is open; "Ask about this" on selected answer text,
   quoted in the composer; agent questions in an accent-framed panel that takes
   the composer's place, shaped like the coding agents' question prompts: a tab per question and a
   Review tab, numbered option rows (a digit picks, the chosen one accent-edged with a filled key
   cap), "Something else…" as the last row with its field inside it; the data notice as the
-  line beneath the composer (no consent checkbox); the reasoning effort as a quiet text button in the
-  composer's foot; reasoning shown live and kept with the turn; the sent message shown at once.
+  line beneath the composer (no consent checkbox); model and reasoning chips sharing shadowless `--surface` popovers and named
+  option rows (ADR 0077): 304px for models, 180px for reasoning, both viewport-bounded.
+  The model list has maker marks, search beyond eight names, and a secondary client-key
+  footer that opens a key list in the same surface. Reasoning offers model default first,
+  then parameter names and secondary localized descriptions; its text chip shows the current
+  parameter name (`Low`, `High`, `Max`, `xHigh`) in `--fg` at regular 400 weight across
+  languages. Request values retain their original casing. Current rows use `--selected-inset`,
+  `--fg` and 600 weight; model rows also use an ink-colored check. Reasoning pairs the
+  primary parameter name on the left with its localized description in `--muted` at
+  the trailing edge; identical descriptions are omitted. Rows are 36px, 44px for phones/touch. Arrows/Home/End browse;
+  Enter/Space/click confirms; confirmation or Escape closes and restores chip focus.
+  Existing theme tokens are reused; reasoning shown live and kept with the turn; the sent message shown at once.
 
 ### Cost & Usage provider grouping
 
@@ -454,14 +499,32 @@ Token Trend preserves measured zero buckets as continuous baseline segments. KPI
 
 Use the shared controlled `TimeZoneSelect`: actual IANA names, a left-aligned name column and a right-aligned tabular UTC-offset column. Pin the server zone first and place its localized source label below the name. Field and popup share a width; narrow screens use the full settings-row width. Keep the helper text to “Used for timestamps and calendar-day totals.” Fixed 64-pixel virtual rows reserve indicator space uniformly. Search supports city/zone names and UTC offsets. Reuse existing color, typography and motion tokens.
 
+### Live reasoning and phase labels
+
+Reasoning disclosures point right when collapsed and down when expanded.
+
+Reasoning is `--fg-2` at 12.5px / 1.6, unframed and bounded to 168px while streaming, 320px
+when settled and reopened. Following tracks the rendered Markdown's height and viewport reflow,
+not just incoming tokens. The top fade appears only when following with history hidden above;
+short reasoning and manual scrollback keep full ink. Returning to the bottom resumes following,
+and reopening a live disclosure shows the newest line. Title, body and the Agent's activity row
+remain in document flow, with the answer's 12px gap before activity. Live activity reports the
+phase and elapsed time; round counts belong to settled-turn measurements.
+
+Short live labels carry a 3.2em `--fg` glint across their own ink on the 900ms
+linear `--motion-live-text` loop, painted by a background clipped to the glyphs. `MOTION_LIVE_TEXT` in `web/src/theme/themeConfig.ts` and the
+pre-hydration root variable in `web/src/index.css` share that period across palettes. This is an
+indeterminate loop, not a transition; reduced motion and unsupported masking leave plain text.
+Placeholder blocks retain their opacity breath (ADR 0052).
+
 ### Live elapsed labels and Stop
 
 Agent activity, running capability rows and Playground running turns use isolated `LiveElapsed`
 labels. A shared visible-only animation-frame clock quantizes milliseconds to 10ms and seconds
 to 0.1s; a formatted external-store snapshot limits second-scale label renders to 10Hz without
 rerendering the page or transcript. Hidden documents and settled labels schedule no frames.
-The Stop button uses the existing `--border` / `--surface` tokens and no shadow, with the existing
-`--danger` border on hover/active. This changes component usage, not the palette or token mapping.
+Stop is the composer's send slot with a square glyph; it uses the existing `--accent-hover` / `--accent-on` tokens
+and no shadow. This changes component usage, not the palette or token mapping.
 
 ### Custom icon picker
 

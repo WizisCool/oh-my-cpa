@@ -200,6 +200,13 @@ async function main() {
         if (text.includes('Management Key') || text.includes('使用 CPA')) {
           throw new Error('rendered the sign-in card instead of the console');
         }
+        if (route.path === '/agent') {
+          await page.getByRole('button', { name: '能力目录', exact: true }).click();
+          const drawer = page.getByTestId('agent-drawer');
+          await drawer.getByTestId('agent-directory').getByText('providers_list', { exact: true }).waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          await drawer.locator('.ant-drawer-close').click();
+          await drawer.waitFor({ state: 'hidden', timeout: NAVIGATION_TIMEOUT_MS });
+        }
         if (route.path === '/oauth-management') {
           await page.getByTestId('oauth-management-model-rules-open').first().click();
           const drawer = page.getByTestId('oauth-model-rules-drawer');

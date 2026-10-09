@@ -92,10 +92,17 @@ const EXCEPTIONS = [
   },
   {
     kind: 'duration',
-    file: 'pages/agent/AgentPage.module.css',
-    selector: '.activity-mark',
+    file: 'components/workspace/Workspace.module.css',
+    selector: '.generation-loader-cell',
     property: 'animation',
-    why: 'The running-turn pip pulses while the model works; 1200ms is the pulse period, not a state transition between two states, and §7 handles it by freezing it under reduced motion rather than by shortening it.',
+    why: 'The generation loader\u2019s lit run travels its nine cells for as long as work is running; 2700ms is the cycle, not a transition between two states, and reduced motion freezes it (ADR 0080).',
+  },
+  {
+    kind: 'duration',
+    file: 'components/workspace/Workspace.module.css',
+    selector: '.stream-caret',
+    property: 'animation',
+    why: 'The caret at the end of arriving text pulses while the stream is open; 1200ms is the pulse period, not a state transition, and reduced motion freezes it (ADR 0080).',
   },
   {
     kind: 'duration',
@@ -117,6 +124,13 @@ const EXCEPTIONS = [
     selector: '.settings-tls-body',
     property: 'grid-template-rows',
     why: 'A disclosure. Expanding and collapsing an accordion reflows by definition, and the grid 0fr/1fr technique is the least costly form of it; the alternative is an accordion that snaps open, which reads as broken.',
+  },
+  {
+    kind: 'layout',
+    file: 'pages/agent/AgentPage.module.css',
+    selector: '.fold',
+    property: 'grid-template-rows',
+    why: 'A disclosure. The Agent\u2019s work timeline and each call\u2019s request and result open in the answer, at a height known only once drawn; the grid 0fr/1fr technique folds them from that height within `base`, as `.settings-tls-body` does, and reduced motion removes it (ADR 0084).',
   },
   {
     kind: 'layout',
@@ -187,6 +201,13 @@ const propertyOf = (part) => (/^[a-z-]+\s*\(/.test(part) ? '' : /^([a-z-]+)\b/.e
 
 /** The individual selectors of a comma-separated prelude. */
 const selectorList = (selector) => selector.split(',').map((entry) => entry.trim()).filter(Boolean);
+
+/**
+ * Whether a media query asks for reduced motion. `no-preference` names the opposite, so matching the
+ * bare substring treated a motion-only block as the reduced one and skipped every rule inside it - a
+ * raw duration and a missing counterpart both went unseen there.
+ */
+const isReducedMedia = (media) => media.includes('prefers-reduced-motion') && !media.includes('no-preference');
 
 /**
  * Parses a stylesheet into leaf rules and keyframe blocks.
@@ -358,13 +379,13 @@ for (const { absolute, file, text } of sources) {
   // match depend on their formatting.
   const reducedKills = new Set(
     rules
-      .filter((rule) => rule.media.includes('prefers-reduced-motion'))
+      .filter((rule) => isReducedMedia(rule.media))
       .filter((rule) => /^none\b/.test(rule.declarations.find((entry) => entry.property === 'animation')?.value ?? ''))
       .flatMap((rule) => selectorList(rule.selector)),
   );
 
   for (const rule of rules) {
-    const isReducedBlock = rule.media.includes('prefers-reduced-motion');
+    const isReducedBlock = isReducedMedia(rule.media);
     const transition = rule.declarations.find(
       (entry) => entry.property === 'transition' || entry.property === 'transition-duration',
     );
