@@ -426,3 +426,17 @@ test('the real phone sweep and unrelated probes retain separate attribution', ()
   assert.equal(settings.all, undefined);
   assert.deepEqual([...settings.ids], ['omc-settings']);
 });
+
+test('a production import of out-of-graph test infrastructure is unresolved and widens', () => {
+  for (const declaration of [
+    "import { probe } from '../../tests/preferences.contract.test'; export const value = probe;",
+    "export const value = () => import('../../tests/preferences.component.test');",
+  ]) {
+    const impact = impactOf({ ...LAZY_CONSOLE, 'web/src/components/shared.ts': declaration });
+    assert.equal(impact.unresolved.length, 1);
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids, ALL);
+  }
+  const actual = buildImporterGraph();
+  assert.deepEqual(actual.unresolved, []);
+  assert.ok([...actual.importers.keys()].every(file => file.startsWith('web/src/')));
+});

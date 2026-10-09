@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "server_timezone": "UTC",
+  "known_keys": [
+    "dashboard_range",
+    "log_filters",
+    "provider_icons",
+    "provider_names",
+    "provider_websites",
+    "usage_events_view",
+    "usage_events_columns",
+    "oauth_management_view_v1",
+    "omc_timezone",
+    "omc_token_style",
+    "omc_tps_calculation_mode",
+    "omc_models_view",
+    "omc_theme",
+    "omc_scroll_smoothing",
+    "playground_session",
+    "agent_target"
+  ],
+  "cases": [
+    {
+      "id": "empty-document",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "preferences": {},
+        "time_zone": {
+          "timezone": "",
+          "server_timezone": "UTC",
+          "effective_timezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "unauthenticated-read",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": false,
+      "status": 401,
+      "response": {
+        "error": "authentication required"
+      }
+    },
+    {
+      "id": "unauthenticated-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_tps_calculation_mode",
+      "body": "\"include_ttft\"",
+      "authenticated": false,
+      "status": 401,
+      "response": {
+        "error": "authentication required"
+      }
+    },
+    {
+      "id": "unsupported-key",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/management_key",
+      "body": "{}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "unsupported preference key"
+      }
+    },
+    {
+      "id": "invalid-json",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/dashboard_range",
+      "body": "{\"preset\":",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "preference value must be a JSON document"
+      }
+    },
+    {
+      "id": "tps-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_tps_calculation_mode",
+      "body": "\"include_ttft\"",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_tps_calculation_mode",
+        "value": "include_ttft"
+      }
+    },
+    {
+      "id": "tps-readback",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "preferences": {
+          "omc_tps_calculation_mode": "include_ttft"
+        },
+        "time_zone": {
+          "timezone": "",
+          "server_timezone": "UTC",
+          "effective_timezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "raw-enum-preserved",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_tps_calculation_mode",
+      "body": "\"future-mode\"",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_tps_calculation_mode",
+        "value": "future-mode"
+      }
+    },
+    {
+      "id": "null-preserved",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/provider_names",
+      "body": "null",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "provider_names",
+        "value": null
+      }
+    },
+    {
+      "id": "structured-document",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/playground_session",
+      "body": "{\"names\":[\"OpenAI\",\"Claude\"],\"empty\":null,\"enabled\":false,\"nested\":{\"count\":0}}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "playground_session",
+        "value": {
+          "names": [
+            "OpenAI",
+            "Claude"
+          ],
+          "empty": null,
+          "enabled": false,
+          "nested": {
+            "count": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "invalid-timezone",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_timezone",
+      "body": "\"Not/AZone\"",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_timezone"
+      }
+    },
+    {
+      "id": "timezone-null-refused",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_timezone",
+      "body": "null",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_timezone"
+      }
+    },
+    {
+      "id": "timezone-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_timezone",
+      "body": "\"America/New_York\"",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_timezone",
+        "value": "America/New_York"
+      }
+    },
+    {
+      "id": "timezone-readback",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "preferences": {
+          "omc_tps_calculation_mode": "future-mode",
+          "provider_names": null,
+          "playground_session": {
+            "names": [
+              "OpenAI",
+              "Claude"
+            ],
+            "empty": null,
+            "enabled": false,
+            "nested": {
+              "count": 0
+            }
+          },
+          "omc_timezone": "America/New_York"
+        },
+        "time_zone": {
+          "timezone": "America/New_York",
+          "server_timezone": "UTC",
+          "effective_timezone": "America/New_York"
+        }
+      }
+    },
+    {
+      "id": "timezone-fallback",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_timezone",
+      "body": "\"\"",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_timezone",
+        "value": ""
+      }
+    },
+    {
+      "id": "final-readback",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "preferences": {
+          "omc_tps_calculation_mode": "future-mode",
+          "provider_names": null,
+          "playground_session": {
+            "names": [
+              "OpenAI",
+              "Claude"
+            ],
+            "empty": null,
+            "enabled": false,
+            "nested": {
+              "count": 0
+            }
+          },
+          "omc_timezone": ""
+        },
+        "time_zone": {
+          "timezone": "",
+          "server_timezone": "UTC",
+          "effective_timezone": "UTC"
+        }
+      }
+    }
+  ],
+  "alternate_server": {
+    "timezone": "Asia/Kuala_Lumpur",
+    "response": {
+      "preferences": {},
+      "time_zone": {
+        "timezone": "",
+        "server_timezone": "Asia/Kuala_Lumpur",
+        "effective_timezone": "Asia/Kuala_Lumpur"
+      }
+    }
+  }
+}

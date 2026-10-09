@@ -37,7 +37,7 @@ export async function runFullVerification({ execute = runChecks, isSerial = fals
   for (const check of [
     { label: 'browser-harness', command: 'pnpm', args: ['verify:browser:harness'] },
     { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
-    { label: 'probes', command: 'pnpm', args: ['verify:probes', ...(probePort === undefined ? [] : ['--port', String(probePort)])] },
+    { label: 'probes', command: 'pnpm', args: ['verify:probes', ...(isSerial ? ['--workers', '1'] : []), ...(probePort === undefined ? [] : ['--port', String(probePort)])] },
   ]) {
     if (!await runGroup([check])) hasPassedBrowser = false;
   }

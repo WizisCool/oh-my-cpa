@@ -20,7 +20,9 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | --- | --- | --- | --- |
 | Server behaviour: handlers, DTO allowlists, redaction, auth, repository queries, migrations, write serialisation, background loops | Go test | `*_test.go` beside the package | `go test ./...` |
 | A frontend decision that is a pure function: URL/state derivation, formatting, poll and debounce policy, sorting, validation | Logic suite (`node:test`) | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
-| Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, request ordering under a held response, StrictMode double invocation | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
+| Rendered React wiring: QueryClient subscriptions, optimistic shared state, hook async ownership and provider-to-component integration | Component integration (Vitest + jsdom + RTL) | `web/tests/**/*.component.test.tsx`, with `web/vitest.config.ts` | `pnpm test:components`, affected `test:fast`, full static/CI |
+| Typed frontend transport versus a handler-certified wire corpus: methods, paths, JSON/null/error/auth semantics | API contract (Vitest Node + Go + fixture self-test) | `web/tests/**/*.contract.test.ts`, matching `internal/api/*_test.go` and `scripts/acceptance/contracts/` | `pnpm test:components`, `go test ./...`, `pnpm test:self`; full static/CI |
+| Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, page-level request ordering/navigation and dev-server integration | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
 | The built binary, embedded SPA, fake CPA and seeded SQLite together: sign-in, route rendering, secret boundaries, cross-stack writes | Cross-stack acceptance | the domain module under `scripts/acceptance/` | `pnpm verify:browser` (full suite on pull requests and master) |
 | The public demonstration | Demo acceptance | route table in `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
 | The Go binary's own demonstration mode: isolated settings, read-only refusals, permitted non-durable edits | Go demo smoke | `scripts/demo-smoke.mjs` | `pnpm verify:demo:go` (opt-in; not part of CI or `verify:full`) |
@@ -67,6 +69,64 @@ Rules that keep the suite fast and honest:
   Calendar fixtures must use the console's configured timezone rather
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
+
+### Rendered component integration
+
+`pnpm test:components` runs the complete, automatically discovered frontend integration layer: rendered `*.component.test.tsx` suites and Node-environment `*.contract.test.ts` suites.
+It uses development-only Vitest, jsdom and React Testing Library, not Chromium, a
+product Vite HTTP listener, Go or fake CPA. The separate config performs in-process
+Vite/JSX transforms without loading the product build/proxy/asset plugins. Isolated
+files and one worker bound resources; the runner reuses the existing process-group
+cancellation and diagnostic retention. Unknown/dependency changes still widen fast
+checks; all frontend changes run this small layer until measurements justify a
+conservative component impact selector. Static/CI discovery is always complete. Contract files declare `@vitest-environment node`; shared setup imports RTL only in a DOM environment. Tests and setup live under `web/tests`, outside the product runtime graph, and are included in frontend type checking. The same transform/worker/process ownership is reused instead of adding another runner or a DOM dependency to transport claims.
+
+The preference pilot in `web/tests/preferences.component.test.tsx` mounts the
+real hook, QueryClient, API client, feedback surface, token-display provider and
+context readout. It holds responses to prove shared optimistic state, key-local
+write ordering, last-intent rollback, failure recovery, fallback readiness,
+reference stability after an observed cache-triggered render and an admitted write
+surviving component unmount. Test-local
+queues are drained even after failures before globals/cache/unmounted trees are
+released. Do not mock the hook/cache/transport under test or suppress console errors.
+
+This layer owns rendered state, not engine facts. The OMC settings probe still owns
+its actual radio wiring, reload and phone geometry; context readout geometry and
+real navigation/keepalive remain browser claims. No assertion is removed merely
+because a component test passes. ADR 0089 and the phase-two ledger in
+`docs/plans/architecture-governance.md` record the decision and negative evidence.
+
+### Handler-certified API contracts
+
+The preference pilot uses `scripts/acceptance/contracts/preferences.json` as a
+small, reviewed wire corpus, not a schema generated from either implementation.
+`TestPreferencesSharedWireContract` runs its ordered requests through the real
+router, authentication middleware, handlers and isolated SQLite repository. It
+compares exact statuses and semantic JSON, verifies the complete public key
+allowlist, content type and authenticated no-store policy, and independently checks
+a non-UTC deployment. Ordinary DTO and permission boundaries remain unchanged.
+
+`web/tests/preferences.contract.test.ts` imports the actual typed client and
+checks method/path/body/credentials/headers, success decoding, ApiError data,
+unauthorized notification, nested deployment prefixes and UTF-8 keepalive admission.
+The Browser Mock uses the per-context fixture in
+`scripts/acceptance/preferences-fixture.mjs`; its self-test executes the actual
+`installRoutes` dispatcher as well as the corpus. Corpus/fixture changes select Go,
+frontend integration and repository checks together; complete CI still discovers
+all owners independently.
+
+A contract is bounded evidence, not a second implementation of the repository.
+Custom-icon reference validation, body limits, same-origin write protection,
+database failures and complete timezone aliases remain real Go test concerns;
+streaming, cancellation and actual navigation remain browser/cross-stack concerns.
+An unsupported mock method still records a harness fault (501), rather than
+pretending to reproduce the router's 405. Add an independent handler case before
+claiming a new mock semantic. Keep new corpora small and beside the shared fixtures;
+no full OpenAPI conversion or runtime validator is required for this pilot.
+
+Focused parity: `go test ./internal/api -run TestPreferencesSharedWireContract -count=1`,
+`pnpm test:components`, and `node --test scripts/preferences-contract.test.mjs`.
+The assertion/fault ledger is in `docs/plans/architecture-governance.md`.
 
 ### Shared conversation claims
 
@@ -145,7 +205,13 @@ CI and full-local gate, not a script self-test; Chromium never enters `test:fast
 
 The probe runner owns Vite through an unpredictable readiness header, rejects port
 collisions, uses a fresh context per scenario, and retains a 120-second scenario
-budget and the 480-second batch watchdog. `scripts/acceptance/lifecycle.mjs` bounds
+budget and the 480-second batch watchdog. Catalog entrypoints use at most two
+independent scenario contexts; `--workers 1` reproduces identical coverage serially.
+Separate built/browser/demo lanes and separate local batches still never overlap.
+Each worker owns its fixture/error/late-fault ledger and outcome; failures are
+collated in catalog order, every admitted worker is joined before shared teardown,
+and shutdown stops new admission. The browser-harness gate executes negative faults
+in both modes and proves concurrent storage/cookie/preference/fault isolation. `scripts/acceptance/lifecycle.mjs` bounds
 shutdown and escalates owned process termination. Chromium is launched through
 BrowserServer so a stuck close has a real child process to terminate. Parallel local
 checks spool output under `tmp/check-output`, print verdicts on completion, record
@@ -192,6 +258,7 @@ run:
 | --- | --- |
 | Go test | none |
 | Logic suite `scripts/test-*.ts` | none: `scripts/test-logic.mjs` discovers the files |
+| Frontend integration `web/tests/**/*.component.test.tsx` / `web/tests/**/*.contract.test.ts` | none: recursive discovery in `scripts/test-components.mjs` and the standalone Vitest config; empty discovery fails |
 | Script self-test `*.test.mjs` | none: `scripts/test-self.mjs` discovers them |
 | Probe scenario | an entry in `scripts/acceptance/scenarios.mjs` (unique `id`). Optionally its measured seconds in `scripts/acceptance/probe-weights.json`, which only affects shard balance |
 | New console page | a rule in `SCENARIO_PATHS` in `scripts/acceptance/check-ui-plan.mjs` naming the scenarios that load its route, or `scenarios: []` if none does. `scripts/ui-impact.test.mjs` fails until the rule exists |
@@ -911,3 +978,15 @@ modules from importing page internals, with eager/lazy negative and erased-type 
 and nonempty real consumers. The existing Agent/Playground probes use `scripts/acceptance/probes/conversation-export.mjs` to
 own actual downloads, standalone HTML/image rendering, controls, privacy, browser
 encoding and responsive behavior. None of these browser claims move to Node.
+
+
+### Bounded probe scheduling
+
+`pnpm check:ui` and `pnpm verify:probes` use two independent scenario contexts per
+batch. Both accept `--workers 1` for resource-constrained hosts and diagnosis; this
+changes scheduling only, not selected IDs, assertions, waits or verdicts.
+`pnpm verify:full:serial` explicitly chooses that same serial probe path. Do not
+increase concurrency or a budget to make a run pass. Watchdog diagnostics name all
+active scenarios/steps. Existing condition-based readiness and complete hosted
+shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
+wall/CPU/memory trade-offs and retained failure ownership.

@@ -28,6 +28,7 @@
  *   pnpm check:ui                       scenarios the working tree affects
  *   pnpm check:ui --all                 every scenario
  *   pnpm check:ui --scenario charts     one scenario by id (see --list)
+ *   pnpm check:ui --workers 1          serial reproduction with identical coverage
  *   pnpm check:ui --list                ids and names, starts nothing
  *   pnpm check:ui --plan                what would run and why, starts nothing
  *   pnpm check:ui --base <ref>          plan against <ref>..worktree instead of HEAD
@@ -38,6 +39,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProbeChecker } from './acceptance/probe.mjs';
 import { runProbeBatches } from './acceptance/probe-batches.mjs';
+import { parseProbeWorkers } from './acceptance/probe-options.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
 import { buildImporterGraph, isCatalogAdditionOnly, isManifestScriptsOnly, readAtRef } from './acceptance/ui-impact.mjs';
@@ -51,13 +53,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5181;
 
 function parseArgs(argv) {
-  const options = { all: false, list: false, plan: false, scenario: undefined, base: 'HEAD' };
+  const options = { all: false, list: false, plan: false, scenario: undefined, base: 'HEAD', workers: 2 };
+  let hasWorkers = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--all') options.all = true;
     else if (arg === '--list') options.list = true;
     else if (arg === '--plan') options.plan = true;
     else if (arg === '--scenario') options.scenario = argv[++index];
+    else if (arg === '--workers' && !hasWorkers) { options.workers = parseProbeWorkers(argv[++index]); hasWorkers = true; }
     else if (arg === '--base') options.base = argv[++index];
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -171,13 +175,14 @@ const selected = SCENARIOS.filter((scenario) => selectedIds.includes(scenario.id
 const { check, failures } = createProbeChecker({ quiet: true });
 
 console.log(`Running ${selected.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
-console.log(`Reason: ${selectionReason}\n`);
+console.log(`Reason: ${selectionReason}; workers: ${options.workers}\n`);
 
 // The runner reports one line per failure with the scenario's own name alongside it,
 // so a focused run is as diagnostic as a full one without printing every pass.
 const startedAt = Date.now();
 const { passed, failures: runFailures } = await runProbeBatches({
   port: PORT,
+  concurrency: options.workers,
   batchCount: selected.length === SCENARIOS.length ? 3 : 1,
   scenarios: selected.map((scenario) => ({ ...scenario, check })),
 });

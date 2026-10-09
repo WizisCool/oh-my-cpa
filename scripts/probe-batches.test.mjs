@@ -56,3 +56,17 @@ test('empty inputs start no browser and duplicate identities are refused', async
   await assert.rejects(runProbeBatches({ scenarios: [{ id: 'duplicate' }, { id: 'duplicate' }] }, execute), /unique scenario IDs/);
   assert.equal(calls, 0);
 });
+
+
+test('batching forwards bounded worker scheduling without changing complete membership', async () => {
+  for (const concurrency of [1, 2]) {
+    const seen = [];
+    const result = await runProbeBatches({ scenarios: catalog, batchCount: 3, concurrency }, async options => {
+      assert.equal(options.concurrency, concurrency);
+      seen.push(...options.scenarios.map(scenario => scenario.id));
+      return { passed: options.scenarios.length, failures: [] };
+    });
+    assert.deepEqual(seen.sort(), catalog.map(scenario => scenario.id).sort());
+    assert.equal(result.passed, catalog.length);
+  }
+});

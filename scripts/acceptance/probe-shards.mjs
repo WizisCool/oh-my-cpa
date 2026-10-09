@@ -1,11 +1,10 @@
 /**
  * Splits the probe catalog into balanced, disjoint shards.
  *
- * Each catalog partition runs serially in one browser, so its wall clock is the sum of its
- * scenarios, dominated by a handful of long ones. CI runs each
- * shard as its own job on its own runner, which keeps the scenarios' timing-sensitive
- * assertions free of the CPU contention that running them side by side in one
- * process would add.
+ * CI runs each shard on its own runner. Within each shard, catalog entrypoints
+ * default to at most two independent scenario contexts sharing one browser;
+ * `--workers 1` retains the same coverage for serial reproduction. The worker
+ * cap bounds local CPU and memory contention rather than eliminating it.
  *
  * The split is longest-first onto the lightest shard, from measured weights. It is
  * deterministic, so a failure names the same shard on a rerun, and it is a partition:
@@ -40,7 +39,8 @@ export function parseShard(text) {
 
 /**
  * Assigns every id to one of `count` shards. Each shard keeps registry order, so a
- * shard runs its scenarios in the same relative order as the full catalog.
+ * shard admits scenarios in the same relative order as the full catalog; bounded
+ * workers may complete them in a different order.
  */
 export function assignShards(ids, count, weights = PROBE_WEIGHTS) {
   const weightOf = (id) => weights[id] ?? DEFAULT_WEIGHT;

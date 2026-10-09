@@ -51,6 +51,7 @@ test('an ordinary component change selects the frontend gates and nothing else',
   assert.deepEqual(planChecks(['web/src/pages/DashboardPage.tsx']), [
     'type-check',
     'logic',
+    'components',
     'i18n',
     'antd-lint',
     'css-modules',

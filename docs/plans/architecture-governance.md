@@ -555,3 +555,402 @@ Raw local evidence is retained under `tmp/pr166-review`: red/green and mutation 
 plan comparison, paired graph timings, full-gate log/resources and the local review.
 The follow-up commit updates this ledger, `AGENTS.md`, `docs/architecture.md` and
 `docs/testing.md` alongside the selector and tests.
+
+## Phase two: component, contract and browser-cost governance
+
+### Baseline and acceptance obligations
+
+Phase two starts from merged PR #166 at
+`b5e00765ada52f9eb92335e970a4dbd673521456` (2026-10-09), on the independent
+`refactor/verification-governance-phase-two` branch. The user authorizes atomic
+commits, branch pushes and a new Draft PR for full CI evidence; merge, release,
+production access and observable behavior changes require separate authorization.
+The first-phase migration, boundary guards and sorting benchmark remain in force.
+
+The completion ledger for this phase must contain: a measured baseline and final
+feedback path; a real rendered-component/hook integration pilot with negative
+fault evidence; a real-handler/typed-client/browser-fixture contract chain;
+measured browser-cost optimization with unchanged engine coverage and isolation;
+module ownership and runtime/resource findings; synchronized testing/architecture
+conventions; full local/hosted verification; atomic commit and Draft PR evidence.
+Unmeasured or pending items are not completed claims.
+
+### Current-state audit and priorities
+
+| Priority | Evidence at the merged baseline | Treatment and compatibility boundary |
+| --- | --- | --- |
+| P1 | 65 probe scenarios already share Vite/Chromium within a batch, but a complete local catalog has three batches and pays three cold Vite transform/browser setups. Each scenario still correctly gets a new context. CI has three independent machines. | Measure setup versus scenario costs before changing ownership. Keep per-scenario contexts, scenario deadlines, watchdog budgets, ledger failures and bounded teardown. Overlap only bounded fresh contexts after controlled fault/resource measurements; keep separate Chromium/browser lanes sequential. |
+| P1 | `defaultRoutes` returns `{ok: true}` for preference PUT, whereas `putPreference` returns `{key, value}`. The mock accepts malformed JSON as `null` and omits the real GET timezone metadata. Existing Go tests and UI probes do not compare these two contracts. | Establish a checked contract corpus against actual authenticated handlers and the real typed client. Reuse the corpus in a stateful, per-context mock. Change fixtures, not the public API or persistence rules. |
+| P1 | `usePreference` combines a real React Query subscription, reference-stable parsing, optimistic cache updates, per-key async serialization, last-intent rollback and localized feedback. Pure parser suites cannot establish their integration. The settings probe exercises one refusal through a full page/reload path. | Pilot a separately discovered simulated-DOM component layer with the real hook, QueryClient, API client and shared display provider/consumer. Assert held-response states, multiple readers, serialization, refusal/recovery and cleanup; retain actual settings wiring, reload, geometry and focus in Chromium. |
+| P2 | 185 internal Go test files, 73 logic suites, 52 repository self-test files and zero component suites. The 1,182-line typed API facade has shared transport/auth/demo/error policy. | Retain Go/Node runners. Add only the missing integration layer; do not replace logic tests or manufacture transport wrappers. Record affected selection and full CI discovery in the same change. |
+| P2 | Existing Node logic, Go handlers, dev probes and built acceptance already split many OAuth/Agent/Playground/Provider claims. Stream sequencing, cancellation, history, real images, layout and safety are not scalar-function assertions. | Keep existing owners and map only claims actually migrated. Additional component cases may strengthen asynchronous coverage without deleting representative browser wiring. |
+| P2 | First-stage audit already found indexed queries, bounded journals, cancellable write gates, shared transports and memoized projections; no new hot path is yet measured. | Profile focused candidates. Leave database locking, polling cadence, streaming and production caches unchanged unless a reproducible bottleneck and equivalence evidence justify a change. |
+
+Initial hosted baseline: master CI run `37938787933` on this exact SHA succeeded;
+workflow timestamps 13:42:39–13:46:41 UTC (242 s), browser job 236 s, static 93 s,
+probe jobs 196/219/187 s. This is one hosted sample, not a causal speedup claim.
+Raw metadata, baseline inventory and local catalog timing evidence live under
+`tmp/phase-two`. The current local baseline run is recorded there before edits to
+browser/product code.
+
+### Staged execution and claim ownership
+
+1. Audit current runners and take baseline evidence; record decisions here rather
+   than starting a duplicate rules document.
+2. Pilot automatically discovered React integration tests, bounded isolated workers,
+   deterministic response rendezvous and explicit cleanup. Preserve full static/CI
+   gates, the Node logic layer and all browser-only claims.
+3. Establish preference API contract parity using actual Go handlers, typed client
+   request/error handling and shared stateful fixtures. Cover method/path/status,
+   raw JSON/null values, allowlists, timezone metadata and authentication; do not
+   expand ordinary DTOs or the public preference allowlist.
+4. Optimize measured browser setup cost while retaining independent contexts,
+   unchanged assertions and fault-injection verification. Compare repeated focused
+   runs and the full catalog, including CPU and child-RSS evidence.
+5. Audit remaining module/runtime candidates, keep only demonstrated net-benefit
+   changes, then deliver full compatibility, resource and hosted CI evidence.
+
+The existing `formatDuration(119600)` result remains separate observable bug-fix
+scope. Test counts and source line counts are inventory, not success criteria.
+
+### Component pilot evidence and browser ownership
+
+The adopted component lane uses development-only Vitest 5.0.3, jsdom 30.1.2,
+React Testing Library 16.3.3 and DOM Testing Library 10.4.1, with the installed
+React 18.3.1 and Vite 6.4.3. Current official documentation and registry peer/engine
+metadata were checked; no production framework upgrade is involved. Existing Node
+logic and Go discovery remain unchanged. ADR 0089 records the layer boundary.
+
+| Claim | New integration owner | Retained engine/cross-stack owner |
+| --- | --- | --- |
+| Held initial read, shared subscription and optimistic values in multiple mounted readers | preference component suite; real hook/QueryClient/client | settings page wiring and actual browser reload |
+| Failed write rolls back, produces real feedback and permits recovery | component refusal/recovery case | existing OMC settings refusal remains; feedback geometry/stacking stay in probes |
+| Per-key serialization and older refusal cannot erase newer intent | held-response component case; three valid TPS intents | cross-stack writes and production HTTP/SQLite ownership remain in Go/built acceptance |
+| Different keys can progress independently | held-response component case | no database concurrency or permission rule changes |
+| An admitted write completes after component unmount | component ownership case | actual navigation and browser keepalive are not simulated guarantees |
+| Failed initial read becomes ready with fallback; parsed objects retain identity across unrelated cache updates | component fallback/reference cases | pure parsing rules remain Node-owned |
+| Token display state reaches the real context meter accessible reading | real shared provider/consumer component case | meter geometry, hover, focus, paint and responsive placement remain Chromium-owned |
+
+Initial eight-case run: Vitest 4.11 s, whole command 6.08 s, user/system CPU
+7.11/0.98 s, maximum child RSS 262,180 KiB. The bounded shared runner variant took
+6.76 s (Vitest 4.37 s, child RSS 264,432 KiB). These are local isolated samples,
+not a claimed speedup of the much broader settings scenario. Fault injection found
+an initially insufficient two-state ordering assertion; a three-intent sequence now
+exposes an older rollback that would otherwise equal the fallback. Removing rollback,
+per-key serialization or last-intent admission each fails its named case. Record
+final measurements and full-gate results after all phase changes.
+
+All 65 unchanged baseline probes passed: runner 732.5 s, whole command 734.66 s,
+user/system CPU 342.01/153.93 s, maximum child RSS 522,772 KiB. Scenario durations
+sum to 730.126 s; only about 2.374 s lies outside scenarios. Therefore replacing
+three process startups alone is not a demonstrated high-leverage optimization.
+Initial route transforms are inside scenario timing and need their own measurement;
+prioritize repeated navigation, payload/transform work and mixed claim ownership
+rather than assuming that a long catalog means slow browser process launch.
+
+### Preference wire parity and integration boundary
+
+The reviewed preference corpus is independently certified by the actual Go router,
+authentication and isolated SQLite handlers. The same examples are consumed by the
+actual typed client's request/response/error paths and the per-context default
+Browser Mock dispatcher. It is not response generation from a mock. ADR 0090 records
+the bounded corpus strategy and supersedes ADR 0089's test-location choice only:
+frontend integration suites/setup now live under `web/tests`, inside type checking
+but outside the product runtime graph. Full static verification detected the earlier
+cross-tree test-fixture edge; moving tests preserves the existing graph's fail-closed
+unresolved import rules instead of suppressing them. A production eager or lazy
+import of this test infrastructure still widens the plan and fails the boundary.
+
+| Claim | Independent owner / negative evidence | Retained scope |
+| --- | --- | --- |
+| GET/PUT path, status, complete public key allowlist, raw JSON/null/enum preservation and readback | `TestPreferencesSharedWireContract`, typed client corpus, fixture/real dispatcher self-test | actual production handlers and DTOs unchanged |
+| Authentication refusal on reads/writes, no-store responses and exact JSON media type | actual Go middleware/handler; client unauthorized notification and ApiError data | same-origin write protection, complete permissions and sensitive DTO projections remain in existing Go/built tests |
+| UTC and non-UTC deployment timezone metadata, operator zone and empty fallback | independent real servers plus client/fixture cases | complete Go IANA semantics; fixture does not claim a second validator |
+| Nested runtime prefix and UTF-8 8 KiB keepalive admission | actual client boundary cases, including multi-byte text | actual navigation/keepalive lifetime remains Chromium-owned |
+| Context store isolation and response ownership | fixture self-test mutates returned data then independently rereads two contexts | no shared state across scenarios |
+
+Six deliberate mutations fail their named assertions: Go write envelope changed to
+`{ok:true}`; mock malformed JSON accepted; mock timezone forced to UTC; client
+metadata ignored; client unauthorized notification removed; UTF-8 byte admission
+replaced with string length. The initial mutation command used a relative config
+path and was rejected at startup; that is not fault-detection evidence. Corrected
+commands first prove a green baseline and require assertion failures, not startup
+errors. All production files were restored before green verification.
+
+Existing mock drift was `{ok:true}` on writes, malformed JSON accepted as null,
+and missing timezone metadata. The adopted fixture now matches the certified wire
+cases without changing a product contract. Custom-icon references, complete timezone
+aliases, body limits and database failures remain existing Go test responsibilities;
+unsupported mock methods still fail with a recorded 501 harness fault rather than
+pretending to model chi's method-not-allowed behavior. No browser assertion moved or
+weakened. Corpus and fixture edits now select Go, frontend integration and self-tests
+as a union; a documentation edit cannot hide those consumers.
+
+The two frontend suites pass 11 cases in Vitest 4.26 s / whole command 6.21 s,
+user/system CPU 7.39/0.92 s, maximum child RSS 263,056 KiB. The client-only suite
+passed three cases in 454 ms inside Vitest before the directory move. Go corpus
+execution passed in 0.129 s package time. Real OMC settings probe passed in 32.72 s
+(33.4 s runner wall), retaining full-page wiring/reload/geometry checks. The first
+full static run correctly failed on test-only graph edges; types, all 73 logic
+suites and Go passed. Final boundary/full-gate evidence will be appended after the
+remaining browser work rather than treating this intermediate failure as completion.
+
+### Navigation profiling before browser changes
+
+A read-only instrumented run of route-render-error and route-lazy-error passed all
+157 checks in 65.16 s whole-command wall (45.39/19.23 s user/system CPU; maximum
+child RSS 330,188 KiB). Render recovery made 21 document navigations and 2,703 script
+requests; lazy recovery made 24 documents and 3,116 script requests. The first goto
+cost 8.018 s; warm gotos were usually 0.46–0.71 s, and scenario totals were
+31.968/31.357 s. Repeated full documents/bootstrap work, not the small outside-scenario
+process overhead, merit focused examination. The first baseline catalog's longer
+lazy run is not causally attributed to any optimization; this was profiling only.
+
+Contract stage after boundary correction: `pnpm verify` passes all static/Go/logic/
+frontend integration/repository gates and the worktree secret scan in 51.01 s wall,
+122.51/13.77 s user/system CPU, maximum child RSS 1,139,368 KiB. All 40 focused
+fixture/integration-discovery/runtime-boundary tests pass. Final full built/browser/
+harness/demo and exact-head hosted evidence remain required after browser changes;
+this stage does not substitute the focused settings run for complete coverage.
+
+### Broader contract/module/resource audit
+
+| Area | Current interface and lowest useful owners | Phase-two decision and remaining risk |
+| --- | --- | --- |
+| Preferences / UI state | closed Go `knownPreferences`; raw JSON client-owned documents; `usePreference` key-local write chain and shared QueryClient | Shared corpus and rendered pilot implemented. Hook reads deduplicate in StrictMode; parsed objects remain stable under unrelated cache updates. The settled write queue is bounded by the 16 public keys, so changing global write lifetime or clearing cache is not an evidence-backed runtime optimization. |
+| Agent / AG-UI | `internal/api/agent_http.go` and projection DTOs; `web/src/agent/protocol.ts`, reducer and run connection; real agent HTTP/projection tests, existing Node protocol/reducer/reconnect suites and engine probes | Different from Playground event vocabulary. Preserve RUN/STATE/TEXT/TOOL events, snapshots, confirmation and OAuth handoffs. Browser fixtures synthesize journals; they are not complete Go-to-browser schema certification. A future small journal corpus can extend parity without replacing current projection/security tests. |
+| Playground / SSE | `internal/api/playground.go`, run state and endpoint selection; `web/src/agent/runConnection.ts`, SSE parser and Playground API adapter | Existing Go admission/deadline/cancellation/endpoint tests and Node stream/reconnect tests already own non-engine permutations. A lost POST must never be repeated; reconnect GETs retry subscriptions, and cancellation is explicit. Do not cache/reorder/refactor those paths without measured latency and journal equivalence evidence. |
+| OAuth | management lifecycle/provider registry and safe credential projection; typed OAuth DTOs; split workspace/authorization/model-rule/quota probes | Existing API tests own lifecycle and registry semantics; Chrome owns popup/keyboard/scroll/reload behavior. Repeating known sorting/leaf work is unnecessary. Default/per-scenario fixtures still have no complete shared wire corpus, so optional fields and error codes remain a documented future parity candidate. |
+| Providers | family-specific allowlisted DTOs and shared admitted write gate; typed provider client; configuration-preservation/concurrent-toggle/busy/identity tests | Existing asymmetries are deliberate: family schemas, status mutations, safe settings and OAuth metadata differ. Do not merge handlers or generic error vocabularies just because similar code exists. Complete family fixture parity is not established by the preference pilot. |
+| API client | shared request/error/auth/demo handling plus typed endpoint methods; runtime-only dependencies are existing config/audit/usage parsing leaves | File size alone does not establish a runtime bottleneck. Keep public methods and singleton error/handler identity stable; a mechanical domain split would add interfaces without demonstrated loading benefit. Node-environment integration now observes actual emitted client behavior without copying its implementation. |
+| Repository / backend | SQLite WAL, explicit admitted writes, bounded reads, projection allowlists and background-loop ownership | No new measured query/lock hot path was found in this verification-focused audit. Full static Go tests/vet remain required. No migration, lock scope, poll cadence, pricing/cache policy or cancellation lifetime is changed. |
+
+Frontend integration's production graph is clean: only `web/src` is analyzed, and
+actual tests/fixtures cannot be reached without an unresolved product import. A
+contract-only edit in `web/tests` correctly plans no browser scenario; fast checks
+still select its type/integration/self-test owners. It is not a new browser skip
+switch: introducing a product eager/lazy import of test infrastructure widens and
+fails existing boundary guards. Node logic suites remain the lower-cost default;
+use a rendered suite only when real subscriptions/state/cleanup must be observed.
+
+### Bounded browser scheduling: measured execution cost
+
+ADR 0091 adopts two workers inside one owned Vite/Chromium batch, not overlapping
+browsers, shared pages or relaxed budgets. The core runner remains serial by default;
+`check:ui` and `verify:probes` select two and accept `--workers 1`. The serial full
+runner explicitly selects one. Shard membership, all 65 scenarios, 120-second
+scenario limits, 480-second batch watchdogs and two-second context close budgets
+are unchanged. Verdicts and failures retain catalog order. Startup/active step
+names, local fault ledgers, late-event checks, diagnostics and teardown are owned
+per context; admitted peers join before normal shared shutdown.
+
+Two controlled pairs use route-render-error, route-lazy-error, playground and
+omc-settings, retaining all 276 checks. The route module is frozen from `c435b95`
+for these pairs so that removing redundant navigations is not credited to scheduling.
+Runs are sequential on the same four-logical-CPU Linux ARM64 host, with no other
+browser lane overlapping. Cache/temperature conditions are not identical; two
+pairs establish repeated direction, not a statistical confidence interval.
+
+| Measurement | One worker | Two workers | Interpretation |
+| --- | ---: | ---: | --- |
+| Pair A scenario-runner wall | 128.416 s | 90.641 s | 29.4% lower wait; 276/276 checks and 4/4 scenarios |
+| Pair A whole command / user + system CPU | 129.11 s / 123.93 s | 91.40 s / 126.56 s | CPU work is similar, not reduced |
+| Pair B scenario-runner wall | 132.094 s | 94.815 s | 28.2% lower wait; same coverage |
+| Pair B sampled process-tree peak PSS | 1,275.5 MiB | 1,622.3 MiB | about 27% higher attributable memory |
+| Pair B sampled process-tree peak RSS | 1,605.1 MiB | 2,074.3 MiB | shared pages are counted repeatedly in RSS |
+| Full 65-scenario command, merged baseline versus adopted implementation | 734.66 s | 464.58 s | 36.8% lower wall; includes both scheduling and navigation reuse |
+| Full command user + system CPU | 495.94 s | 528.95 s | about 6.7% more CPU; this is a latency trade-off |
+
+The adopted full catalog passes 65/65 in 463.8 s runner time, with sampled aggregate
+peak PSS 1,829.6 MiB / RSS 2,429.0 MiB and 11 owned processes. Sampling reads Linux
+`smaps_rollup` every 500 ms and may miss peaks. GNU time's maximum child RSS
+(599,072 KiB) is not aggregate memory. No aggregate baseline catalog sample was
+collected, so do not invent a full-catalog memory percentage. Individual scenarios
+can take longer under overlap; no timeout has been increased to conceal contention.
+There is no basis for three or more workers, and hosted total workflow wall time
+may remain dominated by built acceptance even if probe shards improve.
+
+Route recovery now initializes the first dashboard once and uses the already
+asserted full-document home recovery as the next locale's starting state. It avoids
+three redundant initial document navigations per recovery scenario while preserving
+all failure, reload, home, redirect, locale/theme, phone geometry, keyboard, focus,
+progress, secret-redaction and error assertions. This is test orchestration only.
+
+Queue/options/batch/full-runner/discovery self-tests pass 26 focused cases. Actual
+Chromium fault injection passes in both schedules: runtime exceptions, console
+errors, unknown routes, wrong methods, fulfilled undeclared outbound requests and
+sockets remain failing evidence; declared failures/popups remain healthy. Concurrent
+contexts prove isolated cookies, storage and preference stores, and a fault cannot
+fail its healthy peer. CodeRabbit reported one minor rendezvous/setup-failure risk;
+the setup failure now releases the peer and a fourth harness case explicitly
+proves this rather than waiting for the scenario deadline. Full-run harness evidence
+passes all four cases in 7.45 s Node test time.
+
+Reproduce complete coverage with `pnpm check:ui --all --workers 1` and
+`pnpm check:ui --all --workers 2`, or the unchanged hosted `verify:probes --shard i/3`
+commands. Inspect `tmp/probe-timings/5181.json` for exact-once IDs, verdicts and step
+costs. For a focused same-code comparison, select the four IDs above from
+`SCENARIOS`, call `runProbes` with `concurrency: 1` and then `2`, and count the
+checker callbacks as well as failures. Do not compare simultaneous runs or reuse a
+context to make isolation appear cheaper. Controlled logs, timing JSON, GNU time
+records and process-tree samples are retained under `tmp/phase-two` locally.
+
+### Production artifact compatibility and verification status
+
+There is no production source diff against the merged base in `web/src` or Go
+implementation (the only new Go file is a test). Runtime dependency declarations,
+styles, DTOs, router/auth behavior, migrations and persistence code are unchanged.
+The baseline `bundle-report` artifact from successful master run `37938787933`
+certifies the exact merge SHA; the candidate build has the same 307 JS/CSS filenames
+and SHA-256 hashes and identical metrics. Initial JS remains 1,943,293 raw /
+628,346 gzip bytes, initial CSS 71,866 / 13,838 bytes and total JS 12,002,165 /
+3,600,050 bytes. Loading-boundary/ceiling and exact-base growth checks pass. This
+preserves loading/payload cost; it is not a measured product CPU/latency improvement.
+
+The first full local orchestration completed strict toolchain, SPA synchronization,
+all static groups (48.68 s), history/worktree secret scans, bundle boundaries,
+four actual Chromium harness cases (8.11 s command) and all 376 built cross-stack
+checks (130.51 s command). During probes its supervising shell received SIGTERM
+(exit 143), without a scenario failure; 56 completed records were passing. That
+interrupted invocation is not a passing `verify:full` command and supplies no valid
+whole-command GNU timing. An orphaned Vite listener owned by this invocation was
+identified by PID/path/start time and terminated; an unrelated user Vite server was
+left alone. A first resumption correctly refused the occupied port, preserving the
+fail-closed listener-ownership guard. The demo independently passed all 18 routes
+in 19.97 s command wall. The resumed complete probe lane passes all 65 scenarios in 452.9 s runner /
+455.01 s command wall, 327.63/146.86 s user/system CPU and 626,088 KiB maximum child
+RSS. Its structured timings contain exactly 65 unique passing IDs. Completed,
+unchanged lanes are reused as the agent contract requires; all local full-suite
+lanes now have passing evidence, but the interrupted orchestration is still not
+called a passing monolithic command. Hosted implementation-head verification is recorded below; final documentation-head
+verification is independently required before delivery.
+
+Local CodeRabbit CLI 0.9.0 was verified against its official CLI overview before
+use. The review covered all tracked/untracked phase changes against the merged SHA,
+after a clean secret scan. Its one minor setup-rendezvous issue was fixed with an
+independent Chromium case; the focused follow-up returned zero concrete findings
+but reported an unverified-findings warning. Reviewer output is advisory evidence,
+not proof of behavior or a replacement for the full gates.
+
+### Representative frontend compatibility and feedback evidence
+
+Baseline/current captures use the same synthetic Agent, Playground and OAuth
+fixtures, 1440×900 desktop and 320×850 phone viewports, the actual drawers and
+font/image readiness. The baseline comes from an archive of the exact merge SHA;
+the candidate uses the adopted two-context schedule. Ten representative captures
+preserve geometry and content. Six images are pixel-identical; four contain only
+3/6/13/13 differing pixels, with maximum channel delta one (out of 255), at
+rasterized boundaries. They are not claimed byte-identical. No threshold, mask,
+product style or existing assertion was changed to obtain these observations.
+The first exploratory capture did not await image decoding and showed incomplete
+baseline OAuth icons; it is not the compatibility comparison. The corrected
+captures explicitly await fonts and all image decodes before taking screenshots.
+The unchanged source and all 307 production JS/CSS hashes plus full real-browser
+geometry/interaction checks provide independent compatibility evidence. Neither
+screenshots nor passing tests alone certify every possible visual state.
+
+A representative neutral conversation-label edit was measured by feeding its exact
+file path into the exported production fast planner and executing the unchanged
+`CHECK_COMMANDS` (including affected logic arguments). Six actual affected checks
+pass in 13.35 s whole-command wall, 39.65/4.58 s user/system CPU, maximum child RSS
+631,588 KiB. A contract-test-only plan selects types, all frontend integration and
+repository self-tests: three checks pass in 22.51 s wall, 57.44/6.47 s CPU,
+606,208 KiB child RSS. These are real checks on the current implementation, not
+stand-in delays; the planner-input benchmark is not mislabeled as a changed-worktree
+CLI invocation. They are warm-toolchain local samples, not universal 10–30-second
+guarantees, cold-install claims or faster product runtime. No Chromium/build/fake CPA
+is selected. Existing shared production paths can still widen conservatively; full
+browser/CI ownership remains independent of these plans.
+
+The component layer adds an integration obligation to the frontend static lane.
+It does not replace Node logic suites or reduce existing browser claims in this
+pilot. Future migration should move only a demonstrated non-engine claim, retain
+representative wiring and explicitly update this ledger with negative fault evidence.
+The current speed gain comes from less browser waiting and stronger inexpensive
+state/contract diagnostics, not counting fewer assertions as success.
+
+A separate actual `pnpm test:fast --plan` / `pnpm test:fast` worktree measurement
+uses a temporary whitespace edit to the contract test alongside this report edit;
+the test bytes are restored afterwards. The CLI selects types/integration/docs/self
+as a union and passes four checks in 23.07 s wall (57.95/6.46 s CPU, 618,884 KiB
+maximum child RSS). This verifies registration and real CLI execution without
+claiming that whitespace is a new business behavior or omitting the report check.
+
+### Remaining evolution and explicit exclusions
+
+- Extend the small independent wire corpus only where drift risk is demonstrated,
+  next considering an Agent journal/AG-UI projection or one OAuth provider family.
+  Preferences are a real end-to-end contract pilot, not a certification of every API.
+- Retain existing family-specific safe DTOs, Agent/Playground adapters and gate/lock
+  ownership. No measured production hot path justifies merging handlers, splitting
+  the client mechanically, changing poll cadence or introducing another cache.
+- Profile a stable engine-readiness/transform candidate before further reducing
+  browser latency. The current queue trades additional memory/CPU for less waiting;
+  more workers and generic wait reductions are not approved optimizations.
+- External termination of a long supervising process can still leave an owned dev
+  listener. Diagnose exact PID/port ownership before cleanup; never kill a user's
+  unrelated server or use a different listener's readiness as evidence.
+- Keep component cases explicitly drained and test-only imports outside the runtime
+  graph. Simulated DOM remains inappropriate for geometry, painting, focus, image
+  encoding, navigation lifecycle, real streams or transport cancellation.
+- The existing `formatDuration(119600)` carry presentation remains separate visible
+  bug scope requiring user authorization. No incompatible product change is needed
+  or implemented by this phase.
+
+### Hosted CI and delivery evidence
+
+Independent Draft PR #167 targets master from
+`refactor/verification-governance-phase-two`; the original master remains
+`b5e00765ada52f9eb92335e970a4dbd673521456`. PR title/body follow the repository's
+Contributing guide, PR template and review title constraints. The template's local
+`verify:full` checkbox remains unchecked because the supervising invocation was
+interrupted; independent passing lane evidence is explicit rather than relabeled.
+AGENTS.md now requires reading these existing sources and remote read-back when
+creating/editing a PR instead of maintaining another duplicate template.
+
+Implementation/report head `3e8b65614d0dc2687cb130d66fccfc559b7e7bc4` passes full hosted
+CI run `37958003906`: static, built acceptance/harness/demo/bundle, all three probe
+shards and the mandatory aggregate. Downloaded timing artifacts certify all 65 IDs
+exactly once with passing verdicts; the hosted 307 JS/CSS hashes and bundle metrics
+also match the exact merged baseline. The final local `pnpm verify` passes in
+52.10 s (122.51/14.07 s CPU, 1,154,288 KiB maximum child RSS). Final worktree and
+history secret scans pass; no production environment/data was accessed.
+
+| Hosted observation | Baseline run 37938787933 | Implementation run 37958003906 |
+| --- | ---: | ---: |
+| Workflow timestamps | 242 s | 265 s |
+| Browser job | 236 s | 262 s |
+| Static job / static gate step | 93 s / 42 s | 144 s / 62 s |
+| Probe shard jobs 1 / 2 / 3 | 196 / 219 / 187 s | 163 / 179 / 175 s |
+| Probe execution steps 1 / 2 / 3 | 160 / 172 / 156 s | 125 / 133 / 129 s |
+| Browser dependency install / prepare build / built acceptance | 9 / 68 / 97 s | 12 / 79 / 105 s |
+
+Probe execution steps improve by 21.9%, 22.7% and 17.3% in this hosted sample, but
+total workflow wall is 9.5% longer because built acceptance/setup remains the
+critical path. Static execution also increases with the additional integration and
+self-test obligations. Runner/cache conditions differ, so neither total regression
+nor individual gains are controlled causal estimates. Do not present a local
+catalog improvement as a total-CI improvement. Summed observed job duration is
+933 versus 927 seconds including the aggregate; this is not actual billed runner
+cost or CPU telemetry. More hosted samples and a measured built-acceptance candidate
+are needed before adopting another pipeline optimization.
+
+Rollback/commit boundaries:
+
+- `175ec94`: merged baseline and phase-two audit obligations.
+- `a49dd0c`: isolated rendered React integration pilot and ADR 0089.
+- `c435b95`: independently certified preference corpus/typed client/fixture parity,
+  production graph isolation and ADR 0090.
+- `106453d`: bounded scenario scheduling, retained browser claims/fault tests,
+  controlled resource evidence and ADR 0091.
+- `3e8b656`: local full-lane/artifact/screenshot/feedback evidence and residual risks.
+- The delivery-evidence commit records hosted results and PR creation/read-back
+  conventions. Inspect `git log --oneline b5e0076..HEAD` for the exact final record;
+  the PR head and its hosted checks certify that documentation commit separately.
+
+The completed pilot adds stronger low-cost ownership without removing engine
+claims. Production runtime modules, loading assets, API semantics and visuals are
+preserved; lower catalog wall is measured alongside its memory/CPU cost. The bounded
+parity expansion and profiling recommendations above remain future work, not
+undelivered claims of universal API coverage or runtime speedup. PR remains Draft;
+merge, tags, releases and production operations require separate authorization.

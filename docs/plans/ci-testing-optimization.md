@@ -248,7 +248,7 @@ The implementation preserves required `static`, `browser` and aggregate `probes`
 | Release identity (F1) | Identity resolution produces an exact revision. All verification lanes and publication consumers check out that revision; publication boundaries re-resolve the tag. Identity bootstrap disables package caching because it does not install pnpm. Negative mutations reject conditional/softened identity checks. |
 | Browser faults and fixtures (F2–F5) | Undeclared API methods/paths return 501 and fail the verdict. Per-context ledgers enforce bounded intentional errors and exact-origin HTTP/WebSocket allowlists, including externally targeted requests subsequently fulfilled by a fixture. Owned Vite readiness tokens refuse peer servers. Owned browser processes and teardown are bounded; per-port artifact namespaces retain timing and failure evidence. |
 | Release DAG (F6) | Read-only static, built-browser/demo and three probe shards run after identity resolution, feeding strict aggregates. Native/image publication waits for complete verification. Source checks, image smoke, archive checksums and latest-policy rechecks remain enforced. |
-| Probe balancing and decomposition (F7–F8) | Historical sample metadata lives with the reviewed weights; OAuth and system flows have independent contexts and narrower claim ownership. The catalog now contains 62 scenarios. Unmeasured weights are explicitly provisional and never exclude a scenario. Timing reports generate review candidates rather than rewriting the runtime weights. |
+| Probe balancing and decomposition (F7–F8) | Historical sample metadata lives with the reviewed weights; OAuth and system flows have independent contexts and narrower claim ownership. The catalog now contains 65 scenarios. Unmeasured weights are explicitly provisional and never exclude a scenario. Timing reports generate review candidates rather than rewriting the runtime weights. |
 | Built PR coverage (F9) | Every PR runs full built acceptance, not an additional built-domain selection planner. P0 remains available as a focused local command. This favors a simpler coverage contract over a second ownership map. |
 | Policy validation and docs (F10) | CI/release actions are immutable and checkout credentials do not persist. Parsed semantic validators plus negative mutations cover CI, release and maintenance. Pinned actionlint checks YAML/expression/action syntax separately; shellcheck is not enabled by that command. Maintained Markdown is discovered automatically. |
 | Local feedback (F11) | Full-local verification serializes Chromium lanes on the shared host while static checks remain parallel; hosted lanes remain separate parallel jobs. Completed checks report immediately, with detailed output spooled to disk. Local logic selection follows conservative runtime imports into automatically discovered suites; opaque readers and unknown/infrastructure/dependency changes widen. Final and CI logic gates remain full. |
@@ -279,3 +279,15 @@ Build-input ownership also requires the local full runner to finish SPA synchron
 before Go static compilation. Built live-tail acceptance now controls availability of
 one precommitted fixture row until Hold is established, then forwards real responses
 unchanged; startup duration no longer determines whether the arrival can be observed.
+
+
+### Phase-two probe scheduling evidence
+
+ADR 0091 adds a bounded two-context queue inside each existing probe batch/shard;
+full catalog membership, fault detection, watchdogs and sequential local browser
+lanes are unchanged. `verify:probes --workers 1` and `verify:full:serial` preserve
+serial diagnosis. Repeated local four-scenario comparisons reduce wall time by
+28–29% with similar CPU and higher memory; the complete local catalog falls from
+734.66 s to 464.58 s with 65/65 passing. This is not a hosted total-CI speedup claim.
+Detailed resource samples, compatibility boundaries and hosted results belong in
+`docs/plans/architecture-governance.md` rather than a second measurement ledger.
