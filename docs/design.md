@@ -408,6 +408,13 @@ remainder is a visible gutter at the field's edge — which is what made the fix
 like an unfinished widget. There is no horizontal scrollbar at any desktop width; below the cell
 floor the field swipes instead (see rule 9).
 
+**It shares its row.** On desktop the field is the left half of a two-column row
+(`.dashboard-activity-row`), with credential health on the right, so a year of weeks divides a
+half-width panel rather than the whole content pane; the cell floor is compact enough that the year
+still fills that column with no horizontal scroll at any desktop width. Below 900px the row becomes
+a single column: the two panels stack, and the grid takes the larger mobile floor because a phone
+swipes it sideways anyway.
+
 **The current week is a complete column.** Its later days have not happened, so nothing is stored for
 them — the same fact as a day whose records were pruned, and they are drawn and treated identically
 rather than given a state of their own. Leaving them blank was the alternative and it reads as a
@@ -419,6 +426,23 @@ rendering hole: the shape promises a full week.
 | `--heatmap-busy` | `#00a2fb` | `#005d8f` | the ramp's ceiling: the window's busiest day |
 | `--heatmap-zero-recorded` | `#2c2c30` | `#e5e5ea` | recorded, no traffic |
 | `--heatmap-zero-unrecorded` | `#212124` | `#f1f1f4` | nothing stored for that day |
+
+### Credential health
+
+The panel beside the activity grid answers a different question from every other panel on the page:
+whether the deployment can serve traffic at all, rather than how much it has. It reads the credential
+tally `/management/overview` already returns and draws it as one proportional meter — active,
+unavailable, disabled — with those counts as its legend and each type's own count beneath. One meter
+rather than three figures, because the three states are parts of a single whole, and a proportion is
+what "one of three credentials is unavailable" means.
+
+Because it is the dashboard's one **live** reading, its states are about freshness rather than about
+the window: a failed refresh keeps the last tally and says so in the warning tone, and only a read
+that never produced a tally is reported as unknown — with a retry, not a dead end. A deployment
+holding no credential gets an empty state of its own, because nothing is in doubt. The meter uses the
+semantic status trio (`--success`, `--warn`, `--danger`) and never the heatmap ramp: "healthy" and "a
+lot of tokens" must not be the same colour. Both the empty state and the panel header link to
+`/oauth-management`, which is where the answer is changed.
 
 A measured cell mixes these two stops in **OKLCH** at a weight its own `--heatmap-quiet-share`
 carries, so the whole ramp is one declaration and the endpoint it reaches is the accent token above.

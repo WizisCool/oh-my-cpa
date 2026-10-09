@@ -495,8 +495,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   metadata. CPA has no field for it, so it is never written into CPA's config;
   only an absolute http/https URL is accepted, because the provider list renders
   the provider's name as a link to it.
-- **Token Activity Grid (Heatmap)**: The dashboard's day-by-day token field below the six
-  KPI tiles — a contribution-graph shape of seven weekday rows (Monday first) by one column
+- **Token Activity Grid (Heatmap)**: The dashboard's day-by-day token field, sharing a half-width
+  desktop row with Credential Health below the six KPI tiles — a contribution-graph shape of seven weekday rows (Monday first) by one column
   per week, fifty-three whole weeks ending today. Its span is fixed rather than derived from
   the Range Preset: it answers "how has this year gone" where the tiles answer "how is this
   window going". It carries no caption and no readout saying so - the panel's title names it and
@@ -542,6 +542,16 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   window, so a linear ramp collapses the middle of the range into one invisible shade and a logarithm
   over-amplifies the bottom. The scale is relative to the window, so the same shape of traffic paints
   the same field whatever the absolute volume.
+- **Credential Health**: The dashboard panel beside the Token Activity Grid, showing the credential
+  tally `/management/overview` already returns as one proportional meter — active, unavailable and
+  disabled — with those counts as its legend and each credential type's own count beneath. It is a
+  **live read, not a stored measurement**, so it answers "can this deployment serve traffic" where
+  the grid answers "how has the year gone"; that is why it sits outside the Range Preset's reach,
+  and why its numbers are never read as traffic. Freshness, not the window, decides its states: a
+  refresh that fails while a tally is on screen keeps that tally and states the failure beside it,
+  and only a read that never produced one is reported as unknown, with a retry. A deployment holding
+  no credential is **empty** rather than unknown — nothing is in doubt, it has none — and both that
+  state and the panel's header link to the page that changes the answer, `/oauth-management`.
 
 - **Bucket**: One point of the sparkline. Width is chosen per window so the
   series stays near 48 points on a human step. The newest bucket is always
