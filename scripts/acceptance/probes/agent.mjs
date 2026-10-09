@@ -712,8 +712,10 @@ export async function agentNarrow({ base, page, check }) {
   // on a phone dragged the conversation off the screen.
   const longValue = 'a-value-without-any-break-'.repeat(12);
   const privateQueryCell = 'private-query-cell-not-for-preview';
+  // Wider than a phone's column once every figure is whole.
+  const figuresTable = '| Model | Requests | Tokens | Cost |\n| --- | ---: | ---: | ---: |\n| gpt-4.1 | 1,204,300 | 98,204,300,112 | $1,204,300.25 |';
   await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [
-    { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
+    { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }, { type: 'text', content: figuresTable }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
       { id: 'call-wide', name: 'database_query', arguments: JSON.stringify({ sql: `select '${longValue}'` }), result: { status: 'success', data: { columns: ['provider'], rows: [[privateQueryCell]], is_truncated: false, detail: longValue } } },
     ] },
   ] } }));
@@ -728,6 +730,14 @@ export async function agentNarrow({ base, page, check }) {
   // column rather than only that the overflow is hidden.
   const transcript = await page.locator('[data-testid="agent-transcript"]').evaluate(box => ({ scroll: box.scrollWidth, client: box.clientWidth }));
   check('a long call digest does not widen the transcript on a phone', transcript.scroll <= transcript.client, JSON.stringify(transcript));
+  // A table too wide for the column scrolls in its own frame; shrinking it would split figures.
+  const figures = await page.getByRole('cell', { name: '98,204,300,112', exact: true }).evaluate(cell => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const frame = cell.closest('table').parentElement;
+    return { lines: range.getClientRects().length, scroll: frame.scrollWidth, client: frame.clientWidth };
+  });
+  check('a table keeps each figure on one line and scrolls sideways on a phone', figures.lines === 1 && figures.scroll > figures.client, JSON.stringify(figures));
   const composer = await page.locator('[data-testid="agent-page"] form').last().boundingBox();
   check('the Agent composer starts compact on a phone', composer.height <= 90, `height=${composer.height}`);
   // On a phone the model a message will reach stays named in the composer, never behind a sheet.
@@ -936,6 +946,17 @@ export async function agentViews({ base, page, check, expectProblem }) {
   check('a canvas table formats tokens the way the console writes them', (await cells()).join('|') === 'gpt-4.1|1.2M|gemini-2.5|86.4K', (await cells()).join('|'));
   await drawn.locator('#table th').filter({ hasText: 'Tokens' }).click();
   check('a canvas table sorts by a column', (await cells())[0] === 'gemini-2.5' && await drawn.locator('#table th[aria-sort="ascending"]').count() === 1);
+
+  // A chart is drawn at its frame's width: on a phone its axis text is the size the kit set, not
+  // a desktop drawing scaled down to a third.
+  const chartScale = () => drawn.locator('#chart svg').evaluate(svg => svg.getBoundingClientRect().width / svg.viewBox.baseVal.width);
+  const wideViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 850 });
+  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at a phone width' });
+  check('a canvas chart keeps its text size on a phone and its marks', Math.abs(await chartScale() - 1) < 0.05
+    && await drawn.locator('#chart rect').count() === 2 && await drawn.locator('#chart .omc-tip').count() === 1, String(await chartScale()));
+  await page.setViewportSize(wideViewport);
+  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at the desktop width' });
 
   // A normal dashboard may exceed the old 1,600px viewport. Its last row belongs to the
   // transcript, not to a nested scrolling viewport that narrows the chart on classic scrollbars.

@@ -177,17 +177,54 @@
     padding-top: 48px;
   }
 
+  /* A phone's first screen is given air rather than filled from the top: the greeting starts a
+     little down the page, stands clear of the box, and the starting questions are a quiet list
+     under it instead of four more framed boxes beside the composer's own. */
   .shell[data-hero] .shell-main {
     justify-content: flex-start;
+    padding-top: max(48px, 13dvh);
     padding-bottom: 16px;
   }
 
   .hero {
-    padding-top: 16px;
+    gap: 12px;
+    padding-bottom: 32px;
+  }
+
+  .hero-mark {
+    margin-bottom: 12px;
   }
 
   .examples {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin-top: 24px;
+  }
+
+  .example {
+    min-height: 48px;
+    padding: 10px 6px;
+    border: 0;
+    border-top: 1px solid var(--thread-hairline);
+    border-radius: 0;
+  }
+
+  .example:first-child {
+    border-top: 0;
+  }
+
+  /* With a software keyboard up the transcript is a few lines tall, so the floating actions and
+     the room kept clear for them go to the conversation. */
+  .shell[data-keyboard] .shell-bar {
+    display: none;
+  }
+
+  .shell[data-keyboard] .shell-main {
+    padding-top: 0;
+  }
+
+  .shell[data-hero][data-keyboard] .hero {
+    padding: 16px 12px 16px;
   }
 
   /* On a phone the label would crowd the actions beside it; the icon and its name for assistive
@@ -1526,6 +1563,30 @@
 }
 
 @media (max-width: 640px) {
+  /* A phone's column is narrow and a decision is tapped with a thumb: the card spends less of
+     its width on padding, and the two answers share the row as full-height targets. */
+  .approval:not([data-variant='consent']) {
+    padding: 12px;
+  }
+
+  .approval:not([data-variant='consent']) .operation-fields {
+    padding: 8px 10px;
+    gap: 6px 12px;
+  }
+
+  .approval:not([data-variant='consent']) .operation-actions {
+    flex-wrap: nowrap;
+  }
+
+  .approval:not([data-variant='consent']) .operation-actions > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .approval .operation-actions :global(.ant-btn) {
+    height: 40px;
+  }
+
   .question {
     max-height: 70dvh;
     padding: 12px;

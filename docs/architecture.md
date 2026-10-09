@@ -289,7 +289,9 @@ names the thought process while the separate activity row owns the live phase an
 The console builds a canvas's document in `web/src/agent/canvasDocument.ts` - the content security policy, the theme variables,
 the frozen rows, then the kit in `web/src/agent/canvasKit.ts` (`OMC.rows`, `OMC.fmt`, `OMC.chart`,
 `OMC.table`, `OMC.diagram`, `OMC.icon` and `OMC.compose`, configured with the operator's token
-style, language and time zone; `OMC.compose` only drafts a composer message) ahead of the
+style, language and time zone; `OMC.compose` only drafts a composer message; a chart is drawn at
+its frame's width between 280px and 760px and again when that width changes, so its text keeps
+its size on a phone) ahead of the
 model's markup - and shows it in a script-only sandboxed `srcdoc`
 frame. Drafts draw partial markup under a fresh nonce-only script policy, allowing only the
 host bootstrap to execute: neither model scripts nor inline event handlers run until the

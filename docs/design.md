@@ -1203,7 +1203,9 @@ question. `@` completes a name the operator would otherwise copy from another pa
 key alias, a capability. The list opens upward from the frame's top edge on `--elevated` with a
 hairline border and no shadow, one row per entry: a 16px `--muted` icon for a command, the name in
 mono, what it is in `--muted`, the highlighted row on `--border-soft`. Arrow keys move, Enter picks, Escape closes; while a row is
-highlighted Enter belongs to the list and cannot send. A mention lands as the bare name. Up on an
+highlighted Enter belongs to the list and cannot send. On a phone or a coarse pointer a row is 44px
+high, and the list is never taller than the room the pane has above the box, so under a software
+keyboard it scrolls within itself instead of running past the pane's top edge. A mention lands as the bare name. Up on an
 empty box recalls the messages already sent, newest first. Neither has a button: the placeholder
 names both keys.
 
@@ -1236,7 +1238,8 @@ desktop layout left it a strip between two bars. On desktop the action remains i
 inside its padded bubble, so one line does not acquire a second layer of vertical spacing.
 
 **The transcript scrolls only vertically.** Code blocks and tables scroll sideways inside their own
-frames, every other element is bounded by the column (a capability step's digest is one
+frames - a table never breaks inside a word to fit, so a figure stays whole on a phone - and
+every other element is bounded by the column (a capability step's digest is one
 ellipsized line, never the width of its text), and the column is bounded by the scroll box, so a
 sideways swipe on a touch screen never drags the conversation. An answer always uses the full
 column.
@@ -1366,7 +1369,9 @@ out and the capability chain is shown open, because a picture has nothing to cli
 what Allow and Deny do and the localized description, then the target in mono and a form-shaped
 change as label/value rows on a field panel (anything deeper stays JSON), and ends with one decision, Deny or Allow;
 deciding continues the run (ADR 0035). A destructive capability draws Allow in the danger hue and
-adds a "cannot be undone" line; nothing is typed to confirm. Private input and the OAuth hand-off
+adds a "cannot be undone" line; nothing is typed to confirm. At the 640px phone breakpoint the card
+tightens its padding and Deny and Allow share the row as equal 40px-high targets, as they do on the
+authorization screen. Private input and the OAuth hand-off
 appear on the card when the capability needs them. While a decision is open the composer refuses to
 send and says so in a `--warn` line inside its frame, with a "Show" link that brings the card into
 view and focuses it.
@@ -1447,11 +1452,17 @@ settled-turn measurements, not the live activity line.
 The Agent's page actions sit together at the conversation's top trailing corner: New conversation
 first, labelled and hairline-edged, once there is a conversation to replace, then a short rule and
 quiet icon actions for export, the capability directory and the connection guide. A phone keeps
-the icon and drops the label. The Playground's head carries one labelled button, New conversation,
+the icon and drops the label, and while its software keyboard is up the cluster and the room kept
+clear for it go to the conversation: every action is also a `/` command, and the cluster returns
+with the keyboard's departure. The Playground's head carries one labelled button, New conversation,
 and quiet icon actions for export, refresh and the side panel, whose icon is
 `--accent` while the panel is open. The empty conversation offers example questions as
 keyboard-reachable buttons that fill the composer without sending, and under them one `--meta` line
-of `kbd` hints - `/` for commands, `@` for names, Up for the last message - which a phone leaves out. The newest answer may end with up
+of `kbd` hints - `/` for commands, `@` for names, Up for the last message - which a phone leaves out. On a phone
+the first screen is given air instead of being filled from the top: the greeting starts 13dvh down
+(never under the page actions), stands 32px clear of the composer, and the example questions are a
+borderless list of 48px rows parted by `--thread-hairline` rules 24px under the composer's note, so
+the composer is the only framed box on the screen. Under a software keyboard the top offset is given back. The newest answer may end with up
 to three follow-up questions the model offered, each a slip with a `--thread-hairline` edge at the
 thread radius that fills with `--thread-field` on hover; choosing one fills the composer without
 sending, and they leave with the next message.

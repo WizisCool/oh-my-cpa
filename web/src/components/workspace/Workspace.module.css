@@ -541,6 +541,12 @@
   border-collapse: collapse;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  /* The prose around a table may break a word anywhere to stay in the column, and the Markdown
+     library says the same of every block it draws. A table may not: breaking anywhere also
+     shrinks a column until a figure splits across lines. One too wide for a phone scrolls
+     sideways in its frame with its figures whole. */
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .table-scroll :global(th) {
@@ -740,7 +746,9 @@
   bottom: 4px;
   left: 0;
   z-index: 2;
-  max-height: 232px;
+  /* No taller than the room above the box (measured by the composer), so every row stays in
+     reach of the list's own scroll when a keyboard leaves the conversation a few lines. */
+  max-height: min(232px, var(--trigger-room, 232px));
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
@@ -1455,6 +1463,13 @@
   .picker-option {
     min-height: 44px;
   }
+
+  /* A `/` or `@` row is picked with a finger here, so it takes the same height. */
+  .trigger-row {
+    align-items: center;
+    min-height: 44px;
+  }
+
 }
 
 .effort-surface {
@@ -1628,7 +1643,8 @@
    note, because on a phone the keyboard already takes half the height the conversation has. */
 .is-phone.composer {
   padding-top: 6px;
-  padding-bottom: 8px;
+  /* Clear of the home indicator when the browser's own bar is away. */
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 
 .is-phone .composer-body {

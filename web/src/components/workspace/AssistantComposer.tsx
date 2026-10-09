@@ -84,6 +84,8 @@ const MENTION_FORMATTER: DirectiveFormatter = {
 };
 
 const DESKTOP_ROWS = { minRows: 1, maxRows: 10 };
+/** The least a `/` or `@` list is given, in pixels: two rows at a finger's height. */
+const TRIGGER_MIN_ROOM = 96;
 const PHONE_ROWS = { minRows: 1, maxRows: 5 };
 
 /**
@@ -228,6 +230,24 @@ function ComposerSurface({
   ) : null;
   const iconOf = React.useMemo(() => new Map(commands.map(command => [command.id, command.icon])), [commands]);
 
+  // A list rises from the box into whatever the pane above it has left, which under a phone's
+  // keyboard is a few lines. It is measured as a list mounts - the keyboard is already up by
+  // then - so the list scrolls inside that room instead of running off the pane's top edge.
+  const triggerAnchorRef = React.useRef<HTMLDivElement>(null);
+  const hasTriggers = !!triggers;
+  React.useLayoutEffect(() => {
+    const anchor = triggerAnchorRef.current;
+    const pane = anchor?.parentElement?.parentElement;
+    if (!anchor || !pane) return;
+    const measureRoom = () => {
+      const paneTop = pane.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(pane).paddingTop);
+      anchor.style.setProperty('--trigger-room', `${Math.max(TRIGGER_MIN_ROOM, Math.floor(anchor.getBoundingClientRect().top - paneTop - 4))}px`);
+    };
+    const observer = new MutationObserver(measureRoom);
+    observer.observe(anchor, { childList: true });
+    return () => observer.disconnect();
+  }, [hasTriggers]);
+
   return (
     <div className={clsx(styles['composer'], isPhone && styles['is-phone'])}>
       {/* Messages sent during a run wait in a tray on the box they were typed in, in the order
@@ -251,7 +271,7 @@ function ComposerSurface({
         </div>
       )}
       {triggers && (
-        <div className={styles['trigger-anchor']}>
+        <div ref={triggerAnchorRef} className={styles['trigger-anchor']}>
           <ComposerPrimitive.TriggerPopover char="/" adapter={slash.adapter} className={styles['trigger-popover']} data-testid="composer-commands">
             <ComposerPrimitive.TriggerPopover.Action {...slash.action} />
             <TriggerRows prefix="/" emptyLabel={triggers.emptyLabel} iconOf={iconOf} />

@@ -84,6 +84,10 @@ const PRESENTATIONS: Record<Presentation, { label: string; icon: React.ReactNode
   text: { label: 'agent.present.text', icon: <FileTextOutlined aria-hidden="true" /> },
 };
 
+/** The least a visible viewport falls short of the layout by when a software keyboard is up, in
+ *  pixels: more than a browser's collapsing toolbars, less than the shortest keyboard. */
+const KEYBOARD_MIN_HEIGHT = 160;
+
 export function AgentPage() {
   const { t, lang } = useI18n();
   const queryClient = useQueryClient();
@@ -108,6 +112,9 @@ export function AgentPage() {
       ? `${Math.max(0, visibleViewport.top + visibleViewport.height - shell.getBoundingClientRect().top)}px`
       : '';
   }, [isPhone, visibleViewport]);
+  // A software keyboard leaves the conversation a few lines. The page's actions give their row
+  // back while it is up: each is also a `/` command, and all return when the keyboard goes.
+  const isKeyboardOpen = isPhone && visibleViewport.bottom >= KEYBOARD_MIN_HEIGHT;
   const [fingerprint, setFingerprint] = React.useState('');
   const [model, setModel] = React.useState('');
   const [reasoningEffort, setReasoningEffort] = React.useState('');
@@ -571,7 +578,7 @@ export function AgentPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime} config={AGENT_AUI_CONFIG}>
       <AgentViewContext.Provider value={view}>
-        <div ref={pageRef} className={styles['shell']} data-testid="agent-page" data-hero={isHero || undefined}>
+        <div ref={pageRef} className={styles['shell']} data-testid="agent-page" data-hero={isHero || undefined} data-keyboard={isKeyboardOpen || undefined}>
           {bar}
           <main className={styles['shell-main']}>
             {notices}

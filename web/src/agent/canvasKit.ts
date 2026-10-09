@@ -216,22 +216,44 @@ function pointsOf(spec,data){
 }
 
 function tooltip(host){
-  var tip=html('div','omc-tip','',host);
-  tip.hidden=true;
+  var isBound=!!host.omcTip;
+  host.omcTip=html('div','omc-tip','',host);
+  host.omcTip.hidden=true;
+  // A chart drawn again keeps the listeners of its first drawing; they reach the tip in force.
+  if(isBound)return;
   host.addEventListener('mousemove',function(event){
-    var mark=event.target&&event.target.getAttribute?event.target.getAttribute('data-tip'):null;
+    var tip=host.omcTip,mark=event.target&&event.target.getAttribute?event.target.getAttribute('data-tip'):null;
     if(!mark){tip.hidden=true;return}
     tip.textContent=mark;tip.hidden=false;
     var box=host.getBoundingClientRect();
     var left=Math.min(event.clientX-box.left+12,Math.max(0,box.width-tip.offsetWidth-4));
     tip.style.left=left+'px';tip.style.top=Math.max(0,event.clientY-box.top-tip.offsetHeight-8)+'px';
   });
-  host.addEventListener('mouseleave',function(){tip.hidden=true});
+  host.addEventListener('mouseleave',function(){host.omcTip.hidden=true});
 }
 
+// A chart is drawn at the width of the frame it sits in, up to the desktop measure, so its text
+// keeps its size on a phone instead of shrinking with a fixed drawing; a frame that changes width
+// (a rotated phone, the full-screen view) is drawn again.
+var CHART_WIDTH=760,CHART_MIN_WIDTH=280;
 function chart(target,spec){
-  var host=resolve(target);
+  var host=resolve(target),drawnWidth=0;
   spec=spec||{};
+  function draw(){
+    var width=Math.max(CHART_MIN_WIDTH,Math.min(CHART_WIDTH,Math.round(host.clientWidth)||CHART_WIDTH));
+    // Only the width decides the drawing: its own change of height must not draw it again.
+    if(Math.abs(width-drawnWidth)<8)return;
+    drawnWidth=width;paintChart(host,spec,width);
+  }
+  draw();
+  if(window.ResizeObserver){
+    if(host.omcChartObserver)host.omcChartObserver.disconnect();
+    host.omcChartObserver=new ResizeObserver(draw);host.omcChartObserver.observe(host);
+  }
+  return host;
+}
+
+function paintChart(host,spec,W){
   var data=Array.isArray(spec.rows)?spec.rows:rows,points=pointsOf(spec,data);
   host.textContent='';host.classList.add('omc-chart');
   if(!points.length)return empty(host);
@@ -285,15 +307,17 @@ function chart(target,spec){
   var low=ticks[0],span=ticks[ticks.length-1]-low||1;
 
   if(type==='bar'){
-    var LEFT=148,RIGHT=748,TOP=6,BAND=Math.max(24,(isStacked?1:names.length)*14+10),bottom=TOP+categories.length*BAND;
-    var bars=make('svg',{viewBox:'0 0 760 '+(bottom+24),role:'img'},host);
+    var LEFT=Math.round(Math.min(148,W*0.36)),RIGHT=W-12,TOP=6,BAND=Math.max(24,(isStacked?1:names.length)*14+10),bottom=TOP+categories.length*BAND;
+    var bars=make('svg',{viewBox:'0 0 '+W+' '+(bottom+24),role:'img'},host);
     var across=function(value){return LEFT+(value-low)/span*(RIGHT-LEFT)};
     var thickness=(BAND-10)/(isStacked?1:names.length);
-    ticks.forEach(function(tick){
+    // A narrow scale names every other gridline rather than letting the figures run together.
+    var labelStride=(RIGHT-LEFT)/ticks.length<48?2:1;
+    ticks.forEach(function(tick,index){
       make('path',{'class':tick===0?'zero':'grid',d:'M'+round(across(tick))+' '+TOP+'V'+bottom},bars);
-      make('text',{x:round(across(tick)),y:bottom+16,'text-anchor':'middle'},bars).textContent=fmt(tick,unit);
+      if(index%labelStride===0)make('text',{x:round(across(tick)),y:bottom+16,'text-anchor':'middle'},bars).textContent=fmt(tick,unit);
     });
-    categories.forEach(function(x,index){make('text',{x:LEFT-10,y:TOP+index*BAND+BAND/2+4,'text-anchor':'end'},bars).textContent=clip(category(x),20)});
+    categories.forEach(function(x,index){make('text',{x:LEFT-10,y:TOP+index*BAND+BAND/2+4,'text-anchor':'end'},bars).textContent=clip(category(x),Math.max(6,Math.floor((LEFT-14)/6.7)))});
     points.forEach(function(point,index){
       var top=TOP+categories.indexOf(point.x)*BAND+5+(isStacked?0:names.indexOf(point.series)*thickness);
       make('rect',{x:round(Math.min(across(from(index)),across(to(index)))),y:round(top),width:round(Math.abs(across(to(index))-across(from(index)))),height:round(Math.max(2,thickness-2)),rx:1,fill:color(names.indexOf(point.series)),'data-tip':describe(point)},bars);
@@ -302,8 +326,8 @@ function chart(target,spec){
     return host;
   }
 
-  var L=58,R=752,T=10,B=232;
-  var plot=make('svg',{viewBox:'0 0 760 '+(B+26),role:'img'},host);
+  var L=58,R=W-8,T=10,B=T+Math.round(Math.max(160,Math.min(222,W*0.52)));
+  var plot=make('svg',{viewBox:'0 0 '+W+' '+(B+26),role:'img'},host);
   var up=function(value){return B-(value-low)/span*(B-T)};
   var band=(R-L)/categories.length;
   var along=function(x){return L+(categories.indexOf(x)+0.5)*band};
@@ -312,7 +336,7 @@ function chart(target,spec){
     make('text',{x:L-8,y:round(up(tick))+4,'text-anchor':'end'},plot).textContent=fmt(tick,unit);
   });
   // Labels are thinned to what the width can seat instead of being rotated or overlapped.
-  var stride=Math.max(1,Math.ceil(categories.length/8)),room=Math.max(6,Math.floor(band*stride/6.4)-1);
+  var stride=Math.max(1,Math.ceil(categories.length/Math.max(2,Math.floor((R-L)/86)))),room=Math.max(6,Math.floor(band*stride/6.4)-1);
   categories.forEach(function(x,index){if(index%stride===0)make('text',{x:round(along(x)),y:B+18,'text-anchor':'middle'},plot).textContent=clip(category(x),room)});
   names.forEach(function(name,seriesIndex){
     var own=[];
