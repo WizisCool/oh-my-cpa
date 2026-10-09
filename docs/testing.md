@@ -202,12 +202,20 @@ run:
 
 The UI runtime graph distinguishes literal dynamic imports from eager imports. Mapped
 pages loaded lazily by `web/src/routePages.ts` end their reachability chain at that
-registry, just as direct routed pages end at App. The registry itself, its eager
-helpers, mixed eager/lazy edges, unmapped pages, unreadable sources and missing edge evidence still widen
-to all scenarios. `scripts/ui-impact.test.mjs` reads the real graph and requires a
-nonempty routed-page set; a fixture-only test must not pass while real route discovery
-is empty. The plugin host maps to the existing plugin browser scenarios; built native
-credential, frame and write contracts remain in cross-stack acceptance.
+registry, just as direct routed pages end at App. The graph discovers page identity
+from imported JSX components in App's `createBrowserRouter` route elements, following
+the registry's exported `React.lazy` bindings to literal `createPageLoader` imports.
+It does not maintain another page list or infer page identity from a directory rule.
+A different loader/router recipe requires evidence and negative cases in the same
+change; unrecognized syntax widens rather than being guessed. The registry itself,
+page-directory helpers, other imports of the same resolved module, mixed eager/lazy
+edges, unmapped pages, unreadable sources and missing route/edge evidence still widen
+to all scenarios. `scripts/ui-impact.test.mjs` independently requires the App-to-registry
+runtime edge and a nonempty proven registry-page set, then checks every page's scenario
+rule. Negative fixtures ensure directly imported App pages cannot hide a disconnected
+or empty registry, and a mapped directory cannot certify a helper as a route page.
+The plugin host maps to the existing plugin browser scenarios; built native credential,
+frame and write contracts remain in cross-stack acceptance.
 
 The local fast lane passes changed files to `scripts/logic-plan.mjs`, which follows
 relative runtime imports into automatically discovered suites. Unknown/unowned

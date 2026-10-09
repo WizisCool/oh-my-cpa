@@ -29,6 +29,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCE_ROOT = 'web/src/';
+const APP_ENTRY = 'web/src/App.tsx';
+const ROUTE_REGISTRY = 'web/src/routePages.ts';
 const RESOLVE_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '.json', '/index.ts', '/index.tsx'];
 
 let typescript;
@@ -38,11 +40,111 @@ function loadTypeScript() {
   return typescript;
 }
 
+// These proofs recognize the shipped router/loader recipe, not filename conventions.
+// Other syntax remains an ordinary runtime edge and therefore widens at the registry.
+function findRoutedExports(text, known) {
+  const ts = loadTypeScript();
+  const source = ts.createSourceFile(APP_ENTRY, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const registryNames = new Map();
+  const routerNames = new Set();
+  const routedExports = new Set();
+  if (source.parseDiagnostics.length > 0) return routedExports;
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const clause = statement.importClause;
+    if (clause?.isTypeOnly || !clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    for (const binding of clause.namedBindings.elements) {
+      if (binding.isTypeOnly) continue;
+      const importedName = (binding.propertyName ?? binding.name).text;
+      if (resolveSpecifier(APP_ENTRY, specifier, known) === ROUTE_REGISTRY) registryNames.set(binding.name.text, importedName);
+      if (specifier === 'react-router-dom' && importedName === 'createBrowserRouter') routerNames.add(binding.name.text);
+    }
+  }
+  function visitRouteElement(node) {
+    if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && ts.isIdentifier(node.tagName)) {
+      const exportedName = registryNames.get(node.tagName.text);
+      if (exportedName) routedExports.add(exportedName);
+    }
+    ts.forEachChild(node, visitRouteElement);
+  }
+  function visitRoutes(node) {
+    if (!ts.isArrayLiteralExpression(node)) return;
+    for (const route of node.elements) {
+      if (!ts.isObjectLiteralExpression(route)) continue;
+      for (const property of route.properties) {
+        if (!ts.isPropertyAssignment(property) || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) continue;
+        if (property.name.text === 'element') visitRouteElement(property.initializer);
+        else if (property.name.text === 'children') visitRoutes(property.initializer);
+      }
+    }
+  }
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && routerNames.has(node.expression.text)
+      && node.arguments[0] && ts.isArrayLiteralExpression(node.arguments[0])) visitRoutes(node.arguments[0]);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return routedExports;
+}
+
+function findRoutePageSpecifiers(output, routedExports) {
+  const ts = loadTypeScript();
+  const source = ts.createSourceFile(ROUTE_REGISTRY, output, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const reactNames = new Set();
+  const declarations = new Map();
+  const routeImports = new Set();
+  const routeSpecifiers = new Set();
+  const otherSpecifiers = new Set();
+  if (source.parseDiagnostics.length > 0) return routeSpecifiers;
+  for (const statement of source.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === 'react') {
+      const clause = statement.importClause;
+      if (clause?.name) reactNames.add(clause.name.text);
+      if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) reactNames.add(clause.namedBindings.name.text);
+    }
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name)) declarations.set(declaration.name.text, { declaration, statement });
+    }
+  }
+  for (const exportedName of routedExports) {
+    const entry = declarations.get(exportedName);
+    const initializer = entry?.declaration.initializer;
+    if (!entry?.statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      || !initializer || !ts.isCallExpression(initializer) || initializer.arguments.length !== 1) continue;
+    const callee = initializer.expression;
+    if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)
+      || !reactNames.has(callee.expression.text) || callee.name.text !== 'lazy') continue;
+    const loaderName = initializer.arguments[0];
+    if (!ts.isIdentifier(loaderName)) continue;
+    const loader = declarations.get(loaderName.text)?.declaration.initializer;
+    if (!loader || !ts.isCallExpression(loader) || !ts.isIdentifier(loader.expression)
+      || loader.expression.text !== 'createPageLoader' || loader.arguments.length !== 2
+      || !ts.isStringLiteral(loader.arguments[1])) continue;
+    const loadModule = loader.arguments[0];
+    if (!ts.isArrowFunction(loadModule) || loadModule.parameters.length !== 0) continue;
+    const importCall = loadModule.body;
+    if (ts.isCallExpression(importCall) && importCall.expression.kind === ts.SyntaxKind.ImportKeyword
+      && importCall.arguments.length === 1 && ts.isStringLiteral(importCall.arguments[0])) routeImports.add(importCall);
+  }
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+      && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
+      (routeImports.has(node) ? routeSpecifiers : otherSpecifiers).add(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  for (const specifier of otherSpecifiers) routeSpecifiers.delete(specifier);
+  return routeSpecifiers;
+}
+
 /** Module specifiers that survive to runtime, from transpiled JavaScript. */
 const RUNTIME_SPECIFIER = /(?:\bimport|\bexport)\s*(?:[^'"()]*?\bfrom\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const CSS_IMPORT = /@import\s+(?:url\()?['"]([^'"]+)['"]/g;
 
-function runtimeSpecifiers(file, text) {
+function runtimeSpecifiers(file, text, routedExports) {
   if (file.endsWith('.css')) return [...text.matchAll(CSS_IMPORT)].map((match) => ({ specifier: match[1], isDynamic: false }));
   const ts = loadTypeScript();
   const output = ts.transpileModule(text, {
@@ -55,8 +157,9 @@ function runtimeSpecifiers(file, text) {
       verbatimModuleSyntax: false,
     },
   }).outputText;
+  const routeSpecifiers = file === ROUTE_REGISTRY ? findRoutePageSpecifiers(output, routedExports) : undefined;
   return [...output.matchAll(RUNTIME_SPECIFIER)].map((match) => ({
-    specifier: match[1] ?? match[2], isDynamic: match[2] !== undefined,
+    specifier: match[1] ?? match[2], isDynamic: match[2] !== undefined, isRoutePage: routeSpecifiers?.has(match[2]) ?? false,
   }));
 }
 
@@ -76,6 +179,8 @@ function resolveSpecifier(fromFile, specifier, known) {
 /**
  * The reverse runtime import graph of `web/src`: file -> the files that import it.
  * `files` and `readFile` are injectable so the graph can be tested on a fixture.
+ * `routePages` contains only modules proven through App route elements and the
+ * registry's literal createPageLoader -> React.lazy recipe, without another registry import.
  *
  * A local specifier that resolves to no known file is recorded in `unresolved`
  * rather than dropped: a missed edge would make an imported file look unused and
@@ -91,21 +196,31 @@ export function buildImporterGraph({
   const lazyImporters = new Map([...known].map((file) => [file, new Set()]));
   const eagerImporters = new Map([...known].map((file) => [file, new Set()]));
   const unresolved = [];
+  const routePages = new Set();
+  const nonRouteTargets = new Set();
+  let appText;
+  try {
+    if (known.has(APP_ENTRY)) appText = readFile(APP_ENTRY);
+  } catch {
+    // The normal graph read below records the failure; there is no route proof meanwhile.
+  }
+  const routedExports = appText === undefined ? new Set() : findRoutedExports(appText, known);
   for (const file of known) {
     if (!/\.(?:ts|tsx|css)$/.test(file) || file.endsWith('.d.ts')) continue;
     let text;
     try {
-      text = readFile(file);
+      text = file === APP_ENTRY && appText !== undefined ? appText : readFile(file);
     } catch {
       unresolved.push(`${file} -> unreadable source`);
       continue;
     }
-    for (const { specifier, isDynamic } of runtimeSpecifiers(file, text)) {
+    for (const { specifier, isDynamic, isRoutePage } of runtimeSpecifiers(file, text, routedExports)) {
       const target = resolveSpecifier(file, specifier, known);
       if (target === null) unresolved.push(`${file} -> ${specifier}`);
       else if (target) {
         importers.get(target).add(file);
         (isDynamic ? lazyImporters : eagerImporters).get(target).add(file);
+        if (file === ROUTE_REGISTRY) (isRoutePage ? routePages : nonRouteTargets).add(target);
       }
     }
   }
@@ -114,7 +229,8 @@ export function buildImporterGraph({
   for (const [file, owners] of eagerImporters) {
     for (const owner of owners) lazyImporters.get(file).delete(owner);
   }
-  return { importers, lazyImporters, unresolved };
+  for (const target of nonRouteTargets) routePages.delete(target);
+  return { importers, lazyImporters, routePages, unresolved };
 }
 
 /** Top-level `name -> { key -> entry text }` for every object-literal catalog. */

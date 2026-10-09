@@ -133,9 +133,10 @@ Local measurement results and commit evidence are appended as each stage complet
   DTO, schema, stylesheet, layout or motion is changed. No ADR is needed for this
   reversible correction of existing selection intent.
 
-The stage 1 planner also refuses to treat a lazily loaded shared helper as a page and
-widens when a source read fails. Both negative cases failed before their guards were
-added; 47 combined planner tests now pass. Representative real plans (not measured
+The stage 1 planner also refuses to treat a lazily loaded helper outside page
+directories as a page and widens when a source read fails. The review follow-up below
+closes the page-directory helper and combined-discovery gaps found in this implementation. Both negative cases failed before their guards were
+added; 47 combined planner tests passed at that stage. Representative real plans (not measured
 rerun times): Playground state 13 scenarios, OAuth workspace logic 9, provider
 management 7, Dashboard page 13, System page 5. Their baseline scenario-duration sums
 are respectively 178.83, 159.14, 106.63, 96.91 and 81.99 seconds, excluding startup
@@ -464,8 +465,10 @@ rewriting this table after every documentation update.
 | `9cd1f899d5f9bd5efe2fdb18511ee3d1d2160ff9` | Measured per-invocation OAuth locale comparison setup | `docs/architecture.md`, `docs/testing.md`, this ledger |
 | `2baa4f80ce9bfb6d160b0097e178f6273c7909af` | Shared export presentation policies and page-boundary guard | `docs/architecture.md`, `docs/testing.md`, this ledger |
 
-The final evidence commit changes only this ledger. Its hash is reported with the
-completed delivery; it does not rewrite the tested implementation commits.
+The original final evidence commit `c3b2382109414092e5c383b632c98812da43e3ae`
+changes only this ledger; it does not rewrite the tested implementation commits.
+The later PR 166 correction is a consolidated follow-up described below, with its
+commit identity recorded in the PR review replies.
 
 ## Final local gate
 
@@ -489,3 +492,66 @@ revision is not evidence of a statistical regression or improvement; there is no
 large full-suite speedup claim. The strict host toolchain is Node 22.23.2, Go 1.27.1,
 pnpm 11.19.0 and Chromium 151.0.7922.34 (revision 1234). The performance wins demonstrated
 here are scoped selection, ownership isolation and OAuth comparator CPU cost.
+
+
+## PR 166 review follow-up
+
+The hosted review of `c3b2382109414092e5c383b632c98812da43e3ae` identified two
+selector-evidence gaps and one architecture-document attribution error. Both selector
+claims were reproduced before edits: a literal registry import of
+a synthetic Agent-directory helper selected only 11 of 65 scenarios, while direct App
+page imports allowed the combined real-tree assertion to pass with a disconnected
+or empty registry. The real baseline registry still had 18 page entries; these were
+future verification risks, not observed product regressions. Full CI catalog selection
+remains independent.
+
+The graph now discovers routed export names from imported JSX in App's
+`createBrowserRouter` route elements, then follows the registry's exported
+`React.lazy` bindings through the existing literal `createPageLoader` recipe.
+Only those resolved modules can stop traversal, and another registry import of the
+same target removes that proof. Unknown wiring, missing metadata, directory helpers,
+eager/mixed consumers and unreadable source still widen. Discovery stays automatic;
+there is no second route registration list. The real-tree test independently asserts
+the App-to-registry edge and a nonempty proven registry page set, then checks rules.
+
+New negative cases failed against the reviewed implementation for directory helpers,
+non-route JSX consumption and another lazy consumer of the same module. The fixed
+planner passes 54 combined tests, preserving narrow coverage for all current routes.
+Separate fixtures prove disconnected and empty registry discovery fail even with
+direct App page imports. Additional cases cover imported aliases, wrapped route JSX,
+unknown loader wiring, parse failures and unreadable App source. The architecture
+prose now identifies `scripts/conversation-boundaries.test.mjs` as the guard and
+`web/src/components/workspace/conversationLabels.ts` as the presentation owner.
+
+This correction touches verification scripts and synchronized agent/testing/
+architecture documentation only. Product source, styles, API contracts, persistence,
+permissions and the separately recorded duration carry behavior are unchanged.
+
+Follow-up validation:
+
+- `pnpm test:fast` passes both affected checks; repository self-tests take 15.44 s.
+  `pnpm check:ui` correctly selects no browser scenario for this script/document-only
+  patch; the full gate below runs every browser scenario independently.
+- Three deliberately removed guards (route identity, App-to-registry edge and nonempty
+  registry discovery) each fail their targeted tests, then are restored.
+- All 18 proven real route pages and four representative conversation/OAuth modules
+  retain exactly the same ordered scenario plans as the reviewed head. The runtime
+  graph retains 421 nodes and zero unresolved imports. Five alternating warm pairs
+  measure graph-construction medians of 2,416.81 ms before and 2,371.37 ms after;
+  these nearby samples do not establish a speedup or a significant overhead change.
+- CodeRabbit local review covers all seven changed files with zero findings. Worktree
+  and staged secret scans, documentation references and whitespace checks pass.
+- `pnpm verify:full` exits zero: strict toolchain, production build, static gates,
+  history/worktree secret scans, bundle policy, browser-harness fault checks, 376
+  built-browser checks, all 65 probes, all 18 demo routes and 73 logic suites. Command
+  wall is 961.53 s; user/system CPU is 592.03/184.53 s; maximum individual-child RSS
+  is 3,131,376 KiB. The probe runner takes 696.7 s. This is retained full coverage,
+  not a full-suite speedup claim. No generated tracked state changes.
+- Compared with the reviewed head, the patch has zero changes under product source,
+  deployment/workflow configuration and dependency manifests. Browser assertions,
+  retries, waits and visual fixtures are untouched.
+
+Raw local evidence is retained under `tmp/pr166-review`: red/green and mutation logs,
+plan comparison, paired graph timings, full-gate log/resources and the local review.
+The follow-up commit updates this ledger, `AGENTS.md`, `docs/architecture.md` and
+`docs/testing.md` alongside the selector and tests.

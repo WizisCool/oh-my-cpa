@@ -922,12 +922,13 @@ owns one fallback ID counter, `utils/thinking.ts` parses inline thinking,
 `components/workspace/imageAttachments.ts` owns admission, decoding and bounded
 Agent image encoding. Playground state re-exports these contracts for compatibility;
 Agent and portable exports import the leaves directly. Type-only transcript adapters
-may name Playground turns without loading its state. The runtime-graph guard in
+may name Playground turns without loading its state.
 `components/workspace/conversationLabels.ts` owns status admission, separate Agent/
 Playground error vocabularies and duration presentation for the shared export hook.
 Page modules retain their public exports, while shared workspace runtime modules
 must not import page internals.
-`scripts/conversation-boundaries.test.mjs` prevents reversing these dependencies.
+The runtime-graph guard in `scripts/conversation-boundaries.test.mjs` prevents
+reversing these dependencies.
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message
@@ -2346,9 +2347,13 @@ that partial outcome rather than either success or failure.
 
 Local browser impact analysis follows transpiled runtime imports, preserving eager
 and lazy edge kinds. The central `web/src/routePages.ts` registry is a boundary only
-for mapped literal lazy-page imports; registry changes or eager/unknown consumers
-remain full-catalog changes. Real-tree planner tests require nonempty page discovery
-through both App and the registry. Full CI coverage does not depend on local selection.
+for mapped literal lazy-page imports. Page identity is discovered from App's
+`createBrowserRouter` route elements through the registry's exported `React.lazy`
+components and their literal `createPageLoader` imports, not from directory or
+filename prefixes. Other registry imports, including helpers in page directories,
+registry changes and unrecognized wiring remain full-catalog changes. Real-tree
+planner tests independently require App to import the registry and the registry's
+proven page set to be nonempty. Full CI coverage does not depend on local selection.
 See `docs/plans/architecture-governance.md` for the measured audit and staged work.
 
 The suite is split by what each layer can actually prove, not by which runner is
@@ -2418,8 +2423,9 @@ The UI planner narrows on evidence only:
   chains that import it. A chain that reaches the shared layer, or a routed page
   without a rule, selects everything; so does any unresolved local import, an asset
   the graph cannot see (a CSS `url()`, `web/index.html`), a dependency or Vite change.
-  `scripts/ui-impact.test.mjs` requires every routed page to have a rule and the real
-  tree to resolve completely.
+  `scripts/ui-impact.test.mjs` separately requires the App-to-registry edge, nonempty
+  registry page discovery, every routed page's scenario rule and complete resolution
+  of the real tree. Directory helpers and incomplete route discovery are negative cases.
 - **Translation additions.** A catalog edit whose every pre-existing entry and every
   line outside the catalog objects is unchanged selects nothing: a new entry is only
   rendered by code that references it, which the planner places separately.

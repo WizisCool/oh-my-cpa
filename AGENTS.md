@@ -211,9 +211,10 @@ Evaluate every delivery surface independently: titles, filenames, body prose, co
   Keep domain orchestration at its owner; do not create generic wrappers without
   independently testable behavior or measured reuse.
 - A new route/loading boundary must update impact-analysis evidence in the same
-  change. Test the real import graph, assert discovery is nonempty and pair every
-  narrowing case with an eager/shared/unknown case that still widens. Full CI catalog
-  coverage is independent of the local planner.
+  change. Test the real import graph, independently assert App-to-registry reachability
+  and nonempty registry-page discovery, and pair every narrowing case with an
+  eager/shared/unknown case that still widens. Page-directory rules are not evidence
+  of route-page identity. Full CI catalog coverage is independent of the local planner.
 - For internal refactors, record the existing behavior and claim owners before edits,
   preserve browser-only coverage, and measure the affected feedback path. UI-touching
   changes need representative browser and screenshot/artifact evidence in addition to

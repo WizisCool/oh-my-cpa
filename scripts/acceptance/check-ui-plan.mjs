@@ -446,7 +446,7 @@ function ruleFor(file) {
  * continues through a mapped module rather than stopping at it, because a shared
  * component can also be imported by a page its own rule does not list.
  */
-function reachScenarios(file, { importers, lazyImporters }) {
+function reachScenarios(file, { importers, lazyImporters, routePages }) {
   const found = new Set();
   const via = [];
   const queue = [file];
@@ -457,7 +457,7 @@ function reachScenarios(file, { importers, lazyImporters }) {
       if (importer === 'web/src/routePages.ts') {
         // Only a proven lazy page is isolated from registry initialization. Shared helpers,
         // eager re-exports and unknown edge kinds must still verify every route.
-        if (!node.startsWith('web/src/pages/') || !lazyImporters?.get(node)?.has(importer) || !ruleFor(node)) {
+        if (!node.startsWith('web/src/pages/') || !routePages?.has(node) || !lazyImporters?.get(node)?.has(importer) || !ruleFor(node)) {
           return { all: `${node} reaches the route registry without a mapped lazy boundary` };
         }
         continue;
