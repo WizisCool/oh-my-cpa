@@ -33,17 +33,30 @@ const (
 	historyDays = 371
 
 	// requestsPerHour is the rate curve's anchor points, read as "this many requests
-	// per hour, this many days ago". A gateway does not appear at its current size:
-	// the curve rises towards the present, which is what makes the year-long token
-	// grid read as a deployment that grew rather than as a flat wall of traffic.
-	// The endpoints are interpolated, so the grid has no step in it.
+	// per hour, this many days ago". The gateway has been in daily use for the whole
+	// year and grew gently rather than from nothing: a curve that started near zero
+	// drew the token grid as a smooth left-to-right gradient, which no real
+	// deployment produces and which read as a fixture at a glance. The endpoints are
+	// interpolated, so the grid has no step in it.
 	recentRequestsPerHour = 18.0
 	recentDays            = 30
-	midRequestsPerHour    = 7.0
+	midRequestsPerHour    = 15.0
 	midDays               = 120
-	oldRequestsPerHour    = 2.0
+	oldRequestsPerHour    = 12.0
 	oldDays               = 240
-	oldestRequestPerHour  = 0.3
+	oldestRequestPerHour  = 10.0
+
+	// idleDayShare is the share of days the gateway is not used at all: a holiday, a
+	// day away, a weekend with the laptop shut. A year with no gaps reads as machine
+	// traffic rather than a person's.
+	idleDayShare = 0.07
+	// idleWeekendShare is the same for a Saturday or Sunday, which go unused more often.
+	idleWeekendShare = 0.22
+	// settledDays is how recent a day must be to never be idle, so the short windows
+	// the dashboard opens on always have traffic to show.
+	settledDays = 7
+	// daySpread is the standard deviation of a day's volume around its trend.
+	daySpread = 0.38
 )
 
 // ResetDatabase deletes the demo's database and its write-ahead siblings, so a
@@ -318,7 +331,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 			fraction = float64(now.Minute()*60+now.Second()) / 3600
 		}
 		session = session.advance(random, profiles, hour, now)
-		count := drawRequestCount(random, requestsPerHour(hour, now)*trafficShape(hour)*daySwing(hour)*fraction)
+		count := drawRequestCount(random, requestsPerHour(hour, now)*trafficShape(hour)*daySwing(hour, now)*fraction)
 		for index := 0; index < count; index++ {
 			profile := session.pickProfile(random, profiles)
 			keyIndex := pickWeighted(random, keyWeights(keys))
@@ -514,16 +527,29 @@ func drawRequestCount(random *deterministic, mean float64) int {
 //
 // Without it the rate curve and the working-day shape decide every day exactly, so the
 // history is a smooth envelope with an identical sawtooth inside it. A real deployment
-// has quiet Mondays and busy Wednesdays for reasons no curve knows: the swing multiplies
-// a whole day by a stable factor drawn from its own date, so rewatching the same day
-// gives the same number and the export stays reproducible.
-func daySwing(day time.Time) float64 {
-	// Hashed from the calendar date alone, so every hour of that day agrees.
+// has quiet Mondays and busy Wednesdays for reasons no curve knows, and days nobody
+// touched it at all. The factor is normally distributed around the trend - most days sit
+// near it, a few are markedly busier or quieter - and some days are idle outright.
+//
+// It is drawn from the calendar date alone, so every hour of that day agrees, rewatching
+// the same day gives the same number and the export stays reproducible.
+func daySwing(day, now time.Time) float64 {
+	day = day.UTC()
 	key := uint64(day.Year())*10000 + uint64(day.Month())*100 + uint64(day.Day())
-	// A cheap integer hash: multiply by an odd constant and take the high bits, which
-	// spreads consecutive dates apart rather than clustering them.
-	mixed := (key * 0x9E3779B97F4A7C15) >> 56
-	return 0.6 + float64(mixed)/255*0.9
+	draws := newDeterministic(key * 0x9E3779B97F4A7C15)
+	idleShare := idleDayShare
+	if weekday := day.Weekday(); weekday == time.Saturday || weekday == time.Sunday {
+		idleShare = idleWeekendShare
+	}
+	isIdle := draws.nextFloat() < idleShare
+	// Box-Muller: two uniform draws give one standard normal deviate.
+	deviate := math.Sqrt(-2*math.Log(1-draws.nextFloat())) * math.Cos(2*math.Pi*draws.nextFloat())
+	if isIdle && now.Sub(day) > settledDays*24*time.Hour {
+		return 0
+	}
+	// Clamped so a tail draw neither empties a working day nor produces one that
+	// rescales the whole grid's colour ramp around itself.
+	return math.Min(2.2, math.Max(0.2, 1+daySpread*deviate))
 }
 
 // credentialAuthIndexes maps a provider to the credential that answers it, so a

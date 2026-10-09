@@ -812,7 +812,9 @@ func TestSeedKeepsTheOldestHistoryReadable(t *testing.T) {
 		}
 	}
 	events := analytics.Totals.Requests
-	if days < 25 {
+	// Idle days are deliberate (a person does not use a gateway every day), so the
+	// floor leaves room for them while still failing a month that is mostly blank.
+	if days < 20 {
 		t.Errorf("the oldest month carries traffic on %d of its first 31 days, want most of them: %d requests", days, events)
 	}
 }
@@ -881,7 +883,9 @@ func TestSeedConcentratesADayOnFewModels(t *testing.T) {
 	if len(shares) < 2 || total == 0 {
 		t.Fatalf("the last day carries %d models, want a leader and a background", len(shares))
 	}
-	if leading := float64(shares[0]+shares[1]) / float64(total); leading < 0.6 {
+	// A majority, not a fixed margin above it: which sessions fall inside the last day
+	// is a draw, and an even spread across the catalogue would put two models near a fifth.
+	if leading := float64(shares[0]+shares[1]) / float64(total); leading <= 0.5 {
 		t.Errorf("the two busiest models carry %.0f%% of the last day's tokens, want most of it", leading*100)
 	}
 }
@@ -911,5 +915,44 @@ func TestRecentSubstitutionsCoverEverySubstitutedModel(t *testing.T) {
 	}
 	if len(served) == 0 {
 		t.Fatal("the catalogue names no substituted model")
+	}
+}
+
+// A day's volume is a normal draw around its trend with some days idle outright, which
+// is what keeps the token grid from reading as either a gradient or a wall.
+func TestDaySwingIsCentredWithIdleDays(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const days = 365
+	idle, total, near := 0, 0.0, 0
+	for offset := settledDays + 1; offset <= days; offset++ {
+		day := now.AddDate(0, 0, -offset)
+		swing := daySwing(day, now)
+		if swing != daySwing(day.Add(13*time.Hour), now) {
+			t.Fatalf("%s swings differently between its own hours", day.Format(time.DateOnly))
+		}
+		if swing == 0 {
+			idle++
+			continue
+		}
+		total += swing
+		if swing > 1-daySpread && swing < 1+daySpread {
+			near++
+		}
+	}
+	active := days - settledDays - idle
+	if idle < 15 || idle > 70 {
+		t.Errorf("%d of %d days are idle, want an occasional gap rather than none or many", idle, days)
+	}
+	if mean := total / float64(active); mean < 0.9 || mean > 1.1 {
+		t.Errorf("active days average %.2f of their trend, want them centred on it", mean)
+	}
+	// About two thirds of a normal draw falls within one standard deviation.
+	if share := float64(near) / float64(active); share < 0.55 || share > 0.8 {
+		t.Errorf("%.0f%% of active days sit within one deviation of the trend, want a bell rather than a flat spread", share*100)
+	}
+	for offset := 0; offset <= settledDays; offset++ {
+		if daySwing(now.AddDate(0, 0, -offset), now) == 0 {
+			t.Errorf("the day %d days ago is idle, and the dashboard's short windows would open empty", offset)
+		}
 	}
 }
