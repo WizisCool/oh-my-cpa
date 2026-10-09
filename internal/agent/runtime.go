@@ -478,7 +478,12 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		// new message takes the operator's current choice. The endpoint in particular cannot
 		// change mid-turn: a round's calls and signed reasoning are replayed in its schema.
 		conversation.ReasoningEffort = strings.TrimSpace(input.ReasoningEffort)
-		conversation.Endpoint = input.Endpoint
+		// Stored in its canonical form, with the default left empty: "chat" and an absent
+		// choice are one endpoint, and the conversation should not record them as two.
+		conversation.Endpoint = ""
+		if endpoint, _ := gateway.ParseEndpoint(input.Endpoint); endpoint != gateway.EndpointChat {
+			conversation.Endpoint = string(endpoint)
+		}
 		conversation.AnchorMS = time.Now().UnixMilli()
 		conversation.Turns = append(conversation.Turns, Turn{ID: capability.NewID(), User: input.Message, Present: input.Present, Images: images, Status: "running", Traces: []Trace{}, StartedMS: time.Now().UnixMilli(), Messages: []gateway.AgentMessage{{Role: "user", Content: input.Message, Images: images}}})
 	} else {

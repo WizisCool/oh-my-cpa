@@ -232,8 +232,9 @@ function ComposerSurface({
   const iconOf = React.useMemo(() => new Map(commands.map(command => [command.id, command.icon])), [commands]);
 
   // A list rises from the box into whatever the pane above it has left, which under a phone's
-  // keyboard is a few lines. It is measured as a list mounts - the keyboard is already up by
-  // then - so the list scrolls inside that room instead of running off the pane's top edge.
+  // keyboard is a few lines. It is measured as a list mounts, and again whenever the pane changes
+  // size - a keyboard that opens or closes under an open list moves the box without touching the
+  // list - so the list scrolls inside that room instead of running off the pane's top edge.
   const triggerAnchorRef = React.useRef<HTMLDivElement>(null);
   const hasTriggers = !!triggers;
   React.useLayoutEffect(() => {
@@ -244,9 +245,15 @@ function ComposerSurface({
       const paneTop = pane.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(pane).paddingTop);
       anchor.style.setProperty('--trigger-room', `${Math.max(TRIGGER_MIN_ROOM, Math.floor(anchor.getBoundingClientRect().top - paneTop - 4))}px`);
     };
-    const observer = new MutationObserver(measureRoom);
-    observer.observe(anchor, { childList: true });
-    return () => observer.disconnect();
+    measureRoom();
+    const lists = new MutationObserver(measureRoom);
+    lists.observe(anchor, { childList: true });
+    const layout = new ResizeObserver(measureRoom);
+    layout.observe(pane);
+    return () => {
+      lists.disconnect();
+      layout.disconnect();
+    };
   }, [hasTriggers]);
 
   return (

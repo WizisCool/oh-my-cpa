@@ -899,3 +899,32 @@ func TestRuntimeResetDropsImagesAfterTheCallerLeaves(t *testing.T) {
 		t.Fatalf("the cleanup kept an image the transcript no longer references: %v", err)
 	}
 }
+
+// "chat" and an absent choice are one endpoint, so the conversation records the default as
+// absent and anything else by its canonical name; a name outside the three is refused.
+func TestRuntimeStoresTheEndpointInItsCanonicalForm(t *testing.T) {
+	runtime := newTestRuntime(t)
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+			return gateway.AgentReply{Content: "ok"}, nil
+		}), nil
+	}
+	for _, test := range []struct{ sent, stored string }{{"chat", ""}, {"messages", "messages"}, {"", ""}, {"responses", "responses"}} {
+		current, err := runtime.Current(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := Input{ConversationID: current.ID, Revision: current.Revision, Message: "hi", Model: "fixture", Fingerprint: "key", Endpoint: test.sent}
+		if err := runtime.Run(context.Background(), input, func(Event) error { return nil }); err != nil {
+			t.Fatalf("endpoint %q: %v", test.sent, err)
+		}
+		if current, _ = runtime.Current(context.Background()); current.Endpoint != test.stored {
+			t.Errorf("endpoint %q stored as %q, wanted %q", test.sent, current.Endpoint, test.stored)
+		}
+	}
+	current, _ := runtime.Current(context.Background())
+	err := runtime.Run(context.Background(), Input{ConversationID: current.ID, Revision: current.Revision, Message: "hi", Model: "fixture", Fingerprint: "key", Endpoint: "/v1/embeddings"}, func(Event) error { return nil })
+	if err == nil || err.Error() != "invalid_parameters" {
+		t.Errorf("an endpoint outside the three gave %v", err)
+	}
+}
