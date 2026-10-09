@@ -647,3 +647,68 @@ three process startups alone is not a demonstrated high-leverage optimization.
 Initial route transforms are inside scenario timing and need their own measurement;
 prioritize repeated navigation, payload/transform work and mixed claim ownership
 rather than assuming that a long catalog means slow browser process launch.
+
+### Preference wire parity and integration boundary
+
+The reviewed preference corpus is independently certified by the actual Go router,
+authentication and isolated SQLite handlers. The same examples are consumed by the
+actual typed client's request/response/error paths and the per-context default
+Browser Mock dispatcher. It is not response generation from a mock. ADR 0090 records
+the bounded corpus strategy and supersedes ADR 0089's test-location choice only:
+frontend integration suites/setup now live under `web/tests`, inside type checking
+but outside the product runtime graph. Full static verification detected the earlier
+cross-tree test-fixture edge; moving tests preserves the existing graph's fail-closed
+unresolved import rules instead of suppressing them. A production eager or lazy
+import of this test infrastructure still widens the plan and fails the boundary.
+
+| Claim | Independent owner / negative evidence | Retained scope |
+| --- | --- | --- |
+| GET/PUT path, status, complete public key allowlist, raw JSON/null/enum preservation and readback | `TestPreferencesSharedWireContract`, typed client corpus, fixture/real dispatcher self-test | actual production handlers and DTOs unchanged |
+| Authentication refusal on reads/writes, no-store responses and exact JSON media type | actual Go middleware/handler; client unauthorized notification and ApiError data | same-origin write protection, complete permissions and sensitive DTO projections remain in existing Go/built tests |
+| UTC and non-UTC deployment timezone metadata, operator zone and empty fallback | independent real servers plus client/fixture cases | complete Go IANA semantics; fixture does not claim a second validator |
+| Nested runtime prefix and UTF-8 8 KiB keepalive admission | actual client boundary cases, including multi-byte text | actual navigation/keepalive lifetime remains Chromium-owned |
+| Context store isolation and response ownership | fixture self-test mutates returned data then independently rereads two contexts | no shared state across scenarios |
+
+Six deliberate mutations fail their named assertions: Go write envelope changed to
+`{ok:true}`; mock malformed JSON accepted; mock timezone forced to UTC; client
+metadata ignored; client unauthorized notification removed; UTF-8 byte admission
+replaced with string length. The initial mutation command used a relative config
+path and was rejected at startup; that is not fault-detection evidence. Corrected
+commands first prove a green baseline and require assertion failures, not startup
+errors. All production files were restored before green verification.
+
+Existing mock drift was `{ok:true}` on writes, malformed JSON accepted as null,
+and missing timezone metadata. The adopted fixture now matches the certified wire
+cases without changing a product contract. Custom-icon references, complete timezone
+aliases, body limits and database failures remain existing Go test responsibilities;
+unsupported mock methods still fail with a recorded 501 harness fault rather than
+pretending to model chi's method-not-allowed behavior. No browser assertion moved or
+weakened. Corpus and fixture edits now select Go, frontend integration and self-tests
+as a union; a documentation edit cannot hide those consumers.
+
+The two frontend suites pass 11 cases in Vitest 4.26 s / whole command 6.21 s,
+user/system CPU 7.39/0.92 s, maximum child RSS 263,056 KiB. The client-only suite
+passed three cases in 454 ms inside Vitest before the directory move. Go corpus
+execution passed in 0.129 s package time. Real OMC settings probe passed in 32.72 s
+(33.4 s runner wall), retaining full-page wiring/reload/geometry checks. The first
+full static run correctly failed on test-only graph edges; types, all 73 logic
+suites and Go passed. Final boundary/full-gate evidence will be appended after the
+remaining browser work rather than treating this intermediate failure as completion.
+
+### Navigation profiling before browser changes
+
+A read-only instrumented run of route-render-error and route-lazy-error passed all
+157 checks in 65.16 s whole-command wall (45.39/19.23 s user/system CPU; maximum
+child RSS 330,188 KiB). Render recovery made 21 document navigations and 2,703 script
+requests; lazy recovery made 24 documents and 3,116 script requests. The first goto
+cost 8.018 s; warm gotos were usually 0.46–0.71 s, and scenario totals were
+31.968/31.357 s. Repeated full documents/bootstrap work, not the small outside-scenario
+process overhead, merit focused examination. The first baseline catalog's longer
+lazy run is not causally attributed to any optimization; this was profiling only.
+
+Contract stage after boundary correction: `pnpm verify` passes all static/Go/logic/
+frontend integration/repository gates and the worktree secret scan in 51.01 s wall,
+122.51/13.77 s user/system CPU, maximum child RSS 1,139,368 KiB. All 40 focused
+fixture/integration-discovery/runtime-boundary tests pass. Final full built/browser/
+harness/demo and exact-head hosted evidence remain required after browser changes;
+this stage does not substitute the focused settings run for complete coverage.

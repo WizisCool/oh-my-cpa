@@ -6,10 +6,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   test: {
-    include: ['src/**/*.component.test.tsx'],
+    include: ['tests/**/*.component.test.tsx', 'tests/**/*.contract.test.ts'],
     environment: 'jsdom',
     environmentOptions: { jsdom: { url: 'http://localhost/omc/' } },
-    setupFiles: ['./src/test/componentSetup.ts'],
+    setupFiles: ['./tests/setup.ts'],
     isolate: true,
     maxWorkers: 1,
   },

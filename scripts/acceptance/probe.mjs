@@ -18,6 +18,7 @@
  * before shared defaults, with explicit method matching for writes.
  */
 import { appendProbeTiming } from './probe-timings.mjs';
+import { createPreferenceFixture } from './preferences-fixture.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -185,27 +186,16 @@ export function dashboardBody(series = [], { bucketMS = 60_000, preset = '1h' } 
  * the isolation lives: a write in one scenario cannot be read by another.
  */
 export function defaultRoutes() {
-  const preferences = {};
+  const respondPreference = createPreferenceFixture();
   return [
     [(url, method) => method === 'GET' && url.pathname.endsWith('/api/auth/session'), () => ({ authenticated: true })],
     [
       (url, method) => url.pathname.endsWith('/preferences') && method === 'GET',
-      () => ({ preferences: { ...preferences } }),
+      (url, method) => respondPreference(url, method),
     ],
     [
       (url, method) => url.pathname.includes('/preferences/') && method === 'PUT',
-      (url, _method, request) => {
-        // The key is the last path segment; the body is the document to store. The
-        // shape mirrors the real endpoint closely enough for a probe that reads it
-        // back through the same API.
-        const key = url.pathname.split('/').pop();
-        try {
-          preferences[key] = JSON.parse(request.postData() ?? 'null');
-        } catch {
-          preferences[key] = null;
-        }
-        return { ok: true };
-      },
+      (url, method, request) => respondPreference(url, method, request.postData()),
     ],
 
     [(url, method) => method === 'GET' && url.pathname.endsWith('/custom-icons'), () => ({ icons: [] })],
@@ -265,7 +255,7 @@ export async function installRoutes(context, extra = [], ledger) {
       // error path a scenario could only assert the happy state, which is how a panel
       // that hangs on a first-load failure goes unnoticed.
       if (body && typeof body === 'object' && typeof body.status === 'number' && 'json' in body) {
-        return fulfillFixture(route, { status: body.status, json: body.json });
+        return fulfillFixture(route, { status: body.status, json: body.json, ...(body.headers ? { headers: body.headers } : {}) });
       }
       if (body?.contentType && typeof body.body === 'string') {
         return route.fulfill({ status: 200, contentType: body.contentType, body: body.body });

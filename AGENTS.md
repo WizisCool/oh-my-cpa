@@ -157,7 +157,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
 | `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check and conservative affected logic suites); `--base <ref>` includes committed changes, `--plan` prints without running |
-| `pnpm test:components` | Automatically discovered isolated React integration tests; real hook/cache/client wiring under jsdom, no product HTTP listener or Chromium |
+| `pnpm test:components` | Automatically discovered frontend integration: rendered React under jsdom and typed API contracts under Node; no product HTTP listener or Chromium |
 | `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
 | `pnpm check:bundle` | Check production loading boundaries and anomaly ceilings; report raw/gzip sizes and exact-base growth |
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
@@ -208,6 +208,7 @@ Evaluate every delivery surface independently: titles, filenames, body prose, co
 ## Architecture and verification maintenance
 
 - Put rendered async hook/cache/provider claims in automatically discovered component tests when a pure-function test cannot observe them. Use held responses and explicit cleanup; simulated DOM never replaces Chromium geometry, focus, scrolling, navigation or real image handling.
+- For API mocks, add handler-certified wire cases before claiming parity. Reuse the actual typed client in a Node contract suite; keep repository/auth and real browser lifecycle assertions at their owners. Corpus/fixture changes must select every consumer layer, not just the mock self-test.
 - Prefer leaf modules for shared logic: a shared component or another page must not
   acquire a runtime dependency on a page's state solely to obtain a general utility.
   Keep domain orchestration at its owner; do not create generic wrappers without

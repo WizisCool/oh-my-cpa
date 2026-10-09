@@ -3,10 +3,10 @@ import { App as AntdApp } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { usePreference, type PreferenceWrite } from '../hooks/usePreference';
-import { I18nProvider } from '../i18n';
-import { TokenDisplayProvider, useTokenDisplayStyle } from '../types/tokenDisplayContext';
-import { ContextReadout } from '../components/workspace/ContextReadout';
+import { usePreference, type PreferenceWrite } from '../src/hooks/usePreference';
+import { I18nProvider } from '../src/i18n';
+import { TokenDisplayProvider, useTokenDisplayStyle } from '../src/types/tokenDisplayContext';
+import { ContextReadout } from '../src/components/workspace/ContextReadout';
 
 function deferred<Value>() {
   let resolve!: (value: Value) => void;

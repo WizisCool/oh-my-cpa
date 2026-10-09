@@ -52,6 +52,7 @@ function planFileChecks(file) {
   const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
   if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
+  if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components', 'self-tests');
   if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
   if (file.endsWith('.css')) add('css-modules', 'motion');
@@ -66,6 +67,7 @@ function planFileChecks(file) {
       || WEB_TEST_INFRASTRUCTURE.includes(file)) add('logic');
   if (/^web\/(?:vite\.config\.|tsconfig)/.test(file)) add(...FRONTEND_CHECKS, 'self-tests');
   if (file === 'web/vitest.config.ts' || file.startsWith('scripts/test-components')) add('components');
+  if (file.startsWith('scripts/acceptance/contracts/') || file === 'scripts/acceptance/preferences-fixture.mjs') add('go', 'components');
   if (file === 'scripts/tools-versions.json') add('toolchain');
 
   // Fallback is per file: a documentation edit must never hide an unclassified

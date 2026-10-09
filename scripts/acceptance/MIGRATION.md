@@ -187,3 +187,21 @@ dirty drafts across tabs, explicit zero priority and default weight, and phone
 list/Drawer overflow. It also verifies sequential 10/10/3 refreshes for 23 targets
 in a 48-record collection, partial failures and missing results, and two minimized
 provider sessions without concurrent same-session status reads.
+
+## Phase-two preference claim ownership
+
+The component and contract pilots strengthen lower-layer coverage; they remove no
+browser assertion. The detailed case-to-owner/fault ledger is maintained once in
+`docs/plans/architecture-governance.md`.
+
+| Claim | Lowest owner | Browser/cross-stack claim retained |
+| --- | --- | --- |
+| Shared optimistic subscriptions, ordered/refused writes, last-intent rollback and unmount cleanup | rendered preference integration under jsdom | actual settings controls, page reload, feedback geometry and browser keepalive |
+| Method/path/body/auth/error/raw JSON/null/timezone wire behavior | handler-certified preference corpus + real typed client under Node + default fixture dispatcher self-test | production HTTP/SQLite persistence and real navigation |
+| UTF-8 small-write keepalive admission | actual typed client Node contract case | Chromium navigation transport lifetime |
+
+The default preference mock now returns the handler's `{key,value}` write envelope,
+refuses malformed JSON and includes timezone metadata. Its prior `{ok:true}` and
+malformed-JSON-as-null responses were fixture drift, not authorized product behavior.
+Strict unknown/method harness faults, context isolation and existing scenario
+assertions are unchanged.
