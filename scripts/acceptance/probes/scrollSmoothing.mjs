@@ -322,13 +322,24 @@ async function checkNativeModelPopup({ page, base, check }) {
   // The list is rebuilt when its filter changes, so it is found again rather than held.
   const holder = page.locator('[data-testid="target-popover"] [data-picker-list]');
   await holder.waitFor();
+  // Presence can precede the popup's async alignment, even with reduced motion.
+  // ComposerPicker focuses search after opening completes; only then is its centre a wheel target.
+  const pointAtPopup = async () => {
+    await until(() => page.locator('[data-testid="target-popover"] [data-picker-search] input')
+      .evaluate(element => element === document.activeElement), { label: 'the model popup to finish opening and focus search' });
+    await settleLayout(page);
+    return until(() => holder.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      return element.contains(document.elementFromPoint(point.x, point.y)) ? point : false;
+    }), { label: 'the model list centre to receive pointer input' });
+  };
   const hasNativeHolder = await holder.evaluate(element => {
     element.setAttribute('data-probe-scroller', '');
     return getComputedStyle(element).overflowY === 'auto' && element.querySelectorAll(':scope > [role="option"]').length === 80;
   });
   check('the Playground model popup uses native overflow with the shared list structure', hasNativeHolder);
-  const popupBox = await holder.boundingBox();
-  const popupAt = { x: popupBox.x + popupBox.width / 2, y: popupBox.y + popupBox.height / 2 };
+  const popupAt = await pointAtPopup();
   let notch = describeNotch(await sampleNotch(page, popupAt));
   check('a native model popup scrolls down by one notch', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   notch = describeNotch(await sampleNotch(page, { ...popupAt, deltaY: -NOTCH }));
@@ -346,19 +357,16 @@ async function checkNativeModelPopup({ page, base, check }) {
     element.scrollTop = 0;
     return Math.min(100, element.scrollHeight - element.clientHeight);
   });
-  notch = describeNotch(await sampleNotch(page, popupAt));
+  notch = describeNotch(await sampleNotch(page, await pointAtPopup()));
   check('a filtered native model popup remains scrollable', filteredDistance > 0 && Math.abs(notch.travelled - filteredDistance) <= 1, notch.detail);
   await page.keyboard.press('Escape');
   await holder.waitFor({ state: 'hidden' });
   await modelPicker.click();
   await holder.waitFor();
   await until(() => page.getByRole('option').count().then(count => count === 80), { label: 'reopened unfiltered model options' });
-  await settleLayout(page);
-  const reopenedBox = await holder.boundingBox();
+  const reopenedAt = await pointAtPopup();
   await holder.evaluate(element => { element.setAttribute('data-probe-scroller', ''); element.scrollTop = 0; });
-  notch = describeNotch(await sampleNotch(page, {
-    x: reopenedBox.x + reopenedBox.width / 2, y: reopenedBox.y + reopenedBox.height / 2,
-  }));
+  notch = describeNotch(await sampleNotch(page, reopenedAt));
   check('a reopened native model popup remains scrollable', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   await page.keyboard.press('Escape');
 }

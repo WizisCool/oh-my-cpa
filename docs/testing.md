@@ -44,6 +44,11 @@ Rules that keep the suite fast and honest:
   alignment prepare step, and matching editor/shell widths may both belong to the old
   desktop layout. Wait for the widget's preparation state or its render surface to
   adopt the current viewport before reading the final geometry assertion.
+  Composer model-popup wheel checks wait for search focus from the completed-open
+  callback, then require the list centre to win hit-testing before sending input.
+  An option count and two animation frames alone do not establish popup alignment,
+  especially when a destroyed popup is reopened. Keep the exact wheel-distance
+  assertions after that readiness boundary.
 - **Make time injectable in Go.** A duration a test has to wait out belongs in the
   component's config with a production default, as `ingest.Config.ReadinessGrace` is,
   so the test can set it to milliseconds.
