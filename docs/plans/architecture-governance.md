@@ -822,8 +822,8 @@ in 19.97 s command wall. The resumed complete probe lane passes all 65 scenarios
 RSS. Its structured timings contain exactly 65 unique passing IDs. Completed,
 unchanged lanes are reused as the agent contract requires; all local full-suite
 lanes now have passing evidence, but the interrupted orchestration is still not
-called a passing monolithic command. Hosted exact-head verification remains the
-next completion obligation.
+called a passing monolithic command. Hosted implementation-head verification is recorded below; final documentation-head
+verification is independently required before delivery.
 
 Local CodeRabbit CLI 0.9.0 was verified against its official CLI overview before
 use. The review covered all tracked/untracked phase changes against the merged SHA,
@@ -896,3 +896,61 @@ claiming that whitespace is a new business behavior or omitting the report check
 - The existing `formatDuration(119600)` carry presentation remains separate visible
   bug scope requiring user authorization. No incompatible product change is needed
   or implemented by this phase.
+
+### Hosted CI and delivery evidence
+
+Independent Draft PR #167 targets master from
+`refactor/verification-governance-phase-two`; the original master remains
+`b5e00765ada52f9eb92335e970a4dbd673521456`. PR title/body follow the repository's
+Contributing guide, PR template and review title constraints. The template's local
+`verify:full` checkbox remains unchecked because the supervising invocation was
+interrupted; independent passing lane evidence is explicit rather than relabeled.
+AGENTS.md now requires reading these existing sources and remote read-back when
+creating/editing a PR instead of maintaining another duplicate template.
+
+Implementation/report head `3e8b65614d0dc2687cb130d66fccfc559b7e7bc4` passes full hosted
+CI run `37958003906`: static, built acceptance/harness/demo/bundle, all three probe
+shards and the mandatory aggregate. Downloaded timing artifacts certify all 65 IDs
+exactly once with passing verdicts; the hosted 307 JS/CSS hashes and bundle metrics
+also match the exact merged baseline. The final local `pnpm verify` passes in
+52.10 s (122.51/14.07 s CPU, 1,154,288 KiB maximum child RSS). Final worktree and
+history secret scans pass; no production environment/data was accessed.
+
+| Hosted observation | Baseline run 37938787933 | Implementation run 37958003906 |
+| --- | ---: | ---: |
+| Workflow timestamps | 242 s | 265 s |
+| Browser job | 236 s | 262 s |
+| Static job / static gate step | 93 s / 42 s | 144 s / 62 s |
+| Probe shard jobs 1 / 2 / 3 | 196 / 219 / 187 s | 163 / 179 / 175 s |
+| Probe execution steps 1 / 2 / 3 | 160 / 172 / 156 s | 125 / 133 / 129 s |
+| Browser dependency install / prepare build / built acceptance | 9 / 68 / 97 s | 12 / 79 / 105 s |
+
+Probe execution steps improve by 21.9%, 22.7% and 17.3% in this hosted sample, but
+total workflow wall is 9.5% longer because built acceptance/setup remains the
+critical path. Static execution also increases with the additional integration and
+self-test obligations. Runner/cache conditions differ, so neither total regression
+nor individual gains are controlled causal estimates. Do not present a local
+catalog improvement as a total-CI improvement. Summed observed job duration is
+933 versus 927 seconds including the aggregate; this is not actual billed runner
+cost or CPU telemetry. More hosted samples and a measured built-acceptance candidate
+are needed before adopting another pipeline optimization.
+
+Rollback/commit boundaries:
+
+- `175ec94`: merged baseline and phase-two audit obligations.
+- `a49dd0c`: isolated rendered React integration pilot and ADR 0089.
+- `c435b95`: independently certified preference corpus/typed client/fixture parity,
+  production graph isolation and ADR 0090.
+- `106453d`: bounded scenario scheduling, retained browser claims/fault tests,
+  controlled resource evidence and ADR 0091.
+- `3e8b656`: local full-lane/artifact/screenshot/feedback evidence and residual risks.
+- The delivery-evidence commit records hosted results and PR creation/read-back
+  conventions. Inspect `git log --oneline b5e0076..HEAD` for the exact final record;
+  the PR head and its hosted checks certify that documentation commit separately.
+
+The completed pilot adds stronger low-cost ownership without removing engine
+claims. Production runtime modules, loading assets, API semantics and visuals are
+preserved; lower catalog wall is measured alongside its memory/CPU cost. The bounded
+parity expansion and profiling recommendations above remain future work, not
+undelivered claims of universal API coverage or runtime speedup. PR remains Draft;
+merge, tags, releases and production operations require separate authorization.

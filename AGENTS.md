@@ -67,6 +67,7 @@ Before declaring any change complete, all of the following requirements must be 
 - When a logical feature is complete, and again before declaring a task complete or pushing, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan) and `pnpm check:ui` (the browser scenarios the change can reach). CI then runs the full browser catalog before merge (ADR 0032, refined by ADR 0068); `pnpm verify:full` runs all of it locally and is for build, harness or workflow changes and for reproducing CI;
 - New tests follow `docs/testing.md`: lowest layer that can fail for the right reason, no fixed waits, automatic discovery instead of new registration lists;
 - All context documents triggered by the change per §2 have been updated;
+- Before creating or editing a pull request, read `CONTRIBUTING.md`, `.github/pull_request_template.md` and the title requirements in `.coderabbit.yaml`. Populate the template from actual verification evidence, then read back the published title/body and Draft status;
 - No obsolete comments, dead references, or unlocalized user-visible strings remain.
 
 ### Three Verification Moments (Do Not Run the Full Suite Every Turn)
