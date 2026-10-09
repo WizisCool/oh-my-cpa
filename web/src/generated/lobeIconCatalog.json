@@ -1,5 +1,14 @@
 [
   {
+    "id": "AMDRadeonCloud",
+    "title": "AMD Radeon Cloud",
+    "fullTitle": "AMD Radeon Cloud",
+    "docsUrl": "amd-radeon-cloud",
+    "desc": "https://developer.amd.com.cn/radeon",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
     "id": "Ace",
     "title": "ace",
     "fullTitle": "ACE",
@@ -108,6 +117,15 @@
     "hasColor": true
   },
   {
+    "id": "AiStudio",
+    "title": "Google AI Studio",
+    "fullTitle": "AI Studio (Google)",
+    "docsUrl": "ai-studio",
+    "desc": "https://aistudio.google.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
     "id": "AionLabs",
     "title": "AionLabs",
     "fullTitle": "AionLabs",
@@ -124,15 +142,6 @@
     "desc": "https://airjelly.ai",
     "group": "application",
     "hasColor": true
-  },
-  {
-    "id": "AiStudio",
-    "title": "Google AI Studio",
-    "fullTitle": "AI Studio (Google)",
-    "docsUrl": "ai-studio",
-    "desc": "https://aistudio.google.com",
-    "group": "provider",
-    "hasColor": false
   },
   {
     "id": "AkashChat",
@@ -531,6 +540,15 @@
     "hasColor": true
   },
   {
+    "id": "Chutes",
+    "title": "Chutes",
+    "fullTitle": "Chutes",
+    "docsUrl": "chutes",
+    "desc": "https://chutes.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
     "id": "Civitai",
     "title": "Civitai",
     "fullTitle": "Civitai",
@@ -684,6 +702,15 @@
     "hasColor": true
   },
   {
+    "id": "CommandCode",
+    "title": "Command Code",
+    "fullTitle": "Command Code",
+    "docsUrl": "command-code",
+    "desc": "https://commandcode.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
     "id": "Copilot",
     "title": "Copilot",
     "fullTitle": "Microsoft Copilot",
@@ -774,11 +801,20 @@
     "hasColor": true
   },
   {
+    "id": "Decart",
+    "title": "Decart",
+    "fullTitle": "Decart",
+    "docsUrl": "decart",
+    "desc": "https://decart.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
     "id": "DeepAI",
     "title": "DeepAI",
     "fullTitle": "DeepAI",
     "docsUrl": "deep-ai",
-    "desc": "hhttps://deepai.org",
+    "desc": "https://deepai.org",
     "group": "application",
     "hasColor": false
   },
@@ -846,6 +882,15 @@
     "hasColor": true
   },
   {
+    "id": "DigitalOcean",
+    "title": "DigitalOcean",
+    "fullTitle": "DigitalOcean",
+    "docsUrl": "digital-ocean",
+    "desc": "https://digitalocean.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
     "id": "Doc2X",
     "title": "Doc2X",
     "fullTitle": "Doc2X",
@@ -869,6 +914,15 @@
     "fullTitle": "Dolphin (dphnAI)",
     "docsUrl": "dolphin",
     "desc": "https://dphn.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "DotsStudio",
+    "title": "Dots Studio",
+    "fullTitle": "Dots Studio",
+    "docsUrl": "dots-studio",
+    "desc": "https://studio.dots.ai",
     "group": "model",
     "hasColor": false
   },
@@ -1026,6 +1080,15 @@
     "hasColor": false
   },
   {
+    "id": "GLMV",
+    "title": "GLM-V",
+    "fullTitle": "GLM-V",
+    "docsUrl": "glmv",
+    "desc": "https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking",
+    "group": "model",
+    "hasColor": true
+  },
+  {
     "id": "Gemini",
     "title": "Gemini",
     "fullTitle": "Gemini (Google)",
@@ -1098,13 +1161,13 @@
     "hasColor": false
   },
   {
-    "id": "GLMV",
-    "title": "GLM-V",
-    "fullTitle": "GLM-V",
-    "docsUrl": "glmv",
-    "desc": "https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking",
-    "group": "model",
-    "hasColor": true
+    "id": "GmiCloud",
+    "title": "GmiCloud",
+    "fullTitle": "GMI Cloud",
+    "docsUrl": "gmi-cloud",
+    "desc": "https://gmicloud.ai",
+    "group": "provider",
+    "hasColor": false
   },
   {
     "id": "Google",
@@ -1278,15 +1341,6 @@
     "hasColor": false
   },
   {
-    "id": "Ideogram",
-    "title": "Ideogram",
-    "fullTitle": "Ideogram",
-    "docsUrl": "ideogram",
-    "desc": "https://ideogram.ai",
-    "group": "application",
-    "hasColor": false
-  },
-  {
     "id": "IFlyTekCloud",
     "title": "iFlyTekCloud",
     "fullTitle": "IFlyTekCloud (讯飞开放平台)",
@@ -1296,6 +1350,15 @@
     "hasColor": true
   },
   {
+    "id": "Ideogram",
+    "title": "Ideogram",
+    "fullTitle": "Ideogram",
+    "docsUrl": "ideogram",
+    "desc": "https://ideogram.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
     "id": "Inception",
     "title": "Inception",
     "fullTitle": "Inception Labs",
@@ -1303,6 +1366,15 @@
     "desc": "https://inceptionlabs.ai",
     "group": "model",
     "hasColor": false
+  },
+  {
+    "id": "Inceptron",
+    "title": "Inceptron",
+    "fullTitle": "Inceptron",
+    "docsUrl": "inceptron",
+    "desc": "https://inceptron.io",
+    "group": "provider",
+    "hasColor": true
   },
   {
     "id": "Inference",
@@ -1348,6 +1420,15 @@
     "desc": "https://internlm.intern-ai.org.cn",
     "group": "provider",
     "hasColor": true
+  },
+  {
+    "id": "IoNet",
+    "title": "IoNet",
+    "fullTitle": "io.net",
+    "docsUrl": "io-net",
+    "desc": "https://io.net",
+    "group": "provider",
+    "hasColor": false
   },
   {
     "id": "Jimeng",
@@ -1467,6 +1548,24 @@
     "hasColor": true
   },
   {
+    "id": "LG",
+    "title": "LG AI",
+    "fullTitle": "LG AI (KMMLU/EXAONE)",
+    "docsUrl": "lg",
+    "desc": "https://lgresearch.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "LLaVA",
+    "title": "LLaVA",
+    "fullTitle": "LLaVA",
+    "docsUrl": "l-la-va",
+    "desc": "https://github.com/haotian-liu/LLaVA",
+    "group": "model",
+    "hasColor": true
+  },
+  {
     "id": "Lambda",
     "title": "Lambda",
     "fullTitle": "Lambda",
@@ -1481,15 +1580,6 @@
     "fullTitle": "LangChain",
     "docsUrl": "lang-chain",
     "desc": "https://langchain.com",
-    "group": "application",
-    "hasColor": true
-  },
-  {
-    "id": "Langfuse",
-    "title": "Langfuse",
-    "fullTitle": "Langfuse",
-    "docsUrl": "langfuse",
-    "desc": "https://langfuse.com",
     "group": "application",
     "hasColor": true
   },
@@ -1512,20 +1602,20 @@
     "hasColor": true
   },
   {
+    "id": "Langfuse",
+    "title": "Langfuse",
+    "fullTitle": "Langfuse",
+    "docsUrl": "langfuse",
+    "desc": "https://langfuse.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
     "id": "LeptonAI",
     "title": "LeptonAI",
     "fullTitle": "LeptonAI",
     "docsUrl": "lepton-ai",
     "desc": "https://lepton.ai",
-    "group": "provider",
-    "hasColor": true
-  },
-  {
-    "id": "LG",
-    "title": "LG AI",
-    "fullTitle": "LG AI (KMMLU/EXAONE)",
-    "docsUrl": "lg",
-    "desc": "https://lgresearch.ai",
     "group": "provider",
     "hasColor": true
   },
@@ -1563,15 +1653,6 @@
     "docsUrl": "llama-index",
     "desc": "https://llamaindex.ai",
     "group": "application",
-    "hasColor": true
-  },
-  {
-    "id": "LLaVA",
-    "title": "LLaVA",
-    "fullTitle": "LLaVA",
-    "docsUrl": "l-la-va",
-    "desc": "https://github.com/haotian-liu/LLaVA",
-    "group": "model",
     "hasColor": true
   },
   {
@@ -1638,6 +1719,15 @@
     "hasColor": true
   },
   {
+    "id": "MCP",
+    "title": "ModelContextProtocol",
+    "fullTitle": "MCP (Model Context Protocol)",
+    "docsUrl": "mcp",
+    "desc": "https://modelcontextprotocol.io",
+    "group": "application",
+    "hasColor": false
+  },
+  {
     "id": "Magic",
     "title": "Magic",
     "fullTitle": "Magic",
@@ -1670,15 +1760,6 @@
     "fullTitle": "Mastra",
     "docsUrl": "mastra",
     "desc": "https://mastra.ai",
-    "group": "application",
-    "hasColor": false
-  },
-  {
-    "id": "MCP",
-    "title": "ModelContextProtocol",
-    "fullTitle": "MCP (Model Context Protocol)",
-    "docsUrl": "mcp",
-    "desc": "https://modelcontextprotocol.io",
     "group": "application",
     "hasColor": false
   },
@@ -1836,6 +1917,15 @@
     "hasColor": true
   },
   {
+    "id": "NPLCloud",
+    "title": "NPLCloud",
+    "fullTitle": "NPLCloud",
+    "docsUrl": "npl-cloud",
+    "desc": "https://nlpcloud.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
     "id": "NanoBanana",
     "title": "NanoBanana",
     "fullTitle": "Nano Banana (Google)",
@@ -1859,6 +1949,15 @@
     "fullTitle": "New API",
     "docsUrl": "new-api",
     "desc": "https://newapi.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Nextbit",
+    "title": "Nextbit",
+    "fullTitle": "Nextbit",
+    "docsUrl": "nextbit",
+    "desc": "https://nextbit256.com",
     "group": "provider",
     "hasColor": true
   },
@@ -1913,15 +2012,6 @@
     "fullTitle": "Novita",
     "docsUrl": "novita",
     "desc": "https://novita.ai/",
-    "group": "provider",
-    "hasColor": true
-  },
-  {
-    "id": "NPLCloud",
-    "title": "NPLCloud",
-    "fullTitle": "NPLCloud",
-    "docsUrl": "npl-cloud",
-    "desc": "https://nlpcloud.com",
     "group": "provider",
     "hasColor": true
   },
@@ -2025,6 +2115,15 @@
     "hasColor": false
   },
   {
+    "id": "PPIO",
+    "title": "PPIO",
+    "fullTitle": "PPIO",
+    "docsUrl": "ppio",
+    "desc": "https://ppinfra.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
     "id": "PaLM",
     "title": "PaLM",
     "fullTitle": "PaLM (Google)",
@@ -2043,11 +2142,29 @@
     "hasColor": false
   },
   {
+    "id": "Perceptron",
+    "title": "Perceptron",
+    "fullTitle": "Perceptron",
+    "docsUrl": "perceptron",
+    "desc": "https://perceptron.inc",
+    "group": "model",
+    "hasColor": false
+  },
+  {
     "id": "Perplexity",
     "title": "Perplexity",
     "fullTitle": "Perplexity",
     "docsUrl": "perplexity",
     "desc": "https://perplexity.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Phala",
+    "title": "Phala",
+    "fullTitle": "Phala",
+    "docsUrl": "phala",
+    "desc": "https://phala.com",
     "group": "provider",
     "hasColor": true
   },
@@ -2133,15 +2250,6 @@
     "hasColor": true
   },
   {
-    "id": "PPIO",
-    "title": "PPIO",
-    "fullTitle": "PPIO",
-    "docsUrl": "ppio",
-    "desc": "https://ppinfra.com",
-    "group": "provider",
-    "hasColor": true
-  },
-  {
     "id": "PrunaAI",
     "title": "PrunaAI",
     "fullTitle": "Pruna AI",
@@ -2196,6 +2304,15 @@
     "hasColor": true
   },
   {
+    "id": "RSSHub",
+    "title": "RSSHub",
+    "fullTitle": "RSSHub",
+    "docsUrl": "rss-hub",
+    "desc": "https://rsshub.app",
+    "group": "application",
+    "hasColor": true
+  },
+  {
     "id": "Railway",
     "title": "Railway",
     "fullTitle": "Railway",
@@ -2211,6 +2328,15 @@
     "docsUrl": "recraft",
     "desc": "https://recraft.ai",
     "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Reka",
+    "title": "Reka",
+    "fullTitle": "Reka",
+    "docsUrl": "reka",
+    "desc": "https://reka.ai",
+    "group": "model",
     "hasColor": false
   },
   {
@@ -2259,15 +2385,6 @@
     "hasColor": false
   },
   {
-    "id": "RSSHub",
-    "title": "RSSHub",
-    "fullTitle": "RSSHub",
-    "docsUrl": "rss-hub",
-    "desc": "https://rsshub.app",
-    "group": "application",
-    "hasColor": true
-  },
-  {
     "id": "Runway",
     "title": "Runway",
     "fullTitle": "Runway",
@@ -2286,11 +2403,29 @@
     "hasColor": true
   },
   {
+    "id": "Sakana",
+    "title": "sakana.ai",
+    "fullTitle": "Sakana",
+    "docsUrl": "sakana",
+    "desc": "https://sakana.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
     "id": "SambaNova",
     "title": "SambaNova",
     "fullTitle": "SambaNova",
     "docsUrl": "samba-nova",
     "desc": "https://sambanova.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SearXNG",
+    "title": "SearXNG",
+    "fullTitle": "SearXNG",
+    "docsUrl": "sear-xng",
+    "desc": "https://searxng.org",
     "group": "provider",
     "hasColor": true
   },
@@ -2311,15 +2446,6 @@
     "desc": "https://searchapi.io",
     "group": "provider",
     "hasColor": false
-  },
-  {
-    "id": "SearXNG",
-    "title": "SearXNG",
-    "fullTitle": "SearXNG",
-    "docsUrl": "sear-xng",
-    "desc": "https://searxng.org",
-    "group": "provider",
-    "hasColor": true
   },
   {
     "id": "SenseNova",
@@ -2445,7 +2571,7 @@
     "docsUrl": "stepfun",
     "desc": "https://stepfun.com",
     "group": "model",
-    "hasColor": false
+    "hasColor": true
   },
   {
     "id": "Straico",
@@ -2493,6 +2619,15 @@
     "hasColor": false
   },
   {
+    "id": "TII",
+    "title": "Technology Innovation Institute",
+    "fullTitle": "Technology Innovation Institute (Falcon)",
+    "docsUrl": "tii",
+    "desc": "https://tii.ae",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
     "id": "Targon",
     "title": "Targon",
     "fullTitle": "Targon",
@@ -2535,15 +2670,6 @@
     "docsUrl": "tiangong",
     "desc": "https://tiangong.cn",
     "group": "application",
-    "hasColor": true
-  },
-  {
-    "id": "TII",
-    "title": "Technology Innovation Institute",
-    "fullTitle": "Technology Innovation Institute (Falcon)",
-    "docsUrl": "tii",
-    "desc": "https://tii.ae",
-    "group": "provider",
     "hasColor": true
   },
   {
@@ -2598,6 +2724,24 @@
     "docsUrl": "udio",
     "desc": "https://udio.com",
     "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "UnionAlpha",
+    "title": "UnionAlpha",
+    "fullTitle": "Union Alpha",
+    "docsUrl": "union-alpha",
+    "desc": "https://union-alpha.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Unsloth",
+    "title": "Unsloth",
+    "fullTitle": "Unsloth",
+    "docsUrl": "unsloth",
+    "desc": "https://unsloth.ai",
+    "group": "provider",
     "hasColor": true
   },
   {
@@ -2707,6 +2851,33 @@
     "desc": "https://voyageai.com",
     "group": "model",
     "hasColor": true
+  },
+  {
+    "id": "Wafer",
+    "title": "Wafer",
+    "fullTitle": "Wafer",
+    "docsUrl": "wafer",
+    "desc": "https://wafer.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Wandb",
+    "title": "Weights & Biases",
+    "fullTitle": "Weights & Biases",
+    "docsUrl": "wandb",
+    "desc": "https://wandb.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "WaveSpeed",
+    "title": "WaveSpeed",
+    "fullTitle": "WaveSpeed",
+    "docsUrl": "wave-speed",
+    "desc": "https://wavespeed.ai",
+    "group": "provider",
+    "hasColor": false
   },
   {
     "id": "Wenxin",
@@ -2853,15 +3024,6 @@
     "hasColor": true
   },
   {
-    "id": "Zencoder",
-    "title": "Zencoder",
-    "fullTitle": "Zencoder",
-    "docsUrl": "zencoder",
-    "desc": "https://zencoder.ai",
-    "group": "application",
-    "hasColor": true
-  },
-  {
     "id": "ZenMux",
     "title": "ZenMux",
     "fullTitle": "ZenMux",
@@ -2869,6 +3031,15 @@
     "desc": "https://zenmux.ai",
     "group": "provider",
     "hasColor": false
+  },
+  {
+    "id": "Zencoder",
+    "title": "Zencoder",
+    "fullTitle": "Zencoder",
+    "docsUrl": "zencoder",
+    "desc": "https://zencoder.ai",
+    "group": "application",
+    "hasColor": true
   },
   {
     "id": "ZeroOne",
