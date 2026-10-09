@@ -68,6 +68,19 @@ Rules that keep the suite fast and honest:
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
+### Shared conversation claims
+
+`scripts/test-conversation-primitives.ts` owns ID fallback, inline-thinking and
+model-override permutations plus image admission before browser decoding. Existing
+Playground ID and thinking assertions moved intact into that suite; the Playground
+suite still checks its compatibility export and request integration. Browser probes
+retain real FileReader/Image/canvas admission, normalized uploads, streaming,
+reasoning layout, attachments, export, scroll and focus claims. The automatically
+discovered `scripts/conversation-boundaries.test.mjs` checks the emitted runtime
+import graph, with eager/lazy negative fixtures and a nonempty real graph; type-only
+adapters do not create a runtime dependency. See the claim/evidence ledger in
+`docs/plans/architecture-governance.md`.
+
 ### Container and release acceptance
 
 `scripts/release-plan.test.mjs` tests tag/package validation, image identity, numeric

@@ -1,12 +1,15 @@
+export { createID } from '../../utils/ids';
+export type { IDSource } from '../../utils/ids';
+export { extractThinking } from '../../utils/thinking';
+export { effectiveModel } from '../../types/requestModel';
+export { MAX_IMAGE_BYTES, MAX_IMAGES, IMAGE_TYPES, readImage, readAgentImage } from '../../components/workspace/imageAttachments';
+export type { ImageAttachment } from '../../components/workspace/imageAttachments';
 import { DEFAULT_INFERENCE_ENDPOINT, INFERENCE_ENDPOINT_PATHS, parseInferenceEndpoint } from '../../types/inferenceEndpoints';
 import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_REQUEST_BYTES = 32 * 1024 * 1024;
-export const MAX_IMAGES = 4;
 export const MAX_EVENTS = 500;
 export const MAX_EVENT_BYTES = 1024 * 1024;
-export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export const PLAYGROUND_SESSION_PREFERENCE = 'playground_session';
 
 /** The Playground's names for the shared endpoint vocabulary (`types/inferenceEndpoints.ts`). */
@@ -346,45 +349,6 @@ export function sanitizeTurnsForStorage(turns: Turn[]): Turn[] {
   return stored;
 }
 
-export interface IDSource {
-  randomUUID?: () => string;
-  getRandomValues?: (array: Uint8Array) => void;
-}
-
-let fallbackIDCounter = 0;
-
-function formatUUID(bytes: Uint8Array): string {
-  const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-/**
- * createID works on plain HTTP origins as well as secure origins. `randomUUID`
- * is restricted to a secure context, while `getRandomValues` is not; the final
- * fallback exists only for browsers that expose neither.
- */
-export function createID(prefix = 'id', source: IDSource | undefined = typeof globalThis === 'undefined' ? undefined : globalThis.crypto): string {
-  try {
-    if (typeof source?.randomUUID === 'function') return source.randomUUID();
-  } catch {
-    // Fall through to the non-secure-context generator.
-  }
-  try {
-    if (typeof source?.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16);
-      source.getRandomValues(bytes);
-      bytes[6] = (bytes[6] & 0x0f) | 0x40;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      return formatUUID(bytes);
-    }
-  } catch {
-    // Fall through to the timestamp/counter fallback.
-  }
-  fallbackIDCounter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${fallbackIDCounter.toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-export interface ImageAttachment { uid: string; name: string; size: number; type: string; url: string }
 export type Content = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 export interface Message { role: 'user' | 'assistant' | 'system'; content: Content[] }
 export interface ChatRequest {
@@ -483,25 +447,6 @@ export function applyEvent(turn: Turn, event: StreamEvent, now = Date.now()): Tu
   }
   if (event.type === 'error') { next.status = event.code === 'cancelled' ? 'cancelled' : 'error'; next.error = event; next.endedAt = now; next.durationMS = event.duration_ms ?? now - turn.startedAt; next.firstContentMS ??= event.first_content_ms ?? undefined; }
   return next;
-}
-
-/** Extract thinking blocks if model outputs inline <think> tags. */
-export function extractThinking(text: string): { thought?: string; reply: string; isThinking?: boolean } {
-  const openTag = '<think>';
-  const closeTag = '</think>';
-  const openIndex = text.indexOf(openTag);
-  if (openIndex === -1) return { reply: text, isThinking: false };
-  const closeIndex = text.indexOf(closeTag, openIndex);
-  if (closeIndex === -1) {
-    return {
-      thought: text.slice(openIndex + openTag.length).trim(),
-      reply: text.slice(0, openIndex).trim(),
-      isThinking: true,
-    };
-  }
-  const thought = text.slice(openIndex + openTag.length, closeIndex).trim();
-  const reply = (text.slice(0, openIndex) + text.slice(closeIndex + closeTag.length)).trim();
-  return { thought: thought || undefined, reply, isThinking: false };
 }
 
 /** The endpoint a turn's request was sent to. */
@@ -616,18 +561,6 @@ export function buildCurl(request: ChatRequest, defaultUserAgent: string): strin
   return `cat > request.json <<'${delimiter}'\n${json}\n${delimiter}\ncurl "$CPA_BASE_URL${PLAYGROUND_ENDPOINT_PATHS[endpointOf(request)]}" \\\n  -H "Authorization: Bearer $CPA_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n${request.endpoint === 'messages' ? `  -H 'anthropic-version: ${MESSAGES_VERSION}' \\\n` : ''}  -H 'User-Agent: ${userAgent}' \\\n  --no-buffer --data-binary @request.json`;
 }
 /**
- * effectiveModel reports the model a turn's request will actually use.
- *
- * `custom_body` outranks the selector, so the selected call point is not always the model
- * that was called. Every surface that names the model - the turn label and the diagnostics
- * panel heading - reads this, so a turn is never labelled with a model it did not call.
- */
-export function effectiveModel(request: ChatRequest): string {
-  const override = request.custom_body?.model;
-  return typeof override === 'string' && override.trim() ? override : request.model;
-}
-
-/**
  * How far either side of a turn's own span the request-records window reaches.
  *
  * The request id is what names the record; the window is there because CPA numbers requests
@@ -667,62 +600,4 @@ export function usageLink(turn: Turn, now = Date.now()): string | undefined {
     if (now >= to + USAGE_LINK_INGEST_GRACE_MS) params.set("to", String(to));
   }
   return `/usage/events?${params.toString()}`;
-}
-export async function readImage(file: File): Promise<ImageAttachment> {
-  if (!IMAGE_TYPES.includes(file.type) || file.size === 0 || file.size > MAX_IMAGE_BYTES) throw new Error('invalid_image');
-  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  const isPNG = header[0] === 137 && header[1] === 80 && header[2] === 78 && header[3] === 71;
-  const isJPEG = header[0] === 255 && header[1] === 216 && header[2] === 255;
-  const text = String.fromCharCode(...header);
-  const isWebP = text.startsWith('RIFF') && text.slice(8) === 'WEBP';
-  if (!(file.type === 'image/png' && isPNG || file.type === 'image/jpeg' && isJPEG || file.type === 'image/webp' && isWebP)) throw new Error('invalid_image');
-  const url = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('invalid_image')); reader.readAsDataURL(file);
-  });
-  const preview = new Image();
-  preview.src = url;
-  try { await preview.decode(); } catch { throw new Error('invalid_image'); }
-  if (!preview.naturalWidth || !preview.naturalHeight || preview.naturalWidth * preview.naturalHeight > 40_000_000) throw new Error('invalid_image');
-  return { uid: createID('image'), name: file.name, size: file.size, type: file.type, url };
-}
-
-const MAX_AGENT_IMAGE_BYTES = 512 * 1024;
-
-async function encodeAgentImage(image: HTMLImageElement): Promise<Blob> {
-  const contextScale = Math.min(1, 2048 / Math.max(image.naturalWidth, image.naturalHeight));
-  for (const edge of [2048, 1600, 1200, 900]) {
-    const scale = Math.min(contextScale, edge / Math.max(image.naturalWidth, image.naturalHeight));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('invalid_image');
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.86, 0.74, 0.62, 0.5]) {
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality));
-      if (!blob) throw new Error('invalid_image');
-      if (blob.size <= MAX_AGENT_IMAGE_BYTES) return blob;
-      // A browser that cannot encode WebP answers with a PNG, whose size the quality setting cannot
-      // change: only a smaller edge can bring it under the bound.
-      if (blob.type !== 'image/webp') break;
-    }
-  }
-  throw new Error('invalid_image');
-}
-
-/** Agent uploads are normalized before they are retained in history, keeping repeated image context compact. */
-export async function readAgentImage(file: File): Promise<ImageAttachment> {
-  const source = await readImage(file);
-  const image = new Image();
-  image.src = source.url;
-  try { await image.decode(); } catch { throw new Error('invalid_image'); }
-  const blob = await encodeAgentImage(image);
-  const url = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('invalid_image')); reader.readAsDataURL(blob);
-  });
-  // The type the encoder produced, not the one it was asked for: a browser without WebP answers
-  // with a PNG, and the attachment says what it holds.
-  return { ...source, size: blob.size, type: blob.type || source.type, url };
 }

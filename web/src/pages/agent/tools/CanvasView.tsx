@@ -22,7 +22,7 @@ import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { saveBlob } from '../../../utils/download';
 import { getTimeZone } from '../../../utils/time';
 import styles from '../AgentPage.module.css';
-import { createID } from '../../playground/state';
+import { createID } from '../../../utils/ids';
 
 const INITIAL_HEIGHT = 160;
 const CAPTURE_TIMEOUT_MS = 5000;

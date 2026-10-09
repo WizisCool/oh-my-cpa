@@ -10,7 +10,7 @@ import { runAgent } from '../../agent/transport';
 import { DECLARED_TOOLS } from '../../agent/types';
 import type { Conversation, Presentation } from '../../agent/types';
 import { toBrowserTime } from '../../types/serverClock';
-import { createID } from '../playground/state';
+import { createID } from '../../utils/ids';
 import { failureCode } from './api';
 
 /**

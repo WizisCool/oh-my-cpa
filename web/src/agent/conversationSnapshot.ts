@@ -1,7 +1,8 @@
 import { completedDisplayViews } from './types';
 import type { Conversation, DisplayView, TurnPart } from './types';
 import type { Turn as PlaygroundTurn } from '../pages/playground/state';
-import { effectiveModel, extractThinking } from '../pages/playground/state';
+import { effectiveModel } from '../types/requestModel';
+import { extractThinking } from '../utils/thinking';
 
 export interface SnapshotBlock {
   kind: 'text' | 'thought' | 'call';

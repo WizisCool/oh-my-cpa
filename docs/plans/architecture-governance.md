@@ -144,3 +144,51 @@ gates, browser-harness negative checks, 376 built cross-stack checks, all 65 pro
 (runner 706.3 s) and all 18 demo routes. This is a complete-gate cost, not a scoped
 local-edit speedup. The final planner guards were also checked independently after
 this run's static lane; product/browser sources remained unchanged throughout.
+
+### Stage 2: conversation dependency ownership
+
+The ID generator, inline-thinking parser and image admission/encoding implementations
+were relocated intact. Effective-model reading keeps the same body and accepts a
+page-independent structural request type. Playground re-exports the original names;
+Agent run IDs, canvas IDs, transcript parsing, image attachments and conversation
+snapshots import neutral leaves. The fallback counter is still one shared singleton.
+No JSX, styles, request fields, persistence code or lifecycle scheduling changed.
+
+- Playground-state runtime importers: 13 to 8, now exclusively its own page domain.
+  Its representative UI plan contracts from 13 to 3 scenarios (Playground desktop,
+  narrow and shared mobile-console); a genuinely shared primitive still selects all
+  13 conversation scenarios. A real-tree guard failed on the five cross-domain edges
+  before extraction and passes afterward, with eager/lazy and erased-type fixtures.
+- Two existing ID/thinking logic tests moved without losing assertions into
+  `scripts/test-conversation-primitives.ts`. The suite adds throwing-crypto,
+  singleton-counter, Unicode/partial-thinking, exact override and image-admission
+  boundaries. Four deliberate implementation mutations are detected. Playground
+  retains the request-model integration assertions and an export-identity check.
+  Real decode/encode, pasted attachments, stream/reconnect, canvas, export, focus,
+  layout, scrolling and Back assertions remain in Chromium.
+- `pnpm test:fast`: all 8 affected checks passed; the slowest concurrent check was
+  repository self-tests at 27.41 s (including the real import-graph guard).
+- `pnpm check:ui`: all 13 affected scenarios passed, runner 169.3 s, command wall
+  175.25 s, user/system CPU 124.88/53.47 s, individual-child maximum RSS 543,156 KiB.
+  This observed scoped run is not a claim that the full catalog became faster.
+- Ten before/after screenshots cover Agent/Playground composers and their directory/
+  parameter surfaces at 1440×900 and 320×850, plus OAuth at both widths. Seven PNGs
+  are byte-identical; the remaining images differ at 4, 4 and 27 rounded-border pixels
+  respectively, by at most one channel level out of 255. There is no layout/content
+  displacement. No tolerance or assertion in the browser suites was weakened.
+  Local screenshots, DOM captures and exact comparison diagnostics remain under
+  `tmp/architecture-governance`; production CSS comparison is recorded below.
+
+These are reversible ownership moves under the existing leaf-module convention,
+not a new state framework or API. An additional ADR would duplicate that convention.
+
+The stage 2 production build and bundle gate pass. All 28 CSS assets are byte-identical
+(379,255 raw bytes / 76,664 gzip bytes), with the same 279 JavaScript assets. Initial
+JavaScript remains 1,897.72 KiB raw / 613.62 KiB gzip, initial CSS 70.18 / 13.51 KiB.
+Total JavaScript changes by -378 raw / +164 gzip bytes due to module/chunk placement;
+this is not a bundle-size optimization. The loading boundaries remain enforced.
+
+Stage 2 completion gates: `pnpm verify`, production build, `pnpm check:bundle`
+and all 376 deterministic built-browser checks pass. CodeRabbit reviewed all 16
+staged files with zero findings; worktree secret scans and documentation validation
+pass. No hosted workflow was triggered.
