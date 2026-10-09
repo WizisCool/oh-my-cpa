@@ -35,6 +35,7 @@ type agentConversationDTO struct {
 	Fingerprint     string         `json:"client_key_fingerprint"`
 	Model           string         `json:"model"`
 	ReasoningEffort string         `json:"reasoning_effort,omitempty"`
+	Endpoint        string         `json:"endpoint,omitempty"`
 	Turns           []agentTurnDTO `json:"turns"`
 	Omitted         int            `json:"omitted"`
 	AnchorMS        int64          `json:"anchor_ms"`
@@ -67,7 +68,7 @@ func agentConversationForConsole(conversation *agent.Conversation) *agentConvers
 	}
 	return &agentConversationDTO{
 		ID: conversation.ID, Revision: conversation.Revision, Fingerprint: conversation.Fingerprint,
-		Model: conversation.Model, ReasoningEffort: conversation.ReasoningEffort, Turns: turns,
+		Model: conversation.Model, ReasoningEffort: conversation.ReasoningEffort, Endpoint: conversation.Endpoint, Turns: turns,
 		Omitted: conversation.Omitted, AnchorMS: conversation.AnchorMS,
 	}
 }

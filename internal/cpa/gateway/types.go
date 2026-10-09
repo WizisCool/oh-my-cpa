@@ -1,4 +1,5 @@
-// Package gateway exposes only the two inference operations used by the playground.
+// Package gateway exposes only the inference operations the console itself uses: the model
+// list, and a streamed conversation on one of CPA's three endpoints.
 package gateway
 
 import (
@@ -76,6 +77,9 @@ type Message struct {
 	Content []Content `json:"content"`
 }
 type ChatRequest struct {
+	// Endpoint is which of CPA's inference surfaces the conversation is sent to. It decides
+	// the body's shape and never appears in it.
+	Endpoint        Endpoint        `json:"-"`
 	Model           string          `json:"model"`
 	Messages        []Message       `json:"messages"`
 	Temperature     *float64        `json:"temperature,omitempty"`
@@ -131,6 +135,28 @@ func (failure *Error) Error() string { return failure.Code }
 // to carry upstream parameters this console does not model, and decoding it into
 // ChatRequest would silently drop them.
 func BuildPayload(request ChatRequest) (map[string]any, error) {
+	var payload map[string]any
+	switch request.Endpoint {
+	case EndpointResponses:
+		payload = responsesPayload(request)
+	case EndpointMessages:
+		payload = messagesPayload(request)
+	default:
+		payload = chatPayload(request)
+	}
+	if len(request.CustomBody) > 0 && string(request.CustomBody) != "null" {
+		var custom map[string]any
+		if err := json.Unmarshal(request.CustomBody, &custom); err != nil {
+			return nil, &Error{Code: "invalid_parameters"}
+		}
+		for key, value := range custom {
+			payload[key] = value
+		}
+	}
+	return payload, nil
+}
+
+func chatPayload(request ChatRequest) map[string]any {
 	payload := map[string]any{
 		"model":          request.Model,
 		"messages":       request.Messages,
@@ -149,16 +175,29 @@ func BuildPayload(request ChatRequest) (map[string]any, error) {
 	if request.ReasoningEffort != nil {
 		payload["reasoning_effort"] = *request.ReasoningEffort
 	}
-	if len(request.CustomBody) > 0 && string(request.CustomBody) != "null" {
+	return payload
+}
+
+// ValidateRequest validates what will be sent on the request's endpoint.
+//
+// Chat Completions is the console's own message schema, so its merged body is read back and
+// validated whole (ValidatePayload). The other endpoints carry the conversation in a schema
+// this console only writes: the console's messages are validated before conversion, and the
+// merged body is then checked only for an override that would replace them.
+func ValidateRequest(request ChatRequest, payload map[string]any) error {
+	if request.Endpoint == EndpointResponses || request.Endpoint == EndpointMessages {
+		if err := Validate(request); err != nil {
+			return err
+		}
 		var custom map[string]any
-		if err := json.Unmarshal(request.CustomBody, &custom); err != nil {
-			return nil, &Error{Code: "invalid_parameters"}
+		if len(request.CustomBody) > 0 && string(request.CustomBody) != "null" {
+			if err := json.Unmarshal(request.CustomBody, &custom); err != nil {
+				return errors.New("invalid_parameters")
+			}
 		}
-		for key, value := range custom {
-			payload[key] = value
-		}
+		return validateOverrides(request.Endpoint, custom, payload)
 	}
-	return payload, nil
+	return ValidatePayload(payload, request.UserAgent)
 }
 
 // ValidatePayload validates the body that will actually be sent, plus the resolved

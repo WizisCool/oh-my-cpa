@@ -2,6 +2,8 @@ import { getTimeZone } from '../../utils/time';
 import { getDateTimeFormatter } from '../../utils/dateTimeFormat';
 import type { Lang } from '../../i18n/language';
 import { languageLocale } from '../../i18n/language';
+import { DEFAULT_INFERENCE_ENDPOINT, parseInferenceEndpoint } from '../../types/inferenceEndpoints';
+import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 
 export type {
   AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
@@ -93,7 +95,8 @@ export function pendingOperationID(conversation: Conversation | undefined): stri
 }
 
 /**
- * The Agent's selector as the operator last left it: key, call point and reasoning effort.
+ * The Agent's selector as the operator last left it: key, call point, reasoning effort and
+ * inference endpoint.
  *
  * A preference rather than a field of the conversation, because it is a choice made before a
  * message is sent - a reload between choosing a model and asking it something keeps the choice.
@@ -103,12 +106,14 @@ export interface AgentTarget {
   client_key_fingerprint?: string;
   model?: string;
   reasoning_effort?: string;
+  /** Absent for Chat Completions. */
+  endpoint?: InferenceEndpoint;
 }
 
 export const AGENT_TARGET_PREFERENCE = 'agent_target';
 export const DEFAULT_AGENT_TARGET: AgentTarget = {};
 
-/** Reads the stored selector, keeping only the three string fields it may hold. */
+/** Reads the stored selector, keeping only the fields it may hold. */
 export function parseAgentTarget(raw: unknown): AgentTarget | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
@@ -117,6 +122,8 @@ export function parseAgentTarget(raw: unknown): AgentTarget | undefined {
   if (field('client_key_fingerprint')) target.client_key_fingerprint = field('client_key_fingerprint');
   if (field('model')) target.model = field('model');
   if (field('reasoning_effort')) target.reasoning_effort = field('reasoning_effort');
+  const endpoint = parseInferenceEndpoint(field('endpoint'));
+  if (endpoint && endpoint !== DEFAULT_INFERENCE_ENDPOINT) target.endpoint = endpoint;
   return target;
 }
 

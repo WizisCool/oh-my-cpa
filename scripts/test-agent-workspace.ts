@@ -196,6 +196,10 @@ check('the remembered selector keeps only its three fields, trimmed', () => {
     client_key_fingerprint: 'hmac:k', model: 'm', reasoning_effort: 'high',
   });
   assert.deepEqual(parseAgentTarget({ model: '  ', reasoning_effort: 3 }), {});
+  // The endpoint is one of three names; Chat Completions is the default and is not stored.
+  assert.deepEqual(parseAgentTarget({ model: 'm', endpoint: 'messages' }), { model: 'm', endpoint: 'messages' });
+  assert.deepEqual(parseAgentTarget({ model: 'm', endpoint: 'chat' }), { model: 'm' });
+  assert.deepEqual(parseAgentTarget({ model: 'm', endpoint: '/v1/embeddings' }), { model: 'm' });
   assert.equal(parseAgentTarget(null), undefined);
   assert.equal(parseAgentTarget(['m']), undefined);
 });

@@ -45,8 +45,13 @@ const BASE_CSS = [
   `:root{${Object.entries(THREAD_RADII).map(([name, radius]) => `--radius-${name}:${radius}px`).join(';')}}`,
   '*{box-sizing:border-box}',
   'html,body{margin:0}',
-  // Only a canvas taller than the frame's cap scrolls, and then on a slim bar.
-  'html{scrollbar-width:thin}',
+  // The frame is as tall as its canvas, so the document has nothing to scroll except in the
+  // moment before the frame catches up and in the full-screen view. It never draws a bar for
+  // either: a bar that came and went took width from the canvas each time, and a chart drawn to
+  // that width was drawn again, which is how a bar stayed on a canvas that fitted. Wheel, touch
+  // and keys still scroll a canvas taller than the screen.
+  'html{scrollbar-width:none}',
+  'html::-webkit-scrollbar{width:0;height:0}',
   'body{padding:0;background:var(--surface);color:var(--fg);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}',
   'a{color:var(--accent)}',
   'button,input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-control);padding:6px 10px;max-width:100%}',

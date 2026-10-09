@@ -92,14 +92,16 @@ export function parseAgentEvent(raw: string): AgentEvent | undefined {
 }
 
 /**
- * The OMC part of a run request: the stored revision the page last saw, and the key, model and
- * effort to run with. Everything else a run needs the server already holds.
+ * The OMC part of a run request: the stored revision the page last saw, and the key, model,
+ * effort and inference endpoint to run with. Everything else a run needs the server already holds.
  */
 export interface AgentForwardedProps {
   revision: number;
   model: string;
   client_key_fingerprint: string;
   reasoning_effort?: string;
+  /** `chat`, `responses` or `messages`; absent for Chat Completions. */
+  endpoint?: string;
   /** The newest turn this message takes the place of: a retry or an edit. */
   replace_turn?: string;
   /** The presentation a composer command asked this message's answer to take. */

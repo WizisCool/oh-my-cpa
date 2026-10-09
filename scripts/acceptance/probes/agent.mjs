@@ -138,10 +138,11 @@ export async function agentWorkspace({ base, page, check }) {
     && (await present.innerText()).includes('Interactive UI') && runs.length === 0, JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
   await page.getByRole('button', { name: 'Back to the default answer format', exact: true }).click();
   check('the presentation chip is removable', await present.count() === 0);
-  // The frame holds what a message is sent with and nothing else: attach, effort, the model, send.
+  // The frame holds what a message is sent with and nothing else: attach, the endpoint, effort,
+  // the model, send.
   const frameButtons = await page.locator('[data-testid="agent-page"] form button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') ?? ''));
-  check('the composer frame offers attach, effort, the model and send only',
-    frameButtons.length === 4 && frameButtons[0] === 'Attach images or text files' && frameButtons[1].startsWith('Reasoning effort:') && frameButtons[2].startsWith('Model:') && frameButtons[3] === 'Send', JSON.stringify(frameButtons));
+  check('the composer frame offers attach, the endpoint, effort, the model and send only',
+    frameButtons.length === 5 && frameButtons[0] === 'Attach images or text files' && frameButtons[1].startsWith('Endpoint:') && frameButtons[2].startsWith('Reasoning effort:') && frameButtons[3].startsWith('Model:') && frameButtons[4] === 'Send', JSON.stringify(frameButtons));
   await composer.pressSequentially('/ui');
   await commands.getByText('/text', { exact: true }).waitFor({ state: 'detached' });
   await composer.press('Enter');
@@ -249,7 +250,7 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent submits a message with Enter as one AG-UI user message', runs.length === 1 && request.protocolVersion === '1.0' && request.messages.length === 1
     && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
   check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
-    && request.forwardedProps.reasoning_effort === 'high' && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
+    && request.forwardedProps.reasoning_effort === 'high' && request.forwardedProps.endpoint === undefined && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
   check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_ui', 'suggest_next'])
     && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
   check('agent tells the server the console language and how it writes token counts', JSON.stringify(request.context) === JSON.stringify([{ description: 'console_language', value: 'en' }, { description: 'console_token_style', value: 'en-compact' }]), JSON.stringify(request.context));
@@ -712,8 +713,10 @@ export async function agentNarrow({ base, page, check }) {
   // on a phone dragged the conversation off the screen.
   const longValue = 'a-value-without-any-break-'.repeat(12);
   const privateQueryCell = 'private-query-cell-not-for-preview';
+  // Wider than a phone's column once every figure is whole.
+  const figuresTable = '| Model | Requests | Tokens | Cost |\n| --- | ---: | ---: | ---: |\n| gpt-4.1 | 1,204,300 | 98,204,300,112 | $1,204,300.25 |';
   await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [
-    { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
+    { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }, { type: 'text', content: figuresTable }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
       { id: 'call-wide', name: 'database_query', arguments: JSON.stringify({ sql: `select '${longValue}'` }), result: { status: 'success', data: { columns: ['provider'], rows: [[privateQueryCell]], is_truncated: false, detail: longValue } } },
     ] },
   ] } }));
@@ -728,6 +731,14 @@ export async function agentNarrow({ base, page, check }) {
   // column rather than only that the overflow is hidden.
   const transcript = await page.locator('[data-testid="agent-transcript"]').evaluate(box => ({ scroll: box.scrollWidth, client: box.clientWidth }));
   check('a long call digest does not widen the transcript on a phone', transcript.scroll <= transcript.client, JSON.stringify(transcript));
+  // A table too wide for the column scrolls in its own frame; shrinking it would split figures.
+  const figures = await page.getByRole('cell', { name: '98,204,300,112', exact: true }).evaluate(cell => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const frame = cell.closest('table').parentElement;
+    return { lines: range.getClientRects().length, scroll: frame.scrollWidth, client: frame.clientWidth };
+  });
+  check('a table keeps each figure on one line and scrolls sideways on a phone', figures.lines === 1 && figures.scroll > figures.client, JSON.stringify(figures));
   const composer = await page.locator('[data-testid="agent-page"] form').last().boundingBox();
   check('the Agent composer starts compact on a phone', composer.height <= 90, `height=${composer.height}`);
   // On a phone the model a message will reach stays named in the composer, never behind a sheet.
@@ -936,6 +947,17 @@ export async function agentViews({ base, page, check, expectProblem }) {
   check('a canvas table formats tokens the way the console writes them', (await cells()).join('|') === 'gpt-4.1|1.2M|gemini-2.5|86.4K', (await cells()).join('|'));
   await drawn.locator('#table th').filter({ hasText: 'Tokens' }).click();
   check('a canvas table sorts by a column', (await cells())[0] === 'gemini-2.5' && await drawn.locator('#table th[aria-sort="ascending"]').count() === 1);
+
+  // A chart is drawn at its frame's width: on a phone its axis text is the size the kit set, not
+  // a desktop drawing scaled down to a third.
+  const chartScale = () => drawn.locator('#chart svg').evaluate(svg => svg.getBoundingClientRect().width / svg.viewBox.baseVal.width);
+  const wideViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 850 });
+  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at a phone width' });
+  check('a canvas chart keeps its text size on a phone and its marks', Math.abs(await chartScale() - 1) < 0.05
+    && await drawn.locator('#chart rect').count() === 2 && await drawn.locator('#chart .omc-tip').count() === 1, String(await chartScale()));
+  await page.setViewportSize(wideViewport);
+  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at the desktop width' });
 
   // A normal dashboard may exceed the old 1,600px viewport. Its last row belongs to the
   // transcript, not to a nested scrolling viewport that narrows the chart on classic scrollbars.

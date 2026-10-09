@@ -1,14 +1,18 @@
 import React from 'react';
-import { Button, Dropdown, Tooltip } from 'antd';
+import { Button, Dropdown } from 'antd';
+import { LabelTip } from '../../components/common/LabelTip';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
-import { DownloadOutlined, LayoutOutlined, MessageOutlined, ReloadOutlined } from '../../components/icons';
+import { DownloadOutlined, LayoutOutlined, MessageOutlined } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import { AssistantThread } from '../../components/workspace/AssistantThread';
-import { TargetPicker } from '../../components/workspace/TargetPicker';
+import { EndpointPicker } from '../../components/workspace/EndpointPicker';
+import { ModelMark } from '../../components/workspace/ModelMark';
+import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffortPicker';
+import { TargetChip } from '../../components/workspace/TargetChip';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { exportFileName } from '../../agent/export';
@@ -29,11 +33,11 @@ import { PlaygroundMessage } from './PlaygroundTurn';
 import { PlaygroundImageAdapter } from './attachments';
 import { usePlaygroundThreadRuntime } from './runtime';
 import {
-  buildChatRequest, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, DEFAULT_PLAYGROUND_SESSION,
-  hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
+  buildChatRequest, buildHistory, createID, DEFAULT_PLAYGROUND_ENDPOINT, DEFAULT_PLAYGROUND_PARAMETERS, DEFAULT_PLAYGROUND_SESSION,
+  endpointOf, hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
   PLAYGROUND_SESSION_PREFERENCE, readCustomBody, sessionDocument, usageLink,
 } from './state';
-import type { Content, Message, PlaygroundParameters, PlaygroundSession, Turn } from './state';
+import type { Content, Message, PlaygroundParameters, PlaygroundSession, PlaygroundTarget, Turn } from './state';
 import { usePlaygroundRun } from './usePlaygroundRun';
 import styles from './PlaygroundPage.module.css';
 import { LoadFailure, Notice } from '../../components/feedback';
@@ -53,10 +57,7 @@ function selectNameableKeys(response: Awaited<ReturnType<typeof api.getClientAPI
   return response.keys.filter(key => Boolean(key.usage_fingerprint));
 }
 
-interface Target {
-  fingerprint: string;
-  model: string;
-}
+const NO_TARGET: PlaygroundTarget = { fingerprint: '', model: '', endpoint: DEFAULT_PLAYGROUND_ENDPOINT };
 
 export const PlaygroundPage: React.FC = () => {
   const { isExporting, exportSnapshot } = useConversationExport('playground');
@@ -69,7 +70,7 @@ export const PlaygroundPage: React.FC = () => {
   const defaultUserAgent = playgroundUserAgent(getAppConfig().version);
 
   const sessionPref = usePreference<PlaygroundSession>(PLAYGROUND_SESSION_PREFERENCE, DEFAULT_PLAYGROUND_SESSION, parsePlaygroundSession);
-  const [target, setTarget] = React.useState<Target>({ fingerprint: '', model: '' });
+  const [target, setTarget] = React.useState<PlaygroundTarget>(NO_TARGET);
   const [parameters, setParameters] = React.useState<PlaygroundParameters>(DEFAULT_PLAYGROUND_PARAMETERS);
   const [selectedID, setSelectedID] = React.useState('');
   const [panelTab, setPanelTab] = React.useState<PanelTab>('parameters');
@@ -105,6 +106,8 @@ export const PlaygroundPage: React.FC = () => {
     const stored = sessionPref.value;
     storedRef.current = stored;
     setParameters(parametersFromSession(stored));
+    // The endpoint needs no directory to be checked against, so it is restored with the session.
+    if (stored.endpoint) setTarget(current => ({ ...current, endpoint: stored.endpoint ?? current.endpoint }));
     replaceTurns(stored.turns ?? [], stored.last_run_id ?? stored.turns?.at(-1)?.id ?? "");
     if (stored.turns?.length) {
       setSelectedID(stored.turns[stored.turns.length - 1].id);
@@ -117,7 +120,7 @@ export const PlaygroundPage: React.FC = () => {
     const available = keys.data.map(key => key.usage_fingerprint as string);
     const stored = storedRef.current?.client_key_fingerprint;
     const fingerprint = stored && available.includes(stored) ? stored : available.length === 1 ? available[0] : '';
-    if (fingerprint) setTarget(current => (current.fingerprint ? current : { fingerprint, model: '' }));
+    if (fingerprint) setTarget(current => (current.fingerprint ? current : { ...current, fingerprint, model: '' }));
     setHydration(state => ({ ...state, key: true, model: !fingerprint }));
   }, [hydration.session, hydration.key, keys.isSuccess, keys.data]);
 
@@ -144,7 +147,9 @@ export const PlaygroundPage: React.FC = () => {
     storedRef.current = recovered;
     setParameters(parametersFromSession(recovered));
     const hasKey = keys.data?.some(key => key.usage_fingerprint === request.client_key_fingerprint);
-    setTarget(hasKey ? { fingerprint: request.client_key_fingerprint, model: request.model } : { fingerprint: '', model: '' });
+    setTarget(hasKey
+      ? { fingerprint: request.client_key_fingerprint, model: request.model, endpoint: endpointOf(request) }
+      : { ...NO_TARGET, endpoint: endpointOf(request) });
   }, [keys.data]);
   React.useEffect(() => {
     if (isDemo || !hydration.session || !keys.isSuccess) return;
@@ -170,14 +175,14 @@ export const PlaygroundPage: React.FC = () => {
     lastWrittenRef.current = serialized;
     void persistSession(document);
   }, [persistSession]);
-  const persistedTargetRef = React.useRef<Target>();
+  const persistedTargetRef = React.useRef<PlaygroundTarget>();
   React.useEffect(() => {
     if (isDemo || !isHydrated || !isRecoveryChecked || isRunning) return;
     pendingRef.current = sessionDocument(target, parameters, turns, lastRunID);
     // The first pass sees the restored target, which the server already holds.
     const previousTarget = persistedTargetRef.current ?? target;
     persistedTargetRef.current = target;
-    if (previousTarget.fingerprint !== target.fingerprint || previousTarget.model !== target.model) {
+    if (previousTarget.fingerprint !== target.fingerprint || previousTarget.model !== target.model || previousTarget.endpoint !== target.endpoint) {
       flushSession();
       return;
     }
@@ -307,7 +312,10 @@ export const PlaygroundPage: React.FC = () => {
   const onParametersChange = React.useCallback((patch: Partial<PlaygroundParameters>) => {
     setParameters(current => ({ ...current, ...patch }));
   }, []);
-  const onParametersReset = React.useCallback(() => setParameters(DEFAULT_PLAYGROUND_PARAMETERS), []);
+  const onParametersReset = React.useCallback(() => {
+    setParameters(current => ({ ...DEFAULT_PLAYGROUND_PARAMETERS, reasoningEffort: current.reasoningEffort }));
+  }, []);
+
 
   // ── transcript ─────────────────────────────────────────────────────────────
 
@@ -333,17 +341,6 @@ export const PlaygroundPage: React.FC = () => {
 
   const actions = (
     <>
-      <Tooltip title={t('common.refresh')}>
-        <Button
-          aria-label={t('common.refresh')}
-          icon={<ReloadOutlined />}
-          disabled={isRunning}
-          onClick={() => {
-            void keys.refetch();
-            if (target.fingerprint) void models.refetch();
-          }}
-        />
-      </Tooltip>
       <Dropdown
         trigger={['click']}
         open={isExportMenuOpen}
@@ -368,7 +365,7 @@ export const PlaygroundPage: React.FC = () => {
       <Button aria-label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation}>
         <span className={styles['action-label']}>{t('pg.new_chat')}</span>
       </Button>
-      <Tooltip title={t('pg.parameters')}>
+      <LabelTip title={t('pg.parameters')}>
         <Button
           aria-label={t('pg.parameters')}
           aria-pressed={isPanelOpen}
@@ -376,7 +373,7 @@ export const PlaygroundPage: React.FC = () => {
           icon={<LayoutOutlined />}
           onClick={() => setIsPanelOpen(value => !value)}
         />
-      </Tooltip>
+      </LabelTip>
     </>
   );
 
@@ -385,19 +382,6 @@ export const PlaygroundPage: React.FC = () => {
       <WorkspaceLayout
         testId="playground-page"
         title={t('nav.playground')}
-        target={(
-          <TargetPicker
-            keys={keys.data ?? []}
-            models={models.data?.models ?? []}
-            fingerprint={target.fingerprint}
-            model={target.model}
-            isKeysLoading={keys.isFetching}
-            isModelsLoading={models.isFetching}
-            isDisabled={isRunning}
-            onFingerprintChange={fingerprint => setTarget({ fingerprint, model: '' })}
-            onModelChange={model => setTarget(current => ({ ...current, model }))}
-          />
-        )}
         actions={actions}
         notices={notices}
         aside={{
@@ -435,7 +419,12 @@ export const PlaygroundPage: React.FC = () => {
           empty={(
             <div className={workspace['empty']} data-testid="playground-empty">
               <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
-              {target.model && <p className={styles['empty-target']}>{target.model}</p>}
+              {target.model && (
+                <p className={styles['empty-target']}>
+                  <ModelMark callPoint={target.model} />
+                  <span>{target.model}</span>
+                </p>
+              )}
             </div>
           )}
         >
@@ -448,6 +437,45 @@ export const PlaygroundPage: React.FC = () => {
           stopLabel={t('pg.stop')}
           blockedReason={!isTargetReady ? t('pg.target_required') : !customBody.ok ? t('pg.invalid_json') : undefined}
           attachments={{ addLabel: t('pg.add_image'), removeLabel: t('pg.remove_image') }}
+          // What the next message is sent with sits where it is written, as on the Agent page:
+          // the endpoint leads the foot, effort and the model close it beside send.
+          footerStart={(
+            <EndpointPicker
+              value={target.endpoint}
+              isDisabled={isRunning}
+              onChange={endpoint => setTarget(current => ({ ...current, endpoint }))}
+            />
+          )}
+          footerEnd={(
+            <>
+              <ReasoningEffortPicker
+                value={parameters.reasoningEffort}
+                isDisabled={isRunning}
+                onChange={reasoningEffort => onParametersChange({ reasoningEffort })}
+              />
+              <TargetChip
+                keys={keys.data ?? []}
+                models={models.data?.models ?? []}
+                fingerprint={target.fingerprint}
+                model={target.model}
+                isKeysLoading={keys.isFetching}
+                isModelsLoading={models.isFetching}
+                isDisabled={isRunning}
+                isPending={!isHydrated && !keys.isError && !models.isError}
+                onFingerprintChange={fingerprint => setTarget(current => ({ ...current, fingerprint, model: '' }))}
+                onModelChange={model => setTarget(current => ({ ...current, model }))}
+                onRefresh={() => {
+                  void keys.refetch();
+                  if (target.fingerprint) void models.refetch();
+                }}
+                emptyHint={keys.isSuccess && keys.data.length === 0
+                  ? <>{t('pg.no_keys')} <Link to="/api-keys">{t('pg.manage_keys')}</Link></>
+                  : !!target.fingerprint && models.isSuccess
+                    ? <>{t('pg.no_models')} <Link to="/ai-providers">{t('pg.manage_models')}</Link></>
+                    : undefined}
+              />
+            </>
+          )}
         />
       </WorkspaceLayout>
     </AssistantRuntimeProvider>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
+import { LabelTip } from '../../../components/common/LabelTip';
 import {
   CANVAS_MIN_HEIGHT, CANVAS_SANDBOX, CANVAS_TOKENS, canvasDocument, canvasHeight, canvasImage, canvasRasterScale, uiComposeMessage,
 } from '../../../agent/canvasDocument';
@@ -224,7 +225,7 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
         <span className={styles['view-title']}>{view.title}</span>
         <span className={styles['view-spacer']} />
         {/* One action among the others, named for what it will show next. */}
-        <Tooltip title={t(mode === 'canvas' ? 'agent.view.source' : 'agent.view.ui')}>
+        <LabelTip title={t(mode === 'canvas' ? 'agent.view.source' : 'agent.view.ui')}>
           <Button
             type="text"
             size="small"
@@ -233,8 +234,8 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
             icon={mode === 'canvas' ? <CodeOutlined /> : <EyeOutlined />}
             onClick={() => setMode(mode === 'canvas' ? 'source' : 'canvas')}
           />
-        </Tooltip>
-        <Tooltip title={t('agent.view.save_image')}>
+        </LabelTip>
+        <LabelTip title={t('agent.view.save_image')}>
           <Button
             type="text"
             size="small"
@@ -244,8 +245,8 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
             disabled={mode !== 'canvas' || !isReady}
             onClick={() => void saveImage()}
           />
-        </Tooltip>
-        <Tooltip title={t('agent.view.download_html')}>
+        </LabelTip>
+        <LabelTip title={t('agent.view.download_html')}>
           <Button
             type="text"
             size="small"
@@ -254,8 +255,8 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
             icon={<DownloadOutlined />}
             onClick={() => saveBlob(new Blob([frameDocument], { type: 'text/html;charset=utf-8' }), exportFileName(view.title, 'html', new Date()))}
           />
-        </Tooltip>
-        <Tooltip title={fullscreenLabel}>
+        </LabelTip>
+        <LabelTip title={fullscreenLabel}>
           <Button
             ref={exitRef}
             type="text"
@@ -265,7 +266,7 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
             icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
             onClick={() => setIsFullscreen(value => !value)}
           />
-        </Tooltip>
+        </LabelTip>
       </div>
       {draft && composeMessage && (
         <div className={styles['ui-draft']} data-testid="agent-ui-draft">

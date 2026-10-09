@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button, Image, Tooltip } from 'antd';
+import { LabelTip } from '../../components/common/LabelTip';
 import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAui, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
@@ -183,28 +184,28 @@ function TurnFooter({ turn }: { turn: Turn }) {
       <ActionBarPrimitive.Root className={workspace['foot-actions']}>
         {replaceableTurnID === turn.id && (
           <>
-            <Tooltip title={t('agent.turn.retry')}>
+            <LabelTip title={t('agent.turn.retry')}>
               <Button type="text" size="small" aria-label={t('agent.turn.retry')} icon={<ReloadOutlined />} onClick={retryTurn} />
-            </Tooltip>
-            <Tooltip title={t('agent.turn.edit')}>
+            </LabelTip>
+            <LabelTip title={t('agent.turn.edit')}>
               <Button type="text" size="small" aria-label={t('agent.turn.edit')} icon={<EditOutlined />} onClick={editTurn} />
-            </Tooltip>
+            </LabelTip>
           </>
         )}
-        <Tooltip title={t('conversation.copy_answer')}>
+        <LabelTip title={t('conversation.copy_answer')}>
           <ActionBarPrimitive.Copy asChild>
             <Button type="text" size="small" aria-label={t('conversation.copy_answer')} className={styles['copy-action']}>
               <span className={styles['copy-idle']}><CopyOutlined /></span>
               <span className={styles['copy-done']}><CheckOutlined /></span>
             </Button>
           </ActionBarPrimitive.Copy>
-        </Tooltip>
-        <Tooltip title={t('agent.export.answer')}>
+        </LabelTip>
+        <LabelTip title={t('agent.export.answer')}>
           <Button type="text" size="small" aria-label={t('agent.export.answer')} icon={<FileTextOutlined />} loading={isExporting}
             disabled={isExporting || turn.status === 'running'}
             onClick={() => void readTurnImages([turn]).then(images => exportSnapshot(agentSnapshot({ id: '', revision: 0, model: '', client_key_fingerprint: '', omitted: 0, turns: [turn] }, images), 'html'))}
           />
-        </Tooltip>
+        </LabelTip>
       </ActionBarPrimitive.Root>
     </div>
   );

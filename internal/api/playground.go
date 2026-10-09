@@ -17,6 +17,7 @@ import (
 type playgroundRequest struct {
 	RecoveryTurn         json.RawMessage   `json:"recovery_turn,omitempty"`
 	ClientKeyFingerprint string            `json:"client_key_fingerprint"`
+	Endpoint             string            `json:"endpoint,omitempty"`
 	Model                string            `json:"model"`
 	SystemPrompt         string            `json:"system_prompt,omitempty"`
 	Messages             []gateway.Message `json:"messages"`
@@ -146,11 +147,17 @@ func (h *Handler) chatPlayground(writer http.ResponseWriter, request *http.Reque
 			return
 		}
 	}
+	endpoint, isKnown := gateway.ParseEndpoint(input.Endpoint)
+	if !isKnown {
+		writePlaygroundError(writer, 400, "invalid_request")
+		return
+	}
 	messages := input.Messages
 	if input.SystemPrompt != "" {
 		messages = append([]gateway.Message{{Role: "system", Content: []gateway.Content{{Type: "text", Text: input.SystemPrompt}}}}, messages...)
 	}
 	upstream := gateway.ChatRequest{
+		Endpoint:        endpoint,
 		Model:           input.Model,
 		Messages:        messages,
 		Temperature:     input.Temperature,
@@ -173,7 +180,7 @@ func (h *Handler) chatPlayground(writer http.ResponseWriter, request *http.Reque
 		writePlaygroundError(writer, 400, err.Error())
 		return
 	}
-	if err := gateway.ValidatePayload(payload, upstream.UserAgent); err != nil {
+	if err := gateway.ValidateRequest(upstream, payload); err != nil {
 		writePlaygroundError(writer, 400, err.Error())
 		return
 	}

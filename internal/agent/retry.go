@@ -102,7 +102,10 @@ func (r *Runtime) streamWithRetries(ctx context.Context, clients map[string]Mode
 		var emissionErr error
 		if err == nil {
 			isNewPart, isFirstText := true, true
-			reply, err = client.StreamAgent(ctx, conversation.Model, conversation.ReasoningEffort, messages, tools, func(event gateway.Event) error {
+			// Validated when the message was accepted, so an unknown name cannot reach here.
+			endpoint, _ := gateway.ParseEndpoint(conversation.Endpoint)
+			request := gateway.AgentRequest{Endpoint: endpoint, Model: conversation.Model, ReasoningEffort: conversation.ReasoningEffort, Messages: messages, Tools: tools}
+			reply, err = client.StreamAgent(ctx, request, func(event gateway.Event) error {
 				kind := "text"
 				if event.Type == "thought" {
 					kind = "thought"

@@ -96,6 +96,9 @@ async function checkWorkspaceKeyboard({ base, page, check }) {
       return { inputBottom: input.bottom, sendBottom: send.bottom, sendTop: send.top, isSendHit: Boolean(hit?.closest('button[aria-label="Send"]')) };
     });
     check(`${route} keeps input and Send reachable above the keyboard`, geometry.inputBottom <= 450 && geometry.sendBottom <= 450 && geometry.sendTop >= 30 && geometry.isSendHit, JSON.stringify(geometry));
+    // The Agent's floating actions give their row to the conversation while the keyboard is up.
+    const pageActions = page.getByRole('button', { name: 'Capabilities', exact: true });
+    if (route === '/agent') check('/agent folds its page actions away under a keyboard', !(await pageActions.isVisible()));
     await page.evaluate(() => {
       const viewport = window.visualViewport;
       for (const key of ['height', 'offsetTop']) {
@@ -104,5 +107,9 @@ async function checkWorkspaceKeyboard({ base, page, check }) {
       }
       viewport.dispatchEvent(new Event('resize'));
     });
+    if (route === '/agent') {
+      await pageActions.waitFor({ state: 'visible' });
+      check('/agent brings its page actions back when the keyboard goes', await pageActions.isVisible());
+    }
   }
 }

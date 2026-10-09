@@ -1,6 +1,7 @@
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import React from 'react';
 import { Button, Tooltip } from 'antd';
+import { LabelTip } from '../../components/common/LabelTip';
 import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, EditOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
@@ -72,11 +73,11 @@ export function UserMessage({ canEdit }: { canEdit: boolean }) {
       </div>
       {canEdit && isLast && (
         <ActionBarPrimitive.Root className={workspace['foot-actions']}>
-          <Tooltip title={t('pg.edit_message')}>
+          <LabelTip title={t('pg.edit_message')}>
             <ActionBarPrimitive.Edit asChild>
               <Button type="text" size="small" aria-label={t('pg.edit_message')} icon={<EditOutlined />} />
             </ActionBarPrimitive.Edit>
-          </Tooltip>
+          </LabelTip>
         </ActionBarPrimitive.Root>
       )}
     </MessagePrimitive.Root>
@@ -223,17 +224,17 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
           <Button type="text" size="small" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
         </Tooltip>
         {isLast && (
-          <Tooltip title={t('pg.regenerate')}>
+          <LabelTip title={t('pg.regenerate')}>
             {/* The framework's reload routes to the same replay the retry always was. A turn whose
                 image was dropped from storage cannot be replayed, and says so instead. */}
             <ActionBarPrimitive.Reload asChild disabled={!canRetry}>
               <Button type="text" size="small" aria-label={t('pg.regenerate')} icon={<ReloadOutlined />} onClick={event => { if (!isReplayable(turn)) event.preventDefault(); }} />
             </ActionBarPrimitive.Reload>
-          </Tooltip>
+          </LabelTip>
         )}
-        <Tooltip title={t('pg.inspect')}>
+        <LabelTip title={t('pg.inspect')}>
           <Button type="text" size="small" aria-label={t('pg.inspect')} icon={<BugOutlined />} onClick={() => onInspect(turn)} />
-        </Tooltip>
+        </LabelTip>
       </span>
     </div>
   );

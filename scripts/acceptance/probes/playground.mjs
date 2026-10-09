@@ -50,12 +50,15 @@ export async function playground({ base, page, check, context }) {
   await page.locator('[data-testid="playground-page"]').waitFor();
   const input = page.getByPlaceholder('Enter a message, or paste an image…');
   check('the message box takes text before a model is chosen, and only sending waits for one', await input.isEnabled() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
-  await page.getByLabel('Model', { exact: true }).click();
-  await page.locator('.ant-select-item-option:visible', { hasText: 'vision-alias' }).click();
+  // The model is chosen where the message is written, on the chip the Agent's composer uses.
+  check('the playground names its target in the composer, not in its head', await page.locator('[data-testid="playground-page"] header [data-testid="target-chip"]').count() === 0
+    && await page.locator('[data-testid="playground-page"] form [data-testid="target-chip"]').count() === 1);
+  await page.locator('[data-testid="target-chip"]').click();
+  await page.locator('[data-testid="target-popover"]').getByRole('option', { name: 'vision-alias', exact: true }).click();
   // Reloaded with no pause after the choice: a selection that waited out the parameter debounce
   // before being written is dropped by a reload, which unmounts nothing.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  const target = () => page.locator('[data-testid="playground-page"] header').innerText();
+  const target = () => page.locator('[data-testid="target-chip"]').innerText();
   await until(async () => (await target()).includes('vision-alias'), { label: 'the chosen model after an immediate reload' });
   check('a model chosen just before a reload is still selected after it', (await target()).includes('vision-alias'), await target());
   check('playground offers one image picker beside paste', await page.getByRole('button', { name: 'Add image', exact: true }).count() === 1);
@@ -70,8 +73,8 @@ export async function playground({ base, page, check, context }) {
   // add the same image twice, and asserting only that the first image existed would let that through.
   check('one pasted image produces exactly one attachment', await page.getByAltText('test.png').count() === 1, `attachments=${await page.getByAltText('test.png').count()}`);
   await page.getByLabel('System prompt', { exact: true }).fill('Original system prompt');
-  await page.getByLabel('Reasoning effort', { exact: true }).click();
-  await page.locator('.ant-select-item-option:visible', { hasText: 'Medium (medium)' }).click();
+  await page.locator('[data-testid="effort-chip"]').click();
+  await page.locator('[data-testid="effort-popover"]').getByRole('option', { name: 'Medium (medium)', exact: true }).click();
   await page.getByLabel('User-Agent', { exact: true }).fill('AcmeClient/9.9');
   // A custom body that is not one JSON object is reported beside the field and blocks the send,
   // rather than being discovered after the message has left the composer.
@@ -96,7 +99,7 @@ export async function playground({ base, page, check, context }) {
     label: 'the first streamed turn to complete',
   });
   check('playground sends exactly one request under StrictMode', calls.length === 1, `calls=${calls.length}`);
-  check('playground sends the selected call point, reasoning effort, only a fingerprint and an inline image', calls[0].model === 'vision-alias' && calls[0].reasoning_effort === 'medium' && calls[0].client_key_fingerprint === 'playground-identity' && calls[0].messages[0].content[1].image_url.url.startsWith('data:image/png;base64,'), JSON.stringify(calls[0]).slice(0, 200));
+  check('playground sends the selected call point, reasoning effort, only a fingerprint and an inline image', calls[0].model === 'vision-alias' && calls[0].endpoint === undefined && calls[0].reasoning_effort === 'medium' && calls[0].client_key_fingerprint === 'playground-identity' && calls[0].messages[0].content[1].image_url.url.startsWith('data:image/png;base64,'), JSON.stringify(calls[0]).slice(0, 200));
   // The User-Agent parameter is a transport header, so it travels as its own field and
   // must not also appear inside the chat payload the gateway receives.
   check('the operator-set user-agent is forwarded as its own field, not in the payload', calls[0].user_agent === 'AcmeClient/9.9' && JSON.stringify(calls[0].messages).includes('AcmeClient/9.9') === false, `user_agent=${JSON.stringify(calls[0].user_agent)}`);
@@ -232,7 +235,9 @@ export async function playground({ base, page, check, context }) {
   await page.getByRole('button', { name: 'New conversation', exact: true }).click();
   await page.locator('[data-testid="playground-empty"]').waitFor();
   check('new conversation clears messages and discards stored turns', await page.getByText('A streamed answer').count() === 0, 'empty conversation');
-  const head = await page.locator('[data-testid="playground-page"] header').innerText();
+  await page.locator('[data-testid="target-chip"]').click();
+  const head = `${await page.locator('[data-testid="target-chip"]').innerText()} / ${await page.locator('[data-testid="target-popover"]').innerText()}`;
+  await page.keyboard.press('Escape');
   check('new conversation keeps the key and model', head.includes('Test key') && head.includes('vision-alias'), head);
   await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences))?.playground_session?.turns?.length === 0, {
     label: 'the stored session to drop its turns',
@@ -255,20 +260,34 @@ export async function playgroundNarrow({ base, page, check }) {
   const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, body: document.body.scrollHeight, height: innerHeight,
     page: document.querySelector('[data-testid="playground-page"]').getBoundingClientRect().bottom }));
   check('playground fits a 320px phone and keeps its composer inside the viewport', geometry.scroll <= geometry.width && geometry.page <= geometry.height + 1, JSON.stringify(geometry));
-  // One line with send beside it: on a phone the keyboard takes half the screen, and a two-line box
-  // with a separate send row left the conversation a strip between them.
-  // The placeholder alone may wrap at 320px, and autosize measures it, so the height bound allows
-  // two lines; the claim that matters is that no separate send row exists.
+  // One line with send beside it, and one foot row for what the message is sent with: on a phone
+  // the keyboard takes half the screen, so the box stays compact and every chip stays in view.
   const composer = await page.evaluate(() => {
     const frame = [...document.querySelectorAll('[data-testid="playground-page"] form')].at(-1);
     const input = frame.querySelector('textarea');
     const send = frame.querySelector('button[aria-label="Send"]');
     const inputBox = input.getBoundingClientRect();
     const sendBox = send.getBoundingClientRect();
-    const isSendInline = sendBox.top < inputBox.bottom && sendBox.bottom > inputBox.top;
-    return { height: frame.getBoundingClientRect().height, hasFootRow: frame.childElementCount > 1 && !isSendInline, isSendInline };
+    const chips = ['endpoint-chip', 'effort-chip', 'target-chip'].map(id => frame.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect());
+    return {
+      height: frame.getBoundingClientRect().height,
+      isSendInline: sendBox.top < inputBox.bottom && sendBox.bottom > inputBox.top,
+      areChipsInView: chips.every(box => box && box.left >= 0 && box.right <= innerWidth),
+      areChipsOnOneRow: chips.every(box => box && Math.abs(box.top - chips[0].top) <= 4),
+    };
   });
-  check('the playground composer has send beside the input and no separate row on a phone', !composer.hasFootRow && composer.isSendInline && composer.height <= 72, JSON.stringify(composer));
+  check('the playground composer has send beside the input and one row of settings on a phone', composer.isSendInline && composer.areChipsInView && composer.areChipsOnOneRow && composer.height <= 100, JSON.stringify(composer));
+  // The endpoint is part of the target: chosen once, it is still chosen after a reload.
+  await page.locator('[data-testid="endpoint-chip"]').click();
+  const endpoints = page.locator('[data-testid="endpoint-popover"]');
+  await endpoints.waitFor();
+  const endpointRows = await endpoints.getByRole('option').allInnerTexts();
+  check('the playground offers CPA\'s three inference endpoints by path', await endpoints.getByRole('option').count() === 3
+    && ['/v1/chat/completions', '/v1/responses', '/v1/messages'].every((path, index) => endpointRows[index]?.includes(path)), endpointRows.join(' | '));
+  await endpoints.getByRole('option', { name: 'Messages', exact: true }).click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(async () => (await page.locator('[data-testid="endpoint-chip"]').innerText()).includes('Messages'), { label: 'the chosen endpoint after a reload' });
+  check('an endpoint chosen just before a reload is still selected after it', (await page.locator('[data-testid="endpoint-chip"]').innerText()).includes('Messages'));
   // No model is chosen here. A disabled message box takes no focus, which on a phone is a tap that
   // raises no keyboard and gives no reason.
   const input = page.getByPlaceholder('Enter a message, or paste an image…');

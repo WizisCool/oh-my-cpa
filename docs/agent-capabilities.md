@@ -223,7 +223,7 @@ the console provides a kit (ADR 0073), so a chart or a table is a call rather th
 | --- | --- |
 | `OMC.rows` | The frozen rows of `source`, as objects keyed by field (`window.OMC_DATA` is the same array) |
 | `OMC.fmt(value, unit)` | A number as the console writes it: `tokens`, `usd`, `ms`, `percent` (a 0-1 share), `bytes`, `time` (epoch ms), `number` |
-| `OMC.chart(target, {type, x, y, series, stacked, unit, rows})` | `line`, `area`, `column`, `bar` or `pie`; `y` one field or several, `series` a field to split by |
+| `OMC.chart(target, {type, x, y, series, stacked, unit, rows})` | `line`, `area`, `column`, `bar` or `pie`; `y` one field or several, `series` a field to split by. Drawn at the frame's width, so axis text keeps its size on a phone |
 | `OMC.table(target, {columns: [{field, label, unit}], rows})` | A sortable table with formatted cells |
 | `OMC.compose(message)` | Offers a follow-up in the composer for operator review; does not send, read live data or execute a write |
 | `OMC.diagram(target, {nodes: [{id, label, note, detail, tone, icon}], edges: [{from, to, label}], direction})` | An architecture, flow or topology: nodes layered by distance from a source and joined by arrows, side by side in a wide frame and as an indented tree in a narrow one; picking a node shows its detail and connections |

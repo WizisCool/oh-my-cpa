@@ -219,6 +219,8 @@ type agentForwardedProps struct {
 	Model           string `json:"model"`
 	Fingerprint     string `json:"client_key_fingerprint"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// Endpoint names the inference endpoint a new message is sent to; absent is Chat Completions.
+	Endpoint string `json:"endpoint,omitempty"`
 	// ReplaceTurn is the newest turn a retried or edited message takes the place of.
 	ReplaceTurn string `json:"replace_turn,omitempty"`
 	// Present is the presentation a composer command asked this message's answer to take.
@@ -296,6 +298,7 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		Fingerprint:     props.Fingerprint,
 		Model:           props.Model,
 		ReasoningEffort: props.ReasoningEffort,
+		Endpoint:        props.Endpoint,
 		Language:        wire.Context[AGENT_CONTEXT_LANGUAGE],
 		ReplaceTurn:     props.ReplaceTurn,
 		Present:         props.Present,

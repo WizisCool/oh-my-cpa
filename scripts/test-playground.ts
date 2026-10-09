@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, extractThinking,
+  actualRequest, applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, extractThinking,
   hasCustomParameters, hasOmittedImage, inspectRequest, effectiveModel, MAX_EVENTS, parametersFromSession,
   parsePlaygroundSession, playgroundUserAgent, readCustomBody, retriedTurn, sanitizeTurnsForStorage, sessionDocument,
   STORED_IMAGE_URL_LIMIT, usageLink,
@@ -348,9 +348,12 @@ test('the custom body is one JSON object or nothing, and says which as it is typ
 
 test('an unset parameter is left out of the request so the model default applies', () => {
   const user = { role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] };
-  const target = { fingerprint: 'hmac:key', model: 'alias' };
+  const target = { fingerprint: 'hmac:key', model: 'alias', endpoint: 'chat' as const };
   const minimal = buildChatRequest(target, DEFAULT_PLAYGROUND_PARAMETERS, undefined, [], user);
+  // Chat Completions is the default and is left out, so a turn stored before the endpoint could
+  // be chosen and a new one read the same.
   assert.deepEqual(Object.keys(minimal).sort(), ['client_key_fingerprint', 'messages', 'model']);
+  assert.equal(buildChatRequest({ ...target, endpoint: 'responses' }, DEFAULT_PLAYGROUND_PARAMETERS, undefined, [], user).endpoint, 'responses');
   const full = buildChatRequest(target, {
     systemPrompt: 'be brief', reasoningEffort: ' high ', temperature: 0, topP: 0.5, maxTokens: 64, userAgent: ' Client/1 ', customBody: '{"seed":1}',
   }, { seed: 1 }, [], user);
@@ -363,12 +366,65 @@ test('an unset parameter is left out of the request so the model default applies
 
 test('the stored session round-trips the parameters, and reset means every field is at its default', () => {
   const parameters = { ...DEFAULT_PLAYGROUND_PARAMETERS, systemPrompt: 'sys', temperature: 0.2, customBody: '{}' };
-  const stored = parsePlaygroundSession(JSON.parse(JSON.stringify(sessionDocument({ fingerprint: 'fp', model: 'm' }, parameters, []))));
+  const stored = parsePlaygroundSession(JSON.parse(JSON.stringify(sessionDocument({ fingerprint: 'fp', model: 'm', endpoint: 'messages' }, parameters, []))));
   assert.ok(stored);
   assert.deepEqual(parametersFromSession(stored), parameters);
   assert.equal(stored.client_key_fingerprint, 'fp');
+  assert.equal(stored.endpoint, 'messages');
+  assert.equal(parsePlaygroundSession({ endpoint: '/v1/embeddings' })?.endpoint, undefined);
   assert.equal(hasCustomParameters(parameters), true);
   assert.equal(hasCustomParameters(DEFAULT_PLAYGROUND_PARAMETERS), false);
+  // Effort is chosen in the composer, so the panel's reset neither counts nor clears it.
+  assert.equal(hasCustomParameters({ ...DEFAULT_PLAYGROUND_PARAMETERS, reasoningEffort: 'high' }), false);
+});
+
+test('the inspected request is the body its endpoint receives', () => {
+  const image = 'data:image/png;base64,AAAA';
+  const base = {
+    client_key_fingerprint: 'fp', model: 'alias', system_prompt: 'be brief', reasoning_effort: 'high', max_tokens: 64, temperature: 0,
+    messages: [
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'look' }, { type: 'image_url' as const, image_url: { url: image } }] },
+      { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'seen' }] },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'again' }] },
+    ],
+    custom_body: { metadata: { trace: 'a' } },
+  };
+
+  const responses = actualRequest({ ...base, endpoint: 'responses' }) as Record<string, any>;
+  assert.equal(responses.instructions, 'be brief');
+  assert.equal(responses.max_output_tokens, 64);
+  assert.equal(responses.temperature, 0);
+  assert.deepEqual(responses.reasoning, { effort: 'high', summary: 'auto' });
+  assert.deepEqual(responses.input[0].content, [{ type: 'input_text', text: 'look' }, { type: 'input_image', image_url: image }]);
+  assert.equal(responses.input[1].content[0].type, 'output_text');
+  assert.equal(responses.messages, undefined);
+  assert.deepEqual(responses.metadata, { trace: 'a' });
+
+  const messages = actualRequest({ ...base, endpoint: 'messages' }) as Record<string, any>;
+  assert.equal(messages.system, 'be brief');
+  assert.equal(messages.max_tokens, 64);
+  assert.deepEqual(messages.thinking, { type: 'adaptive' });
+  assert.deepEqual(messages.output_config, { effort: 'high' });
+  assert.deepEqual(messages.messages[0].content[1], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
+  assert.equal(messages.messages.length, 3);
+  // The schema requires a limit, and "none" is the one effort that means thinking is off.
+  const bare = actualRequest({ ...base, endpoint: 'messages', max_tokens: undefined, reasoning_effort: 'none' }) as Record<string, any>;
+  assert.equal(bare.max_tokens, 4096);
+  assert.deepEqual(bare.thinking, { type: 'disabled' });
+  assert.equal(bare.output_config, undefined);
+
+  // Image bytes never reach the panel, in either schema's spelling of an image.
+  for (const endpoint of ['responses', 'messages'] as const) {
+    const inspected = JSON.stringify(inspectRequest({ ...base, endpoint }));
+    assert.equal(inspected.includes('AAAA'), false, endpoint);
+    assert.equal(inspected.includes('base64 omitted'), true, endpoint);
+  }
+  const responsesCurl = buildCurl({ ...base, endpoint: 'responses' }, playgroundUserAgent());
+  assert.equal(responsesCurl.includes('"$CPA_BASE_URL/v1/responses"'), true);
+  assert.equal(responsesCurl.includes('anthropic-version'), false);
+  const messagesCurl = buildCurl({ ...base, endpoint: 'messages' }, playgroundUserAgent());
+  assert.equal(messagesCurl.includes('"$CPA_BASE_URL/v1/messages"') && messagesCurl.includes("-H 'anthropic-version: 2023-06-01'"), true);
+  assert.equal(buildCurl(base, playgroundUserAgent()).includes('"$CPA_BASE_URL/v1/chat/completions"'), true);
 });
 
 test('a retry replays the snapshot and forgets what the failed attempt observed', () => {

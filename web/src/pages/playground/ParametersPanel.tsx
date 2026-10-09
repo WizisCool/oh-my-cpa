@@ -1,8 +1,7 @@
 import React from 'react';
-import { AutoComplete, Button, Input, InputNumber, Slider, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Slider, Tooltip } from 'antd';
 import { clsx } from 'clsx';
 import { UndoOutlined } from '../../components/icons';
-import { REASONING_EFFORTS } from '../../components/workspace/ReasoningEffortPicker';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { hasCustomParameters, readCustomBody } from './state';
@@ -77,10 +76,6 @@ export interface ParametersPanelProps {
 /** What the next request is built from. Edits apply to the next message; a retry replays its own snapshot. */
 export const ParametersPanel = React.memo(function ParametersPanel({ parameters, defaultUserAgent, onChange, onReset }: ParametersPanelProps) {
   const { t } = useI18n();
-  const reasoningOptions = React.useMemo(
-    () => REASONING_EFFORTS.map(value => ({ value, label: t(`conversation.reasoning_effort.${value}`) })),
-    [t],
-  );
   const isCustomBodyValid = readCustomBody(parameters.customBody).ok;
 
   return (
@@ -131,20 +126,6 @@ export const ParametersPanel = React.memo(function ParametersPanel({ parameters,
             value={parameters.maxTokens}
             placeholder={t('conversation.model_default')}
             onChange={next => onChange({ maxTokens: typeof next === 'number' ? next : null })}
-          />
-        </div>
-        <div className={workspace['field']}>
-          <label className={workspace['field-label']} htmlFor="playground-reasoning-effort">{t('conversation.reasoning_effort')}</label>
-          {/* Free text as well as the presets: providers name effort levels their own way, and a
-              value this list does not know is still forwarded as typed. */}
-          <AutoComplete
-            id="playground-reasoning-effort"
-            aria-label={t('conversation.reasoning_effort')}
-            allowClear
-            value={parameters.reasoningEffort}
-            placeholder={t('conversation.model_default')}
-            options={reasoningOptions}
-            onChange={next => onChange({ reasoningEffort: (next ?? '').trim() })}
           />
         </div>
       </section>

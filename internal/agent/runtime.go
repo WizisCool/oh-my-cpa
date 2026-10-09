@@ -116,9 +116,12 @@ type Conversation struct {
 	Fingerprint     string `json:"client_key_fingerprint"`
 	Model           string `json:"model"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	Turns           []Turn `json:"turns"`
-	Omitted         int    `json:"omitted"`
-	AnchorMS        int64  `json:"anchor_ms"`
+	// Endpoint is which of CPA's inference endpoints the conversation's rounds are sent to;
+	// empty is Chat Completions, which is what a conversation stored before the choice used.
+	Endpoint string `json:"endpoint,omitempty"`
+	Turns    []Turn `json:"turns"`
+	Omitted  int    `json:"omitted"`
+	AnchorMS int64  `json:"anchor_ms"`
 }
 
 // Input is one run request. There is no consent flag: the page states, beside the composer, that
@@ -140,8 +143,10 @@ type Input struct {
 	Fingerprint     string
 	Model           string
 	ReasoningEffort string
-	Resume          []string
-	Language        string
+	// Endpoint is the wire name of the inference endpoint a new message is sent to.
+	Endpoint string
+	Resume   []string
+	Language string
 	// DisplayTools names the display tools the console can draw for this run (ADR 0042).
 	DisplayTools []string
 	// ReplaceTurn names the newest turn the message takes the place of, for a retry or an edit.
@@ -308,7 +313,7 @@ var LANGUAGES = map[string]string{
 }
 
 type ModelClient interface {
-	StreamAgent(ctx context.Context, model string, reasoningEffort string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error)
+	StreamAgent(ctx context.Context, request gateway.AgentRequest, emit func(gateway.Event) error) (gateway.AgentReply, error)
 }
 type Runtime struct {
 	Executor *capability.Executor
@@ -374,6 +379,7 @@ func (r *Runtime) Reset(ctx context.Context, revision int64) error {
 		Fingerprint:     current.Fingerprint,
 		Model:           current.Model,
 		ReasoningEffort: current.ReasoningEffort,
+		Endpoint:        current.Endpoint,
 		Turns:           []Turn{},
 	}
 	if err := r.save(ctx, &current); err != nil {
@@ -402,6 +408,9 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		return errors.New("invalid_parameters")
 	}
 	if input.ReasoningEffort != "" && !gateway.ValidReasoningEffort(input.ReasoningEffort) {
+		return errors.New("invalid_parameters")
+	}
+	if _, isKnown := gateway.ParseEndpoint(input.Endpoint); !isKnown {
 		return errors.New("invalid_parameters")
 	}
 	if _, ok := LANGUAGES[input.Language]; input.Language != "" && !ok {
@@ -465,9 +474,16 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 		}
 		conversation.Fingerprint = input.Fingerprint
 		conversation.Model = input.Model
-		// A resumption continues the turn with the effort it started with; only a new message
-		// takes the operator's current choice.
+		// A resumption continues the turn with the effort and endpoint it started with; only a
+		// new message takes the operator's current choice. The endpoint in particular cannot
+		// change mid-turn: a round's calls and signed reasoning are replayed in its schema.
 		conversation.ReasoningEffort = strings.TrimSpace(input.ReasoningEffort)
+		// Stored in its canonical form, with the default left empty: "chat" and an absent
+		// choice are one endpoint, and the conversation should not record them as two.
+		conversation.Endpoint = ""
+		if endpoint, _ := gateway.ParseEndpoint(input.Endpoint); endpoint != gateway.EndpointChat {
+			conversation.Endpoint = string(endpoint)
+		}
 		conversation.AnchorMS = time.Now().UnixMilli()
 		conversation.Turns = append(conversation.Turns, Turn{ID: capability.NewID(), User: input.Message, Present: input.Present, Images: images, Status: "running", Traces: []Trace{}, StartedMS: time.Now().UnixMilli(), Messages: []gateway.AgentMessage{{Role: "user", Content: input.Message, Images: images}}})
 	} else {
@@ -721,7 +737,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 			return err
 		}
 		calls, suggestions := takeSuggestions(offered, reply.Calls)
-		turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "assistant", Content: reply.Content, ToolCalls: calls})
+		turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "assistant", Content: reply.Content, ToolCalls: calls, Thinking: reply.Thinking})
 		if len(calls) == 0 {
 			// Follow-ups belong to a finished answer; ones offered before more work are stale.
 			turn.Suggestions = suggestions

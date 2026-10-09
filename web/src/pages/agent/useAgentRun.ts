@@ -1,3 +1,5 @@
+import { DEFAULT_INFERENCE_ENDPOINT } from '../../types/inferenceEndpoints';
+import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { isAbortError } from '../../api/client';
@@ -69,6 +71,7 @@ interface AgentRunOptions {
   fingerprint: string;
   /** Empty for the model's own default. */
   reasoningEffort: string;
+  endpoint: InferenceEndpoint;
   language: string;
   tokenStyle: string;
   /** Writes a conversation the server has already persisted, so no refetch is needed for it. */
@@ -142,7 +145,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   // `isMessage` rather than a non-empty text: a message may be images alone, and a retry of one
   // sends no words at all.
   const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string, { replaceTurn = '', present, images = NO_IMAGES }: SendOptions = {}, isMessage = false) => {
-    const { conversation: current, model, fingerprint, reasoningEffort, language, tokenStyle } = optionsRef.current;
+    const { conversation: current, model, fingerprint, reasoningEffort, endpoint, language, tokenStyle } = optionsRef.current;
     if (controllerRef.current || !current) throw new RunRejectedError('agent_busy', message);
     const isResume = !isMessage;
     const runID = recoveryID ?? newRunID();
@@ -176,6 +179,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
           model,
           client_key_fingerprint: fingerprint,
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+          ...(endpoint !== DEFAULT_INFERENCE_ENDPOINT ? { endpoint } : {}),
           ...(replaceTurn ? { replace_turn: replaceTurn } : {}),
           ...(present ? { present } : {}),
         },

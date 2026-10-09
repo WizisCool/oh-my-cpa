@@ -28,7 +28,7 @@ func TestAgentStreamAssemblesCallsOnlyAfterCompleteFinish(t *testing.T) {
 				}
 				io.WriteString(writer, body)
 			})
-			reply, err := client.StreamAgent(context.Background(), "model", "", []AgentMessage{{Role: "user", Content: "count"}}, nil, func(Event) error { return nil })
+			reply, err := client.StreamAgent(context.Background(), AgentRequest{Model: "model", ReasoningEffort: "", Messages: []AgentMessage{{Role: "user", Content: "count"}}}, func(Event) error { return nil })
 			if !complete {
 				if err == nil || len(reply.Calls) != 0 {
 					t.Fatal("incomplete stream produced executable calls")
@@ -47,7 +47,7 @@ func TestAgentRejectsLegacyFunctionsAndMalformedCalls(t *testing.T) {
 			writer.Header().Set("Content-Type", "text/event-stream")
 			io.WriteString(writer, `data: {"choices":[{"index":0,"delta":{`+delta+`},"finish_reason":"function_call"}]}`+"\n\ndata: [DONE]\n\n")
 		})
-		reply, err := client.StreamAgent(context.Background(), "model", "", nil, nil, func(Event) error { return nil })
+		reply, err := client.StreamAgent(context.Background(), AgentRequest{Model: "model", ReasoningEffort: "", Messages: nil}, func(Event) error { return nil })
 		if err == nil || len(reply.Calls) != 0 {
 			t.Fatal("unsafe output accepted")
 		}
@@ -67,7 +67,7 @@ func TestAgentStreamSeparatesReasoningAndForwardsEffort(t *testing.T) {
 			`data: {"choices":[{"index":0,"delta":{"content":"answer"},"finish_reason":"stop"}]}`+"\n\ndata: [DONE]\n\n")
 	})
 	var thought string
-	reply, err := client.StreamAgent(context.Background(), "model", "high", []AgentMessage{{Role: "user", Content: "q"}}, nil, func(event Event) error {
+	reply, err := client.StreamAgent(context.Background(), AgentRequest{Model: "model", ReasoningEffort: "high", Messages: []AgentMessage{{Role: "user", Content: "q"}}}, func(event Event) error {
 		if event.Type == "thought" {
 			thought += event.Content
 		}
@@ -79,7 +79,7 @@ func TestAgentStreamSeparatesReasoningAndForwardsEffort(t *testing.T) {
 	if !strings.Contains(body, `"reasoning_effort":"high"`) {
 		t.Fatalf("effort not forwarded: %s", body)
 	}
-	if _, err := client.StreamAgent(context.Background(), "model", "bad\neffort", nil, nil, func(Event) error { return nil }); err == nil {
+	if _, err := client.StreamAgent(context.Background(), AgentRequest{Model: "model", ReasoningEffort: "bad\neffort", Messages: nil}, func(Event) error { return nil }); err == nil {
 		t.Fatal("a control character in the effort level was accepted")
 	}
 }
@@ -113,7 +113,7 @@ func TestAgentContextErrorsInHTTPAndStreamAreStructured(t *testing.T) {
 			}
 		}))
 		client, _ := NewClient(server.URL, "key", false)
-		_, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: "q"}}, nil, func(Event) error { return nil })
+		_, err := client.StreamAgent(context.Background(), AgentRequest{Model: "fixture", ReasoningEffort: "", Messages: []AgentMessage{{Role: "user", Content: "q"}}}, func(Event) error { return nil })
 		var failure *Error
 		if !errors.As(err, &failure) || failure.Code != "context_length_exceeded" || failure.Parameter != "messages" || strings.Contains(err.Error(), "sensitive") {
 			t.Fatalf("error %+v", err)
@@ -136,7 +136,7 @@ func TestAgentStreamSeparatesRefusalsFromOutages(t *testing.T) {
 				fmt.Fprintf(writer, "data: %s\n\n", testCase.frame)
 			}))
 			client, _ := NewClient(server.URL, "key", false)
-			_, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: "q"}}, nil, func(Event) error { return nil })
+			_, err := client.StreamAgent(context.Background(), AgentRequest{Model: "fixture", ReasoningEffort: "", Messages: []AgentMessage{{Role: "user", Content: "q"}}}, func(Event) error { return nil })
 			var failure *Error
 			if !errors.As(err, &failure) || failure.Code != testCase.code || strings.Contains(err.Error(), "sensitive") {
 				t.Fatalf("error %+v", err)
@@ -165,7 +165,7 @@ func TestAgentDoesNotSendTokenBudgetsOrCapToolCounts(t *testing.T) {
 	}))
 	defer server.Close()
 	client, _ := NewClient(server.URL, "key", false)
-	reply, err := client.StreamAgent(context.Background(), "fixture", "", []AgentMessage{{Role: "user", Content: strings.Repeat("x", 2<<20)}}, nil, func(Event) error { return nil })
+	reply, err := client.StreamAgent(context.Background(), AgentRequest{Model: "fixture", ReasoningEffort: "", Messages: []AgentMessage{{Role: "user", Content: strings.Repeat("x", 2<<20)}}}, func(Event) error { return nil })
 	if err != nil || len(reply.Calls) != 32 {
 		t.Fatalf("calls %d err %v", len(reply.Calls), err)
 	}
