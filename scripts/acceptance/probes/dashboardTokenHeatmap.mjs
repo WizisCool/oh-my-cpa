@@ -15,6 +15,34 @@ import {
 
 
 
+async function checkActivityHealthLayout(page, check, isStacked) {
+  const health = page.getByTestId('dashboard-credential-health');
+  await health.waitFor();
+  const layout = await page.evaluate(() => {
+    const heatmap = document.querySelector('.heatmap-panel').getBoundingClientRect();
+    const health = document.querySelector('[data-testid="dashboard-credential-health"]').getBoundingClientRect();
+    const row = document.querySelector('.dashboard-activity-row').getBoundingClientRect();
+    return {
+      heatmap: { left: heatmap.left, right: heatmap.right, top: heatmap.top, bottom: heatmap.bottom, width: heatmap.width },
+      health: { left: health.left, right: health.right, top: health.top, bottom: health.bottom, width: health.width },
+      rowWidth: row.width,
+      runtimePanels: document.querySelectorAll('.runtime-list').length,
+    };
+  });
+  check('the dashboard has no runtime information panel', layout.runtimePanels === 0, `panels=${layout.runtimePanels}`);
+  if (isStacked) {
+    check('credential health stacks below token activity', layout.health.top >= layout.heatmap.bottom - 1,
+      `heatmapBottom=${layout.heatmap.bottom} healthTop=${layout.health.top}`);
+    check('both mobile panels fill their row', Math.abs(layout.heatmap.width - layout.rowWidth) <= 1 && Math.abs(layout.health.width - layout.rowWidth) <= 1,
+      `heatmap=${layout.heatmap.width} health=${layout.health.width} row=${layout.rowWidth}`);
+  } else {
+    check('credential health sits to the right of token activity', layout.health.left >= layout.heatmap.right && Math.abs(layout.health.top - layout.heatmap.top) <= 1,
+      `heatmap=${JSON.stringify(layout.heatmap)} health=${JSON.stringify(layout.health)}`);
+    check('token activity and credential health occupy equal half-width columns', Math.abs(layout.heatmap.width - layout.health.width) <= 1 && layout.heatmap.width / layout.rowWidth > 0.45 && layout.heatmap.width / layout.rowWidth < 0.5,
+      `heatmap=${layout.heatmap.width} health=${layout.health.width} row=${layout.rowWidth}`);
+  }
+}
+
 export async function dashboardTokenHeatmap({ base, page, check }) {
   await page.addInitScript(() => {
     window.__heatmapExtentReads = [];
@@ -31,6 +59,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await checkActivityHealthLayout(page, check, false);
   const extentReads = await page.evaluate(() => window.__heatmapExtentReads);
   check('initial heatmap positioning does not synchronously read its scroll extent', extentReads.length === 0, JSON.stringify(extentReads));
 
@@ -150,6 +179,8 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
       panelWidth: panel.clientWidth,
       bodyWidth: body.getBoundingClientRect().width,
       gridWidth: grid.getBoundingClientRect().width,
+      weekdayWidth: document.querySelector('.heatmap-weekdays').getBoundingClientRect().width,
+      labelGap: parseFloat(getComputedStyle(body).columnGap),
       horizontalOverflow: scroll.scrollWidth - scroll.clientWidth,
       verticalOverflow: scroll.scrollHeight - scroll.clientHeight,
       monthsOverflow: months.scrollWidth - months.clientWidth,
@@ -179,8 +210,8 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   });
   check(
     'the grid fills the panel rather than leaving a gutter',
-    fit.bodyWidth >= fit.panelWidth - 1 && fit.gridWidth / fit.panelWidth > 0.95,
-    `panel=${fit.panelWidth} body=${Math.round(fit.bodyWidth)} grid=${Math.round(fit.gridWidth)}`,
+    Math.abs(fit.bodyWidth - fit.panelWidth) <= 1 && Math.abs(fit.gridWidth + fit.weekdayWidth + fit.labelGap - fit.bodyWidth) <= 1,
+    `panel=${fit.panelWidth} body=${fit.bodyWidth} grid=${fit.gridWidth} gutter=${fit.weekdayWidth + fit.labelGap}`,
   );
   check('the field never scrolls horizontally', fit.horizontalOverflow <= 0, `horizontalOverflow=${fit.horizontalOverflow}`);
   check('the field never scrolls vertically', fit.verticalOverflow <= 0, `verticalOverflow=${fit.verticalOverflow}`);
@@ -192,7 +223,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     `monthsOverflow=${fit.monthsOverflow} maxDrift=${Math.max(...fit.monthDrift.map(Math.abs))}`,
   );
   check('the cells are square', Math.abs(fit.cellRatio - 1) < 0.02, `height/width=${fit.cellRatio.toFixed(3)}`);
-  check('the cells are large enough to read', fit.cell >= 12, `cell=${fit.cell}px`);
+  check('the compact cells keep the desktop legibility floor', fit.cell >= 7, `cell=${fit.cell}px`);
 
   // The panel carries the title, the grid and the legend and nothing else: the three readouts the
   // earlier versions had were restating what a tooltip says on demand.
@@ -924,6 +955,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
 export async function dashboardTokenHeatmapMobile({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await checkActivityHealthLayout(page, check, true);
 
   // The page itself must never scroll sideways; the field swipes inside its own container so the
   // rest of the dashboard keeps its layout.
@@ -1164,6 +1196,8 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   await page.locator('.heatmap-panel .ant-alert-error').waitFor({ timeout: 20_000 });
   const errorText = await page.locator('.heatmap-panel .ant-alert-error').innerText();
   check('a failed first load is reported rather than left loading', errorText.length > 0, `alert=${JSON.stringify(errorText.slice(0, 120))}`);
+  await page.getByTestId('dashboard-credential-health').waitFor();
+  check('a failed heatmap leaves credential health readable', await page.getByTestId('dashboard-credential-health').getAttribute('data-health-state') === 'empty');
   check('the failed panel offers a retry', (await page.locator('.heatmap-panel .ant-alert-error button').count()) === 1);
   check(
     'the failed panel does not show a grid it never read',
@@ -1188,7 +1222,10 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
 
   // Pressing the page's refresh button re-reads the grid, and that read fails.
   failNext = true;
+  const overviewRefresh = page2.waitForResponse(response => response.url().includes('/management/overview') && response.request().method() === 'GET');
   await page2.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  const refreshedOverview = await overviewRefresh;
+  check('the page refresh also reaches credential health', refreshedOverview.ok());
   await page2.locator('.heatmap-stale-alert').waitFor({ timeout: 20_000 });
   const cellsAfter = await page2.locator('.heatmap-grid .heatmap-cell').count();
   check(
@@ -1205,6 +1242,43 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   await page2.locator('.heatmap-stale-alert button').click();
   await page2.locator('.heatmap-stale-alert').waitFor({ state: 'detached', timeout: 20_000 });
   check('a successful retry clears the warning', (await page2.locator('.heatmap-stale-alert').count()) === 0);
+
+  const healthPage = await context.newPage();
+  const healthOverview = {
+    status: 'connected', cpa_connected: true,
+    counts: { management_keys: 1, provider_keys: 0, credentials: 3, models: null },
+    providers: [], traffic: null, partial_errors: [],
+    credentials: {
+      total: 3, active: 1, unavailable: 1, disabled: 1,
+      by_type: [{ type: 'codex', count: 2, disabled: 0 }, { type: 'claude', count: 1, disabled: 1 }],
+    },
+  };
+  let canReadHealth = false;
+  await healthPage.route('**/omc/api/**/management/overview*', route => fulfillFixture(route, canReadHealth
+    ? { status: 200, json: healthOverview }
+    : { status: 503, json: { error: 'CPA unavailable' } }));
+  await healthPage.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const healthPanel = healthPage.getByTestId('dashboard-credential-health');
+  await healthPanel.locator('.ant-alert-error').waitFor();
+  check('an unread overview renders unknown health rather than an empty fleet', await healthPanel.getAttribute('data-health-state') === 'unknown');
+  await healthPage.locator('.heatmap-grid').waitFor();
+  check('an unread overview leaves token activity readable', await healthPage.locator('.heatmap-cell').count() === HEATMAP_TOTAL_DAYS);
+
+  canReadHealth = true;
+  await healthPanel.getByRole('button', { name: 'Retry' }).click();
+  await healthPanel.getByRole('meter').waitFor();
+  check('the health retry publishes the recovered management projection', await healthPanel.getByRole('meter').getAttribute('aria-valuenow') === '1');
+
+  canReadHealth = false;
+  await healthPage.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  await healthPanel.locator('.health-stale-alert.ant-alert-warning').waitFor();
+  check('a failed overview refresh retains the previous health counts with a warning', await healthPanel.getAttribute('data-health-state') === 'ready' && await healthPanel.getByRole('meter').getAttribute('aria-valuemax') === '3');
+
+  canReadHealth = true;
+  await healthPanel.getByRole('button', { name: 'Retry' }).click();
+  await healthPanel.locator('.health-stale-alert').waitFor({ state: 'detached' });
+  check('a successful overview retry clears the stale health warning', await healthPanel.getByRole('meter').count() === 1);
+
 }
 
 // ---------------------------------------------------------------------------

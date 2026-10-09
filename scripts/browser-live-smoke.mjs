@@ -115,16 +115,14 @@ async function main() {
     overviewResponse.ok() && Boolean(overview.cpa_version) && overview.status !== 'unconfigured');
 
   await page.waitForSelector('.terminal-title', { timeout: 15000 });
-  // The runtime block is a second, independent query that mounts only once the
-  // dashboard window has data. Waiting for it keeps this check about content
-  // rather than about which of two requests wins the race.
-  await page.waitForSelector('.runtime-list', { timeout: 15000 });
+  // Credential health is independent of the dashboard window read.
+  await page.waitForSelector('[data-testid="dashboard-credential-health"]:not([data-health-state="loading"])', { timeout: 15000 });
+  const healthState = await page.locator('[data-testid="dashboard-credential-health"]').getAttribute('data-health-state');
+  check('Dashboard health preserves unavailable versus empty data', healthState,
+    overview.credentials === null ? healthState === 'unknown' : healthState === (overview.credentials.total > 0 ? 'ready' : 'empty'));
+  check('Dashboard omits the runtime panel', await page.locator('.runtime-list').count(),
+    (await page.locator('.runtime-list').count()) === 0);
   const dashboardText = await page.locator('main').innerText();
-  check('Dashboard 展示真实 CPA 版本', overview.cpa_version, dashboardText.includes(overview.cpa_version));
-  const instanceName = overview.cpa_instance_name || '';
-  if (instanceName) {
-    check('Dashboard 展示真实实例名', instanceName, dashboardText.includes(instanceName));
-  }
   const hasRequests = dashboardText.includes('请求总数') || dashboardText.includes('请求');
   const silent = dashboardText.includes('静候') || dashboardText.includes('暂无') || dashboardText.includes('尚未捕获');
   check('Dashboard 展示流量吞吐或真实静默态', `hasRequests=${hasRequests} silent=${silent}`, hasRequests || silent);
