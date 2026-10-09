@@ -890,3 +890,16 @@ it alternates both implementations on the same fixtures and reports warm median/
 plus process/locale/resource metadata without timing thresholds in correctness gates.
 Add `--expose-gc` for a separate post-GC retained-heap sample; GC never runs inside
 the timed comparisons.
+
+
+### Conversation presentation ownership
+
+`scripts/test-conversation-labels.ts` owns status admission, separate Agent/Playground
+failure keys, duration thresholds/rounding and the identity of compatibility exports.
+The duration cases formerly in the Agent workspace suite move here without removing
+assertions; page-specific stopped-turn/failure semantics remain there. The runtime
+graph guard in `scripts/conversation-boundaries.test.mjs` forbids shared workspace
+modules from importing page internals, with eager/lazy negative and erased-type cases
+and nonempty real consumers. The existing Agent/Playground probes use `scripts/acceptance/probes/conversation-export.mjs` to
+own actual downloads, standalone HTML/image rendering, controls, privacy, browser
+encoding and responsive behavior. None of these browser claims move to Node.

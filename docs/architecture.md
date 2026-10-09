@@ -923,7 +923,11 @@ owns one fallback ID counter, `utils/thinking.ts` parses inline thinking,
 Agent image encoding. Playground state re-exports these contracts for compatibility;
 Agent and portable exports import the leaves directly. Type-only transcript adapters
 may name Playground turns without loading its state. The runtime-graph guard in
-`scripts/conversation-boundaries.test.mjs` prevents reversing this dependency.
+`components/workspace/conversationLabels.ts` owns status admission, separate Agent/
+Playground error vocabularies and duration presentation for the shared export hook.
+Page modules retain their public exports, while shared workspace runtime modules
+must not import page internals.
+`scripts/conversation-boundaries.test.mjs` prevents reversing these dependencies.
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message

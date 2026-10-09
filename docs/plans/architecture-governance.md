@@ -54,6 +54,7 @@ observable defect is recorded with reproduction and impact before any repair.
 | --- | --- | --- | --- |
 | Local selection misses or widens routed pages | `scripts/ui-impact.test.mjs`, `scripts/check-ui-plan.test.mjs` | Full CI catalog independent of local selection | Add literal-lazy, eager, unknown, mixed-change and real-tree cases. |
 | Request endpoint/body, retry snapshots, stored image redaction, stream bounds | `scripts/test-playground.ts`; gateway and API Go tests | `playground`, `playground-narrow`, built inference acceptance | Keep request semantics; relocate shared primitives without dropping assertions. |
+| Export status, failure vocabulary and duration presentation | `scripts/test-conversation-labels.ts` plus page integration assertions | Agent/Playground downloads, standalone controls, images and print | Move exact policies below pages; retain both vocabularies, page exports and export content. |
 | Agent parts, resume, capabilities and permissions | Agent logic suites and `internal/agent`, `internal/capability`, `internal/mcpbridge`, `internal/api` tests | Agent catalog, built approval/write flows | Preserve reducers and native capability gates. |
 | OAuth join ambiguity, filters and quota target eligibility | `scripts/test-oauth-workspace.ts`, `scripts/test-quota*.ts`, quota/API Go tests | Seven OAuth contexts plus model rules; image/file/focus and request sequencing | Existing extraction is substantial; do not duplicate pure rules in a new DOM harness. |
 | Provider attribution and serialized writes | Dashboard/provider logic suites, API write-gate tests | Provider picker, phone and overlay checks | Retain exact identity and ambiguity rules; no normalization change. |
@@ -239,5 +240,53 @@ all nine affected browser scenarios pass (182.6 s runner / 188.47 s command wall
 desktop and phone screenshots are byte-identical to the baseline. CodeRabbit reviewed
 all seven staged files with zero findings; documentation and diff checks pass.
 The optional GC experiment reports current retained heap 10,484,280 to 10,484,864
-bytes after 150 sorts: no evidence of a retained collator cache. This single-process
+bytes after 10 sorts: no evidence of a retained collator cache. This single-process
 observation is not a universal memory bound.
+
+
+### Stage 4: shared export presentation ownership
+
+The shared `useConversationExport` hook imported Agent state and Playground errors
+solely for presentation policies. `conversationLabels.ts` now owns the exact status
+admission, separate error dictionaries and duration formatter. Existing page exports
+are preserved; no snapshot, HTML renderer, download, hook order or JSX/style changes
+are made. The real-tree guard first detected both edges; it now also protects Agent
+state and all shared workspace modules from importing page runtime internals. Type-only
+references remain erased and permitted.
+
+Four duration assertions move intact from the Agent workspace suite to the neutral
+logic suite, with additional threshold/rounding cases. Existing failure/status domain
+assertions stay in the Agent suite. New tests pin export identities, separate fallback
+vocabularies and unknown status behavior; three deliberate mutations are detected.
+Source comparison confirms that every status array, dictionary and function body is
+byte-preserved. Browser export/download/lifecycle assertions remain unchanged.
+
+
+#### Observable defect held outside this refactor
+
+CodeRabbit identified the existing duration formatter's carry behavior: 119,600 ms
+reads `1m 60s`, while 59,999 ms reads `60.0s`. The new characterization cases retain
+those results rather than silently normalizing them. Rounding before choosing/splitting
+units would change Agent and exported duration labels; it is a separate user-visible
+fix requiring explicit approval. It does not block preserving current behavior. The
+review completed over all ten staged files with this one minor finding and no other
+findings; the recommendation is recorded, not implemented in this scope.
+
+
+Stage 4 completion evidence: all seven affected fast checks pass (slowest check
+26.07 s), `pnpm verify` passes, and all 13 affected browser scenarios pass (169.2 s
+runner / 175.14 s command wall, 123.92/54.07 s user/system CPU, maximum individual-child
+RSS 615,704 KiB). The final ten desktop/phone composer/directory/parameter/OAuth
+screenshots are all byte-identical to the baseline. Real Agent/Playground HTML
+downloads differ only at their observed clock timestamps; after replacing those
+displayed dates, the entire files are identical. No test fixture or browser assertion
+was changed to achieve that comparison. Exported PNG and standalone-reader browser
+checks pass unchanged.
+
+Agent-state direct runtime consumers fall from nine to eight, exclusively within its
+page domain; its future edit plan selects 11 rather than 13 scenarios. Playground
+errors fall from four to three page-domain consumers and select three scenarios.
+The shared presentation leaf still selects all 13 conversation scenarios. Narrowing
+is ownership-based, not a blanket reduction in coverage. These reversible moves
+follow the existing module boundary contract and need no replacement state framework
+or irreversible architecture decision.
