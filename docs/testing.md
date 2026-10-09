@@ -85,7 +85,8 @@ The preference pilot in `web/tests/preferences.component.test.tsx` mounts the
 real hook, QueryClient, API client, feedback surface, token-display provider and
 context readout. It holds responses to prove shared optimistic state, key-local
 write ordering, last-intent rollback, failure recovery, fallback readiness,
-reference stability and an admitted write surviving component unmount. Test-local
+reference stability after an observed cache-triggered render and an admitted write
+surviving component unmount. Test-local
 queues are drained even after failures before globals/cache/unmounted trees are
 released. Do not mock the hook/cache/transport under test or suppress console errors.
 

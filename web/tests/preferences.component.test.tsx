@@ -205,7 +205,9 @@ describe('real preference hook and cache integration', () => {
     const { client } = mount(<Columns />);
     await waitFor(() => expect(screen.getByLabelText('columns ready').textContent).toBe('true'));
     const value = values.at(-1);
+    const renderCount = values.length;
     await act(async () => { client.setQueryData(['preferences'], { ...stored, omc_theme: 'dark' }); });
+    await waitFor(() => expect(values.length).toBeGreaterThan(renderCount));
     expect(values.at(-1)).toBe(value);
   });
 });

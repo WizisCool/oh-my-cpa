@@ -2472,7 +2472,9 @@ receives the shared browser harness it needs and owns one product surface rather
 than becoming another catch-all script.
 
 **`pnpm test:fast` never pays for the browser.** No ordinary change may build the
-SPA, build a Go binary, start Vite, start Chromium or start the fake CPA. The
+SPA, build a Go binary, start the product Vite HTTP listener, start Chromium or
+start the fake CPA. In-process Vite transforms used by frontend integration tests
+remain inside this boundary. The
 selection lives in `scripts/affected-checks.mjs` so it can be asserted directly,
 including that negative property, and a file the rules cannot place selects the
 broad gates rather than nothing.

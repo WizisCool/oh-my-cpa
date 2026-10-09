@@ -177,7 +177,8 @@ reviews:
         The verification harness. Two properties are pinned by tests and by
         `docs/architecture.md`: the affected-check planner and the UI scenario
         planner must never silently select nothing, and `pnpm test:fast` must
-        never build the SPA, start Vite, start Chromium, or start the fake CPA.
+        never build the SPA, start the product Vite HTTP listener, start Chromium, or
+        start the fake CPA.
         An assertion may move to a cheaper layer, but it must not disappear
         without a replacement that makes the same claim. A change to a suite, a
         harness module, or either planner must keep those negative properties
