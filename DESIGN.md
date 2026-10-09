@@ -776,3 +776,19 @@ An identified `credential_quota` cooldown is explained by the existing CPA coold
 ### Native and virtual option scrolling
 
 Native option popups with `overflow-y: auto`, including the Playground model picker, retain browser-owned wheel scrolling even when they share the list library's holder structure. Their scroll listener mirrors offsets through deferred React state, so a second offset writer can undo progress. Only hidden-overflow virtual holders receive synthetic wheel steps; structure alone does not identify virtual scrolling. Existing scroll and motion tokens are unchanged.
+
+### Navigation scroll and portable answer fidelity
+
+The sidebar's native vertical viewport has a 6px overlay indicator instead of consuming a
+scrollbar column. Hover, scrolling, dragging or keyboard focus reveals it; touch retains
+native content scrolling. The thumb tracks the viewport/content ratio and can be dragged;
+pressing the bare track pages toward it. The motion uses the existing fast/base tokens.
+The mobile heatmap starts at the newest edge with a signed-32-bit-safe scroll offset and
+stays pinned through resize only until the reader chooses an older date.
+
+The demonstration announces its nature using the global arrival toast, with contextual
+Agent/Playground replay copy on those pages; it reserves no banner row. Portable Agent HTML
+keeps the same text, standalone reasoning, working timelines and inline generated figures
+in reading order. Call rows retain argument summaries, outcome and duration disclosures.
+PNG captures generated interfaces at their laid-out width, including kit charts and controls;
+unavailable figures keep a visible fallback note rather than silently disappearing.

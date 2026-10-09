@@ -248,7 +248,7 @@ heartbeat interval. The dedicated stream can last ten minutes, with a 120-second
 upstream first-response or idle timeout. Ordinary API timeouts are unchanged. Request
 diagnostics never return credentials; copied cURL needs CPA_BASE_URL, CPA_API_KEY and
 replacement image data URLs. The public demonstration shows the page and model directory
-but refuses inference.
+and offers one browser-local recorded example without inference (ADR 0092).
 
 ## Recovering Agent and Playground runs
 
@@ -462,3 +462,9 @@ Both actions require the console session, are refused in demo mode, and must
 record an attempt audit before calling CPA. If the success audit fails after CPA
 has completed the action, the successful action remains successful; the audit
 failure is logged without tokens or uploaded key material.
+
+## Public demonstration conversations
+
+The public demonstration's Agent and Playground offer one browser-local recorded example
+each. Send/retry/cancel do not invoke a provider or write the Worker. Other questions are
+refused. The server-side demo security classification is unchanged; ADR 0092 documents replay.

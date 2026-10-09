@@ -954,3 +954,12 @@ preserved; lower catalog wall is measured alongside its memory/CPU cost. The bou
 parity expansion and profiling recommendations above remain future work, not
 undelivered claims of universal API coverage or runtime speedup. PR remains Draft;
 merge, tags, releases and production operations require separate authorization.
+
+### Recorded replay and portable conversation fidelity
+
+The replay modules emit the production wire contracts without acquiring runtime dependencies
+on a page's state. Shared grouping/status logic lives in leaf `answerLayout.ts` and
+`callFacts.ts`; Agent framework orchestration stays page-owned. PNG figure capture shares
+`canvasCapture.ts` with the live save-image path and retains opaque sandbox permissions.
+Pure grouping/redaction tests and real-browser script-set content, exact-color PNG pixels,
+download controls and temporary-frame cleanup own the claims at their lowest valid layers.

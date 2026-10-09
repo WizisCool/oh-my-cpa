@@ -1,5 +1,4 @@
 import type { ChatRequest, StreamEvent } from '../pages/playground/state';
-import { PLAYGROUND_EVENT_TYPES } from '../pages/playground/state';
 import { answerChunkSize, chunkText, recordingLanguage, REPLAY_FRAME_MS, REPLAY_ROUND_PAUSE_MS, wallClockPace } from './pacing';
 import type { Pace } from './pacing';
 import recording from './playgroundRecording.json';
@@ -22,8 +21,6 @@ export async function replayPlaygroundChat(
   pace: Pace = wallClockPace,
 ): Promise<void> {
   const emit = (event: StreamEvent) => {
-    // The live path refuses an event outside the facade's vocabulary, and so does the replay.
-    if (!(PLAYGROUND_EVENT_TYPES as readonly string[]).includes(event.type)) throw new Error('invalid_gateway_response');
     onEvent(event);
   };
   const recorded = recordingLanguage(language);

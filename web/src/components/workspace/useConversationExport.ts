@@ -5,7 +5,8 @@ import { capabilityTitle } from '../../i18n/capabilities';
 import { useToast } from '../feedback';
 import { getTimeZone } from '../../utils/time';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { failureKey, formatDuration, isKnownTurnStatus, playgroundErrorKey } from './conversationLabels';
+import { callStatusKey, failureKey, formatDuration, isKnownTurnStatus, playgroundErrorKey } from './conversationLabels';
+import { formatTokens } from '../../types/tokenDisplay';
 import type { ConversationSnapshot } from '../../agent/conversationSnapshot';
 import type { SnapshotLabels } from '../../agent/conversationHtml';
 
@@ -35,7 +36,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       panel: t('agent.panel'), close: t('common.close'), usage: t('agent.foot.tokens'),
       noMatches: t('agent.export.no_matches'), canvasOmitted: t('agent.export.canvas_omitted'),
       step: status => t(`agent.view.step.${status}`),
-      calls: count => t('agent.chain.used', { count }),
+      calls: count => t('agent.chain.used', { count: String(count) }),
       turns: count => t('agent.export.turns', { count }),
       number: value => numberFormat.format(value),
       tokens: count => `${t('pg.total_tokens')} ${new Intl.NumberFormat(locale).format(count)}`, print: t('agent.export.print'), imageOmitted: t('agent.export.image_omitted'), privacy: t('agent.export.privacy'),
@@ -43,6 +44,11 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       status: status => t(kind === 'playground' ? `pg.status.${status}` : status === 'cancelled' ? 'agent.status.stopped' :
         status === 'running' ? 'agent.call.running' : isKnownTurnStatus(status) ? `agent.status.${status}` : 'agent.status.unknown'),
       capability: name => capabilityTitle(name, t),
+      callStatus: (name, status) => t(callStatusKey({ name, result: { status } })),
+      chainFailed: count => t('agent.chain.failed', { count: String(count) }),
+      rounds: (rounds, calls) => t('agent.foot.rounds', { rounds: String(rounds), calls: String(calls) }),
+      present: present => t(`agent.present.${present}`),
+      tokenCount: count => formatTokens(count, tokenStyle),
       failure: code => t(kind === 'agent' ? failureKey(code) : playgroundErrorKey(code)),
       duration: formatDuration,
       date: milliseconds => new Intl.DateTimeFormat(locale, { timeZone: getTimeZone(), dateStyle: 'medium', timeStyle: 'short' }).format(milliseconds),

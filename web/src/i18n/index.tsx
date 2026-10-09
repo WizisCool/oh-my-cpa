@@ -373,7 +373,7 @@ const DICT: Record<string, [string, string]> = {
   'agent.view.step.active': ["进行中", "In progress"],
   'agent.view.step.pending': ["待处理", "Pending"],
   'agent.view.step.failed': ["失败", "Failed"],
-  'agent.export.canvas_omitted': ["交互画布仅在 HTML 导出中可用", "The interactive canvas is available in the HTML export"],
+  'agent.export.canvas_omitted': ["此生成式界面无法捕获为图片，可在 HTML 导出中查看。", "This generated UI could not be captured; view it in the HTML export."],
   'pg.add_image': ["添加图片", "Add image"],
   'pg.edit_message': ["编辑消息并重新发送", "Edit and resend"],
   'pg.edit_send': ["重新发送", "Resend"],

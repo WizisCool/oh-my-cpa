@@ -310,7 +310,7 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.view.step.active": "Sedang berjalan",
   "agent.view.step.pending": "Belum selesai",
   "agent.view.step.failed": "Gagal",
-  "agent.export.canvas_omitted": "Kanvas interaktif tersedia dalam eksport HTML",
+  "agent.export.canvas_omitted": "UI terjana ini tidak dapat dirakam; lihat dalam eksport HTML.",
   "pg.add_image": "Tambah imej",
   "pg.edit_message": "Sunting dan hantar semula",
   "pg.edit_send": "Hantar semula",

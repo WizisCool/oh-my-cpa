@@ -317,7 +317,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.view.step.active": "進行中",
   "agent.view.step.pending": "待處理",
   "agent.view.step.failed": "失敗",
-  "agent.export.canvas_omitted": "互動畫布僅在 HTML 匯出中可用",
+  "agent.export.canvas_omitted": "此生成式介面無法擷取為圖片，可在 HTML 匯出中查看。",
   "pg.add_image": "新增圖片",
   "pg.edit_message": "編輯訊息並重新送出",
   "pg.edit_send": "重新送出",

@@ -434,7 +434,7 @@ before its scroll event), resumption at the bottom, live disclosure remounts aft
 folding on completion and reopening settled text. Reasoning start/end fixtures carry the same
 required message IDs as the protocol. No fixed delay or additional runner is needed.
 The attachment probe asserts the normalized WebP wire payload rather than the original upload's
-encoding. Conversation exports still gather views after the answer text, as recorded in ADR 0082.
+encoding. Conversation exports preserve inline display order and working timelines; ADR 0093 extends the export boundary recorded in ADR 0082.
 
 ### Console readout and disclosure regressions
 
@@ -990,3 +990,21 @@ increase concurrency or a budget to make a run pass. Watchdog diagnostics name a
 active scenarios/steps. Existing condition-based readiness and complete hosted
 shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
 wall/CPU/memory trade-offs and retained failure ownership.
+
+### Demo replay and generated-UI exports
+
+`scripts/test-demo-replay.ts` owns recording/event fidelity, localization/date templates,
+refetch/reset state and cancellation; `internal/demo/demo_test.go` owns full-year synthetic
+traffic and idle-day distribution. `scripts/check-demo.test.mjs` owns public recording privacy.
+Built `scripts/verify-demo.mjs` sends both examples and requires settled generated-UI/answer
+content; because the generated interface is an opaque sandbox, it seeds theme storage only in
+frames with an origin and tolerates Playwright's own service-worker probe there, bounded to the
+documents that replay builds. The existing heatmap probe owns newest-edge mobile scrolling and
+resize behavior.
+
+`scripts/test-answer-layout.ts` pins reasoning/call timeline and inline figure grouping;
+`scripts/test-conversation-export.ts` owns detached/redacted snapshots and HTML anatomy.
+The existing `agent-stream` probe exports a generated component as standalone HTML and PNG:
+it requires script-set content in the opaque sandbox and an exact fixture color in PNG
+pixels, then checks temporary-frame cleanup. The common conversation-export helper retains
+real download/controls/mobile checks. These browser claims are not replaced by DOM tests.
