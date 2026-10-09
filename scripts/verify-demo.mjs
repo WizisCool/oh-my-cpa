@@ -146,6 +146,17 @@ async function startLocalDemo() {
 }
 
 const NAVIGATION_TIMEOUT_MS = 30_000;
+/** A replay is paced like the run it was recorded from, so it is given longer than a navigation. */
+const REPLAY_TIMEOUT_MS = 60_000;
+/**
+ * Playwright's service-worker block reads `navigator.serviceWorker` in every frame, and the
+ * recorded run draws its generated interface in an opaque sandbox, which refuses the property.
+ * That refusal is the harness looking, not the console failing: the draft is built and then
+ * rebuilt once the appearance settles, and the validated component is built and then rebuilt with
+ * its icons. Four sandbox documents is what this run tolerates before a frame is unexpected.
+ */
+const SERVICE_WORKER_PROBE = /Failed to read the 'serviceWorker' property from 'Navigator'/;
+const SERVICE_WORKER_PROBE_ALLOWANCE = 4;
 
 async function main() {
   // A local server is only started when no deployment was named, and it needs the
@@ -156,6 +167,7 @@ async function main() {
   const consoleErrors = [];
   const failedRequests = [];
   const failures = [];
+  let serviceWorkerProbes = 0;
   try {
     browser = await launchBrowser(chromium);
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
@@ -164,13 +176,22 @@ async function main() {
     // pushed that unsaved choice on load would be refused by the Worker on every page, and the
     // refusal is an API error this run already fails on.
     await context.addInitScript(() => {
+      // `addInitScript` runs in every frame, and a frame the console sandboxes has no origin and
+      // therefore no storage to seed; reading it there would raise against the harness itself.
+      if (!/^https?:$/.test(location.protocol)) return;
       window.localStorage.setItem('omc-theme', JSON.stringify({ mode: 'light', dirty: true }));
+      // Route headings are Chinese, but the Agent replay must also work with English copy.
+      window.localStorage.setItem('omc-lang', location.pathname.endsWith('/agent') ? 'en' : 'zh');
     });
     const page = await context.newPage();
     page.on('console', (message) => {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
-    page.on('pageerror', (error) => consoleErrors.push(String(error)));
+    page.on('pageerror', (error) => {
+      const message = String(error);
+      if (SERVICE_WORKER_PROBE.test(message)) { serviceWorkerProbes += 1; return; }
+      consoleErrors.push(message);
+    });
     page.on('response', (response) => {
       const url = new URL(response.url());
       if (url.origin === new URL(BASE).origin && response.status() >= 400) {
@@ -201,11 +222,27 @@ async function main() {
           throw new Error('rendered the sign-in card instead of the console');
         }
         if (route.path === '/agent') {
-          await page.getByRole('button', { name: '能力目录', exact: true }).click();
+          await page.waitForFunction(() => document.documentElement.lang === 'en', undefined, { timeout: NAVIGATION_TIMEOUT_MS });
+          await page.getByTestId('agent-directory-open').click();
           const drawer = page.getByTestId('agent-drawer');
           await drawer.getByTestId('agent-directory').getByText('providers_list', { exact: true }).waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
           await drawer.locator('.ant-drawer-close').click();
           await drawer.waitFor({ state: 'hidden', timeout: NAVIGATION_TIMEOUT_MS });
+        }
+        if (route.path === '/agent') {
+          // The recorded run (ADR 0092): the example sends, the run ends as a stored turn, and
+          // that turn holds the calls and the generated interface the recording carries. This is
+          // the built bundle, so it also proves the replay's lazy chunk loads from a static host.
+          await page.getByTestId('agent-empty').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          await page.getByTestId('agent-demo-example').click();
+          const turn = page.getByTestId('agent-turn');
+          await turn.waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
+          await turn.getByTestId('agent-view').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          if (await page.getByTestId('agent-rejected').count() > 0) throw new Error('the demonstration refused its own example question');
+        }
+        if (route.path === '/playground') {
+          await page.getByTestId('playground-demo-example').click();
+          await page.getByTestId('playground-answer').getByText('$0.97').waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
         }
         if (route.path === '/oauth-management') {
           await page.getByTestId('oauth-management-model-rules-open').first().click();
@@ -241,8 +278,12 @@ async function main() {
     console.error(`  FAIL the console logged errors:`);
     for (const error of [...new Set(consoleErrors)].slice(0, 10)) console.error(`       ${error}`);
   }
+  if (serviceWorkerProbes > SERVICE_WORKER_PROBE_ALLOWANCE) {
+    console.error(`  FAIL ${serviceWorkerProbes} frames refused the harness service-worker probe, more than the sandboxed figures explain`);
+  }
 
-  if (failures.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0) {
+  if (failures.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0
+    || serviceWorkerProbes > SERVICE_WORKER_PROBE_ALLOWANCE) {
     process.exitCode = 1;
     return;
   }

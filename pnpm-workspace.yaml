@@ -4,6 +4,8 @@ allowBuilds:
   esbuild: true
   # The local demonstration server needs its runtime binary fetched at install time.
   workerd: true
+minimumReleaseAgeExclude:
+  - lucide-react@1.54.0
 overrides:
   dompurify: ^3.4.16
   katex: 0.18.2

@@ -648,9 +648,11 @@ export async function agentStream({ base, page, check, expectProblem }) {
 
   // Keep one real UI tool call open across observations: a component must appear before its
   // argument string finishes, and its scripts must wait until the validated view replaces it.
-  // The nonce-scoped draft reloads when appearance settles; each sandbox load trips
-  // Playwright's blocked-service-worker shim (two draft documents and the final component).
-  expectProblem({ kind: 'pageerror', message: /(?:Failed to read the 'serviceWorker' property|Service worker is disabled because the context is sandboxed)/, count: 3 });
+  // Playwright's service-worker block probes `navigator.serviceWorker` in each frame without an
+  // origin: the nonce-scoped draft, which reloads when appearance settles, the validated
+  // component, and the frames the image export draws the frozen document in. `expectProblem`
+  // reads the count as the ceiling this scenario tolerates, not a tally it has to reach.
+  expectProblem({ kind: 'pageerror', message: /(?:Failed to read the 'serviceWorker' property|Service worker is disabled because the context is sandboxed)/, count: 5 });
   await page.evaluate(() => {
     const fetchRequest = window.fetch;
     window.fetch = async (input, options) => {
@@ -669,9 +671,9 @@ export async function agentStream({ base, page, check, expectProblem }) {
   await page.getByLabel('Describe an OMC query or action').fill('Build an inline status component');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await until(() => page.evaluate(() => Boolean(window.__inlineUIStream)), { label: 'the held inline UI response' });
-  const componentHTML = '<div class="omc-stack"><p id="inline-label">Provider status</p><output id="inline-state">Preparing</output><button id="inline-action" onclick="document.getElementById(\'inline-state\').textContent=\'Selected\'">Select scope</button></div><script>document.getElementById("inline-state").textContent="Ready"</script>';
+  const componentHTML = '<div id="capture-mark" style="width:48px;height:24px;background:rgb(255,0,255)"></div><div class="omc-stack"><p id="inline-label">Provider status</p><output id="inline-state">Preparing</output><button id="inline-action" onclick="document.getElementById(\'inline-state\').textContent=\'Selected\'">Select scope</button></div><script>document.getElementById("inline-state").textContent="Ready"</script>';
   const argumentsText = JSON.stringify({ title: 'Inline provider status', html: componentHTML });
-  const split = argumentsText.indexOf('</div>');
+  const split = argumentsText.lastIndexOf('</div>');
   const writeUI = events => page.evaluate(events => window.__inlineUIStream.write(events), events);
   await writeUI([started('turn-inline'), step(1), ...text('inline:before', 'Status before the component.'),
     { type: 'TOOL_CALL_START', toolCallId: 'inline-ui', toolCallName: 'render_ui' },
@@ -704,6 +706,7 @@ export async function agentStream({ base, page, check, expectProblem }) {
   const activeComponent = finishedComponent.frameLocator('[data-testid="agent-canvas"]');
   await activeComponent.locator('#inline-action').click();
   check('the completed sandbox activates the component event handler', await activeComponent.locator('#inline-state').innerText() === 'Selected');
+  await checkConversationExport({ page, check, kind: 'agent-ui', expectedText: 'Status after the component.', canvasProbe: { selector: '#inline-state', text: 'Ready' } });
 }
 
 

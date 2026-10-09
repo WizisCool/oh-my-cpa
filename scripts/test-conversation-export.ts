@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { test } from 'node:test';
-import { agentSnapshot, playgroundSnapshot, snapshotImageSlices, snapshotValue, SNAPSHOT_IMAGE_PAGE_HEIGHT } from '../web/src/agent/conversationSnapshot.ts';
+import { agentSnapshot, playgroundSnapshot, snapshotImageSlices, snapshotValue, snapshotViews, SNAPSHOT_IMAGE_PAGE_HEIGHT } from '../web/src/agent/conversationSnapshot.ts';
 import { conversationHTML } from '../web/src/agent/conversationHtml.ts';
 import type { SnapshotLabels } from '../web/src/agent/conversationHtml.ts';
 import type { Conversation, DisplayView } from '../web/src/agent/types.ts';
@@ -15,6 +15,8 @@ const LABELS: SnapshotLabels = {
   number: value => String(value), calls: count => `Used ${count} capabilities`, tokens: count => `${count} tokens`,
   collapse: 'Collapse details', print: 'Print', imageOmitted: 'Image omitted', privacy: 'Snapshot; share with care',
   omitted: count => `${count} omitted turns`, status: status => status, capability: name => name,
+  callStatus: (_name, status) => `call-${status}`, chainFailed: count => `${count} failed`, rounds: (rounds, calls) => `${rounds} rounds, ${calls} calls`,
+  present: present => `present-${present}`, tokenCount: count => `${count}t`,
   failure: code => `Failed ${code}`, date: milliseconds => new Date(milliseconds).toISOString(), duration: milliseconds => `${milliseconds}ms`,
 };
 const VIEW: DisplayView = { kind: 'canvas', title: 'Requests', html: '<div id="plot"></div><script>OMC.chart("#plot", { type: "column", x: "day", y: "n" })</script>', columns: ['day', 'n'], rows: [{ day: 'Monday', n: 2 }, { day: 'Tuesday', n: 10 }] };
@@ -31,20 +33,28 @@ function htmlFor(snapshot = agentSnapshot(CONVERSATION)) {
 
 test('Agent exports ordered reasoning, calls and answers, metrics and frozen successful figures, not execution identities or SQL rows', () => {
   const snapshot = agentSnapshot(CONVERSATION);
-  assert.deepEqual(snapshot.turns[0].blocks.map(block => block.kind), ['thought', 'text', 'call', 'call', 'text']);
-  assert.equal(snapshot.turns[0].blocks[2].result, undefined);
+  // The blocks the conversation draws: reasoning with no call beside it stands alone, a call is
+  // a timeline, and the display is the figure in the place the model called it.
+  assert.deepEqual(snapshot.turns[0].segments.map(segment => segment.kind), ['thought', 'text', 'chain', 'figure', 'text']);
+  const chain = snapshot.turns[0].segments[2];
+  assert.ok(chain.kind === 'chain' && chain.steps[0].kind === 'call');
+  assert.equal(chain.steps[0].result, undefined);
+  assert.equal(chain.steps[0].summary, 'sql=select model from usage_events');
   assert.equal(snapshot.turns[0].duration, 400);
   assert.equal(snapshot.turns[0].usage?.total_tokens, 33);
-  assert.deepEqual(snapshot.turns[0].views, [VIEW]);
+  assert.deepEqual(snapshotViews(snapshot), [VIEW]);
   const html = htmlFor(snapshot);
   for (const secret of ['private-session', 'private-key-fingerprint', 'private-run-id', 'private-query-row', 'private-operation']) assert.equal(html.includes(secret), false, secret);
   assert.ok(html.includes('Thought') && html.includes('Monday') && html.includes('3 omitted turns'));
   assert.ok(html.indexOf('First') < html.indexOf('database_query') && html.indexOf('database_query') < html.indexOf('Last'));
+  assert.ok(html.indexOf('database_query') < html.indexOf('<iframe class="canvas-frame"') && html.indexOf('<iframe class="canvas-frame"') < html.indexOf('>Last<'), 'the figure sits where the model called it, before the text that follows');
+  assert.ok(html.includes('<details class="chain">') && html.includes('class="call-args"') && html.includes('class="call-detail"'), 'a call is a disclosure in the answer');
+  assert.equal(html.includes('class="message-head"'), false, 'the Agent names no model above an answer');
   assert.ok(html.includes('<iframe class="canvas-frame"') && html.includes('title="Requests"'));
   assert.ok(html.includes('select model from usage_events'));
-  snapshot.turns[0].views[0].rows[0].n = 99;
+  snapshotViews(snapshot)[0].rows[0].n = 99;
   assert.equal(VIEW.rows[0].n, 2, 'export is detached from live display data');
-  for (const status of ['running', 'pending', 'error', 'cancelled']) assert.deepEqual(agentSnapshot({ ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], status }] }).turns[0].views.map(view => view.title), [VIEW.title]);
+  for (const status of ['running', 'pending', 'error', 'cancelled']) assert.deepEqual(snapshotViews(agentSnapshot({ ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], status }] })).map(view => view.title), [VIEW.title]);
 });
 
 test('Playground exports the original request model, images, parameters, partial reasoning and cancellation', () => {
@@ -83,8 +93,11 @@ test('a view stored by a display tool the console no longer has is left out of t
   const retired = { ...VIEW, kind: 'chart' } as unknown as DisplayView;
   const conversation = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], traces: [CONVERSATION.turns[0].traces[0], { id: 'display', name: 'render_chart', result: { status: 'success' as const }, view: retired }] }] };
   const snapshot = agentSnapshot(conversation);
-  assert.deepEqual(snapshot.turns[0].views, []);
-  assert.deepEqual(snapshot.turns[0].blocks.map(block => block.kind), ['thought', 'text', 'call', 'call', 'text']);
+  assert.deepEqual(snapshotViews(snapshot), []);
+  // The retired display is an ordinary call now, so it joins the timeline beside the query.
+  assert.deepEqual(snapshot.turns[0].segments.map(segment => segment.kind), ['thought', 'text', 'chain', 'text']);
+  const chain = snapshot.turns[0].segments[2];
+  assert.deepEqual(chain.kind === 'chain' && chain.steps.map(step => step.kind === 'call' && step.name), ['database_query', 'render_chart']);
 });
 
 test('image pagination bounds each canvas and preserves the entire long conversation', () => {
@@ -141,7 +154,7 @@ test('HTML exports retain inline framing and ground while historical canvases st
       { id: 'display', name: 'render_ui', result: { status: 'success' }, view },
     ] }] };
     const html = htmlFor(agentSnapshot(conversation));
-    assert.equal(html.includes('<figure data-frame="none" aria-label="Inline status">'), frame === 'none');
+    assert.equal(html.includes('<figure class="view" data-frame="none" aria-label="Inline status">'), frame === 'none');
     const sourceDocument = /srcdoc="([^"]*)"/.exec(html)?.[1] ?? '';
     assert.equal(sourceDocument.includes('body{background:var(--bg)}'), frame === 'none');
   }
@@ -171,4 +184,25 @@ test('Intelligent UI embeds only offline icon assets and preserves interaction s
   assert.ok(!document.includes('outside.example'));
   assert.equal(uiComposeMessage({ type: 'omc-ui-compose', message: 'Compare these results' }), 'Compare these results');
   for (const data of [null, {}, { type: 'omc-ui-compose', message: '' }, { type: 'omc-ui-compose', message: 'x'.repeat(49 * 1024) }, { type: 'send', message: 'Do it' }]) assert.equal(uiComposeMessage(data), undefined);
+});
+
+test('a document that becomes a picture leaves each canvas a slot instead of a frame', () => {
+  const html = conversationHTML({ snapshot: agentSnapshot(CONVERSATION), labels: LABELS, exportedAt: new Date(0), language: 'en',
+    appearance: { variables: { '--bg': '#121214' }, canvases: 'slot' } });
+  assert.equal(html.includes('<iframe'), false, 'a picture cannot run a frame, and a nested one only logs a refusal');
+  assert.equal(html.match(/data-canvas-slot/g)?.length, 1);
+  assert.ok(html.includes('Canvas in HTML export'), 'the note stands in when the canvas cannot be drawn');
+});
+
+test('the Playground keeps its model heading, and a failed display call stays a row with its code', () => {
+  const playground = htmlFor(playgroundSnapshot([]));
+  assert.equal(playgroundSnapshot([]).layout, 'playground');
+  assert.ok(!playground.includes('<details class="chain">'));
+  const failed = { ...CONVERSATION, turns: [{ ...CONVERSATION.turns[0], present: 'ui' as const, rounds: 2, traces: [CONVERSATION.turns[0].traces[0],
+    { id: 'display', name: 'render_ui', arguments: '{"title":"x"}', result: { status: 'error', code: 'invalid_view', detail: 'html is required' } }] }] };
+  const snapshot = agentSnapshot(failed);
+  assert.deepEqual(snapshot.turns[0].segments.map(segment => segment.kind), ['thought', 'text', 'chain', 'call', 'text']);
+  const html = htmlFor(snapshot);
+  assert.ok(html.includes('class="call-failure"><code>invalid_view</code><span>html is required</span>'));
+  assert.ok(html.includes('call-error') && html.includes('present-ui') && html.includes('2 rounds, 2 calls') && html.includes('33t'));
 });

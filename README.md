@@ -80,6 +80,10 @@ Changes beyond low-risk writes run only after approval.
 </tr>
 </table>
 
+The [live demo](https://omc-demo.junze.dev) includes a recorded Agent run with capability calls
+and generated UI, plus a Playground example; neither calls a model. Conversation HTML keeps
+inline figures and tool chains; PNG also includes generated UI.
+
 ## Screenshots
 
 <table>

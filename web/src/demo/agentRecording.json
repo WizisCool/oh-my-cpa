@@ -1,0 +1,1815 @@
+{
+ "turn": {
+  "user": {
+   "zh": "按天统计最近 7 天的请求数与失败率。",
+   "en": "Count requests and the failure rate per day for the last 7 days."
+  },
+  "status": "success",
+  "rounds": 5,
+  "calls": 4,
+  "usage": {
+   "input_tokens": 65635,
+   "output_tokens": 1183,
+   "total_tokens": 66818,
+   "context_tokens": 16347
+  },
+  "prompt_version": "2026-10-08.11",
+  "present": "ui",
+  "parts": [
+   {
+    "type": "tool",
+    "trace_id": "call_40d5d68c0fc024026fabd396bbd7220d"
+   },
+   {
+    "type": "thought",
+    "content": "**Verifying daily schema**\n\nThe aggregate returns a rolling trend rather than calendar days. I need to check the schema to see whether I can group the retained events by day myself, and decide how to label the partial first and last days of a rolling seven-day window."
+   },
+   {
+    "type": "tool",
+    "trace_id": "call_02441f75c1463e098881cc5d4b6053e6"
+   },
+   {
+    "type": "thought",
+    "content": "**Checking the window**\n\nThe window is the last seven days ending now, so it touches eight calendar days. I'll group `usage_events` by UTC date inside the same bounds the aggregate used, so the two results can be compared."
+   },
+   {
+    "type": "tool",
+    "trace_id": "call_122a49ef22bc7626687476829ba37d32"
+   },
+   {
+    "type": "thought",
+    "content": "**Checking SQL sums**\n\nAdding the daily counts: 96 + 214 = 310, plus 187 gives 497, adding 243 reaches 740, continuing with 268 gives 1,008, then 231 makes 1,239, 252 results in 1,491, and 141 brings it to 1,632. Failures add up to 88. The aggregate reported 1,631 requests, one fewer: a request that landed on the window edge between the two reads."
+   },
+   {
+    "type": "text",
+    "content": {
+     "zh": "最近 7 天的每日失败率总体下降。统计窗口为 **{{md:-7}} {{hm}} 至 {{md:0}} {{hm}}**（UTC），按 UTC 自然日分组，因此首尾两天不是完整日。失败率＝失败请求数 ÷ 请求总数。",
+     "en": "The daily failure rate fell over the last 7 days. The window runs from **{{md:-7}} {{hm}} to {{md:0}} {{hm}}** (UTC) and is grouped by UTC calendar day, so the first and last days are partial. Failure rate = failed requests ÷ total requests."
+    }
+   },
+   {
+    "type": "tool",
+    "trace_id": "call_499c77b05be5059b7525de2356244694"
+   },
+   {
+    "type": "thought",
+    "content": "**Choosing the final totals**\n\nThe chart and the table are drawn from the SQL rows, so the summary should use the same figures: 1,632 requests and 88 failures, which is 88 ÷ 1,632 = 5.4%."
+   },
+   {
+    "type": "text",
+    "content": {
+     "zh": "最近 7 天共 **1,632 次请求**，其中 **88 次失败**，整体失败率 **5.4%**。\n\n上方可切换查看每日请求数与失败率，并查阅精确数值。失败率总体下降；但首尾两天均为部分日，请求数不宜直接与完整日比较。",
+     "en": "The last 7 days saw **1,632 requests**, **88 of them failed**, for an overall failure rate of **5.4%**.\n\nThe view above switches between daily requests and failure rate and lists the exact values. The failure rate fell throughout; the first and last days are partial, so their request counts should not be compared with a full day."
+    }
+   }
+  ],
+  "traces": [
+   {
+    "id": "call_40d5d68c0fc024026fabd396bbd7220d",
+    "name": "usage_aggregate",
+    "arguments": {
+     "from_ms": "{{ms:-168}}",
+     "to_ms": "{{ms:0}}",
+     "providers": null,
+     "models": null,
+     "call_points": null,
+     "client_keys": null,
+     "credentials": null,
+     "status": "",
+     "search": "",
+     "regex_field": "",
+     "regex": "",
+     "min_latency_ms": 0,
+     "group_by": "all",
+     "is_trend": true,
+     "limit": 100,
+     "cursor": ""
+    },
+    "result": {
+     "status": "success",
+     "data": {
+      "from_ms": "{{ms:-168}}",
+      "to_ms": "{{ms:0}}",
+      "timezone": "UTC",
+      "source": "retained_usage_events",
+      "data": {
+       "groups": [
+        {
+         "key": "{{ms:-168}}",
+         "requests": 29,
+         "failures": 5,
+         "tokens": 592172,
+         "input_tokens": 524770,
+         "output_tokens": 67402,
+         "cost_nanos": 1376952390,
+         "priced_requests": 29
+        },
+        {
+         "key": "{{ms:-162}}",
+         "requests": 73,
+         "failures": 5,
+         "tokens": 1557608,
+         "input_tokens": 1378060,
+         "output_tokens": 179548,
+         "cost_nanos": 3707641522,
+         "priced_requests": 73
+        },
+        {
+         "key": "{{ms:-156}}",
+         "requests": 85,
+         "failures": 5,
+         "tokens": 1644534,
+         "input_tokens": 1460423,
+         "output_tokens": 184111,
+         "cost_nanos": 3707175510,
+         "priced_requests": 85
+        },
+        {
+         "key": "{{ms:-150}}",
+         "requests": 27,
+         "failures": 4,
+         "tokens": 479260,
+         "input_tokens": 427140,
+         "output_tokens": 52120,
+         "cost_nanos": 1022053925,
+         "priced_requests": 27
+        },
+        {
+         "key": "{{ms:-144}}",
+         "requests": 26,
+         "failures": 5,
+         "tokens": 536130,
+         "input_tokens": 474931,
+         "output_tokens": 61199,
+         "cost_nanos": 1253324315,
+         "priced_requests": 25
+        },
+        {
+         "key": "{{ms:-138}}",
+         "requests": 63,
+         "failures": 4,
+         "tokens": 1307701,
+         "input_tokens": 1158139,
+         "output_tokens": 149562,
+         "cost_nanos": 3067975828,
+         "priced_requests": 63
+        },
+        {
+         "key": "{{ms:-132}}",
+         "requests": 75,
+         "failures": 4,
+         "tokens": 1443121,
+         "input_tokens": 1281841,
+         "output_tokens": 161280,
+         "cost_nanos": 3242404274,
+         "priced_requests": 75
+        },
+        {
+         "key": "{{ms:-126}}",
+         "requests": 23,
+         "failures": 5,
+         "tokens": 375574,
+         "input_tokens": 335998,
+         "output_tokens": 39576,
+         "cost_nanos": 752764328,
+         "priced_requests": 23
+        },
+        {
+         "key": "{{ms:-120}}",
+         "requests": 33,
+         "failures": 4,
+         "tokens": 623284,
+         "input_tokens": 554046,
+         "output_tokens": 69238,
+         "cost_nanos": 1384505805,
+         "priced_requests": 33
+        },
+        {
+         "key": "{{ms:-114}}",
+         "requests": 82,
+         "failures": 4,
+         "tokens": 1377497,
+         "input_tokens": 1230719,
+         "output_tokens": 146778,
+         "cost_nanos": 2822581254,
+         "priced_requests": 82
+        },
+        {
+         "key": "{{ms:-108}}",
+         "requests": 98,
+         "failures": 3,
+         "tokens": 1999865,
+         "input_tokens": 1772279,
+         "output_tokens": 227586,
+         "cost_nanos": 4648569189,
+         "priced_requests": 98
+        },
+        {
+         "key": "{{ms:-102}}",
+         "requests": 30,
+         "failures": 4,
+         "tokens": 559798,
+         "input_tokens": 497861,
+         "output_tokens": 61937,
+         "cost_nanos": 1234029389,
+         "priced_requests": 30
+        },
+        {
+         "key": "{{ms:-96}}",
+         "requests": 37,
+         "failures": 4,
+         "tokens": 663260,
+         "input_tokens": 590878,
+         "output_tokens": 72382,
+         "cost_nanos": 1424026359,
+         "priced_requests": 37
+        },
+        {
+         "key": "{{ms:-90}}",
+         "requests": 90,
+         "failures": 3,
+         "tokens": 1668031,
+         "input_tokens": 1483896,
+         "output_tokens": 184135,
+         "cost_nanos": 3661100204,
+         "priced_requests": 89
+        },
+        {
+         "key": "{{ms:-84}}",
+         "requests": 107,
+         "failures": 3,
+         "tokens": 1972024,
+         "input_tokens": 1754742,
+         "output_tokens": 217282,
+         "cost_nanos": 4312679710,
+         "priced_requests": 107
+        },
+        {
+         "key": "{{ms:-78}}",
+         "requests": 34,
+         "failures": 3,
+         "tokens": 647708,
+         "input_tokens": 575555,
+         "output_tokens": 72153,
+         "cost_nanos": 1446425366,
+         "priced_requests": 34
+        },
+        {
+         "key": "{{ms:-72}}",
+         "requests": 32,
+         "failures": 3,
+         "tokens": 603039,
+         "input_tokens": 536099,
+         "output_tokens": 66940,
+         "cost_nanos": 1337650003,
+         "priced_requests": 32
+        },
+        {
+         "key": "{{ms:-66}}",
+         "requests": 78,
+         "failures": 3,
+         "tokens": 1558477,
+         "input_tokens": 1382243,
+         "output_tokens": 176234,
+         "cost_nanos": 3579954814,
+         "priced_requests": 78
+        },
+        {
+         "key": "{{ms:-60}}",
+         "requests": 92,
+         "failures": 3,
+         "tokens": 1736511,
+         "input_tokens": 1543649,
+         "output_tokens": 192862,
+         "cost_nanos": 3855746487,
+         "priced_requests": 92
+        },
+        {
+         "key": "{{ms:-54}}",
+         "requests": 29,
+         "failures": 2,
+         "tokens": 612301,
+         "input_tokens": 541929,
+         "output_tokens": 70372,
+         "cost_nanos": 1449548041,
+         "priced_requests": 29
+        },
+        {
+         "key": "{{ms:-48}}",
+         "requests": 35,
+         "failures": 2,
+         "tokens": 758929,
+         "input_tokens": 671055,
+         "output_tokens": 87874,
+         "cost_nanos": 1821388464,
+         "priced_requests": 35
+        },
+        {
+         "key": "{{ms:-42}}",
+         "requests": 85,
+         "failures": 3,
+         "tokens": 1347624,
+         "input_tokens": 1207319,
+         "output_tokens": 140305,
+         "cost_nanos": 2636350680,
+         "priced_requests": 85
+        },
+        {
+         "key": "{{ms:-36}}",
+         "requests": 101,
+         "failures": 1,
+         "tokens": 2176223,
+         "input_tokens": 1924682,
+         "output_tokens": 251541,
+         "cost_nanos": 5206120093,
+         "priced_requests": 100
+        },
+        {
+         "key": "{{ms:-30}}",
+         "requests": 31,
+         "failures": 2,
+         "tokens": 555621,
+         "input_tokens": 494989,
+         "output_tokens": 60632,
+         "cost_nanos": 1192802800,
+         "priced_requests": 31
+        },
+        {
+         "key": "{{ms:-24}}",
+         "requests": 32,
+         "failures": 2,
+         "tokens": 542269,
+         "input_tokens": 484295,
+         "output_tokens": 57974,
+         "cost_nanos": 1118479404,
+         "priced_requests": 32
+        },
+        {
+         "key": "{{ms:-18}}",
+         "requests": 80,
+         "failures": 1,
+         "tokens": 1321268,
+         "input_tokens": 1181409,
+         "output_tokens": 139859,
+         "cost_nanos": 2672115013,
+         "priced_requests": 80
+        },
+        {
+         "key": "{{ms:-12}}",
+         "requests": 95,
+         "failures": 1,
+         "tokens": 1837897,
+         "input_tokens": 1632142,
+         "output_tokens": 205755,
+         "cost_nanos": 4142912553,
+         "priced_requests": 95
+        },
+        {
+         "key": "{{ms:-6}}",
+         "requests": 29,
+         "failures": 0,
+         "tokens": 553728,
+         "input_tokens": 491998,
+         "output_tokens": 61730,
+         "cost_nanos": 1238301521,
+         "priced_requests": 29
+        }
+       ],
+       "total": {
+        "key": "all",
+        "requests": 1631,
+        "failures": 88,
+        "tokens": 31051454,
+        "input_tokens": 27593087,
+        "output_tokens": 3458367,
+        "cost_nanos": 69315579241,
+        "priced_requests": 1628
+       },
+       "has_more": false
+      }
+     }
+    },
+    "duration_ms": 114
+   },
+   {
+    "id": "call_02441f75c1463e098881cc5d4b6053e6",
+    "name": "database_schema",
+    "arguments": {},
+    "result": {
+     "status": "success",
+     "data": {
+      "tables": [
+       {
+        "name": "audit_events",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "occurred_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "action",
+          "type": "TEXT"
+         },
+         {
+          "name": "target_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "target_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "result",
+          "type": "TEXT"
+         },
+         {
+          "name": "request_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "source_summary",
+          "type": "TEXT"
+         },
+         {
+          "name": "details_json",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "client_key_aliases",
+        "columns": [
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "key_fingerprint",
+          "type": "TEXT"
+         },
+         {
+          "name": "alias",
+          "type": "TEXT"
+         },
+         {
+          "name": "version",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "connections",
+        "columns": [
+         {
+          "name": "id",
+          "type": "TEXT"
+         },
+         {
+          "name": "source_name",
+          "type": "TEXT"
+         },
+         {
+          "name": "display_name",
+          "type": "TEXT"
+         },
+         {
+          "name": "custom_name",
+          "type": "TEXT"
+         },
+         {
+          "name": "icon_ref",
+          "type": "TEXT"
+         },
+         {
+          "name": "color",
+          "type": "TEXT"
+         },
+         {
+          "name": "notes",
+          "type": "TEXT"
+         },
+         {
+          "name": "status",
+          "type": "TEXT"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "cpa_bindings",
+        "columns": [
+         {
+          "name": "id",
+          "type": "TEXT"
+         },
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "resource_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_resource_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "binding_fingerprint",
+          "type": "TEXT"
+         },
+         {
+          "name": "status",
+          "type": "TEXT"
+         },
+         {
+          "name": "first_seen_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_seen_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "missing_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "cpa_config_backup_settings",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "retention",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "data_lifecycle_state",
+        "columns": [
+         {
+          "name": "policy",
+          "type": "TEXT"
+         },
+         {
+          "name": "horizon_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "deleted_rows",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_run_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "discovered_resources",
+        "columns": [
+         {
+          "name": "id",
+          "type": "TEXT"
+         },
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "resource_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_resource_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_resource_name",
+          "type": "TEXT"
+         },
+         {
+          "name": "cpa_driver",
+          "type": "TEXT"
+         },
+         {
+          "name": "protocol_driver",
+          "type": "TEXT"
+         },
+         {
+          "name": "protocol_display",
+          "type": "TEXT"
+         },
+         {
+          "name": "base_url",
+          "type": "TEXT"
+         },
+         {
+          "name": "suggested_source",
+          "type": "TEXT"
+         },
+         {
+          "name": "suggested_plan",
+          "type": "TEXT"
+         },
+         {
+          "name": "status",
+          "type": "TEXT"
+         },
+         {
+          "name": "last_seen_at",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at",
+          "type": "INTEGER"
+         }
+        ],
+        "redacted": [
+         "details_json"
+        ]
+       },
+       {
+        "name": "error_events",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "event_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "request_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "provider",
+          "type": "TEXT"
+         },
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "status_code",
+          "type": "INTEGER"
+         },
+         {
+          "name": "code",
+          "type": "TEXT"
+         },
+         {
+          "name": "retryable",
+          "type": "INTEGER"
+         },
+         {
+          "name": "auth_status",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_disabled",
+          "type": "INTEGER"
+         },
+         {
+          "name": "auth_unavailable",
+          "type": "INTEGER"
+         },
+         {
+          "name": "quota_exceeded",
+          "type": "INTEGER"
+         },
+         {
+          "name": "quota_reason",
+          "type": "TEXT"
+         },
+         {
+          "name": "next_retry_after_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "next_recover_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "backoff_level",
+          "type": "INTEGER"
+         },
+         {
+          "name": "timestamp_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         }
+        ],
+        "redacted": [
+         "body"
+        ]
+       },
+       {
+        "name": "ingest_gaps",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "source_mode",
+          "type": "TEXT"
+         },
+         {
+          "name": "started_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ended_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "estimated_count",
+          "type": "INTEGER"
+         },
+         {
+          "name": "reason_code",
+          "type": "TEXT"
+         },
+         {
+          "name": "summary",
+          "type": "TEXT"
+         },
+         {
+          "name": "acknowledged_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "model_price_versions",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "effective_from_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "available",
+          "type": "INTEGER"
+         },
+         {
+          "name": "prompt_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "completion_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_read_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_write_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "price_multiplier",
+          "type": "REAL"
+         },
+         {
+          "name": "source",
+          "type": "TEXT"
+         },
+         {
+          "name": "tiers_json",
+          "type": "TEXT"
+         },
+         {
+          "name": "upstream_id",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "model_prices",
+        "columns": [
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "prompt_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "completion_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_read_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_write_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "price_multiplier",
+          "type": "REAL"
+         },
+         {
+          "name": "tiers_json",
+          "type": "TEXT"
+         },
+         {
+          "name": "source",
+          "type": "TEXT"
+         },
+         {
+          "name": "upstream_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "match_kind",
+          "type": "TEXT"
+         },
+         {
+          "name": "synced_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "pricing_catalog_state",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "providers_json",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "pricing_channel_versions",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "channel",
+          "type": "TEXT"
+         },
+         {
+          "name": "effective_from_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "available",
+          "type": "INTEGER"
+         },
+         {
+          "name": "multiplier",
+          "type": "REAL"
+         }
+        ]
+       },
+       {
+        "name": "pricing_channels",
+        "columns": [
+         {
+          "name": "channel",
+          "type": "TEXT"
+         },
+         {
+          "name": "multiplier",
+          "type": "REAL"
+         },
+         {
+          "name": "note",
+          "type": "TEXT"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "pricing_match_reviews",
+        "columns": [
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "upstream_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "reviewed_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "pricing_model_catalog",
+        "columns": [
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "price_model",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "pricing_model_links",
+        "columns": [
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "upstream_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "pricing_sync_state",
+        "columns": [
+         {
+          "name": "source",
+          "type": "TEXT"
+         },
+         {
+          "name": "running",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_success_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_error",
+          "type": "TEXT"
+         },
+         {
+          "name": "last_matched",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_unmatched",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "auto_sync_interval_hours",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "pricing_upstream_catalog",
+        "columns": [
+         {
+          "name": "id",
+          "type": "TEXT"
+         },
+         {
+          "name": "canonical_slug",
+          "type": "TEXT"
+         },
+         {
+          "name": "name",
+          "type": "TEXT"
+         },
+         {
+          "name": "author",
+          "type": "TEXT"
+         },
+         {
+          "name": "context_length",
+          "type": "INTEGER"
+         },
+         {
+          "name": "prompt_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "completion_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_read_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "cache_write_price_per_1m",
+          "type": "REAL"
+         },
+         {
+          "name": "tiers_json",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "quota_snapshots",
+        "columns": [
+         {
+          "name": "id",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "provider",
+          "type": "TEXT"
+         },
+         {
+          "name": "status",
+          "type": "TEXT"
+         },
+         {
+          "name": "plan_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "plan_tier",
+          "type": "TEXT"
+         },
+         {
+          "name": "windows_json",
+          "type": "TEXT"
+         },
+         {
+          "name": "reset_credits_json",
+          "type": "TEXT"
+         },
+         {
+          "name": "observed_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "plan_json",
+          "type": "TEXT"
+         }
+        ]
+       },
+       {
+        "name": "release_check_state",
+        "columns": [
+         {
+          "name": "product",
+          "type": "TEXT"
+         },
+         {
+          "name": "repository",
+          "type": "TEXT"
+         },
+         {
+          "name": "running",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_attempt_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_success_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "last_error",
+          "type": "TEXT"
+         },
+         {
+          "name": "latest_tag",
+          "type": "TEXT"
+         },
+         {
+          "name": "etag",
+          "type": "TEXT"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "truncated",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "release_index",
+        "columns": [
+         {
+          "name": "product",
+          "type": "TEXT"
+         },
+         {
+          "name": "repository",
+          "type": "TEXT"
+         },
+         {
+          "name": "tag",
+          "type": "TEXT"
+         },
+         {
+          "name": "name",
+          "type": "TEXT"
+         },
+         {
+          "name": "published_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "prerelease",
+          "type": "INTEGER"
+         },
+         {
+          "name": "checked_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "resource_overrides",
+        "columns": [
+         {
+          "name": "resource_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "display_name",
+          "type": "TEXT"
+         },
+         {
+          "name": "color",
+          "type": "TEXT"
+         },
+         {
+          "name": "icon_ref",
+          "type": "TEXT"
+         },
+         {
+          "name": "notes",
+          "type": "TEXT"
+         },
+         {
+          "name": "updated_at",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "schema_migrations",
+        "columns": [
+         {
+          "name": "version",
+          "type": "INTEGER"
+         },
+         {
+          "name": "applied_at",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "sqlite_sequence",
+        "columns": [
+         {
+          "name": "name",
+          "type": ""
+         },
+         {
+          "name": "seq",
+          "type": ""
+         }
+        ]
+       },
+       {
+        "name": "usage_aggregation_checkpoints",
+        "columns": [
+         {
+          "name": "name",
+          "type": "TEXT"
+         },
+         {
+          "name": "last_usage_event_id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "stats_updated_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "updated_at_ms",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "usage_events",
+        "columns": [
+         {
+          "name": "id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "event_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "api_group_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "provider",
+          "type": "TEXT"
+         },
+         {
+          "name": "endpoint",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "request_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "client_ip",
+          "type": "TEXT"
+         },
+         {
+          "name": "x_forwarded_for",
+          "type": "TEXT"
+         },
+         {
+          "name": "user_agent",
+          "type": "TEXT"
+         },
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "model_alias",
+          "type": "TEXT"
+         },
+         {
+          "name": "reasoning_effort",
+          "type": "TEXT"
+         },
+         {
+          "name": "service_tier",
+          "type": "TEXT"
+         },
+         {
+          "name": "response_service_tier",
+          "type": "TEXT"
+         },
+         {
+          "name": "executor_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "timestamp_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "source",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "failed",
+          "type": "INTEGER"
+         },
+         {
+          "name": "generate",
+          "type": "INTEGER"
+         },
+         {
+          "name": "latency_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ttft_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "input_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "output_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "reasoning_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cached_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_read_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_creation_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "total_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "created_at_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "api_group_label",
+          "type": "TEXT"
+         },
+         {
+          "name": "api_key_mask",
+          "type": "TEXT"
+         },
+         {
+          "name": "cost_nanos",
+          "type": "INTEGER"
+         },
+         {
+          "name": "price_version_id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "pricing_status",
+          "type": "TEXT"
+         },
+         {
+          "name": "stream",
+          "type": "INTEGER"
+         },
+         {
+          "name": "channel_version_id",
+          "type": "INTEGER"
+         },
+         {
+          "name": "price_tier",
+          "type": "INTEGER"
+         },
+         {
+          "name": "response_model",
+          "type": "TEXT"
+         },
+         {
+          "name": "model_substituted",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "usage_facts_15m",
+        "columns": [
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "bucket_start_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "api_group_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "model_alias",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "provider",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "requests",
+          "type": "INTEGER"
+         },
+         {
+          "name": "failures",
+          "type": "INTEGER"
+         },
+         {
+          "name": "input_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "output_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "reasoning_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cached_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_read_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_creation_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "total_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "latency_sum_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ttft_sum_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ttft_count",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cost_nanos",
+          "type": "INTEGER"
+         },
+         {
+          "name": "priced_requests",
+          "type": "INTEGER"
+         },
+         {
+          "name": "costed_requests",
+          "type": "INTEGER"
+         }
+        ]
+       },
+       {
+        "name": "usage_facts_daily",
+        "columns": [
+         {
+          "name": "instance_id",
+          "type": "TEXT"
+         },
+         {
+          "name": "bucket_start_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "api_group_key",
+          "type": "TEXT"
+         },
+         {
+          "name": "model",
+          "type": "TEXT"
+         },
+         {
+          "name": "model_alias",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_index",
+          "type": "TEXT"
+         },
+         {
+          "name": "provider",
+          "type": "TEXT"
+         },
+         {
+          "name": "auth_type",
+          "type": "TEXT"
+         },
+         {
+          "name": "requests",
+          "type": "INTEGER"
+         },
+         {
+          "name": "failures",
+          "type": "INTEGER"
+         },
+         {
+          "name": "input_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "output_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "reasoning_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cached_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_read_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cache_creation_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "total_tokens",
+          "type": "INTEGER"
+         },
+         {
+          "name": "latency_sum_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ttft_sum_ms",
+          "type": "INTEGER"
+         },
+         {
+          "name": "ttft_count",
+          "type": "INTEGER"
+         },
+         {
+          "name": "cost_nanos",
+          "type": "INTEGER"
+         },
+         {
+          "name": "priced_requests",
+          "type": "INTEGER"
+         },
+         {
+          "name": "costed_requests",
+          "type": "INTEGER"
+         }
+        ]
+       }
+      ]
+     },
+     "operation_id": "fd41c2286dc866f056fcb128a90a9e1825e66914d03c5c41"
+    },
+    "duration_ms": 18
+   },
+   {
+    "id": "call_122a49ef22bc7626687476829ba37d32",
+    "name": "database_query",
+    "arguments": {
+     "sql": "SELECT date(timestamp_ms / 1000, 'unixepoch') AS day, COUNT(*) AS requests, SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END) AS failures, ROUND(1.0 * SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END) / COUNT(*), 4) AS failure_rate FROM usage_events WHERE timestamp_ms >= {{ms:-168}} AND timestamp_ms < {{ms:0}} GROUP BY day ORDER BY day",
+     "max_rows": 20
+    },
+    "result": {
+     "status": "success",
+     "operation_id": "ee2f86969aad000efb744b5b1022d6e8532166744822fc4f"
+    },
+    "duration_ms": 186
+   },
+   {
+    "id": "call_499c77b05be5059b7525de2356244694",
+    "name": "render_ui",
+    "arguments": {
+     "icons": null,
+     "title": {
+      "zh": "最近 7 天 · 每日请求数与失败率",
+      "en": "Last 7 days · daily requests and failure rate"
+     },
+     "html": {
+      "zh": "<div class=\"omc-stack\"><div class=\"omc-grid\" id=\"stats\"></div><div class=\"omc-row\"><label>查看指标 <select id=\"metric\"><option value=\"requests\">请求数</option><option value=\"failure_rate\">失败率</option></select></label></div><div id=\"chart\"></div><div style=\"overflow-x:auto\" id=\"table\"></div><div class=\"omc-callout\">窗口：{{ymd:-7}} {{hm}}–{{md:0}} {{hm}}（UTC）。{{md:-7}}与{{md:0}}仅包含窗口内的部分时段；统计仅覆盖保留的请求记录。</div></div><script>const rows=OMC.rows;const n=rows.reduce((s,r)=>s+r.requests,0),f=rows.reduce((s,r)=>s+r.failures,0);document.getElementById('stats').innerHTML='<div class=\"omc-stat\"><small>窗口请求总数</small><b>'+n.toLocaleString('zh-CN')+'</b></div><div class=\"omc-stat\"><small>窗口失败请求数</small><b>'+f.toLocaleString('zh-CN')+'</b></div><div class=\"omc-stat\"><small>窗口失败率</small><b>'+(100*f/n).toFixed(1)+'%</b><span>按请求数加权</span></div>';function draw(){const k=document.getElementById('metric').value;OMC.chart('#chart',{type:k==='requests'?'column':'line',x:'day',y:[k],unit:k==='requests'?'number':'percent',rows});}document.getElementById('metric').addEventListener('change',draw);draw();OMC.table('#table',{columns:[{field:'day',label:'日期'},{field:'requests',label:'请求数',unit:'number'},{field:'failures',label:'失败请求数',unit:'number'},{field:'failure_rate',label:'失败率',unit:'percent'}],rows});</script>",
+      "en": "<div class=\"omc-stack\"><div class=\"omc-grid\" id=\"stats\"></div><div class=\"omc-row\"><label>Metric <select id=\"metric\"><option value=\"requests\">Requests</option><option value=\"failure_rate\">Failure rate</option></select></label></div><div id=\"chart\"></div><div style=\"overflow-x:auto\" id=\"table\"></div><div class=\"omc-callout\">Window: {{ymd:-7}} {{hm}} – {{md:0}} {{hm}} (UTC). {{md:-7}} and {{md:0}} hold only the part of the day inside the window; the counts cover retained request records only.</div></div><script>const rows=OMC.rows;const n=rows.reduce((s,r)=>s+r.requests,0),f=rows.reduce((s,r)=>s+r.failures,0);document.getElementById('stats').innerHTML='<div class=\"omc-stat\"><small>Requests in window</small><b>'+n.toLocaleString('en-US')+'</b></div><div class=\"omc-stat\"><small>Failed requests</small><b>'+f.toLocaleString('en-US')+'</b></div><div class=\"omc-stat\"><small>Failure rate</small><b>'+(100*f/n).toFixed(1)+'%</b><span>Weighted by requests</span></div>';function draw(){const k=document.getElementById('metric').value;OMC.chart('#chart',{type:k==='requests'?'column':'line',x:'day',y:[k],unit:k==='requests'?'number':'percent',rows});}document.getElementById('metric').addEventListener('change',draw);draw();OMC.table('#table',{columns:[{field:'day',label:'Day'},{field:'requests',label:'Requests',unit:'number'},{field:'failures',label:'Failed requests',unit:'number'},{field:'failure_rate',label:'Failure rate',unit:'percent'}],rows});</script>"
+     },
+     "source": {
+      "data_ref": "ds_39dc6648d4dd6a37f1588c564603e51cbfbf484695840e5395004eb65c7250e1",
+      "call_id": "",
+      "path": ""
+     },
+     "fields": [
+      "day",
+      "requests",
+      "failures",
+      "failure_rate"
+     ],
+     "frame": "card"
+    },
+    "result": {
+     "status": "success",
+     "data": {
+      "rendered": true,
+      "rows": 8,
+      "fields": [
+       "day",
+       "requests",
+       "failures",
+       "failure_rate"
+      ]
+     }
+    },
+    "duration_ms": 2,
+    "view": {
+     "kind": "ui",
+     "title": {
+      "zh": "最近 7 天 · 每日请求数与失败率",
+      "en": "Last 7 days · daily requests and failure rate"
+     },
+     "columns": [
+      "day",
+      "requests",
+      "failures",
+      "failure_rate"
+     ],
+     "rows": [
+      {
+       "day": "{{iso:-7}}",
+       "failure_rate": 0.0938,
+       "failures": 9,
+       "requests": 96
+      },
+      {
+       "day": "{{iso:-6}}",
+       "failure_rate": 0.0748,
+       "failures": 16,
+       "requests": 214
+      },
+      {
+       "day": "{{iso:-5}}",
+       "failure_rate": 0.0642,
+       "failures": 12,
+       "requests": 187
+      },
+      {
+       "day": "{{iso:-4}}",
+       "failure_rate": 0.0617,
+       "failures": 15,
+       "requests": 243
+      },
+      {
+       "day": "{{iso:-3}}",
+       "failure_rate": 0.0522,
+       "failures": 14,
+       "requests": 268
+      },
+      {
+       "day": "{{iso:-2}}",
+       "failure_rate": 0.0433,
+       "failures": 10,
+       "requests": 231
+      },
+      {
+       "day": "{{iso:-1}}",
+       "failure_rate": 0.0357,
+       "failures": 9,
+       "requests": 252
+      },
+      {
+       "day": "{{iso:0}}",
+       "failure_rate": 0.0213,
+       "failures": 3,
+       "requests": 141
+      }
+     ],
+     "source": {
+      "data_ref": "ds_39dc6648d4dd6a37f1588c564603e51cbfbf484695840e5395004eb65c7250e1",
+      "call_id": "call_122a49ef22bc7626687476829ba37d32",
+      "path": "rows"
+     },
+     "html": {
+      "zh": "<div class=\"omc-stack\"><div class=\"omc-grid\" id=\"stats\"></div><div class=\"omc-row\"><label>查看指标 <select id=\"metric\"><option value=\"requests\">请求数</option><option value=\"failure_rate\">失败率</option></select></label></div><div id=\"chart\"></div><div style=\"overflow-x:auto\" id=\"table\"></div><div class=\"omc-callout\">窗口：{{ymd:-7}} {{hm}}–{{md:0}} {{hm}}（UTC）。{{md:-7}}与{{md:0}}仅包含窗口内的部分时段；统计仅覆盖保留的请求记录。</div></div><script>const rows=OMC.rows;const n=rows.reduce((s,r)=>s+r.requests,0),f=rows.reduce((s,r)=>s+r.failures,0);document.getElementById('stats').innerHTML='<div class=\"omc-stat\"><small>窗口请求总数</small><b>'+n.toLocaleString('zh-CN')+'</b></div><div class=\"omc-stat\"><small>窗口失败请求数</small><b>'+f.toLocaleString('zh-CN')+'</b></div><div class=\"omc-stat\"><small>窗口失败率</small><b>'+(100*f/n).toFixed(1)+'%</b><span>按请求数加权</span></div>';function draw(){const k=document.getElementById('metric').value;OMC.chart('#chart',{type:k==='requests'?'column':'line',x:'day',y:[k],unit:k==='requests'?'number':'percent',rows});}document.getElementById('metric').addEventListener('change',draw);draw();OMC.table('#table',{columns:[{field:'day',label:'日期'},{field:'requests',label:'请求数',unit:'number'},{field:'failures',label:'失败请求数',unit:'number'},{field:'failure_rate',label:'失败率',unit:'percent'}],rows});</script>",
+      "en": "<div class=\"omc-stack\"><div class=\"omc-grid\" id=\"stats\"></div><div class=\"omc-row\"><label>Metric <select id=\"metric\"><option value=\"requests\">Requests</option><option value=\"failure_rate\">Failure rate</option></select></label></div><div id=\"chart\"></div><div style=\"overflow-x:auto\" id=\"table\"></div><div class=\"omc-callout\">Window: {{ymd:-7}} {{hm}} – {{md:0}} {{hm}} (UTC). {{md:-7}} and {{md:0}} hold only the part of the day inside the window; the counts cover retained request records only.</div></div><script>const rows=OMC.rows;const n=rows.reduce((s,r)=>s+r.requests,0),f=rows.reduce((s,r)=>s+r.failures,0);document.getElementById('stats').innerHTML='<div class=\"omc-stat\"><small>Requests in window</small><b>'+n.toLocaleString('en-US')+'</b></div><div class=\"omc-stat\"><small>Failed requests</small><b>'+f.toLocaleString('en-US')+'</b></div><div class=\"omc-stat\"><small>Failure rate</small><b>'+(100*f/n).toFixed(1)+'%</b><span>Weighted by requests</span></div>';function draw(){const k=document.getElementById('metric').value;OMC.chart('#chart',{type:k==='requests'?'column':'line',x:'day',y:[k],unit:k==='requests'?'number':'percent',rows});}document.getElementById('metric').addEventListener('change',draw);draw();OMC.table('#table',{columns:[{field:'day',label:'Day'},{field:'requests',label:'Requests',unit:'number'},{field:'failures',label:'Failed requests',unit:'number'},{field:'failure_rate',label:'Failure rate',unit:'percent'}],rows});</script>"
+     }
+    }
+   }
+  ]
+ }
+}

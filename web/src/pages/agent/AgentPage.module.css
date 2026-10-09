@@ -118,42 +118,6 @@
   transform: translateX(calc(var(--workspace-gutter) / -2));
 }
 
-.example {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border: 1px solid var(--thread-hairline);
-  border-radius: var(--radius-thread);
-  background: transparent;
-  color: var(--fg-2);
-  font: inherit;
-  font-size: 12.5px;
-  line-height: 1.45;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
-}
-
-.example:active {
-  transform: scale(.98);
-}
-
-.example:focus-visible {
-  border-radius: var(--radius-thread);
-}
-
-.example :global(.anticon) {
-  flex-shrink: 0;
-  color: var(--muted);
-}
-
-.example:hover {
-  background: var(--thread-field);
-  color: var(--fg);
-}
-
 @media (hover: none) {
   .shell {
     --workspace-gutter: 0px;
@@ -201,7 +165,9 @@
     margin-top: 24px;
   }
 
-  .example {
+  /* The chips become a list here. They are the grid's children, addressed as such because their
+     own class belongs to the shared workspace stylesheet. */
+  .examples > * {
     min-height: 48px;
     padding: 10px 6px;
     border: 0;
@@ -209,7 +175,7 @@
     border-radius: 0;
   }
 
-  .example:first-child {
+  .examples > *:first-child {
     border-top: 0;
   }
 

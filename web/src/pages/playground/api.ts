@@ -1,9 +1,21 @@
 import { ApiError } from '../../api/client';
 import { reconnectRun } from '../../agent/reconnect';
+import { isDemoMode } from '../../types/demoMode';
 import { PLAYGROUND_EVENT_TYPES } from './state';
 import type { ChatRequest, StreamEvent } from './state';
 
-export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void, run: { id: string; turn?: unknown; replay: () => void; isRecovery?: boolean }): Promise<void> {
+/**
+ * Streams one chat request's events to `onEvent`.
+ *
+ * The demonstration calls no model: it replays a recorded answer as the same events instead
+ * (ADR 0092), loaded on demand so a self-hosted console never fetches the recording.
+ */
+export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void, run: { id: string; turn?: unknown; replay: () => void; isRecovery?: boolean; language?: string }): Promise<void> {
+  if (isDemoMode()) {
+    const { replayPlaygroundChat } = await import('../../demo/playgroundReplay');
+    await replayPlaygroundChat(request, signal, onEvent, run.language);
+    return;
+  }
   const frames = reconnectRun({ workspace: 'playground', id: run.id, signal, replay: run.replay,
     ...(run.isRecovery ? {} : { initial: { method: 'POST', body: JSON.stringify({ ...request, recovery_turn: run.turn }) } }),
   });

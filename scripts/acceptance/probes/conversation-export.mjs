@@ -3,7 +3,7 @@ import path from 'node:path';
 import { until } from '../harness.mjs';
 
 /** Exercise the real download, then the standalone reader without the application renderer. */
-export async function checkConversationExport({ page, check, kind, expectedText }) {
+export async function checkConversationExport({ page, check, kind, expectedText, canvasProbe }) {
   const directory = path.resolve('tmp/conversation-export');
   await fs.mkdir(directory, { recursive: true });
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -20,6 +20,11 @@ export async function checkConversationExport({ page, check, kind, expectedText 
     await standalone.setContent(html, { waitUntil: 'load' });
     await standalone.evaluate(() => document.fonts.ready);
     await standalone.locator('.answer').first().waitFor();
+    if (canvasProbe) {
+      const generated = standalone.frameLocator('.canvas-frame').locator(canvasProbe.selector);
+      await generated.getByText(canvasProbe.text, { exact: true }).waitFor();
+      check(`${kind} standalone HTML activates the generated UI in an opaque network-blocked sandbox`, await standalone.locator('.canvas-frame').getAttribute('sandbox') === 'allow-scripts');
+    }
     const layout = await standalone.evaluate(() => {
       const column = document.querySelector('.transcript-column');
       const bubble = document.querySelector('.user');
@@ -63,10 +68,11 @@ export async function checkConversationExport({ page, check, kind, expectedText 
     const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
     const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, image.width, image.height).data;
-    let opaque = 0; const colors = new Set();
-    for (let i = 0; i < pixels.length; i += 64) { if (pixels[i + 3] === 255) opaque++; colors.add(`${pixels[i]}-${pixels[i + 1]}-${pixels[i + 2]}`); }
-    return { width: image.width, height: image.height, opaque, colors: colors.size };
+    let marker = 0; let opaque = 0; const colors = new Set();
+    for (let i = 0; i < pixels.length; i += 64) { if (pixels[i + 3] === 255) opaque++; if (pixels[i] === 255 && pixels[i + 1] === 0 && pixels[i + 2] === 255 && pixels[i + 3] === 255) marker++; colors.add(`${pixels[i]}-${pixels[i + 1]}-${pixels[i + 2]}`); }
+    return { width: image.width, height: image.height, opaque, marker, colors: colors.size };
   }, bytes.toString('base64'));
   check(`${kind} image export produces a painted, opaque high-resolution conversation`, image.suggestedFilename().endsWith('.png') && evidence.width === 1680 && evidence.height > 500 && evidence.opaque > 1000 && evidence.colors > 20, JSON.stringify(evidence));
-  check(`${kind} image capture removes its temporary document`, await page.locator('iframe[sandbox="allow-same-origin"]').count() === 0);
+  if (canvasProbe) check(`${kind} image export contains actual generated UI pixels`, evidence.marker > 100, JSON.stringify(evidence));
+  check(`${kind} image capture removes its temporary document`, await page.locator('body > iframe[aria-hidden="true"]').count() === 0);
 }

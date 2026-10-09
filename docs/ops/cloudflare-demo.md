@@ -16,7 +16,7 @@ records why that trade was taken and what it costs.
 | --- | --- | --- |
 | Console | Cloudflare Static Assets, from `tmp/cloudflare-demo/assets` | The built SPA, with the demonstration's runtime configuration injected and its asset URLs made root-relative |
 | API | `deploy/cloudflare/worker.mjs` | Reads the dataset, re-bases its timestamps and answers; refuses everything that would leave the demonstration |
-| Data | `deploy/cloudflare/data/responses.json` | 110 captured responses, generated from the real handlers |
+| Data | `deploy/cloudflare/data/responses.json` | Captured responses generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
 | Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |
@@ -285,22 +285,24 @@ regenerated copy.
 per-machine state) and run `pnpm install` again, which fetches the runtime binary the
 local server needs.
 
-## Agent-capability data and refusal
+## Agent-capability data and replay
 
 The `/agent` route ships in the demonstration as the real page over generated data: the
 capability catalogue and the empty Agent session are exported from the real handlers
 (`/api/v1/capabilities`, `/api/v1/agent/session`), so a visitor sees the declared
-capabilities, their permissions and their descriptions. Nothing else is simulated — the
-Worker refuses capability invocation, session reset, Agent runs, operation decisions,
-secret submission and OAuth start, and the page disables sending in demo mode. No
-conversation, model call, pending operation or approval is fabricated, and no capability
-result is presented as if it had been produced.
+capabilities, their permissions and their descriptions. The Worker refuses capability
+invocation, session reset, Agent runs, operation decisions, secret submission and OAuth start.
+The browser offers one curated recorded example (ADR 0092), folded through the production
+reducers without making a model request or executing a capability. Replay remains available
+when the key or model catalogue is empty; pending approval still blocks sending. Its recorded
+receipts and local generated UI demonstrate the workspace; they are not current service observations or
+approvals of live operations.
 
 Because the catalogue is part of the dataset's coverage, adding, renaming or re-describing
 a capability changes a served response: regenerate and inspect the dataset whenever the
 registry or its safety metadata changes.
 
-## Playground data and refusal
+## Playground data and replay
 
 The playground's model directory is generated from the loopback CPA fixture through the
 real OMC facade. The export derives its client-key fingerprint from the already-captured
@@ -309,7 +311,7 @@ masked key list; no literal fingerprint is maintained in the generator. The Work
 route `/playground` is included in both demo coverage and browser acceptance.
 
 `POST /api/v1/playground/chat` is refused by the Go route policy and the Worker's existing
-non-read refusal. The UI disables sending in demo mode. It does not claim durable preference storage: the Worker
+non-read refusal. The UI offers one browser-local recorded example in demo mode. It does not claim durable preference storage: the Worker
 still refuses non-read API calls, so a selected key and call point last only for that page session. No sample
 answer is represented as a real model call, and no new outbound destination or console
 configuration is needed. Regenerate and inspect the dataset whenever this surface changes.
@@ -391,3 +393,24 @@ changes, so the served plan labels match the Go facade (ADR 0065, ADR 0071).
 Demo policy refuses the entire authenticated plugin host, including v0/v8 native management
 reads/writes, management HEAD and the fixed model-directory read (ADR 0067). These routes
 must not expose configuration through either Worker or Go demonstration mode.
+
+## Recorded example conversations and annual activity
+
+`web/src/demo/agentRecording.json` and `playgroundRecording.json` ship as browser assets,
+not Worker mutation endpoints. The Agent recording uses relative-date placeholders and
+localized prose; replay emits AG-UI frames, reasoning, capability receipts, streamed UI
+arguments and the final conversation. The Playground example emits its normal stream event
+contract. Only the offered example question is accepted. No model, CPA request or provider
+credential is needed. The Agent keeps the settled session across read refetches for the
+page lifetime; reload/reset clears it. Public writes remain refused. ADR 0092 is the decision.
+
+`internal/demo/seed.go` seeds the full heatmap year with deterministic normally varied daily
+traffic, quieter weekends and occasional idle days. The recent-traffic protection compares UTC
+calendar dates, so every hour of the same date stays active through seven days of age; older
+dates may be idle regardless of the reference time of day. `pnpm demo:generate` captures the real
+handler responses; review and commit the responses/provenance diff. Recordings also pass
+`pnpm check:demo` privacy checks. `pnpm verify:demo` sends both examples in the built console:
+the Agent must settle its generated interface, while the Playground must settle its answer
+content. Agent acceptance uses English copy and locale-independent action selectors; the
+remaining route headings use Chinese. Entry information is a global arrival toast, with contextual replay instructions on the conversation pages. Theme
+choices remain browser-local, so a returning visitor never pushes them to the shared Worker.

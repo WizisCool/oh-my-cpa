@@ -982,6 +982,18 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
     `scrollLeft=${opened.scrollLeft}/${opened.maxScroll} todayVisible=${opened.todayVisible}`,
   );
 
+  // A phone that is rotated, or a panel that settles to its width late, changes how far the
+  // field can scroll. Until the reader swipes away, the newest column has to stay the one in view.
+  await page.setViewportSize({ width: 340, height: 844 });
+  await page.waitForFunction(() => {
+    const scroll = document.querySelector('.heatmap-scroll');
+    return scroll.clientWidth < 340 && Math.round(scroll.scrollLeft) === scroll.scrollWidth - scroll.clientWidth;
+  }, undefined, { timeout: 5_000 }).then(
+    () => check('a narrower panel keeps the field on today', true, ''),
+    () => check('a narrower panel keeps the field on today', false, 'the newest column left the view after the resize'),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+
   const retainedScroll = await page.locator('.heatmap-scroll').evaluate((container) => {
     container.scrollLeft = Math.floor(container.scrollLeft / 2);
     return container.scrollLeft;

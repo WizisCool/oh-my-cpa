@@ -2,14 +2,11 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from 'antd';
 import { LabelTip } from '../../../components/common/LabelTip';
-import {
-  CANVAS_MIN_HEIGHT, CANVAS_SANDBOX, CANVAS_TOKENS, canvasDocument, canvasHeight, canvasImage, canvasRasterScale, uiComposeMessage,
-} from '../../../agent/canvasDocument';
+import { CANVAS_MIN_HEIGHT, CANVAS_SANDBOX, CANVAS_TOKENS, canvasDocument, canvasHeight, uiComposeMessage } from '../../../agent/canvasDocument';
+import { rasterizeCanvasPicture, requestCanvasPicture } from '../../../agent/canvasCapture';
 import { loadUIIcons } from '../../../agent/uiIcons';
 import type { UIIconAssets } from '../../../agent/uiAssets';
 import { useAgentView } from './AgentViewContext';
-import type { CanvasImage } from '../../../agent/canvasDocument';
-import { CANVAS_CAPTURE_REQUEST } from '../../../agent/canvasKit';
 import { exportFileName } from '../../../agent/export';
 import type { DisplayView } from '../../../agent/types';
 import { useToast } from '../../../components/feedback';
@@ -22,32 +19,9 @@ import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { saveBlob } from '../../../utils/download';
 import { getTimeZone } from '../../../utils/time';
 import styles from '../AgentPage.module.css';
-import { createID } from '../../../utils/ids';
 
 const INITIAL_HEIGHT = 160;
-const CAPTURE_TIMEOUT_MS = 5000;
 const IMAGE_SCALE = 2;
-
-/** Rasterises the picture a canvas sent of itself. It is only ever decoded as an image. */
-async function encodeImage({ svg, width, height }: CanvasImage): Promise<Blob | null> {
-  const image = new Image();
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error('canvas image unavailable'));
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  });
-  const scale = canvasRasterScale(width, height, IMAGE_SCALE);
-  const surface = document.createElement('canvas');
-  surface.width = Math.max(1, Math.floor(width * scale));
-  surface.height = Math.max(1, Math.floor(height * scale));
-  const context = surface.getContext('2d');
-  if (!context) return null;
-  // Filled exactly, rather than by the wanted scale: a lowered scale is fractional, and rounding it
-  // down would leave a sliver of the surface unpainted.
-  context.scale(surface.width / width, surface.height / height);
-  context.drawImage(image, 0, 0);
-  return new Promise(resolve => surface.toBlob(resolve, 'image/png'));
-}
 
 function readCanvasVariables(): Record<string, string> {
   const computed = getComputedStyle(document.documentElement);
@@ -185,22 +159,8 @@ export function CanvasView({ view, callID }: { view: DisplayView; callID?: strin
     if (!target || isSaving) return;
     setIsSaving(true);
     try {
-      // `crypto.randomUUID` exists only on secure origins; the console is also served over plain HTTP.
-      const id = createID('capture');
-      const picture = await new Promise<CanvasImage>((resolve, reject) => {
-        const timer = window.setTimeout(() => { window.removeEventListener('message', onReply); reject(new Error('canvas did not answer')); }, CAPTURE_TIMEOUT_MS);
-        function onReply(event: MessageEvent) {
-          if (event.source !== target) return;
-          const image = canvasImage(event.data, id);
-          if (!image) return;
-          window.clearTimeout(timer);
-          window.removeEventListener('message', onReply);
-          resolve(image);
-        }
-        window.addEventListener('message', onReply);
-        target.postMessage({ type: CANVAS_CAPTURE_REQUEST, id }, '*');
-      });
-      const blob = await encodeImage(picture);
+      const surface = await rasterizeCanvasPicture(await requestCanvasPicture(target), IMAGE_SCALE);
+      const blob = surface && await new Promise<Blob | null>(resolve => surface.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('canvas image not encoded');
       saveBlob(blob, exportFileName(view.title, 'png', new Date()));
     } catch {

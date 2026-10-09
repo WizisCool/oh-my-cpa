@@ -1,5 +1,6 @@
-import { isKnownTurnStatus } from '../../components/workspace/conversationLabels';
-export { failureKey, formatDuration, isKnownTurnStatus } from '../../components/workspace/conversationLabels';
+import { ASK_QUESTION, isKnownTurnStatus } from '../../components/workspace/conversationLabels';
+export { ASK_QUESTION, callStatusKey, failureKey, formatDuration, isKnownTurnStatus } from '../../components/workspace/conversationLabels';
+export { argumentSummary, callDuration, statusTone } from '../../agent/callFacts';
 import { getTimeZone } from '../../utils/time';
 import { getDateTimeFormatter } from '../../utils/dateTimeFormat';
 import type { Lang } from '../../i18n/language';
@@ -11,7 +12,7 @@ export type {
   AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
 } from '../../agent/types';
 import { isDisplayTool } from '../../agent/types';
-import type { CapabilityReceipt, Conversation, Trace, Turn, TurnPart } from '../../agent/types';
+import type { CapabilityReceipt, Conversation, Turn, TurnPart } from '../../agent/types';
 
 export interface Operation {
   id: string;
@@ -26,9 +27,6 @@ export interface Operation {
   preview: { target: string; changes?: unknown };
   result: CapabilityReceipt;
 }
-
-/** The capability the agent asks the operator through; registered by the server's agent runtime. */
-export const ASK_QUESTION = 'ask_question';
 
 /** One question the agent asks through `ask_question`, as its prepared operation carries it. */
 export interface AgentQuestion {
@@ -115,6 +113,11 @@ export interface AgentTarget {
 export const AGENT_TARGET_PREFERENCE = 'agent_target';
 export const DEFAULT_AGENT_TARGET: AgentTarget = {};
 
+/** Local demo recordings need no inference target, but never bypass an open decision. */
+export function isAgentSendDisabled(isDemo: boolean, isFullyConfigured: boolean, isAwaiting: boolean): boolean {
+  return (!isDemo && !isFullyConfigured) || isAwaiting;
+}
+
 /** Reads the stored selector, keeping only the fields it may hold. */
 export function parseAgentTarget(raw: unknown): AgentTarget | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
@@ -158,28 +161,6 @@ export function turnLabelKey(turn: Pick<Turn, 'status' | 'code'>): string {
 export function isAwaitingAnswer(turn: Pick<Turn, 'status' | 'traces'>): boolean {
   return turn.status === 'pending'
     && (turn.traces ?? []).some(trace => trace.name === ASK_QUESTION && trace.result.status === 'pending');
-}
-
-/** The tone a status earns in the console's semantic palette. */
-export function statusTone(status: string, code?: string): 'success' | 'processing' | 'warning' | 'error' | 'default' {
-  if (status === 'error' && code === 'cancelled') return 'default';
-  switch (status) {
-    case 'success':
-      return 'success';
-    case 'running':
-    case 'executing':
-      return 'processing';
-    case 'pending':
-    case 'partial':
-    case 'uncertain':
-    case 'expired':
-      return 'warning';
-    case 'error':
-    case 'rejected':
-      return 'error';
-    default:
-      return 'default';
-  }
 }
 
 const PREVIEW_FIELDS_MAX = 8;
@@ -273,54 +254,4 @@ export function groupCapabilities(
   return PERMISSION_ORDER
     .map(permission => ({ permission, items: matched.filter(item => item.permission === permission).sort((left, right) => left.name.localeCompare(right.name)) }))
     .filter(group => group.items.length > 0);
-}
-
-const ARGUMENT_SUMMARY_FIELDS = 3;
-const ARGUMENT_SUMMARY_CHARS = 32;
-
-/**
- * A call's arguments as one short line: the first few top-level fields as `name=value`, each value
- * clipped. The whole argument text is one click away in the details panel; the row only has to say
- * which window, which provider, which model.
- */
-export function argumentSummary(argumentsText: string | undefined): string {
-  if (!argumentsText) return '';
-  let value: unknown;
-  try {
-    value = JSON.parse(argumentsText);
-  } catch {
-    return '';
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '';
-  const clip = (text: string) => (text.length > ARGUMENT_SUMMARY_CHARS ? `${text.slice(0, ARGUMENT_SUMMARY_CHARS)}…` : text);
-  const fields = Object.entries(value)
-    .filter(([, field]) => field !== null && field !== '' && !(Array.isArray(field) && field.length === 0))
-    .map(([key, field]) => `${key}=${clip(typeof field === 'string' ? field : JSON.stringify(field))}`);
-  const shown = fields.slice(0, ARGUMENT_SUMMARY_FIELDS).join(' · ');
-  return fields.length > ARGUMENT_SUMMARY_FIELDS ? `${shown} · +${fields.length - ARGUMENT_SUMMARY_FIELDS}` : shown;
-}
-
-/**
- * The label a call row states: running, done, needs you, uncertain, failed. A call waiting on the
- * agent's question says so rather than "awaiting confirmation", which would send the operator
- * looking for an approval that is not there.
- */
-export function callStatusKey(trace: Pick<Trace, 'name' | 'result'>): string {
-  switch (trace.result.status) {
-    case 'running':
-      return 'agent.call.running';
-    case 'pending':
-      return trace.name === ASK_QUESTION ? 'agent.status.question' : 'agent.call.needs_you';
-    case 'success':
-      return 'agent.call.done';
-    default:
-      return isKnownTurnStatus(trace.result.status) ? `agent.status.${trace.result.status}` : 'agent.status.unknown';
-  }
-}
-
-/** How long a call took, or how long it has been running when `nowMS` is given. */
-export function callDuration(trace: Pick<Trace, 'started_at_ms' | 'ended_at_ms'>, nowMS?: number): number | undefined {
-  if (!trace.started_at_ms) return undefined;
-  const end = trace.ended_at_ms ?? nowMS;
-  return end === undefined ? undefined : Math.max(0, end - trace.started_at_ms);
 }

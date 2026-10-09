@@ -958,7 +958,7 @@ how serious it is:
 | --- | --- | --- |
 | The outcome of something the operator just did - saved, copied, refused, three of five refreshed | **Toast** | `useToast()` |
 | A region that could not be read - a chart, a list, a drawer's tab | **Inline, in the region's place, with Retry** | `LoadFailure` |
-| A condition that holds while the region is on screen - demo mode, stale data, a feature switched off, a diagnostic about a record | **Inline, where it applies** | `Notice` |
+| A condition that holds while the region is on screen - stale data, a feature switched off, a diagnostic about a record | **Inline, where it applies** | `Notice` |
 | A refusal of the input in front of the operator - a login, a composer message, a form field | **Inline, beside that input** | `Notice` / the form's own field error |
 
 - **One outcome, one surface.** A toast is never repeated as a banner, and a result never opens an
@@ -2442,3 +2442,19 @@ controls wrap within the viewport and the log list owns its scrolling.
 
 Under reduced motion, a closing floating panel becomes hidden as soon as its
 leave phase starts, even while the library retains its node for motion cleanup.
+
+### Navigation scroll and portable answer fidelity
+
+The sidebar's native vertical viewport has a 6px overlay indicator instead of consuming a
+scrollbar column. Hover, scrolling, dragging or keyboard focus reveals it; touch retains
+native content scrolling. The thumb tracks the viewport/content ratio and can be dragged;
+pressing the bare track pages toward it. The motion uses the existing fast/base tokens.
+The mobile heatmap starts at the newest edge with a signed-32-bit-safe scroll offset and
+stays pinned through resize only until the reader chooses an older date.
+
+The demonstration announces its nature using the global arrival toast, with contextual
+Agent/Playground replay copy on those pages; it reserves no banner row. Portable Agent HTML
+keeps the same text, standalone reasoning, working timelines and inline generated figures
+in reading order. Call rows retain argument summaries, outcome and duration disclosures.
+PNG captures generated interfaces at their laid-out width, including kit charts and controls;
+unavailable figures keep a visible fallback note rather than silently disappearing.

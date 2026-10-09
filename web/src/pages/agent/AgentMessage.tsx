@@ -72,6 +72,9 @@ export function AgentUserMessage() {
  * Reasoning and capability calls form the answer's chain of thought; the answer text stays outside
  * it. A display call is left out of the chain: it is drawn where the model made it, as the figure
  * itself, so the model decides what the reader meets before and after it (ADR 0082).
+ *
+ * `agent/answerLayout.ts` states the same rule as a plain function for a saved copy of the
+ * conversation; the two change together.
  */
 const GROUP_BY = groupPartByType({
   reasoning: ['group-chain'],

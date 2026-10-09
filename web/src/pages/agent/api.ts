@@ -1,6 +1,8 @@
 import { ApiError, requestResponse } from '../../api/client';
 import { observeServerClock } from '../../types/serverClock';
 import type { Capability, Conversation, Operation, QuestionReply } from './state';
+import { readDemoConversation, resetDemoConversation } from '../../demo/session';
+import { isDemoMode } from '../../types/demoMode';
 
 /**
  * The Agent page's own endpoint surface.
@@ -14,13 +16,18 @@ import type { Capability, Conversation, Operation, QuestionReply } from './state
  */
 
 export async function getSession(signal?: AbortSignal): Promise<Conversation> {
+  // The demonstration's API always serves the empty session; a replayed conversation lives in
+  // the page, and a refetch has to return it rather than erase it.
+  const replayed = isDemoMode() ? readDemoConversation() : undefined;
+  if (replayed) return replayed;
   const response = await requestResponse('/agent/session', { signal });
   // The turns below carry the server's timestamps; this is where its clock is read to count from them.
   observeServerClock(response);
   return response.json();
 }
 
-export async function resetSession(revision: number): Promise<Conversation> {
+export async function resetSession(revision: number, current?: Conversation): Promise<Conversation> {
+  if (isDemoMode() && current) return resetDemoConversation(current);
   return (await requestResponse('/agent/session/reset', { method: 'POST', body: JSON.stringify({ revision }) })).json();
 }
 

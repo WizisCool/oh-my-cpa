@@ -46,6 +46,16 @@ const WEEKDAY_KEYS = [
 ];
 
 /**
+ * A scroll offset past any width the field can have, which the browser clamps to the newest
+ * column.
+ *
+ * It has to fit a signed 32-bit integer. WebKit converts an assigned `scrollLeft` to one, so
+ * `Number.MAX_SAFE_INTEGER` wraps to -1 there and clamps to the *oldest* column: every iOS
+ * browser opened the field a year in the past while Chromium opened it on today.
+ */
+const HEATMAP_SCROLL_END = 1_000_000;
+
+/**
  * The panel's own refresh cadence.
  *
  * Today's total keeps growing as the day is used, so the strip is not static between
@@ -271,7 +281,7 @@ export const TokenHeatmap: React.FC = () => {
   // either of them from reconciling all ~370 cells.
   const gridRef = React.useRef<HTMLDivElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
-  const hasScrolledToToday = React.useRef(false);
+  const isPinnedToNewest = React.useRef(true);
   const { data, isError, error, isFetching, refetch } = useQuery({
     queryKey: [TOKEN_HEATMAP_QUERY_KEY, timezone],
     queryFn: () => api.getTokenHeatmap(timezone),
@@ -333,30 +343,41 @@ export const TokenHeatmap: React.FC = () => {
   }, [focusDay]);
 
   /**
-   * Brings today into view when the field is swipeable.
+   * Keeps today in view when the field is swipeable.
    *
    * Only a panel too narrow for the cell floor scrolls at all; a fitted field clamps to zero.
    * The DOM order stays oldest-to-newest - it is what the arrow keys,
    * the month axis and a screen reader describe - so the newest column is scrolled to instead.
-   * Run once per mount, so a background re-read does not yank the field back while the operator
-   * is reading January.
+   *
+   * The field stays pinned to that edge until the reader swipes away from it: a phone rotated
+   * after load, or a panel that only gets its final width a frame later, would otherwise leave
+   * the newest weeks off screen again. Once the reader has chosen an older week, neither a
+   * resize nor a background re-read moves the field.
    */
   React.useEffect(() => {
-    if (hasScrolledToToday.current || cells.length === 0) return;
+    if (cells.length === 0) return;
     const container = scrollRef.current;
     if (!container) return;
+    const followNewest = () => {
+      // Layout is clean inside a ResizeObserver callback, so this is a clamp, not a forced reflow.
+      container.scrollLeft = HEATMAP_SCROLL_END;
+    };
+    const recordReaderPosition = () => {
+      isPinnedToNewest.current = container.scrollLeft >= container.scrollWidth - container.clientWidth - 1;
+    };
     // ResizeObserver delivers after layout. An extent read in the mount effect instead
     // forces the entire dashboard's pending layout into the navigation commit.
     const observer = new ResizeObserver((observations) => {
+      if (!isPinnedToNewest.current) return;
       if (!observations.some((entry) => entry.contentRect.width > 0)) return;
-      hasScrolledToToday.current = true;
-      // The browser clamps to the available extent, including zero on a fitted desktop
-      // grid; no geometry read or hardcoded cell-floor calculation is needed.
-      container.scrollLeft = Number.MAX_SAFE_INTEGER;
-      observer.disconnect();
+      followNewest();
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    container.addEventListener('scroll', recordReaderPosition, { passive: true });
+    return () => {
+      observer.disconnect();
+      container.removeEventListener('scroll', recordReaderPosition);
+    };
   }, [cells.length]);
 
   /**

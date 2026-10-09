@@ -84,6 +84,7 @@ const FAILURE_KEYS: Record<string, string> = {
   conversation_budget_exceeded: 'agent.error.budget',
   agent_document_too_large: 'agent.error.budget',
   demo_operation_refused: 'demo.blocked',
+  demo_replay_only: 'demo.replay_only',
 };
 
 export function failureKey(code: string): string {
@@ -97,6 +98,7 @@ export function failureKey(code: string): string {
  * identifier; it is just not the message. Codes absent from this table read as a gateway failure.
  */
 const ERROR_KEYS: Record<string, string> = {
+  demo_replay_only: 'demo.replay_only',
   client_key_required: 'pg.error.key',
   client_key_missing: 'pg.error.key_missing',
   playground_busy: 'pg.error.busy',
@@ -140,4 +142,25 @@ export function formatDuration(milliseconds: number): string {
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ${Math.round(seconds - minutes * 60)}s`;
+}
+
+/** The capability the agent asks the operator through; registered by the server's agent runtime. */
+export const ASK_QUESTION = 'ask_question';
+
+/**
+ * The label a call row states: running, done, needs you, uncertain, failed. A call waiting on the
+ * agent's question says so rather than "awaiting confirmation", which would send the operator
+ * looking for an approval that is not there.
+ */
+export function callStatusKey(trace: { name: string; result: { status: string } }): string {
+  switch (trace.result.status) {
+    case 'running':
+      return 'agent.call.running';
+    case 'pending':
+      return trace.name === ASK_QUESTION ? 'agent.status.question' : 'agent.call.needs_you';
+    case 'success':
+      return 'agent.call.done';
+    default:
+      return isKnownTurnStatus(trace.result.status) ? `agent.status.${trace.result.status}` : 'agent.status.unknown';
+  }
 }

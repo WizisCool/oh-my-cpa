@@ -434,7 +434,7 @@ before its scroll event), resumption at the bottom, live disclosure remounts aft
 folding on completion and reopening settled text. Reasoning start/end fixtures carry the same
 required message IDs as the protocol. No fixed delay or additional runner is needed.
 The attachment probe asserts the normalized WebP wire payload rather than the original upload's
-encoding. Conversation exports still gather views after the answer text, as recorded in ADR 0082.
+encoding. Conversation exports preserve inline display order and working timelines; ADR 0093 extends the export boundary recorded in ADR 0082.
 
 ### Console readout and disclosure regressions
 
@@ -572,6 +572,11 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 Image parsing, bounds, MIME consistency, static-format detection and SVG security belong in `internal/iconasset/image_test.go`. Repository tests cover persistence, quota, legacy mapping counts, atomic reference clearing with unrelated assets/preferences preserved, stale/missing deletion guards, deletion-failure rollback and concurrent assignment/deletion; handler tests cover authenticated CRUD, private ETag revalidation, bounded input and metadata projection. Operations tests exercise Agent/MCP declarations and deletion confirmation. The automatically discovered custom-icon logic suite checks reference parsing, search, immutable assignment cleanup, save eligibility and failed-selection policy.
 
 The `custom-icon-library` probe owns file selection, validated preview, Base64 replacement, immediate repaint of a mounted provider, selection failure, invalid-replacement save prevention, retained inputs after save/delete failure, reload persistence, referenced deletion with default restoration, cancellation, reload persistence of resets, full-width empty states, focus restoration the narrow editor/confirmation overlay above the provider drawer and automatic reset of its unsaved icon selection. Provider-console planner rules include it alongside the existing picker scenarios, with pinned union and negative cases. Assertions wait on observable state rather than fixed delays.
+
+Default restoration compares the provider mark with its original monochrome CSS mask, both
+immediately after deletion and after reload; a remaining custom image, missing mark or neutral
+fallback cannot satisfy it. The selected custom image is an explicit negative case for that
+restoration predicate.
 
 ### Codex configuration path regression coverage
 
@@ -990,3 +995,26 @@ increase concurrency or a budget to make a run pass. Watchdog diagnostics name a
 active scenarios/steps. Existing condition-based readiness and complete hosted
 shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
 wall/CPU/memory trade-offs and retained failure ownership.
+
+### Demo replay and generated-UI exports
+
+`scripts/test-demo-replay.ts` owns recording/event fidelity, localization/date templates,
+refetch/reset state and cancellation; `internal/demo/demo_test.go` owns full-year synthetic
+traffic, idle-day distribution and whole-UTC-date recent-traffic protection, including non-midnight
+reference times and equivalent instants in other time zones. `scripts/check-demo.test.mjs` owns
+public recording privacy. `scripts/test-agent-workspace.ts` owns send admission: target-free
+demo replay, required live targets, and approval blocking in both modes.
+Built `scripts/verify-demo.mjs` sends both examples: the Agent replay must settle its generated
+interface, while the Playground replay must settle its answer content. The Agent example and
+capability-directory actions use locale-independent identities; built acceptance exercises the
+Agent in English while the other route headings remain Chinese. Because the generated interface
+is an opaque sandbox, the check seeds theme storage only in frames with an origin and tolerates
+Playwright's own service-worker probe there, bounded to four documents per recorded replay.
+The existing heatmap probe owns newest-edge mobile scrolling and resize behavior.
+
+`scripts/test-answer-layout.ts` pins reasoning/call timeline and inline figure grouping;
+`scripts/test-conversation-export.ts` owns detached/redacted snapshots and HTML anatomy.
+The existing `agent-stream` probe exports a generated component as standalone HTML and PNG:
+it requires script-set content in the opaque sandbox and an exact fixture color in PNG
+pixels, then checks temporary-frame cleanup. The common conversation-export helper retains
+real download/controls/mobile checks. These browser claims are not replaced by DOM tests.

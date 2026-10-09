@@ -20,6 +20,7 @@
     "cpa:start": "node scripts/cpa-start.mjs",
     "demo:generate": "node scripts/generate-demo-data.mjs",
     "icons:generate": "node scripts/generate-lucide-icons.mjs",
+    "icons:lobe": "node scripts/sync-lobe-icon-catalog.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:api": "node scripts/dev.mjs --api-only",
     "dev:demo": "wrangler dev --config deploy/cloudflare/wrangler.jsonc",

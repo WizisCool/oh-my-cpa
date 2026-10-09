@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import {
   failureKey,
+  isAgentSendDisabled,
   isAwaitingAnswer,
   EMPTY_DRAFT,
   chooseOption,
@@ -495,6 +496,19 @@ check('the context readout needs both a reported input and a listed window, and 
   // A window the catalog understates must not print more than a full box.
   assert.equal(contextShare(300_000, 200_000), 1);
   for (const [used, window] of [[undefined, 200_000], [0, 200_000], [1000, undefined], [1000, 0]] as const) assert.equal(contextShare(used, window), undefined);
+});
+
+check('Agent send policy exempts local demo targets while preserving live targets and approvals', () => {
+  for (const isDemo of [false, true]) {
+    for (const isFullyConfigured of [false, true]) {
+      assert.equal(isAgentSendDisabled(isDemo, isFullyConfigured, true), true,
+        'an open approval blocks both local replay and live inference');
+    }
+  }
+  assert.equal(isAgentSendDisabled(true, false, false), false, 'a demo with no keys or models can replay');
+  assert.equal(isAgentSendDisabled(true, true, false), false, 'a demo with fixture targets can replay');
+  assert.equal(isAgentSendDisabled(false, false, false), true, 'live inference still requires both target fields');
+  assert.equal(isAgentSendDisabled(false, true, false), false, 'a configured live conversation can send');
 });
 
 console.log(`\n${passed} assertions passed`);

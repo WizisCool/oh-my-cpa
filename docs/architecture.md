@@ -2920,7 +2920,7 @@ that snapshot to one HTML string: the palette's resolved tokens as custom proper
 font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
 sandboxed frame, and a Content-Security-Policy that allows no network. Its only script is the fixed
 `conversationControls.ts` (search, side panel, copy, table sorting, print). The PNG is the same
-document laid out as an 840px share card in a sandboxed, script-free iframe and rasterized through an
+document laid out as an 840px share card in a sandboxed, script-free iframe. Generated interfaces are first drawn in separate opaque-origin, network-blocked frames using the shared `canvasCapture.ts` path, inserted as PNG data images, then the document is rasterized through an
 SVG `foreignObject` at 2x (`conversationDownload.ts`); a long transcript becomes several numbered
 files, each cut at a block boundary by `snapshotImageSlices`. The download module is loaded on demand,
 so the Markdown renderer's server build stays out of the workspace chunk.
@@ -3013,7 +3013,7 @@ listed neighbouring requests as if they were this one. ADR
 0022 records the entitlement and privacy boundary; ADR 0023 recorded the selection-only preference
 and is superseded by ADR 0024, which records the single latest session that replaced it. Gateway unit tests, facade tests,
 `scripts/test-playground.ts`, and desktop/phone probes cover this flow. Public-demo
-model reads are generated through the real facade; inference is explicitly refused.
+model reads are generated through the real facade; inference is explicitly refused, while one browser-local recorded example demonstrates the flow (ADR 0092).
 
 ## 15. Where to look next
 
@@ -3161,3 +3161,20 @@ timings support reviewed deterministic shard weights rather than runtime selecti
 The independent weekly maintenance workflow owns targeted race/fuzz/advisory checks
 and Windows/macOS runtime evidence without adding network-dependent audits to PR
 gates. See `docs/testing.md` for budgets, failure ownership and registration.
+
+### Demonstration replay and portable answer fidelity
+
+`web/src/demo/agentReplay.ts` streams the curated `agentRecording.json` through AG-UI;
+`playgroundReplay.ts` streams `playgroundRecording.json` through the Playground wire contract.
+Both are loaded on demand only in demo mode, pace locally and honor abort signals. The Agent's
+`session.ts` retains the settled conversation across query refetches until reload/reset.
+`recordingTemplate.ts` localizes text and re-bases recorded dates to the run's anchor. The
+Worker still refuses server writes and has no inference path. ADR 0092 records this boundary.
+
+The export snapshot uses `answerLayout.ts` and `callFacts.ts` to preserve answer block order,
+call summaries, status, timings and reasoning/call timelines. The live framework grouping
+remains page-owned and is tested against those same cases. Canvas capture never combines
+script permission with same-origin permission: model markup runs only in the existing opaque
+sandbox, its bounded response becomes an image, and the outer snapshot is script-disabled.
+A missing figure retains an explicit unavailable-image note; all transcript pages must encode
+before any PNG is downloaded.

@@ -114,6 +114,23 @@ test('it fails when the dataset carries an operator identifier', async () => {
   );
 });
 
+test('it fails when a replayed recording carries a key fingerprint', async () => {
+  // A recording starts as a real conversation, and the fingerprint of the key it ran with
+  // is in the first lines of one.
+  await withModifiedFile(
+    join(root, 'web', 'src', 'demo', 'agentRecording.json'),
+    (content) => {
+      const decoded = JSON.parse(content);
+      decoded.client_key_fingerprint = `hmac:${'ab12'.repeat(16)}`;
+      return JSON.stringify(decoded);
+    },
+    (result) => {
+      assert.equal(result.code, 1);
+      assert.match(result.output, /agentRecording\.json contains a client key fingerprint/);
+    },
+  );
+});
+
 test('it fails when the provenance record disagrees with the dataset', async () => {
   await withModifiedFile(
     PROVENANCE,

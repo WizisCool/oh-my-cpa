@@ -366,8 +366,18 @@ export async function customIconLibrary({ base, page, check }) {
   await page.route('**/omc/api/v1/custom-icons/*/content*', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle r="10" cx="12" cy="12"/></svg>' }));
   await page.goto(`${base}/ai-providers`, { waitUntil: 'domcontentloaded' });
   const row = page.locator('.providers-page tbody tr[data-row-key="openai-compat-0"]');
+  const providerMark = row.getByRole('button', { name: `Change Icon: ${pickerProvider.name}`, exact: true });
+  const defaultArtwork = providerMark.locator('span[style*="mask"]');
+  await defaultArtwork.waitFor({ state: 'visible' });
+  const defaultMask = await defaultArtwork.evaluate((element) => getComputedStyle(element).maskImage);
+  check('the provider default uses its monochrome brand artwork', defaultMask.includes('/lobe-icons/commandcode.svg'));
+  // Monochrome catalog marks are masks, so restoration must not wait for an image.
+  // Matching the original mask also rejects a missing mark or neutral fallback.
+  const hasDefaultArtwork = async () => await providerMark.locator('img').count() === 0
+    && await defaultArtwork.count() === 1
+    && await defaultArtwork.evaluate((element) => getComputedStyle(element).maskImage) === defaultMask;
   const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
-  const openPicker = async () => { await row.waitFor({ state: 'visible' }); await row.locator('div[title]').first().click(); await picker.waitFor({ state: 'visible' }); };
+  const openPicker = async () => { await row.waitFor({ state: 'visible' }); await providerMark.click(); await picker.waitFor({ state: 'visible' }); };
   await openPicker();
   await picker.getByText('Custom', { exact: true }).click();
   await picker.getByRole('button', { name: 'Add icon' }).click();
@@ -390,6 +400,7 @@ export async function customIconLibrary({ base, page, check }) {
   await tile.locator('button[data-icon-id]').click();
   await picker.waitFor({ state: 'hidden' });
   await until(async () => (await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'custom provider mark' });
+  check('custom artwork does not satisfy default restoration', !await hasDefaultArtwork());
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openPicker();
   await tile.waitFor({ state: 'visible' });
@@ -426,7 +437,7 @@ export async function customIconLibrary({ base, page, check }) {
   check('failed deletion retains confirmation and the provider artwork', await confirmation.isVisible() && (await row.locator('img').getAttribute('src')).includes('/custom-icons/'));
   await confirmation.getByRole('button', { name: /^Delete/ }).click();
   await tile.waitFor({ state: 'hidden' });
-  await until(async () => !(await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'deleted reference to restore the provider default' });
+  await until(hasDefaultArtwork, { label: 'deleted reference to restore the provider default' });
   check('referenced deletion restores the live provider default', await tile.count() === 0);
   const empty = picker.getByTestId('custom-icons-empty');
   await empty.waitFor({ state: 'visible' });
@@ -436,7 +447,8 @@ export async function customIconLibrary({ base, page, check }) {
   await picker.waitFor({ state: 'hidden' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await row.waitFor({ state: 'visible' });
-  check('reference resets persist after reload', !(await row.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'));
+  await until(hasDefaultArtwork, { label: 'provider default artwork after reload' });
+  check('reference resets persist after reload', await hasDefaultArtwork());
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Add Provider' }).click();
   const drawer = page.locator('.ant-drawer-open');
