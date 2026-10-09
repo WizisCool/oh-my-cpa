@@ -388,8 +388,12 @@ export function sortOAuthWorkspaceRecords(
   sort: AuthFileSortKey,
 ): OAuthWorkspaceRecord[] {
   const copy = [...records];
-  const byName = (left: OAuthWorkspaceRecord, right: OAuthWorkspaceRecord) =>
-    left.file.name.localeCompare(right.file.name, undefined, { numeric: true, sensitivity: 'base' });
+  // Reuse comparison setup within this sort only; each invocation still resolves the default locale.
+  let nameCollator: Intl.Collator | undefined;
+  const byName = (left: OAuthWorkspaceRecord, right: OAuthWorkspaceRecord) => {
+    nameCollator ??= new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    return nameCollator.compare(left.file.name, right.file.name);
+  };
   switch (sort) {
     case 'name-desc':
       return copy.sort((left, right) => byName(right, left));

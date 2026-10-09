@@ -204,6 +204,26 @@ Evaluate every delivery surface independently: titles, filenames, body prose, co
 
 ---
 
+## Architecture and verification maintenance
+
+- Prefer leaf modules for shared logic: a shared component or another page must not
+  acquire a runtime dependency on a page's state solely to obtain a general utility.
+  Keep domain orchestration at its owner; do not create generic wrappers without
+  independently testable behavior or measured reuse.
+- A new route/loading boundary must update impact-analysis evidence in the same
+  change. Test the real import graph, independently assert App-to-registry reachability
+  and nonempty registry-page discovery, and pair every narrowing case with an
+  eager/shared/unknown case that still widens. Page-directory rules are not evidence
+  of route-page identity. Full CI catalog coverage is independent of the local planner.
+- For internal refactors, record the existing behavior and claim owners before edits,
+  preserve browser-only coverage, and measure the affected feedback path. UI-touching
+  changes need representative browser and screenshot/artifact evidence in addition to
+  test passes. Observable bug fixes are separate scope, not incidental refactoring.
+- Use `docs/plans/architecture-governance.md` for this audit's evidence and migration
+  ledger rather than introducing another overlapping engineering rules document.
+
+---
+
 ## 8. Things NOT to Do
 
 - Ordinary facade responses must retain `internal/api` DTO allowlists. The authenticated trusted Plugin Host is the bounded native-response exception in ADR 0067: fixed CPA v0/v8 management trees and GET model directory only, with credential separation, audited reads/writes and config backup/write gates. Never introduce arbitrary target URLs or outbound `api-call` proxies.

@@ -1,5 +1,5 @@
 import type { AttachmentAdapter, CompleteAttachment, PendingAttachment } from '@assistant-ui/react';
-import { IMAGE_TYPES, MAX_IMAGES, readAgentImage } from '../playground/state';
+import { IMAGE_TYPES, MAX_IMAGES, readAgentImage } from '../../components/workspace/imageAttachments';
 
 /**
  * What an Agent message can carry beside its words.

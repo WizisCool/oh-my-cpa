@@ -65,6 +65,149 @@ test('reaching the shared layer or an unnamed routed page still selects everythi
   assert.equal(planScenarios(['web/src/utils/onlyUnmapped.ts'], ALL, impactOf(CONSOLE)).ids.length, ALL.length);
 });
 
+const ROUTER_HEADER = "import { createBrowserRouter } from 'react-router-dom';";
+const LAZY_REGISTRY_HEADER = `import React from 'react';
+function createPageLoader(importModule, name) { return importModule; }`;
+const LAZY_CONSOLE = {
+  ...CONSOLE,
+  'web/src/App.tsx': `${ROUTER_HEADER} import { SystemPage, ApiKeysPage, UnmappedPage } from './routePages';
+    export const routes = createBrowserRouter([{ element: <SystemPage /> }, { element: <ApiKeysPage /> }, { element: <UnmappedPage /> }]);`,
+  'web/src/routePages.ts': `${LAZY_REGISTRY_HEADER}
+    const system = createPageLoader(() => import('./pages/SystemPage'), 'default');
+    export const SystemPage = React.lazy(system);
+    const keys = createPageLoader(() => import('./pages/ApiKeysPage'), 'default');
+    export const ApiKeysPage = React.lazy(keys);
+    const orphan = createPageLoader(() => import('./pages/UnmappedPage'), 'default');
+    export const UnmappedPage = React.lazy(orphan);`,
+};
+
+test('literal lazy pages stop at the route registry without losing shared helper consumers', () => {
+  const impact = impactOf(LAZY_CONSOLE);
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids,
+    planScenarios(['web/src/pages/SystemPage.tsx'], ALL).ids);
+  assert.deepEqual(new Set(planScenarios(['web/src/utils/format.ts'], ALL, impact).ids),
+    new Set(planScenarios(['web/src/utils/format.ts'], ALL, impactOf(CONSOLE)).ids));
+});
+
+test('route registry edits, unmapped lazy pages, eager edges and mixed shared edits still widen', () => {
+  const impact = impactOf(LAZY_CONSOLE);
+  for (const files of [
+    ['web/src/routePages.ts'],
+    ['web/src/utils/onlyUnmapped.ts'],
+    ['web/src/pages/SystemPage.tsx', 'web/src/App.tsx'],
+  ]) assert.deepEqual(planScenarios(files, ALL, impact).ids, ALL, files.join(', '));
+  for (const statement of [
+    "import SystemPage from './pages/SystemPage'; export { SystemPage };",
+    "export { default as SystemPage } from './pages/SystemPage';",
+    "import SystemPage from './pages/SystemPage.tsx'; export { SystemPage };",
+  ]) {
+    const eager = impactOf({ ...LAZY_CONSOLE, 'web/src/routePages.ts': `${LAZY_CONSOLE['web/src/routePages.ts']} ${statement}` });
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, eager).ids, ALL, statement);
+  }
+  const lazyHelper = impactOf({
+    ...LAZY_CONSOLE,
+    'web/src/routePages.ts': "export const helper = () => import('./types/rollingNumber');",
+    'web/src/types/rollingNumber.ts': 'export const value = 1;',
+  });
+  assert.deepEqual(planScenarios(['web/src/types/rollingNumber.ts'], ALL, lazyHelper).ids, ALL,
+    'a mapped shared helper is not a routed page');
+  const unknown = { ...impact, lazyImporters: undefined };
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, unknown).ids, ALL);
+});
+
+test('mapped directories and page-name prefixes do not make lazy registry helpers route pages', () => {
+  for (const helper of [
+    'web/src/pages/agent/helper.ts',
+    'web/src/pages/agent/HelperView.tsx',
+    'web/src/pages/agent/OtherPage.tsx',
+    'web/src/pages/playground/helper.ts',
+    'web/src/pages/oauthManagement/oauthWorkspaceLogic.ts',
+    'web/src/pages/pricing/helper.ts',
+    'web/src/pages/SystemPageHelper.tsx',
+  ]) {
+    const impact = impactOf({
+      ...LAZY_CONSOLE,
+      'web/src/routePages.ts': `export const helper = () => import('./${helper.slice('web/src/'.length)}');`,
+      [helper]: 'export const value = 1;',
+    });
+    assert.deepEqual(impact.unresolved, [], helper);
+    assert.deepEqual(planScenarios([helper], ALL, impact).ids, ALL, `${helper} is not a route entry`);
+  }
+});
+
+test('explicit route entries under mapped directories retain narrow lazy plans', () => {
+  for (const page of [
+    'web/src/pages/agent/AgentPage.tsx',
+    'web/src/pages/agent/AuthorizePage.tsx',
+    'web/src/pages/playground/PlaygroundPage.tsx',
+    'web/src/pages/oauthManagement/OAuthManagementPage.tsx',
+    'web/src/pages/pricing/PricingPage.tsx',
+  ]) {
+    const impact = impactOf({
+      ...LAZY_CONSOLE,
+      'web/src/App.tsx': `${ROUTER_HEADER} import { Page } from './routePages'; export const routes = createBrowserRouter([{ element: <Page /> }]);`,
+      'web/src/routePages.ts': `${LAZY_REGISTRY_HEADER}
+        const loader = createPageLoader(() => import('./${page.slice('web/src/'.length)}'), 'default');
+        export const Page = React.lazy(loader);`,
+      [page]: 'export default function Page() { return null; }',
+    });
+    const expected = planScenarios([page], ALL).ids;
+    assert.ok(expected.length > 0 && expected.length < ALL.length, page);
+    assert.deepEqual(planScenarios([page], ALL, impact).ids, expected, page);
+  }
+});
+
+test('lazy component declarations need actual route-element consumption before narrowing', () => {
+  for (const app of [
+    "import * as pages from './routePages'; export { pages };",
+    "import { SystemPage } from './routePages'; export const widget = <SystemPage />;",
+    `${ROUTER_HEADER} import { SystemPage } from './routePages'; export const routes = createBrowserRouter([{ element: <div /> }]);`,
+    `${ROUTER_HEADER} import { SystemPage } from './routePages'; export const routes = createBrowserRouter([{ element: SystemPage }]);`,
+    "import { SystemPage } from './routePages'; export const widget = { element: <SystemPage /> };",
+    `${ROUTER_HEADER} import { SystemPage } from './routePages'; export const routes = createBrowserRouter([{ handle: { element: <SystemPage /> } }]);`,
+  ]) {
+    const impact = impactOf({ ...LAZY_CONSOLE, 'web/src/App.tsx': app });
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids, ALL, app);
+  }
+  const renamed = impactOf({ ...LAZY_CONSOLE, 'web/src/App.tsx':
+    `${ROUTER_HEADER} import { SystemPage as SystemRoute } from './routePages'; export const routes = createBrowserRouter([{ children: [{ element: <div><SystemRoute /></div> }] }]);` });
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, renamed).ids,
+    planScenarios(['web/src/pages/SystemPage.tsx'], ALL).ids);
+});
+
+test('a routed lazy import cannot hide another lazy consumer of the same resolved module', () => {
+  for (const specifier of ['./pages/SystemPage', './pages/SystemPage.tsx']) {
+    const impact = impactOf({ ...LAZY_CONSOLE, 'web/src/routePages.ts':
+      `${LAZY_CONSOLE['web/src/routePages.ts']} export const helper = () => import('${specifier}');` });
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids, ALL, specifier);
+  }
+  const unknown = { ...impactOf(LAZY_CONSOLE), routePages: undefined };
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, unknown).ids, ALL);
+});
+
+test('unrecognized loader wiring and parse failures cannot certify route imports', () => {
+  for (const registry of [
+    LAZY_CONSOLE['web/src/routePages.ts'].replace('React.lazy(system)', 'wrap(system)'),
+    LAZY_CONSOLE['web/src/routePages.ts'].replace('const system =', 'let system ='),
+    LAZY_CONSOLE['web/src/routePages.ts'].replace("() => import('./pages/SystemPage')", "() => { return import('./pages/SystemPage'); }"),
+    LAZY_CONSOLE['web/src/routePages.ts'].replace("import React from 'react'", "import React from 'other-library'"),
+    `${LAZY_CONSOLE['web/src/routePages.ts']} const broken = (`,
+  ]) {
+    const impact = impactOf({ ...LAZY_CONSOLE, 'web/src/routePages.ts': registry });
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids, ALL, registry);
+  }
+  const unreadable = buildImporterGraph({
+    files: Object.keys(LAZY_CONSOLE),
+    readFile: file => {
+      if (file === 'web/src/App.tsx') throw new Error('fixture unavailable');
+      return LAZY_CONSOLE[file];
+    },
+  });
+  assert.deepEqual(unreadable.unresolved, ['web/src/App.tsx -> unreadable source']);
+  assert.equal(unreadable.routePages.size, 0);
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, unreadable).ids, ALL);
+});
+
 test('a type-only module selects nothing, an unimported asset selects everything', () => {
   assert.deepEqual(planScenarios(['web/src/types/system.ts'], ALL, impactOf(CONSOLE)).ids, []);
   assert.equal(planScenarios(['web/src/assets/fonts/inter.woff2'], ALL, impactOf(CONSOLE)).ids.length, ALL.length);
@@ -73,6 +216,18 @@ test('a type-only module selects nothing, an unimported asset selects everything
 test('an unresolved import anywhere widens the plan', () => {
   const impact = { ...impactOf(CONSOLE), unresolved: ['web/src/App.tsx -> ./nowhere'] };
   assert.equal(planScenarios(['web/src/utils/format.ts'], ALL, impact).ids.length, ALL.length);
+});
+
+test('unreadable graph inputs widen rather than disappearing as unused modules', () => {
+  const graph = buildImporterGraph({
+    files: Object.keys(CONSOLE),
+    readFile: file => {
+      if (file === 'web/src/pages/SystemPage.tsx') throw new Error('fixture unavailable');
+      return CONSOLE[file];
+    },
+  });
+  assert.ok(graph.unresolved.length > 0);
+  assert.deepEqual(planScenarios(['web/src/utils/format.ts'], ALL, graph).ids, ALL);
 });
 
 const CATALOG = "import { x } from './x';\nexport const DICT = {\n  'a.one': ['一', 'One'],\n  'a.two': [\n    '二',\n    'Two',\n  ],\n};\nexport function t(key: string) { return DICT[key]; }\n";
@@ -160,6 +315,50 @@ test('the runner, anything it imports and unattributable registry edits select a
 
 // ── properties of the real tree the narrowing depends on ──────────────────────
 
+function discoverRoutedPages({ importers, routePages }) {
+  const registry = 'web/src/routePages.ts';
+  assert.ok(importers.get(registry)?.has('web/src/App.tsx'), 'expected App to import the route registry at runtime');
+  const registryPages = [...importers]
+    .filter(([file, owners]) => file.startsWith('web/src/pages/') && owners.has(registry) && routePages?.has(file))
+    .map(([file]) => file);
+  assert.ok(registryPages.length > 0, 'expected the route registry to import at least one page');
+  const directPages = [...importers]
+    .filter(([file, owners]) => file.startsWith('web/src/pages/') && owners.has('web/src/App.tsx'))
+    .map(([file]) => file);
+  return [...new Set([...registryPages, ...directPages])];
+}
+
+test('direct App pages cannot hide a disconnected or empty route registry', () => {
+  const fixtures = [
+    {
+      sources: { ...LAZY_CONSOLE, 'web/src/App.tsx': CONSOLE['web/src/App.tsx'] },
+      error: /expected App to import the route registry at runtime/,
+    },
+    {
+      sources: {
+        ...LAZY_CONSOLE,
+        'web/src/App.tsx': `${LAZY_CONSOLE['web/src/App.tsx']} ${CONSOLE['web/src/App.tsx']}`,
+        'web/src/routePages.ts': 'export const pages = [];',
+      },
+      error: /expected the route registry to import at least one page/,
+    },
+  ];
+  for (const { sources, error } of fixtures) assert.throws(() => discoverRoutedPages(graphOf(sources)), error);
+  assert.deepEqual(new Set(discoverRoutedPages(graphOf(LAZY_CONSOLE))), new Set([
+    'web/src/pages/SystemPage.tsx', 'web/src/pages/ApiKeysPage.tsx', 'web/src/pages/UnmappedPage.tsx',
+  ]));
+});
+
+test('registry helpers do not become discovered route pages through a directory rule', () => {
+  const helper = 'web/src/pages/agent/helper.ts';
+  const graph = graphOf({
+    ...LAZY_CONSOLE,
+    [helper]: 'export const value = 1;',
+    'web/src/routePages.ts': `${LAZY_CONSOLE['web/src/routePages.ts']} export const helper = () => import('./pages/agent/helper');`,
+  });
+  assert.ok(!discoverRoutedPages(graph).includes(helper));
+});
+
 const realGraph = buildImporterGraph();
 
 test('every local import in the console resolves', () => {
@@ -173,8 +372,7 @@ test('every page the router loads has a scenario rule', () => {
   // Without one, any change that reaches the page selects the whole catalog. Add a
   // rule to SCENARIO_PATHS in check-ui-plan.mjs naming the scenarios that load its
   // route - or `scenarios: []` when no probe loads it.
-  const routed = [...realGraph.importers].filter(([, importers]) => importers.has('web/src/App.tsx')).map(([file]) => file)
-    .filter((file) => file.startsWith('web/src/pages/'));
+  const routed = discoverRoutedPages(realGraph);
   const unnamed = routed.filter((file) => planScenarios([file], ALL, { ...realGraph, isAdditionOnly: () => false }).ids.length === ALL.length);
   assert.deepEqual(unnamed, []);
 });

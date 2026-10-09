@@ -18,7 +18,6 @@ import {
   operationQuestions,
   pendingOperationID,
   replaceableTurnID,
-  formatDuration,
   groupCapabilities,
   parseAgentTarget,
   turnParts,
@@ -82,13 +81,6 @@ check('an unverified write is reported as uncertain, not as a plain failure', ()
   // A turn stored after any budget refusal carries this code; it is not a gateway outage.
   assert.equal(failureKey('budget_exceeded'), 'agent.error.budget');
   assert.equal(failureKey('something_new_from_a_newer_server'), 'agent.error.gateway');
-});
-
-check('a duration is one number and one unit', () => {
-  assert.equal(formatDuration(420), '420ms');
-  assert.equal(formatDuration(4200), '4.2s');
-  assert.equal(formatDuration(72_000), '1m 12s');
-  assert.equal(formatDuration(Number.NaN), '-');
 });
 
 check('a stored turn reports its own elapsed time and nothing while it runs', () => {

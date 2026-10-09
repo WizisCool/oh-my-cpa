@@ -4,7 +4,7 @@ import type { AppendMessage, ThreadMessageLike } from '@assistant-ui/react';
 import type { RunFrame } from '../../agent/runReducer';
 import type { Conversation, Presentation, Trace, Turn, TurnPart } from '../../agent/types';
 import { getAppConfig } from '../../types/config';
-import { extractThinking } from '../playground/state';
+import { extractThinking } from '../../utils/thinking';
 import { ASK_QUESTION, turnParts } from './state';
 
 /**

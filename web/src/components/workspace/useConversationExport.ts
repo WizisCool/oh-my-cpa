@@ -5,8 +5,7 @@ import { capabilityTitle } from '../../i18n/capabilities';
 import { useToast } from '../feedback';
 import { getTimeZone } from '../../utils/time';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { failureKey, formatDuration, isKnownTurnStatus } from '../../pages/agent/state';
-import { playgroundErrorKey } from '../../pages/playground/errors';
+import { failureKey, formatDuration, isKnownTurnStatus, playgroundErrorKey } from './conversationLabels';
 import type { ConversationSnapshot } from '../../agent/conversationSnapshot';
 import type { SnapshotLabels } from '../../agent/conversationHtml';
 

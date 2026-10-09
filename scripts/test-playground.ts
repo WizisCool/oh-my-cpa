@@ -1,7 +1,8 @@
+import { createID as sharedCreateID } from '../web/src/utils/ids';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  actualRequest, applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, extractThinking,
+  actualRequest, applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS,
   hasCustomParameters, hasOmittedImage, inspectRequest, effectiveModel, MAX_EVENTS, parametersFromSession,
   parsePlaygroundSession, playgroundUserAgent, readCustomBody, retriedTurn, sanitizeTurnsForStorage, sessionDocument,
   STORED_IMAGE_URL_LIMIT, usageLink,
@@ -31,25 +32,6 @@ test('thought events accumulate in turn.thought', () => {
   turn = applyEvent(turn, { type: 'thought', content: 'step 2.' });
   assert.equal(turn.thought, 'thinking step 1; step 2.');
   assert.equal(turn.reply, '');
-});
-
-test('extractThinking parses inline <think> tags', () => {
-  const inline = '<think>I need to solve X</think>The answer is 42';
-  const extracted = extractThinking(inline);
-  assert.equal(extracted.thought, 'I need to solve X');
-  assert.equal(extracted.reply, 'The answer is 42');
-  assert.equal(extracted.isThinking, false);
-
-  const partial = '<think>Still thinking';
-  const partialExtracted = extractThinking(partial);
-  assert.equal(partialExtracted.thought, 'Still thinking');
-  assert.equal(partialExtracted.reply, '');
-  assert.equal(partialExtracted.isThinking, true);
-
-  const normal = 'Direct answer';
-  assert.equal(extractThinking(normal).thought, undefined);
-  assert.equal(extractThinking(normal).reply, 'Direct answer');
-  assert.equal(extractThinking(normal).isThinking, false);
 });
 
 test('bounded diagnostic events do not truncate the actual answer', () => {
@@ -170,14 +152,6 @@ test("a turn without an end stays open-ended however long ago it started", () =>
   const params = new URL(link!, "http://local").searchParams;
   assert.equal(params.has("to"), false);
   assert.equal(readEventQuery(params).from, 2_000_000 - 5 * 60_000);
-});
-
-test('playground IDs do not require a secure-context randomUUID', () => {
-  assert.equal(createID('turn', { randomUUID: () => 'native-id' }), 'native-id');
-  const randomValuesID = createID('turn', { getRandomValues: bytes => bytes.fill(7) });
-  assert.match(randomValuesID, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  const fallback = createID('turn', {});
-  assert.match(fallback, /^turn-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/);
 });
 
 test('playground session preference parses all configuration and turns safely', () => {
@@ -442,4 +416,8 @@ test('a turn whose image did not survive storage is recognised as unreplayable',
   assert.equal(hasOmittedImage(turn), false);
   turn.request.messages[0].content.push({ type: 'image_url', image_url: { url: '<image omitted>' } });
   assert.equal(hasOmittedImage(turn), true);
+});
+
+test('the Playground compatibility export shares the neutral ID generator', () => {
+  assert.equal(createID, sharedCreateID);
 });

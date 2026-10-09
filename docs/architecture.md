@@ -909,6 +909,27 @@ Query for server state.
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, direct settings action and an overflow menu for safe external links and confirmed removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys and CPA's `store` install record carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pluginRuntime.ts` waits for the gateway to load or unload a switched plugin. `pages/PluginsPage.tsx` owns the tab, which is the path (`/plugins`, `/plugins/store`, `/plugins/settings`), and reads the store only once its tab is opened. `pluginPages.ts` turns the plugin list into the pages plugins registered; `AppLayout` lists them in the navigation's Plugins group, reading the plugin list once per shell, and `pages/PluginPageHost.tsx` shows one at `/plugin-pages/<id>/<n>` in a frame on the plugin host, inside a console-written parent document that states the colour mode as `data-theme` (ADR 0060) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048) and the export of selected requests (`requestSelection.ts` decides the selection and what a redaction withholds, `requestSheetModel.ts` lays the image out as data, `requestExportJson.ts` builds the JSON document, and only `requestSheetPainter.ts` touches a canvas - so what an export can contain is asserted without a browser), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
 
+OAuth workspace sorting constructs its numeric/base-sensitive name collator lazily
+within one sort invocation, resolving the runtime default locale afresh. Numeric
+ranking, fallback defaults and stable name ties are unchanged. Do not share this
+comparator with `components/authFiles/authFileLogic.ts` blindly: that legacy list's
+numeric-ranking ties use a different plain-name comparison policy. The differential
+oracle and opt-in benchmark are documented in `docs/testing.md`.
+
+Shared conversation primitives do not depend on a page at runtime: `utils/ids.ts`
+owns one fallback ID counter, `utils/thinking.ts` parses inline thinking,
+`types/requestModel.ts` reads the effective custom-body model, and
+`components/workspace/imageAttachments.ts` owns admission, decoding and bounded
+Agent image encoding. Playground state re-exports these contracts for compatibility;
+Agent and portable exports import the leaves directly. Type-only transcript adapters
+may name Playground turns without loading its state.
+`components/workspace/conversationLabels.ts` owns status admission, separate Agent/
+Playground error vocabularies and duration presentation for the shared export hook.
+Page modules retain their public exports, while shared workspace runtime modules
+must not import page internals.
+The runtime-graph guard in `scripts/conversation-boundaries.test.mjs` prevents
+reversing these dependencies.
+
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message
 (or the console's localized demo refusal), and a transport `Error`'s message is the useful
@@ -2324,6 +2345,17 @@ that partial outcome rather than either success or failure.
 
 ## 12. Test layering
 
+Local browser impact analysis follows transpiled runtime imports, preserving eager
+and lazy edge kinds. The central `web/src/routePages.ts` registry is a boundary only
+for mapped literal lazy-page imports. Page identity is discovered from App's
+`createBrowserRouter` route elements through the registry's exported `React.lazy`
+components and their literal `createPageLoader` imports, not from directory or
+filename prefixes. Other registry imports, including helpers in page directories,
+registry changes and unrecognized wiring remain full-catalog changes. Real-tree
+planner tests independently require App to import the registry and the registry's
+proven page set to be nonempty. Full CI coverage does not depend on local selection.
+See `docs/plans/architecture-governance.md` for the measured audit and staged work.
+
 The suite is split by what each layer can actually prove, not by which runner is
 fashionable. `docs/testing.md` is the working guide (where a new test goes, how it is
 registered, what to run when); this section records why. The rule is **Browser Everything → Browser Only Where Browser
@@ -2391,8 +2423,9 @@ The UI planner narrows on evidence only:
   chains that import it. A chain that reaches the shared layer, or a routed page
   without a rule, selects everything; so does any unresolved local import, an asset
   the graph cannot see (a CSS `url()`, `web/index.html`), a dependency or Vite change.
-  `scripts/ui-impact.test.mjs` requires every routed page to have a rule and the real
-  tree to resolve completely.
+  `scripts/ui-impact.test.mjs` separately requires the App-to-registry edge, nonempty
+  registry page discovery, every routed page's scenario rule and complete resolution
+  of the real tree. Directory helpers and incomplete route discovery are negative cases.
 - **Translation additions.** A catalog edit whose every pre-existing entry and every
   line outside the catalog objects is unchanged selects nothing: a new entry is only
   rendered by code that references it, which the planner places separately.

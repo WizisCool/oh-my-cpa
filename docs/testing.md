@@ -68,6 +68,19 @@ Rules that keep the suite fast and honest:
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
+### Shared conversation claims
+
+`scripts/test-conversation-primitives.ts` owns ID fallback, inline-thinking and
+model-override permutations plus image admission before browser decoding. Existing
+Playground ID and thinking assertions moved intact into that suite; the Playground
+suite still checks its compatibility export and request integration. Browser probes
+retain real FileReader/Image/canvas admission, normalized uploads, streaming,
+reasoning layout, attachments, export, scroll and focus claims. The automatically
+discovered `scripts/conversation-boundaries.test.mjs` checks the emitted runtime
+import graph, with eager/lazy negative fixtures and a nonempty real graph; type-only
+adapters do not create a runtime dependency. See the claim/evidence ledger in
+`docs/plans/architecture-governance.md`.
+
 ### Container and release acceptance
 
 `scripts/release-plan.test.mjs` tests tag/package validation, image identity, numeric
@@ -186,6 +199,23 @@ run:
 | New console read or response shape | `pnpm demo:generate` (pins `TZ=UTC` for deterministic deployment metadata), review the diff, commit the dataset (see `docs/ops/cloudflare-demo.md`) |
 
 ## 3. What to run, and when
+
+The UI runtime graph distinguishes literal dynamic imports from eager imports. Mapped
+pages loaded lazily by `web/src/routePages.ts` end their reachability chain at that
+registry, just as direct routed pages end at App. The graph discovers page identity
+from imported JSX components in App's `createBrowserRouter` route elements, following
+the registry's exported `React.lazy` bindings to literal `createPageLoader` imports.
+It does not maintain another page list or infer page identity from a directory rule.
+A different loader/router recipe requires evidence and negative cases in the same
+change; unrecognized syntax widens rather than being guessed. The registry itself,
+page-directory helpers, other imports of the same resolved module, mixed eager/lazy
+edges, unmapped pages, unreadable sources and missing route/edge evidence still widen
+to all scenarios. `scripts/ui-impact.test.mjs` independently requires the App-to-registry
+runtime edge and a nonempty proven registry-page set, then checks every page's scenario
+rule. Negative fixtures ensure directly imported App pages cannot hide a disconnected
+or empty registry, and a mapped directory cannot certify a helper as a route page.
+The plugin host maps to the existing plugin browser scenarios; built native credential,
+frame and write contracts remain in cross-stack acceptance.
 
 The local fast lane passes changed files to `scripts/logic-plan.mjs`, which follows
 relative runtime imports into automatically discovered suites. Unknown/unowned
@@ -854,3 +884,30 @@ page-title header. Demo acceptance then opens the capability drawer and requires
 capability before closing it. `scripts/demo-readiness.test.mjs` pins the dedicated identity,
 missing content and loading/hidden negative cases while retaining the ordinary-page heading
 checks.
+
+### Opt-in sorting measurements
+
+`scripts/test-oauth-sort.ts` compares every OAuth workspace sort with the frozen
+baseline oracle in `scripts/fixtures/oauth-sort.ts`, including empty/singleton inputs,
+Unicode/numeric/equivalent labels, missing numeric defaults, stable ties, unknown-key
+fallback and immutable input/record identity. These are logic claims; OAuth browser
+scenarios retain responsive rows, filters, file actions, quota refresh and authorization
+wiring. `scripts/benchmark-oauth-sort.ts` is opt-in, not discovered as a test. Run it
+with `node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/benchmark-oauth-sort.ts`;
+it alternates both implementations on the same fixtures and reports warm median/p95
+plus process/locale/resource metadata without timing thresholds in correctness gates.
+Add `--expose-gc` for a separate post-GC retained-heap sample; GC never runs inside
+the timed comparisons.
+
+
+### Conversation presentation ownership
+
+`scripts/test-conversation-labels.ts` owns status admission, separate Agent/Playground
+failure keys, duration thresholds/rounding and the identity of compatibility exports.
+The duration cases formerly in the Agent workspace suite move here without removing
+assertions; page-specific stopped-turn/failure semantics remain there. The runtime
+graph guard in `scripts/conversation-boundaries.test.mjs` forbids shared workspace
+modules from importing page internals, with eager/lazy negative and erased-type cases
+and nonempty real consumers. The existing Agent/Playground probes use `scripts/acceptance/probes/conversation-export.mjs` to
+own actual downloads, standalone HTML/image rendering, controls, privacy, browser
+encoding and responsive behavior. None of these browser claims move to Node.
