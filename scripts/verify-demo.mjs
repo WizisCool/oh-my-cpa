@@ -148,6 +148,15 @@ async function startLocalDemo() {
 const NAVIGATION_TIMEOUT_MS = 30_000;
 /** A replay is paced like the run it was recorded from, so it is given longer than a navigation. */
 const REPLAY_TIMEOUT_MS = 60_000;
+/**
+ * Playwright's service-worker block reads `navigator.serviceWorker` in every frame, and the
+ * recorded run draws its generated interface in an opaque sandbox, which refuses the property.
+ * That refusal is the harness looking, not the console failing: the draft is built and then
+ * rebuilt once the appearance settles, and the validated component is built and then rebuilt with
+ * its icons. Four sandbox documents is what this run tolerates before a frame is unexpected.
+ */
+const SERVICE_WORKER_PROBE = /Failed to read the 'serviceWorker' property from 'Navigator'/;
+const SERVICE_WORKER_PROBE_ALLOWANCE = 4;
 
 async function main() {
   // A local server is only started when no deployment was named, and it needs the
@@ -158,6 +167,7 @@ async function main() {
   const consoleErrors = [];
   const failedRequests = [];
   const failures = [];
+  let serviceWorkerProbes = 0;
   try {
     browser = await launchBrowser(chromium);
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
@@ -166,13 +176,20 @@ async function main() {
     // pushed that unsaved choice on load would be refused by the Worker on every page, and the
     // refusal is an API error this run already fails on.
     await context.addInitScript(() => {
+      // `addInitScript` runs in every frame, and a frame the console sandboxes has no origin and
+      // therefore no storage to seed; reading it there would raise against the harness itself.
+      if (!/^https?:$/.test(location.protocol)) return;
       window.localStorage.setItem('omc-theme', JSON.stringify({ mode: 'light', dirty: true }));
     });
     const page = await context.newPage();
     page.on('console', (message) => {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
-    page.on('pageerror', (error) => consoleErrors.push(String(error)));
+    page.on('pageerror', (error) => {
+      const message = String(error);
+      if (SERVICE_WORKER_PROBE.test(message)) { serviceWorkerProbes += 1; return; }
+      consoleErrors.push(message);
+    });
     page.on('response', (response) => {
       const url = new URL(response.url());
       if (url.origin === new URL(BASE).origin && response.status() >= 400) {
@@ -258,8 +275,12 @@ async function main() {
     console.error(`  FAIL the console logged errors:`);
     for (const error of [...new Set(consoleErrors)].slice(0, 10)) console.error(`       ${error}`);
   }
+  if (serviceWorkerProbes > SERVICE_WORKER_PROBE_ALLOWANCE) {
+    console.error(`  FAIL ${serviceWorkerProbes} frames refused the harness service-worker probe, more than the sandboxed figures explain`);
+  }
 
-  if (failures.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0) {
+  if (failures.length > 0 || failedRequests.length > 0 || consoleErrors.length > 0
+    || serviceWorkerProbes > SERVICE_WORKER_PROBE_ALLOWANCE) {
     process.exitCode = 1;
     return;
   }
