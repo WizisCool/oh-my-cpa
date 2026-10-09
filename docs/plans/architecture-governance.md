@@ -794,3 +794,105 @@ costs. For a focused same-code comparison, select the four IDs above from
 checker callbacks as well as failures. Do not compare simultaneous runs or reuse a
 context to make isolation appear cheaper. Controlled logs, timing JSON, GNU time
 records and process-tree samples are retained under `tmp/phase-two` locally.
+
+### Production artifact compatibility and verification status
+
+There is no production source diff against the merged base in `web/src` or Go
+implementation (the only new Go file is a test). Runtime dependency declarations,
+styles, DTOs, router/auth behavior, migrations and persistence code are unchanged.
+The baseline `bundle-report` artifact from successful master run `37938787933`
+certifies the exact merge SHA; the candidate build has the same 307 JS/CSS filenames
+and SHA-256 hashes and identical metrics. Initial JS remains 1,943,293 raw /
+628,346 gzip bytes, initial CSS 71,866 / 13,838 bytes and total JS 12,002,165 /
+3,600,050 bytes. Loading-boundary/ceiling and exact-base growth checks pass. This
+preserves loading/payload cost; it is not a measured product CPU/latency improvement.
+
+The first full local orchestration completed strict toolchain, SPA synchronization,
+all static groups (48.68 s), history/worktree secret scans, bundle boundaries,
+four actual Chromium harness cases (8.11 s command) and all 376 built cross-stack
+checks (130.51 s command). During probes its supervising shell received SIGTERM
+(exit 143), without a scenario failure; 56 completed records were passing. That
+interrupted invocation is not a passing `verify:full` command and supplies no valid
+whole-command GNU timing. An orphaned Vite listener owned by this invocation was
+identified by PID/path/start time and terminated; an unrelated user Vite server was
+left alone. A first resumption correctly refused the occupied port, preserving the
+fail-closed listener-ownership guard. The demo independently passed all 18 routes
+in 19.97 s command wall. The resumed complete probe lane passes all 65 scenarios in 452.9 s runner /
+455.01 s command wall, 327.63/146.86 s user/system CPU and 626,088 KiB maximum child
+RSS. Its structured timings contain exactly 65 unique passing IDs. Completed,
+unchanged lanes are reused as the agent contract requires; all local full-suite
+lanes now have passing evidence, but the interrupted orchestration is still not
+called a passing monolithic command. Hosted exact-head verification remains the
+next completion obligation.
+
+Local CodeRabbit CLI 0.9.0 was verified against its official CLI overview before
+use. The review covered all tracked/untracked phase changes against the merged SHA,
+after a clean secret scan. Its one minor setup-rendezvous issue was fixed with an
+independent Chromium case; the focused follow-up returned zero concrete findings
+but reported an unverified-findings warning. Reviewer output is advisory evidence,
+not proof of behavior or a replacement for the full gates.
+
+### Representative frontend compatibility and feedback evidence
+
+Baseline/current captures use the same synthetic Agent, Playground and OAuth
+fixtures, 1440×900 desktop and 320×850 phone viewports, the actual drawers and
+font/image readiness. The baseline comes from an archive of the exact merge SHA;
+the candidate uses the adopted two-context schedule. Ten representative captures
+preserve geometry and content. Six images are pixel-identical; four contain only
+3/6/13/13 differing pixels, with maximum channel delta one (out of 255), at
+rasterized boundaries. They are not claimed byte-identical. No threshold, mask,
+product style or existing assertion was changed to obtain these observations.
+The first exploratory capture did not await image decoding and showed incomplete
+baseline OAuth icons; it is not the compatibility comparison. The corrected
+captures explicitly await fonts and all image decodes before taking screenshots.
+The unchanged source and all 307 production JS/CSS hashes plus full real-browser
+geometry/interaction checks provide independent compatibility evidence. Neither
+screenshots nor passing tests alone certify every possible visual state.
+
+A representative neutral conversation-label edit was measured by feeding its exact
+file path into the exported production fast planner and executing the unchanged
+`CHECK_COMMANDS` (including affected logic arguments). Six actual affected checks
+pass in 13.35 s whole-command wall, 39.65/4.58 s user/system CPU, maximum child RSS
+631,588 KiB. A contract-test-only plan selects types, all frontend integration and
+repository self-tests: three checks pass in 22.51 s wall, 57.44/6.47 s CPU,
+606,208 KiB child RSS. These are real checks on the current implementation, not
+stand-in delays; the planner-input benchmark is not mislabeled as a changed-worktree
+CLI invocation. They are warm-toolchain local samples, not universal 10–30-second
+guarantees, cold-install claims or faster product runtime. No Chromium/build/fake CPA
+is selected. Existing shared production paths can still widen conservatively; full
+browser/CI ownership remains independent of these plans.
+
+The component layer adds an integration obligation to the frontend static lane.
+It does not replace Node logic suites or reduce existing browser claims in this
+pilot. Future migration should move only a demonstrated non-engine claim, retain
+representative wiring and explicitly update this ledger with negative fault evidence.
+The current speed gain comes from less browser waiting and stronger inexpensive
+state/contract diagnostics, not counting fewer assertions as success.
+
+A separate actual `pnpm test:fast --plan` / `pnpm test:fast` worktree measurement
+uses a temporary whitespace edit to the contract test alongside this report edit;
+the test bytes are restored afterwards. The CLI selects types/integration/docs/self
+as a union and passes four checks in 23.07 s wall (57.95/6.46 s CPU, 618,884 KiB
+maximum child RSS). This verifies registration and real CLI execution without
+claiming that whitespace is a new business behavior or omitting the report check.
+
+### Remaining evolution and explicit exclusions
+
+- Extend the small independent wire corpus only where drift risk is demonstrated,
+  next considering an Agent journal/AG-UI projection or one OAuth provider family.
+  Preferences are a real end-to-end contract pilot, not a certification of every API.
+- Retain existing family-specific safe DTOs, Agent/Playground adapters and gate/lock
+  ownership. No measured production hot path justifies merging handlers, splitting
+  the client mechanically, changing poll cadence or introducing another cache.
+- Profile a stable engine-readiness/transform candidate before further reducing
+  browser latency. The current queue trades additional memory/CPU for less waiting;
+  more workers and generic wait reductions are not approved optimizations.
+- External termination of a long supervising process can still leave an owned dev
+  listener. Diagnose exact PID/port ownership before cleanup; never kill a user's
+  unrelated server or use a different listener's readiness as evidence.
+- Keep component cases explicitly drained and test-only imports outside the runtime
+  graph. Simulated DOM remains inappropriate for geometry, painting, focus, image
+  encoding, navigation lifecycle, real streams or transport cancellation.
+- The existing `formatDuration(119600)` carry presentation remains separate visible
+  bug scope requiring user authorization. No incompatible product change is needed
+  or implemented by this phase.
