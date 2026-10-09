@@ -112,3 +112,16 @@ test('Agent readiness requires its welcome identity and content, not sidebar chr
     else globalThis.document = original;
   }
 });
+
+
+test('dashboard readiness waits for both activity and health sources', () => {
+  const dashboard = DEMO_ROUTES.find(route => route.path === '/dashboard');
+  assert.deepEqual(dashboard.reads, [
+    '/management/dashboard',
+    '/management/dashboard/models',
+    '/management/dashboard/token-heatmap',
+    '/management/overview',
+    '/management/dashboard/providers',
+  ]);
+  assert.equal(dashboard.content, '.dashboard-activity-row .heatmap-grid');
+});
