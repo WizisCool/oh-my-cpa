@@ -290,3 +290,202 @@ The shared presentation leaf still selects all 13 conversation scenarios. Narrow
 is ownership-based, not a blanket reduction in coverage. These reversible moves
 follow the existing module boundary contract and need no replacement state framework
 or irreversible architecture decision.
+
+## Runtime and resource audit conclusion
+
+Current source supports retaining the modular monolith rather than creating new
+service boundaries. `internal/repository/db.go` owns the SQLite WAL pool and gated
+driver; independent pools share one gate per DB. `internal/repository/usage_performance_test.go` already
+provides opt-in seeded benchmarks, and query/result caches and pricing attribution
+have their own existing tests. No backend, SQL, pool, lock, migration or transport
+implementation changes are needed for the measured frontend/planner findings.
+
+An isolated backend reference run used:
+
+```sh
+go test ./internal/repository -run '^$' -bench 'BenchmarkUsage(Status|Span)$' -benchmem -benchtime=100ms -count=3
+```
+
+Medians of three samples on the audit host:
+
+| Read | 1,000 rows | 100,000 rows | Allocations per operation |
+| --- | ---: | ---: | --- |
+| Usage pipeline status | 0.201 ms | 12.497 ms | 2,176 bytes / 56 allocations |
+| Usage time span | 0.037 ms | 0.038 ms | 784 bytes / 19 allocations |
+
+Fixture creation is excluded from timed operations; the command itself takes
+66.04 s and maximum individual-child RSS is 220,644 KiB, including setup. These
+are workload references, not before/after improvements: backend source is unchanged.
+Status cost grows with row count while indexed span lookup stays approximately
+flat. Consider a further status-query profile only with a real workload/latency
+budget; introducing materialized counters would change write/recovery complexity.
+
+Frontend inspection found existing ownership mechanisms worth keeping:
+
+- `web/src/pages/oauthManagement/OAuthManagementPage.tsx` memoizes provider choices, projection, filters/sort and
+  pagination. The measured sort runs when its record/filter/sort inputs change;
+  no render cadence or query keys need to change. Its file refresh, quota freshness
+  and provider-logo reads retain their existing policy.
+- `web/src/pages/DashboardPage.tsx` separates full-window reads and resolution-paced tail reads,
+  refuses a tail while the previous window is placeholder data and avoids polling
+  closed windows. Flattening these reads or changing caching would change freshness
+  semantics, not merely improve performance.
+- `web/src/pages/oauthManagement/useOAuthSessions.ts` keeps timers and generation guards outside drawer lifetime.
+  `web/src/pages/playground/usePlaygroundRun.ts` and `web/src/pages/agent/useAgentRun.ts` retain abort ownership, bounded publish
+  schedules and replay/reconnect safeguards. No effect dependencies, timers,
+  subscriptions or cancellation order changed.
+- `web/src/components/providers/useProviderManagement.ts` legitimately coordinates one form,
+  validation, approval/mutation and refresh mechanism. Its size alone is not evidence
+  that splitting state from writes improves maintainability. Pure provider policies
+  and payload tests remain the lower-layer decision owners.
+
+## Representative development feedback
+
+For the same whitespace-only Playground-state edit in isolated detached worktrees,
+with identical dependencies and the same five selected fast checks:
+
+| Run | Before primitive extraction | After primitive extraction |
+| --- | ---: | ---: |
+| Cold incremental type cache | 25.63 s | 25.84 s |
+| Warm incremental type cache | 10.18 s | 10.83 s |
+| Warm maximum individual-child RSS | 593,992 KiB | 592,404 KiB |
+
+The before worktree is stage 1 (`15a4180`); the after worktree is stage 2 (`4daec6a`).
+This experiment isolates primitive ownership rather than attributing selector repair
+or toolchain/cache warming to a runtime speedup. There is no meaningful fast-lane
+speedup here: warm feedback already meets the 10–30 s target and cold type checking
+still dominates. New audit/test/benchmark files conservatively select more suites;
+normal page edits retain affected selection.
+
+The after worktree's actual `pnpm check:ui` selects three Playground/mobile scenarios
+and passes in 90.9 s runner / 96.72 s command wall, 70.28/26.41 s user/system CPU,
+maximum individual-child RSS 516,692 KiB. Baseline selection incorrectly included
+all 65 scenarios (731.49 s measured full command); shared conversation changes still
+select 13 and require about 175 s on this host. The improvement is avoiding unrelated
+work, not making every browser assertion cheaper. Browser-specific edits are not
+claimed to meet the 10–30 s logic target.
+
+## Residual risks and next decisions
+
+- Full local/CI catalogs retain every browser claim and their existing cost. Their
+  geometry, image decoding, focus, scroll, StrictMode and lifecycle assertions cannot
+  be certified by a simulated DOM. Profile setup versus scenario work and runner
+  capacity before changing orchestration; context reuse, retries and skips are not
+  acceptable shortcuts.
+- The real import graph covers transpiled literal imports, with conservative widening
+  for unknown/unresolved/shared/eager paths. Computed or new loading mechanisms require
+  corresponding evidence and negative cases. The full CI catalog remains independent
+  of local selection, so narrowing is not a merge gate omission.
+- API-client and other genuine global changes still widen plans. Consider domain
+  entrypoints only with a measured local feedback cost and unchanged transport/auth/
+  error behavior. Do not introduce duplicate clients or a new caching framework.
+- Keep the shared conversation leaf guard and existing lowest-layer claim owners.
+  Add a component integration environment only for a concrete wiring claim with
+  measurable savings, not as a uniform framework replacement.
+- The ordinary facade DTO allowlists, Plugin Host exception, request shapes, permission
+  gates, schema, offline resources and `/omc` subpath remain unchanged. Source proof,
+  differential logic, real browser/visual evidence and production checks together
+  establish compatibility within covered fixtures, not a claim about all future
+  workloads or every supported host/browser combination.
+- Duration carry normalization is the one identified user-visible repair proposal.
+  It remains unchanged and requires a separate decision; no incompatible optimization
+  was needed or implemented in this work.
+
+## Reproduction and rollback
+
+Inspect plans without launching a browser using `pnpm test:fast --base <ref> --plan`
+and `pnpm check:ui --base <ref> --plan`. For a typical edit, use the fast lane first;
+then use the selected browser lane when the claim needs Chromium. Build/harness/workflow
+changes use `pnpm verify:full`, while PR CI always owns complete catalog coverage.
+Run the opt-in sorting benchmark with the command in `docs/testing.md`; verify locale
+via `LC_ALL` and the reported effective locale, not by assuming a `LANG` override wins.
+
+Local raw evidence remains in `tmp/architecture-governance`: gate logs/resources,
+per-scenario timings, baseline/final screenshot and DOM captures, actual export diffs,
+paired Node/Chromium sort samples, negative-test/mutation output, artifact comparisons
+and hosted run metadata. These ignored artifacts are evidence, not new product assets.
+Existing Agent/Playground browser probes reproduce downloads and standalone reader
+screenshots under `tmp/conversation-export`; existing fixture routes isolate all API
+reads from operator deployments. Durable results and limitations are recorded here.
+
+Each implementation stage is independently revertible with Git. Page compatibility
+exports keep callers stable; no migration, persisted-format rewrite or deployment
+rollback is involved. If reverting a leaf extraction, revert its associated boundary
+and claim-owner tests together. Do not revert only a test guard to permit a broken
+boundary. This task introduced no irreversible architectural choice requiring a new
+ADR; ADRs 0032/0068 and the existing leaf-module contract remain authoritative.
+
+## Hosted before/after evidence
+
+The authorized Draft PR is number 166 on `refactor/architecture-governance`, targeting
+`master`. No merge, tag or publication was executed. Successful after run
+`37926750823` tested branch head `2baa4f80ce9bfb6d160b0097e178f6273c7909af`
+(checkout/build revision is GitHub's synthetic PR merge
+`2e90f7026d4d1386fd59fc8ea9594a87c2e8426f`). It ran on 2026-10-09
+11:55:38–12:00:01 UTC. Baseline run `37915661696` is the earlier successful push
+run at the baseline SHA; these are single observations of different hosted runners
+and event/cache states, not a controlled throughput benchmark.
+
+| Wall time | Baseline run | After implementation run |
+| --- | ---: | ---: |
+| Workflow elapsed | 278 s | 263 s |
+| Static job | 96 s | 117 s |
+| Built-browser job | 269 s | 259 s |
+| Probe shards 1 / 2 / 3 | 225 / 190 / 251 s | 223 / 163 / 248 s |
+| Aggregate probe check | 2 s | 3 s |
+
+All after checks succeed. Logs show 376 built-browser checks, all 65 dev-server
+scenarios across 22/22/21 shards and 18 demonstration routes, along with bundle,
+browser-harness fault checks, secret scans and clean generated state. Static is
+21 s slower; no reliable overall CI speedup is inferred from one before/after pair.
+The main development improvement remains correct local reachability and domain
+ownership, while full CI verification costs are deliberately preserved.
+
+Hosted bundle artifacts compare exact baseline revision to the PR build. Initial
+JavaScript changes from 1,943,270 to 1,943,293 raw bytes (+23), gzip 628,348 to 628,346
+(-2). Initial CSS is unchanged at 71,866 raw / 13,838 gzip bytes. Total JavaScript
+changes from 12,002,434 to 12,002,165 raw (-269), gzip 3,600,001 to 3,600,050 (+49).
+Local baseline/final artifact comparison confirms all 28 CSS files are byte-identical
+and retains 279 JavaScript files. These tiny placement differences are not a loading
+or bundle-size performance improvement. Lazy loading/anomaly gates pass.
+
+The run retains bundle-report and three structured probe-timing artifacts through
+2026-11-08. A final documentation-only evidence commit will generate another full
+CI run; the measured implementation run above stays identified rather than continually
+rewriting this table after every documentation update.
+
+
+## Commit ledger
+
+| Commit | Independently reversible stage | Synchronized documents |
+| --- | --- | --- |
+| `15a418040d2f881502e63fe9df20cf8c28d57a6b` | Conservative lazy-route selection and non-vacuous graph evidence | `AGENTS.md`, `docs/architecture.md`, `docs/testing.md`, this ledger |
+| `4daec6aae10078422e5d655a614c7f31dbbd3b1a` | Page-independent conversation primitives and claim ownership | `docs/architecture.md`, `docs/testing.md`, this ledger |
+| `9cd1f899d5f9bd5efe2fdb18511ee3d1d2160ff9` | Measured per-invocation OAuth locale comparison setup | `docs/architecture.md`, `docs/testing.md`, this ledger |
+| `2baa4f80ce9bfb6d160b0097e178f6273c7909af` | Shared export presentation policies and page-boundary guard | `docs/architecture.md`, `docs/testing.md`, this ledger |
+
+The final evidence commit changes only this ledger. Its hash is reported with the
+completed delivery; it does not rewrite the tested implementation commits.
+
+## Final local gate
+
+At implementation head `2baa4f80ce9bfb6d160b0097e178f6273c7909af`,
+`pnpm verify:full` succeeds: strict toolchain, production build, full static gates,
+worktree/history secret scans, bundle loading/anomaly checks, real-browser harness
+fault injection, 376 built-browser checks, all 65 probes and 18 demo routes. It keeps
+the worktree clean. The final catalog retains every baseline scenario and assertion;
+73 automatically discovered logic suites pass.
+
+| Full local cost | Stage 1 after selector correction | Final implementation |
+| --- | ---: | ---: |
+| Command wall | 960.27 s | 984.21 s |
+| Probe runner | 706.3 s | 703.1 s |
+| User / system CPU | 585.44 / 184.58 s | 628.19 / 189.95 s |
+| Maximum individual-child RSS | 3,284,292 KiB | 3,309,256 KiB |
+
+Full local elapsed time is slightly higher; it has not been optimized away. Shared
+framework/bootstrap, static work and real-browser catalog costs remain. One run per
+revision is not evidence of a statistical regression or improvement; there is no
+large full-suite speedup claim. The strict host toolchain is Node 22.23.2, Go 1.27.1,
+pnpm 11.19.0 and Chromium 151.0.7922.34 (revision 1234). The performance wins demonstrated
+here are scoped selection, ownership isolation and OAuth comparator CPU cost.
