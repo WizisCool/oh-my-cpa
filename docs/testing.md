@@ -1002,7 +1002,8 @@ wall/CPU/memory trade-offs and retained failure ownership.
 refetch/reset state and cancellation; `internal/demo/demo_test.go` owns full-year synthetic
 traffic, idle-day distribution and whole-UTC-date recent-traffic protection, including non-midnight
 reference times and equivalent instants in other time zones. `scripts/check-demo.test.mjs` owns
-public recording privacy.
+public recording privacy. `scripts/test-agent-workspace.ts` owns send admission: target-free
+demo replay, required live targets, and approval blocking in both modes.
 Built `scripts/verify-demo.mjs` sends both examples: the Agent replay must settle its generated
 interface, while the Playground replay must settle its answer content. The Agent example and
 capability-directory actions use locale-independent identities; built acceptance exercises the

@@ -598,6 +598,7 @@ A **Custom Icon** is reusable, operator-owned static artwork in the current depl
 
 A demonstration replay is one localized recorded question folded by the production reducers,
 including reasoning, calls and generated UI. It is neither model inference nor a capability
-execution. Agent replay state lasts for the page lifetime. No operation identifier in a
-recording authorizes a live action. The activity fixture is a deterministic synthetic year
+execution. Replay needs no configured caller key or model; an open approval still blocks
+sending in both demo and normal mode. Agent replay state lasts for the page lifetime. No
+operation identifier in a recording authorizes a live action. The activity fixture is a deterministic synthetic year
 with normally distributed daily variation, quieter weekends and a small set of idle dates.

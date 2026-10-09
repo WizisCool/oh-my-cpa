@@ -113,6 +113,11 @@ export interface AgentTarget {
 export const AGENT_TARGET_PREFERENCE = 'agent_target';
 export const DEFAULT_AGENT_TARGET: AgentTarget = {};
 
+/** Local demo recordings need no inference target, but never bypass an open decision. */
+export function isAgentSendDisabled(isDemo: boolean, isFullyConfigured: boolean, isAwaiting: boolean): boolean {
+  return (!isDemo && !isFullyConfigured) || isAwaiting;
+}
+
 /** Reads the stored selector, keeping only the fields it may hold. */
 export function parseAgentTarget(raw: unknown): AgentTarget | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;

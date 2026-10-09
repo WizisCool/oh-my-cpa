@@ -45,7 +45,7 @@ import { QuestionPanel } from './interrupts/QuestionPanel';
 import { AgentAttachmentAdapter, splitAttachedFiles } from './attachments';
 import { useAgentThreadRuntime } from './runtime';
 import {
-  AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, failureKey, isAwaitingApproval, parseAgentTarget, pendingOperationID, replaceableTurnID,
+  AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, failureKey, isAgentSendDisabled, isAwaitingApproval, parseAgentTarget, pendingOperationID, replaceableTurnID,
 } from './state';
 import type { AgentTarget, Conversation, Operation } from './state';
 import { mergeLiveTurn } from './thread';
@@ -293,7 +293,7 @@ export function AgentPage() {
       return options;
     }, []),
     isDisabled: !session.data,
-    isSendDisabled: !isFullyConfigured || isAwaiting,
+    isSendDisabled: isAgentSendDisabled(isDemo, isFullyConfigured, isAwaiting),
     onRejected: React.useCallback((text: string, code: string) => {
       setRejection({ code, text });
     }, []),
@@ -641,7 +641,7 @@ export function AgentPage() {
                 inputLabel={t('agent.message')}
                 sendLabel={t(isRunning ? 'agent.queue.send' : 'agent.send')}
                 stopLabel={t('agent.stop')}
-                blockedReason={isAwaiting ? t('agent.operation.hint') : !isFullyConfigured ? t('conversation.target.choose') : undefined}
+                blockedReason={isAwaiting ? t('agent.operation.hint') : !isDemo && !isFullyConfigured ? t('conversation.target.choose') : undefined}
                 header={<>{approvalHint}{quote}</>}
                 chips={chips}
                 // The endpoint leads the foot, as in the Playground. A turn waiting on a decision

@@ -293,8 +293,9 @@ capability catalogue and the empty Agent session are exported from the real hand
 capabilities, their permissions and their descriptions. The Worker refuses capability
 invocation, session reset, Agent runs, operation decisions, secret submission and OAuth start.
 The browser offers one curated recorded example (ADR 0092), folded through the production
-reducers without making a model request or executing a capability. Its recorded receipts and
-local generated UI demonstrate the workspace; they are not current service observations or
+reducers without making a model request or executing a capability. Replay remains available
+when the key or model catalogue is empty; pending approval still blocks sending. Its recorded
+receipts and local generated UI demonstrate the workspace; they are not current service observations or
 approvals of live operations.
 
 Because the catalogue is part of the dataset's coverage, adding, renaming or re-describing

@@ -19,7 +19,7 @@ interface AgentSendOptions {
 interface AgentRuntimeOptions {
   conversation: Conversation | undefined;
   run: AgentRunControls;
-  /** Sending is refused (demo, no target, a decision open); typing stays possible. */
+  /** The page owns send admission; typing stays possible while sending is disabled. */
   isSendDisabled: boolean;
   isDisabled: boolean;
   /** A message the server refused before accepting: the composer takes it back. */
