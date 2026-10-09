@@ -404,9 +404,12 @@ credential is needed. The Agent keeps the settled session across read refetches 
 page lifetime; reload/reset clears it. Public writes remain refused. ADR 0092 is the decision.
 
 `internal/demo/seed.go` seeds the full heatmap year with deterministic normally varied daily
-traffic, quieter weekends and occasional idle days. `pnpm demo:generate` captures the real
+traffic, quieter weekends and occasional idle days. The recent-traffic protection compares UTC
+calendar dates, so every hour of the same date stays active through seven days of age; older
+dates may be idle regardless of the reference time of day. `pnpm demo:generate` captures the real
 handler responses; review and commit the responses/provenance diff. Recordings also pass
-`pnpm check:demo` privacy checks. `pnpm verify:demo` sends both examples and requires their
-settled content and generated interface in the built console. Entry information is a global
-arrival toast, with contextual replay instructions on the conversation pages. Theme
+`pnpm check:demo` privacy checks. `pnpm verify:demo` sends both examples in the built console:
+the Agent must settle its generated interface, while the Playground must settle its answer
+content. Agent acceptance uses English copy and locale-independent action selectors; the
+remaining route headings use Chinese. Entry information is a global arrival toast, with contextual replay instructions on the conversation pages. Theme
 choices remain browser-local, so a returning visitor never pushes them to the shared Worker.

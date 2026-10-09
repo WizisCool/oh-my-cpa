@@ -534,7 +534,9 @@ func drawRequestCount(random *deterministic, mean float64) int {
 // It is drawn from the calendar date alone, so every hour of that day agrees, rewatching
 // the same day gives the same number and the export stays reproducible.
 func daySwing(day, now time.Time) float64 {
-	day = day.UTC()
+	// The recent-date protection must have the same outcome for every hour of a UTC day.
+	day = day.UTC().Truncate(24 * time.Hour)
+	now = now.UTC().Truncate(24 * time.Hour)
 	key := uint64(day.Year())*10000 + uint64(day.Month())*100 + uint64(day.Day())
 	draws := newDeterministic(key * 0x9E3779B97F4A7C15)
 	idleShare := idleDayShare

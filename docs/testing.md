@@ -573,6 +573,11 @@ Image parsing, bounds, MIME consistency, static-format detection and SVG securit
 
 The `custom-icon-library` probe owns file selection, validated preview, Base64 replacement, immediate repaint of a mounted provider, selection failure, invalid-replacement save prevention, retained inputs after save/delete failure, reload persistence, referenced deletion with default restoration, cancellation, reload persistence of resets, full-width empty states, focus restoration the narrow editor/confirmation overlay above the provider drawer and automatic reset of its unsaved icon selection. Provider-console planner rules include it alongside the existing picker scenarios, with pinned union and negative cases. Assertions wait on observable state rather than fixed delays.
 
+Default restoration compares the provider mark with its original monochrome CSS mask, both
+immediately after deletion and after reload; a remaining custom image, missing mark or neutral
+fallback cannot satisfy it. The selected custom image is an explicit negative case for that
+restoration predicate.
+
 ### Codex configuration path regression coverage
 
 `scripts/test-config-patch.ts` owns canonical and historical field reads/writes,
@@ -995,12 +1000,16 @@ wall/CPU/memory trade-offs and retained failure ownership.
 
 `scripts/test-demo-replay.ts` owns recording/event fidelity, localization/date templates,
 refetch/reset state and cancellation; `internal/demo/demo_test.go` owns full-year synthetic
-traffic and idle-day distribution. `scripts/check-demo.test.mjs` owns public recording privacy.
-Built `scripts/verify-demo.mjs` sends both examples and requires settled generated-UI/answer
-content; because the generated interface is an opaque sandbox, it seeds theme storage only in
-frames with an origin and tolerates Playwright's own service-worker probe there, bounded to the
-documents that replay builds. The existing heatmap probe owns newest-edge mobile scrolling and
-resize behavior.
+traffic, idle-day distribution and whole-UTC-date recent-traffic protection, including non-midnight
+reference times and equivalent instants in other time zones. `scripts/check-demo.test.mjs` owns
+public recording privacy.
+Built `scripts/verify-demo.mjs` sends both examples: the Agent replay must settle its generated
+interface, while the Playground replay must settle its answer content. The Agent example and
+capability-directory actions use locale-independent identities; built acceptance exercises the
+Agent in English while the other route headings remain Chinese. Because the generated interface
+is an opaque sandbox, the check seeds theme storage only in frames with an origin and tolerates
+Playwright's own service-worker probe there, bounded to four documents per recorded replay.
+The existing heatmap probe owns newest-edge mobile scrolling and resize behavior.
 
 `scripts/test-answer-layout.ts` pins reasoning/call timeline and inline figure grouping;
 `scripts/test-conversation-export.ts` owns detached/redacted snapshots and HTML anatomy.

@@ -956,3 +956,35 @@ func TestDaySwingIsCentredWithIdleDays(t *testing.T) {
 		}
 	}
 }
+
+func TestDaySwingUsesUTCCalendarDates(t *testing.T) {
+	var idleDay time.Time
+	for offset := 0; offset < 365; offset++ {
+		day := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -offset)
+		if daySwing(day, day.AddDate(0, 0, settledDays+1)) == 0 {
+			idleDay = day
+			break
+		}
+	}
+	if idleDay.IsZero() {
+		t.Fatal("the deterministic year must contain an idle date")
+	}
+	activeSwing := daySwing(idleDay, idleDay)
+	for _, offset := range []int{settledDays, settledDays + 1} {
+		for _, nowHour := range []int{0, 12, 23} {
+			now := idleDay.AddDate(0, 0, offset).Add(time.Duration(nowHour) * time.Hour)
+			for dayHour := 0; dayHour < 24; dayHour++ {
+				day := idleDay.Add(time.Duration(dayHour) * time.Hour)
+				for _, zone := range []*time.Location{time.UTC, time.FixedZone("UTC+08", 8*60*60), time.FixedZone("UTC-07", -7*60*60)} {
+					want := activeSwing
+					if offset > settledDays {
+						want = 0
+					}
+					if got := daySwing(day.In(zone), now.In(zone)); got != want {
+						t.Fatalf("day=%s now=%s zone=%s: swing=%g, want=%g", day, now, zone, got, want)
+					}
+				}
+			}
+		}
+	}
+}

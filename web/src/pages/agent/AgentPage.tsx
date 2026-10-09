@@ -515,7 +515,7 @@ export function AgentPage() {
         </Dropdown>
       )}
       <LabelTip title={t('agent.directory')}>
-        <Button type="text" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
+        <Button type="text" data-testid="agent-directory-open" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
       </LabelTip>
       <LabelTip title={t('agent.connect')}>
         <Button type="text" aria-label={t('agent.connect')} icon={<LinkOutlined />} onClick={() => setDrawerView('connect')} />
@@ -595,7 +595,7 @@ export function AgentPage() {
   const examples = (
     <div className={styles['examples']} aria-label={t('agent.examples')}>
       {shownExamples.map(example => (
-        <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={isDemo} className={workspace['example']}>
+        <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={isDemo} className={workspace['example']} data-testid={isDemo ? 'agent-demo-example' : undefined}>
           {example.icon}
           <span>{t(example.key)}</span>
         </ThreadPrimitive.Suggestion>

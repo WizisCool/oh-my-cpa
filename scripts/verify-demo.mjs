@@ -180,6 +180,8 @@ async function main() {
       // therefore no storage to seed; reading it there would raise against the harness itself.
       if (!/^https?:$/.test(location.protocol)) return;
       window.localStorage.setItem('omc-theme', JSON.stringify({ mode: 'light', dirty: true }));
+      // Route headings are Chinese, but the Agent replay must also work with English copy.
+      window.localStorage.setItem('omc-lang', location.pathname.endsWith('/agent') ? 'en' : 'zh');
     });
     const page = await context.newPage();
     page.on('console', (message) => {
@@ -220,7 +222,8 @@ async function main() {
           throw new Error('rendered the sign-in card instead of the console');
         }
         if (route.path === '/agent') {
-          await page.getByRole('button', { name: '能力目录', exact: true }).click();
+          await page.waitForFunction(() => document.documentElement.lang === 'en', undefined, { timeout: NAVIGATION_TIMEOUT_MS });
+          await page.getByTestId('agent-directory-open').click();
           const drawer = page.getByTestId('agent-drawer');
           await drawer.getByTestId('agent-directory').getByText('providers_list', { exact: true }).waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
           await drawer.locator('.ant-drawer-close').click();
@@ -231,7 +234,7 @@ async function main() {
           // that turn holds the calls and the generated interface the recording carries. This is
           // the built bundle, so it also proves the replay's lazy chunk loads from a static host.
           await page.getByTestId('agent-empty').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
-          await page.locator('main button').filter({ hasText: '最近 7 天' }).first().click();
+          await page.getByTestId('agent-demo-example').click();
           const turn = page.getByTestId('agent-turn');
           await turn.waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
           await turn.getByTestId('agent-view').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
