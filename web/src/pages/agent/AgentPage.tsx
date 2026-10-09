@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Drawer, Dropdown, Tooltip } from 'antd';
+import { Button, Drawer, Dropdown } from 'antd';
+import { LabelTip } from '../../components/common/LabelTip';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -12,6 +13,7 @@ import {
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import type { ComposerCommand, ComposerTriggers } from '../../components/workspace/AssistantComposer';
 import { AssistantThread } from '../../components/workspace/AssistantThread';
+import { EndpointPicker } from '../../components/workspace/EndpointPicker';
 import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffortPicker';
 import { TargetChip } from '../../components/workspace/TargetChip';
 import workspace from '../../components/workspace/Workspace.module.css';
@@ -24,6 +26,8 @@ import { useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { usePreference } from '../../hooks/usePreference';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import { referenceContextWindow } from '../../types/modelSquare';
+import { DEFAULT_INFERENCE_ENDPOINT, parseInferenceEndpoint } from '../../types/inferenceEndpoints';
+import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 import { ContextReadout } from '../../components/workspace/ContextReadout';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -118,6 +122,7 @@ export function AgentPage() {
   const [fingerprint, setFingerprint] = React.useState('');
   const [model, setModel] = React.useState('');
   const [reasoningEffort, setReasoningEffort] = React.useState('');
+  const [endpoint, setEndpoint] = React.useState<InferenceEndpoint>(DEFAULT_INFERENCE_ENDPOINT);
   const [localError, setLocalError] = React.useState('');
   const [rejection, setRejection] = React.useState<{ code: string; text: string }>();
   const targetPref = usePreference<AgentTarget>(AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, parseAgentTarget);
@@ -141,7 +146,7 @@ export function AgentPage() {
   }, [queryClient]);
 
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const run = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, language: lang, tokenStyle, onConversation: acceptConversation });
+  const run = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, endpoint, language: lang, tokenStyle, onConversation: acceptConversation });
   const { isRunning, frame, errorCode, startedAtMS, clearError } = run;
 
   // ── the selector ───────────────────────────────────────────────────────────
@@ -156,11 +161,12 @@ export function AgentPage() {
     setIsTargetRestored(true);
     const stored = targetPref.value;
     const source: AgentTarget = isAwaitingApproval(session.data) || !stored.client_key_fingerprint
-      ? { client_key_fingerprint: session.data.client_key_fingerprint, model: session.data.model, reasoning_effort: session.data.reasoning_effort }
+      ? { client_key_fingerprint: session.data.client_key_fingerprint, model: session.data.model, reasoning_effort: session.data.reasoning_effort, endpoint: parseInferenceEndpoint(session.data.endpoint) }
       : stored;
     setFingerprint(source.client_key_fingerprint ?? '');
     setModel(source.model ?? '');
     setReasoningEffort(source.reasoning_effort ?? '');
+    setEndpoint(source.endpoint ?? DEFAULT_INFERENCE_ENDPOINT);
   }, [isTargetRestored, session.data, targetPref.ready, targetPref.value]);
 
   // A remembered key or model that no longer exists is dropped rather than sent to.
@@ -178,15 +184,18 @@ export function AgentPage() {
   }, [models, directory.isFetching, model]);
 
   const { set: persistTarget } = targetPref;
-  const chooseTarget = (next: { fingerprint: string; model: string; reasoningEffort: string }) => {
+  const chooseTarget = (change: Partial<{ fingerprint: string; model: string; reasoningEffort: string; endpoint: InferenceEndpoint }>) => {
+    const next = { fingerprint, model, reasoningEffort, endpoint, ...change };
     setFingerprint(next.fingerprint);
     setModel(next.model);
     setReasoningEffort(next.reasoningEffort);
+    setEndpoint(next.endpoint);
     if (isDemo) return;
     void persistTarget({
       ...(next.fingerprint ? { client_key_fingerprint: next.fingerprint } : {}),
       ...(next.model ? { model: next.model } : {}),
       ...(next.reasoningEffort ? { reasoning_effort: next.reasoningEffort } : {}),
+      ...(next.endpoint !== DEFAULT_INFERENCE_ENDPOINT ? { endpoint: next.endpoint } : {}),
     });
   };
 
@@ -459,11 +468,11 @@ export function AgentPage() {
   const bar = (
     <div className={styles['shell-bar']}>
       {hasTurns && (
-        <Tooltip title={isPhone ? t('agent.new') : undefined}>
+        <LabelTip title={isPhone ? t('agent.new') : undefined}>
           <Button type="text" className={styles['shell-new']} data-testid="agent-new" aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning || isDemo} onClick={() => void reset()}>
             <span>{t('agent.new')}</span>
           </Button>
-        </Tooltip>
+        </LabelTip>
       )}
       {hasTurns && <span className={styles['shell-bar-rule']} aria-hidden="true" />}
       {hasTurns && (
@@ -484,17 +493,17 @@ export function AgentPage() {
             },
           }}
         >
-          <Tooltip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
+          <LabelTip title={t('agent.export')} open={isExportMenuOpen ? false : undefined}>
             <Button type="text" aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={!canExport} />
-          </Tooltip>
+          </LabelTip>
         </Dropdown>
       )}
-      <Tooltip title={t('agent.directory')}>
+      <LabelTip title={t('agent.directory')}>
         <Button type="text" aria-label={t('agent.directory')} icon={<ToolOutlined />} onClick={() => setDrawerView('directory')} />
-      </Tooltip>
-      <Tooltip title={t('agent.connect')}>
+      </LabelTip>
+      <LabelTip title={t('agent.connect')}>
         <Button type="text" aria-label={t('agent.connect')} icon={<LinkOutlined />} onClick={() => setDrawerView('connect')} />
-      </Tooltip>
+      </LabelTip>
     </div>
   );
 
@@ -537,18 +546,18 @@ export function AgentPage() {
             {editedMessage.files.map(file => <React.Fragment key={file.name}> · <code>{file.name}</code></React.Fragment>)}
             {!!newestTurn?.images?.length && <> · {t('agent.turn.images', { n: newestTurn.images.length })}</>}
           </span>
-          <Tooltip title={t('agent.turn.edit_cancel')}>
+          <LabelTip title={t('agent.turn.edit_cancel')}>
             <Button type="text" size="small" aria-label={t('agent.turn.edit_cancel')} icon={<CloseOutlined />} onClick={() => { setEditTarget(''); runtime.thread.composer.setText(''); }} />
-          </Tooltip>
+          </LabelTip>
         </span>
       )}
       {present && (
         <span className={workspace['composer-chip']} data-tone="accent" data-testid="agent-present" data-present={present}>
           {PRESENTATIONS[present].icon}
           <span className={workspace['composer-chip-text']}>{t(PRESENTATIONS[present].label)}</span>
-          <Tooltip title={t('agent.present.remove')}>
+          <LabelTip title={t('agent.present.remove')}>
             <Button type="text" size="small" aria-label={t('agent.present.remove')} icon={<CloseOutlined />} onClick={() => setPresent(undefined)} />
-          </Tooltip>
+          </LabelTip>
         </span>
       )}
     </>
@@ -616,6 +625,9 @@ export function AgentPage() {
                 blockedReason={isAwaiting ? t('agent.operation.hint') : !isFullyConfigured ? t('conversation.target.choose') : undefined}
                 header={<>{approvalHint}{quote}</>}
                 chips={chips}
+                // The endpoint leads the foot, as in the Playground. A turn waiting on a decision
+                // pins it with the rest: its calls are replayed in the schema they were made in.
+                footerStart={<EndpointPicker value={endpoint} isDisabled={isAwaiting} onChange={value => chooseTarget({ endpoint: value })} />}
                 footerEnd={(
                   <>
                     {/* Both settings belong to the next message, and a message can be written and
@@ -624,7 +636,7 @@ export function AgentPage() {
                     <ReasoningEffortPicker
                       value={reasoningEffort}
                       isDisabled={isAwaiting}
-                      onChange={value => chooseTarget({ fingerprint, model, reasoningEffort: value })}
+                      onChange={value => chooseTarget({ reasoningEffort: value })}
                     />
                     <TargetChip
                       keys={keys.data?.keys ?? []}
@@ -635,8 +647,8 @@ export function AgentPage() {
                       isModelsLoading={directory.isFetching}
                       isDisabled={isAwaiting}
                       isPending={!isTargetRestored && !session.isError}
-                      onFingerprintChange={value => chooseTarget({ fingerprint: value, model: '', reasoningEffort })}
-                      onModelChange={value => chooseTarget({ fingerprint, model: value, reasoningEffort })}
+                      onFingerprintChange={value => chooseTarget({ fingerprint: value, model: '' })}
+                      onModelChange={value => chooseTarget({ model: value })}
                       onRefresh={() => {
                         void keys.refetch();
                         void capabilities.refetch();

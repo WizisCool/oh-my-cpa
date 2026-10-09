@@ -32,8 +32,6 @@ export interface WorkspaceAside {
 export interface WorkspaceLayoutProps {
   testId: string;
   title: string;
-  /** The key and model the conversation runs against. */
-  target: React.ReactNode;
   actions: React.ReactNode;
   notices?: React.ReactNode;
   aside: WorkspaceAside;
@@ -41,8 +39,7 @@ export interface WorkspaceLayoutProps {
 }
 
 /**
- * The frame both conversation workspaces share: a head carrying the title, the target and the
- * page actions; a main column the page fills with its conversation; and a resizable, tabbed side
+ * The Playground's frame: a head carrying the title and the page actions; a main column the page fills with its conversation; and a resizable, tabbed side
  * panel - the extension slot for views beside the conversation (a directory, call details,
  * parameters), each registered as a tab rather than wired into the page.
  *
@@ -51,10 +48,10 @@ export interface WorkspaceLayoutProps {
  * viewport, and the conversation centres its own reading column inside what is left. Capping the
  * frame would float the panel in the middle of a wide screen with the transcript beside it.
  *
- * Below the narrow breakpoint the panel becomes a Drawer joined to the platform Back gesture, and
- * the target moves onto its own row so the model a message will reach is never hidden in a menu.
+ * Below the narrow breakpoint the panel becomes a Drawer joined to the platform Back gesture. What
+ * a message is sent with is named in the composer, so it is in view at every width.
  */
-export function WorkspaceLayout({ testId, title, target, actions, notices, aside, children }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ testId, title, actions, notices, aside, children }: WorkspaceLayoutProps) {
   const isNarrow = useIsNarrowViewport();
   const isPhone = useIsPhoneViewport();
   const visibleViewport = useVisibleViewport(isPhone);
@@ -90,7 +87,6 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
     <div ref={workspaceRef} className={styles['workspace']} data-testid={testId}>
       <header className={styles['head']}>
         <h1 className={clsx('terminal-title', styles['title'])}>{title}</h1>
-        <div className={styles['target']}>{target}</div>
         <div className={styles['actions']}>{actions}</div>
       </header>
       <div className={clsx(styles['body'], panel.isResizing && styles['is-resizing'])}>

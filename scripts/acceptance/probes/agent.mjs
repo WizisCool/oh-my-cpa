@@ -249,7 +249,7 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent submits a message with Enter as one AG-UI user message', runs.length === 1 && request.protocolVersion === '1.0' && request.messages.length === 1
     && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
   check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
-    && request.forwardedProps.reasoning_effort === 'high' && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
+    && request.forwardedProps.reasoning_effort === 'high' && request.forwardedProps.endpoint === undefined && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
   check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_ui', 'suggest_next'])
     && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
   check('agent tells the server the console language and how it writes token counts', JSON.stringify(request.context) === JSON.stringify([{ description: 'console_language', value: 'en' }, { description: 'console_token_style', value: 'en-compact' }]), JSON.stringify(request.context));

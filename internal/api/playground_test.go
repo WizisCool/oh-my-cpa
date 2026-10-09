@@ -271,3 +271,65 @@ func TestPlaygroundCustomUAAndCustomBodyPriority(t *testing.T) {
 		}
 	}
 }
+
+func TestPlaygroundSendsTheChosenEndpoint(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	var captureMu sync.Mutex
+	var observedPath string
+	var observedPayload map[string]any
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management/config" {
+			io.WriteString(writer, `{"access":{"api-keys":["playground-fixture"]}}`)
+			return
+		}
+		var payload map[string]any
+		json.NewDecoder(request.Body).Decode(&payload)
+		captureMu.Lock()
+		observedPath, observedPayload = request.URL.Path, payload
+		captureMu.Unlock()
+		writer.Header().Set("Content-Type", "text/event-stream")
+		switch request.URL.Path {
+		case "/v1/responses":
+			io.WriteString(writer, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n")
+		case "/v1/messages":
+			io.WriteString(writer, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"answer\"}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+		default:
+			t.Errorf("unexpected path %s", request.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	server := httptest.NewServer(fixture.handler.Router())
+	defer server.Close()
+	fingerprint, _ := fixture.handler.repo.UsageClientKeyFingerprint("playground-fixture")
+	post := func(endpoint string) (int, string) {
+		t.Helper()
+		response, err := fixture.client.Post(server.URL+"/omc/api/v1/playground/chat", "application/json", strings.NewReader(
+			`{"client_key_fingerprint":"`+fingerprint+`","endpoint":"`+endpoint+`","model":"model-alias","system_prompt":"Be brief.","messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		data, _ := io.ReadAll(response.Body)
+		return response.StatusCode, string(data)
+	}
+	for endpoint, want := range map[string]struct{ path, content, system string }{
+		"responses": {"/v1/responses", "input", "instructions"},
+		"messages":  {"/v1/messages", "messages", "system"},
+	} {
+		status, data := post(endpoint)
+		captureMu.Lock()
+		gotPath, gotPayload := observedPath, observedPayload
+		captureMu.Unlock()
+		if status != 200 || !strings.Contains(data, `"content":"answer"`) || !strings.Contains(data, "event: done") || strings.Contains(data, "event: error") {
+			t.Fatalf("%s: stream %d %s", endpoint, status, data)
+		}
+		if gotPath != want.path || gotPayload[want.content] == nil || gotPayload[want.system] != "Be brief." || gotPayload["client_key_fingerprint"] != nil || gotPayload["endpoint"] != nil {
+			t.Errorf("%s: sent %s %v", endpoint, gotPath, gotPayload)
+		}
+	}
+	// The operator picks among CPA's surfaces; a path or anything else is not one of them.
+	if status, data := post("/v1/embeddings"); status != 400 || !strings.Contains(data, "invalid_request") {
+		t.Errorf("unknown endpoint gave %d %s", status, data)
+	}
+}

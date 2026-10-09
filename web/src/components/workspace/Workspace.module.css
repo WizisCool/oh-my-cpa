@@ -37,18 +37,12 @@
   white-space: nowrap;
 }
 
-.target {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: flex-end;
-}
-
 .actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .body {
@@ -1232,12 +1226,38 @@
   background: var(--border);
 }
 
+/* Every chip states its value in the same ink and weight - endpoint, effort and model are three
+   settings of one message - and a chip that cannot be changed gives all of itself to the disabled
+   ink: value, mark and caret together, so a pinned setting reads as pinned whichever it is. */
 .picker-trigger-value {
   min-width: 0;
   max-width: 140px;
   overflow: hidden;
+  color: var(--fg);
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.picker-trigger:global(.ant-btn):disabled {
+  color: var(--meta);
+  cursor: not-allowed;
+}
+
+.picker-trigger:global(.ant-btn):disabled .picker-trigger-value,
+.picker-trigger:global(.ant-btn):disabled .picker-trigger-icon,
+.picker-trigger:global(.ant-btn):disabled .picker-caret {
+  color: inherit;
+}
+
+/* The effort's name is a word or two; on a narrow foot it is the model's name that shortens. */
+.effort-chip:global(.ant-btn) {
+  flex-shrink: 0;
+}
+
+/* A maker's mark is a picture, so it fades where ink would grey. */
+.picker-trigger:global(.ant-btn):disabled .picker-trigger-icon {
+  opacity: .5;
 }
 
 .target-chip .picker-trigger-value {
@@ -1480,13 +1500,15 @@
   color: var(--muted);
 }
 
-.effort-chip .picker-trigger-value {
-  font-weight: 400;
+.endpoint-surface {
+  width: min(300px, calc(100vw - 32px));
 }
 
-/* A pinned setting looks pinned: the value takes the disabled ink with the rest of its trigger. */
-.effort-chip:not(:disabled) .picker-trigger-value {
-  color: var(--fg);
+/* The path is what tells two similarly named endpoints apart, so it is read whole. */
+.endpoint-surface .picker-option-detail {
+  max-width: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 /* ── side panel ────────────────────────────────────────────────────────────── */
@@ -1576,67 +1598,9 @@
   width: 100%;
 }
 
-/* ── target picker ─────────────────────────────────────────────────────────── */
-
-.target-picker {
-  display: flex;
-  width: 100%;
-  max-width: 560px;
-}
-
-.key-select {
-  flex: 0 1 220px;
-  min-width: 0;
-}
-
-.model-select {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-.target-icon {
-  color: var(--muted);
-}
-
-/* A model's name led by its maker's mark, in the closed field and in the list alike. */
-.model-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.model-option-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .model-mark-fallback {
   color: var(--muted);
   font-size: 14px;
-}
-
-.key-option {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.key-alias {
-  color: var(--fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.key-mask {
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
 }
 
 /* A phone's composer: one line to start with send beside it (see Composer), and tighter frame and
@@ -1661,9 +1625,18 @@
   padding: 0 8px 4px;
 }
 
+/* On a narrow foot the model's name gives way first: it is the long one, and it is read in full
+   in its list, while the endpoint's short name is the whole of what its chip says. */
 .is-phone .target-chip:global(.ant-btn) {
+  flex-shrink: 1;
+  min-width: 72px;
   max-width: 170px;
 }
+
+.is-phone .composer-foot-start {
+  flex: 1 0 auto;
+}
+
 
 .is-phone .composer-under {
   margin-top: 4px;
@@ -1698,15 +1671,6 @@
     flex: 1;
   }
 
-  .target {
-    order: 3;
-    flex-basis: 100%;
-  }
-
-  .target-picker {
-    max-width: none;
-  }
-
   .notices,
   .composer {
     padding-left: 12px;
@@ -1724,10 +1688,6 @@
 
 @media (max-width: 640px) {
   .head { gap: 8px 12px; min-height: 0; padding: 8px 12px; }
-
-  .key-select {
-    flex-basis: 42%;
-  }
 
   .empty {
     justify-content: flex-start;

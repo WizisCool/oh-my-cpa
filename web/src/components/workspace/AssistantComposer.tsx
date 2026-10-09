@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
+import { LabelTip } from '../common/LabelTip';
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -193,20 +194,20 @@ function ComposerSurface({
   // Send and stop are one round primary-filled button whose glyph changes: the single filled shape in the
   // frame, so the eye finds the action without reading the row.
   const send = (
-    <Tooltip title={canSend ? sendLabel : blockedReason}>
+    <LabelTip title={canSend ? sendLabel : blockedReason}>
       <button type="button" className={styles['send-button']} aria-label={sendLabel} aria-disabled={!canSend || undefined} onClick={submit}>
         <ArrowUpOutlined aria-hidden="true" />
       </button>
-    </Tooltip>
+    </LabelTip>
   );
   const stop = (
-    <Tooltip title={stopLabel}>
+    <LabelTip title={stopLabel}>
       <ComposerPrimitive.Cancel asChild>
         <button type="button" className={styles['send-button']} data-action="stop" aria-label={stopLabel}>
           <span className={styles['stop-glyph']} aria-hidden="true" />
         </button>
       </ComposerPrimitive.Cancel>
-    </Tooltip>
+    </LabelTip>
   );
   // One action occupies the same slot: an empty running composer stops; a draft can be queued.
   const controls = (
@@ -215,11 +216,11 @@ function ComposerSurface({
     </span>
   );
   const addAttachment = attachments && (
-    <Tooltip title={attachments.addLabel}>
+    <LabelTip title={attachments.addLabel}>
       <ComposerPrimitive.AddAttachment asChild>
         <Button type="text" shape="circle" className={styles['attach-button']} aria-label={attachments.addLabel} icon={attachments.icon ?? <PictureOutlined />} />
       </ComposerPrimitive.AddAttachment>
-    </Tooltip>
+    </LabelTip>
   );
   // On a phone the picker sits beside send, so an attachment alone never costs the box a row.
   const start = (footerStart || (addAttachment && !isPhone)) ? (
@@ -260,11 +261,11 @@ function ComposerSurface({
               <div className={styles['queue-item']} data-testid="composer-queue-item" key={queueItem.id}>
                 <ArrowUpOutlined className={styles['queue-mark']} aria-hidden="true" />
                 <QueueItemPrimitive.Text className={styles['queue-text']} />
-                <Tooltip title={queue.removeLabel}>
+                <LabelTip title={queue.removeLabel}>
                   <QueueItemPrimitive.Remove asChild>
                     <Button type="text" size="small" aria-label={queue.removeLabel} icon={<CloseOutlined />} />
                   </QueueItemPrimitive.Remove>
-                </Tooltip>
+                </LabelTip>
               </div>
             )}
           </ComposerPrimitive.Queue>

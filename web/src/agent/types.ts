@@ -140,6 +140,8 @@ export interface Conversation {
   model: string;
   client_key_fingerprint: string;
   reasoning_effort?: string;
+  /** The inference endpoint the conversation's rounds are sent to; absent for Chat Completions. */
+  endpoint?: string;
   turns: Turn[];
   omitted: number;
   anchor_ms?: number;

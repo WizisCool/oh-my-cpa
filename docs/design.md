@@ -1133,13 +1133,27 @@ column the transcript, the notices and the composer share one reading width
 (`--workspace-column`, 760px): long enough for a code block, short enough to read prose without
 losing the line. The scroll box itself stays full width so its scrollbar sits at the pane's edge.
 
-**The target is one joined control.** Key and model are one decision - the model list is whatever
-the gateway serves to that key - so they are drawn as one field. A key is named by its alias, and
-by its mask only when it has none (§7, "Naming is a first-class action"); the open list shows both,
-which is where two similar names are told apart. Below the 900px breakpoint the target moves onto
-its own row of the head rather than into a menu: which model a message will reach is never hidden.
-A model is led by its maker's mark, in the field and in the open list, and by a neutral box when the
-maker is not recognised; the name stays the call point.
+**What a message is sent with is chosen in the composer, on both pages.** Key and model are one
+decision - the model list is whatever the gateway serves to that key - so they are one chip: it
+names the model, and its list ends with the client key. A key is named by its alias, and by its
+mask only when it has none (§7, "Naming is a first-class action"); the key view shows both, which
+is where two similar names are told apart. A model is led by its maker's mark, on the chip, in the
+list and under the Playground's empty-state wordmark, and by a neutral box when the maker is not
+recognised; the name stays the call point. Both foot rows lead with a third chip, the
+inference endpoint (ADR 0088): the chip carries a neutral plug mark and the short name (Chat,
+Responses, Messages), and its list the endpoint's full name with its path in mono. The chips sit
+in the composer at every width, so which model and endpoint a message will reach is never hidden
+in a menu or a head row; on a phone's foot the model's name is the one that shortens. The three
+chips state their values in one ink and weight (`--fg`, regular), and a chip that cannot be
+changed - during a Playground run, or while an Agent turn waits on a decision - gives value, mark
+and caret to `--meta` together, with a maker's mark at half opacity.
+
+**An action's name is a tooltip only for a pointer that can rest.** Icon actions in the
+conversation workspaces name themselves through `LabelTip`, which draws nothing where the primary
+pointer cannot hover: on a touch screen the browser keeps a hover at the last place touched, so a
+label opened over whatever the layout moved there - Send, once a tapped example raised the
+keyboard. A tooltip that says more than the control's name (a measurement's meaning) stays an
+ordinary Tooltip, since a tap is how a touch reader asks for it.
 
 **The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
@@ -1232,7 +1246,7 @@ count or the reference catalog lists no window for the model: a guess would read
 **The composer starts at one line.** It grows to ten lines on desktop. At the 640px phone
 breakpoint the box grows to five lines, send - and the Playground's image picker - sits beside the
 input instead of in a foot row, and the foot row appears only for a control that needs it (the
-Agent's effort and model chips); frame and note
+endpoint, effort and model chips); frame and note
 tighten with it. On a phone the conversation already shares its height with the keyboard, and the
 desktop layout left it a strip between two bars. On desktop the action remains in the foot row. User message text has no paragraph margins
 inside its padded bubble, so one line does not acquire a second layer of vertical spacing.
@@ -1332,8 +1346,9 @@ without visible card chrome, and the finished canvas takes its place at the heig
 the draft had reached. Its
 height follows its content between 48px and 16384px, measured to include overflowing content
 without using the viewport as a minimum, so it can both grow and shrink after local interactions.
-Normal content scrolls with the transcript without a nested root scrollbar; content above the
-cap scrolls on a thin bar. Component surfaces and diagram nodes use `--radius-surface` (6px);
+Normal content scrolls with the transcript, and the frame's document never draws a scrollbar of
+its own: a bar that appeared while the frame caught up took width from the canvas and redrew it.
+Content above the cap, and the full-screen view, still scroll by wheel, touch and keys. Component surfaces and diagram nodes use `--radius-surface` (6px);
 controls use `--radius-control` (4px), including in streamed previews and HTML exports. Charts and tables inside it are drawn by the console's kit (ADR 0073) from the theme
 variables the frame is given, so they follow the palette in both schemes: marks on the series
 palette, `--border` grid rules, `--muted` tick and legend text formatted the way the console
@@ -1455,7 +1470,7 @@ quiet icon actions for export, the capability directory and the connection guide
 the icon and drops the label, and while its software keyboard is up the cluster and the room kept
 clear for it go to the conversation: every action is also a `/` command, and the cluster returns
 with the keyboard's departure. The Playground's head carries one labelled button, New conversation,
-and quiet icon actions for export, refresh and the side panel, whose icon is
+and quiet icon actions for export and the side panel, whose icon is
 `--accent` while the panel is open. The empty conversation offers example questions as
 keyboard-reachable buttons that fill the composer without sending, and under them one `--meta` line
 of `kbd` hints - `/` for commands, `@` for names, Up for the last message - which a phone leaves out. On a phone

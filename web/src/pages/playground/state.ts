@@ -1,3 +1,6 @@
+import { DEFAULT_INFERENCE_ENDPOINT, INFERENCE_ENDPOINT_PATHS, parseInferenceEndpoint } from '../../types/inferenceEndpoints';
+import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
+
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_REQUEST_BYTES = 32 * 1024 * 1024;
 export const MAX_IMAGES = 4;
@@ -5,6 +8,23 @@ export const MAX_EVENTS = 500;
 export const MAX_EVENT_BYTES = 1024 * 1024;
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export const PLAYGROUND_SESSION_PREFERENCE = 'playground_session';
+
+/** The Playground's names for the shared endpoint vocabulary (`types/inferenceEndpoints.ts`). */
+export type PlaygroundEndpoint = InferenceEndpoint;
+export const DEFAULT_PLAYGROUND_ENDPOINT = DEFAULT_INFERENCE_ENDPOINT;
+export const PLAYGROUND_ENDPOINT_PATHS = INFERENCE_ENDPOINT_PATHS;
+export const parsePlaygroundEndpoint = parseInferenceEndpoint;
+/** Mirrors `gateway.DEFAULT_MESSAGES_MAX_TOKENS`: the Messages schema requires a limit. */
+const DEFAULT_MESSAGES_MAX_TOKENS = 4096;
+/** Mirrors `gateway.MESSAGES_VERSION`. */
+const MESSAGES_VERSION = '2023-06-01';
+
+/** What a message is sent to: the key, the model and the endpoint. */
+export interface PlaygroundTarget {
+  fingerprint: string;
+  model: string;
+  endpoint: PlaygroundEndpoint;
+}
 
 /**
  * The default User-Agent for a deployment, mirroring `gateway.UserAgentForVersion`.
@@ -64,15 +84,19 @@ export function parametersFromSession(session: PlaygroundSession): PlaygroundPar
   };
 }
 
-/** Whether any parameter differs from the model's defaults, which is what "Reset" undoes. */
+/**
+ * Whether any parameter of the panel differs from the model's defaults, which is what "Reset"
+ * undoes. Reasoning effort is chosen in the composer, beside the model, so the panel's reset
+ * neither counts nor clears it.
+ */
 export function hasCustomParameters(parameters: PlaygroundParameters): boolean {
   return (Object.keys(DEFAULT_PLAYGROUND_PARAMETERS) as (keyof PlaygroundParameters)[])
-    .some(key => parameters[key] !== DEFAULT_PLAYGROUND_PARAMETERS[key]);
+    .some(key => key !== 'reasoningEffort' && parameters[key] !== DEFAULT_PLAYGROUND_PARAMETERS[key]);
 }
 
 /** The single stored session: the target, the parameters, and the conversation's bounded turns. */
 export function sessionDocument(
-  target: { fingerprint: string; model: string },
+  target: PlaygroundTarget,
   parameters: PlaygroundParameters,
   turns: Turn[],
   lastRunID?: string,
@@ -80,6 +104,7 @@ export function sessionDocument(
   return {
     client_key_fingerprint: target.fingerprint || undefined,
     model: target.model || undefined,
+    ...(target.endpoint !== DEFAULT_PLAYGROUND_ENDPOINT ? { endpoint: target.endpoint } : {}),
     system_prompt: parameters.systemPrompt || undefined,
     temperature: parameters.temperature,
     top_p: parameters.topP,
@@ -117,7 +142,7 @@ export function readCustomBody(text: string): CustomBodyReading {
 
 /** The request for the next message: the snapshot a turn keeps, and what retry replays. */
 export function buildChatRequest(
-  target: { fingerprint: string; model: string },
+  target: PlaygroundTarget,
   parameters: PlaygroundParameters,
   customBody: Record<string, unknown> | undefined,
   history: Message[],
@@ -125,6 +150,9 @@ export function buildChatRequest(
 ): ChatRequest {
   return {
     client_key_fingerprint: target.fingerprint,
+    // Left out for Chat Completions, so a stored turn from before the endpoint could be chosen
+    // and a new one read the same.
+    ...(target.endpoint !== DEFAULT_PLAYGROUND_ENDPOINT ? { endpoint: target.endpoint } : {}),
     model: target.model,
     messages: [...history, user],
     ...(parameters.systemPrompt.trim() ? { system_prompt: parameters.systemPrompt } : {}),
@@ -185,6 +213,7 @@ export interface PlaygroundSession {
   last_run_id?: string;
   client_key_fingerprint?: string;
   model?: string;
+  endpoint?: PlaygroundEndpoint;
   system_prompt?: string;
   temperature?: number | null;
   top_p?: number | null;
@@ -223,6 +252,7 @@ function isStoredTurn(value: unknown): value is Turn {
   for (const field of ['temperature', 'top_p', 'max_tokens']) if (request[field] !== undefined && (typeof request[field] !== 'number' || !Number.isFinite(request[field]))) return false;
   for (const field of ['system_prompt', 'reasoning_effort', 'user_agent']) if (request[field] !== undefined && typeof request[field] !== 'string') return false;
   if (request.custom_body !== undefined && !isObject(request.custom_body)) return false;
+  if (request.endpoint !== undefined && !parsePlaygroundEndpoint(request.endpoint)) return false;
   return true;
 }
 
@@ -232,6 +262,7 @@ export function parsePlaygroundSession(raw: unknown): PlaygroundSession | undefi
   const value = raw as Record<string, unknown>;
   const clientKeyFingerprint = typeof value.client_key_fingerprint === 'string' ? value.client_key_fingerprint.trim() : undefined;
   const model = typeof value.model === 'string' ? value.model.trim() : undefined;
+  const endpoint = parsePlaygroundEndpoint(value.endpoint);
   const systemPrompt = typeof value.system_prompt === 'string' ? value.system_prompt : undefined;
   const temperature = typeof value.temperature === 'number' && Number.isFinite(value.temperature) ? value.temperature : null;
   const topP = typeof value.top_p === 'number' && Number.isFinite(value.top_p) ? value.top_p : null;
@@ -255,6 +286,7 @@ export function parsePlaygroundSession(raw: unknown): PlaygroundSession | undefi
     ...(typeof value.last_run_id === 'string' ? { last_run_id: value.last_run_id } : {}),
     ...(clientKeyFingerprint ? { client_key_fingerprint: clientKeyFingerprint } : {}),
     ...(model ? { model } : {}),
+    ...(endpoint ? { endpoint } : {}),
     ...(systemPrompt !== undefined ? { system_prompt: systemPrompt } : {}),
     ...(temperature !== null ? { temperature } : {}),
     ...(topP !== null ? { top_p: topP } : {}),
@@ -357,6 +389,8 @@ export type Content = { type: 'text'; text: string } | { type: 'image_url'; imag
 export interface Message { role: 'user' | 'assistant' | 'system'; content: Content[] }
 export interface ChatRequest {
   client_key_fingerprint: string;
+  /** Absent for Chat Completions. */
+  endpoint?: PlaygroundEndpoint;
   model: string;
   system_prompt?: string;
   messages: Message[];
@@ -470,13 +504,65 @@ export function extractThinking(text: string): { thought?: string; reply: string
   return { thought: thought || undefined, reply, isThinking: false };
 }
 
+/** The endpoint a turn's request was sent to. */
+export function endpointOf(request: ChatRequest): PlaygroundEndpoint {
+  return request.endpoint ?? DEFAULT_PLAYGROUND_ENDPOINT;
+}
+
+/**
+ * The body the gateway receives, written the way `gateway.BuildPayload` writes it for the
+ * request's endpoint: the diagnostics panel and the copied cURL show what left the process, so
+ * this mirrors the server field for field rather than showing the console's own request.
+ */
 export function actualRequest(request: ChatRequest) {
-  // `user_agent` is the one playground field that is not part of the chat payload:
-  // the server reads it to set the outbound `User-Agent` header and never forwards
-  // it as a body field. It is therefore excluded here (the body is what the gateway
-  // receives) and rendered by `buildCurl` as a header instead, so the diagnostic
-  // matches what actually leaves the process.
-  const { client_key_fingerprint: _fingerprint, system_prompt: systemPrompt, custom_body: customBody, user_agent: _userAgent, ...fields } = request;
+  // `user_agent` is the one playground field that is not part of the payload: the server reads
+  // it to set the outbound `User-Agent` header and never forwards it as a body field. It is
+  // therefore excluded here and rendered by `buildCurl` as a header instead.
+  const { client_key_fingerprint: _fingerprint, endpoint: _endpoint, system_prompt: systemPrompt, custom_body: customBody, user_agent: _userAgent, ...fields } = request;
+  const sampling = {
+    ...(fields.temperature !== undefined ? { temperature: fields.temperature } : {}),
+    ...(fields.top_p !== undefined ? { top_p: fields.top_p } : {}),
+  };
+  const effort = fields.reasoning_effort;
+  if (request.endpoint === 'responses') {
+    return {
+      model: fields.model,
+      input: fields.messages.map(message => ({
+        type: 'message',
+        role: message.role,
+        content: message.content.map(part => part.type === 'image_url'
+          ? { type: 'input_image', image_url: part.image_url.url }
+          : { type: message.role === 'assistant' ? 'output_text' : 'input_text', text: part.text }),
+      })),
+      stream: true,
+      ...(systemPrompt ? { instructions: systemPrompt } : {}),
+      ...sampling,
+      ...(fields.max_tokens !== undefined ? { max_output_tokens: fields.max_tokens } : {}),
+      ...(effort !== undefined ? { reasoning: { effort, summary: 'auto' } } : {}),
+      ...(customBody ?? {}),
+    };
+  }
+  if (request.endpoint === 'messages') {
+    return {
+      model: fields.model,
+      messages: fields.messages.map(message => ({
+        role: message.role,
+        content: message.content.map(part => {
+          if (part.type !== 'image_url') return { type: 'text', text: part.text };
+          const [header, data = ''] = part.image_url.url.split(',', 2);
+          return { type: 'image', source: { type: 'base64', media_type: header.replace(/^data:/, '').replace(/;base64$/, ''), data } };
+        }),
+      })),
+      max_tokens: fields.max_tokens ?? DEFAULT_MESSAGES_MAX_TOKENS,
+      stream: true,
+      ...(systemPrompt ? { system: systemPrompt } : {}),
+      ...sampling,
+      ...(effort === undefined ? {} : effort.trim() === 'none'
+        ? { thinking: { type: 'disabled' } }
+        : { thinking: { type: 'adaptive' }, output_config: { effort: effort.trim() } }),
+      ...(customBody ?? {}),
+    };
+  }
   return {
     ...fields,
     messages: [...(systemPrompt ? [{ role: 'system' as const, content: [{ type: 'text' as const, text: systemPrompt }] }] : []), ...fields.messages],
@@ -507,6 +593,11 @@ function redactImageData(value: unknown): any {
   }
   if (Array.isArray(value)) return value.map(redactImageData);
   if (value !== null && typeof value === 'object') {
+    // A Messages image carries its bytes bare, beside the media type, not as a data URL.
+    const source = value as { type?: unknown; media_type?: unknown; data?: unknown };
+    if (source.type === 'base64' && typeof source.data === 'string') {
+      return { ...source, data: `<${typeof source.media_type === 'string' ? source.media_type : 'image'}; base64 omitted>` };
+    }
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, redactImageData(entry)]));
   }
   return value;
@@ -522,7 +613,7 @@ export function buildCurl(request: ChatRequest, defaultUserAgent: string): strin
   // rather than held here, because the server resolves the value that is actually sent
   // and this function only renders it.
   const userAgent = (request.user_agent?.trim() || defaultUserAgent).replace(/'/g, `'\\''`);
-  return `cat > request.json <<'${delimiter}'\n${json}\n${delimiter}\ncurl "$CPA_BASE_URL/v1/chat/completions" \\\n  -H "Authorization: Bearer $CPA_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -H 'User-Agent: ${userAgent}' \\\n  --no-buffer --data-binary @request.json`;
+  return `cat > request.json <<'${delimiter}'\n${json}\n${delimiter}\ncurl "$CPA_BASE_URL${PLAYGROUND_ENDPOINT_PATHS[endpointOf(request)]}" \\\n  -H "Authorization: Bearer $CPA_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n${request.endpoint === 'messages' ? `  -H 'anthropic-version: ${MESSAGES_VERSION}' \\\n` : ''}  -H 'User-Agent: ${userAgent}' \\\n  --no-buffer --data-binary @request.json`;
 }
 /**
  * effectiveModel reports the model a turn's request will actually use.

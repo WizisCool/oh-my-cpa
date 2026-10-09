@@ -19,8 +19,8 @@ import (
 
 type modelFunc func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error)
 
-func (fn modelFunc) StreamAgent(ctx context.Context, model string, _ string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error) {
-	return fn(ctx, model, messages, tools, emit)
+func (fn modelFunc) StreamAgent(ctx context.Context, request gateway.AgentRequest, emit func(gateway.Event) error) (gateway.AgentReply, error) {
+	return fn(ctx, request.Model, request.Messages, request.Tools, emit)
 }
 func newTestRuntime(t *testing.T) *Runtime {
 	t.Helper()

@@ -52,13 +52,20 @@ func (client *Client) request(ctx context.Context, method, endpoint string, body
 }
 
 func (client *Client) requestWithUA(ctx context.Context, method, endpoint string, body io.Reader, userAgent string) (*http.Response, error) {
-	request, err := http.NewRequestWithContext(ctx, method, client.baseURL+endpoint, body)
+	return client.send(ctx, method, endpoint, body, userAgent, EndpointChat)
+}
+
+func (client *Client) send(ctx context.Context, method, path string, body io.Reader, userAgent string, endpoint Endpoint) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, method, client.baseURL+path, body)
 	if err != nil {
 		return nil, &Error{Code: "gateway_unavailable"}
 	}
 	request.Header.Set("Authorization", "Bearer "+client.clientKey)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/event-stream")
+	if endpoint == EndpointMessages {
+		request.Header.Set("anthropic-version", MESSAGES_VERSION)
+	}
 	ua := strings.TrimSpace(userAgent)
 	if ua == "" {
 		ua = DefaultUserAgent
@@ -201,7 +208,7 @@ func (client *Client) Stream(ctx context.Context, request ChatRequest, payload m
 	var hasTimedOut atomic.Bool
 	timer := time.AfterFunc(client.idleTimeout, func() { hasTimedOut.Store(true); cancel() })
 	defer timer.Stop()
-	response, err := client.requestWithUA(ctx, http.MethodPost, "/v1/chat/completions", bytes.NewReader(body), request.UserAgent)
+	response, err := client.send(ctx, http.MethodPost, request.Endpoint.Path(), bytes.NewReader(body), request.UserAgent, request.Endpoint)
 	if err != nil {
 		if hasTimedOut.Load() {
 			return &Error{Code: "upstream_timeout"}
@@ -221,83 +228,14 @@ func (client *Client) Stream(ctx context.Context, request ChatRequest, payload m
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	var data []string
 	totalBytes := 0
-	finishReason := ""
+	decoder := decoderFor(request.Endpoint)
 	dispatch := func() (bool, error) {
 		if len(data) == 0 {
 			return false, nil
 		}
 		joined := strings.Join(data, "\n")
 		data = nil
-		if joined == "[DONE]" {
-			if finishReason == "" {
-				return false, &Error{Code: "stream_incomplete"}
-			}
-			return true, emit(Event{Type: "done", FinishReason: finishReason})
-		}
-		var chunk struct {
-			Choices []struct {
-				Index int `json:"index"`
-				Delta struct {
-					Content          string          `json:"content"`
-					ReasoningContent string          `json:"reasoning_content"`
-					Reasoning        string          `json:"reasoning"`
-					ToolCalls        json.RawMessage `json:"tool_calls"`
-					FunctionCall     json.RawMessage `json:"function_call"`
-				} `json:"delta"`
-				FinishReason *string `json:"finish_reason"`
-			} `json:"choices"`
-			Usage *Usage          `json:"usage"`
-			Error json.RawMessage `json:"error"`
-		}
-		if json.Unmarshal([]byte(joined), &chunk) != nil {
-			return false, &Error{Code: "invalid_gateway_response"}
-		}
-		if len(chunk.Error) > 0 && string(chunk.Error) != "null" {
-			return false, &Error{Code: "upstream_rejected"}
-		}
-		for _, choice := range chunk.Choices {
-			if choice.Index != 0 {
-				continue
-			}
-			if hasJSONValue(choice.Delta.ToolCalls) || hasJSONValue(choice.Delta.FunctionCall) {
-				return false, &Error{Code: "unsupported_output"}
-			}
-			thought := choice.Delta.ReasoningContent
-			if thought == "" {
-				thought = choice.Delta.Reasoning
-			}
-			if thought != "" {
-				if err := emit(Event{Type: "thought", Content: thought}); err != nil {
-					return false, err
-				}
-			}
-			if choice.Delta.Content != "" {
-				if err := emit(Event{Type: "delta", Content: choice.Delta.Content}); err != nil {
-					return false, err
-				}
-			}
-			if choice.FinishReason != nil {
-				switch *choice.FinishReason {
-				case "stop", "length", "content_filter":
-					finishReason = *choice.FinishReason
-				case "tool_calls", "function_call":
-					return false, &Error{Code: "unsupported_output"}
-				default:
-					return false, &Error{Code: "invalid_gateway_response"}
-				}
-			}
-		}
-		if chunk.Usage != nil {
-			for _, value := range []*int64{chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.TotalTokens} {
-				if value != nil && *value < 0 {
-					return false, &Error{Code: "invalid_gateway_response"}
-				}
-			}
-			if err := emit(Event{Type: "usage", Usage: chunk.Usage}); err != nil {
-				return false, err
-			}
-		}
-		return false, nil
+		return decoder.decode(joined, emit)
 	}
 	for scanner.Scan() {
 		line := scanner.Text()

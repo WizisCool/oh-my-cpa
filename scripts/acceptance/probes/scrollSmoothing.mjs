@@ -317,14 +317,14 @@ async function checkNativeModelPopup({ page, base, check }) {
     });
   }
   await page.goto(`${base}/playground`);
-  const modelPicker = page.getByRole('combobox', { name: 'Model', exact: true });
+  const modelPicker = page.locator('[data-testid="target-chip"]');
   await modelPicker.click();
-  const holder = page.locator('.ant-select-dropdown-list-holder:visible');
+  // The list is rebuilt when its filter changes, so it is found again rather than held.
+  const holder = page.locator('[data-testid="target-popover"] [data-picker-list]');
   await holder.waitFor();
   const hasNativeHolder = await holder.evaluate(element => {
     element.setAttribute('data-probe-scroller', '');
-    return getComputedStyle(element).overflowY === 'auto'
-      && element.querySelector(':scope > div > [class*="-holder-inner"]') !== null;
+    return getComputedStyle(element).overflowY === 'auto' && element.querySelectorAll(':scope > [role="option"]').length === 80;
   });
   check('the Playground model popup uses native overflow with the shared list structure', hasNativeHolder);
   const popupBox = await holder.boundingBox();
@@ -338,9 +338,11 @@ async function checkNativeModelPopup({ page, base, check }) {
   }, TURNED_SAMPLE_FRAMES));
   check('a native model popup continues scrolling across repeated notches', Math.abs(notch.travelled - NOTCH * TURNED_NOTCHES) <= 1, notch.detail);
 
-  await modelPicker.fill('model-00');
-  await until(() => page.getByRole('option').count().then(count => count === 10), { label: 'filtered model options' });
+  // Seventeen call points carry a `1`: enough to overflow the list, few enough to prove the filter.
+  await page.locator('[data-testid="target-popover"] [data-picker-search] input').fill('1');
+  await until(() => page.getByRole('option').count().then(count => count === 17), { label: 'filtered model options' });
   const filteredDistance = await holder.evaluate(element => {
+    element.setAttribute('data-probe-scroller', '');
     element.scrollTop = 0;
     return Math.min(100, element.scrollHeight - element.clientHeight);
   });
@@ -353,7 +355,7 @@ async function checkNativeModelPopup({ page, base, check }) {
   await until(() => page.getByRole('option').count().then(count => count === 80), { label: 'reopened unfiltered model options' });
   await settleLayout(page);
   const reopenedBox = await holder.boundingBox();
-  await holder.evaluate(element => { element.scrollTop = 0; });
+  await holder.evaluate(element => { element.setAttribute('data-probe-scroller', ''); element.scrollTop = 0; });
   notch = describeNotch(await sampleNotch(page, {
     x: reopenedBox.x + reopenedBox.width / 2, y: reopenedBox.y + reopenedBox.height / 2,
   }));
