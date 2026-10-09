@@ -113,18 +113,19 @@ const WIDE_COLUMNS = 54;
 /**
  * Panels that hold a year of weeks, and panels that do not.
  *
- * The boundary is arithmetic, not a guess: 54 columns at the 9px floor with 4px gaps need
- * 698px, plus the 30px gutter, so 728px is the narrowest panel that fills. The two lists
- * below straddle it rather than sitting on round numbers, because that is what makes the
- * caption's measurement-driven behaviour testable - a 720px viewport scrolls, a 740px one
- * does not, and no single breakpoint describes both.
+ * The boundary is arithmetic, not a guess: 54 columns at the 7px floor with 2px gaps need
+ * 484px, plus the 26px gutter, so 510px is the narrowest panel that fills. That floor is what
+ * lets the half-width desktop column (about 640px beside credential health) still hold a whole
+ * year without scrolling. The two lists below straddle the boundary rather than sitting on round
+ * numbers, because that is what makes the caption's measurement-driven behaviour testable - a
+ * 500px viewport scrolls, a 560px one does not, and no single breakpoint describes both.
  */
 const MIN_PANEL_WIDTH = heatmapMinPanelWidth(WIDE_COLUMNS);
-assert.equal(MIN_PANEL_WIDTH, 728, 'a year of weeks needs 728px at the cell floor');
-for (const width of [MIN_PANEL_WIDTH, 740, 850, 1000, 1150, 1330]) {
+assert.equal(MIN_PANEL_WIDTH, 510, 'a year of weeks needs 510px at the cell floor');
+for (const width of [MIN_PANEL_WIDTH, 560, 640, 740, 850, 1000, 1150, 1330]) {
   assert.ok(width >= MIN_PANEL_WIDTH!, `${width}px holds a year of weeks, so it fills rather than scrolls`);
 }
-for (const width of [320, 390, 560, 640, MIN_PANEL_WIDTH! - 1]) {
+for (const width of [320, 390, 440, 500, MIN_PANEL_WIDTH! - 1]) {
   assert.ok(
     heatmapMinPanelWidth(WIDE_COLUMNS)! > width,
     `${width}px is narrower than the floor needs, so the grid scrolls`,

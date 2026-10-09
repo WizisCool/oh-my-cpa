@@ -25,8 +25,7 @@ import (
 // window picker still governs the six KPI tiles above it, which is why the panel says which axis it
 // owns.
 //
-// Because the window ends today there are no days still to come, so every cell in it is either a
-// record or the absence of one - which is the only distinction a reader can act on.
+// The final week is drawn in full; days after today stay unqueried and carry no records.
 const heatmapWeeks = 53
 
 // heatmapMaxZoneName bounds a zone name before it reaches the loader. Real names are
@@ -43,7 +42,7 @@ type dashboardTokenHeatmapResponse struct {
 	// Timezone is the IANA zone the days were built in, echoed so a response and the
 	// strip it was rendered into cannot silently disagree about where a day starts.
 	Timezone string `json:"timezone"`
-	// FirstStoredMS is the earliest stored request record for this instance, or null
+	// FirstStoredMS is the earliest retained usage fact for this instance, or null
 	// when none has been captured. Days before it have no stored usage - which is a
 	// statement about storage, not about whether the gateway was running. The panel
 	// labels those cells accordingly rather than claiming nothing happened.

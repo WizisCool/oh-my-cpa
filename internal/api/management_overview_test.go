@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -68,6 +69,9 @@ func TestManagementOverviewUnconfiguredReportsNullCounts(t *testing.T) {
 	}
 	if payload.Counts.Credentials != nil || payload.Counts.ProviderKeys != nil || payload.Counts.ManagementKeys != nil || payload.Counts.Models != nil {
 		t.Fatalf("unconfigured counts must be null, not zero: %#v", payload.Counts)
+	}
+	if payload.Credentials != nil {
+		t.Fatalf("unconfigured credential health must be unknown, not empty: %#v", payload.Credentials)
 	}
 	if payload.Traffic != nil {
 		t.Fatalf("unconfigured traffic must be null: %#v", payload.Traffic)
@@ -242,85 +246,109 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 }
 
 func TestManagementOverviewPartialFailureAndNullCounts(t *testing.T) {
-	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		switch request.URL.Path {
-		case "/v8/management/config":
-			writer.WriteHeader(http.StatusUnauthorized)
-			_, _ = writer.Write([]byte(`{"error":"bad management key"}`))
-		case "/v8/management/credentials":
-			_, _ = writer.Write([]byte(`{"files":[]}`))
-		case "/v8/management/observability/usage/api-keys":
-			writer.WriteHeader(http.StatusNotFound)
-		default:
-			writer.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer cpaServer.Close()
+	for _, shouldFailCredentials := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failed-credentials=%t", shouldFailCredentials), func(t *testing.T) {
+			cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				switch request.URL.Path {
+				case "/v8/management/config":
+					if shouldFailCredentials {
+						_, _ = writer.Write([]byte(`{}`))
+					} else {
+						writer.WriteHeader(http.StatusUnauthorized)
+						_, _ = writer.Write([]byte(`{"error":"bad management key"}`))
+					}
+				case "/v8/management/credentials":
+					if shouldFailCredentials {
+						writer.WriteHeader(http.StatusServiceUnavailable)
+					} else {
+						_, _ = writer.Write([]byte(`{"files":[]}`))
+					}
+				case "/v8/management/observability/usage/api-keys":
+					writer.WriteHeader(http.StatusNotFound)
+				default:
+					writer.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer cpaServer.Close()
 
-	db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	repo := repository.New(db)
-	cipher, err := crypto.New("01234567890123456789012345678901")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ciphertext, nonce, err := cipher.Encrypt([]byte("key"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	if err := repo.UpsertInstance(context.Background(), domain.CPAInstance{ID: "default", Name: "Test", BaseURL: cpaServer.URL, ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce, CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	authManager, err := auth.New("management-secret", "/omc", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := NewHandler(config.Config{BasePath: "/omc", Version: "test", RequestTimeout: time.Second}, repo, cipher, nil, authManager)
-	server := httptest.NewServer(handler.Router())
-	defer server.Close()
-	client := &http.Client{}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
-	// Attach the session manually because this test does not use a cookie jar.
-	request, err := http.NewRequest(http.MethodGet, server.URL+"/omc/api/v1/management/overview", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Header.Set("Cookie", login.Header.Get("Set-Cookie"))
-	response, err := client.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("overview status = %d", response.StatusCode)
-	}
-	var payload managementOverviewResponse
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Status != "degraded" || !payload.CPAConnected {
-		t.Fatalf("status = %#v", payload)
-	}
-	if payload.Counts.ManagementKeys != nil || payload.Counts.ProviderKeys != nil {
-		t.Fatalf("failed config counts should be null: %#v", payload.Counts)
-	}
-	if len(payload.PartialErrors) != 2 {
-		t.Fatalf("partial errors = %#v", payload.PartialErrors)
-	}
-	if response.Header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("overview cache-control = %q", response.Header.Get("Cache-Control"))
-	}
-	if payload.Traffic == nil {
-		t.Fatal("traffic should remain available from successful auth-files endpoint")
+			db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			repo := repository.New(db)
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ciphertext, nonce, err := cipher.Encrypt([]byte("key"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			if err := repo.UpsertInstance(context.Background(), domain.CPAInstance{ID: "default", Name: "Test", BaseURL: cpaServer.URL, ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce, CreatedAt: now, UpdatedAt: now}); err != nil {
+				t.Fatal(err)
+			}
+			authManager, err := auth.New("management-secret", "/omc", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := NewHandler(config.Config{BasePath: "/omc", Version: "test", RequestTimeout: time.Second}, repo, cipher, nil, authManager)
+			server := httptest.NewServer(handler.Router())
+			defer server.Close()
+			client := &http.Client{}
+			login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			login.Body.Close()
+			// Attach the session manually because this test does not use a cookie jar.
+			request, err := http.NewRequest(http.MethodGet, server.URL+"/omc/api/v1/management/overview", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Cookie", login.Header.Get("Set-Cookie"))
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("overview status = %d", response.StatusCode)
+			}
+			var payload managementOverviewResponse
+			if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Status != "degraded" || !payload.CPAConnected {
+				t.Fatalf("status = %#v", payload)
+			}
+			if shouldFailCredentials {
+				if payload.Credentials != nil || payload.Counts.Credentials != nil || payload.Traffic != nil {
+					t.Fatalf("failed credentials must be unknown, not empty: %#v", payload)
+				}
+				if payload.Counts.ManagementKeys == nil || payload.Counts.ProviderKeys == nil {
+					t.Fatalf("successful config must remain readable: %#v", payload.Counts)
+				}
+			} else {
+				if payload.Counts.ManagementKeys != nil || payload.Counts.ProviderKeys != nil {
+					t.Fatalf("failed config counts should be null: %#v", payload.Counts)
+				}
+				if payload.Credentials == nil || payload.Credentials.Total != 0 || payload.Counts.Credentials == nil || *payload.Counts.Credentials != 0 {
+					t.Fatalf("successful empty credentials must not be unknown: %#v", payload)
+				}
+			}
+			if len(payload.PartialErrors) != 2 {
+				t.Fatalf("partial errors = %#v", payload.PartialErrors)
+			}
+			if response.Header.Get("Cache-Control") != "no-store" {
+				t.Fatalf("overview cache-control = %q", response.Header.Get("Cache-Control"))
+			}
+			if !shouldFailCredentials && payload.Traffic == nil {
+				t.Fatal("traffic should remain available from successful auth-files endpoint")
+			}
+		})
 	}
 }
 
@@ -369,5 +397,41 @@ func TestBuildCredentialHealthSeparatesConfiguredAPIKeys(t *testing.T) {
 	}
 	if entry := byType["claude"]; entry.Count != 1 || entry.APIKeys != 1 || entry.APIKeysDisabled != 0 {
 		t.Fatalf("claude tally = %#v, want its one API key", entry)
+	}
+}
+
+func TestBuildCredentialHealthUsesExclusiveStates(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		files       []management.AuthFile
+		active      int
+		unavailable int
+		disabled    int
+	}{
+		{name: "empty"},
+		{name: "active", files: []management.AuthFile{{Type: "codex"}}, active: 1},
+		{name: "unavailable", files: []management.AuthFile{{Type: "codex", Unavailable: true}}, unavailable: 1},
+		{name: "disabled takes precedence", files: []management.AuthFile{{Type: "codex", Disabled: true, Unavailable: true}}, disabled: 1},
+		{name: "mixed", files: []management.AuthFile{{Type: "codex"}, {Type: "codex", Unavailable: true}, {Type: "claude", Disabled: true, Unavailable: true}}, active: 1, unavailable: 1, disabled: 1},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			health := buildCredentialHealth(testCase.files)
+			if health.Total != len(testCase.files) || health.Active != testCase.active || health.Unavailable != testCase.unavailable || health.Disabled != testCase.disabled {
+				t.Fatalf("health = %#v", health)
+			}
+			if health.Active+health.Unavailable+health.Disabled != health.Total {
+				t.Fatalf("health states do not partition the total: %#v", health)
+			}
+			if health.ByType == nil {
+				t.Fatal("successful empty health must expose an empty type list, not null")
+			}
+			typeTotal := 0
+			for _, entry := range health.ByType {
+				typeTotal += entry.Count
+			}
+			if typeTotal != health.Total {
+				t.Fatalf("type total = %d, want %d", typeTotal, health.Total)
+			}
+		})
 	}
 }

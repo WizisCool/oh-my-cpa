@@ -75,12 +75,12 @@
   --heatmap-busy: #00a2fb;
   /* The grid's floor, the space between cells, and the weekday gutter. The cell size itself
      is not a token: it is whatever divides the panel evenly. */
-  --heatmap-min-cell: 9px;
-  --heatmap-gap: 4px;
-  --heatmap-label: 22px;
-  --heatmap-label-gap: 8px;
+  --heatmap-min-cell: 7px;
+  --heatmap-gap: 2px;
+  --heatmap-label: 20px;
+  --heatmap-label-gap: 6px;
   /* The loading skeleton's row height. Fixed because there is no grid yet to measure against. */
-  --heatmap-skeleton-cell: 12px;
+  --heatmap-skeleton-cell: 8px;
   /* The two zero states, as one ordered scale measured against the card rather than against the
      page. The panel sits at `--surface` (#1c1c1f), and both steps are a shade *lighter* than it,
      which is the direction GitHub's own graph uses on dark: the 4px gaps then read as the darker
@@ -927,10 +927,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .type-list span { border: 1px solid var(--border); padding: 4px 7px; color: var(--muted); font-size: 12px; }
 .type-list b { color: var(--fg); font-weight: 500; }
 .empty-copy { color: var(--muted); font-size: 13px; }
-.runtime-list { margin: 8px 0 0; }
-.runtime-list div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
-.runtime-list dt { color: var(--muted); font-size: 13px; }
-.runtime-list dd { max-width: 65%; margin: 0; color: var(--fg); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .terminal-page { padding: 24px 16px 40px; }
@@ -1332,7 +1328,117 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    swipes instead, keeping the floor and letting the row extend past the panel. Shrinking the cells
    to fit was the alternative and it makes the field unreadable well before it fits, and clipping
    silently hides two thirds of the year. */
-.heatmap-panel { margin-bottom: 32px; grid-column: 1 / -1; }
+/* ── dashboard activity & credential health row ────────────────────────────── */
+.dashboard-activity-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+  align-items: stretch;
+}
+.heatmap-panel {
+  margin-bottom: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.heatmap-panel .ant-card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.credential-health-panel {
+  margin-bottom: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.credential-health-panel .ant-card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.health-inner {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+.health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.health-head-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+.health-head-link:hover {
+  color: var(--accent);
+}
+.health-link-icon {
+  font-size: 10px;
+}
+.health-body {
+  margin-top: 14px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.health-skeleton {
+  margin-top: 14px;
+}
+.health-skeleton-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 18px;
+}
+.health-skeleton-types {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.health-empty-action {
+  margin-top: 12px;
+}
+.health-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.health-action-link:hover {
+  text-decoration: underline;
+}
+.health-retry-action {
+  margin-top: 10px;
+}
+.health-alert {
+  margin-bottom: 12px;
+}
+.health-unavailable-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 900px) {
+  .dashboard-activity-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .heatmap-scroll {
+    --heatmap-min-cell: 9px;
+    --heatmap-gap: 2.5px;
+  }
+}
 .heatmap-inner { min-width: 0; }
 .heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 /* The field fills its panel on any width a desktop produces. A phone is the one case where a
@@ -1351,6 +1457,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   /* `!important` because a global `* { scrollbar-width: thin }` further down the sheet would
      otherwise win this declaration, and the bar is exactly what must not appear here. */
   scrollbar-width: none !important;
+  padding-bottom: 2px;
 }
 .heatmap-scroll::-webkit-scrollbar { display: none !important; }
 /* The month axis carries the gutter as padding rather than as a track, so both it and the grid

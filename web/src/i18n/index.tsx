@@ -1221,13 +1221,11 @@ const DICT: Record<string, [string, string]> = {
   'dash.providers_show_less': ['收起', 'Show less'],
   'dash.empty_providers': ['尚无 provider 流量数据', 'No provider traffic yet'],
   'dash.credentials_n': ['{n} 个凭据', '{n} credentials'],
-  'dash.health': ['凭据健康度', 'Credential health'],
+  'dash.health': ['凭证健康度', 'Credential health'],
   'dash.health_empty': ['尚无认证文件数据。', 'No auth file data yet.'],
-  'dash.runtime': ['运行信息', 'Runtime'],
-  'dash.runtime_instance': ['CPA instance', 'CPA instance'],
-  'dash.runtime_version': ['CPA version', 'CPA version'],
-  'dash.runtime_omc': ['Oh My CPA', 'Oh My CPA'],
-  'dash.runtime_baseurl': ['Base URL', 'Base URL'],
+  'dash.health_unavailable': ['无法读取凭证健康数据。', 'Credential health data unavailable.'],
+  'dash.health_error': ['凭证健康数据读取失败', 'Failed to load credential health'],
+  'dash.health_stale': ['凭证健康刷新失败，正在显示之前的数据', 'Credential health refresh failed; showing previous data'],
 
   // ── auth files ───────────────────────────────────────────────────────────
   'af.status_all': ['全部状态', 'All statuses'],

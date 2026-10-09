@@ -175,13 +175,13 @@ export function buildHeatmapGrid(days: DashboardTokenHeatmapDay[]): HeatmapCell[
  */
 export const HEATMAP_GRID = {
   /** The cell floor: below this a square stops reading as a measured value. */
-  minCell: 9,
+  minCell: 7,
   /** Space between cells, and between the gutter and the grid. */
-  gap: 4,
+  gap: 2,
   /** The weekday gutter's width. */
-  label: 22,
+  label: 20,
   /** Space between the gutter and the grid. */
-  labelGap: 8,
+  labelGap: 6,
 } as const;
 
 /**
