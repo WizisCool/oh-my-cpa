@@ -29,6 +29,7 @@
 /* Shown while the region is being used - pointed at, scrolled or dragged - and gone otherwise,
    so a resting rail carries no chrome. */
 .root:hover > .track,
+.root:focus-within > .track,
 .root[data-scrolling] > .track,
 .root[data-dragging] > .track { opacity: 1; }
 .thumb {
