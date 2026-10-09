@@ -612,3 +612,38 @@ browser/product code.
 
 The existing `formatDuration(119600)` result remains separate observable bug-fix
 scope. Test counts and source line counts are inventory, not success criteria.
+
+### Component pilot evidence and browser ownership
+
+The adopted component lane uses development-only Vitest 5.0.3, jsdom 30.1.2,
+React Testing Library 16.3.3 and DOM Testing Library 10.4.1, with the installed
+React 18.3.1 and Vite 6.4.3. Current official documentation and registry peer/engine
+metadata were checked; no production framework upgrade is involved. Existing Node
+logic and Go discovery remain unchanged. ADR 0089 records the layer boundary.
+
+| Claim | New integration owner | Retained engine/cross-stack owner |
+| --- | --- | --- |
+| Held initial read, shared subscription and optimistic values in multiple mounted readers | preference component suite; real hook/QueryClient/client | settings page wiring and actual browser reload |
+| Failed write rolls back, produces real feedback and permits recovery | component refusal/recovery case | existing OMC settings refusal remains; feedback geometry/stacking stay in probes |
+| Per-key serialization and older refusal cannot erase newer intent | held-response component case; three valid TPS intents | cross-stack writes and production HTTP/SQLite ownership remain in Go/built acceptance |
+| Different keys can progress independently | held-response component case | no database concurrency or permission rule changes |
+| An admitted write completes after component unmount | component ownership case | actual navigation and browser keepalive are not simulated guarantees |
+| Failed initial read becomes ready with fallback; parsed objects retain identity across unrelated cache updates | component fallback/reference cases | pure parsing rules remain Node-owned |
+| Token display state reaches the real context meter accessible reading | real shared provider/consumer component case | meter geometry, hover, focus, paint and responsive placement remain Chromium-owned |
+
+Initial eight-case run: Vitest 4.11 s, whole command 6.08 s, user/system CPU
+7.11/0.98 s, maximum child RSS 262,180 KiB. The bounded shared runner variant took
+6.76 s (Vitest 4.37 s, child RSS 264,432 KiB). These are local isolated samples,
+not a claimed speedup of the much broader settings scenario. Fault injection found
+an initially insufficient two-state ordering assertion; a three-intent sequence now
+exposes an older rollback that would otherwise equal the fallback. Removing rollback,
+per-key serialization or last-intent admission each fails its named case. Record
+final measurements and full-gate results after all phase changes.
+
+All 65 unchanged baseline probes passed: runner 732.5 s, whole command 734.66 s,
+user/system CPU 342.01/153.93 s, maximum child RSS 522,772 KiB. Scenario durations
+sum to 730.126 s; only about 2.374 s lies outside scenarios. Therefore replacing
+three process startups alone is not a demonstrated high-leverage optimization.
+Initial route transforms are inside scenario timing and need their own measurement;
+prioritize repeated navigation, payload/transform work and mixed claim ownership
+rather than assuming that a long catalog means slow browser process launch.

@@ -148,7 +148,7 @@ Semantic requirements:
 ## 6. Common Commands
 
 Test layering criteria and "what belongs in the browser" are detailed in [`docs/architecture.md`](docs/architecture.md) §12:
-**Pay the browser testing cost only when Chromium is genuinely needed.** `pnpm test:fast` never builds, never launches Vite / Chromium / fake CPA; selection logic lives in `scripts/affected-checks.mjs` and its tests assert this property.
+**Pay the browser testing cost only when Chromium is genuinely needed.** `pnpm test:fast` never builds or launches the product Vite HTTP listener / Chromium / fake CPA; selection logic lives in `scripts/affected-checks.mjs` and its tests assert this property.
 
 | Command | Purpose |
 | --- | --- |
@@ -157,6 +157,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
 | `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check and conservative affected logic suites); `--base <ref>` includes committed changes, `--plan` prints without running |
+| `pnpm test:components` | Automatically discovered isolated React integration tests; real hook/cache/client wiring under jsdom, no product HTTP listener or Chromium |
 | `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
 | `pnpm check:bundle` | Check production loading boundaries and anomaly ceilings; report raw/gzip sizes and exact-base growth |
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
@@ -206,6 +207,7 @@ Evaluate every delivery surface independently: titles, filenames, body prose, co
 
 ## Architecture and verification maintenance
 
+- Put rendered async hook/cache/provider claims in automatically discovered component tests when a pure-function test cannot observe them. Use held responses and explicit cleanup; simulated DOM never replaces Chromium geometry, focus, scrolling, navigation or real image handling.
 - Prefer leaf modules for shared logic: a shared component or another page must not
   acquire a runtime dependency on a page's state solely to obtain a general utility.
   Keep domain orchestration at its owner; do not create generic wrappers without

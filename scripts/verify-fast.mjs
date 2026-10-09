@@ -45,6 +45,7 @@ export const CHECK_COMMANDS = {
   // info file under `tmp/`, while `verify` and CI keep the fresh `type-check`.
   'type-check': { label: 'frontend type check (incremental)', command: 'pnpm', args: ['type-check:incremental'] },
   logic: { label: 'frontend logic tests', command: 'pnpm', args: ['test:logic'] },
+  components: { label: 'React component integration tests', command: 'pnpm', args: ['test:components'] },
   i18n: { label: 'frontend translation keys', command: 'pnpm', args: ['check-i18n'] },
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },

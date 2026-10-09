@@ -75,7 +75,7 @@
     "verify:secrets:staged": "node scripts/secret-scan.mjs --staged",
     "verify:secrets:worktree": "node scripts/secret-scan.mjs --worktree",
     "verify:static": "node scripts/verify-static.mjs",
-    "verify:static:frontend": "pnpm type-check && pnpm test:logic && pnpm lint:antd",
+    "verify:static:frontend": "pnpm type-check && pnpm test:logic && pnpm test:components && pnpm lint:antd",
     "verify:static:go": "go test ./... && go vet ./...",
     "verify:static:repository": "pnpm verify:workflow && pnpm check-i18n && pnpm check-docs && pnpm check-brand && pnpm check-css-modules && pnpm check:motion && pnpm check:feedback && pnpm test:self",
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
@@ -88,7 +88,8 @@
     "report:probe-timings": "node scripts/probe-timing-report.mjs",
     "verify:workflow:lint": "node scripts/lint-workflows.mjs",
     "verify:browser:harness": "node --test scripts/acceptance/browser-harness.test.mjs",
-    "benchmark:native": "node scripts/benchmark-native-builds.mjs"
+    "benchmark:native": "node scripts/benchmark-native-builds.mjs",
+    "test:components": "node scripts/test-components.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
