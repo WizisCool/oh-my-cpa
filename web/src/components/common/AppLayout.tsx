@@ -33,6 +33,7 @@ import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
+import { OverlayScrollArea } from './OverlayScrollArea';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
@@ -372,7 +373,7 @@ export const AppLayout: React.FC = () => {
               <BrandArtwork shape="o" height={20} />
             </div>
           ) : brand}
-          <div className="app-sider-scroll">{menu}</div>
+          <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
           {isCollapsed ? (
             <Tooltip
               title={`${t('shell.cpa')} · ${cpaState}`}
@@ -455,7 +456,7 @@ export const AppLayout: React.FC = () => {
           styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
         >
           {brand}
-          <div className="app-sider-scroll">{menu}</div>
+          <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
           {siderFoot}
         </Drawer>
       )}

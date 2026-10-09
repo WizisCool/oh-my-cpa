@@ -564,7 +564,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* Sized by height: the wordmark is about 5.9:1 and the O about 1:1, so both take their own
    width and neither is letterboxed by a fixed box. */
 .app-brand-logo { display: block; flex: none; width: auto; }
-.app-sider-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; }
+/* The navigation scrolls under an overlay thumb (`OverlayScrollArea`): a native bar took 8px
+   out of one side of a 236px rail, so the rows sat off the brand's axis whenever the list
+   overflowed and jumped back when it did not. */
+.app-sider-scroll { flex: 1 1 0; }
+.app-sider-viewport { padding: 6px 8px; }
 .app-menu { background: transparent !important; border-inline-end: 0 !important; }
 .app-menu .ant-menu-item-group-title { color: var(--meta) !important; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; padding: 14px 12px 6px; }
 .app-menu .ant-menu-item { color: var(--muted); margin: 2px 8px; width: calc(100% - 16px); padding-inline: 10px; border-radius: var(--radius-sm); }
@@ -643,9 +647,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   /* The mask is transparent, so the sheet's own edge is what separates it from the page. */
   border-right: 1px solid var(--border);
 }
-/* The nav is the only region that scrolls, so the brand and the foot stay put and the sheet
-   never becomes a second scroller the reader has to find. */
-.mobile-nav-drawer .app-sider-scroll { overscroll-behavior: contain; }
 .mobile-nav-drawer .app-brand { cursor: default; }
 /* ── sign-in ──────────────────────────────────────────────────────────────
    One centred column on the page itself: no card, no texture, no rule under the header. The

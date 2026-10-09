@@ -1,0 +1,48 @@
+/* A scroll region whose indicator floats over the content instead of taking a column of it.
+   The native bar is hidden in every engine and a thumb is drawn in its place, so the content
+   keeps the same width whether or not it overflows and on every platform's scrollbar style. */
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.viewport {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* `!important` because the console's global `* { scrollbar-width: thin }` would win otherwise. */
+  scrollbar-width: none !important;
+}
+.viewport::-webkit-scrollbar { display: none !important; }
+.track {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-end: 2px;
+  width: 6px;
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--ease-standard);
+}
+.track[hidden] { display: none; }
+/* Shown while the region is being used - pointed at, scrolled or dragged - and gone otherwise,
+   so a resting rail carries no chrome. */
+.root:hover > .track,
+.root[data-scrolling] > .track,
+.root[data-dragging] > .track { opacity: 1; }
+.thumb {
+  width: 100%;
+  min-height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+  will-change: transform;
+  touch-action: none;
+}
+.thumb:hover,
+.root[data-dragging] .thumb { background: var(--meta); }
+/* Touch scrolls the content itself; the thumb there only reports position. */
+@media (hover: none) {
+  .track { pointer-events: none; }
+}
