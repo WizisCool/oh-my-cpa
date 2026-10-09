@@ -65,6 +65,46 @@ test('reaching the shared layer or an unnamed routed page still selects everythi
   assert.equal(planScenarios(['web/src/utils/onlyUnmapped.ts'], ALL, impactOf(CONSOLE)).ids.length, ALL.length);
 });
 
+const LAZY_CONSOLE = {
+  ...CONSOLE,
+  'web/src/App.tsx': "import * as pages from './routePages'; export { pages };",
+  'web/src/routePages.ts': "export const system = () => import('./pages/SystemPage'); export const keys = () => import('./pages/ApiKeysPage'); export const orphan = () => import('./pages/UnmappedPage');",
+};
+
+test('literal lazy pages stop at the route registry without losing shared helper consumers', () => {
+  const impact = impactOf(LAZY_CONSOLE);
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, impact).ids,
+    planScenarios(['web/src/pages/SystemPage.tsx'], ALL).ids);
+  assert.deepEqual(new Set(planScenarios(['web/src/utils/format.ts'], ALL, impact).ids),
+    new Set(planScenarios(['web/src/utils/format.ts'], ALL, impactOf(CONSOLE)).ids));
+});
+
+test('route registry edits, unmapped lazy pages, eager edges and mixed shared edits still widen', () => {
+  const impact = impactOf(LAZY_CONSOLE);
+  for (const files of [
+    ['web/src/routePages.ts'],
+    ['web/src/utils/onlyUnmapped.ts'],
+    ['web/src/pages/SystemPage.tsx', 'web/src/App.tsx'],
+  ]) assert.deepEqual(planScenarios(files, ALL, impact).ids, ALL, files.join(', '));
+  for (const statement of [
+    "import SystemPage from './pages/SystemPage'; export { SystemPage };",
+    "export { default as SystemPage } from './pages/SystemPage';",
+    "import SystemPage from './pages/SystemPage.tsx'; export { SystemPage };",
+  ]) {
+    const eager = impactOf({ ...LAZY_CONSOLE, 'web/src/routePages.ts': `${LAZY_CONSOLE['web/src/routePages.ts']} ${statement}` });
+    assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, eager).ids, ALL, statement);
+  }
+  const lazyHelper = impactOf({
+    ...LAZY_CONSOLE,
+    'web/src/routePages.ts': "export const helper = () => import('./types/rollingNumber');",
+    'web/src/types/rollingNumber.ts': 'export const value = 1;',
+  });
+  assert.deepEqual(planScenarios(['web/src/types/rollingNumber.ts'], ALL, lazyHelper).ids, ALL,
+    'a mapped shared helper is not a routed page');
+  const unknown = { ...impact, lazyImporters: undefined };
+  assert.deepEqual(planScenarios(['web/src/pages/SystemPage.tsx'], ALL, unknown).ids, ALL);
+});
+
 test('a type-only module selects nothing, an unimported asset selects everything', () => {
   assert.deepEqual(planScenarios(['web/src/types/system.ts'], ALL, impactOf(CONSOLE)).ids, []);
   assert.equal(planScenarios(['web/src/assets/fonts/inter.woff2'], ALL, impactOf(CONSOLE)).ids.length, ALL.length);
@@ -73,6 +113,18 @@ test('a type-only module selects nothing, an unimported asset selects everything
 test('an unresolved import anywhere widens the plan', () => {
   const impact = { ...impactOf(CONSOLE), unresolved: ['web/src/App.tsx -> ./nowhere'] };
   assert.equal(planScenarios(['web/src/utils/format.ts'], ALL, impact).ids.length, ALL.length);
+});
+
+test('unreadable graph inputs widen rather than disappearing as unused modules', () => {
+  const graph = buildImporterGraph({
+    files: Object.keys(CONSOLE),
+    readFile: file => {
+      if (file === 'web/src/pages/SystemPage.tsx') throw new Error('fixture unavailable');
+      return CONSOLE[file];
+    },
+  });
+  assert.ok(graph.unresolved.length > 0);
+  assert.deepEqual(planScenarios(['web/src/utils/format.ts'], ALL, graph).ids, ALL);
 });
 
 const CATALOG = "import { x } from './x';\nexport const DICT = {\n  'a.one': ['一', 'One'],\n  'a.two': [\n    '二',\n    'Two',\n  ],\n};\nexport function t(key: string) { return DICT[key]; }\n";
@@ -173,8 +225,9 @@ test('every page the router loads has a scenario rule', () => {
   // Without one, any change that reaches the page selects the whole catalog. Add a
   // rule to SCENARIO_PATHS in check-ui-plan.mjs naming the scenarios that load its
   // route - or `scenarios: []` when no probe loads it.
-  const routed = [...realGraph.importers].filter(([, importers]) => importers.has('web/src/App.tsx')).map(([file]) => file)
+  const routed = [...realGraph.importers].filter(([, importers]) => importers.has('web/src/App.tsx') || importers.has('web/src/routePages.ts')).map(([file]) => file)
     .filter((file) => file.startsWith('web/src/pages/'));
+  assert.ok(routed.length > 0, 'expected pages reached through the real router and lazy registry');
   const unnamed = routed.filter((file) => planScenarios([file], ALL, { ...realGraph, isAdditionOnly: () => false }).ids.length === ALL.length);
   assert.deepEqual(unnamed, []);
 });

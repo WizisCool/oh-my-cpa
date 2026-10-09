@@ -32,6 +32,7 @@ const SHELL_PATHS = [
   'web/index.html',
   'web/src/App.tsx',
   'web/src/main.tsx',
+  'web/src/routePages.ts',
   'web/src/index.css',
   'web/src/api/client.ts',
   'web/src/i18n/index.tsx',
@@ -230,6 +231,10 @@ const SCENARIO_PATHS = [
   // The key list page: the phone rendering, the touch rules and the modal Back dismissal
   // each load `/api-keys`.
   { prefix: 'web/src/pages/ApiKeysPage', scenarios: ['phone-lists', 'touch-ergonomics', 'overlay-back', 'mobile-console'] },
+  {
+    prefix: 'web/src/pages/PluginPageHost',
+    scenarios: ['plugin-management', 'plugin-management-narrow', 'mobile-console'],
+  },
   {
     prefix: 'web/src/pages/PluginsPage',
     scenarios: ['plugin-management', 'plugin-management-narrow', 'mobile-console'],
@@ -441,7 +446,7 @@ function ruleFor(file) {
  * continues through a mapped module rather than stopping at it, because a shared
  * component can also be imported by a page its own rule does not list.
  */
-function reachScenarios(file, importers) {
+function reachScenarios(file, { importers, lazyImporters }) {
   const found = new Set();
   const via = [];
   const queue = [file];
@@ -449,6 +454,14 @@ function reachScenarios(file, importers) {
   while (queue.length > 0) {
     const node = queue.shift();
     for (const importer of importers.get(node) ?? []) {
+      if (importer === 'web/src/routePages.ts') {
+        // Only a proven lazy page is isolated from registry initialization. Shared helpers,
+        // eager re-exports and unknown edge kinds must still verify every route.
+        if (!node.startsWith('web/src/pages/') || !lazyImporters?.get(node)?.has(importer) || !ruleFor(node)) {
+          return { all: `${node} reaches the route registry without a mapped lazy boundary` };
+        }
+        continue;
+      }
       if (ROUTER_ROOTS.has(importer)) {
         if (!ruleFor(node)) return { all: `${node} is loaded by the router and no scenario rule names it` };
         continue;
@@ -577,7 +590,7 @@ export function planScenarios(files, allIds, impact) {
       if (!rule) unplaced.push(file);
       continue;
     }
-    const reach = reachScenarios(file, impact.importers);
+    const reach = reachScenarios(file, impact);
     if (reach.all) {
       return {
         ids: [...allIds],

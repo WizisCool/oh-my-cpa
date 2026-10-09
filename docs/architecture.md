@@ -2324,6 +2324,13 @@ that partial outcome rather than either success or failure.
 
 ## 12. Test layering
 
+Local browser impact analysis follows transpiled runtime imports, preserving eager
+and lazy edge kinds. The central `web/src/routePages.ts` registry is a boundary only
+for mapped literal lazy-page imports; registry changes or eager/unknown consumers
+remain full-catalog changes. Real-tree planner tests require nonempty page discovery
+through both App and the registry. Full CI coverage does not depend on local selection.
+See `docs/plans/architecture-governance.md` for the measured audit and staged work.
+
 The suite is split by what each layer can actually prove, not by which runner is
 fashionable. `docs/testing.md` is the working guide (where a new test goes, how it is
 registered, what to run when); this section records why. The rule is **Browser Everything → Browser Only Where Browser

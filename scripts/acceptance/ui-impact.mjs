@@ -43,7 +43,7 @@ const RUNTIME_SPECIFIER = /(?:\bimport|\bexport)\s*(?:[^'"()]*?\bfrom\s*)?['"]([
 const CSS_IMPORT = /@import\s+(?:url\()?['"]([^'"]+)['"]/g;
 
 function runtimeSpecifiers(file, text) {
-  if (file.endsWith('.css')) return [...text.matchAll(CSS_IMPORT)].map((match) => match[1]);
+  if (file.endsWith('.css')) return [...text.matchAll(CSS_IMPORT)].map((match) => ({ specifier: match[1], isDynamic: false }));
   const ts = loadTypeScript();
   const output = ts.transpileModule(text, {
     fileName: file,
@@ -55,7 +55,9 @@ function runtimeSpecifiers(file, text) {
       verbatimModuleSyntax: false,
     },
   }).outputText;
-  return [...output.matchAll(RUNTIME_SPECIFIER)].map((match) => match[1] ?? match[2]);
+  return [...output.matchAll(RUNTIME_SPECIFIER)].map((match) => ({
+    specifier: match[1] ?? match[2], isDynamic: match[2] !== undefined,
+  }));
 }
 
 /** Resolves a local specifier to a known file; `null` marks a local one that did not resolve. */
@@ -86,6 +88,8 @@ export function buildImporterGraph({
 } = {}) {
   const known = new Set(files);
   const importers = new Map([...known].map((file) => [file, new Set()]));
+  const lazyImporters = new Map([...known].map((file) => [file, new Set()]));
+  const eagerImporters = new Map([...known].map((file) => [file, new Set()]));
   const unresolved = [];
   for (const file of known) {
     if (!/\.(?:ts|tsx|css)$/.test(file) || file.endsWith('.d.ts')) continue;
@@ -93,15 +97,24 @@ export function buildImporterGraph({
     try {
       text = readFile(file);
     } catch {
+      unresolved.push(`${file} -> unreadable source`);
       continue;
     }
-    for (const specifier of runtimeSpecifiers(file, text)) {
+    for (const { specifier, isDynamic } of runtimeSpecifiers(file, text)) {
       const target = resolveSpecifier(file, specifier, known);
       if (target === null) unresolved.push(`${file} -> ${specifier}`);
-      else if (target) importers.get(target).add(file);
+      else if (target) {
+        importers.get(target).add(file);
+        (isDynamic ? lazyImporters : eagerImporters).get(target).add(file);
+      }
     }
   }
-  return { importers, unresolved };
+  // A page imported both lazily and eagerly still participates in registry initialization.
+  // Classify by resolved file rather than spelling so aliases cannot hide the eager edge.
+  for (const [file, owners] of eagerImporters) {
+    for (const owner of owners) lazyImporters.get(file).delete(owner);
+  }
+  return { importers, lazyImporters, unresolved };
 }
 
 /** Top-level `name -> { key -> entry text }` for every object-literal catalog. */

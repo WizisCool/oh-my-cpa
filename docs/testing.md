@@ -187,6 +187,15 @@ run:
 
 ## 3. What to run, and when
 
+The UI runtime graph distinguishes literal dynamic imports from eager imports. Mapped
+pages loaded lazily by `web/src/routePages.ts` end their reachability chain at that
+registry, just as direct routed pages end at App. The registry itself, its eager
+helpers, mixed eager/lazy edges, unmapped pages, unreadable sources and missing edge evidence still widen
+to all scenarios. `scripts/ui-impact.test.mjs` reads the real graph and requires a
+nonempty routed-page set; a fixture-only test must not pass while real route discovery
+is empty. The plugin host maps to the existing plugin browser scenarios; built native
+credential, frame and write contracts remain in cross-stack acceptance.
+
 The local fast lane passes changed files to `scripts/logic-plan.mjs`, which follows
 relative runtime imports into automatically discovered suites. Unknown/unowned
 changes and infrastructure/dependency changes widen to the full suite. Suites with
