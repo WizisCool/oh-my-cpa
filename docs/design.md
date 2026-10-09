@@ -1224,8 +1224,8 @@ empty box recalls the messages already sent, newest first. Neither has a button:
 names both keys.
 
 **The frame holds what a message is made of and sent with, and nothing that only reports.** The
-Agent's foot has four controls: a 28px round `+` that attaches at the start, and the effort chip,
-the model chip and the send slot at the end. Readings sit under the frame, on the note's line. What the next
+Agent's foot has five controls: a 28px round `+` that attaches and the endpoint chip at the start,
+and the effort chip, the model chip and the send slot at the end. Readings sit under the frame, on the note's line. What the next
 message carries beyond its text sits above the input as 24px hairline chips on `--bg`, each with
 its own remove: an edit of the newest message in `--fg-2`, a presentation (`/ui`, `/text`) in
 `--accent` with an accent border. The chip leaves when the message is sent, and the sent message
