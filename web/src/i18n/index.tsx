@@ -813,11 +813,6 @@ const DICT: Record<string, [string, string]> = {
   'omc.token_style_en': ['缩写 K/M/B', 'Compact K/M/B'],
   'omc.token_style_zh': ['中文 万/亿', 'Chinese 万/亿'],
   'omc.token_style_full': ['完整数字', 'Full digits'],
-  'omc.models_view': ['模型展示口径', 'Model display view'],
-  'omc.models_view_desc': [
-    '控制仪表盘与请求记录中默认展示调用模型还是请求模型。',
-    'Choose whether the dashboard and request records display the call model or the requested model by default.',
-  ],
   'omc.request_model_icons': ['请求列表模型图标', 'Model icons in request list'],
   'omc.request_model_icons_desc': [
     '在请求记录列表中，是否在模型名称前展示对应的厂商或提供商图标。',
@@ -2298,11 +2293,8 @@ const DICT: Record<string, [string, string]> = {
   'events.caller': ['请求来源', 'Request origin'],
   'events.executor': ['执行器', 'Executor'],
   'events.endpoint': ['请求端点', 'Endpoint'],
-  'events.model_alias': ['调用模型', 'Call model'],
   'events.call_model': ['调用模型', 'Call model'],
   'events.request_model': ['请求模型', 'Requested model'],
-  'events.col_model_call': ['调用模型', 'Call model'],
-  'events.col_model_request': ['请求模型', 'Requested model'],
   'events.model_view_toggle': ['模型展示口径', 'Model display view'],
   'events.not_captured': ['未采集', 'Not captured'],
   'events.unknown_provider': ['提供商未记录', 'Provider not recorded'],
