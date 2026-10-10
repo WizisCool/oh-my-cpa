@@ -69,7 +69,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
   const t = useT();
   const toast = useToast();
   const { theme } = useTheme();
-  const { style: tokenStyle, tpsMode } = useTokenDisplayStyle();
+  const { style: tokenStyle, tpsMode, modelView } = useTokenDisplayStyle();
   const customIcons = useCustomIcons(open).data;
   useOverlayHistory({ isOpen: open, onClose });
 
@@ -96,6 +96,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
             t,
             tokenStyle,
             tpsMode,
+            modelView,
             credentials,
             providerIcons,
             configuredProviders,
@@ -104,7 +105,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
           })
         : null,
     [
-      open, isImage, rows, masks, colWidths, t, tokenStyle, tpsMode,
+      open, isImage, rows, masks, colWidths, t, tokenStyle, tpsMode, modelView,
       credentials, providerIcons, configuredProviders, pluginLogos,
     ],
   );

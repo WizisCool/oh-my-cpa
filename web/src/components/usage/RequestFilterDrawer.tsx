@@ -80,13 +80,13 @@ const ROUTING_FACETS: FacetSpec[] = [
  * multi-select as the other exact dimensions.
  */
 const ALIAS_FACETS: FacetSpec[] = [
-  { key: 'model_alias', facet: 'model_aliases', labelKey: 'events.model_alias' },
+  { key: 'model_alias', facet: 'model_aliases', labelKey: 'events.call_model' },
 ];
 
 /** What the reader calls each field a pattern can be matched against. */
 export const REGEX_FIELD_LABELS: Record<UsageRegexField, string> = {
-  model: 'events.col_model',
-  model_alias: 'events.model_alias',
+  model: 'events.request_model',
+  model_alias: 'events.call_model',
   response_model: 'events.served_model',
   provider: 'events.provider',
   endpoint: 'events.endpoint',

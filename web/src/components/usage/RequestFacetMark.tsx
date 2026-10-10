@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { resolveModelManufacturer } from '../../types/modelSquare';
+import { ModelMark } from '../ModelMark';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import {
   resolveProviderInfo,
@@ -9,8 +9,7 @@ import {
 } from '../../types/usageEventIdentity';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageEvent } from '../../types/usageEvents';
-import { BoxOutlined } from '../icons';
-import { LobeIcon, ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
 
 const MARK_SIZE = 16;
 
@@ -48,13 +47,7 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
 
   return (key, value) => {
     if (key === 'model') {
-      const maker = resolveModelManufacturer(value);
-      const iconId = maker.modelIconId || maker.iconId;
-      return iconId ? (
-        <LobeIcon iconId={iconId} size={MARK_SIZE} />
-      ) : (
-        <BoxOutlined className="req-facet-generic-mark" size={MARK_SIZE} strokeWidth={1.5} aria-hidden />
-      );
+      return <ModelMark model={value} size={MARK_SIZE} className="req-facet-model-mark" />;
     }
     if (key === 'provider') return providerMark({ provider: value });
     if (key === 'auth_index') {

@@ -157,6 +157,7 @@ export interface RequestSheetInput {
   t: (key: string, values?: Record<string, string | number>) => string;
   tokenStyle: TokenNumberStyle;
   tpsMode: TpsCalculationMode;
+  modelView?: 'call' | 'model';
   credentials: CredentialIndex;
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
@@ -225,7 +226,13 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       model: {
         lines: [
           [
-            text(event.model || t('events.not_captured'), 'fg', 13, 600, true),
+            text(
+              (input.modelView === 'call' ? (event.model_alias || event.model) : event.model) || t('events.not_captured'),
+              'fg',
+              13,
+              600,
+              true,
+            ),
             ...(!event.generate ? [{ kind: 'tag', text: t('events.preflight'), tone: 'muted' } as const] : []),
           ],
           ...(event.model_substituted && event.response_model

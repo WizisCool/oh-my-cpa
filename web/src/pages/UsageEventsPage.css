@@ -978,6 +978,12 @@
   gap: 6px;
   overflow: hidden;
 }
+.req-model-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .req-model-name {
   font-size: 13px;
   font-weight: 600;

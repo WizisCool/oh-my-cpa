@@ -4,8 +4,10 @@ import { usePreference } from '../hooks/usePreference';
 import { useI18n } from '../i18n';
 import {
   DEFAULT_MODEL_CHART_VIEW,
+  DEFAULT_REQUEST_MODEL_ICONS,
   DEFAULT_TOKEN_NUMBER_STYLE,
   parseModelChartView,
+  parseRequestModelIcons,
   parseTokenNumberStyle,
   resolveTokenNumberStyle,
   type ModelChartView,
@@ -16,6 +18,8 @@ import {
 export const TOKEN_STYLE_PREFERENCE = 'omc_token_style';
 /** The stored preference key holding the model panels' grouping view. */
 export const MODEL_VIEW_PREFERENCE = 'omc_models_view';
+/** The stored preference key holding whether model brand icons appear in the request list. */
+export const REQUEST_MODEL_ICONS_PREFERENCE = 'omc_request_model_icons';
 
 interface TokenDisplayContextValue {
   /**
@@ -27,6 +31,8 @@ interface TokenDisplayContextValue {
   /** How the model panels group their series. */
   modelView: ModelChartView;
   tpsMode: TpsCalculationMode;
+  showModelIcons: boolean;
+  setShowModelIcons: (show: boolean) => void;
   setTpsMode: (mode: TpsCalculationMode) => void;
   setStyle: (style: TokenNumberStyle) => void;
   setModelView: (view: ModelChartView) => void;
@@ -36,6 +42,8 @@ const TokenDisplayContext = React.createContext<TokenDisplayContextValue>({
   style: DEFAULT_TOKEN_NUMBER_STYLE,
   modelView: DEFAULT_MODEL_CHART_VIEW,
   tpsMode: DEFAULT_TPS_CALCULATION_MODE,
+  showModelIcons: DEFAULT_REQUEST_MODEL_ICONS,
+  setShowModelIcons: () => undefined,
   setTpsMode: () => undefined,
   setStyle: () => undefined,
   setModelView: () => undefined,
@@ -58,9 +66,11 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const parseStyle = React.useRef(parseTokenNumberStyle).current;
   const parseView = React.useRef(parseModelChartView).current;
   const parseTpsMode = React.useRef(parseTpsCalculationMode).current;
+  const parseIcons = React.useRef(parseRequestModelIcons).current;
 
   const stylePref = usePreference<TokenNumberStyle>(TOKEN_STYLE_PREFERENCE, DEFAULT_TOKEN_NUMBER_STYLE, parseStyle);
   const viewPref = usePreference<ModelChartView>(MODEL_VIEW_PREFERENCE, DEFAULT_MODEL_CHART_VIEW, parseView);
+  const iconsPref = usePreference<boolean>(REQUEST_MODEL_ICONS_PREFERENCE, DEFAULT_REQUEST_MODEL_ICONS, parseIcons);
 
   const tpsPref = usePreference<TpsCalculationMode>(TPS_CALCULATION_PREFERENCE, DEFAULT_TPS_CALCULATION_MODE, parseTpsMode);
 
@@ -77,11 +87,13 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
       style,
       modelView: viewPref.value,
       tpsMode: tpsPref.value,
+      showModelIcons: iconsPref.value,
+      setShowModelIcons: iconsPref.set,
       setTpsMode: tpsPref.set,
       setStyle: stylePref.set,
       setModelView: viewPref.set,
     }),
-    [style, stylePref.set, viewPref.value, viewPref.set, tpsPref.value, tpsPref.set],
+    [style, stylePref.set, viewPref.value, viewPref.set, tpsPref.value, tpsPref.set, iconsPref.value, iconsPref.set],
   );
 
   return <TokenDisplayContext.Provider value={value}>{children}</TokenDisplayContext.Provider>;

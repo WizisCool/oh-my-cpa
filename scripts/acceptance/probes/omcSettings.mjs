@@ -179,16 +179,17 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
   //
-  // Eight rows include the deployment timezone, token style, TPS mode, language, scroll smoothing and
-  // appearance: the mode is the setting an operator changes often, and the two palettes are the
-  // considered choices behind it. A single "theme" row could only be one of those.
+  // Nine rows include the deployment timezone, token style, TPS mode, model icons in request list,
+  // language, scroll smoothing and appearance: the mode is the setting an operator changes often,
+  // and the two palettes are the considered choices behind it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 8
+    labels.length === 9
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
       && labels.some((label) => /TPS calculation mode|TPS 计算方式/.test(label))
+      && labels.some((label) => /Model icons in request list|请求列表模型图标/.test(label))
       && labels.some((label) => /Theme mode|主题模式/.test(label))
       && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
       && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))

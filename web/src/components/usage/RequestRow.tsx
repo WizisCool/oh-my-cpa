@@ -33,6 +33,7 @@ import {
   eventUserAgentLabel,
 } from '../../types/usageEventLabels';
 import { requestColumnAlignClass } from './requestColumns';
+import { ModelMark } from '../ModelMark';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useToast } from '../feedback';
@@ -70,7 +71,25 @@ export const RequestRow = React.memo<RequestRowProps>(
     const openPriceEditor = useOpenPriceEditor();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
-    const { style: tokenStyle, tpsMode } = useTokenDisplayStyle();
+    const { style: tokenStyle, tpsMode, modelView, showModelIcons } = useTokenDisplayStyle();
+    const isCallView = modelView === 'call';
+    const callModel = event.model_alias || event.model;
+    const requestModel = event.model;
+    const displayModel = (isCallView ? callModel : requestModel) || t('events.not_captured');
+
+    const modelTooltip = React.useMemo(() => {
+      const parts: string[] = [];
+      if (event.model_alias && event.model_alias !== event.model) {
+        parts.push(`${t('events.call_model')}: ${event.model_alias}`);
+        parts.push(`${t('events.request_model')}: ${event.model}`);
+      } else if (event.model) {
+        parts.push(isCallView ? `${t('events.call_model')}: ${event.model}` : `${t('events.request_model')}: ${event.model}`);
+      }
+      if (event.response_model && event.model_substituted) {
+        parts.push(`${t('events.served_model')}: ${event.response_model}`);
+      }
+      return parts.join(' · ');
+    }, [event.model, event.model_alias, event.response_model, event.model_substituted, isCallView, t]);
 
     const providerInfo = resolveProviderInfo(
       event,
@@ -141,7 +160,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             onOpen(event.id);
           }
         }}
-        aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
+        aria-label={`${t('common.details')}: ${displayModel}, ${event.request_id || event.id}`}
       >
         {/* The row opens the record; the checkbox picks it instead, so neither a
             click nor a key on it may reach the row. */}
@@ -253,15 +272,19 @@ export const RequestRow = React.memo<RequestRowProps>(
             the request was made has its own column, so a row is two lines at most. */}
         <div className={`req-col req-col-model ${requestColumnAlignClass('model')}`}>
           <div className="req-model-primary">
+            {showModelIcons && (
+              <ModelMark
+                model={displayModel}
+                fallbackModel={event.model}
+                size={16}
+                className="req-model-mark"
+              />
+            )}
             <strong
               className="req-model-name"
-              title={
-                event.model_alias && event.model_alias !== event.model
-                  ? `${event.model || ''} · ${t('events.model_alias')}: ${event.model_alias}`
-                  : event.model
-              }
+              title={modelTooltip || displayModel}
             >
-              {event.model || t('events.not_captured')}
+              {displayModel}
             </strong>
             {!event.generate && (
               <span className="req-preflight-badge" title={t('events.preflight_hint')}>

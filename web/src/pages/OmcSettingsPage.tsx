@@ -1,7 +1,7 @@
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, ColorPicker, Segmented, Select } from 'antd';
+import { Button, ColorPicker, Segmented, Select, Switch } from 'antd';
 import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
@@ -102,7 +102,14 @@ export const OmcSettingsPage: React.FC = () => {
   const t = useT();
   const timezone = useTimeZoneSetting();
   const { lang, setLang } = useI18n();
-  const { style, setStyle, tpsMode, setTpsMode } = useTokenDisplayStyle();
+  const {
+    style,
+    setStyle,
+    tpsMode,
+    setTpsMode,
+    showModelIcons,
+    setShowModelIcons,
+  } = useTokenDisplayStyle();
   const { modePreference, setModePreference, systemMode, previewMode, themeMode } = useTheme();
   // A multi-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
   // and the items do not wrap, so later options paint past the card's edge. Below the console's
@@ -165,6 +172,17 @@ export const OmcSettingsPage: React.FC = () => {
               aria-label={t('omc.tps_calculation_mode')}
               vertical={isNarrow}
               block={isNarrow}
+            />
+          }
+        />
+        <SettingRow
+          label={t('omc.request_model_icons')}
+          description={t('omc.request_model_icons_desc')}
+          control={
+            <Switch
+              checked={showModelIcons}
+              onChange={(checked) => setShowModelIcons(checked)}
+              aria-label={t('omc.request_model_icons')}
             />
           }
         />
