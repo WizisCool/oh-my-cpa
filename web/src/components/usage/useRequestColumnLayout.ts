@@ -62,6 +62,9 @@ export function useRequestColumnLayout() {
     observer.current = null;
     if (!node) return;
     observer.current = new ResizeObserver(([entry]) => {
+      // The list also changes height on every frame of the header's fold, and
+      // only its width decides what fits.
+      if (entry.contentRect.width === streamWidth.current) return;
       streamWidth.current = entry.contentRect.width;
       refold();
     });

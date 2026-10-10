@@ -40,6 +40,7 @@ import {
 import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
 import { useUsageEventViewState } from '../components/usage/useUsageEventViewState';
 import { RequestBackToTop, RequestCollapsibleHeader, RequestFoldToggle } from '../components/usage/RequestFoldControls';
+import { useRequestListHeight } from '../components/usage/useRequestListHeight';
 import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
@@ -398,17 +399,7 @@ export const UsageEventsPage: React.FC = () => {
   // hidden would be a filter the operator can only clear by guessing.
   const hasActiveFilter = activeFilters.length > 0 || query.result !== 'all';
 
-  const listHost = React.useRef<HTMLDivElement>(null);
-  const [height, setHeight] = React.useState(480);
-  React.useLayoutEffect(() => {
-    const host = listHost.current;
-    if (!host) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setHeight(Math.max(240, Math.floor(entry.contentRect.height))),
-    );
-    observer.observe(host);
-    return () => observer.disconnect();
-  }, []);
+  const { hostRef: listHost, height } = useRequestListHeight(pageRef);
 
   /**
    * Clear-all is offered in two places (the bar and the chip strip) and must

@@ -139,6 +139,20 @@ const EXCEPTIONS = [
     property: 'inset-inline-start',
     why: 'The floating save bar is centred in the content column, and collapsing the sider resizes that column. Encoding the shift as a transform would mean recomputing a delta outside CSS; here the custom property already carries it.',
   },
+  {
+    kind: 'layout',
+    file: 'pages/UsageEventsPage.css',
+    selector: '.request-collapsible-header',
+    property: 'grid-template-rows',
+    why: 'A disclosure, and a large one: this block is the request page\u2019s own header and its whole filter toolbar, folded away so a reader can scroll it out of the way. The grid 0fr/1fr technique folds it from its own height, as `.settings-tls-body` does. Its `margin` rides along in the same declaration for the same reason.',
+  },
+  {
+    kind: 'layout',
+    file: 'pages/UsageEventsPage.css',
+    selector: '.request-collapsible-header',
+    property: 'margin',
+    why: 'Part of the same disclosure: collapsing the header to zero height still leaves its box gap, and the negative margin is what takes that back.',
+  },
 ];
 
 /** Strip comments so prose about a duration is never read as one. */

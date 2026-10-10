@@ -587,6 +587,55 @@ export async function requestListInteractions({ base, page, check }) {
   await page.setViewportSize(restingViewport);
   await until(async () => (await readColumns()).folded !== undefined, { label: 'viewport restored' });
 
+  // The header folds with a height transition, and the list below it fills the height that
+  // frees. The virtual list must take its new height once per fold, not once per frame of it.
+  const listBox = await page.locator('.request-list-host').boundingBox();
+  await page.mouse.move(listBox.x + 200, listBox.y + 120);
+  // Whatever the steps above left: the top bounce is what unfolds a folded header.
+  await until(async () => {
+    if ((await page.locator('.request-collapsible-header.is-collapsed').count()) === 0) return true;
+    await page.mouse.wheel(0, -400);
+    return false;
+  }, { label: 'header unfolded before the fold is measured' });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => {
+    const holder = document.querySelector('.request-list-host .ant-listy-holder');
+    const header = document.querySelector('.request-collapsible-header');
+    const fold = { heights: [holder.style.maxHeight], ran: 0 };
+    new MutationObserver(() => {
+      if (holder.style.maxHeight !== fold.heights.at(-1)) fold.heights.push(holder.style.maxHeight);
+    }).observe(holder, { attributes: true, attributeFilter: ['style'] });
+    header.addEventListener('transitionrun', (event) => {
+      if (event.target === header && event.propertyName === 'grid-template-rows') fold.ran += 1;
+    });
+    window.__requestFold = fold;
+  });
+  const readFold = () => page.evaluate(() => ({
+    heights: [...window.__requestFold.heights],
+    ran: window.__requestFold.ran,
+    isSettled: document.querySelector('.request-collapsible-header').getAnimations().length === 0,
+    isCollapsed: document.querySelector('.request-collapsible-header.is-collapsed') !== null,
+    host: Math.floor(document.querySelector('.request-list-host').clientHeight),
+  }));
+  await page.locator('.req-expand-toggle-btn').click();
+  await until(async () => { const fold = await readFold(); return fold.isCollapsed && fold.isSettled && fold.heights.length > 1; },
+    { label: 'header folded and list height settled' });
+  const folded = await readFold();
+  check('folding the header animates its height and resizes the list once',
+    folded.ran === 1 && folded.heights.length === 2 && Number.parseFloat(folded.heights[1]) === folded.host,
+    JSON.stringify(folded));
+  await page.mouse.move(listBox.x + 200, listBox.y + 120);
+  await page.mouse.wheel(0, -120);
+  await until(async () => { const fold = await readFold(); return !fold.isCollapsed && fold.isSettled && fold.heights.length > 2; },
+    { label: 'header unfolded and list height settled' });
+  const unfolded = await readFold();
+  check('unfolding the header resizes the list once, back to the height it had',
+    unfolded.ran === 2 && unfolded.heights.length === 3 && unfolded.heights[2] === unfolded.heights[0] &&
+    Number.parseFloat(unfolded.heights[2]) === unfolded.host,
+    JSON.stringify(unfolded));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.mouse.move(0, 0);
+
   const priceAction = page.locator('[data-testid="request-set-price"]').first();
   await priceAction.focus();
   await cellPopup.waitFor({ state: 'visible' });

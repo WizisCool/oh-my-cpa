@@ -2154,13 +2154,18 @@ move, and that coast kept firing while the finger was still down. The console mo
   them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
   or found nothing has no list to pull, so a drag there never folds the header, and a header folded
   before the list went away unfolds on a 48px pull down anywhere on the page.
-- **The fold is a cut, not a slide.** The list fills the height the header frees, so animating the
-  header's height re-laid out the page and re-measured the virtual list on every frame; a wheel
-  rocking across the top of the list dropped frames at each change of direction (measured on the
-  dev server: 20 frames over 25ms in twelve rocks, against 6 once the fold was instant). The header
-  leaves at once and returns with a `--motion-base` opacity fade, which the compositor runs alone.
-  The fold and the back-to-top pill are also held outside the page's render (`viewFlag.ts`), so a
-  flip re-renders the header wrapper and its button and nothing else.
+- **The fold slides, and the list answers it once.** The header folds over `--motion-base` from
+  its own height, and the list fills the height that frees, so every frame of the fold resizes the
+  list's box. What made that drop frames - a wheel rocking across the top of the list stuttered at
+  each change of direction - was everything that answered each frame: the page re-rendered to pass
+  the list a new height, and the virtual list measured every mounted row again. Now nothing does.
+  A list about to grow takes the fold's end height in one step when the fold starts, read from the
+  transition's own end keyframes; a list about to shrink keeps its height until the fold lands,
+  and its host clips the surplus (`useRequestListHeight`). The fold and the back-to-top pill are
+  held outside the page's render (`viewFlag.ts`), so a flip re-renders the header wrapper and its
+  button and nothing else. Measured on the dev server over twelve rocks: about 20 frames over 25ms
+  before, about 10 now, and a third less script; the same fold with no transition at all measures
+  6, which is the price of the slide.
 
 ### The phone's navigation is the rail, in a sheet
 
