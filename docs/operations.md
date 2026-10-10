@@ -101,6 +101,10 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   CPA needs no configuration change. The console's first configuration save converts
   such a file to the v8 layout, after keeping an encrypted copy of the original that the
   configuration page offers for download (see `docs/cpa-v8-compat.md`).
+- **Gateway configuration**: Omitted request retries and maximum cooldown wait
+  both mean `0`; the example's `3` and `30` apply only when explicitly configured.
+  Header passthrough forwards filtered upstream response headers to clients.
+  See `docs/cpa-v8-compat.md` for the other option semantics and upstream sources.
 - **Base path**: Direct OMC serving supports `/omc` or `/`. The console is served at
   the prefix with a trailing slash (`/omc/`); OMC answers the bare prefix (`/omc`) with
   a 308 redirect to it. An operator-owned proxy must preserve the prefix and route the

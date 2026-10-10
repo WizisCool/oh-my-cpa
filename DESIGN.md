@@ -350,6 +350,8 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Usage**: Restricted to KPI stats, entity summary headers, and peer comparison panels.
 - **Managed Elsewhere**: A group whose field is edited on its own page states how much is configured and leads there with one action, and it still renders in search results. One editor per field; a second editor could disagree with the first.
 
+- **Payload Rules**: All categories start collapsed. Disclosure does not edit the YAML; external document updates preserve the chosen state. A failed save opens the first invalid category.
+
 ### Caller-Key Masks
 - **One Pattern, One Chip**: The request list's pattern filter is a field select joined to a mono pattern input, committed and removed as a single chip; its hint states RE2, match-anywhere and `(?i)`. See `docs/design.md` §2.
 - **Marked Options**: A model, provider or credential filter option is led by the 16px mark its rows carry - the maker's mark by Model Square's rule, the provider's through the request row's own resolver - so the option and the rows it leaves show one picture. Vocabularies of plain words get no mark. See `docs/design.md` §2.

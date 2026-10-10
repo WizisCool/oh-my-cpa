@@ -60,7 +60,7 @@ export function usePayloadRulesDraft({
     { value: 'antigravity', label: 'antigravity' },
   ];
 
-  const [activePanels, setActivePanels] = useState<string[]>(['default']);
+  const [activePanels, setActivePanels] = useState<string[]>([]);
 
   // Local state for each category to guarantee ZERO input focus loss
   const [defaultRules, setDefaultRules] = useState<PayloadTypedRule[]>(() =>

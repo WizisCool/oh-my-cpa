@@ -168,3 +168,38 @@ test('Editing the key list round-trips through the document unchanged', () => {
   updateFieldWithBaseline(currentDoc, serverDoc, apiKeysField, ['sk-existing']);
   assert.equal(currentDoc.toString().trim(), originalYaml.trim());
 });
+
+for (const [fieldId, exampleValue] of [['requestRetry', 3], ['maxRetryInterval', 30]] as const) {
+  test(`${fieldId} reads an omitted CPA setting as zero and persists an explicit example value`, () => {
+    const field = schemaField(fieldId);
+    const originalYaml = '# Keep unrelated settings intact.\nserver:\n  port: 8317\n';
+    const serverDoc = parseDocument(originalYaml);
+    const currentDoc = parseDocument(originalYaml);
+
+    assert.equal(getFieldSemanticValue(serverDoc, field), 0);
+    updateFieldWithBaseline(currentDoc, serverDoc, field, exampleValue);
+    assert.equal(getFieldSemanticValue(currentDoc, field), exampleValue);
+    assert.equal(currentDoc.hasIn(field.yamlPath), true);
+    assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, [field]), false);
+
+    updateFieldWithBaseline(currentDoc, serverDoc, field, 0);
+    assert.equal(currentDoc.hasIn(field.yamlPath), false);
+    assert.equal(currentDoc.toString(), serverDoc.toString());
+  });
+
+  test(`${fieldId} keeps an explicit zero and restores an existing value with its comment`, () => {
+    const field = schemaField(fieldId);
+    const originalYaml = `routing:\n  retry:\n    ${field.yamlPath.at(-1)}: ${exampleValue} # Explicit policy.\n`;
+    const serverDoc = parseDocument(originalYaml);
+    const currentDoc = parseDocument(originalYaml);
+
+    assert.equal(getFieldSemanticValue(serverDoc, field), exampleValue);
+    updateFieldWithBaseline(currentDoc, serverDoc, field, 0);
+    assert.equal(getFieldSemanticValue(currentDoc, field), 0);
+    assert.equal(currentDoc.hasIn(field.yamlPath), true);
+    assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, [field]), false);
+
+    updateFieldWithBaseline(currentDoc, serverDoc, field, exampleValue);
+    assert.equal(currentDoc.toString(), serverDoc.toString());
+  });
+}

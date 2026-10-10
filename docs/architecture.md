@@ -602,6 +602,10 @@ secrets from the stored document, and answer with CPA's new rendering, which bec
 editor's baseline. A failed success-audit write is logged but the save still returns
 `200` with that baseline, because the configuration write has already landed; if the
 readback fails, the response omits the baseline so the editor reloads.
+The frontend schema resolves omitted fields to CPA runtime defaults, not example
+configuration values: omitted request retries and maximum cooldown wait both mean
+`0`. Reverting a visual edit to that semantic baseline removes the added path,
+restoring the original YAML rather than materializing a default.
 The two relocated Codex behavior controls declare canonical `client.codex` and
 `upstream.codex` paths with a historical `oauth.providers.codex` fallback in the
 frontend schema. The field reader and writer choose the canonical path by its
