@@ -469,7 +469,7 @@ without moving the dashboard.
 
 A bar's hue is the remaining share — `--success` from 70%, `--warn` from 25%, `--danger` below —
 and never the heatmap ramp: "plenty left" and "a lot of tokens" must not be the same colour. Its
-states are about freshness: a failed refresh keeps the rows and says so in the warning tone, only a
+states are about freshness: a re-read that fails keeps the rows and says so in the warning tone, only a
 credential list that was never read is reported as unknown, with a retry, and a deployment holding
 no credential gets an empty state that links to connecting one.
 
