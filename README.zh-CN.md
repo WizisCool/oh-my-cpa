@@ -49,21 +49,21 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/images/readme/usage-events-split.zh.webp" alt="请求记录：每条请求的耗时、Token 与费用">
+<img src="docs/images/readme/usage-events.zh.webp" alt="请求记录：每条请求的耗时、Token 与费用">
 <p align="center"><b>请求记录</b><br />按模型、提供商、密钥、状态与费用筛选每一条请求</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/images/readme/pricing-split.zh.webp" alt="按提供商分组的模型价目表">
+<img src="docs/images/readme/pricing.zh.webp" alt="按提供商分组的模型价目表">
 <p align="center"><b>费用与用量</b><br />自动匹配 OpenRouter 价格，也可自定义覆盖</p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/images/readme/oauth-management-split.zh.webp" alt="OAuth 凭据及其状态与配额">
+<img src="docs/images/readme/oauth-management.zh.webp" alt="OAuth 凭据及其状态与配额">
 <p align="center"><b>OAuth 管理</b><br />登录、查看配额、配置凭据，集中在一处完成</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/images/readme/ai-providers-split.zh.webp" alt="AI 提供商列表、启停开关与流量">
+<img src="docs/images/readme/ai-providers.zh.webp" alt="AI 提供商列表、启停开关与流量">
 <p align="center"><b>AI 提供商</b><br />端点、模型、优先级，以及由网关执行的启停开关</p>
 </td>
 </tr>

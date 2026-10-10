@@ -52,21 +52,21 @@ signs in with CPA's management key.
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/images/readme/usage-events-split.en.webp" alt="Request records with latency, tokens and cost per request">
+<img src="docs/images/readme/usage-events.en.webp" alt="Request records with latency, tokens and cost per request">
 <p align="center"><b>Request records</b><br />Every request, filterable by model, provider, key, status and cost</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/images/readme/pricing-split.en.webp" alt="Model price book grouped by provider">
+<img src="docs/images/readme/pricing.en.webp" alt="Model price book grouped by provider">
 <p align="center"><b>Cost &amp; usage</b><br />A price book matched from OpenRouter, with custom overrides</p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/images/readme/oauth-management-split.en.webp" alt="OAuth credentials with their state and quota">
+<img src="docs/images/readme/oauth-management.en.webp" alt="OAuth credentials with their state and quota">
 <p align="center"><b>OAuth management</b><br />Sign in, inspect quota and configure each credential in one place</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/images/readme/ai-providers-split.en.webp" alt="AI provider list with enable switches and traffic">
+<img src="docs/images/readme/ai-providers.en.webp" alt="AI provider list with enable switches and traffic">
 <p align="center"><b>AI providers</b><br />Endpoints, models, priority and an enable switch enforced by the gateway</p>
 </td>
 </tr>

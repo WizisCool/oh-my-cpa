@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { capture } from './readme-screenshots.mjs';
+import { capture, windowDocument } from './readme-screenshots.mjs';
 import { hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const CAPTURE_OPTIONS = {
@@ -75,4 +75,22 @@ test('capture propagates final readiness timeout without a screenshot and closes
   const fixture = createCaptureFixture(async () => { throw timeout; });
   await assert.rejects(capture(fixture.browser, CAPTURE_OPTIONS), error => error === timeout);
   assert.deepEqual(fixture.readState(), { waitCount: 2, hasCaptured: false, hasClosed: true });
+});
+
+test('feature windows render one capture and dashboard windows render both themes', () => {
+  const light = { dataUrl: 'data:image/png;base64,light', background: '#ffffff' };
+  const dark = { dataUrl: 'data:image/png;base64,dark', background: '#131215' };
+  for (const shot of [light, dark]) {
+    const html = windowDocument(shot);
+    assert.equal((html.match(/<img /g) ?? []).length, 1);
+    assert.ok(html.includes(`src="${shot.dataUrl}"`));
+    assert.ok(html.includes(`style="background:${shot.background}"`));
+    assert.ok(html.includes('class="window"'));
+    assert.ok(!html.includes('<svg'));
+    assert.ok(!html.includes('class="layer split"'));
+  }
+  const hero = windowDocument(light, dark);
+  assert.equal((hero.match(/<img /g) ?? []).length, 2);
+  assert.ok(hero.includes('class="layer split"'));
+  assert.ok(hero.includes('<svg class="divider"'));
 });

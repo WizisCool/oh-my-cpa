@@ -33,8 +33,12 @@ const MODES = ['light', 'dark'];
 const DESKTOP = { width: 1440, height: 900, scale: 2 };
 const PHONE = { width: 390, height: 844, scale: 3 };
 
-/** Each feature uses the same light/dark split as the dashboard. */
-const FEATURE_ROUTES = ['/usage/events', '/pricing', '/oauth-management', '/ai-providers'];
+const FEATURE_SHOTS = [
+  { path: '/usage/events', mode: 'light' },
+  { path: '/pricing', mode: 'light' },
+  { path: '/oauth-management', mode: 'dark' },
+  { path: '/ai-providers', mode: 'dark' },
+];
 /** The three phones, left to right; alternating themes shows both in one picture. */
 const PHONE_SHOTS = [
   { path: '/dashboard', mode: 'dark' },
@@ -166,16 +170,17 @@ function windowLayer(shot, className = '') {
     <div class="bar"><i></i><i></i><i></i></div><img src="${shot.dataUrl}"></div>`;
 }
 
-/** Opaque bevel strokes cover the clipped glyphs where the two theme captures meet. */
-function windowDocument(light, dark) {
-  return `<style>${WINDOW_CSS}</style><div id="stage"><div class="window">
-    ${windowLayer(light)}${windowLayer(dark, 'split')}
+export function windowDocument(first, second) {
+  // The bevel covers clipped glyphs where the hero's two theme captures meet.
+  const split = second ? `${windowLayer(second, 'split')}
     <svg class="divider" viewBox="0 0 100 100" preserveAspectRatio="none">
       <line x1="58" y1="0" x2="42" y2="100" stroke="#c5c7ca"
         stroke-width="6" vector-effect="non-scaling-stroke" />
       <line x1="58" y1="0" x2="42" y2="100" stroke="#fafafa"
         stroke-width="3" vector-effect="non-scaling-stroke" />
-    </svg></div></div>`;
+    </svg>` : '';
+  return `<style>${WINDOW_CSS}</style><div id="stage"><div class="window">
+    ${windowLayer(first)}${split}</div></div>`;
 }
 
 const PHONE_CSS = `
@@ -245,10 +250,9 @@ async function main() {
         capture(browser, { routePath: '/dashboard', mode, lang, viewport: DESKTOP })));
       await writeComposition(composer, windowDocument(light, dark), `hero-split.${lang}.webp`);
 
-      for (const routePath of FEATURE_ROUTES) {
-        const [light, dark] = await Promise.all(MODES.map((mode) =>
-          capture(browser, { routePath, mode, lang, viewport: DESKTOP })));
-        await writeComposition(composer, windowDocument(light, dark), `${fileNameFor(routePath)}-split.${lang}.webp`);
+      for (const { path: routePath, mode } of FEATURE_SHOTS) {
+        const shot = await capture(browser, { routePath, mode, lang, viewport: DESKTOP });
+        await writeComposition(composer, windowDocument(shot), `${fileNameFor(routePath)}.${lang}.webp`);
       }
 
       const phones = [];
