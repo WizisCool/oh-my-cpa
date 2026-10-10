@@ -265,7 +265,7 @@ export const PlaygroundPage: React.FC = () => {
       return false;
     }
     return true;
-  }, []);
+  }, [refuse]);
 
   const onInspect = React.useCallback((turn: Turn) => {
     setSelectedID(turn.id);
@@ -282,7 +282,7 @@ export const PlaygroundPage: React.FC = () => {
   const attachmentAdapter = React.useMemo(() => new PlaygroundImageAdapter(
     () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
     () => refuse('invalid_image'),
-  ), []);
+  ), [refuse]);
   const runtime = usePlaygroundThreadRuntime({
     turns,
     isRunning,
