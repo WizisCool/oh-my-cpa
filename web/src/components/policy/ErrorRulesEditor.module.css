@@ -29,7 +29,7 @@
 .rule-order {
   min-width: 20px;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -78,13 +78,13 @@
 .rule-problem {
   margin: 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .rule-note {
   margin: 0 0 12px;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 /* A finger has no hover and needs a taller target than a pointer does. */

@@ -187,6 +187,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |
 | `pnpm check-css-modules` | Validate every `styles[...]` reference matches a defined class in `*.module.css` (`pnpm test:css-modules` self-test) |
 | `pnpm check:motion` | Enforce §7's motion budget: every duration is a `--motion-*` token, no transition animates a layout property, every keyframe honours `prefers-reduced-motion`, and hovers stay within `fast` (`pnpm test:motion` self-test) |
+| `pnpm check:style-tokens` | Enforce the type and radius scales (`docs/design.md` §3, §4): a font size on the scale and a 2–4px corner are written as `--text-*` / `--radius-*` tokens, no fractional font sizes, and every such reference resolves without a fallback (self-test `scripts/check-style-tokens.test.mjs`, discovered by `pnpm test:self`) |
 | `pnpm check:feedback` | Enforce the feedback surfaces (ADR 0045): antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs are used only inside `web/src/components/feedback/`, and antd `Switch` is refused in favour of `web/src/components/common/Switch.tsx` (`pnpm test:feedback` self-test) |
 | `pnpm lint:antd` | Check antd usage and accessibility rules |
 | `pnpm readme:screenshots` | Regenerate the README screenshots under `docs/images/readme/` from demo mode (requires `pnpm build` first; outside every gate) |

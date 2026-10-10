@@ -23,7 +23,7 @@
 
 .section-title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
   display: flex;
@@ -47,7 +47,7 @@
   max-height: 160px;
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -107,7 +107,7 @@
 }
 
 .switch-title {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--fg);
 }
@@ -124,7 +124,7 @@
 .policy-title {
   margin: 0;
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -132,7 +132,7 @@
   display: block;
   margin-bottom: 6px;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
@@ -143,7 +143,7 @@
 .policy-desc {
   margin: 6px 0;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .alias-list {

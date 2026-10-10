@@ -88,9 +88,9 @@ test('a Go module change selects the Go tests', () => {
 });
 
 test('a CSS change selects the CSS module check without the TypeScript gates', () => {
-  // A stylesheet can break a class reference and the motion budget, and those are the two gates that
-  // catch exactly that; neither needs the type checker.
-  assert.deepEqual(planChecks(['web/src/pages/UsageEventsPage.css']), ['css-modules', 'motion']);
+  // A stylesheet can break a class reference, the motion budget and the type and radius scales,
+  // and those are the gates that catch exactly that; none needs the type checker.
+  assert.deepEqual(planChecks(['web/src/pages/UsageEventsPage.css']), ['css-modules', 'motion', 'style-tokens']);
 });
 
 test('the embedded placeholder is a Go-relevant change', () => {

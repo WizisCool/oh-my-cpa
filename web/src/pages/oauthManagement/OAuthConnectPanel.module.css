@@ -12,7 +12,7 @@
 .field-label {
   display: block;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-bottom: 6px;
   font-weight: 500;
 }
@@ -37,14 +37,14 @@
 }
 
 .grid-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
 
 .grid-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
 }
 
@@ -106,13 +106,13 @@
 }
 
 .tile-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
 
 .tile-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   line-height: 1.4;
   display: -webkit-box;
@@ -164,7 +164,7 @@
 
 .connect-desc {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg-2);
   line-height: 1.4;
 }
@@ -210,13 +210,13 @@
   border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-on);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   font-family: var(--font-mono);
 }
 
 .step-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
@@ -229,7 +229,7 @@
 
 .step-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.4;
 }
@@ -253,7 +253,7 @@
 
 .url-textarea {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .callback-actions {
@@ -313,20 +313,20 @@
 }
 
 .waiting-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
 
 .waiting-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 
 /* A status read that failed before CPA answered: the attempt is still waiting, so the
    note is attached to that state rather than replacing it. */
 .waiting-note {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--warn);
 }
 
@@ -338,7 +338,7 @@
 }
 
 .success-icon {
-  font-size: 22px;
+  font-size: var(--text-xl);
   color: var(--success);
   flex: none;
 }
@@ -352,13 +352,13 @@
 }
 
 .success-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--success);
 }
 
 .success-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg-2);
 }
 
@@ -393,13 +393,13 @@
 }
 
 .error-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--danger);
 }
 
 .error-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--danger);
 }
 

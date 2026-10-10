@@ -1041,6 +1041,12 @@ layout animation are listed in its `EXCEPTIONS` table with a reason each, and a
 stale entry is itself a failure. The budget it enforces is stated in
 `docs/design.md` §7, and the reasoning behind the hover bound is ADR 0009.
 
+The type and radius scales are held the same way. `pnpm check:style-tokens` reads
+every stylesheet and fails on a font size that the scale owns but is written as a
+number, a fractional font size, a 2–4px corner written as a number, and a
+`--text-*` or `--radius-*` reference that no stylesheet defines or that carries a
+fallback (`docs/design.md` §3 and §4).
+
 
 ### Route error recovery
 

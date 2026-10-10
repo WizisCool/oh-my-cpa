@@ -31,7 +31,7 @@
 }
 
 .subtitle {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;

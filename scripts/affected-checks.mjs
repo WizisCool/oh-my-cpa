@@ -27,6 +27,7 @@ export const CHECK_IDS = [
   'antd-lint',
   'css-modules',
   'motion',
+  'style-tokens',
   'feedback',
   'go',
   'docs',
@@ -44,7 +45,7 @@ const WEB_TEST_INFRASTRUCTURE = [
 const DEPENDENCY_INPUTS = new Set([
   'package.json', 'web/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
 ]);
-const FRONTEND_CHECKS = ['type-check', 'logic', 'components', 'i18n', 'antd-lint', 'css-modules', 'motion', 'feedback'];
+const FRONTEND_CHECKS = ['type-check', 'logic', 'components', 'i18n', 'antd-lint', 'css-modules', 'motion', 'style-tokens', 'feedback'];
 
 function planFileChecks(file) {
   const checks = new Set();
@@ -55,7 +56,7 @@ function planFileChecks(file) {
   if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components', 'self-tests');
   if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
-  if (file.endsWith('.css')) add('css-modules', 'motion');
+  if (file.endsWith('.css')) add('css-modules', 'motion', 'style-tokens');
   if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)
       || file.startsWith('migrations/') || file.startsWith('internal/web/')) add('go');
   // Go tests are also counted by the fixed-wait ratchet, which is a repository self-test.

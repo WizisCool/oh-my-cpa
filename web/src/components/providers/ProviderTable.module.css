@@ -35,7 +35,7 @@
 .provider-name {
   min-width: 0;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -58,7 +58,7 @@
   overflow: hidden;
   color: var(--meta);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -69,7 +69,7 @@
   gap: 5px;
   margin: 0 !important;
   padding: 2px 8px !important;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
@@ -90,7 +90,7 @@
   max-width: 190px;
   overflow: hidden;
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 18px;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -106,13 +106,13 @@
   background: var(--bg);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 16px;
 }
 
 .muted {
   color: var(--meta);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .count-pills {
@@ -128,7 +128,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 20px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -160,11 +160,11 @@
 
 .traffic-requests {
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .traffic-rate {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -174,7 +174,7 @@
 
 .traffic-failed {
   color: var(--danger);
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }

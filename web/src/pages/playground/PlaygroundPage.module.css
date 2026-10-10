@@ -8,7 +8,7 @@
   max-width: 100%;
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .empty-target > span {
@@ -18,12 +18,12 @@
 
 .waiting {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .no-content {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .image-omitted {
@@ -34,7 +34,7 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .turn-error {
@@ -46,12 +46,12 @@
   border-left: 2px solid var(--danger);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .turn-error code {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .action-label {
@@ -96,7 +96,7 @@
 .json-input textarea,
 .json-input:global(.ant-input) {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-md);
 }
 
 /* ── inspector ─────────────────────────────────────────────────────────────── */
@@ -106,7 +106,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .inspect-target {
@@ -118,7 +118,7 @@
 
 .inspect-model {
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   overflow-wrap: anywhere;
 }
 
@@ -154,13 +154,13 @@
 
 .metric-cell dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .metric-cell dd {
   margin: 0;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -199,7 +199,7 @@
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .request-id code {

@@ -29,7 +29,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .sync-schedule :global(.ant-select) {
@@ -59,7 +59,7 @@
 .candidate-text {
   min-width: 0;
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 
@@ -97,7 +97,7 @@
 
 .filter-count {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -128,7 +128,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .mode-cell {
@@ -151,7 +151,7 @@
 
 .usage-requests,
 .usage-unpriced {
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -174,7 +174,7 @@ a.usage-unpriced:hover {
 .channels-formula {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .channel-editor {
@@ -231,14 +231,14 @@ a.usage-unpriced:hover {
   align-items: center;
   gap: 8px;
   padding: 14px 0 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .provider-heading h2 {
   max-width: 100%;
   overflow-wrap: anywhere;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -260,7 +260,7 @@ a.usage-unpriced:hover {
 
 .pagination-range {
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 

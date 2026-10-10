@@ -854,6 +854,23 @@ Line height  1.5
 Tabular      font-variant-numeric: tabular-nums on all numeric data
 ```
 
+**The type scale is seven variables**, defined in `web/src/index.css`:
+
+| Token | Size | Usage |
+| --- | --- | --- |
+| `--text-2xs` | 10px | Eyebrows, badge codes, the densest table marks |
+| `--text-xs` | 11px | Meta lines, counts, column heads |
+| `--text-sm` | 12px | Data rows, logs, secondary copy |
+| `--text-md` | 13px | Labels, descriptions, notice and toast copy |
+| `--text-base` | 14px | Body (antd `fontSize`) |
+| `--text-lg` | 16px | Section headings, drawer and modal titles, the touch focus floor |
+| `--text-xl` | 22px | The page title |
+
+A stylesheet writes a size on this scale as its token and never as a fractional pixel value. A
+display numeral (the hero number, a KPI value) or an icon keeps a literal size, because it belongs
+to one surface. `pnpm check:style-tokens` enforces both, and that every `--text-*` reference
+resolves without a fallback.
+
 | Level | Size / weight | Usage |
 | --- | --- | --- |
 | Page title (`--text-xl`) | 22px / 700 | One per page, the verdict or page name |
@@ -911,7 +928,8 @@ wide table happens inside the list's frame, so the column stays where the reader
 ## 4. Shape, spacing, elevation
 
 ```text
-radius-sm     4px    inputs, buttons, tags, cards, pips (the app's radius)
+radius-xs     2px    marks too small for 4px to read as a corner: pips, bar ends, 16px logos
+radius-sm     4px    inputs, buttons, tags, cards (the app's radius)
 radius-lg     6px    modals/drawers outer shell only
 thread scale  4 · 4 · 6 · 8px     conversation workspaces and approval cards (ADR 0086, below)
 space scale   4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px

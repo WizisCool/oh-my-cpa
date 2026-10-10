@@ -13,7 +13,7 @@
   column-gap: 16px;
   min-height: 52px;
   width: 100%;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 400;
   font-style: normal;
   line-height: 1.5;
@@ -34,7 +34,7 @@
 
 .timezone-source {
   color: var(--fg2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 

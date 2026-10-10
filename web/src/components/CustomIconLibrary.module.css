@@ -19,7 +19,7 @@
 .library-header h3 span {
   margin-left: 12px;
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: normal;
 }
 .library-header > button {
@@ -95,13 +95,13 @@
   top: 6px;
   right: 6px;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .tile-meta {
@@ -110,7 +110,7 @@
   gap: 8px;
   padding: 6px 10px 10px;
   color: var(--fg-2);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .actions {
   display: flex;
@@ -138,12 +138,12 @@
 }
 .empty h4 {
   margin: 4px 0 0;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .empty p {
   margin: 0 0 4px;
   max-width: 360px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   color: var(--fg-2);
 }
@@ -181,14 +181,14 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .source-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   min-height: 24px;
 }
 .dropzone {
@@ -216,11 +216,11 @@
   color: var(--fg-2);
 }
 .dropzone strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 .dropzone > span:not(:first-child) {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg-2);
   line-height: 1.6;
 }
@@ -245,7 +245,7 @@
 .limits {
   margin: 0;
   color: var(--fg-2);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1.8;
 }
 .validated {
@@ -253,7 +253,7 @@
   align-items: center;
   gap: 6px;
   color: var(--success);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .validated > span:last-child {
   margin-left: auto;
@@ -270,7 +270,7 @@
 }
 .preview-panel h4 {
   margin: 0 0 16px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-align: left;
 }
@@ -292,7 +292,7 @@
 .preview-caption {
   margin: 8px 0 16px;
   color: var(--fg-2);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .preview-small {
   display: flex;
@@ -304,12 +304,12 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--fg-2);
 }
 .preview-note {
   margin: 12px 0 0;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--fg-2);
   line-height: 1.8;
   text-align: left;
@@ -355,13 +355,13 @@
   color: var(--danger);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 .deletion > p {
   margin: 0;
   max-width: 460px;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.9;
 }
 .delete-impact {
@@ -375,7 +375,7 @@
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .delete-impact > :nth-child(2) {
   transform: rotate(180deg);
@@ -453,7 +453,7 @@
   }
   .delete-impact {
     gap: 10px;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 }
 

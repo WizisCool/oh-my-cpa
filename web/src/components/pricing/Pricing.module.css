@@ -35,7 +35,7 @@
 
 .drawer-footer-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .drawer-footer-actions {
@@ -53,7 +53,7 @@
 
 .section h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
@@ -74,14 +74,14 @@
 .mode-hint {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
 .field-error {
   margin: 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .required {
@@ -93,7 +93,7 @@
   margin-left: auto;
   flex: none;
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 /* ── One OpenRouter model ── */
@@ -104,7 +104,7 @@
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 .upstream-head {
@@ -133,7 +133,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .rate-grid {
@@ -152,7 +152,7 @@
 
 .rate-cell dt {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .rate-cell dd {
@@ -173,11 +173,11 @@
   gap: 4px;
   padding: 1px 6px;
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: nowrap;
   background: var(--bg);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 /* ── The OpenRouter picker ── */
@@ -193,7 +193,7 @@
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 .picker-option {
@@ -242,13 +242,13 @@
 .picker-suggested {
   flex: none;
   color: var(--accent);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .picker-option-rates {
   flex: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -267,7 +267,7 @@
   gap: 4px;
   min-width: 0;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .rate-input :global(.ant-input-number),
@@ -285,7 +285,7 @@
   align-items: center;
   gap: 6px;
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .rate-delta {
@@ -328,7 +328,7 @@
 
 .tier-section h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
@@ -357,7 +357,7 @@
   width: 100%;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
 .tier-row-invalid {
@@ -377,7 +377,7 @@
   gap: 4px;
   min-width: 0;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .tier-threshold :global(.ant-input-affix-wrapper),
@@ -398,12 +398,12 @@
   padding: 0 8px;
   color: var(--fg-2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   transition: border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
 
@@ -426,7 +426,7 @@
 
 .tier-note {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -460,7 +460,7 @@
 .schedule {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -475,7 +475,7 @@
 
 .schedule thead th {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .schedule th:first-child {
@@ -500,7 +500,7 @@
 
 .schedule-ratio {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .schedule-active th,
@@ -535,7 +535,7 @@
 .preview-table thead th,
 .breakdown-table thead th {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .preview-new {
@@ -546,7 +546,7 @@
 .preview-tier {
   display: block;
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .calculator {
@@ -558,7 +558,7 @@
 
 .calculator-label {
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .calculator :global(.ant-input) {
@@ -593,7 +593,7 @@
 
 .history-source {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .history-rates {
@@ -610,7 +610,7 @@
 .breakdown-tier {
   margin: 0;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .breakdown-total {
@@ -623,14 +623,14 @@
 
 .breakdown-total strong {
   color: var(--fg);
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-variant-numeric: tabular-nums;
 }
 
 .breakdown-source {
   margin: 0;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .breakdown-action {

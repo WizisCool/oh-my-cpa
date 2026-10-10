@@ -502,6 +502,11 @@ and identity remain covered by the workspace and plugin-logo logic suites.
   imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
   strings and type-only imports, legal confirmations, diagnostic locations and the
   feedback module exemption. It is automatically discovered by the repository self-test runner.
+- `scripts/check-style-tokens.test.mjs` pins the type and radius scale rules in both directions:
+  scale-sized and fractional font sizes, display sizes that stay literal, custom properties that only
+  end in `font-size`, small radii in shorthand and longhand, undefined and fallback-carrying token
+  references, commented-out declarations, and an empty tree. It is automatically discovered by the
+  repository self-test runner.
 - The `oauth-management` browser scenario checks that ordinary copy acknowledgements cannot evict
   a persistent quota report, another refresh replaces it, and its close action removes it. It also
   checks one credential-aware authorization toast for a unique new credential, an ambiguous result

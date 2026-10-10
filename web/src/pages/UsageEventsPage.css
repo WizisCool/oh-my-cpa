@@ -16,7 +16,7 @@
 .request-window {
   color: var(--muted);
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 .request-actions {
@@ -92,7 +92,7 @@
   display: inline-block;
   width: 6px;
   height: 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: currentColor;
   flex-shrink: 0;
 }
@@ -129,7 +129,7 @@
   border-radius: 8px;
   background: var(--accent);
   color: var(--surface);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -140,13 +140,13 @@
 }
 .req-facets-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .request-advanced {
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .request-advanced > .ant-select,
 .request-advanced > .ant-input-affix-wrapper {
@@ -157,7 +157,7 @@
 .request-advanced > [role='status'] {
   width: 100%;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .request-toolbar-bottom {
   display: flex;
@@ -181,7 +181,7 @@
   user-select: none;
 }
 .req-auto-refresh-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg-2);
 }
 .req-live-pulse-dot {
@@ -201,8 +201,8 @@
   padding: 6px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
 }
 .req-active-chips-label {
   color: var(--muted);
@@ -222,10 +222,10 @@
   padding: 2px 8px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--fg);
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.3;
 }
 .req-filter-chip-remove {
@@ -234,7 +234,7 @@
   padding: 0 0 0 2px;
   color: var(--muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -249,7 +249,7 @@
   font-variant-numeric: tabular-nums;
 }
 .req-clear-all-chips {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 0 4px;
   height: auto;
   color: var(--muted);
@@ -302,7 +302,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   position: relative;
 }
 .req-expand-toggle-btn {
@@ -336,9 +336,9 @@
      the 1px border keeps the edge. */
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   color: var(--fg);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
   font-weight: 500;
   line-height: 1;
@@ -388,7 +388,7 @@
 }
 
 .req-back-to-top-btn .anticon {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--accent);
   transition: transform var(--motion-fast) var(--ease-standard);
 }
@@ -404,7 +404,7 @@
   gap: 10px;
   padding: 12px 18px;
   border-top: 1px solid var(--border);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .request-pagination .request-actions {
@@ -462,7 +462,7 @@
   height: 38px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.02em;
@@ -522,7 +522,7 @@
 }
 
 .req-reset-columns-btn {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 0 8px;
   color: var(--muted);
 }
@@ -588,7 +588,7 @@
   color: var(--fg);
   text-align: left;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   position: relative;
   contain: layout style;
   transition: background var(--motion-fast) ease;
@@ -741,7 +741,7 @@
   padding: 4px var(--req-pad-inline);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--text-sm);
   flex-shrink: 0;
 }
 .request-selection-count {
@@ -784,13 +784,13 @@
   padding: 0;
   margin-bottom: 2px;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 .req-export-hint {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .req-export-mask-row {
   display: flex;
@@ -812,7 +812,7 @@
 .req-export-preview {
   max-height: min(52vh, 560px);
   overflow-y: auto;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .req-export-preview:focus-visible {
   outline: 2px solid var(--accent);
@@ -824,13 +824,13 @@
   gap: 3px;
 }
 .req-time-text {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 .req-time-sub {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-family: var(--font-mono, monospace);
   display: flex;
@@ -851,7 +851,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   border: 0;
   background: transparent;
   font: inherit;
@@ -875,10 +875,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -895,7 +895,7 @@
 .req-result-bullet {
   width: 7px;
   height: 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: currentColor;
 }
 
@@ -911,7 +911,7 @@
 .req-provider-icon-wrapper {
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -934,7 +934,7 @@
   overflow: hidden;
 }
 .req-provider-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   color: var(--fg);
@@ -943,11 +943,11 @@
   white-space: nowrap;
 }
 .req-badge-oauth {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   padding: 1px 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
@@ -961,7 +961,7 @@
    the provider name rather than as a second title. */
 .req-provider-credential {
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -985,7 +985,7 @@
   justify-content: center;
 }
 .req-model-name {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   color: var(--fg);
@@ -994,10 +994,10 @@
   white-space: nowrap;
 }
 .req-preflight-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-family: var(--font-mono, monospace);
   padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   color: var(--muted);
   flex-shrink: 0;
@@ -1007,14 +1007,14 @@
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
   color: var(--warn);
   overflow: hidden;
 }
 .req-model-served-icon {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .req-model-served-name {
   overflow: hidden;
@@ -1046,13 +1046,13 @@
    the tint and edge are too thin to carry a tertiary grey. */
 .req-effort-badge {
   --effort-hue: var(--fg-2);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   line-height: 16px;
   text-transform: capitalize;
   padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
   color: var(--effort-hue);
   border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
@@ -1067,8 +1067,8 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-sm, 4px);
-  font-size: 11px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
   cursor: help;
   flex-shrink: 0;
 }
@@ -1099,7 +1099,7 @@
   gap: 2px;
 }
 .req-latency-val {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
@@ -1108,7 +1108,7 @@
    is working as intended, so an amber threshold would flag normal traffic as a
    problem; design.md reserves the semantic hues for real state. */
 .req-ttft-val {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1118,14 +1118,14 @@
   justify-content: center;
 }
 .req-tps-val {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 .req-tps-none {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   font-family: var(--font-mono, monospace);
   text-align: right;
@@ -1142,12 +1142,12 @@
   font-variant-numeric: tabular-nums;
 }
 .req-tokens-total strong {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
 }
 .req-tokens-total small {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--muted);
   text-transform: uppercase;
 }
@@ -1158,7 +1158,7 @@
      keeps its height whatever the numbers are. */
   flex-wrap: nowrap;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1171,7 +1171,7 @@
   gap: 3px;
 }
 .req-token-icon-reasoning {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1;
 }
 
@@ -1181,7 +1181,7 @@
   gap: 2px;
 }
 .req-cost-val {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
@@ -1200,7 +1200,7 @@
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease;
 }
 .req-cost-set:hover,
@@ -1231,14 +1231,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--cache-rate-hue);
   background: color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-tint), transparent);
   border: 1px solid color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-edge), transparent);
   padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   line-height: 1.3;
 }
 /* No token data at all is not a 0% reading: the badge keeps its shape but
@@ -1249,11 +1249,11 @@
 .req-cache-bullet {
   width: 6px;
   height: 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--cache-rate-hue);
 }
 .req-cache-count {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1264,7 +1264,7 @@
   gap: 3px;
 }
 .req-key-val {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   font-family: var(--font-mono, monospace);
   color: var(--fg-2);
@@ -1279,7 +1279,7 @@
   align-items: flex-start;
 }
 .req-ua-val {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
   color: var(--muted);
   overflow: hidden;
@@ -1290,7 +1290,7 @@
 
 .req-mobile-label {
   display: none;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1300,7 +1300,7 @@
 
 .request-chevron {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 /* The row layout is chosen by the *list's* width, not by the device's.
@@ -1367,7 +1367,7 @@
   align-items: center;
   gap: 16px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 10px 18px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -1380,7 +1380,7 @@
 .request-group-title span {
   flex-shrink: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .request-list .ant-listy-group-header {
   background-image: none;
@@ -1388,7 +1388,7 @@
 }
 .request-ingest {
   max-width: min(340px, calc(100vw - 60px));
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .request-ingest p {
   color: var(--muted);
@@ -1403,7 +1403,7 @@
   padding-right: 12px;
 }
 .req-drawer-title-text {
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
 }
 .req-drawer-nav {
@@ -1412,7 +1412,7 @@
   gap: 4px;
 }
 .req-drawer-nav-counter {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   font-family: var(--font-mono, monospace);
   font-variant-numeric: tabular-nums;
@@ -1425,7 +1425,7 @@
   padding: 14px 16px;
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .req-overview-error-top {
   display: flex;
@@ -1435,16 +1435,16 @@
   margin-bottom: 6px;
 }
 .req-overview-error-status {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 15%, transparent);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono, monospace);
 }
 .req-overview-error-code {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg);
   font-family: var(--font-mono, monospace);
@@ -1456,18 +1456,18 @@
   gap: 8px;
 }
 .req-overview-error-reason {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg-2);
   margin: 4px 0 8px;
 }
 .req-overview-error-body {
   margin: 0;
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   max-height: 120px;
   overflow: auto;
   white-space: pre-wrap;
@@ -1480,7 +1480,7 @@
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .req-waterfall-header {
   display: flex;
@@ -1490,12 +1490,12 @@
 }
 .req-waterfall-header h4 {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg);
 }
 .req-waterfall-total {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
@@ -1505,7 +1505,7 @@
   height: 8px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   display: flex;
   overflow: hidden;
   margin-bottom: 10px;
@@ -1523,7 +1523,7 @@
   display: flex;
   align-items: center;
   gap: 20px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .req-waterfall-legend-item {
@@ -1534,7 +1534,7 @@
 .req-waterfall-pip {
   width: 6px;
   height: 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 .req-waterfall-pip-ttft {
   background: var(--accent);
@@ -1564,10 +1564,10 @@
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .req-token-card span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .req-token-card strong {
@@ -1597,7 +1597,7 @@
   min-width: 0;
 }
 .request-detail-heading h2 {
-  font-size: 22px;
+  font-size: var(--text-xl);
   line-height: 1.25;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1608,7 +1608,7 @@
   gap: 8px;
   margin-top: 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .request-detail-id span {
@@ -1626,11 +1626,11 @@
   gap: 6px;
 }
 .request-detail-metrics span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .request-detail-metrics strong {
-  font-size: 22px;
+  font-size: var(--text-xl);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1639,14 +1639,14 @@
 }
 .request-detail-section h3 {
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .request-detail-section .ant-descriptions-item-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   min-width: 112px;
 }
 .request-detail-section .ant-descriptions-item-content {
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -1661,8 +1661,8 @@
   align-items: center;
   gap: 4px;
   padding: 0 6px;
-  font-size: 11px;
-  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
@@ -1679,29 +1679,29 @@
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .request-source-chain > div {
   min-width: 0;
 }
 .request-source-chain span {
   display: block;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--muted);
   margin-bottom: 8px;
 }
 .request-source-chain strong {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .request-source-chain > .anticon {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-2xs);
 }
 .request-detail-note {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.8;
 }
@@ -1722,13 +1722,13 @@
 .request-error pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--text-sm);
   max-height: 260px;
   overflow: auto;
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .request-detail-empty {
   padding: 28px 0;
@@ -1782,9 +1782,9 @@
     bottom: 56px;
     height: 28px;
     padding: 0 8px;
-    font-size: 11px;
+    font-size: var(--text-xs);
     gap: 4px;
-    border-radius: var(--radius-sm, 4px);
+    border-radius: var(--radius-sm);
   }
   .request-detail .ant-drawer-body {
     padding: 16px;
@@ -1793,7 +1793,7 @@
     gap: 12px;
   }
   .request-detail-metrics strong {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
   .request-source-chain {
     grid-template-columns: 1fr;
@@ -1897,7 +1897,7 @@
 }
 .request-failure-detail p {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--fg-2);
 }
 .request-failure-detail .req-overview-error-body {
@@ -1921,7 +1921,7 @@
 }
 .request-header-group h4 {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--muted);
 }
@@ -1931,7 +1931,7 @@
   gap: 6px 16px;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .request-header-group dt {
   color: var(--muted);

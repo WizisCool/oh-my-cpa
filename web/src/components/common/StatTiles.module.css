@@ -40,12 +40,12 @@
 
 .stat-tile-label {
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .stat-tile-value {
   color: var(--fg);
-  font-size: 22px;
+  font-size: var(--text-xl);
   font-weight: 600;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;

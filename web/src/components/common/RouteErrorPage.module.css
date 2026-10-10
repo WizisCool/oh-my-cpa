@@ -36,7 +36,7 @@
 .error-description {
   margin: 12px 0 0;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -59,7 +59,7 @@
 .message-label {
   margin: 16px 0 8px;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .diagnostic-code {
@@ -72,7 +72,7 @@
   background: var(--bg);
   color: var(--fg-2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -81,7 +81,7 @@
 .stack-details {
   margin-top: 12px;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .stack-details summary {
@@ -97,7 +97,7 @@
 .recovery-hint {
   margin: 16px 0 0;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 

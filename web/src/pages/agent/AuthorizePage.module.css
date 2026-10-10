@@ -26,7 +26,7 @@
 
 .link {
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 /* The shared title leaves room for a form under it; here one sentence follows directly. */
@@ -37,7 +37,7 @@
 .intro {
   margin: 0 0 20px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.6;
   text-align: center;
   overflow-wrap: anywhere;
@@ -76,7 +76,7 @@
 .request-name {
   align-self: flex-start;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .outcome {
@@ -84,7 +84,7 @@
   align-items: center;
   gap: 8px;
   margin: 4px 0 0;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -95,7 +95,7 @@
 .fine {
   margin: 14px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   text-align: center;
 }
@@ -103,6 +103,6 @@
 .console {
   display: block;
   margin-top: 20px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: center;
 }

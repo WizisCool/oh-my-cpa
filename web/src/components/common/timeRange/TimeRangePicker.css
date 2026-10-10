@@ -14,7 +14,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.time-range-trigger-caret { flex: none; color: var(--meta); font-size: 10px; }
+.time-range-trigger-caret { flex: none; color: var(--meta); font-size: var(--text-2xs); }
 .time-range-trigger.is-frozen { border-color: var(--accent); color: var(--accent); }
 
 /* The panel draws its own padding so the preset rail can run the popover's full height. */
@@ -25,7 +25,7 @@
   --time-range-band: color-mix(in srgb, var(--accent) 16%, transparent);
   display: flex;
   align-items: stretch;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 /* ── presets ── */
@@ -46,7 +46,7 @@
   inset: -3px 0 auto;
   border-top: 1px solid var(--border-soft);
 }
-.time-range-custom-caret { color: var(--meta); font-size: 10px; }
+.time-range-custom-caret { color: var(--meta); font-size: var(--text-2xs); }
 .time-range-custom-toggle[aria-expanded="true"] { background: var(--hover-inset); color: var(--fg); }
 .time-range-panel[data-mode="custom"] > .time-range-rail { border-right: 1px solid var(--border); }
 .time-range-option {
@@ -81,7 +81,7 @@
 .time-range-calendar { display: flex; gap: 20px; }
 .time-range-month { flex: 1 1 0; min-width: 0; }
 .time-range-month-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.time-range-month-title { color: var(--fg); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.time-range-month-title { color: var(--fg); font-size: var(--text-md); font-weight: 600; font-variant-numeric: tabular-nums; }
 .time-range-month-step {
   display: inline-flex;
   align-items: center;
@@ -101,7 +101,7 @@
 
 .time-range-weekdays,
 .time-range-days { display: grid; grid-template-columns: repeat(7, minmax(var(--time-range-cell), 1fr)); }
-.time-range-weekdays { margin-bottom: 2px; color: var(--meta); font-size: 11px; text-align: center; }
+.time-range-weekdays { margin-bottom: 2px; color: var(--meta); font-size: var(--text-xs); text-align: center; }
 .time-range-weekdays > span { line-height: 24px; }
 /* Rows are separated and columns are not, so a range reads as one unbroken band per week. */
 .time-range-days { row-gap: 2px; }
@@ -150,7 +150,7 @@
 }
 /* The end the next press on the calendar will set. */
 .time-range-field.is-next { border-color: var(--accent); }
-.time-range-field-label { flex: 1 0 100%; color: var(--meta); font-size: 11px; }
+.time-range-field-label { flex: 1 0 100%; color: var(--meta); font-size: var(--text-xs); }
 .time-range-field-value { color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .time-range-field-value.is-empty { color: var(--meta); }
 .time-range-time {
@@ -170,8 +170,8 @@
 /* The line is always present so an error appearing does not move Apply under the pointer. */
 .time-range-error { min-height: 18px; margin: 0; color: var(--danger); line-height: 18px; }
 .time-range-footer { display: flex; align-items: center; gap: 12px; }
-.time-range-open-end { font-size: 12px; }
-.time-range-zone { color: var(--meta); font-size: 11px; }
+.time-range-open-end { font-size: var(--text-sm); }
+.time-range-zone { color: var(--meta); font-size: var(--text-xs); }
 .time-range-actions { display: flex; gap: 8px; margin-left: auto; }
 
 /* ── narrow viewports: a bottom sheet ── */
@@ -188,7 +188,7 @@
   width: 100%;
   max-width: 440px;
   margin-inline: auto;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .time-range-panel.is-sheet .time-range-rail { width: auto; padding: 0; }
 .time-range-back {

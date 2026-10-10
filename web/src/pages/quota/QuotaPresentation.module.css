@@ -4,7 +4,7 @@
   align-items: baseline;
   column-gap: 16px;
   row-gap: 4px;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .meta-item {
@@ -30,7 +30,7 @@
 
 .meta-tag {
   color: var(--meta);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-decoration: underline dotted;
   text-underline-offset: 2px;
   cursor: help;
@@ -44,7 +44,7 @@
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
   letter-spacing: 0.2px;
 }
@@ -61,7 +61,7 @@
   align-items: baseline;
   gap: 10px;
   padding: 5px 10px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   background: var(--hover-inset);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
@@ -81,7 +81,7 @@
 }
 
 .no-window {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
   padding: 8px 0;
   text-align: center;
@@ -98,7 +98,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .progress-label {
@@ -140,7 +140,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 2px 12px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -174,12 +174,12 @@
 }
 
 .capacity-error {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
 }
 
 .capacity-hint {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1.5;
   color: var(--meta);
 }
@@ -187,9 +187,9 @@
 .rec-banner {
   background: var(--hover-inset);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -209,18 +209,18 @@
 .banner-dot {
   width: 7px;
   height: 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
 }
 
 .rec-sub-danger {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--danger);
   margin-top: 2px;
 }
 
 .card-meta-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
   font-family: var(--font-mono);
 }
@@ -247,13 +247,13 @@
 }
 
 .quota-diagnostic-alert {
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .quota-diagnostics {
   border-top: 1px solid var(--border-soft);
   padding-top: 8px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--meta);
 }
 
@@ -316,7 +316,7 @@
 
 .head :global(.ant-tag) {
   margin: 0 !important;
-  font-size: 11px !important;
+  font-size: var(--text-xs) !important;
   line-height: 18px !important;
   padding: 0 6px !important;
   border-radius: var(--radius-xs) !important;
@@ -329,7 +329,7 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xs);
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 550;
   min-width: 0;
   overflow: hidden;
@@ -346,7 +346,7 @@
   gap: 4px;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   background: var(--hover-inset);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xs);
@@ -357,7 +357,7 @@
   margin-left: auto;
   color: var(--meta);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
 }
 
@@ -387,7 +387,7 @@
 
 .window-label {
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -398,7 +398,7 @@
   flex: none;
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -415,7 +415,7 @@
 
 .bar :global(.ant-progress-inner) {
   background-color: var(--border-soft) !important;
-  border-radius: 2px !important;
+  border-radius: var(--radius-xs) !important;
 }
 
 .window-foot {
@@ -435,7 +435,7 @@
   overflow-wrap: anywhere;
   color: var(--fg-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: normal;
@@ -445,7 +445,7 @@
   min-width: 0;
   color: var(--meta);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -460,7 +460,7 @@
   border: 1px dashed var(--border-soft);
   border-radius: var(--radius-xs);
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
   background: var(--hover-inset);
   min-height: 38px;
 }

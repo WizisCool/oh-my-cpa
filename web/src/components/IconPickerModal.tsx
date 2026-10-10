@@ -256,7 +256,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                       justifyContent: 'center',
                       gap: 6,
                       padding: '10px 4px',
-                      borderRadius: 'var(--radius-sm, 4px)',
+                      borderRadius: 'var(--radius-sm)',
                       border: isSelected
                         ? '2px solid var(--accent)'
                         : '1px solid var(--border)',

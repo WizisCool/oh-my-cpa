@@ -5,7 +5,7 @@
   gap: 12px;
   margin: 12px 0 8px;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .list {
@@ -33,7 +33,7 @@
   overflow-wrap: anywhere;
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .row-configured .name {
@@ -43,7 +43,7 @@
 .configured-tag {
   flex-shrink: 0;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .empty {

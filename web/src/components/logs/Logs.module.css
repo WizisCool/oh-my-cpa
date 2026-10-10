@@ -43,14 +43,14 @@
 
 .filter-label {
   color: var(--meta);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .filter-empty {
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 24px;
 }
 
@@ -90,7 +90,7 @@
 .path-option-count {
   flex: none;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -145,7 +145,7 @@
 .service-attr {
   flex: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .service-attr-key {
@@ -168,7 +168,7 @@
   border-bottom: 1px dashed var(--border);
   background: var(--surface);
   color: var(--warn);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 640px) {

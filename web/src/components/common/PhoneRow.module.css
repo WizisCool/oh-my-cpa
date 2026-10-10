@@ -46,7 +46,7 @@
 
 .phone-row-field dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -55,7 +55,7 @@
   margin: 0;
   min-width: 0;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 

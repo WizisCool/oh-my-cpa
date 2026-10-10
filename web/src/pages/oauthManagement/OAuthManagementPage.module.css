@@ -8,7 +8,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--fg-2);
 }
@@ -31,7 +31,7 @@
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .summary-healthy { color: var(--success); }
@@ -78,7 +78,7 @@
 
 .session-strip-label {
   color: var(--meta);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .session-pill {
@@ -90,7 +90,7 @@
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   background: var(--hover-inset);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .session-pill :global(.ant-btn-link) {
@@ -134,7 +134,7 @@
   border-bottom: 1px solid var(--border-soft);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -182,7 +182,7 @@
 }
 
 .filter-field-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-family: var(--font-mono);
   color: var(--meta);
   text-transform: uppercase;
@@ -213,7 +213,7 @@
   flex-wrap: wrap;
   gap: 12px;
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .pagination > span:first-child {

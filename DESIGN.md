@@ -324,6 +324,8 @@ Depth and hierarchy are conveyed exclusively through:
 
 The geometric form language is compact, rectangular, and tightly controlled:
 - **Standard Radius (`--radius-sm`)**: `4px` across all interactive elements (buttons, inputs, selects, tags, and cards).
+- **Mark Radius (`--radius-xs`)**: `2px` for marks too small for 4px to read as a corner (pips, bar ends, 16px logos).
+- **Type Scale**: `--text-2xs` 10px, `--text-xs` 11px, `--text-sm` 12px, `--text-md` 13px, `--text-base` 14px, `--text-lg` 16px, `--text-xl` 22px; stylesheets write these sizes and the 2–4px radii as tokens (`pnpm check:style-tokens`), and only display numerals and icons keep literal sizes.
 - **Outer Shell Radius (`--radius-lg`)**: `6px` reserved strictly for modal dialogs and slide-out drawers.
 - **Thread Scale** (conversation workspaces and the approval card only, ADR 0081 refined by ADR 0086): `--radius-document` 4px for printed matter, `--radius-control` 4px for what is pressed, `--radius-surface` 6px for field panels and floating lists, `--radius-thread` 8px for the composer, the operator's bubble, cards and suggestions; grouping by `--thread-field` (`--fg` at 5%, 8% on hover) and one `--thread-hairline` edge (`--fg` at 12%), radii owned by `THREAD_RADII` (also used by HTML conversation exports), fills derived from the palette by `THREAD_FILL_SHARES` and `themePaletteCssVariables`, with pre-hydration defaults in `web/src/index.css`.
 - **Status Indicator Pip**: `7×7px` square with a `2px` micro-radius.

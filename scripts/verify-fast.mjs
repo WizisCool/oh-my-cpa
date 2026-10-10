@@ -50,6 +50,7 @@ export const CHECK_COMMANDS = {
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },
   motion: { label: 'motion budget', command: 'pnpm', args: ['check:motion'] },
+  'style-tokens': { label: 'style tokens', command: 'pnpm', args: ['check:style-tokens'] },
   feedback: { label: 'feedback surfaces', command: 'pnpm', args: ['check:feedback'] },
   go: { label: 'Go tests', command: 'go', args: ['test', './...'] },
   docs: { label: 'documentation references', command: 'pnpm', args: ['check-docs'] },

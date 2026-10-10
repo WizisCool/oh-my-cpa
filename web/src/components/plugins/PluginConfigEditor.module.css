@@ -27,7 +27,7 @@
 .source {
   min-height: max(320px, calc(100vh - 330px)) !important;
   font-family: var(--font-mono) !important;
-  font-size: 12px !important;
+  font-size: var(--text-sm) !important;
   line-height: 1.5 !important;
 }
 
@@ -43,7 +43,7 @@
 .summary-title {
   margin-bottom: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -64,7 +64,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .summary-key {

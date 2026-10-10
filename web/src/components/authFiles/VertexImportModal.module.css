@@ -8,14 +8,14 @@
   display: block;
   margin-bottom: 6px;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
 .desc {
   margin: 6px 0 0;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -29,7 +29,7 @@
 .file-name {
   min-width: 0;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--text-md);
   overflow-wrap: anywhere;
 }
 
@@ -41,7 +41,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .summary dt {
@@ -57,5 +57,5 @@
 .problem {
   margin: 6px 0 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
