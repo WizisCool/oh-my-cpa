@@ -1008,7 +1008,10 @@ const oauthEvent = {
 
 const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
 assert.equal(oauthResolved.isOAuth, true);
-assert.equal(oauthResolved.title, 'user@example.com');
+// One grammar for both credential types: the provider is the title, and the
+// credential that answered is the line under it.
+assert.equal(oauthResolved.title, 'Claude', 'an OAuth cell leads with its provider, as an API-key cell does');
+assert.equal(oauthResolved.credential, 'user@example.com', 'the account is the credential line');
 assert.equal(oauthResolved.iconId, 'Claude');
 assert.equal(oauthResolved.accountIdentity, 'user@example.com');
 
@@ -1022,7 +1025,7 @@ const apiKeyEvent = {
 const apiKeyResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'openai': 'OpenAI' });
 assert.equal(apiKeyResolved.isOAuth, false);
 assert.equal(apiKeyResolved.title, 'Openai');
-assert.equal(apiKeyResolved.subtitle, undefined);
+assert.equal(apiKeyResolved.credential, undefined);
 
 // Configured AI provider match
 const configuredProviders = [
@@ -1033,7 +1036,7 @@ const customResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'custom-dee
 assert.equal(customResolved.isOAuth, false);
 assert.equal(customResolved.title, 'DeepSeek 专线');
 assert.equal(customResolved.iconId, 'DeepSeek');
-assert.equal(customResolved.subtitle, undefined);
+assert.equal(customResolved.credential, undefined);
 
 // The key that served the record outranks a name match earlier in the list, and every key of a
 // provider counts, not only its first.
@@ -1044,7 +1047,7 @@ const byServingKey = resolveProviderInfo(secondKeyEvent, credFiles, {}, [
 ]);
 assert.equal(byServingKey.title, 'Relay');
 
-// Technical driver string: openai-compatible-opencode go -> Opencode with no subtitle
+// Technical driver string: openai-compatible-opencode go -> Opencode
 const opencodeEvent = {
   id: 12,
   provider: 'openai-compatible-opencode go',
@@ -1054,7 +1057,7 @@ const opencodeEvent = {
 const opencodeResolved = resolveProviderInfo(opencodeEvent, credFiles, {}, configuredProviders);
 assert.equal(opencodeResolved.isOAuth, false);
 assert.equal(opencodeResolved.title, 'Opencode');
-assert.equal(opencodeResolved.subtitle, undefined);
+assert.equal(opencodeResolved.credential, undefined);
 
 // Unconfigured fallback also cleans technical prefixes/suffixes
 const fallbackOpencodeEvent = {
@@ -1065,7 +1068,7 @@ const fallbackOpencodeEvent = {
 const fallbackOpencodeResolved = resolveProviderInfo(fallbackOpencodeEvent, credFiles, {}, []);
 assert.equal(fallbackOpencodeResolved.isOAuth, false);
 assert.equal(fallbackOpencodeResolved.title, 'Opencode');
-assert.equal(fallbackOpencodeResolved.subtitle, undefined);
+assert.equal(fallbackOpencodeResolved.credential, undefined);
 
 // A request answered by a plugin-registered OAuth provider carries that plugin's own
 // logo, looked up by the provider key the credential file and the record share.

@@ -270,6 +270,7 @@ asked" to find it.
 
 | Column | Question | Carries |
 | --- | --- | --- |
+| Provider | Which provider answered, and on which credential? | The provider's name with an `OAuth` badge when the credential is one, then the credential on the second line: the account for OAuth, the masked key for an API key. Both lines are set alike on every row, so the first is always a provider and the second always a credential. |
 | Model | Which model answered? | The requested model, and the served one only when it was substituted. A preflight tag stays here because it qualifies what the record is. |
 | Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px boxed mark per departure from an ordinary streamed call: the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
 

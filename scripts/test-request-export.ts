@@ -102,9 +102,25 @@ const byDefault = build(effectiveMasks(DEFAULT_SENSITIVE_DETAILS, []));
 for (const value of [ACCOUNT, 'someone', PROVIDER_KEY, 'laptop key']) {
   assert.ok(!byDefault.includes(value), `the default redaction withholds ${value}`);
 }
-for (const value of ['req-oauth', 'claude-opus', 'gpt-5', 'Claude OAuth']) {
+for (const value of ['req-oauth', 'claude-opus', 'gpt-5', 'Claude']) {
   assert.ok(byDefault.includes(value), `the default redaction keeps ${value}`);
 }
+
+// Both credential types draw the same two lines: the provider, then the
+// credential that answered. Redaction covers the second line and never the first.
+const providerLines = (masks: ReturnType<typeof effectiveMasks>) =>
+  buildRequestSheet({ rows: events, masks, colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials })
+    .rows.map((row) => row.cells.provider.lines);
+const [oauthLines, keyLines] = providerLines(effectiveMasks([], []));
+assert.deepEqual(oauthLines, [
+  [{ kind: 'text', text: 'Claude', tone: 'fg', size: 13, weight: 600, isMono: true }, { kind: 'tag', text: 'OAuth', tone: 'accent' }],
+  [{ kind: 'text', text: ACCOUNT, tone: 'meta', size: 11, weight: 400, isMono: true }],
+], 'an OAuth cell is its provider, then the account');
+assert.equal(keyLines.length, 2, 'an API-key cell is its provider, then the masked key');
+assert.deepEqual(keyLines[1], oauthLines[1].map((segment) => ({ ...segment, text: PROVIDER_KEY })), 'both credential lines are drawn alike');
+const [oauthRedacted, keyRedacted] = providerLines(effectiveMasks(DEFAULT_SENSITIVE_DETAILS, []));
+assert.deepEqual(oauthRedacted[0], oauthLines[0], 'withholding the account keeps the provider name');
+assert.deepEqual([oauthRedacted[1], keyRedacted[1]], [[{ kind: 'mask' }], [{ kind: 'mask' }]], 'each withheld credential is a bar on its own line');
 
 const idsHidden = build(effectiveMasks(['request_id'], []));
 assert.ok(!idsHidden.includes('req-oauth') && !idsHidden.includes('req-key') && idsHidden.includes(ACCOUNT));

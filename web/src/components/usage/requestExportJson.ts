@@ -84,7 +84,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
         put('resource_name', event.resource_name);
         if (!masks.has('provider_key')) put('provider_key_mask', maskKeyText(event.provider_key_mask));
       } else if (!masks.has('provider_account')) {
-        put('account', provider.title);
+        put('account', provider.credential);
         put('source', event.source);
         put('resource_name', event.resource_name);
       }

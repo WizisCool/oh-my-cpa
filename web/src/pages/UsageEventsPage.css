@@ -949,18 +949,12 @@
   flex-shrink: 0;
   line-height: 1.2;
 }
-.req-provider-sub {
-  font-size: 11px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* The upstream credential that answered the request, masked the same way the key
-   list masks a caller key: monospace so its head and tail line up between rows,
-   and the metadata colour so it reads as an annotation on the provider name
-   rather than as a second title. */
-.req-provider-key {
+/* The credential that answered the request - an OAuth account, or an API key
+   masked the way the key list masks a caller key. One style for both, so the
+   line means the same thing on every row: monospace so a mask's head and tail
+   line up between rows, and the metadata colour so it reads as an annotation on
+   the provider name rather than as a second title. */
+.req-provider-credential {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--meta);

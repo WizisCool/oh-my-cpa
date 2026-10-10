@@ -208,15 +208,15 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       provider: {
         mark: { iconId: provider.iconId, logo: provider.logo },
         lines: [
-          // An OAuth row's title is the account - usually an address. The source it
-          // belongs to is the line below, and stays.
-          provider.isOAuth && masks.has('provider_account')
-            ? [{ kind: 'mask' }, { kind: 'tag', text: 'OAuth', tone: 'accent' }]
-            : [
-                text(provider.title, 'fg', 13, 600, true),
-                ...(provider.isOAuth ? [{ kind: 'tag', text: 'OAuth', tone: 'accent' } as const] : []),
-              ],
-          ...(provider.subtitle ? [[text(provider.subtitle, 'muted', 11)]] : []),
+          [
+            text(provider.title, 'fg', 13, 600, true),
+            ...(provider.isOAuth ? [{ kind: 'tag', text: 'OAuth', tone: 'accent' } as const] : []),
+          ],
+          // The credential line: an OAuth account - usually an address - or the
+          // masked key. Each has its own mask; the provider's name always stays.
+          ...(provider.isOAuth && provider.credential
+            ? [masks.has('provider_account') ? MASK_LINE : [text(provider.credential, 'meta', 11, 400, true)]]
+            : []),
           ...(providerKeyMask
             ? [masks.has('provider_key') ? MASK_LINE : [text(providerKeyMask, 'meta', 11, 400, true)]]
             : []),
