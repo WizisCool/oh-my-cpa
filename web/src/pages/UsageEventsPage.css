@@ -290,7 +290,7 @@
   --req-grid-columns: 20px 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(145px, 0.6fr) minmax(88px, 0.6fr) 14px;
   --req-grid-gap: 16px;
   --req-pad-inline: 12px;
-  --req-min-width: 1330px;
+  --req-min-width: 1418px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -410,7 +410,7 @@
 .request-list-host {
   flex: 1;
   min-height: 240px;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
   overflow: hidden;
   position: relative;
 }
@@ -464,7 +464,7 @@
   user-select: none;
   flex-shrink: 0;
   width: 100%;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
 }
 
 .req-th {
@@ -556,7 +556,7 @@
 
 .request-row {
   width: 100%;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
@@ -956,7 +956,7 @@
   white-space: nowrap;
 }
 
-/* Column 4: Model name with reasoning effort beneath */
+/* Column 4: Model - the name, and the served model when it was substituted */
 .req-col-model {
   gap: 2px;
 }
@@ -975,22 +975,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
-   The component passes the step as a token reference and nothing else; `none`
-   and an unranked level pass nothing and keep the neutral step. */
-.req-effort-badge {
-  --effort-hue: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
-  text-transform: capitalize;
-  padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
-  color: var(--effort-hue);
-  border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
-  flex-shrink: 0;
-}
 .req-preflight-badge {
   font-size: 10px;
   font-family: var(--font-mono, monospace);
@@ -999,26 +983,6 @@
   border: 1px solid var(--border);
   color: var(--muted);
   flex-shrink: 0;
-}
-.req-non-stream-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--muted) 10%, transparent);
-  color: var(--muted);
-  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
-  font-size: 11px;
-  cursor: help;
-  flex-shrink: 0;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
-}
-.req-non-stream-icon:hover {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-  color: var(--fg);
-  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
 .req-model-served {
   display: inline-flex;
@@ -1039,14 +1003,65 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.req-model-sub {
+
+/* Column 5: Mode - the reasoning effort, then one mark per departure from an
+   ordinary streamed call. One wrapping line: at the default width the badge and
+   its marks sit side by side, and a column dragged narrow drops the marks under
+   the badge instead of clipping them. */
+.req-col-mode {
+  align-items: flex-start;
+}
+.req-mode-marks {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  font-size: 11px;
+  gap: 4px;
+  max-width: 100%;
+}
+.req-mode-none {
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+/* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
+   The component passes the step as a token reference and nothing else; `none`
+   and an unranked level pass nothing and keep the neutral step. */
+.req-effort-badge {
+  --effort-hue: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  line-height: 16px;
+  text-transform: capitalize;
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
+  color: var(--effort-hue);
+  border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
   white-space: nowrap;
+  cursor: help;
+}
+/* A mark is an icon in the badge's own box, so a row of them reads as one strip. */
+.req-mode-mark,
+.req-non-stream-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  cursor: help;
+  flex-shrink: 0;
+}
+.req-non-stream-icon {
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.req-non-stream-icon:hover {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
 
 /* Column 5: Latency */
@@ -1263,7 +1278,7 @@
    A container query rather than a viewport breakpoint, and deliberately so: this list sits
    inside the page's content column, so a 1440px viewport with a collapsed rail and a wide
    card holds a different list width than the same viewport with the rail open. The
-   question "do ten columns still fit" is about the box the columns are in, and only the
+   question "do the columns still fit" is about the box the columns are in, and only the
    container can answer it. It is therefore the one threshold in the console that is not a
    viewport one, alongside the shell's 900px and the phone's 640px (docs/design.md §8). */
 @container reqstream (max-width: 920px) {

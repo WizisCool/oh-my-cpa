@@ -1265,7 +1265,7 @@ console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
-assert.equal(REQUEST_COLUMNS.length, 11);
+assert.equal(REQUEST_COLUMNS.length, 12);
 
 // Sanitization & clamping
 assert.deepEqual(parseUsageEventsColumns(null), {});
@@ -1284,11 +1284,11 @@ assert.equal(parsedWidths.provider, 480);
 assert.equal(parsedWidths.model, 210);
 assert.equal(parsedWidths.latency, 85);
 
-// buildGridTemplateColumns: adaptive defaults with fr for provider, model, tokens
+// buildGridTemplateColumns: the two name columns share the spare room; every figure is a rigid track
 const defaultGrid = buildGridTemplateColumns({});
 assert.ok(defaultGrid.includes('minmax(140px, 1.6fr)'));
 assert.ok(defaultGrid.includes('minmax(130px, 1.3fr)'));
-assert.ok(defaultGrid.includes('minmax(125px, 1fr)'));
+assert.equal(defaultGrid.split(' ').filter((track) => track.startsWith('minmax(')).length, 2);
 assert.ok(defaultGrid.startsWith('20px ')); // selection track
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 // An exported sheet has no checkbox to tick and no record to open, so it has neither track.
@@ -1302,17 +1302,17 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-// computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 12 gaps + inline padding
-// 96 + 88 + 140 + 130 + 76 + 78 + 125 + 72 + 64 + 135 + 76 = 1080; selection 20 + chevron 14 = 34;
-// gaps 12*16 = 192; padding 24 = 1330
-const baseMin = 1080 + 34;
-assert.equal(computeGridMinWidth({}), baseMin + 192 + 24);
+// computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 13 gaps + inline padding
+// 96 + 88 + 140 + 130 + 84 + 76 + 78 + 132 + 64 + 64 + 124 + 76 = 1152; selection 20 + chevron 14 = 34;
+// gaps 13*16 = 208; padding 24 = 1418
+const baseMin = 1152 + 34;
+assert.equal(computeGridMinWidth({}), baseMin + 208 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 192 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 208 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 192 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 208 + 24);
 // The sheet drops both fixed tracks and the two gaps that separated them from the data.
-assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1080 + 160 + 24);
+assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1152 + 176 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
 console.log(

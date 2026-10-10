@@ -225,17 +225,25 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         lines: [
           [
             text(event.model || t('events.not_captured'), 'fg', 13, 600, true),
-            ...(isNonStreamingEvent(event)
-              ? [{ kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true } as const]
-              : []),
             ...(!event.generate ? [{ kind: 'tag', text: t('events.preflight'), tone: 'muted' } as const] : []),
           ],
           ...(event.model_substituted && event.response_model
             ? [[{ kind: 'glyph', glyph: 'substituted', tone: 'warn' } as const, text(event.response_model, 'warn', 11, 400, true)]]
             : []),
-          event.reasoning_effort
-            ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'muted', effortStep: effortStep(event.reasoning_effort) ?? undefined }]
-            : [text('—', 'muted', 11)],
+        ],
+      },
+      mode: {
+        lines: [
+          event.reasoning_effort || isNonStreamingEvent(event)
+            ? [
+                ...(event.reasoning_effort
+                  ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'muted', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  : []),
+                ...(isNonStreamingEvent(event)
+                  ? [{ kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true } as const]
+                  : []),
+              ]
+            : [text('—', 'muted', 12)],
         ],
       },
       latency: {

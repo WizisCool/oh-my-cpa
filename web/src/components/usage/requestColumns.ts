@@ -3,6 +3,7 @@ export type RequestColumnId =
   | 'result'
   | 'provider'
   | 'model'
+  | 'mode'
   | 'latency'
   | 'tps'
   | 'tokens'
@@ -64,6 +65,19 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     resizable: true,
   },
   {
+    // How the request was made, apart from which model answered it: the reasoning
+    // effort and the marks for a non-streamed response. Rigid, because its content
+    // is a badge and a couple of icons whose width does not depend on the record.
+    id: 'mode',
+    labelKey: 'events.col_mode',
+    align: 'left',
+    defaultWidth: 84,
+    minWidth: 72,
+    maxWidth: 180,
+    flexGrow: 0,
+    resizable: true,
+  },
+  {
     id: 'latency',
     labelKey: 'events.col_latency',
     align: 'right',
@@ -84,21 +98,24 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     resizable: true,
   },
   {
+    // Rigid like every other figure: its counts have a known width, and a share
+    // of the spare room here would be taken from the provider and model names,
+    // which are the two cells that actually truncate.
     id: 'tokens',
     labelKey: 'events.col_tokens',
     align: 'right',
-    defaultWidth: 140,
-    minWidth: 125,
+    defaultWidth: 132,
+    minWidth: 116,
     maxWidth: 280,
-    flexGrow: 1,
+    flexGrow: 0,
     resizable: true,
   },
   {
     id: 'cost',
     labelKey: 'events.col_cost',
     align: 'right',
-    defaultWidth: 72,
-    minWidth: 64,
+    defaultWidth: 64,
+    minWidth: 58,
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
@@ -117,8 +134,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'key',
     labelKey: 'events.col_key',
     align: 'left',
-    defaultWidth: 135,
-    minWidth: 125,
+    defaultWidth: 124,
+    minWidth: 110,
     maxWidth: 220,
     flexGrow: 0,
     resizable: true,
@@ -202,7 +219,7 @@ export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
 
 /**
  * buildGridTemplateColumns constructs the CSS grid-template-columns specification
- * for the 11 data columns plus the fixed selection and action chevron tracks.
+ * for the data columns plus the fixed selection and action chevron tracks.
  * If a column has a manual override, it renders as a fixed pixel track (e.g. 210px).
  * If no override exists and flexGrow > 0, it renders as minmax(minWidth, flexGrow fr) for adaptive sizing.
  * If no override exists and flexGrow === 0, it renders as defaultWidth px.

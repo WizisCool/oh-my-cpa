@@ -113,6 +113,31 @@ const modelHidden = build(effectiveMasks([], ['model']));
 assert.ok(!modelHidden.includes('claude-opus') && !modelHidden.includes('gpt-5') && modelHidden.includes('events.col_model'),
   'a redacted column keeps its heading and loses its values');
 
+// How a request was made is its own column, so it is withheld on its own: hiding
+// the model keeps the effort, and hiding the mode keeps the model.
+const moded = [{ ...events[1], reasoning_effort: 'xhigh', stream: false, ttft_ms: undefined }] as UsageEvent[];
+const modeSheet = (masks: ReturnType<typeof effectiveMasks>) =>
+  buildRequestSheet({ rows: moded, masks, colWidths: {}, caption: 'caption', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials });
+const modeCell = modeSheet(effectiveMasks([], [])).rows[0].cells.mode.lines;
+assert.deepEqual(modeCell, [[
+  { kind: 'tag', text: 'xhigh', tone: 'muted', effortStep: 5 },
+  { kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true },
+]], 'the mode cell draws the effort on its scale step, then the non-streaming mark');
+assert.equal(modeSheet(effectiveMasks([], [])).rows[0].cells.model.lines.length, 1, 'the model cell is the name alone');
+assert.deepEqual(
+  buildRequestSheet({ rows: [events[1]], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials }).rows[0].cells.mode.lines,
+  [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
+  'a request with nothing to mark draws a dash, not an empty cell',
+);
+const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
+assert.ok(!modeHidden.includes('xhigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
+const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>
+  buildRequestExport({ rows: moded, masks: effectiveMasks([], columns), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
+assert.equal(modeJson(['model']).reasoning_effort, 'xhigh', 'the JSON keeps the effort when only the model is withheld');
+assert.equal(modeJson(['model']).model, undefined);
+assert.ok(!('reasoning_effort' in modeJson(['mode'])) && !('stream' in modeJson(['mode'])) && modeJson(['mode']).model === 'gpt-5',
+  'the JSON withholds the mode fields with the mode column');
+
 // The JSON document makes the same promise in a form a program reads: stored
 // values, and a withheld field absent rather than blanked.
 const exportJson = (masks: ReturnType<typeof effectiveMasks>) =>

@@ -94,6 +94,8 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       put('model_alias', event.model_alias);
       put('response_model', event.response_model);
       put('model_substituted', event.model_substituted);
+    }
+    if (!masks.has('mode')) {
       put('reasoning_effort', event.reasoning_effort);
       put('service_tier', event.service_tier);
       put('response_service_tier', event.response_service_tier);

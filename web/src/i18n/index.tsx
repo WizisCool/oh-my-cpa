@@ -2436,6 +2436,7 @@ const DICT: Record<string, [string, string]> = {
   'events.col_time': ['请求时间', 'Timestamp'],
   'events.col_result': ['结果', 'Result'],
   'events.col_model': ['模型', 'Model'],
+  'events.col_mode': ['模式', 'Mode'],
   'events.col_resource': ['提供商 / 凭据', 'Provider / Credential'],
   'events.col_provider_cred': ['提供商 / 凭据', 'Provider / Credential'],
   'events.col_latency': ['耗时', 'Latency'],

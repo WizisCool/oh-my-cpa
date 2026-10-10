@@ -260,6 +260,31 @@ Totals belong where the whole window is in scope: the dashboard tiles, and the
 detail drawer for one request. If a per-page figure is ever needed again, it
 belongs in the footer next to the page count, stated as a page figure.
 
+### A request cell answers one question
+
+Each column of the request list answers one question about the request, and a cell that starts
+answering a second one is split. The model cell used to carry the model name, a non-streaming icon,
+a preflight tag, the substituted model and the reasoning effort; three stacked lines made the row
+taller than its neighbours, and a reader looking for "which model" had to read past "how it was
+asked" to find it.
+
+| Column | Question | Carries |
+| --- | --- | --- |
+| Model | Which model answered? | The requested model, and the served one only when it was substituted. A preflight tag stays here because it qualifies what the record is. |
+| Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px boxed mark per departure from an ordinary streamed call: the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
+
+Rules:
+
+- **A row is two lines at most**, so every row is the same 68px and the virtual list's estimate
+  holds. A third fact needs another column or the detail drawer, never a third line.
+- **A mark states a departure, never the default.** A streamed request carries no "streamed" mark,
+  and the requested service tier (`auto`) stays in the drawer.
+- **Every mark has a text reading**: the effort badge prints its level, and an icon mark carries an
+  accessible name and the list's shared tooltip.
+- **Only the two name columns flex.** Provider and model take the spare width; every figure, badge
+  and mark column is a rigid track, because its content has a known width and any share it took
+  would come out of the names that truncate.
+
 ### Filter options carry the mark their rows carry
 
 A model, provider or credential option in the filter bar and in the "More filters" drawer is
@@ -2050,11 +2075,11 @@ is what this section records.
 | --- | --- | --- |
 | `900px` | viewport | The shell changes shape: the rail becomes a sheet, page head and grid columns stack. |
 | `640px` | viewport | The device is a phone: list surfaces render labelled rows instead of a table, and controls take their touch sizes. |
-| `920px` | container (`reqstream`) | The request list's own width no longer fits its ten columns, so each record becomes a stacked row. |
+| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked row. |
 
 The third is a container query rather than a viewport breakpoint, and deliberately so: that
 list sits inside the page's content column, so the same viewport holds a different list width
-depending on whether the rail is open. "Do ten columns still fit" is a question about the box
+depending on whether the rail is open. "Do the columns still fit" is a question about the box
 the columns are in, and only the container can answer it. The same reasoning governs the
 dashboard's `@container modelusage (max-width: 500px)` panel stack.
 

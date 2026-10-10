@@ -2115,6 +2115,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.col_time": "請求時間",
   "events.col_result": "結果",
   "events.col_model": "模型",
+  "events.col_mode": "模式",
   "events.col_resource": "供應商 / 憑據",
   "events.col_provider_cred": "供應商 / 憑據",
   "events.col_latency": "耗時",

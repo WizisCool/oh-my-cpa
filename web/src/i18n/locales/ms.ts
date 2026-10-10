@@ -2115,6 +2115,7 @@ export const MS: Readonly<Record<string, string>> = {
   "events.col_time": "Cap masa",
   "events.col_result": "Keputusan",
   "events.col_model": "Model",
+  "events.col_mode": "Mod",
   "events.col_resource": "Pembekal / Tauliah",
   "events.col_provider_cred": "Pembekal / Tauliah",
   "events.col_latency": "Kependaman",

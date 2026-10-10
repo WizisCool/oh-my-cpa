@@ -138,6 +138,7 @@ export async function columnAlignment({ base, page, check }) {
       'req-col-result',
       'req-col-provider',
       'req-col-model',
+      'req-col-mode',
       'req-col-key',
       'req-col-ua',
     ];
