@@ -43,6 +43,7 @@ import {
   SUCCESS_RATE_HEALTHY_PERCENT,
   eventTokensPerSecond,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
   MIN_STREAMING_GENERATION_WINDOW_MS,
 } from '../web/src/types/usageEventMetrics.ts';
@@ -63,6 +64,8 @@ import {
 } from '../web/src/types/usageEventFilters.ts';
 import {
   REQUEST_COLUMNS,
+  REQUEST_STACK_WIDTH,
+  foldRequestColumns,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   parseUsageEventsColumns,
   SHEET_GRID_CHROME,
@@ -1005,7 +1008,17 @@ const oauthEvent = {
 
 const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
 assert.equal(oauthResolved.isOAuth, true);
-assert.equal(oauthResolved.title, 'user@example.com');
+// One grammar for both credential types: the provider is the title, and the
+// credential that answered is the line under it.
+assert.equal(oauthResolved.title, 'Claude', 'an OAuth cell leads with its provider, as an API-key cell does');
+assert.equal(oauthResolved.credential, 'user@example.com', 'the account is the credential line');
+// A file that records only its credential type does not name the provider; the record does.
+const typeOnlyOAuth = resolveProviderInfo(
+  oauthEvent,
+  indexCredentialFiles([{ name: 'someone.json', auth_index: 'auth-oauth', type: 'oauth', email: 'user@example.com' }]),
+);
+assert.equal(typeOnlyOAuth.title, 'Claude', 'the title is the provider, never the word for the credential type');
+assert.equal(typeOnlyOAuth.iconId, 'Claude');
 assert.equal(oauthResolved.iconId, 'Claude');
 assert.equal(oauthResolved.accountIdentity, 'user@example.com');
 
@@ -1019,7 +1032,7 @@ const apiKeyEvent = {
 const apiKeyResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'openai': 'OpenAI' });
 assert.equal(apiKeyResolved.isOAuth, false);
 assert.equal(apiKeyResolved.title, 'Openai');
-assert.equal(apiKeyResolved.subtitle, undefined);
+assert.equal(apiKeyResolved.credential, undefined);
 
 // Configured AI provider match
 const configuredProviders = [
@@ -1030,7 +1043,7 @@ const customResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'custom-dee
 assert.equal(customResolved.isOAuth, false);
 assert.equal(customResolved.title, 'DeepSeek 专线');
 assert.equal(customResolved.iconId, 'DeepSeek');
-assert.equal(customResolved.subtitle, undefined);
+assert.equal(customResolved.credential, undefined);
 
 // The key that served the record outranks a name match earlier in the list, and every key of a
 // provider counts, not only its first.
@@ -1041,7 +1054,7 @@ const byServingKey = resolveProviderInfo(secondKeyEvent, credFiles, {}, [
 ]);
 assert.equal(byServingKey.title, 'Relay');
 
-// Technical driver string: openai-compatible-opencode go -> Opencode with no subtitle
+// Technical driver string: openai-compatible-opencode go -> Opencode
 const opencodeEvent = {
   id: 12,
   provider: 'openai-compatible-opencode go',
@@ -1051,7 +1064,7 @@ const opencodeEvent = {
 const opencodeResolved = resolveProviderInfo(opencodeEvent, credFiles, {}, configuredProviders);
 assert.equal(opencodeResolved.isOAuth, false);
 assert.equal(opencodeResolved.title, 'Opencode');
-assert.equal(opencodeResolved.subtitle, undefined);
+assert.equal(opencodeResolved.credential, undefined);
 
 // Unconfigured fallback also cleans technical prefixes/suffixes
 const fallbackOpencodeEvent = {
@@ -1062,7 +1075,7 @@ const fallbackOpencodeEvent = {
 const fallbackOpencodeResolved = resolveProviderInfo(fallbackOpencodeEvent, credFiles, {}, []);
 assert.equal(fallbackOpencodeResolved.isOAuth, false);
 assert.equal(fallbackOpencodeResolved.title, 'Opencode');
-assert.equal(fallbackOpencodeResolved.subtitle, undefined);
+assert.equal(fallbackOpencodeResolved.credential, undefined);
 
 // A request answered by a plugin-registered OAuth provider carries that plugin's own
 // logo, looked up by the provider key the credential file and the record share.
@@ -1261,11 +1274,22 @@ assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); 
 assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
 assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
 
+// The fast-lane mark reads the tier the response reported, under either vendor's name for it.
+assert.equal(isFastTierEvent({ response_service_tier: 'priority' }), true);
+assert.equal(isFastTierEvent({ response_service_tier: 'fast' }), true);
+assert.equal(isFastTierEvent({ response_service_tier: ' Priority ' }), true);
+for (const tier of ['default', 'auto', 'flex', 'scale', '', undefined]) {
+  assert.equal(isFastTierEvent({ response_service_tier: tier }), false, `${String(tier)} is not the fast lane`);
+}
+// Asking for the fast lane is not being served on it.
+assert.equal(isFastTierEvent({ service_tier: 'priority', response_service_tier: 'default' } as Partial<UsageEvent>), false);
+assert.equal(isFastTierEvent(undefined), false);
+
 console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-to-end average, edge boundaries');
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
-assert.equal(REQUEST_COLUMNS.length, 11);
+assert.equal(REQUEST_COLUMNS.length, 12);
 
 // Sanitization & clamping
 assert.deepEqual(parseUsageEventsColumns(null), {});
@@ -1284,11 +1308,11 @@ assert.equal(parsedWidths.provider, 480);
 assert.equal(parsedWidths.model, 210);
 assert.equal(parsedWidths.latency, 85);
 
-// buildGridTemplateColumns: adaptive defaults with fr for provider, model, tokens
+// buildGridTemplateColumns: the two name columns share the spare room; every figure is a rigid track
 const defaultGrid = buildGridTemplateColumns({});
 assert.ok(defaultGrid.includes('minmax(140px, 1.6fr)'));
 assert.ok(defaultGrid.includes('minmax(130px, 1.3fr)'));
-assert.ok(defaultGrid.includes('minmax(125px, 1fr)'));
+assert.equal(defaultGrid.split(' ').filter((track) => track.startsWith('minmax(')).length, 2);
 assert.ok(defaultGrid.startsWith('20px ')); // selection track
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 // An exported sheet has no checkbox to tick and no record to open, so it has neither track.
@@ -1302,21 +1326,50 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-// computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 12 gaps + inline padding
-// 96 + 88 + 140 + 130 + 76 + 78 + 125 + 72 + 64 + 135 + 76 = 1080; selection 20 + chevron 14 = 34;
-// gaps 12*16 = 192; padding 24 = 1330
-const baseMin = 1080 + 34;
-assert.equal(computeGridMinWidth({}), baseMin + 192 + 24);
+// computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 13 gaps + inline padding
+// 96 + 88 + 140 + 130 + 84 + 76 + 78 + 132 + 64 + 64 + 124 + 76 = 1152; selection 20 + chevron 14 = 34;
+// gaps 13*16 = 208; padding 24 = 1418
+const baseMin = 1152 + 34;
+assert.equal(computeGridMinWidth({}), baseMin + 208 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 192 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 208 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 192 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 208 + 24);
 // The sheet drops both fixed tracks and the two gaps that separated them from the data.
-assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1080 + 160 + 24);
+assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1152 + 176 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
+// foldRequestColumns: a list too narrow for every column leaves the least-scanned ones out, in order.
+const foldedAt = (width: number | null, widths = {}) => [...foldRequestColumns(width, widths)];
+assert.deepEqual(foldedAt(null), [], 'nothing folds before the list is measured');
+assert.deepEqual(foldedAt(1418), [], 'every column fits at the grid floor');
+assert.deepEqual(foldedAt(2400), []);
+assert.deepEqual(foldedAt(1417), ['ua'], 'one pixel short folds the first column only');
+assert.deepEqual(foldedAt(1326), ['ua']);
+assert.deepEqual(foldedAt(1325), ['ua', 'key']);
+assert.deepEqual(foldedAt(1140), ['ua', 'key', 'tps'], 'a 1440px window with the rail open keeps the cache rate and the mode');
+assert.deepEqual(foldedAt(921), ['ua', 'key', 'tps', 'cache', 'mode']);
+// A stacked record labels every field, so the card width folds nothing.
+assert.deepEqual(foldedAt(REQUEST_STACK_WIDTH), []);
+assert.deepEqual(foldedAt(400), []);
+// What stays always fits above the stacked width, so the default layout never scrolls sideways.
+const allFolded = foldRequestColumns(REQUEST_STACK_WIDTH + 1);
+assert.ok(computeGridMinWidth({}, 16, 12, undefined, allFolded) <= REQUEST_STACK_WIDTH + 1);
+for (let width = REQUEST_STACK_WIDTH + 1; width <= 1500; width += 1) {
+  assert.ok(
+    computeGridMinWidth({}, 16, 12, undefined, foldRequestColumns(width)) <= width,
+    `the default columns fit a ${width}px list without scrolling sideways`,
+  );
+}
+// A width the operator dragged out counts against the room, and folds sooner.
+assert.deepEqual(foldedAt(1418, { provider: 300 }), ['ua', 'key']);
+// The folded columns have no track, and the floor shrinks by their width and gap.
+const foldedGrid = buildGridTemplateColumns({}, undefined, new Set(['ua', 'key']));
+assert.equal(foldedGrid.split(' ').length, defaultGrid.split(' ').length - 2);
+assert.equal(computeGridMinWidth({}, 16, 12, undefined, new Set(['ua'])), baseMin + 208 + 24 - 76 - 16);
+
 console.log(
-  'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor',
+  'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor, width-driven folding',
 );
 
 // successRateTone: the console's one published band, read by every surface that shows a success

@@ -85,7 +85,8 @@ console renders what the operator asked for.
 `--selected-inset` `#2e2e37`, `--hover-inset` `#121214`, `--tooltip-bg` `#1c1c1f`, `--heatmap-quiet`
 `#212124`, `--heatmap-busy` `#00a2fb`, `--heatmap-zero-recorded` `#2c2c30`,
 `--heatmap-zero-unrecorded` `#212124`, `--heatmap-tip-link` `#00a2fb`, `--series-track` `#2c2c30`,
-`--cache-rate-yellow` `#f59e0b`, `--cache-rate-green` `#10b981`.
+`--cache-rate-yellow` `#f59e0b`, `--cache-rate-green` `#10b981`. The six `--effort-*` steps are
+per-mode constants; see the reasoning-effort scale below.
 
 ### OMC Light
 
@@ -259,6 +260,32 @@ Totals belong where the whole window is in scope: the dashboard tiles, and the
 detail drawer for one request. If a per-page figure is ever needed again, it
 belongs in the footer next to the page count, stated as a page figure.
 
+### A request cell answers one question
+
+Each column of the request list answers one question about the request, and a cell that starts
+answering a second one is split. The model cell used to carry the model name, a non-streaming icon,
+a preflight tag, the substituted model and the reasoning effort; three stacked lines made the row
+taller than its neighbours, and a reader looking for "which model" had to read past "how it was
+asked" to find it.
+
+| Column | Question | Carries |
+| --- | --- | --- |
+| Provider | Which provider answered, and on which credential? | The provider's name with an `OAuth` badge when the credential is one, then the credential on the second line: the account for OAuth, the masked key for an API key. Both lines are set alike on every row, so the first is always a provider and the second always a credential. |
+| Model | Which model answered? | The requested model, and the served one only when it was substituted. A preflight tag stays here because it qualifies what the record is. |
+| Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px boxed mark per departure from an ordinary streamed call: a filled bolt in `--accent` when the response's service tier was `fast` or `priority`, and the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
+
+Rules:
+
+- **A row is two lines at most**, so every row is the same 68px and the virtual list's estimate
+  holds. A third fact needs another column or the detail drawer, never a third line.
+- **A mark states a departure, never the default.** A streamed request carries no "streamed" mark,
+  and the requested service tier (`auto`) stays in the drawer.
+- **Every mark has a text reading**: the effort badge prints its level, and an icon mark carries an
+  accessible name and the list's shared tooltip.
+- **Only the two name columns flex.** Provider and model take the spare width; every figure, badge
+  and mark column is a rigid track, because its content has a known width and any share it took
+  would come out of the names that truncate.
+
 ### Filter options carry the mark their rows carry
 
 A model, provider or credential option in the filter bar and in the "More filters" drawer is
@@ -377,6 +404,48 @@ Fixing it means persisting the breakdown (or per-convention token columns in the
 usage facts) before any arithmetic change. Until then the ratio is a bounded estimate
 for cache-writing providers, and the request list is exact only for providers
 whose input already includes the cached prefix.
+
+### Reasoning-effort scale
+
+The request list colours a request's reasoning effort, because effort is the one request parameter
+an operator compares down a column: a page of `high` and `xhigh` calls costs and waits differently
+from a page of `low` ones. Effort is an **ordinal** reading - each level is more thinking than the
+one below it - so it takes a sequential scale rather than one unrelated colour per name.
+
+Neither OpenAI nor Anthropic publishes a colour for these levels, so the scale follows the general
+rule for ordered data instead: one sweep whose hue and saturation rise with the value, and a printed
+label so the colour is never the only carrier (WCAG 1.4.1).
+
+| Token | Level | Dark | Light | Family |
+| --- | --- | --- | --- | --- |
+| - | `none`, unranked | `--fg-2` | `--fg-2` | neutral: the absence of reasoning, or a level the scale does not rank (`instant`, `ultra`, a token budget) |
+| `--effort-1` | `minimal` | `#94bfce` | `#39626e` | slate |
+| `--effort-2` | `low` | `#4eccd3` | `#00686c` | teal |
+| `--effort-3` | `medium` | `#91b7fe` | `#3057a3` | blue |
+| `--effort-4` | `high` | `#bda7fe` | `#6343a4` | violet |
+| `--effort-5` | `xhigh` | `#f08dee` | `#8a2b8a` | magenta |
+| `--effort-6` | `max` | `#ff8cc1` | `#9b2065` | pink |
+| `--effort-tint` | | `14%` | `12%` | badge fill = step over the ground |
+| `--effort-edge` | | `32%` | `30%` | badge border = step over the ground |
+
+Rules:
+
+1. **The sweep stays cool.** It runs teal to pink and never enters green, amber or red. Those hues
+   are verdicts in this console, and a request that thought hard did not succeed, degrade or fail by
+   doing so - the same reasoning that keeps latency uncoloured and red off the cache-rate scale.
+2. **One order for both vendors.** OpenAI's ladder runs `none` to `xhigh` and Anthropic's `low` to
+   `max`; they agree wherever they overlap, so `effortStep` (`web/src/theme/effortScale.ts`) ranks
+   them on one scale. Matching ignores case and surrounding whitespace.
+3. **An unranked level stays neutral, and neutral is plain rather than faint.** A
+   provider-specific value (`instant`, `ultra`, `auto`, a token budget) is printed as recorded at
+   the neutral step. Painting it as the top of the scale would state an order nobody published. The
+   neutral step is `--fg-2`, secondary text: the badge's tint and edge are thin by design, and
+   `--muted` through them left the level close to unreadable.
+4. **The steps are per-mode constants, not derived tokens**, for the reason the series slots are: an
+   operator's accent must not rotate what a level looks like. Every palette inherits its mode's set.
+5. **Each step, the neutral one included, clears 4.5:1** as 10px badge text on its own tint, over the page, the card and the
+   row's hover fill, in every registered palette. `scripts/test-effort-scale.ts` asserts that, the
+   ranking, and that the stylesheet's fallback values match the palette.
 
 ### Token activity heatmap
 
@@ -2009,13 +2078,25 @@ is what this section records.
 | --- | --- | --- |
 | `900px` | viewport | The shell changes shape: the rail becomes a sheet, page head and grid columns stack. |
 | `640px` | viewport | The device is a phone: list surfaces render labelled rows instead of a table, and controls take their touch sizes. |
-| `920px` | container (`reqstream`) | The request list's own width no longer fits its ten columns, so each record becomes a stacked row. |
+| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked row. |
 
 The third is a container query rather than a viewport breakpoint, and deliberately so: that
 list sits inside the page's content column, so the same viewport holds a different list width
-depending on whether the rail is open. "Do ten columns still fit" is a question about the box
+depending on whether the rail is open. "Do the columns still fit" is a question about the box
 the columns are in, and only the container can answer it. The same reasoning governs the
 dashboard's `@container modelusage (max-width: 500px)` panel stack.
+
+Above that threshold the request list **folds columns rather than scrolling sideways**. The grid
+has a floor - the sum of every column's width - and a window narrower than the floor used to get a
+horizontal scrollbar, which moved the cost and token figures off screen and made every hover a
+scroll. The list now measures its own width and hides columns, one at a time, until the rest fit:
+user agent first, then the caller's key, speed, cache rate and mode. The columns that say what the
+request was and what it cost - time, result, provider, model, latency, tokens, cost - never fold;
+they stay until the list becomes stacked records. This adds no threshold: the fold points are the
+measured widths of the columns the operator currently has (`foldRequestColumns` in
+`web/src/components/usage/requestColumns.ts`), so a resized column moves them. A folded column is
+absent from the header and the rows alike, its value is still in the record's detail drawer, and an
+export draws every column regardless, because a sheet is not bound by the window.
 
 Three thresholds with three distinct meanings is the budget. A fourth number needs a reason
 stated beside it, and two rules that compute the same thing at slightly different widths are
@@ -2073,6 +2154,18 @@ move, and that coast kept firing while the finger was still down. The console mo
   them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
   or found nothing has no list to pull, so a drag there never folds the header, and a header folded
   before the list went away unfolds on a 48px pull down anywhere on the page.
+- **The fold slides, and the list answers it once.** The header folds over `--motion-base` from
+  its own height, and the list fills the height that frees, so every frame of the fold resizes the
+  list's box. What made that drop frames - a wheel rocking across the top of the list stuttered at
+  each change of direction - was everything that answered each frame: the page re-rendered to pass
+  the list a new height, and the virtual list measured every mounted row again. Now nothing does.
+  A list about to grow takes the fold's end height in one step when the fold starts, read from the
+  transition's own end keyframes; a list about to shrink keeps its height until the fold lands,
+  and its host clips the surplus (`useRequestListHeight`). The fold and the back-to-top pill are
+  held outside the page's render (`viewFlag.ts`), so a flip re-renders the header wrapper and its
+  button and nothing else. Measured on the dev server over twelve rocks: about 20 frames over 25ms
+  before, about 10 now, and a third less script; the same fold with no transition at all measures
+  6, which is the price of the slide.
 
 ### The phone's navigation is the rail, in a sheet
 

@@ -707,7 +707,14 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 	// A reasoning model's traces are what make the request detail panel readable,
 	// so the effort is recorded for the models that actually think.
 	if profile.reasonShare >= 0.4 {
-		event.ReasoningEffort = []string{"low", "medium", "high"}[int(random.nextUint64()%3)]
+		event.ReasoningEffort = []string{"low", "medium", "high", "xhigh"}[int(random.nextUint64()%4)]
+	}
+	// A share of the answered requests rode the upstream's fast lane. Derived from
+	// the latency already drawn, so every other generated value stays where it was.
+	if !failed && latency%6 == 0 {
+		event.ServiceTier, event.ResponseServiceTier = "priority", "priority"
+	} else if !failed {
+		event.ResponseServiceTier = "default"
 	}
 	return event
 }

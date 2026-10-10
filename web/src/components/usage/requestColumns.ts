@@ -3,6 +3,7 @@ export type RequestColumnId =
   | 'result'
   | 'provider'
   | 'model'
+  | 'mode'
   | 'latency'
   | 'tps'
   | 'tokens'
@@ -20,6 +21,12 @@ export interface RequestColumnDefinition {
   maxWidth: number;
   flexGrow: number;
   resizable: boolean;
+  /**
+   * When the list is too narrow for every column, the order in which this one is
+   * folded away: 1 goes first. Absent on the columns that say what the request
+   * was and what it cost, which stay until the list becomes stacked records.
+   */
+  foldOrder?: number;
 }
 
 export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
@@ -64,6 +71,20 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     resizable: true,
   },
   {
+    // How the request was made, apart from which model answered it: the reasoning
+    // effort and the marks for a non-streamed response. Rigid, because its content
+    // is a badge and a couple of icons whose width does not depend on the record.
+    id: 'mode',
+    labelKey: 'events.col_mode',
+    align: 'left',
+    defaultWidth: 84,
+    minWidth: 72,
+    maxWidth: 180,
+    flexGrow: 0,
+    resizable: true,
+    foldOrder: 5,
+  },
+  {
     id: 'latency',
     labelKey: 'events.col_latency',
     align: 'right',
@@ -82,23 +103,27 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
+    foldOrder: 3,
   },
   {
+    // Rigid like every other figure: its counts have a known width, and a share
+    // of the spare room here would be taken from the provider and model names,
+    // which are the two cells that actually truncate.
     id: 'tokens',
     labelKey: 'events.col_tokens',
     align: 'right',
-    defaultWidth: 140,
-    minWidth: 125,
+    defaultWidth: 132,
+    minWidth: 116,
     maxWidth: 280,
-    flexGrow: 1,
+    flexGrow: 0,
     resizable: true,
   },
   {
     id: 'cost',
     labelKey: 'events.col_cost',
     align: 'right',
-    defaultWidth: 72,
-    minWidth: 64,
+    defaultWidth: 64,
+    minWidth: 58,
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
@@ -112,16 +137,18 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     maxWidth: 130,
     flexGrow: 0,
     resizable: true,
+    foldOrder: 4,
   },
   {
     id: 'key',
     labelKey: 'events.col_key',
     align: 'left',
-    defaultWidth: 135,
-    minWidth: 125,
+    defaultWidth: 124,
+    minWidth: 110,
     maxWidth: 220,
     flexGrow: 0,
     resizable: true,
+    foldOrder: 2,
   },
   {
     id: 'ua',
@@ -132,6 +159,7 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     maxWidth: 180,
     flexGrow: 0,
     resizable: true,
+    foldOrder: 1,
   },
 ] as const;
 
@@ -157,6 +185,13 @@ export interface RequestGridChrome {
 
 export const LIST_GRID_CHROME: RequestGridChrome = { hasSelection: true, hasChevron: true };
 export const SHEET_GRID_CHROME: RequestGridChrome = { hasSelection: false, hasChevron: false };
+
+/**
+ * The list width at and below which each record is a stacked card instead of a
+ * row of columns. It is the `reqstream` container threshold in
+ * `UsageEventsPage.css`; a stacked record labels every field, so nothing folds.
+ */
+export const REQUEST_STACK_WIDTH = 920;
 
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
 
@@ -200,18 +235,22 @@ export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
   return result;
 }
 
+const NO_COLUMNS: ReadonlySet<RequestColumnId> = new Set();
+
 /**
  * buildGridTemplateColumns constructs the CSS grid-template-columns specification
- * for the 11 data columns plus the fixed selection and action chevron tracks.
+ * for the data columns plus the fixed selection and action chevron tracks.
  * If a column has a manual override, it renders as a fixed pixel track (e.g. 210px).
  * If no override exists and flexGrow > 0, it renders as minmax(minWidth, flexGrow fr) for adaptive sizing.
  * If no override exists and flexGrow === 0, it renders as defaultWidth px.
+ * A folded column contributes no track.
  */
 export function buildGridTemplateColumns(
   widths: RequestColumnWidths = {},
   chrome: RequestGridChrome = LIST_GRID_CHROME,
+  folded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
 ): string {
-  const tracks = REQUEST_COLUMNS.map((col) => {
+  const tracks = REQUEST_COLUMNS.filter((col) => !folded.has(col.id)).map((col) => {
     const manualWidth = widths[col.id];
     if (manualWidth !== undefined && Number.isFinite(manualWidth)) {
       const clamped = Math.min(col.maxWidth, Math.max(col.minWidth, manualWidth));
@@ -244,8 +283,10 @@ export function computeGridMinWidth(
   gap = REQUEST_GRID_GAP,
   paddingInline = REQUEST_PAD_INLINE,
   chrome: RequestGridChrome = LIST_GRID_CHROME,
+  folded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
 ): number {
-  const total = REQUEST_COLUMNS.reduce((sum, col) => {
+  const columns = REQUEST_COLUMNS.filter((col) => !folded.has(col.id));
+  const total = columns.reduce((sum, col) => {
     const manual = widths[col.id];
     if (manual !== undefined && Number.isFinite(manual)) {
       return sum + Math.min(col.maxWidth, Math.max(col.minWidth, manual));
@@ -257,11 +298,39 @@ export function computeGridMinWidth(
     chrome.hasChevron ? CHEVRON_TRACK_WIDTH : null,
   ].filter((width): width is number => width !== null);
   // One gap between each pair of neighbouring tracks, data and fixed alike.
-  const gaps = (REQUEST_COLUMNS.length + fixedTracks.length - 1) * gap;
+  const gaps = (columns.length + fixedTracks.length - 1) * gap;
   const fixed = fixedTracks.reduce((sum, width) => sum + width, 0);
   return Math.round(total + fixed + gaps + paddingInline * 2);
 }
 
+/** The foldable columns, the first to go first. */
+const FOLD_SEQUENCE: readonly RequestColumnId[] = REQUEST_COLUMNS.filter((col) => col.foldOrder !== undefined)
+  .sort((left, right) => left.foldOrder! - right.foldOrder!)
+  .map((col) => col.id);
 
-
-
+/**
+ * foldRequestColumns decides which columns a list of the given width leaves out.
+ *
+ * A list too narrow for its columns used to scroll sideways, which hides the
+ * right-hand columns just the same but behind a gesture, and takes the header's
+ * alignment with it on the way. Folding instead keeps every remaining column
+ * whole: the least-scanned ones go first, one at a time, until the grid's floor
+ * fits. Whatever is folded is still a click away in the record's detail drawer.
+ *
+ * Nothing folds before the width is measured, or at the stacked-card width, where
+ * each record labels all of its fields. The columns without a `foldOrder` never
+ * fold; if they alone do not fit - only possible with widths the operator dragged
+ * out - the list scrolls sideways as before.
+ */
+export function foldRequestColumns(
+  availableWidth: number | null,
+  widths: RequestColumnWidths = {},
+): ReadonlySet<RequestColumnId> {
+  const folded = new Set<RequestColumnId>();
+  if (availableWidth === null || availableWidth <= REQUEST_STACK_WIDTH) return folded;
+  for (const id of FOLD_SEQUENCE) {
+    if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, folded) <= availableWidth) break;
+    folded.add(id);
+  }
+  return folded;
+}

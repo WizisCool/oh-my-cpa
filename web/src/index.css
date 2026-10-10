@@ -107,6 +107,17 @@
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
+  /* Reasoning-effort scale (design.md §2): one cool sweep from a quiet teal to a saturated pink,
+     lowest reasoning step first. It never enters green, amber or red, which are verdicts here;
+     each step is lightened until 10px badge text clears 4.5:1 on the badge's own tint. */
+  --effort-1: #94bfce;
+  --effort-2: #4eccd3;
+  --effort-3: #91b7fe;
+  --effort-4: #bda7fe;
+  --effort-5: #f08dee;
+  --effort-6: #ff8cc1;
+  --effort-tint: 14%;
+  --effort-edge: 32%;
   --radius-sm: 4px;
   /* Conversation shape stays close to the console's 4px geometry: document frames and
      controls share it, floating surfaces use 6px, and the composer and bubbles use 8px.
@@ -192,6 +203,15 @@
   --series-5: #b45309;
   --series-6: #0891b2;
   --series-track: #e5e5ea;
+  /* The same sweep as its darker steps, which is what stays legible on a light page. */
+  --effort-1: #39626e;
+  --effort-2: #00686c;
+  --effort-3: #3057a3;
+  --effort-4: #6343a4;
+  --effort-5: #8a2b8a;
+  --effort-6: #9b2065;
+  --effort-tint: 12%;
+  --effort-edge: 30%;
 }
 
 * { box-sizing: border-box; }

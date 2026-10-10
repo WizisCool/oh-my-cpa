@@ -2,13 +2,16 @@ import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
 import { sleep } from '../probe.mjs';
-import { until } from '../harness.mjs';
+import { pastDeadline, until } from '../harness.mjs';
 
 /**
  * Probes for the request-record console: the column geometry and truncation, the
  * live tail and the hold a reader takes when they scroll away, the refresh
  * sequence, and the interactions the table answers (resize, keyboard, download).
  */
+
+/** `TOOLTIP_INTENT_DELAY_MS` in the list's tooltip layer: how long a left popup waits before closing. */
+const REQUEST_TOOLTIP_DISMISS_MS = 100;
 
 export const LONG_PROVIDER = 'openai-compatible-commandcode-goat-super-long-relay-name';
 export const LONG_MODEL = 'vendor/some-extremely-long-model-identifier-that-cannot-fit';
@@ -135,6 +138,7 @@ export async function columnAlignment({ base, page, check }) {
       'req-col-result',
       'req-col-provider',
       'req-col-model',
+      'req-col-mode',
       'req-col-key',
       'req-col-ua',
     ];
@@ -343,6 +347,9 @@ export const interactionRecords = (() => {
     provider: ['openai', 'claude', 'gemini'][index % 3],
     model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
     service_tier: 'auto',
+    // One record in four was served on the upstream's fast lane, and thought about it.
+    response_service_tier: index % 4 === 1 ? 'priority' : 'default',
+    ...(index % 4 === 1 ? { reasoning_effort: 'high' } : {}),
     source: `hmac:source-fingerprint-${index % 3}`,
     auth_index: `credential-${index % 3}`,
     auth_type: 'oauth',
@@ -482,12 +489,151 @@ export async function requestListInteractions({ base, page, check }) {
     failureFit.left >= 0 && failureFit.top >= 0 && failureFit.right <= failureFit.width && failureFit.bottom <= failureFit.height,
     JSON.stringify(failureFit));
   await page.screenshot({ path: 'tmp/request-failure-popup.png' });
-  await failurePopup.locator('pre').hover();
-  check('the failure popup stays open while its text is read', await failurePopup.isVisible());
+  // A pointer travels to the popup; it does not arrive there. `hover()` would place it
+  // inside in one event and never cross the gap a reader's hand has to cross, which is
+  // where the popup used to close before its copy button could be reached. Each stop is
+  // held past the list's dismissal timer, so a stop that counted as leaving has closed it.
+  const pillBox = await failedPill.boundingBox();
+  const panelBox = await failurePopup.locator('.ant-popover-container').boundingBox();
+  const bodyBox = await failurePopup.locator('pre').boundingBox();
+  const travelX = pillBox.x + pillBox.width / 2;
+  const travelStops = [
+    pillBox.y + pillBox.height / 2,
+    (pillBox.y + pillBox.height + panelBox.y) / 2,
+    panelBox.y + 4,
+    bodyBox.y + Math.min(24, bodyBox.height / 2),
+  ];
+  const travelHeld = [];
+  for (const stopY of travelStops) {
+    await page.mouse.move(travelX, stopY);
+    await pastDeadline(REQUEST_TOOLTIP_DISMISS_MS);
+    travelHeld.push(await failurePopup.isVisible());
+  }
+  check('the failure popup stays open while the pointer travels from the pill into it',
+    travelHeld.every(Boolean), `gap=${(panelBox.y - pillBox.y - pillBox.height).toFixed(1)} held=${travelHeld.join(',')}`);
+  await page.mouse.wheel(0, 40);
+  await pastDeadline(REQUEST_TOOLTIP_DISMISS_MS);
+  check('scrolling over the error body does not dismiss the failure popup', await failurePopup.isVisible());
+  const failureSurface = await page.evaluate(() => {
+    const resolve = (token) => {
+      const swatch = document.body.appendChild(document.createElement('i'));
+      swatch.style.color = `var(${token})`;
+      const color = getComputedStyle(swatch).color;
+      swatch.remove();
+      return color;
+    };
+    const panel = document.querySelector('.request-failure-tooltip .ant-popover-container');
+    const style = panel ? getComputedStyle(panel) : null;
+    return { fill: style?.backgroundColor, ink: style?.color, elevated: resolve('--elevated'), fg: resolve('--fg') };
+  });
+  check('the failure popup is a panel on the theme surface, not the inverse tooltip block',
+    failureSurface.fill === failureSurface.elevated && failureSurface.ink === failureSurface.fg, JSON.stringify(failureSurface));
+  // How a request was made lives in its own column: the model cell is the name, and the
+  // fast-lane mark appears exactly on the records the upstream reported as served there.
+  const modeCells = await page.evaluate(() => [...document.querySelectorAll('.request-row')].map((row) => ({
+    hasEffortInModel: row.querySelector('.req-col-model .req-effort-badge') !== null,
+    effort: row.querySelector('.req-col-mode .req-effort-badge')?.textContent ?? '',
+    isFast: row.querySelector('.req-col-mode [data-testid="request-fast-tier"]') !== null,
+    fastName: row.querySelector('[data-testid="request-fast-tier"]')?.getAttribute('aria-label') ?? '',
+    height: row.getBoundingClientRect().height,
+  })));
+  const fastCells = modeCells.filter((cell) => cell.isFast);
+  check('the mode column carries the effort and the fast-lane mark, and the model cell neither',
+    fastCells.length > 0 && fastCells.length < modeCells.length &&
+    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'high')) &&
+    fastCells.every((cell) => cell.fastName.includes('priority')),
+    JSON.stringify(modeCells.slice(0, 4)));
+  check('every request row is the same height', new Set(modeCells.map((cell) => Math.round(cell.height))).size === 1,
+    JSON.stringify([...new Set(modeCells.map((cell) => cell.height))]));
   check('a successful result carries no failure popup',
     await page.locator('.request-row .req-result-pill.is-success[data-request-failure]').count() === 0);
   await page.keyboard.press('Escape');
   await failurePopup.waitFor({ state: 'hidden' });
+  await page.mouse.move(0, 0);
+
+  // A window too narrow for every column drops the least important ones instead of
+  // scrolling sideways, from the header and the rows alike.
+  const restingViewport = page.viewportSize();
+  const readColumns = () => page.evaluate(() => {
+    const shown = (root) => [...root.children]
+      .filter((cell) => getComputedStyle(cell).display !== 'none')
+      .flatMap((cell) => [...cell.classList].filter((name) => /^req-(th|col)-/.test(name)).map((name) => name.replace(/^req-(th|col)-/, '')));
+    const scroller = document.querySelector('.request-table-scroll-area');
+    return {
+      header: shown(document.querySelector('.request-table-header')),
+      row: shown(document.querySelector('.request-row')),
+      folded: document.querySelector('.request-stream').dataset.foldedColumns,
+      sideways: scroller.scrollWidth - scroller.clientWidth,
+    };
+  });
+  await page.setViewportSize({ width: 1920, height: restingViewport.height });
+  await until(async () => (await readColumns()).folded === '', { label: 'every column shown on a wide window' });
+  const wideColumns = await readColumns();
+  await page.setViewportSize({ width: 1400, height: restingViewport.height });
+  await until(async () => (await readColumns()).folded !== '', { label: 'columns folded on a narrow window' });
+  const narrowColumns = await readColumns();
+  const CORE_COLUMNS = ['time', 'result', 'provider', 'model', 'latency', 'tokens', 'cost'];
+  check('a wide window shows every column without sideways scroll',
+    wideColumns.sideways <= 1 && ['mode', 'tps', 'cache', 'key', 'ua'].every((id) => wideColumns.row.includes(id)),
+    JSON.stringify(wideColumns));
+  check('a narrow window folds columns instead of scrolling sideways',
+    narrowColumns.sideways <= 1 && narrowColumns.row.length < wideColumns.row.length && !narrowColumns.row.includes('ua'),
+    JSON.stringify(narrowColumns));
+  check('the header and the rows fold the same columns, and the core ones stay',
+    JSON.stringify(narrowColumns.header.filter((id) => narrowColumns.row.includes(id))) === JSON.stringify(narrowColumns.row.filter((id) => narrowColumns.header.includes(id))) &&
+    narrowColumns.folded.split(' ').every((id) => !narrowColumns.row.includes(id) && !narrowColumns.header.includes(id)) &&
+    CORE_COLUMNS.every((id) => narrowColumns.row.includes(id) && narrowColumns.header.includes(id)),
+    JSON.stringify(narrowColumns));
+  await page.setViewportSize(restingViewport);
+  await until(async () => (await readColumns()).folded !== undefined, { label: 'viewport restored' });
+
+  // The header folds with a height transition, and the list below it fills the height that
+  // frees. The virtual list must take its new height once per fold, not once per frame of it.
+  const listBox = await page.locator('.request-list-host').boundingBox();
+  await page.mouse.move(listBox.x + 200, listBox.y + 120);
+  // Whatever the steps above left: the top bounce is what unfolds a folded header.
+  await until(async () => {
+    if ((await page.locator('.request-collapsible-header.is-collapsed').count()) === 0) return true;
+    await page.mouse.wheel(0, -400);
+    return false;
+  }, { label: 'header unfolded before the fold is measured' });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => {
+    const holder = document.querySelector('.request-list-host .ant-listy-holder');
+    const header = document.querySelector('.request-collapsible-header');
+    const fold = { heights: [holder.style.maxHeight], ran: 0 };
+    new MutationObserver(() => {
+      if (holder.style.maxHeight !== fold.heights.at(-1)) fold.heights.push(holder.style.maxHeight);
+    }).observe(holder, { attributes: true, attributeFilter: ['style'] });
+    header.addEventListener('transitionrun', (event) => {
+      if (event.target === header && event.propertyName === 'grid-template-rows') fold.ran += 1;
+    });
+    window.__requestFold = fold;
+  });
+  const readFold = () => page.evaluate(() => ({
+    heights: [...window.__requestFold.heights],
+    ran: window.__requestFold.ran,
+    isSettled: document.querySelector('.request-collapsible-header').getAnimations().length === 0,
+    isCollapsed: document.querySelector('.request-collapsible-header.is-collapsed') !== null,
+    host: Math.floor(document.querySelector('.request-list-host').clientHeight),
+  }));
+  await page.locator('.req-expand-toggle-btn').click();
+  await until(async () => { const fold = await readFold(); return fold.isCollapsed && fold.isSettled && fold.heights.length > 1; },
+    { label: 'header folded and list height settled' });
+  const folded = await readFold();
+  check('folding the header animates its height and resizes the list once',
+    folded.ran === 1 && folded.heights.length === 2 && Number.parseFloat(folded.heights[1]) === folded.host,
+    JSON.stringify(folded));
+  await page.mouse.move(listBox.x + 200, listBox.y + 120);
+  await page.mouse.wheel(0, -120);
+  await until(async () => { const fold = await readFold(); return !fold.isCollapsed && fold.isSettled && fold.heights.length > 2; },
+    { label: 'header unfolded and list height settled' });
+  const unfolded = await readFold();
+  check('unfolding the header resizes the list once, back to the height it had',
+    unfolded.ran === 2 && unfolded.heights.length === 3 && unfolded.heights[2] === unfolded.heights[0] &&
+    Number.parseFloat(unfolded.heights[2]) === unfolded.host,
+    JSON.stringify(unfolded));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.mouse.move(0, 0);
 
   const priceAction = page.locator('[data-testid="request-set-price"]').first();

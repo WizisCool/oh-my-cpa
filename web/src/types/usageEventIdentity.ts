@@ -139,8 +139,14 @@ export interface ResolvedProviderInfo {
   iconId: string;
   /** Logo the plugin owning this provider publishes, which outranks the catalog mark. */
   logo?: string;
+  /** The provider's name, for every credential type. */
   title: string;
-  subtitle?: string;
+  /**
+   * Which OAuth credential answered: the account, else its file. An API-key
+   * provider's credential is the masked key the record carries, which the
+   * surfaces render from the record themselves.
+   */
+  credential?: string;
   authFile?: string;
   accountIdentity?: string;
 }
@@ -176,23 +182,29 @@ export function resolveProviderInfo(
   };
 
   if (isOAuth) {
-    const providerFamily = (file?.provider || file?.type || event.provider || 'oauth').toLowerCase();
+    // A credential file may say only that it is an OAuth file. That is how it
+    // authenticates, not who it belongs to, so the record's own provider names
+    // the cell before it does.
+    const fileType = file?.type?.toLowerCase() === 'oauth' ? '' : file?.type;
+    const providerFamily = (file?.provider || fileType || event.provider || file?.type || 'oauth').toLowerCase();
     const iconId = resolveIcon(providerFamily, file?.name);
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);
     const fileName = credIdentity.name || file?.name || event.source || '';
 
-    // For OAuth: display account identity prominently (e.g. email / project_id / file name)
-    const displayName = account || fileName || event.resource_name || event.auth_index || providerFamily;
-    const providerLabel = providerFamily ? providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1) : 'OAuth';
-    const secondary = `${providerLabel} OAuth`;
+    // Both credential types read the same way: the provider is the title and the
+    // credential that answered is the line under it. Leading with the account
+    // here made an OAuth cell answer a different question from the API-key cell
+    // beside it.
+    const providerLabel = providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1);
+    const credential = account || fileName || event.resource_name?.trim() || event.auth_index?.trim() || undefined;
 
     return {
       isOAuth: true,
       iconId,
       logo: resolveLogo(file?.provider, file?.type, event.provider),
-      title: displayName,
-      subtitle: secondary,
+      title: providerLabel,
+      credential,
       authFile: fileName,
       accountIdentity: account || undefined,
     };
@@ -258,13 +270,11 @@ export function resolveProviderInfo(
     providerIcons[providerName] ||
     resolveIcon(providerFamily, providerName, matched?.base_url);
 
-  // For AI Providers, show only the clean Name (no technical driver subtitle)
   return {
     isOAuth: false,
     iconId,
     logo: resolveLogo(matched?.family, matched?.upstream_name, event.provider),
     title: providerName,
-    subtitle: undefined,
     authFile: fileName,
   };
 }

@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
-import { NonStreamOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
+import { NonStreamOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -10,6 +10,7 @@ import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
+import { effortColor, effortStep } from '../../theme/effortScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveProviderInfo,
@@ -23,6 +24,7 @@ import {
   tpsCalculationHintKey,
   formatEventDuration,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import {
@@ -82,8 +84,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     // Which of the provider's keys answered this request. The server resolves it
     // from CPA's credential lists and omits it when the credential cannot be
     // identified, so an absent value prints no line at all rather than a guess.
-    // An OAuth credential has no provider key - its row names the account - so the
-    // line is confined to API-key credentials, and the mask is re-rendered here
+    // An OAuth credential has no provider key - its second line names the account
+    // instead - so the mask is confined to API-key credentials, and is re-rendered here
     // from whatever arrived: this surface can then never print a credential even if
     // a future response carried one.
     const providerKeyMask = providerInfo.isOAuth ? '' : maskKeyText(event.provider_key_mask);
@@ -103,6 +105,11 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
+    // The level's place on the effort scale, as a token reference; absent for
+    // `none` and for a level the scale does not rank, which keep the neutral badge.
+    const effortHue = effortColor(effortStep(event.reasoning_effort));
+    const isNonStreaming = isNonStreamingEvent(event);
+    const isFastTier = isFastTierEvent(event);
 
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
@@ -227,22 +234,23 @@ export const RequestRow = React.memo<RequestRowProps>(
                 </span>
               )}
             </div>
-            {providerInfo.subtitle && (
-              <span className="req-provider-sub" title={providerInfo.subtitle}>
-                {providerInfo.subtitle}
+            {providerInfo.isOAuth && providerInfo.credential && (
+              <span className="req-provider-credential" title={providerInfo.credential}>
+                {providerInfo.credential}
               </span>
             )}
             {providerKeyMask && (
               /* The tooltip repeats the cell's own mask and nothing more: the value
                  itself is never held by this page (ADR 0015). */
-              <span className="req-provider-key" title={providerKeyMask}>
+              <span className="req-provider-credential req-provider-key" title={providerKeyMask}>
                 {providerKeyMask}
               </span>
             )}
           </div>
         </div>
 
-        {/* Column 4: model, with reasoning effort underneath */}
+        {/* Column 4: model. The cell is the model's identity and nothing else: how
+            the request was made has its own column, so a row is two lines at most. */}
         <div className={`req-col req-col-model ${requestColumnAlignClass('model')}`}>
           <div className="req-model-primary">
             <strong
@@ -255,13 +263,6 @@ export const RequestRow = React.memo<RequestRowProps>(
             >
               {event.model || t('events.not_captured')}
             </strong>
-            {isNonStreamingEvent(event) && (
-              <RequestTooltip title={t('events.non_stream_hint')}>
-                <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
-                  <NonStreamOutlined />
-                </span>
-              </RequestTooltip>
-            )}
             {!event.generate && (
               <span className="req-preflight-badge" title={t('events.preflight_hint')}>
                 {t('events.preflight')}
@@ -281,23 +282,52 @@ export const RequestRow = React.memo<RequestRowProps>(
               </span>
             </RequestTooltip>
           )}
-          {/* The requested service tier ("auto") is not a model fact operators
-              scan for; the alias and the tier stay in the detail drawer. */}
-          <span className="req-model-sub">
-            {event.reasoning_effort ? (
-              <span
-                className="req-effort-badge"
-                title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}
-              >
-                {event.reasoning_effort}
-              </span>
-            ) : (
-              '—'
-            )}
-          </span>
         </div>
 
-        {/* Column 5: total latency */}
+        {/* Column 5: mode - the reasoning effort, then a mark per way this request
+            departed from an ordinary streamed call: served on the fast lane, or
+            answered in one piece. The requested service tier ("auto") is not
+            something operators scan for and stays in the drawer. */}
+        <div className={`req-col req-col-mode ${requestColumnAlignClass('mode')}`}>
+          <span className="req-mobile-label">{t('events.col_mode')}</span>
+          {event.reasoning_effort || isFastTier || isNonStreaming ? (
+            <div className="req-mode-marks">
+              {event.reasoning_effort && (
+                <RequestTooltip title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}>
+                  <span
+                    className="req-effort-badge"
+                    style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
+                  >
+                    {event.reasoning_effort}
+                  </span>
+                </RequestTooltip>
+              )}
+              {isFastTier && (
+                <RequestTooltip title={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}>
+                  <span
+                    className="req-mode-mark req-fast-icon"
+                    role="img"
+                    aria-label={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}
+                    data-testid="request-fast-tier"
+                  >
+                    <ThunderboltFilled />
+                  </span>
+                </RequestTooltip>
+              )}
+              {isNonStreaming && (
+                <RequestTooltip title={t('events.non_stream_hint')}>
+                  <span className="req-mode-mark req-non-stream-icon" role="img" aria-label={t('events.non_stream_hint')}>
+                    <NonStreamOutlined />
+                  </span>
+                </RequestTooltip>
+              )}
+            </div>
+          ) : (
+            <span className="req-mode-none">—</span>
+          )}
+        </div>
+
+        {/* Column 6: total latency */}
         <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
           <strong className="req-latency-val">
@@ -310,7 +340,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 6: output tokens per second */}
+        {/* Column 7: output tokens per second */}
         <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.basis !== null ? (
@@ -326,7 +356,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 7: tokens (total, input, output, reasoning) */}
+        {/* Column 8: tokens (total, input, output, reasoning) */}
         <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
@@ -352,7 +382,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 8: cost, locked at request time; unpriced stays an em dash
+        {/* Column 9: cost, locked at request time; unpriced stays an em dash
             rather than a fabricated 0, beside the one action that fixes it */}
         <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
@@ -384,7 +414,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             </>
           )}
         </div>
-        {/* Column 9: cache hit rate */}
+        {/* Column 10: cache hit rate */}
         <div className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           <RequestTooltip
@@ -417,7 +447,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </RequestTooltip>
         </div>
 
-        {/* Column 10: caller key, masked, and only for api_key callers;
+        {/* Column 11: caller key, masked, and only for api_key callers;
             every other auth type falls back to the source fingerprint */}
         <div className={`req-col req-col-key ${requestColumnAlignClass('key')}`}>
           <span className="req-mobile-label">{t('events.col_key')}</span>
@@ -426,7 +456,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 11: user agent, already reduced to a client product label
+        {/* Column 12: user agent, already reduced to a client product label
             at ingestion */}
         <div className={`req-col req-col-ua ${requestColumnAlignClass('ua')}`}>
           <span className="req-mobile-label">{t('events.col_ua')}</span>

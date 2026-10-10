@@ -6,14 +6,15 @@ import {
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   buildGridTemplateColumns,
   computeGridMinWidth,
+  foldRequestColumns,
   parseUsageEventsColumns,
   type RequestColumnId,
   type RequestColumnWidths,
 } from './requestColumns';
 
 /**
- * The request list's column layout: the widths the operator dragged or nudged
- * and the grid those widths project to.
+ * The request list's column layout: the widths the operator dragged or nudged,
+ * the columns the list's own width has room for, and the grid those project to.
  *
  * The header and the rows are separate grids on one track list. Neither reserves
  * a scrollbar gutter: the virtual list draws its own overlay scrollbar and loses
@@ -44,11 +45,46 @@ export function useRequestColumnLayout() {
     }
   }, [columnWidthsReady, columnWidthsPref]);
 
-  const gridTemplate = React.useMemo(
-    () => buildGridTemplateColumns(colWidths),
-    [colWidths],
+  // Which columns the list's width leaves out, as the space-separated ids the
+  // stylesheet matches on. Held as that string rather than as the measured width
+  // so a window being dragged re-renders the page only when a column actually
+  // folds or returns, not on every pixel.
+  const [foldedKey, setFoldedKey] = React.useState('');
+  const streamWidth = React.useRef<number | null>(null);
+  const widthsRef = React.useRef(colWidths);
+  widthsRef.current = colWidths;
+  const refold = React.useCallback(() => {
+    setFoldedKey([...foldRequestColumns(streamWidth.current, widthsRef.current)].join(' '));
+  }, []);
+  const observer = React.useRef<ResizeObserver | null>(null);
+  const streamRef = React.useCallback((node: HTMLElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node) return;
+    observer.current = new ResizeObserver(([entry]) => {
+      // The list also changes height on every frame of the header's fold, and
+      // only its width decides what fits.
+      if (entry.contentRect.width === streamWidth.current) return;
+      streamWidth.current = entry.contentRect.width;
+      refold();
+    });
+    observer.current.observe(node);
+  }, [refold]);
+  // A dragged width changes what fits without the list itself resizing.
+  React.useEffect(refold, [colWidths, refold]);
+
+  const folded = React.useMemo(
+    () => new Set(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
+    [foldedKey],
   );
-  const gridMinWidth = React.useMemo(() => computeGridMinWidth(colWidths), [colWidths]);
+  const gridTemplate = React.useMemo(
+    () => buildGridTemplateColumns(colWidths, undefined, folded),
+    [colWidths, folded],
+  );
+  const gridMinWidth = React.useMemo(
+    () => computeGridMinWidth(colWidths, undefined, undefined, undefined, folded),
+    [colWidths, folded],
+  );
 
   const handleResizeStart = React.useCallback(
     (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
@@ -146,6 +182,8 @@ export function useRequestColumnLayout() {
     colWidths,
     gridTemplate,
     gridMinWidth,
+    foldedColumns: foldedKey,
+    streamRef,
     hasCustomWidths: Object.keys(colWidths).length > 0,
     handleResizeStart,
     handleResetColumn,

@@ -1,10 +1,11 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Tooltip } from 'antd';
-import type { TooltipRef } from 'antd/es/tooltip';
+import { Popover, Tooltip } from 'antd';
 import { RequestFailureDetail } from './RequestFailureDetail';
 
 const TOOLTIP_INTENT_DELAY_MS = 100;
+/** The class both popups carry on their root; the page has one of them at a time. */
+const POPUP_CLASS = 'request-cell-tooltip';
 
 /** Plain cells keep the virtualized mount cheap; one list-owned popup reads their current labels. */
 export function RequestTooltip({ title, children }: {
@@ -23,7 +24,6 @@ interface TooltipTarget {
 
 export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTMLDivElement> }) {
   const [target, setTarget] = React.useState<TooltipTarget | null>(null);
-  const popupRef = React.useRef<TooltipRef>(null);
   const popupId = React.useId();
 
   React.useEffect(() => {
@@ -42,8 +42,12 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       const element = node.closest<HTMLElement>('[data-request-tooltip]');
       return element && host.contains(element) ? element : null;
     };
+    // Asked of the document rather than of the popup's ref: antd builds that
+    // handle when the anchor mounts, before the popup exists, so its
+    // `popupElement` stays undefined until some later render and a pointer
+    // entering the popup in the meantime read as one leaving the cell.
     const isInsidePopup = (node: EventTarget | null) =>
-      node instanceof Node && !!popupRef.current?.popupElement?.contains(node);
+      node instanceof Element && node.closest(`.${POPUP_CLASS}`) !== null;
     const activate = (element: HTMLElement) => {
       cancelPending();
       const title = element.dataset.requestTooltip;
@@ -102,7 +106,9 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       }
     };
     // Virtualized rows can disappear without pointerout; scroll and resize invalidate their anchors.
-    const handleGeometryChange = () => {
+    const handleGeometryChange = (event: Event) => {
+      // The popup's own content scrolls: reading a long error body is not the list moving.
+      if (isInsidePopup(event.target)) return;
       hovered = null;
       focused = null;
       dismiss();
@@ -158,32 +164,50 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
   }, [element, isOpen, popupId, hostRef]);
 
   if (!target) return null;
-  return createPortal(
-    <Tooltip
-      ref={popupRef}
-      id={popupId}
-      title={failureEventId && title
-        ? <RequestFailureDetail eventId={failureEventId} statusLabel={title} />
-        : title}
-      open={isOpen}
-      trigger={[]}
-      placement={failureEventId ? 'bottomLeft' : 'top'}
-      classNames={{ root: failureEventId ? 'request-cell-tooltip request-failure-tooltip' : 'request-cell-tooltip' }}
-      destroyOnHidden
-      afterOpenChange={(hasOpened) => {
-        if (!hasOpened) setTarget((current) => current?.isOpen ? current : null);
+  const anchor = (
+    <span
+      aria-hidden="true"
+      data-request-tooltip-anchor
+      style={{
+        position: 'fixed', pointerEvents: 'none',
+        left: target.bounds.left, top: target.bounds.top,
+        width: target.bounds.width, height: target.bounds.height,
       }}
-    >
-      <span
-        aria-hidden="true"
-        data-request-tooltip-anchor
-        style={{
-          position: 'fixed', pointerEvents: 'none',
-          left: target.bounds.left, top: target.bounds.top,
-          width: target.bounds.width, height: target.bounds.height,
-        }}
-      />
-    </Tooltip>,
+    />
+  );
+  const afterOpenChange = (hasOpened: boolean) => {
+    if (!hasOpened) setTarget((current) => current?.isOpen ? current : null);
+  };
+  // A failure is read and copied from, so it is a floating panel on the console's
+  // own surface; a label stays the compact tooltip every other cell uses.
+  return createPortal(
+    failureEventId && title ? (
+      <Popover
+        content={<RequestFailureDetail id={popupId} eventId={failureEventId} statusLabel={title} />}
+        open={isOpen}
+        trigger={[]}
+        placement="bottomLeft"
+        arrow={false}
+        classNames={{ root: `${POPUP_CLASS} request-failure-tooltip` }}
+        destroyOnHidden
+        afterOpenChange={afterOpenChange}
+      >
+        {anchor}
+      </Popover>
+    ) : (
+      <Tooltip
+        id={popupId}
+        title={title}
+        open={isOpen}
+        trigger={[]}
+        placement="top"
+        classNames={{ root: POPUP_CLASS }}
+        destroyOnHidden
+        afterOpenChange={afterOpenChange}
+      >
+        {anchor}
+      </Tooltip>
+    ),
     document.body,
   );
 }

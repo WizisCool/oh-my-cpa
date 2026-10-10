@@ -25,6 +25,12 @@ colors:
   series-4: "#f43f5e"
   series-5: "#f59e0b"
   series-6: "#06b6d4"
+  effort-1: "#94bfce"         # reasoning-effort scale, minimal → max; light mode uses the darker steps
+  effort-2: "#4eccd3"
+  effort-3: "#91b7fe"
+  effort-4: "#bda7fe"
+  effort-5: "#f08dee"
+  effort-6: "#ff8cc1"
   brand-openai: "#10A37F"
   brand-codex: "#60A5FA"
   brand-claude: "#D97757"
@@ -182,6 +188,20 @@ family in the app, and the only exception to the semantic-only rule above; see
   the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
   mode's set.
 
+
+### Reasoning effort (ordinal)
+
+The request list colours a request's reasoning effort on one cool sweep, quiet at the bottom and
+saturated at the top; see `docs/design.md` §2.
+
+- **Steps** (`--effort-1` … `--effort-6`, `minimal` → `max`): slate `#94bfce` / `#39626e`, teal
+  `#4eccd3` / `#00686c`, blue `#91b7fe` / `#3057a3`, violet `#bda7fe` / `#6343a4`, magenta `#f08dee`
+  / `#8a2b8a`, pink `#ff8cc1` / `#9b2065` (dark / light). `none` and any level the vendors do not
+  publish stay at the neutral step, `--fg-2`: plain, and as legible as the scale.
+- The sweep never enters green, amber or red, which are verdicts; the level's name is always printed
+  beside the colour. Each step clears 4.5:1 as badge text on its own tint in every registered
+  palette, asserted by `scripts/test-effort-scale.ts`.
+
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
 - **Graphite Surface (`--surface`)** (`#1c1c1f`): Elevated containers, cards, dropdown menus, modals, and row hover states.
@@ -252,7 +272,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 The console is operated from a phone as well as a desktop, and the phone is treated as its own device rather than a narrow desktop.
 
-**Two viewport breakpoints, one container threshold.** `900px` — the shell changes shape (the rail becomes a sheet, page head and grid columns stack). `640px` — the device is a phone (list surfaces render labelled rows instead of a table, controls take their touch sizes). `920px` **container** (`reqstream`) — the request list's own width no longer fits ten columns, so each record becomes a stacked row. The third is a container query on purpose: that list lives inside the content column, so the same viewport holds a different list width depending on whether the rail is open, and "do ten columns fit" is a question only the box can answer.
+**Two viewport breakpoints, one container threshold.** `900px` — the shell changes shape (the rail becomes a sheet, page head and grid columns stack). `640px` — the device is a phone (list surfaces render labelled rows instead of a table, controls take their touch sizes). `920px` **container** (`reqstream`) — the request list's own width no longer fits its columns, so each record becomes a stacked row. The third is a container query on purpose: that list lives inside the content column, so the same viewport holds a different list width depending on whether the rail is open, and "do the columns fit" is a question only the box can answer. Above it the list folds columns instead of scrolling sideways: user agent, caller key, speed, cache rate and mode leave in that order as the measured width runs out, while time, result, provider, model, latency, tokens and cost stay until the stack.
 
 - **A finger has no hover.** Every `:hover` reveal carries a `@media (hover: none)` counterpart that draws it permanently (`.provider-jump-arrow`, `.req-id-quick-copy`). A tooltip may name a control, never be the only way to reach one.
 - **The tap floor is a hit area, not a drawn size.** `space scale 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px` is what the density *is*, so a 28×28 control keeps its size and gains `::before { inset: -4px }` under `(pointer: coarse)`. Tabs and segmented items grow vertically only, since edge-to-edge neighbours would lose taps to a horizontal inset. antd's small switch grows to 44×22 because the floor needs real dimensions; number steppers (measured 1×19px) and the request list's column resizer are hidden on touch, where a drag near a header edge means "scroll".

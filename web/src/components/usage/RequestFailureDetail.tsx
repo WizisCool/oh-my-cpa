@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Button } from 'antd';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
@@ -12,7 +13,7 @@ import { CopyOutlined } from '../icons';
  * so it is read from the single-record view on intent. The query key is the
  * request detail's own, so opening the record afterwards costs no second read.
  */
-export function RequestFailureDetail({ eventId, statusLabel }: { eventId: number; statusLabel: string }) {
+export function RequestFailureDetail({ id, eventId, statusLabel }: { id?: string; eventId: number; statusLabel: string }) {
   const t = useT();
   const toast = useToast();
   const result = useQuery({
@@ -25,17 +26,22 @@ export function RequestFailureDetail({ eventId, statusLabel }: { eventId: number
     else toast.error(t('events.copy_failed'));
   };
   return (
-    <div className="request-failure-detail">
+    <div id={id} className="request-failure-detail">
       <header>
-        <strong>{statusLabel}</strong>
+        <span className="req-overview-error-status">{statusLabel}</span>
         {body ? (
-          <button type="button" aria-label={t('events.fail_copy')} title={t('events.fail_copy')} onClick={() => void copyBody()}>
-            <CopyOutlined />
-          </button>
+          <Button
+            size="small"
+            type="text"
+            icon={<CopyOutlined />}
+            aria-label={t('events.fail_copy')}
+            title={t('events.fail_copy')}
+            onClick={() => void copyBody()}
+          />
         ) : null}
       </header>
       {body ? (
-        <pre>{body}</pre>
+        <pre className="req-overview-error-body">{body}</pre>
       ) : (
         <p>{t(result.isPending ? 'common.loading' : result.isError ? 'events.fail_load_failed' : 'events.fail_no_body')}</p>
       )}

@@ -261,7 +261,12 @@
 .request-collapsible-header {
   /* A one-row grid folds from the header's own height, however many rows the filters wrap
      into. A max-height has to be set above the tallest header, and the fold then spends most
-     of its duration shrinking space nobody sees before the header starts to move. */
+     of its duration shrinking space nobody sees before the header starts to move.
+
+     The list below fills the height this frees, so every frame of the fold resizes it. That
+     is affordable only because nothing in the list answers a frame: the virtual list takes
+     its height once per fold (`useRequestListHeight`), and the fold's flag is not page state
+     (`viewFlag.ts`). */
   display: grid;
   grid-template-rows: 1fr;
   opacity: 1;
@@ -287,10 +292,10 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 20px 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(145px, 0.6fr) minmax(88px, 0.6fr) 14px;
+  --req-grid-columns: 20px 96px 88px minmax(140px, 1.6fr) minmax(130px, 1.3fr) 84px 76px 78px 132px 64px 64px 124px 76px 14px;
   --req-grid-gap: 16px;
   --req-pad-inline: 12px;
-  --req-min-width: 1330px;
+  --req-min-width: 1418px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -410,7 +415,7 @@
 .request-list-host {
   flex: 1;
   min-height: 240px;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
   overflow: hidden;
   position: relative;
 }
@@ -464,7 +469,7 @@
   user-select: none;
   flex-shrink: 0;
   width: 100%;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
 }
 
 .req-th {
@@ -525,6 +530,19 @@
   color: var(--accent);
 }
 
+/* A list too narrow for every column folds the least-scanned ones away instead of
+   scrolling sideways. `foldRequestColumns` (requestColumns.ts) decides which, from
+   the list's measured width, and names them here; the grid template it sends
+   alongside has no track for them. Matching on the container keeps a fold off
+   the rows' render path: no row re-renders when a column goes or returns. */
+.request-stream[data-folded-columns~='ua'] :is(.req-th-ua, .req-col-ua),
+.request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
+.request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
+.request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
+.request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode) {
+  display: none;
+}
+
 /* Alignment is driven by the shared column definitions (requestColumns.ts), not
    by a selector list restated per column: the header and the body cell carry the
    same is-align-* class, so they cannot disagree.
@@ -556,7 +574,7 @@
 
 .request-row {
   width: 100%;
-  min-width: var(--req-min-width, 1330px);
+  min-width: var(--req-min-width, 1418px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
@@ -936,18 +954,12 @@
   flex-shrink: 0;
   line-height: 1.2;
 }
-.req-provider-sub {
-  font-size: 11px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* The upstream credential that answered the request, masked the same way the key
-   list masks a caller key: monospace so its head and tail line up between rows,
-   and the metadata colour so it reads as an annotation on the provider name
-   rather than as a second title. */
-.req-provider-key {
+/* The credential that answered the request - an OAuth account, or an API key
+   masked the way the key list masks a caller key. One style for both, so the
+   line means the same thing on every row: monospace so a mask's head and tail
+   line up between rows, and the metadata colour so it reads as an annotation on
+   the provider name rather than as a second title. */
+.req-provider-credential {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--meta);
@@ -956,7 +968,7 @@
   white-space: nowrap;
 }
 
-/* Column 4: Model name with reasoning effort beneath */
+/* Column 4: Model - the name, and the served model when it was substituted */
 .req-col-model {
   gap: 2px;
 }
@@ -975,18 +987,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.req-effort-badge {
-  font-size: 10px;
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
-  text-transform: capitalize;
-  padding: 0 5px;
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  flex-shrink: 0;
-}
 .req-preflight-badge {
   font-size: 10px;
   font-family: var(--font-mono, monospace);
@@ -995,26 +995,6 @@
   border: 1px solid var(--border);
   color: var(--muted);
   flex-shrink: 0;
-}
-.req-non-stream-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--muted) 10%, transparent);
-  color: var(--muted);
-  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
-  font-size: 11px;
-  cursor: help;
-  flex-shrink: 0;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
-}
-.req-non-stream-icon:hover {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-  color: var(--fg);
-  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
 .req-model-served {
   display: inline-flex;
@@ -1035,14 +1015,77 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.req-model-sub {
+
+/* Column 5: Mode - the reasoning effort, then one mark per departure from an
+   ordinary streamed call. One wrapping line: at the default width the badge and
+   its marks sit side by side, and a column dragged narrow drops the marks under
+   the badge instead of clipping them. */
+.req-col-mode {
+  align-items: flex-start;
+}
+.req-mode-marks {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  font-size: 11px;
+  gap: 4px;
+  max-width: 100%;
+}
+.req-mode-none {
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+/* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
+   The component passes the step as a token reference and nothing else; `none`
+   and an unranked level pass nothing and keep the neutral step. That step is
+   secondary text, not `--muted`: a level nobody ranked is still a reading, and
+   the tint and edge are too thin to carry a tertiary grey. */
+.req-effort-badge {
+  --effort-hue: var(--fg-2);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  line-height: 16px;
+  text-transform: capitalize;
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
+  color: var(--effort-hue);
+  border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
   white-space: nowrap;
+  cursor: help;
+}
+/* A mark is an icon in the badge's own box, so a row of them reads as one strip. */
+.req-mode-mark,
+.req-non-stream-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  cursor: help;
+  flex-shrink: 0;
+}
+/* The fast lane is the accent, not amber: lightning is conventionally yellow, but
+   amber is this console's warning hue and a request served quickly is not one. */
+.req-fast-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.req-fast-icon svg {
+  fill: currentColor;
+}
+.req-non-stream-icon {
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.req-non-stream-icon:hover {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
 
 /* Column 5: Latency */
@@ -1259,7 +1302,7 @@
    A container query rather than a viewport breakpoint, and deliberately so: this list sits
    inside the page's content column, so a 1440px viewport with a collapsed rail and a wide
    card holds a different list width than the same viewport with the rail open. The
-   question "do ten columns still fit" is about the box the columns are in, and only the
+   question "do the columns still fit" is about the box the columns are in, and only the
    container can answer it. It is therefore the one threshold in the console that is not a
    viewport one, alongside the shell's 900px and the phone's 640px (docs/design.md §8). */
 @container reqstream (max-width: 920px) {
@@ -1820,45 +1863,42 @@
   .request-collapsible-header { transition: none; }
 }
 
-/* The failed pill's popup quotes the upstream error, so it is wider than a label
-   tooltip and scrolls inside itself rather than growing past the list. */
+/* The failed pill's popup quotes the upstream error, so it is a floating panel
+   rather than a label: it takes the console's panel surface in either theme, is
+   wider than a tooltip, and scrolls inside itself rather than growing past the
+   list. The status chip and the body reuse the detail drawer's error vocabulary. */
 .req-result-pill.has-detail {
   cursor: help;
 }
 .request-failure-tooltip {
-  max-width: min(440px, calc(100vw - 32px));
+  width: min(440px, calc(100vw - 32px));
+}
+/* The panel hangs a few pixels off its pill, and a pointer crossing that gap is
+   over neither. The bridge extends the panel's own hit area across it, so the
+   way from the pill to the copy button never leaves the popup. */
+.request-failure-tooltip::before {
+  content: '';
+  position: absolute;
+  inset: -12px 0;
+  z-index: -1;
 }
 .request-failure-detail header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 24px;
 }
-.request-failure-detail header button {
-  display: inline-flex;
-  padding: 2px;
-  color: inherit;
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  opacity: 0.75;
-}
-.request-failure-detail header button:hover,
-.request-failure-detail header button:focus-visible {
-  opacity: 1;
-}
-.request-failure-detail pre,
 .request-failure-detail p {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
+  color: var(--fg-2);
 }
-.request-failure-detail pre {
+.request-failure-detail .req-overview-error-body {
+  margin-top: 8px;
   max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
+  word-break: normal;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* Response headers read as name/value pairs in two tracks: the names align so a

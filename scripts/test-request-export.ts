@@ -102,9 +102,25 @@ const byDefault = build(effectiveMasks(DEFAULT_SENSITIVE_DETAILS, []));
 for (const value of [ACCOUNT, 'someone', PROVIDER_KEY, 'laptop key']) {
   assert.ok(!byDefault.includes(value), `the default redaction withholds ${value}`);
 }
-for (const value of ['req-oauth', 'claude-opus', 'gpt-5', 'Claude OAuth']) {
+for (const value of ['req-oauth', 'claude-opus', 'gpt-5', 'Claude']) {
   assert.ok(byDefault.includes(value), `the default redaction keeps ${value}`);
 }
+
+// Both credential types draw the same two lines: the provider, then the
+// credential that answered. Redaction covers the second line and never the first.
+const providerLines = (masks: ReturnType<typeof effectiveMasks>) =>
+  buildRequestSheet({ rows: events, masks, colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials })
+    .rows.map((row) => row.cells.provider.lines);
+const [oauthLines, keyLines] = providerLines(effectiveMasks([], []));
+assert.deepEqual(oauthLines, [
+  [{ kind: 'text', text: 'Claude', tone: 'fg', size: 13, weight: 600, isMono: true }, { kind: 'tag', text: 'OAuth', tone: 'accent' }],
+  [{ kind: 'text', text: ACCOUNT, tone: 'meta', size: 11, weight: 400, isMono: true }],
+], 'an OAuth cell is its provider, then the account');
+assert.equal(keyLines.length, 2, 'an API-key cell is its provider, then the masked key');
+assert.deepEqual(keyLines[1], oauthLines[1].map((segment) => ({ ...segment, text: PROVIDER_KEY })), 'both credential lines are drawn alike');
+const [oauthRedacted, keyRedacted] = providerLines(effectiveMasks(DEFAULT_SENSITIVE_DETAILS, []));
+assert.deepEqual(oauthRedacted[0], oauthLines[0], 'withholding the account keeps the provider name');
+assert.deepEqual([oauthRedacted[1], keyRedacted[1]], [[{ kind: 'mask' }], [{ kind: 'mask' }]], 'each withheld credential is a bar on its own line');
 
 const idsHidden = build(effectiveMasks(['request_id'], []));
 assert.ok(!idsHidden.includes('req-oauth') && !idsHidden.includes('req-key') && idsHidden.includes(ACCOUNT));
@@ -112,6 +128,37 @@ assert.ok(!idsHidden.includes('req-oauth') && !idsHidden.includes('req-key') && 
 const modelHidden = build(effectiveMasks([], ['model']));
 assert.ok(!modelHidden.includes('claude-opus') && !modelHidden.includes('gpt-5') && modelHidden.includes('events.col_model'),
   'a redacted column keeps its heading and loses its values');
+
+// How a request was made is its own column, so it is withheld on its own: hiding
+// the model keeps the effort, and hiding the mode keeps the model.
+const moded = [{ ...events[1], reasoning_effort: 'xhigh', stream: false, ttft_ms: undefined }] as UsageEvent[];
+const modeSheet = (masks: ReturnType<typeof effectiveMasks>) =>
+  buildRequestSheet({ rows: moded, masks, colWidths: {}, caption: 'caption', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials });
+const modeCell = modeSheet(effectiveMasks([], [])).rows[0].cells.mode.lines;
+assert.deepEqual(modeCell, [[
+  { kind: 'tag', text: 'xhigh', tone: 'fg2', effortStep: 5 },
+  { kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true },
+]], 'the mode cell draws the effort on its scale step, then the non-streaming mark');
+assert.equal(modeSheet(effectiveMasks([], [])).rows[0].cells.model.lines.length, 1, 'the model cell is the name alone');
+assert.deepEqual(
+  buildRequestSheet({ rows: [events[1]], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials }).rows[0].cells.mode.lines,
+  [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
+  'a request with nothing to mark draws a dash, not an empty cell',
+);
+const fastSheet = buildRequestSheet({
+  rows: [{ ...events[1], response_service_tier: 'priority' }] as UsageEvent[],
+  masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,
+});
+assert.deepEqual(fastSheet.rows[0].cells.mode.lines, [[{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true }]],
+  'a request served on the fast lane draws the lightning mark');
+const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
+assert.ok(!modeHidden.includes('xhigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
+const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>
+  buildRequestExport({ rows: moded, masks: effectiveMasks([], columns), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
+assert.equal(modeJson(['model']).reasoning_effort, 'xhigh', 'the JSON keeps the effort when only the model is withheld');
+assert.equal(modeJson(['model']).model, undefined);
+assert.ok(!('reasoning_effort' in modeJson(['mode'])) && !('stream' in modeJson(['mode'])) && modeJson(['mode']).model === 'gpt-5',
+  'the JSON withholds the mode fields with the mode column');
 
 // The JSON document makes the same promise in a form a program reads: stored
 // values, and a withheld field absent rather than blanked.
