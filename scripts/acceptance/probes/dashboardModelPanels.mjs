@@ -886,8 +886,8 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
   // would present upstream-model rows as call points. The request URL is the observable, and so is
   // the persisted write: the choice has to survive a reload like every other console preference.
   const beforeToggle = calls.length;
-  const modelOption = page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By upstream model|按上游模型/ }).first();
-  const callPointOption = page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By call point|按调用点/ }).first();
+  const modelOption = page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By requested model|按请求模型/ }).first();
+  const callPointOption = page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By call model|按调用模型|按呼叫模型/ }).first();
   // The thumb owns the selected CSS class during motion; the radio owns the actual value.
   const modelRadio = modelOption.getByRole('radio');
   const callPointRadio = callPointOption.getByRole('radio');

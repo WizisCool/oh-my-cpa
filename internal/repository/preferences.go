@@ -32,6 +32,7 @@ const (
 	PreferenceTokenStyle         = "omc_token_style"
 	PreferenceTpsCalculationMode = "omc_tps_calculation_mode"
 	PreferenceModelView          = "omc_models_view"
+	PreferenceRequestModelIcons  = "omc_request_model_icons"
 	PreferenceTheme              = "omc_theme"
 	PreferenceScrollSmoothing    = "omc_scroll_smoothing"
 

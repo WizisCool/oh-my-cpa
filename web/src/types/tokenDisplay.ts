@@ -41,6 +41,16 @@ export type ModelChartView = (typeof MODEL_CHART_VIEWS)[number];
 
 export const DEFAULT_MODEL_CHART_VIEW: ModelChartView = 'call';
 
+export const DEFAULT_REQUEST_MODEL_ICONS = true;
+
+/**
+ * parseRequestModelIcons validates the stored preference for whether model brand
+ * icons are shown in the request list.
+ */
+export function parseRequestModelIcons(raw: unknown): boolean | undefined {
+  return typeof raw === 'boolean' ? raw : undefined;
+}
+
 /**
  * parseTokenNumberStyle validates a stored preference.
  *

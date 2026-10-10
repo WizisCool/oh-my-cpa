@@ -267,7 +267,7 @@ troubleshooting.
 <summary><b>Observability</b></summary>
 
 - **Dashboard**: request volume, token throughput, cache hit rate and cost over presets from 15 minutes to 90 days, an all-time window since installation, or any custom range, plus a year-long token heatmap. Statistics are kept permanently; request records roll out of a configurable retention.
-- **Model panels**: token trend and usage ring by call point or by upstream model, with cost shares.
+- **Model panels**: token trend and usage ring by call model or by requested model, with cost shares.
 - **Request records**: multi-select facets and full-text search; a detail drawer with duration, TTFT, token breakdown and the raw per-request log. Each record keeps the model the upstream reported serving, and flags the ones where it differs from the model requested.
 - **Background collection**: usage is ingested by stream or polling, even with no browser open.
 - **Logs and audit trail**: tail the gateway log, read the console's own service log, and review an append-only audit trail with filters and JSON export.

@@ -813,6 +813,11 @@ const DICT: Record<string, [string, string]> = {
   'omc.token_style_en': ['缩写 K/M/B', 'Compact K/M/B'],
   'omc.token_style_zh': ['中文 万/亿', 'Chinese 万/亿'],
   'omc.token_style_full': ['完整数字', 'Full digits'],
+  'omc.request_model_icons': ['请求列表模型图标', 'Model icons in request list'],
+  'omc.request_model_icons_desc': [
+    '在请求记录列表中，是否在模型名称前展示对应的厂商或提供商图标。',
+    'Whether to display manufacturer and provider icons beside model names in request records.',
+  ],
   // The appearance controls: one mode, two palettes, and the editor behind a custom one. The
   // mode names are also the header control's states, so they are worded to stand alone.
   'omc.theme_mode': ['主题模式', 'Theme mode'],
@@ -1136,11 +1141,11 @@ const DICT: Record<string, [string, string]> = {
   'dash.heatmap.legend_more': ['多', 'More'],
   'dash.models.trend_title': ['Token 趋势', 'Token trend'],
   'dash.models.usage_title': ['模型用量', 'Model usage'],
-  // The view toggle. "By call point" groups by the call point a client requested (the model alias,
-  // or the upstream model when no alias was set), so one call point served by several upstream
-  // variants reads as one line. "By upstream model" splits by what the gateway actually routed to.
-  'dash.models.view_call': ['按调用点', 'By call point'],
-  'dash.models.view_model': ['按上游模型', 'By upstream model'],
+  // The view toggle. "By call model" groups by the call point a client requested (the model alias,
+  // or the model when no alias was set), so one call point served by several upstream
+  // variants reads as one line. "By requested model" splits by what the gateway actually requested.
+  'dash.models.view_call': ['按调用模型', 'By call model'],
+  'dash.models.view_model': ['按请求模型', 'By requested model'],
   'dash.models.view_toggle_label': ['统计口径', 'Grouping'],
   // The ranked list's cost column. The note appears only when part of the group's requests were
   // unpriced, so a partial spend never reads as the whole.
@@ -2288,7 +2293,9 @@ const DICT: Record<string, [string, string]> = {
   'events.caller': ['请求来源', 'Request origin'],
   'events.executor': ['执行器', 'Executor'],
   'events.endpoint': ['请求端点', 'Endpoint'],
-  'events.model_alias': ['模型别名', 'Model alias'],
+  'events.call_model': ['调用模型', 'Call model'],
+  'events.request_model': ['请求模型', 'Requested model'],
+  'events.model_view_toggle': ['模型展示口径', 'Model display view'],
   'events.not_captured': ['未采集', 'Not captured'],
   'events.unknown_provider': ['提供商未记录', 'Provider not recorded'],
   'events.unknown_credential': ['认证来源未记录', 'Credential not recorded'],
@@ -2532,7 +2539,7 @@ const DICT: Record<string, [string, string]> = {
   'events.new_records': ['{n} 条新记录', '{n} new records'],
   'events.active_filters': ['当前筛选', 'Active Filters'],
   'events.clear_all': ['清空全部', 'Clear All'],
-  'events.filter_chip_model': ['模型: {val}', 'Model: {val}'],
+  'events.filter_chip_model': ['请求模型: {val}', 'Requested model: {val}'],
   'events.filter_chip_provider': ['提供商: {val}', 'Provider: {val}'],
   'events.filter_chip_source': ['来源: {val}', 'Source: {val}'],
   'events.filter_chip_credential': ['凭据: {val}', 'Credential: {val}'],
@@ -2540,7 +2547,7 @@ const DICT: Record<string, [string, string]> = {
   'events.filter_chip_executor': ['执行器: {val}', 'Executor: {val}'],
   'events.filter_chip_search': ['搜索: {val}', 'Search: {val}'],
   'events.filter_chip_auth_type': ['认证方式: {val}', 'Auth type: {val}'],
-  'events.filter_chip_model_alias': ['模型别名: {val}', 'Model alias: {val}'],
+  'events.filter_chip_model_alias': ['调用模型: {val}', 'Call model: {val}'],
   'events.filter_chip_reasoning': ['推理强度: {val}', 'Reasoning effort: {val}'],
   'events.filter_chip_service_tier': ['服务等级: {val}', 'Service tier: {val}'],
   'events.filter_chip_ua': ['客户端 UA: {val}', 'User agent: {val}'],

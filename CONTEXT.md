@@ -165,7 +165,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   read one response, so a model's colour in the trend cannot disagree with its colour in the ring - see
   `docs/design.md` §2 for the categorical palette this needs and ADR 0006 for why it is a scoped
   exception to the semantic-colour rule. Both panels rank by one of two groupings, chosen per
-  **Call Point** or per upstream model and persisted as a Preference; the ranked list also carries each
+  **Call Model** (or Call Point) or per requested model and persisted as a Preference; the ranked list also carries each
   group's priced spend at request-time prices, with the priced share shown when it is partial. The list
   reads name, spend, volume, share, and its three numeric columns are tracks declared once on the list
   rather than per row, so a group's spend, volume and share start on the same edge as every other
@@ -434,8 +434,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   the provider icon, display-name and website overrides, the usage-event view
   and column layout, and the console's own display settings — the token unit
   style (`omc_token_style`), TPS calculation mode (`omc_tps_calculation_mode`),
-  the model panels' grouping view
-  (`omc_models_view`), the theme (`omc_theme`) and scroll smoothing
+  the model display view (`omc_models_view`), request list model brand icons
+  (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`) and scroll smoothing
   (`omc_scroll_smoothing`).
 - **Scroll Smoothing**: Whether a wheel notch or a scrolling key glides to its
   destination instead of jumping — `on` (default), `system` (glide unless the
@@ -501,14 +501,17 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   identifiers, quota and rate limits, routing and edge, other - by header-name
   fragments (`web/src/types/responseHeaderGroups.ts`), without interpreting any
   provider's values.
-- **Call Point**: The client-facing identity of a model request: the model alias
-  a client requested, or the upstream model name when no alias was set. It is a
-  *grouping key*, not a display rewrite — in the model panels' call view one
-  call point served by several upstream model variants (the gateway's routing
+- **Call Model / Call Point**: The client-facing identity of a model request: the model alias
+  a client requested, or the model name when no alias was set. It is a
+  *grouping key*, not a display rewrite — in the model panels' and request list's call view one
+  call model served by several upstream model variants (the gateway's routing
   detail) reads as one line, because the split between them is not a difference
-  the caller chose. The model view keeps the upstream variants distinct, which
-  is what the gateway actually routed to. Call view is the default; the choice
-  is stored as the `omc_models_view` preference.
+  the caller chose. The requested-model view keeps the model CPA actually routed to distinct.
+  Call view is the default; the choice is stored as the `omc_models_view` preference.
+- **Requested Model**: The model name that CPA routed and requested from the upstream
+  provider (`usage_events.model`).
+- **Actual Model / Served Model**: The model an upstream reported having served for one
+  request (`usage_events.response_model`).
 - **Source Grouping**: One mode of the request-record list that groups by the
   source a record came from — the provider plus the credential underneath it — so
   the provider context and the auth source are the same axis read at one zoom

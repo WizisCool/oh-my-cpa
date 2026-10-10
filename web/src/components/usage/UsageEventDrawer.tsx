@@ -21,6 +21,7 @@ import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { ModelMark } from '../ModelMark';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
@@ -59,7 +60,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are
   // exact counts, so the full form is what this surface prints.
-  const { style: tokenStyle } = useTokenDisplayStyle();
+  const { style: tokenStyle, modelView } = useTokenDisplayStyle();
+  const isCallView = modelView === 'call';
   const toast = useToast();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
 
@@ -241,7 +243,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
           <div className="request-detail-hero">
             <div className="request-detail-heading">
               <div className="request-detail-model-row">
-                <h2>{event.model || t('events.not_captured')}</h2>
+                <ModelMark
+                  model={isCallView ? (event.model_alias || event.model) : event.model}
+                  fallbackModel={event.model}
+                  size={22}
+                  className="req-model-mark"
+                />
+                <h2>{(isCallView ? (event.model_alias || event.model) : event.model) || t('events.not_captured')}</h2>
                 {isFastTierEvent(event) && (
                   <Tooltip title={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}>
                     <span
@@ -390,8 +398,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     {section(
                       t('events.request_parameters'),
                       fields([
-                        [t('events.col_model'), value(event.model)],
-                        [t('events.model_alias'), value(event.model_alias)],
+                        [t('events.call_model'), value(event.model_alias || event.model)],
+                        [t('events.request_model'), value(event.model)],
                         [
                           t('events.served_model'),
                           event.response_model ? (

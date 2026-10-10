@@ -3,6 +3,8 @@ import { Button, Input, Segmented, Select } from 'antd';
 import { FilterOutlined, SearchOutlined } from '../icons';
 
 import { useT } from '../../i18n';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import type { ModelChartView } from '../../types/tokenDisplay';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { mergeFacetOptions } from '../../types/usageEventQuery';
 import type { EventGrouping } from '../../types/usageEventViewPreference';
@@ -70,6 +72,7 @@ export function RequestToolbar({
   onGroupingChange,
 }: RequestToolbarProps) {
   const t = useT();
+  const { modelView, setModelView } = useTokenDisplayStyle();
 
   /**
    * Facet options carry the window's request count; `expandProps` was dropped
@@ -188,6 +191,16 @@ export function RequestToolbar({
                   value,
                   label: t(`events.group_${value}`),
                 }))}
+              />
+              <Segmented
+                className="req-model-view-toggle"
+                value={modelView}
+                onChange={(value) => setModelView(value as ModelChartView)}
+                options={[
+                  { value: 'call', label: t('dash.models.view_call') },
+                  { value: 'model', label: t('dash.models.view_model') },
+                ]}
+                aria-label={t('events.model_view_toggle')}
               />
             </div>
           </div>
