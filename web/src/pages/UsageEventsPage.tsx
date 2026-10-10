@@ -8,14 +8,8 @@ import {
   Listy,
   Popover,
   Switch,
-  Tooltip,
 } from 'antd';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
-import {
-  FullscreenExitOutlined,
-  FullscreenOutlined,
-  VerticalAlignTopOutlined,
-} from '../components/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api } from '../api/client';
@@ -45,6 +39,7 @@ import {
 } from '../types/usageEventGrouping';
 import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
 import { useUsageEventViewState } from '../components/usage/useUsageEventViewState';
+import { RequestBackToTop, RequestCollapsibleHeader, RequestFoldToggle } from '../components/usage/RequestFoldControls';
 import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
@@ -151,8 +146,8 @@ export const UsageEventsPage: React.FC = () => {
   const {
     pageRef,
     listRef,
-    isCollapsed,
-    isScrolledDown,
+    collapse,
+    scrolledDown,
     observeLatest,
     pendingArrivals,
     markPageNavigation,
@@ -496,7 +491,7 @@ export const UsageEventsPage: React.FC = () => {
 
   return (
     <div ref={pageRef} className="terminal-page usage-events-page request-events-page">
-      <div className={`request-collapsible-header ${isCollapsed ? 'is-collapsed' : ''}`}>
+      <RequestCollapsibleHeader collapse={collapse}>
         <div className="request-header-content">
           <header className="terminal-page-head">
             <div>
@@ -566,16 +561,7 @@ export const UsageEventsPage: React.FC = () => {
                   {t('events.reset_columns')}
                 </Button>
               )}
-              <Tooltip title={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}>
-                <Button
-                  size="small"
-                  type="text"
-                  className="req-expand-toggle-btn"
-                  aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
-                  icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-                  onClick={handleToggleExpand}
-                />
-              </Tooltip>
+              <RequestFoldToggle collapse={collapse} onToggle={handleToggleExpand} />
               <RefreshButton
                 isRefreshing={isSyncing || result.isFetching}
                 disabled={isSyncing}
@@ -647,7 +633,7 @@ export const UsageEventsPage: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
+      </RequestCollapsibleHeader>
       <section
         ref={streamRef}
         className="request-stream"
@@ -728,21 +714,7 @@ export const UsageEventsPage: React.FC = () => {
             )}
           </div>
         </div>
-        {(isScrolledDown || pendingCount > 0) && (
-          <button
-            type="button"
-            className={`req-back-to-top-btn${pendingCount > 0 ? ' is-live' : ''}`}
-            onClick={handleBackToTop}
-            aria-label={
-              pendingCount > 0 ? t('events.new_records', { n: pendingCount }) : t('events.back_to_top')
-            }
-          >
-            <VerticalAlignTopOutlined className="req-back-to-top-icon" />
-            <span className="req-back-to-top-text">
-              {pendingCount > 0 ? t('events.new_records', { n: pendingCount }) : t('events.back_to_top')}
-            </span>
-          </button>
-        )}
+        <RequestBackToTop scrolledDown={scrolledDown} pendingCount={pendingCount} onBackToTop={handleBackToTop} />
         <RequestPagination
           stale={stale}
           isPlaceholderData={result.isPlaceholderData}

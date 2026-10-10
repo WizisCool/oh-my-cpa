@@ -260,14 +260,14 @@
 
 .request-collapsible-header {
   /* A one-row grid folds from the header's own height, however many rows the filters wrap
-     into. A max-height has to be set above the tallest header, and the fold then spends most
-     of its duration shrinking space nobody sees before the header starts to move. */
+     into. The fold itself is not animated: the list below fills the height it frees, so a
+     transition on the row re-laid out the page and re-measured the virtual list on every
+     frame, and a wheel rocking across the top of the list dropped frames each time the
+     direction changed. Only the returning header's fade is animated, on the compositor. */
   display: grid;
   grid-template-rows: 1fr;
   opacity: 1;
-  transition: grid-template-rows var(--motion-base) var(--ease-standard),
-              opacity var(--motion-base) var(--ease-standard),
-              margin var(--motion-base) var(--ease-standard);
+  transition: opacity var(--motion-base) var(--ease-standard);
 }
 .request-collapsible-header > .request-header-content {
   display: flex;
@@ -279,6 +279,7 @@
 .request-collapsible-header.is-collapsed {
   grid-template-rows: 0fr;
   opacity: 0;
+  transition: none;
   margin-top: -16px;
   margin-bottom: -16px;
   pointer-events: none;

@@ -8,6 +8,7 @@ import { consumeWheel } from '../../utils/scrollSmoothing';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../../utils/smoothScroll';
 import { pendingArrivalCount } from './pollingPolicy';
 import { installRequestListTouch, type RequestListTouch } from './requestListTouch';
+import { createViewFlag } from './viewFlag';
 
 /**
  * Distance from the top at which the list counts as "following the live edge".
@@ -64,8 +65,10 @@ export function useRequestListScroll({
   // Full-height scroll-down expansion & top-bounce expand mode & back-to-top
   const pageRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<ListyRef>(null);
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
-  const [isScrolledDown, setIsScrolledDown] = React.useState(false);
+  // Flags rather than state: both flip on scroll gestures, and neither may cost
+  // a render of the page that owns the list. See `viewFlag.ts`.
+  const [collapse] = React.useState(() => createViewFlag());
+  const [scrolledDown] = React.useState(() => createViewFlag());
   /**
    * The reader's scroll position, captured from the list's own scroll events.
    *
@@ -99,10 +102,10 @@ export function useRequestListScroll({
     pageNavigationTimerRef.current = setTimeout(() => {
       isNavigatingPageRef.current = false;
       lastScrollTopRef.current = 0;
-      setIsScrolledDown(false);
+      scrolledDown.set(false);
       pageNavigationTimerRef.current = null;
     }, 300);
-  }, []);
+  }, [scrolledDown]);
 
   React.useEffect(
     () => () => {
@@ -127,7 +130,7 @@ export function useRequestListScroll({
       lastScrollTopRef.current = scrollTop;
 
       // Show back-to-top button when scrolled down
-      setIsScrolledDown(scrollTop > 60);
+      scrolledDown.set(scrollTop > 60);
 
       // Following vs. holding. The top of the list is the live edge: at the top
       // the list follows new records, and scrolling away freezes the rows on
@@ -168,11 +171,9 @@ export function useRequestListScroll({
         return;
       }
       // Scrolling down collapses header into full-screen mode
-      if (scrollTop > 50) {
-        if (!isCollapsed) setIsCollapsed(true);
-      }
+      if (scrollTop > 50) collapse.set(true);
     },
-    [endReturnToTop, isCollapsed],
+    [collapse, endReturnToTop, scrolledDown],
   );
 
   // Wheel handling:
@@ -182,7 +183,7 @@ export function useRequestListScroll({
     (e: React.WheelEvent<HTMLElement>) => {
       if (isNavigatingPageRef.current) return;
 
-      if (!isCollapsed && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
+      if (!collapse.get() && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
         // First wheel down from top: enter full-screen mode, but freeze scroll at top
         // so row 1 stays visible in full screen mode. The notch became the collapse, so the
         // console-wide glide must not scroll for it; when the glide had taken the notch over, the
@@ -190,17 +191,17 @@ export function useRequestListScroll({
         // reader's next notch.
         const wasClaimed = consumeWheel(e.nativeEvent);
         justCollapsedFromTopRef.current = !wasClaimed;
-        setIsCollapsed(true);
+        collapse.set(true);
         listRef.current?.scrollTo({ top: 0 });
         return;
       }
 
-      if (isCollapsed && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
+      if (collapse.get() && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
         // Intentional top-bounce when already at the very top: unfold header
-        setIsCollapsed(false);
+        collapse.set(false);
       }
     },
-    [isCollapsed],
+    [collapse],
   );
 
   /**
@@ -250,16 +251,14 @@ export function useRequestListScroll({
         },
       },
     );
-    setIsScrolledDown(false);
-    setIsCollapsed(false);
-  }, [endReturnToTop]);
+    scrolledDown.set(false);
+    collapse.set(false);
+  }, [collapse, endReturnToTop, scrolledDown]);
 
   // Touch: the list follows the finger and the header folds and unfolds with the
   // same gestures as the wheel; see `requestListTouch.ts`. Without the pull a phone
   // had no way back to the filters but the back-to-top button, which is not shown at
   // the top.
-  const isCollapsedRef = React.useRef(isCollapsed);
-  isCollapsedRef.current = isCollapsed;
   React.useEffect(() => {
     const page = pageRef.current;
     if (!page) return undefined;
@@ -272,8 +271,8 @@ export function useRequestListScroll({
       isInList: (target) => target instanceof Element && target.closest('.request-list-host') !== null,
       // Synchronously, so the rows under the finger are drawn on the frame the finger moved.
       scrollListTo: (top) => flushSync(() => listRef.current?.scrollTo({ top })),
-      isCollapsed: () => isCollapsedRef.current,
-      setCollapsed: setIsCollapsed,
+      isCollapsed: collapse.get,
+      setCollapsed: collapse.set,
       isPaused: () => isNavigatingPageRef.current,
       // A finger on the list during the animated return to the top takes it over.
       onDriveStart: () => {
@@ -287,18 +286,18 @@ export function useRequestListScroll({
       touch.dispose();
       touchRef.current = null;
     };
-  }, [endReturnToTop]);
+  }, [collapse, endReturnToTop]);
 
   const handleToggleExpand = React.useCallback(() => {
-    setIsCollapsed((prev) => !prev);
-  }, []);
+    collapse.set((isCollapsed) => !isCollapsed);
+  }, [collapse]);
 
   // Reset collapse only on filter / window changes (NOT cursor pagination, and
   // not on a poll: a refresh must never expand or collapse the reader's view).
   React.useEffect(() => {
-    setIsCollapsed(false);
-    setIsScrolledDown(false);
-  }, [viewScope]);
+    collapse.set(false);
+    scrolledDown.set(false);
+  }, [collapse, scrolledDown, viewScope]);
 
   const heldBoundaryID = heldItems ? heldBoundaryIDRef.current : undefined;
 
@@ -350,8 +349,8 @@ export function useRequestListScroll({
   return {
     pageRef,
     listRef,
-    isCollapsed,
-    isScrolledDown,
+    collapse,
+    scrolledDown,
     heldItems,
     heldBoundaryID,
     observeLatest,

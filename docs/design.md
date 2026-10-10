@@ -2154,6 +2154,13 @@ move, and that coast kept firing while the finger was still down. The console mo
   them that a finger has, since the back-to-top pill is not shown at the top. A page that is loading
   or found nothing has no list to pull, so a drag there never folds the header, and a header folded
   before the list went away unfolds on a 48px pull down anywhere on the page.
+- **The fold is a cut, not a slide.** The list fills the height the header frees, so animating the
+  header's height re-laid out the page and re-measured the virtual list on every frame; a wheel
+  rocking across the top of the list dropped frames at each change of direction (measured on the
+  dev server: 20 frames over 25ms in twelve rocks, against 6 once the fold was instant). The header
+  leaves at once and returns with a `--motion-base` opacity fade, which the compositor runs alone.
+  The fold and the back-to-top pill are also held outside the page's render (`viewFlag.ts`), so a
+  flip re-renders the header wrapper and its button and nothing else.
 
 ### The phone's navigation is the rail, in a sheet
 
