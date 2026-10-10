@@ -305,5 +305,8 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
   palette.series.forEach((color, index) => {
     variables[`--series-${index + 1}`] = color;
   });
+  palette.effort.forEach((color, index) => {
+    variables[`--effort-${index + 1}`] = color;
+  });
   return variables;
 }

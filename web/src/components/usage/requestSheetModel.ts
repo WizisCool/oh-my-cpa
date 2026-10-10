@@ -1,4 +1,5 @@
 import { formatCacheRate } from '../../theme/cacheScale';
+import { effortStep } from '../../theme/effortScale';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -47,8 +48,11 @@ export type SheetGlyph = 'non_stream' | 'substituted';
 export type SheetSegment =
   /** Plain text. The first text segment of a line is the one that gives way when the line is too long. */
   | { kind: 'text'; text: string; tone: SheetTone; size: number; weight: 400 | 500 | 600; isMono?: boolean }
-  /** A small bordered tag: OAuth, a reasoning effort, a preflight. */
-  | { kind: 'tag'; text: string; tone: SheetTone }
+  /**
+   * A small bordered tag: OAuth, a reasoning effort, a preflight. An effort
+   * that ranks on the reasoning-effort scale names its step, which outranks the tone.
+   */
+  | { kind: 'tag'; text: string; tone: SheetTone; effortStep?: number }
   /** A tinted pill led by a square bullet: the result, and the cache rate. */
   | { kind: 'pill'; text: string; tone: SheetTone; cacheRate?: number }
   /** One of the list's own glyphs, boxed when the list draws it as a badge. */
@@ -230,7 +234,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
             ? [[{ kind: 'glyph', glyph: 'substituted', tone: 'warn' } as const, text(event.response_model, 'warn', 11, 400, true)]]
             : []),
           event.reasoning_effort
-            ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'accent' }]
+            ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'muted', effortStep: effortStep(event.reasoning_effort) ?? undefined }]
             : [text('—', 'muted', 11)],
         ],
       },

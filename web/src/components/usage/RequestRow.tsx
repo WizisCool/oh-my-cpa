@@ -10,6 +10,7 @@ import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
+import { effortColor, effortStep } from '../../theme/effortScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveProviderInfo,
@@ -103,6 +104,9 @@ export const RequestRow = React.memo<RequestRowProps>(
       : undefined;
 
     const tpsInfo = eventTokensPerSecond(event, tpsMode);
+    // The level's place on the effort scale, as a token reference; absent for
+    // `none` and for a level the scale does not rank, which keep the neutral badge.
+    const effortHue = effortColor(effortStep(event.reasoning_effort));
 
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
@@ -287,6 +291,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             {event.reasoning_effort ? (
               <span
                 className="req-effort-badge"
+                style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
                 title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}
               >
                 {event.reasoning_effort}

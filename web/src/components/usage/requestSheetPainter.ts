@@ -260,7 +260,11 @@ export async function paintRequestSheet(
       context.fillText(fit(segment.text, width), x, centreY);
       return;
     }
-    const color = segment.kind === 'pill' ? pillColor(segment) : toneColor(palette, segment.tone);
+    // An effort step below 1 is `none`, which the list also leaves at the neutral tone.
+    const color =
+      segment.kind === 'pill'
+        ? pillColor(segment)
+        : (segment.effortStep && palette.effort[segment.effortStep - 1]) || toneColor(palette, segment.tone);
     const boxHeight = segment.kind === 'pill' ? 18 : 15;
     context.fillStyle = color;
     context.strokeStyle = color;

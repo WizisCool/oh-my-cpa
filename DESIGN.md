@@ -25,6 +25,12 @@ colors:
   series-4: "#f43f5e"
   series-5: "#f59e0b"
   series-6: "#06b6d4"
+  effort-1: "#94bfce"         # reasoning-effort scale, minimal → max; light mode uses the darker steps
+  effort-2: "#4eccd3"
+  effort-3: "#91b7fe"
+  effort-4: "#bda7fe"
+  effort-5: "#f08dee"
+  effort-6: "#ff8cc1"
   brand-openai: "#10A37F"
   brand-codex: "#60A5FA"
   brand-claude: "#D97757"
@@ -181,6 +187,20 @@ family in the app, and the only exception to the semantic-only rule above; see
   `scripts/test-chart-marks.ts` from the palette itself. The slots above are the OMC Dark/OMC Light pair;
   the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
   mode's set.
+
+
+### Reasoning effort (ordinal)
+
+The request list colours a request's reasoning effort on one cool sweep, quiet at the bottom and
+saturated at the top; see `docs/design.md` §2.
+
+- **Steps** (`--effort-1` … `--effort-6`, `minimal` → `max`): slate `#94bfce` / `#39626e`, teal
+  `#4eccd3` / `#00686c`, blue `#91b7fe` / `#3057a3`, violet `#bda7fe` / `#6343a4`, magenta `#f08dee`
+  / `#8a2b8a`, pink `#ff8cc1` / `#9b2065` (dark / light). `none` and any level the vendors do not
+  publish stay at the neutral step.
+- The sweep never enters green, amber or red, which are verdicts; the level's name is always printed
+  beside the colour. Each step clears 4.5:1 as badge text on its own tint in every registered
+  palette, asserted by `scripts/test-effort-scale.ts`.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.

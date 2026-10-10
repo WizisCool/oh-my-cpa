@@ -113,6 +113,8 @@ export interface ThemePalette extends ThemeCore {
   heatmapTipLink: string;
   series: readonly string[];
   seriesTrack: string;
+  /** The reasoning-effort scale, lowest reasoning step first (`effortScale.ts`). */
+  effort: readonly string[];
 }
 
 /**
@@ -203,25 +205,29 @@ type LadderDirection = 'deeper' | 'lighter';
 /**
  * Per-mode values that are not derived from the nine authored tokens.
  *
- * The status hues and the categorical series palette are *semantics*, not palette: green
- * means healthy and never anything else, and a series slot is a fixed identity whose family
- * survives a theme switch (`docs/adr/0006-categorical-series-palette.md`). Deriving them
+ * The status hues, the categorical series palette and the reasoning-effort scale are
+ * *semantics*, not palette: green means healthy and never anything else, a series slot is a
+ * fixed identity whose family survives a theme switch
+ * (`docs/adr/0006-categorical-series-palette.md`), and an effort step is a fixed place on
+ * one ordered sweep. Deriving them
  * from an operator's accent would make "green" depend on a colour choice, which is the one
  * thing `docs/design.md` §1 forbids. They are constants here, and a custom palette inherits
  * its mode's set.
  */
-const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; series: readonly string[] }> = {
+const MODE_SEMANTICS: Record<ThemeMode, { success: string; warn: string; danger: string; series: readonly string[]; effort: readonly string[] }> = {
   dark: {
     success: '#10b981',
     warn: '#f59e0b',
     danger: '#ef4444',
     series: ['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4'],
+    effort: ['#94bfce', '#4eccd3', '#91b7fe', '#bda7fe', '#f08dee', '#ff8cc1'],
   },
   light: {
     success: '#059669',
     warn: '#b45309',
     danger: '#dc2626',
     series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
+    effort: ['#39626e', '#00686c', '#3057a3', '#6343a4', '#8a2b8a', '#9b2065'],
   },
 };
 
@@ -366,6 +372,7 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
     heatmapTipLink: core.accent,
     series: semantics.series,
     seriesTrack: core.border,
+    effort: semantics.effort,
   };
 }
 

@@ -85,7 +85,8 @@ console renders what the operator asked for.
 `--selected-inset` `#2e2e37`, `--hover-inset` `#121214`, `--tooltip-bg` `#1c1c1f`, `--heatmap-quiet`
 `#212124`, `--heatmap-busy` `#00a2fb`, `--heatmap-zero-recorded` `#2c2c30`,
 `--heatmap-zero-unrecorded` `#212124`, `--heatmap-tip-link` `#00a2fb`, `--series-track` `#2c2c30`,
-`--cache-rate-yellow` `#f59e0b`, `--cache-rate-green` `#10b981`.
+`--cache-rate-yellow` `#f59e0b`, `--cache-rate-green` `#10b981`. The six `--effort-*` steps are
+per-mode constants; see the reasoning-effort scale below.
 
 ### OMC Light
 
@@ -377,6 +378,46 @@ Fixing it means persisting the breakdown (or per-convention token columns in the
 usage facts) before any arithmetic change. Until then the ratio is a bounded estimate
 for cache-writing providers, and the request list is exact only for providers
 whose input already includes the cached prefix.
+
+### Reasoning-effort scale
+
+The request list colours a request's reasoning effort, because effort is the one request parameter
+an operator compares down a column: a page of `high` and `xhigh` calls costs and waits differently
+from a page of `low` ones. Effort is an **ordinal** reading - each level is more thinking than the
+one below it - so it takes a sequential scale rather than one unrelated colour per name.
+
+Neither OpenAI nor Anthropic publishes a colour for these levels, so the scale follows the general
+rule for ordered data instead: one sweep whose hue and saturation rise with the value, and a printed
+label so the colour is never the only carrier (WCAG 1.4.1).
+
+| Token | Level | Dark | Light | Family |
+| --- | --- | --- | --- | --- |
+| - | `none` | `--muted` | `--muted` | neutral: the absence of reasoning |
+| `--effort-1` | `minimal` | `#94bfce` | `#39626e` | slate |
+| `--effort-2` | `low` | `#4eccd3` | `#00686c` | teal |
+| `--effort-3` | `medium` | `#91b7fe` | `#3057a3` | blue |
+| `--effort-4` | `high` | `#bda7fe` | `#6343a4` | violet |
+| `--effort-5` | `xhigh` | `#f08dee` | `#8a2b8a` | magenta |
+| `--effort-6` | `max` | `#ff8cc1` | `#9b2065` | pink |
+| `--effort-tint` | | `14%` | `12%` | badge fill = step over the ground |
+| `--effort-edge` | | `32%` | `30%` | badge border = step over the ground |
+
+Rules:
+
+1. **The sweep stays cool.** It runs teal to pink and never enters green, amber or red. Those hues
+   are verdicts in this console, and a request that thought hard did not succeed, degrade or fail by
+   doing so - the same reasoning that keeps latency uncoloured and red off the cache-rate scale.
+2. **One order for both vendors.** OpenAI's ladder runs `none` to `xhigh` and Anthropic's `low` to
+   `max`; they agree wherever they overlap, so `effortStep` (`web/src/theme/effortScale.ts`) ranks
+   them on one scale. Matching ignores case and surrounding whitespace.
+3. **An unranked level stays neutral.** A provider-specific value (`ultra`, `auto`, a token budget)
+   is printed as recorded at the neutral step. Painting it as the top of the scale would state an
+   order nobody published.
+4. **The steps are per-mode constants, not derived tokens**, for the reason the series slots are: an
+   operator's accent must not rotate what a level looks like. Every palette inherits its mode's set.
+5. **Each step clears 4.5:1** as 10px badge text on its own tint, over the page, the card and the
+   row's hover fill, in every registered palette. `scripts/test-effort-scale.ts` asserts that, the
+   ranking, and that the stylesheet's fallback values match the palette.
 
 ### Token activity heatmap
 

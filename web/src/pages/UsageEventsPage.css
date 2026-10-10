@@ -975,16 +975,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
+   The component passes the step as a token reference and nothing else; `none`
+   and an unranked level pass nothing and keep the neutral step. */
 .req-effort-badge {
+  --effort-hue: var(--muted);
   font-size: 10px;
   font-weight: 600;
   font-family: var(--font-mono, monospace);
   text-transform: capitalize;
   padding: 0 5px;
   border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
+  color: var(--effort-hue);
+  border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
   flex-shrink: 0;
 }
 .req-preflight-badge {
