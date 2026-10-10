@@ -417,7 +417,7 @@ label so the colour is never the only carrier (WCAG 1.4.1).
 
 | Token | Level | Dark | Light | Family |
 | --- | --- | --- | --- | --- |
-| - | `none` | `--muted` | `--muted` | neutral: the absence of reasoning |
+| - | `none`, unranked | `--fg-2` | `--fg-2` | neutral: the absence of reasoning, or a level the scale does not rank (`instant`, `ultra`, a token budget) |
 | `--effort-1` | `minimal` | `#94bfce` | `#39626e` | slate |
 | `--effort-2` | `low` | `#4eccd3` | `#00686c` | teal |
 | `--effort-3` | `medium` | `#91b7fe` | `#3057a3` | blue |
@@ -435,12 +435,14 @@ Rules:
 2. **One order for both vendors.** OpenAI's ladder runs `none` to `xhigh` and Anthropic's `low` to
    `max`; they agree wherever they overlap, so `effortStep` (`web/src/theme/effortScale.ts`) ranks
    them on one scale. Matching ignores case and surrounding whitespace.
-3. **An unranked level stays neutral.** A provider-specific value (`ultra`, `auto`, a token budget)
-   is printed as recorded at the neutral step. Painting it as the top of the scale would state an
-   order nobody published.
+3. **An unranked level stays neutral, and neutral is plain rather than faint.** A
+   provider-specific value (`instant`, `ultra`, `auto`, a token budget) is printed as recorded at
+   the neutral step. Painting it as the top of the scale would state an order nobody published. The
+   neutral step is `--fg-2`, secondary text: the badge's tint and edge are thin by design, and
+   `--muted` through them left the level close to unreadable.
 4. **The steps are per-mode constants, not derived tokens**, for the reason the series slots are: an
    operator's accent must not rotate what a level looks like. Every palette inherits its mode's set.
-5. **Each step clears 4.5:1** as 10px badge text on its own tint, over the page, the card and the
+5. **Each step, the neutral one included, clears 4.5:1** as 10px badge text on its own tint, over the page, the card and the
    row's hover fill, in every registered palette. `scripts/test-effort-scale.ts` asserts that, the
    ranking, and that the stylesheet's fallback values match the palette.
 

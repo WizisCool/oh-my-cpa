@@ -1023,9 +1023,11 @@
 }
 /* Coloured by the level's step on the reasoning-effort scale (docs/design.md §2).
    The component passes the step as a token reference and nothing else; `none`
-   and an unranked level pass nothing and keep the neutral step. */
+   and an unranked level pass nothing and keep the neutral step. That step is
+   secondary text, not `--muted`: a level nobody ranked is still a reading, and
+   the tint and edge are too thin to carry a tertiary grey. */
 .req-effort-badge {
-  --effort-hue: var(--muted);
+  --effort-hue: var(--fg-2);
   font-size: 10px;
   font-weight: 600;
   font-family: var(--font-mono, monospace);

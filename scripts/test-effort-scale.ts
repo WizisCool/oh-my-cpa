@@ -90,6 +90,16 @@ for (const definition of BUILT_IN_PALETTES) {
     }
   });
 
+  // `none` and an unranked level (`instant`, `ultra`, a token budget) wear the
+  // neutral step. It is plain, and it is held to the same floor as the scale.
+  for (const ground of grounds) {
+    const ratio = contrast(palette.fg2, tintOver(palette.fg2, ground, share));
+    assert.ok(
+      ratio >= 4.5,
+      `${definition.id}: the neutral effort badge (${palette.fg2}) reads ${ratio.toFixed(2)}:1 over ${ground}, want >= 4.5:1`,
+    );
+  }
+
   const variables = themePaletteCssVariables(palette);
   palette.effort.forEach((step, index) => {
     assert.equal(variables[`--effort-${index + 1}`], step, `${definition.id}: --effort-${index + 1} is projected from the palette`);
@@ -102,5 +112,16 @@ for (const [mode, id] of [['dark', 'omc-dark'], ['light', 'omc-light']] as const
     assert.equal(declared(stylesheet[mode], `--effort-${index + 1}`), step.toLowerCase(), `${mode} --effort-${index + 1} in index.css matches the palette`);
   });
 }
+
+// The neutral step the list paints must be the one measured above.
+const listCss = fs.readFileSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'web/src/pages/UsageEventsPage.css'),
+  'utf8',
+);
+assert.match(
+  /\.req-effort-badge\s*\{[^}]*\}/.exec(listCss)?.[0] ?? '',
+  /--effort-hue:\s*var\(--fg-2\);/,
+  'the effort badge falls back to secondary text, not a tertiary grey',
+);
 
 console.log('effort scale: ok');

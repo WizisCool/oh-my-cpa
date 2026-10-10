@@ -197,7 +197,7 @@ saturated at the top; see `docs/design.md` §2.
 - **Steps** (`--effort-1` … `--effort-6`, `minimal` → `max`): slate `#94bfce` / `#39626e`, teal
   `#4eccd3` / `#00686c`, blue `#91b7fe` / `#3057a3`, violet `#bda7fe` / `#6343a4`, magenta `#f08dee`
   / `#8a2b8a`, pink `#ff8cc1` / `#9b2065` (dark / light). `none` and any level the vendors do not
-  publish stay at the neutral step.
+  publish stay at the neutral step, `--fg-2`: plain, and as legible as the scale.
 - The sweep never enters green, amber or red, which are verdicts; the level's name is always printed
   beside the colour. Each step clears 4.5:1 as badge text on its own tint in every registered
   palette, asserted by `scripts/test-effort-scale.ts`.

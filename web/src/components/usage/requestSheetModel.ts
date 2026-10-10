@@ -238,7 +238,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
           event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
             ? [
                 ...(event.reasoning_effort
-                  ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'muted', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
                   : []),
                 ...(isFastTierEvent(event)
                   ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]

@@ -267,7 +267,7 @@ export async function paintRequestSheet(
       context.fillText(fit(segment.text, width), x, centreY);
       return;
     }
-    // An effort step below 1 is `none`, which the list also leaves at the neutral tone.
+    // An effort step below 1 is `none`, which the list also leaves at the tag's own neutral tone.
     const color =
       segment.kind === 'pill'
         ? pillColor(segment)

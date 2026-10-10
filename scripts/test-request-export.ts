@@ -120,7 +120,7 @@ const modeSheet = (masks: ReturnType<typeof effectiveMasks>) =>
   buildRequestSheet({ rows: moded, masks, colWidths: {}, caption: 'caption', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials });
 const modeCell = modeSheet(effectiveMasks([], [])).rows[0].cells.mode.lines;
 assert.deepEqual(modeCell, [[
-  { kind: 'tag', text: 'xhigh', tone: 'muted', effortStep: 5 },
+  { kind: 'tag', text: 'xhigh', tone: 'fg2', effortStep: 5 },
   { kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true },
 ]], 'the mode cell draws the effort on its scale step, then the non-streaming mark');
 assert.equal(modeSheet(effectiveMasks([], [])).rows[0].cells.model.lines.length, 1, 'the model cell is the name alone');
