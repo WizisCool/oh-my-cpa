@@ -2085,6 +2085,18 @@ depending on whether the rail is open. "Do the columns still fit" is a question 
 the columns are in, and only the container can answer it. The same reasoning governs the
 dashboard's `@container modelusage (max-width: 500px)` panel stack.
 
+Above that threshold the request list **folds columns rather than scrolling sideways**. The grid
+has a floor - the sum of every column's width - and a window narrower than the floor used to get a
+horizontal scrollbar, which moved the cost and token figures off screen and made every hover a
+scroll. The list now measures its own width and hides columns, one at a time, until the rest fit:
+user agent first, then the caller's key, speed, cache rate and mode. The columns that say what the
+request was and what it cost - time, result, provider, model, latency, tokens, cost - never fold;
+they stay until the list becomes stacked records. This adds no threshold: the fold points are the
+measured widths of the columns the operator currently has (`foldRequestColumns` in
+`web/src/components/usage/requestColumns.ts`), so a resized column moves them. A folded column is
+absent from the header and the rows alike, its value is still in the record's detail drawer, and an
+export draws every column regardless, because a sheet is not bound by the window.
+
 Three thresholds with three distinct meanings is the budget. A fourth number needs a reason
 stated beside it, and two rules that compute the same thing at slightly different widths are
 a defect: the request list carried a viewport `@media (max-width: 920px)` block duplicating

@@ -64,6 +64,8 @@ import {
 } from '../web/src/types/usageEventFilters.ts';
 import {
   REQUEST_COLUMNS,
+  REQUEST_STACK_WIDTH,
+  foldRequestColumns,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   parseUsageEventsColumns,
   SHEET_GRID_CHROME,
@@ -1327,8 +1329,37 @@ assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 208 
 assert.equal(computeGridMinWidth({}, 16, 12, SHEET_GRID_CHROME), 1152 + 176 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
+// foldRequestColumns: a list too narrow for every column leaves the least-scanned ones out, in order.
+const foldedAt = (width: number | null, widths = {}) => [...foldRequestColumns(width, widths)];
+assert.deepEqual(foldedAt(null), [], 'nothing folds before the list is measured');
+assert.deepEqual(foldedAt(1418), [], 'every column fits at the grid floor');
+assert.deepEqual(foldedAt(2400), []);
+assert.deepEqual(foldedAt(1417), ['ua'], 'one pixel short folds the first column only');
+assert.deepEqual(foldedAt(1326), ['ua']);
+assert.deepEqual(foldedAt(1325), ['ua', 'key']);
+assert.deepEqual(foldedAt(1140), ['ua', 'key', 'tps'], 'a 1440px window with the rail open keeps the cache rate and the mode');
+assert.deepEqual(foldedAt(921), ['ua', 'key', 'tps', 'cache', 'mode']);
+// A stacked record labels every field, so the card width folds nothing.
+assert.deepEqual(foldedAt(REQUEST_STACK_WIDTH), []);
+assert.deepEqual(foldedAt(400), []);
+// What stays always fits above the stacked width, so the default layout never scrolls sideways.
+const allFolded = foldRequestColumns(REQUEST_STACK_WIDTH + 1);
+assert.ok(computeGridMinWidth({}, 16, 12, undefined, allFolded) <= REQUEST_STACK_WIDTH + 1);
+for (let width = REQUEST_STACK_WIDTH + 1; width <= 1500; width += 1) {
+  assert.ok(
+    computeGridMinWidth({}, 16, 12, undefined, foldRequestColumns(width)) <= width,
+    `the default columns fit a ${width}px list without scrolling sideways`,
+  );
+}
+// A width the operator dragged out counts against the room, and folds sooner.
+assert.deepEqual(foldedAt(1418, { provider: 300 }), ['ua', 'key']);
+// The folded columns have no track, and the floor shrinks by their width and gap.
+const foldedGrid = buildGridTemplateColumns({}, undefined, new Set(['ua', 'key']));
+assert.equal(foldedGrid.split(' ').length, defaultGrid.split(' ').length - 2);
+assert.equal(computeGridMinWidth({}, 16, 12, undefined, new Set(['ua'])), baseMin + 208 + 24 - 76 - 16);
+
 console.log(
-  'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor',
+  'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor, width-driven folding',
 );
 
 // successRateTone: the console's one published band, read by every surface that shows a success

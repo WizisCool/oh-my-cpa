@@ -107,6 +107,8 @@ export const UsageEventsPage: React.FC = () => {
     colWidths,
     gridTemplate,
     gridMinWidth,
+    foldedColumns,
+    streamRef,
     hasCustomWidths,
     handleResizeStart,
     handleResetColumn,
@@ -647,7 +649,9 @@ export const UsageEventsPage: React.FC = () => {
         </div>
       </div>
       <section
+        ref={streamRef}
         className="request-stream"
+        data-folded-columns={foldedColumns}
         aria-label={t('events.title')}
         aria-busy={result.isFetching}
         style={

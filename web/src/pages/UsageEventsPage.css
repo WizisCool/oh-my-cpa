@@ -287,7 +287,7 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 20px 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(145px, 0.6fr) minmax(88px, 0.6fr) 14px;
+  --req-grid-columns: 20px 96px 88px minmax(140px, 1.6fr) minmax(130px, 1.3fr) 84px 76px 78px 132px 64px 64px 124px 76px 14px;
   --req-grid-gap: 16px;
   --req-pad-inline: 12px;
   --req-min-width: 1418px;
@@ -523,6 +523,19 @@
 }
 .req-reset-columns-btn:hover {
   color: var(--accent);
+}
+
+/* A list too narrow for every column folds the least-scanned ones away instead of
+   scrolling sideways. `foldRequestColumns` (requestColumns.ts) decides which, from
+   the list's measured width, and names them here; the grid template it sends
+   alongside has no track for them. Matching on the container keeps a fold off
+   the rows' render path: no row re-renders when a column goes or returns. */
+.request-stream[data-folded-columns~='ua'] :is(.req-th-ua, .req-col-ua),
+.request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
+.request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
+.request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
+.request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode) {
+  display: none;
 }
 
 /* Alignment is driven by the shared column definitions (requestColumns.ts), not

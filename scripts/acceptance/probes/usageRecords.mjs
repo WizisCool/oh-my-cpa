@@ -551,6 +551,42 @@ export async function requestListInteractions({ base, page, check }) {
   await failurePopup.waitFor({ state: 'hidden' });
   await page.mouse.move(0, 0);
 
+  // A window too narrow for every column drops the least important ones instead of
+  // scrolling sideways, from the header and the rows alike.
+  const restingViewport = page.viewportSize();
+  const readColumns = () => page.evaluate(() => {
+    const shown = (root) => [...root.children]
+      .filter((cell) => getComputedStyle(cell).display !== 'none')
+      .flatMap((cell) => [...cell.classList].filter((name) => /^req-(th|col)-/.test(name)).map((name) => name.replace(/^req-(th|col)-/, '')));
+    const scroller = document.querySelector('.request-table-scroll-area');
+    return {
+      header: shown(document.querySelector('.request-table-header')),
+      row: shown(document.querySelector('.request-row')),
+      folded: document.querySelector('.request-stream').dataset.foldedColumns,
+      sideways: scroller.scrollWidth - scroller.clientWidth,
+    };
+  });
+  await page.setViewportSize({ width: 1920, height: restingViewport.height });
+  await until(async () => (await readColumns()).folded === '', { label: 'every column shown on a wide window' });
+  const wideColumns = await readColumns();
+  await page.setViewportSize({ width: 1400, height: restingViewport.height });
+  await until(async () => (await readColumns()).folded !== '', { label: 'columns folded on a narrow window' });
+  const narrowColumns = await readColumns();
+  const CORE_COLUMNS = ['time', 'result', 'provider', 'model', 'latency', 'tokens', 'cost'];
+  check('a wide window shows every column without sideways scroll',
+    wideColumns.sideways <= 1 && ['mode', 'tps', 'cache', 'key', 'ua'].every((id) => wideColumns.row.includes(id)),
+    JSON.stringify(wideColumns));
+  check('a narrow window folds columns instead of scrolling sideways',
+    narrowColumns.sideways <= 1 && narrowColumns.row.length < wideColumns.row.length && !narrowColumns.row.includes('ua'),
+    JSON.stringify(narrowColumns));
+  check('the header and the rows fold the same columns, and the core ones stay',
+    JSON.stringify(narrowColumns.header.filter((id) => narrowColumns.row.includes(id))) === JSON.stringify(narrowColumns.row.filter((id) => narrowColumns.header.includes(id))) &&
+    narrowColumns.folded.split(' ').every((id) => !narrowColumns.row.includes(id) && !narrowColumns.header.includes(id)) &&
+    CORE_COLUMNS.every((id) => narrowColumns.row.includes(id) && narrowColumns.header.includes(id)),
+    JSON.stringify(narrowColumns));
+  await page.setViewportSize(restingViewport);
+  await until(async () => (await readColumns()).folded !== undefined, { label: 'viewport restored' });
+
   const priceAction = page.locator('[data-testid="request-set-price"]').first();
   await priceAction.focus();
   await cellPopup.waitFor({ state: 'visible' });
