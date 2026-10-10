@@ -43,6 +43,7 @@ import {
   SUCCESS_RATE_HEALTHY_PERCENT,
   eventTokensPerSecond,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
   MIN_STREAMING_GENERATION_WINDOW_MS,
 } from '../web/src/types/usageEventMetrics.ts';
@@ -1260,6 +1261,17 @@ assert.equal(isNonStreamingEvent({ stream: false, latency_ms: 31251, ttft_ms: 44
 assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); // collapsed historical window
 assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
 assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
+
+// The fast-lane mark reads the tier the response reported, under either vendor's name for it.
+assert.equal(isFastTierEvent({ response_service_tier: 'priority' }), true);
+assert.equal(isFastTierEvent({ response_service_tier: 'fast' }), true);
+assert.equal(isFastTierEvent({ response_service_tier: ' Priority ' }), true);
+for (const tier of ['default', 'auto', 'flex', 'scale', '', undefined]) {
+  assert.equal(isFastTierEvent({ response_service_tier: tier }), false, `${String(tier)} is not the fast lane`);
+}
+// Asking for the fast lane is not being served on it.
+assert.equal(isFastTierEvent({ service_tier: 'priority', response_service_tier: 'default' } as Partial<UsageEvent>), false);
+assert.equal(isFastTierEvent(undefined), false);
 
 console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-to-end average, edge boundaries');
 

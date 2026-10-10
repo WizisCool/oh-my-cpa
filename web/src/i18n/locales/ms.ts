@@ -2003,6 +2003,7 @@ export const MS: Readonly<Record<string, string>> = {
   "events.oauth_badge": "Akaun OAuth",
   "events.preflight_hint": "Permintaan prapenerbangan (tiada generasi)",
   "events.non_stream_hint": "Respons bukan strim",
+  "events.fast_tier_hint": "Mod pantas · peringkat perkhidmatan respons {tier}",
   "events.filters": "Tapis permintaan",
   "events.range_open_end": "terbuka",
   "events.range_min": "Min",

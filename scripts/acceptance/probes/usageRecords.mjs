@@ -347,6 +347,9 @@ export const interactionRecords = (() => {
     provider: ['openai', 'claude', 'gemini'][index % 3],
     model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
     service_tier: 'auto',
+    // One record in four was served on the upstream's fast lane, and thought about it.
+    response_service_tier: index % 4 === 1 ? 'priority' : 'default',
+    ...(index % 4 === 1 ? { reasoning_effort: 'high' } : {}),
     source: `hmac:source-fingerprint-${index % 3}`,
     auth_index: `credential-${index % 3}`,
     auth_type: 'oauth',
@@ -525,6 +528,23 @@ export async function requestListInteractions({ base, page, check }) {
   });
   check('the failure popup is a panel on the theme surface, not the inverse tooltip block',
     failureSurface.fill === failureSurface.elevated && failureSurface.ink === failureSurface.fg, JSON.stringify(failureSurface));
+  // How a request was made lives in its own column: the model cell is the name, and the
+  // fast-lane mark appears exactly on the records the upstream reported as served there.
+  const modeCells = await page.evaluate(() => [...document.querySelectorAll('.request-row')].map((row) => ({
+    hasEffortInModel: row.querySelector('.req-col-model .req-effort-badge') !== null,
+    effort: row.querySelector('.req-col-mode .req-effort-badge')?.textContent ?? '',
+    isFast: row.querySelector('.req-col-mode [data-testid="request-fast-tier"]') !== null,
+    fastName: row.querySelector('[data-testid="request-fast-tier"]')?.getAttribute('aria-label') ?? '',
+    height: row.getBoundingClientRect().height,
+  })));
+  const fastCells = modeCells.filter((cell) => cell.isFast);
+  check('the mode column carries the effort and the fast-lane mark, and the model cell neither',
+    fastCells.length > 0 && fastCells.length < modeCells.length &&
+    modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'high')) &&
+    fastCells.every((cell) => cell.fastName.includes('priority')),
+    JSON.stringify(modeCells.slice(0, 4)));
+  check('every request row is the same height', new Set(modeCells.map((cell) => Math.round(cell.height))).size === 1,
+    JSON.stringify([...new Set(modeCells.map((cell) => cell.height))]));
   check('a successful result carries no failure popup',
     await page.locator('.request-row .req-result-pill.is-success[data-request-failure]').count() === 0);
   await page.keyboard.press('Escape');

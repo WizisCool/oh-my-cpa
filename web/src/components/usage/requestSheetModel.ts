@@ -14,6 +14,7 @@ import {
   eventTokensPerSecond,
   formatEventDuration,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import type { TpsCalculationMode } from '../../types/tpsCalculation';
@@ -43,7 +44,7 @@ import { formatRequestTimestamp } from './requestTimestamp';
 export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn';
 
 /** The glyphs a cell uses where the list uses an icon: a marker a reader already knows from the list. */
-export type SheetGlyph = 'non_stream' | 'substituted';
+export type SheetGlyph = 'non_stream' | 'substituted' | 'fast';
 
 export type SheetSegment =
   /** Plain text. The first text segment of a line is the one that gives way when the line is too long. */
@@ -55,8 +56,8 @@ export type SheetSegment =
   | { kind: 'tag'; text: string; tone: SheetTone; effortStep?: number }
   /** A tinted pill led by a square bullet: the result, and the cache rate. */
   | { kind: 'pill'; text: string; tone: SheetTone; cacheRate?: number }
-  /** One of the list's own glyphs, boxed when the list draws it as a badge. */
-  | { kind: 'glyph'; glyph: SheetGlyph; tone: SheetTone; isBoxed?: boolean }
+  /** One of the list's own glyphs, boxed when the list draws it as a badge and filled when the list fills it. */
+  | { kind: 'glyph'; glyph: SheetGlyph; tone: SheetTone; isBoxed?: boolean; isFilled?: boolean }
   /** A redaction bar. It carries nothing of the value it stands in for. */
   | { kind: 'mask' };
 
@@ -234,10 +235,13 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       },
       mode: {
         lines: [
-          event.reasoning_effort || isNonStreamingEvent(event)
+          event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
             ? [
                 ...(event.reasoning_effort
                   ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'muted', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  : []),
+                ...(isFastTierEvent(event)
+                  ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]
                   : []),
                 ...(isNonStreamingEvent(event)
                   ? [{ kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true } as const]

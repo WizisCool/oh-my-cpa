@@ -120,6 +120,21 @@ export interface EventTokensPerSecondResult {
  */
 export const MIN_STREAMING_GENERATION_WINDOW_MS = 50;
 
+/** The response service tiers an upstream reports for its faster, separately priced lane. */
+const FAST_SERVICE_TIERS = new Set(['fast', 'priority']);
+
+/**
+ * isFastTierEvent reports whether the upstream served a request on its fast lane.
+ *
+ * It reads the tier the response reported, never the one the request asked for:
+ * a client can ask for `priority` and be served `default`, and the mark is a
+ * statement about what happened. OpenAI names the lane `priority` and Anthropic
+ * `fast`; both are the same fact to an operator reading the list.
+ */
+export function isFastTierEvent(event?: Partial<Pick<UsageEvent, 'response_service_tier'>>): boolean {
+  return FAST_SERVICE_TIERS.has((event?.response_service_tier ?? '').trim().toLowerCase());
+}
+
 /**
  * hasMeasurableTTFT determines whether a usage record carries a genuine, non-collapsed
  * time-to-first-token measurement:

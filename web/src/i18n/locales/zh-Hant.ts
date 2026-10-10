@@ -2003,6 +2003,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.oauth_badge": "OAuth 授權賬號",
   "events.preflight_hint": "預檢請求（非生成）",
   "events.non_stream_hint": "非串流返回",
+  "events.fast_tier_hint": "Fast 模式 · 回應服務等級 {tier}",
   "events.filters": "篩選請求",
   "events.range_open_end": "至今",
   "events.range_min": "最小",

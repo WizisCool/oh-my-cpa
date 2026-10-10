@@ -129,6 +129,12 @@ assert.deepEqual(
   [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
   'a request with nothing to mark draws a dash, not an empty cell',
 );
+const fastSheet = buildRequestSheet({
+  rows: [{ ...events[1], response_service_tier: 'priority' }] as UsageEvent[],
+  masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,
+});
+assert.deepEqual(fastSheet.rows[0].cells.mode.lines, [[{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true }]],
+  'a request served on the fast lane draws the lightning mark');
 const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
 assert.ok(!modeHidden.includes('xhigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
 const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>

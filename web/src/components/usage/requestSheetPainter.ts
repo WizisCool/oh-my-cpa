@@ -30,8 +30,9 @@ const GLYPH_SIZE = 12;
 const GLYPH_BOX = 18;
 /**
  * The stroke paths of the glyphs the list draws as icons, on Lucide's 24-unit
- * grid: `RadioOff` for a non-streaming response and `ArrowLeftRight` for a
- * substituted model, the same two `components/icons` gives the row.
+ * grid: `RadioOff` for a non-streaming response, `ArrowLeftRight` for a
+ * substituted model and `Zap` for the fast lane, the same three
+ * `components/icons` gives the row.
  */
 const GLYPH_PATHS: Record<SheetGlyph, readonly string[]> = {
   non_stream: [
@@ -43,6 +44,7 @@ const GLYPH_PATHS: Record<SheetGlyph, readonly string[]> = {
     'M7.753 16.239a6 6 0 0 1 0-8.478',
   ],
   substituted: ['M8 3 4 7l4 4', 'M4 7h16', 'm16 21 4-4-4-4', 'M20 17H4'],
+  fast: ['M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z'],
 };
 const MARK_BOX = 26;
 const MARK_SIZE = 20;
@@ -249,7 +251,12 @@ export async function paintRequestSheet(
       context.lineWidth = 2;
       context.lineCap = 'round';
       context.lineJoin = 'round';
-      for (const path of GLYPH_PATHS[segment.glyph]) context.stroke(new Path2D(path));
+      context.fillStyle = color;
+      for (const path of GLYPH_PATHS[segment.glyph]) {
+        const outline = new Path2D(path);
+        if (segment.isFilled) context.fill(outline);
+        context.stroke(outline);
+      }
       context.restore();
       return;
     }

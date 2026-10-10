@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
-import { NonStreamOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
+import { NonStreamOutlined, ThunderboltFilled, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined, SwapOutlined } from '../icons';
 import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
@@ -24,6 +24,7 @@ import {
   tpsCalculationHintKey,
   formatEventDuration,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import {
@@ -108,6 +109,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
     const isNonStreaming = isNonStreamingEvent(event);
+    const isFastTier = isFastTierEvent(event);
 
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
@@ -283,11 +285,12 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 5: mode - the reasoning effort, then a mark per way this request
-            departed from an ordinary streamed call. The requested service tier
-            ("auto") is not something operators scan for and stays in the drawer. */}
+            departed from an ordinary streamed call: served on the fast lane, or
+            answered in one piece. The requested service tier ("auto") is not
+            something operators scan for and stays in the drawer. */}
         <div className={`req-col req-col-mode ${requestColumnAlignClass('mode')}`}>
           <span className="req-mobile-label">{t('events.col_mode')}</span>
-          {event.reasoning_effort || isNonStreaming ? (
+          {event.reasoning_effort || isFastTier || isNonStreaming ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
                 <RequestTooltip title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}>
@@ -296,6 +299,18 @@ export const RequestRow = React.memo<RequestRowProps>(
                     style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
                   >
                     {event.reasoning_effort}
+                  </span>
+                </RequestTooltip>
+              )}
+              {isFastTier && (
+                <RequestTooltip title={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}>
+                  <span
+                    className="req-mode-mark req-fast-icon"
+                    role="img"
+                    aria-label={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}
+                    data-testid="request-fast-tier"
+                  >
+                    <ThunderboltFilled />
                   </span>
                 </RequestTooltip>
               )}

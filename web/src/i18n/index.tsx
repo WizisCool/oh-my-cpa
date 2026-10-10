@@ -2298,6 +2298,7 @@ const DICT: Record<string, [string, string]> = {
   'events.oauth_badge': ['OAuth 授权账号', 'OAuth account'],
   'events.preflight_hint': ['预检请求（非生成）', 'Preflight request (no generation)'],
   'events.non_stream_hint': ['非流式返回', 'Non-streaming response'],
+  'events.fast_tier_hint': ['Fast 模式 · 响应服务等级 {tier}', 'Fast mode · response service tier {tier}'],
   'events.filters': ['筛选请求', 'Filter requests'],
   'events.range_open_end': ['至今', 'open-ended'],
   'events.range_min': ['最小', 'Min'],

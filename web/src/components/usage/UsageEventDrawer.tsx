@@ -9,6 +9,7 @@ import {
   DownloadOutlined,
   DownOutlined,
   SwapOutlined,
+  ThunderboltFilled,
   UpOutlined,
 } from '../icons';
 import { useQuery } from '@tanstack/react-query';
@@ -29,6 +30,7 @@ import {
 import {
   formatEventDuration,
   hasMeasurableTTFT,
+  isFastTierEvent,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
@@ -240,6 +242,17 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             <div className="request-detail-heading">
               <div className="request-detail-model-row">
                 <h2>{event.model || t('events.not_captured')}</h2>
+                {isFastTierEvent(event) && (
+                  <Tooltip title={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}>
+                    <span
+                      className="req-mode-mark req-fast-icon"
+                      role="img"
+                      aria-label={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}
+                    >
+                      <ThunderboltFilled />
+                    </span>
+                  </Tooltip>
+                )}
                 {isNonStreamingEvent(event) && (
                   <Tooltip title={t('events.non_stream_hint')}>
                     <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>

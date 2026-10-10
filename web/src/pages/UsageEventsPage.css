@@ -1052,6 +1052,16 @@
   cursor: help;
   flex-shrink: 0;
 }
+/* The fast lane is the accent, not amber: lightning is conventionally yellow, but
+   amber is this console's warning hue and a request served quickly is not one. */
+.req-fast-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.req-fast-icon svg {
+  fill: currentColor;
+}
 .req-non-stream-icon {
   background: color-mix(in srgb, var(--muted) 10%, transparent);
   color: var(--muted);
