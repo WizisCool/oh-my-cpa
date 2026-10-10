@@ -31,7 +31,11 @@ import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
-import { CredentialHealth } from '../components/dashboard/CredentialHealth';
+import {
+  CredentialQuota,
+  CREDENTIAL_FILES_QUERY_KEY,
+  CREDENTIAL_QUOTA_QUERY_KEY,
+} from '../components/dashboard/CredentialQuota';
 import { ModelUsagePanels, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
 import {
@@ -257,6 +261,8 @@ export const DashboardPage: React.FC = () => {
     void queryClient.invalidateQueries({ queryKey: [DASHBOARD_MODELS_QUERY_KEY] });
     void queryClient.invalidateQueries({ queryKey: ['dashboard-providers'] });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
+    void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_FILES_QUERY_KEY] });
+    void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] });
     void refetch();
   }, [queryClient, refetch]);
 
@@ -552,16 +558,10 @@ export const DashboardPage: React.FC = () => {
 
       {/* Under the six tiles, and outside the time-range control's reach: the strip has
           its own fixed fifty-three-week span, paired on desktop in a half-width column
-          with Credential health on the right. Both stack cleanly on mobile. */}
+          with credential quota on the right. Both stack on mobile. */}
       <div className="dashboard-activity-row">
         <TokenHeatmap />
-        <CredentialHealth
-          overview={overviewQuery.data}
-          isLoading={overviewQuery.isLoading && !overviewQuery.data}
-          isError={overviewQuery.isError}
-          error={overviewQuery.error}
-          onRetry={() => void overviewQuery.refetch()}
-        />
+        <CredentialQuota />
       </div>
 
       {overviewQuery.data && (

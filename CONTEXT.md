@@ -496,11 +496,14 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   only an absolute http/https URL is accepted, because the provider list renders
   the provider's name as a link to it.
 - **Token Activity Grid (Heatmap)**: The dashboard's day-by-day token field, sharing a half-width
-  desktop row with Credential Health below the six KPI tiles — a contribution-graph shape of seven weekday rows (Monday first) by one column
+  desktop row with Credential Quota below the six KPI tiles — a contribution-graph shape of seven weekday rows (Monday first) by one column
   per week, fifty-three whole weeks ending today. Its span is fixed rather than derived from
   the Range Preset: it answers "how has this year gone" where the tiles answer "how is this
-  window going". It carries no caption and no readout saying so - the panel's title names it and
-  the cells' tooltips carry the numbers - which is why the two ranges are told apart by the shape
+  window going". The panel shows as many of the newest weeks as fit at a comfortable cell size and
+  scrolls to the older ones, so a square stays readable and hittable in a half-width column; the field
+  opens on today's column and stays pinned there until the reader scrolls away. It carries no caption
+  and no quantities of its own - the panel's title names it, a key names only the ramp's direction,
+  and the cells' tooltips carry the numbers - which is why the two ranges are told apart by the shape
   of the field rather than by a sentence. Seven rows are what make a weekly rhythm a row and a
   trend a direction, which is why the grid is not a single-row timeline. Each day is the **viewer's** local calendar day,
   resolved server-side from the IANA zone the browser sends; a day is 23, 24 or 25 hours as
@@ -542,16 +545,24 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   window, so a linear ramp collapses the middle of the range into one invisible shade and a logarithm
   over-amplifies the bottom. The scale is relative to the window, so the same shape of traffic paints
   the same field whatever the absolute volume.
-- **Credential Health**: The dashboard panel beside the Token Activity Grid, showing the credential
-  tally `/management/overview` already returns as one proportional meter — active, unavailable and
-  disabled — with those counts as its legend and each credential type's own count beneath. It is a
-  **live read, not a stored measurement**, so it answers "can this deployment serve traffic" where
-  the grid answers "how has the year gone"; that is why it sits outside the Range Preset's reach,
-  and why its numbers are never read as traffic. Freshness, not the window, decides its states: a
-  refresh that fails while a tally is on screen keeps that tally and states the failure beside it,
-  and only a read that never produced one is reported as unknown, with a retry. A deployment holding
-  no credential is **empty** rather than unknown — nothing is in doubt, it has none — and both that
-  state and the panel's header link to the page that changes the answer, `/oauth-management`.
+- **Credential Quota**: The dashboard panel beside the Token Activity Grid, listing every enabled
+  credential of the deployment by urgency - sign-in required, cooling down, exhausted, unavailable,
+  running low, healthy, no quota reading - with the ones that cannot serve first, because on a
+  deployment holding many credentials the rows that need a decision are the ones in view. A
+  credential that cannot serve states why in place of its windows, and when it recovers; one that
+  can shows its plan's two shortest **Quota Windows** as remaining-share bars and the countdown to
+  the tightest of them refilling. Disabled credentials are the operator's own decision and are only
+  counted, in the header. It is a **live read of stored readings, not a measurement of its own**: the
+  panel reads the credential list and the last recorded quota observations, and never a provider,
+  so it answers "can this deployment serve traffic, and for how much longer" where the grid answers
+  "how has the year gone". That is why it sits outside the Range Preset's reach, and why its numbers
+  are never read as traffic. Freshness, not the window, decides its states: a refresh that fails
+  while rows are on screen keeps those rows and states the failure beside them, and only a credential
+  list that never produced one is reported as unknown, with a retry. A deployment holding no
+  credential is **empty** rather than unknown - nothing is in doubt, it has none - and that state
+  links to the page that connects one. Its rows are deliberately not interactive, so a touch meant to
+  move the list cannot leave the page; its one control is a header refresh that asks the providers
+  for fresh readings, and its footer links to `/oauth-management`.
 
 - **Bucket**: One point of the sparkline. Width is chosen per window so the
   series stays near 48 points on a human step. The newest bucket is always

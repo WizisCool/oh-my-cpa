@@ -115,11 +115,11 @@ async function main() {
     overviewResponse.ok() && Boolean(overview.cpa_version) && overview.status !== 'unconfigured');
 
   await page.waitForSelector('.terminal-title', { timeout: 15000 });
-  // Credential health is independent of the dashboard window read.
-  await page.waitForSelector('[data-testid="dashboard-credential-health"]:not([data-health-state="loading"])', { timeout: 15000 });
-  const healthState = await page.locator('[data-testid="dashboard-credential-health"]').getAttribute('data-health-state');
-  check('Dashboard health preserves unavailable versus empty data', healthState,
-    overview.credentials === null ? healthState === 'unknown' : healthState === (overview.credentials.total > 0 ? 'ready' : 'empty'));
+  // Credential quota reads the credential list on its own, independent of the dashboard window.
+  await page.waitForSelector('[data-testid="dashboard-credential-quota"]:not([data-quota-panel-state="loading"])', { timeout: 15000 });
+  const quotaPanelState = await page.locator('[data-testid="dashboard-credential-quota"]').getAttribute('data-quota-panel-state');
+  check('Dashboard credential quota settles on a read state', quotaPanelState,
+    ['ready', 'empty', 'unknown'].includes(quotaPanelState));
   check('Dashboard omits the runtime panel', await page.locator('.runtime-list').count(),
     (await page.locator('.runtime-list').count()) === 0);
   const dashboardText = await page.locator('main').innerText();

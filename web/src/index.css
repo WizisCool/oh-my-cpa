@@ -73,17 +73,18 @@
      day's volume - see web/src/theme/heatmapRamp.ts for why that curve and not a linear one. */
   --heatmap-quiet: #212124;
   --heatmap-busy: #00a2fb;
-  /* The grid's floor, the space between cells, and the weekday gutter. The cell size itself
-     is not a token: it is whatever divides the panel evenly. */
+  /* The comfortable cell, the space between cells, and the weekday gutter. The painted cell is
+     not a token: the panel shows as many weeks as fit at the target and stretches them to its
+     edge, so the size lands at or just above it. The floor only bounds the tracks before the
+     panel has been measured. */
+  --heatmap-cell-target: 18px;
   --heatmap-min-cell: 7px;
-  --heatmap-gap: 2px;
+  --heatmap-gap: 4px;
   --heatmap-label: 20px;
-  --heatmap-label-gap: 6px;
-  /* The loading skeleton's row height. Fixed because there is no grid yet to measure against. */
-  --heatmap-skeleton-cell: 8px;
+  --heatmap-label-gap: 8px;
   /* The two zero states, as one ordered scale measured against the card rather than against the
      page. The panel sits at `--surface` (#1c1c1f), and both steps are a shade *lighter* than it,
-     which is the direction GitHub's own graph uses on dark: the 4px gaps then read as the darker
+     which is the direction GitHub's own graph uses on dark: the gaps then read as the darker
      card showing through instead of as a bright mesh drawn around every cell.
      The order is the meaning. An unrecorded day carries no information, so it is the closest to the
      card; a recorded-but-empty day is a measurement of zero, so it takes a step further; a measured
@@ -634,6 +635,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    reads as one more label in the shell instead of as an alert. */
 .demo-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: 2px; background: var(--surface); color: var(--accent); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
 .app-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+/* On the phone shell the content column never pans sideways. `overflow-y: auto` alone computes the
+   other axis to `auto`, so anything that reaches past the right edge for a moment - a chart
+   readout placed by its library, a popper mid-measure - made the whole page draggable toward
+   empty space. Surfaces that genuinely hold more than a screen scroll inside themselves. */
+@media (max-width: 900px) {
+  .app-content { overflow-x: hidden; }
+}
 .app-footer { display: none; }
 
 /* ── mobile navigation sheet ────────────────────────────────────────────────
@@ -719,11 +727,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .dashboard-page { max-width: 1440px; }
 .terminal-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .dashboard-alert { margin-bottom: 16px; }
-.health-legend { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 13px; }
-.health-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.health-legend b { color: var(--fg); font-weight: 500; }
 /* Status pips: 7×7, 2px radius (design.md). Both vocabularies are covered —
-   the chart tone names and the older health-legend names — because a pip that
+   the chart tone names and the status names — because a pip that
    matches no rule silently falls back to grey, which is how a failed
    request once ended up reading as healthy. */
 .legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 2px; background: var(--meta); }
@@ -916,23 +921,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     grid-column: 1 / -1;
   }
 }
-.dashboard-lower { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.dashboard-card { min-height: 250px; padding: 20px; }
-.health-meter { display: flex; height: 8px; gap: 2px; margin: 24px 0 14px; background: var(--border); }
-.health-meter span { min-width: 0; }
-.health-active { background: var(--success); }
-.health-unavailable { background: var(--warn); }
-.health-disabled { background: var(--danger); }
-.type-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
-.type-list span { border: 1px solid var(--border); padding: 4px 7px; color: var(--muted); font-size: 12px; }
-.type-list b { color: var(--fg); font-weight: 500; }
 .empty-copy { color: var(--muted); font-size: 13px; }
 
 @media (max-width: 900px) {
   .terminal-page { padding: 24px 16px 40px; }
   .app-footer { padding-inline: 16px; flex-direction: column; gap: 4px; }
   .dashboard-hero { align-items: flex-start; flex-direction: column; padding: 20px; }
-  .dashboard-lower { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -1274,6 +1268,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   opacity: 1 !important;
   box-shadow: none !important;
   padding: 6px 8px !important;
+  /* The library flips a readout that would leave its chart, and can only do so if the readout is
+     narrower than the screen it flips within. */
+  max-width: calc(100vw - 32px) !important;
+  box-sizing: border-box !important;
 }
 /* The library's own title/name/value rules each set their own colour, so each is overridden rather
    than left to inherit - an inherited colour is what a later library rule would win against. */
@@ -1289,9 +1287,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
    Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
-.omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }
 .omc-tip-time { color: var(--muted); margin-bottom: 2px; }
-.omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; }
+.omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; max-width: 100%; }
 .omc-tip-rows.has-names { grid-template-columns: max-content minmax(0, max-content) max-content; }
 .omc-tip-rows.has-shares { grid-template-columns: max-content max-content max-content; }
 .omc-tip-rows.has-names.has-shares { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
@@ -1316,18 +1314,15 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
-   A contribution graph: seven weekday rows by a year of week columns, sized to fill its
-   panel at any width. The cells are sized by the grid rather than by JavaScript -
-   `minmax(--heatmap-min-cell, 1fr)` divides whatever width the panel has into fifty-three
-   equal tracks, which is what makes the field reach its edges exactly; an integer cell size
-   computed in JS cannot divide an arbitrary width evenly and leaves a visible gutter, which
-   is what made the fixed-size version look like an unfinished widget.
+   A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
+   the newest weeks as fit at `--heatmap-cell-target` and stretches them to reach its edge, so the
+   squares stay a readable, hittable size at any width; the older weeks scroll inside the panel,
+   behind a pinned weekday gutter. Dividing the whole year into the panel was the alternative, and
+   in a half-width column it leaves 8px squares in a strip a third the height of its neighbour.
 
-   On a desktop width the grid never scrolls: the tracks divide whatever the panel has, so the
-   field reaches both edges and the year is always whole. Below the cell floor - a phone - it
-   swipes instead, keeping the floor and letting the row extend past the panel. Shrinking the cells
-   to fit was the alternative and it makes the field unreadable well before it fits, and clipping
-   silently hides two thirds of the year. */
+   The component writes the fitted size as `--heatmap-cell`. Until it has measured - and whenever
+   the whole year fits - the tracks are `minmax(--heatmap-min-cell, 1fr)`, which divides the
+   panel exactly with no rounding seam. */
 /* ── dashboard activity & credential health row ────────────────────────────── */
 .dashboard-activity-row {
   display: grid;
@@ -1336,116 +1331,121 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   margin-bottom: 32px;
   align-items: stretch;
 }
-.heatmap-panel {
-  margin-bottom: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.heatmap-panel .ant-card-body {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-}
-.credential-health-panel {
-  margin-bottom: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.credential-health-panel .ant-card-body {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-}
-.health-inner {
+/* Both panels stretch to the row's height and lay their content out as a column, so whichever
+   is shorter spends the difference above its footer instead of ending early. */
+.heatmap-panel, .credential-quota-panel { margin-bottom: 0; min-width: 0; }
+.heatmap-inner, .quota-inner {
   min-width: 0;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
 }
-.health-head {
-  display: flex;
+/* ── credential quota: what the fleet can still serve ─────────────────────────
+   Every credential, ordered by urgency, in a list that scrolls inside the panel: the panel keeps
+   the height of the row it shares however many credentials a deployment holds. The rows are not
+   interactive, so a touch that scrolls the list can never leave the page. */
+.credential-quota-panel { --quota-row-height: 46px; }
+.quota-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.quota-head-aside { display: inline-flex; align-items: center; gap: 10px; }
+/* A glyph in the header's own muted ink rather than a framed button: the panel is a reading, and
+   its one control should not outweigh the title it sits beside. */
+.quota-refresh.ant-btn { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+.quota-refresh.ant-btn:hover { color: var(--accent); }
+.quota-summary { display: inline-flex; gap: 16px; color: var(--muted); font-size: 13px; line-height: 1; }
+.quota-summary b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.quota-summary .is-blocked, .quota-summary .is-blocked b { color: var(--danger); }
+/* The list takes whatever height the activity grid beside it gives the row, and never less than
+   three rows. A zero basis is what stops a long list from setting the row's height itself. */
+.quota-list {
+  flex: 1 1 0;
+  min-height: calc(var(--quota-row-height) * 3);
+  margin: 10px -8px 0 0;
+  padding: 0 8px 0 0;
+  list-style: none;
+  /* Vertical only: `overflow-y: auto` alone computes the other axis to `auto` as well, and a list
+     that can be nudged sideways under a finger reads as a broken page. */
+  overflow: hidden auto;
+  /* The page takes over once the list reaches either end, as it does everywhere else. */
+  overscroll-behavior-y: auto;
+}
+.quota-row + .quota-row { border-top: 1px solid var(--border-soft); }
+.quota-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.7fr) 78px;
+  grid-template-areas: "icon name reading when";
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: var(--quota-row-height);
+  color: var(--fg);
+  font-size: 13px;
 }
-.health-head-link {
+.quota-row-icon { grid-area: icon; }
+.quota-row-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-row-windows {
+  grid-area: reading;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+.quota-window { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: center; gap: 8px; min-width: 0; }
+.quota-window-label { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.quota-window-track { display: block; height: 6px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.quota-window-fill { display: block; height: 100%; border-radius: inherit; }
+.quota-window-fill.is-ample { background: var(--success); }
+.quota-window-fill.is-partial { background: var(--warn); }
+.quota-window-fill.is-low { background: var(--danger); }
+.quota-window-value { color: var(--fg); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.quota-row-status { grid-area: reading; display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+/* A credential that recovers on its own clock is a warning; one that waits for the operator is a
+   failure. */
+.quota-row.is-blocked .quota-row-status { color: var(--danger); }
+.quota-row.is-cooldown .quota-row-status { color: var(--warn); }
+.quota-row-status-icon { font-size: 14px; flex: none; }
+.quota-row-when {
+  grid-area: when;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1;
-  transition: color var(--motion-fast) var(--ease-standard);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.health-head-link:hover {
-  color: var(--accent);
+.quota-row-when-icon { font-size: 12px; flex: none; }
+.quota-foot { display: flex; justify-content: flex-end; padding-top: 12px; }
+/* Without a list above it the footer still sits on the panel's bottom edge. */
+.quota-all-disabled + .quota-foot { margin-top: auto; }
+.quota-foot-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; line-height: 1; }
+.quota-foot-link:hover { color: var(--accent); }
+.quota-link-icon { font-size: 10px; }
+.quota-skeleton { display: flex; flex-direction: column; gap: 22px; margin-top: 20px; }
+.quota-alert { margin-top: 12px; }
+.quota-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 14px; }
+.quota-all-disabled { margin-top: 14px; }
+/* Stacked, there is no neighbour to take a height from: the list is as tall as its rows up to
+   four and a half of them, the half row being what says there is more to scroll to. */
+@media (max-width: 900px) {
+  .quota-list { flex: none; min-height: 0; max-height: calc(var(--quota-row-height) * 4.5); }
 }
-.health-link-icon {
-  font-size: 10px;
-}
-.health-body {
-  margin-top: 14px;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-}
-.health-skeleton {
-  margin-top: 14px;
-}
-.health-skeleton-legend {
-  display: flex;
-  gap: 14px;
-  margin-top: 18px;
-}
-.health-skeleton-types {
-  display: flex;
-  gap: 8px;
-  margin-top: 20px;
-}
-.health-empty-action {
-  margin-top: 12px;
-}
-.health-action-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--accent);
-  font-size: 12px;
-}
-.health-action-link:hover {
-  text-decoration: underline;
-}
-.health-retry-action {
-  margin-top: 10px;
-}
-.health-alert {
-  margin-bottom: 12px;
-}
-.health-unavailable-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+@media (max-width: 640px) {
+  .credential-quota-panel { --quota-row-height: 68px; }
+  .quota-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas: "icon name when" "reading reading reading";
+    align-content: center;
+  }
 }
 @media (max-width: 900px) {
-  .dashboard-activity-row {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .heatmap-scroll {
-    --heatmap-min-cell: 9px;
-    --heatmap-gap: 2.5px;
-  }
+  .dashboard-activity-row { grid-template-columns: 1fr; }
+  /* A phone shows fewer weeks either way; the smaller target keeps a quarter in view. */
+  .heatmap-scroll { --heatmap-cell-target: 14px; --heatmap-gap: 3px; }
 }
-.heatmap-inner { min-width: 0; }
 .heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-/* The field fills its panel on any width a desktop produces. A phone is the one case where a
-   year of weeks cannot fit at a legible cell size, so the container is swipeable there - with
+/* The field scrolls sideways inside its panel whenever a year of weeks is wider than it - with
    the scrollbar itself hidden, because a bar inside a dashboard card is visual noise and touch
-   has no scrollbar anyway. Clipping instead would be worse than either: the point of the field
-   is the whole year, and hiding two thirds of it silently is not a layout choice.
+   has no scrollbar anyway. Clipping instead would silently drop the older weeks.
    `overflow-y: hidden` alongside is what stops the pair from computing to `auto` on both axes,
    which is the gotcha that drew a stray vertical scrollbar on a field with room to spare. */
 .heatmap-scroll {
@@ -1454,32 +1454,56 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   overflow-y: hidden;
   position: relative;
   overscroll-behavior-x: contain;
+  /* A cell brought into view by the keyboard stops clear of the pinned gutter, not under it. */
+  scroll-padding-left: calc(var(--heatmap-label) + var(--heatmap-label-gap));
   /* `!important` because a global `* { scrollbar-width: thin }` further down the sheet would
      otherwise win this declaration, and the bar is exactly what must not appear here. */
   scrollbar-width: none !important;
+  /* The container's bottom edge is flush with the grid's last row, so `overflow-y: hidden` would
+     cut off the bottom row's hover lift. `scale(1.18)` reaches 0.09 of a cell past its own box
+     and this is the room it paints into. The other three edges need none: the month axis pushes
+     the top row down, and the gutter and the scrolling track already leave space on the sides. */
   padding-bottom: 2px;
 }
 .heatmap-scroll::-webkit-scrollbar { display: none !important; }
-/* The month axis carries the gutter as padding rather than as a track, so both it and the grid
-   divide the same remaining width into the same number of columns. With a track, the axis would
-   have one extra gap and every label would sit a gap-width left of the column it names. */
-.heatmap-months {
-  display: grid;
-  /* The same tracks the grid below uses, so a label's column is the column it names. Sizing the
-     axis from its own content instead let each label drift right as earlier labels accumulated
-     width - every month pointed at a column it did not name, by more the further along it sat. */
-  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
-  gap: var(--heatmap-gap);
-  margin-bottom: 5px;
-  padding-left: calc(var(--heatmap-label) + var(--heatmap-label-gap));
-  height: 10px;
-  align-items: start;
+/* The axis and the body are the same two boxes - a pinned gutter, then the week tracks - so both
+   divide the same remaining width into the same columns. They are as wide as their content
+   rather than as the panel: a pinned box only travels inside its parent, and a parent the width
+   of the panel would release the gutter partway through the year. */
+.heatmap-months, .heatmap-body {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
 }
+.heatmap-months { margin-bottom: 6px; height: 10px; }
+/* The gutter carries the space beside it as its own padding, so a week scrolling past is covered
+   up to the first visible column instead of showing a sliver between the labels and the field. */
+.heatmap-corner, .heatmap-weekdays {
+  flex: 0 0 calc(var(--heatmap-label) + var(--heatmap-label-gap));
+  box-sizing: border-box;
+  padding-right: var(--heatmap-label-gap);
+  position: sticky;
+  left: 0;
+  /* Above the hovered cell's lifted mark. */
+  z-index: 2;
+  background: var(--surface);
+}
+.heatmap-month-track, .heatmap-grid {
+  display: grid;
+  /* One explicit track per week. Explicit rather than `auto-fit`: auto-fit makes as many tracks
+     as fit and leaves the rest of the cells in *implicit* tracks, which are sized to their
+     content - so the field was not the uniform grid the month axis assumed, and no axis could
+     line up with it. */
+  grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell, minmax(var(--heatmap-min-cell), 1fr)));
+  gap: var(--heatmap-gap);
+  flex: 1 0 auto;
+  min-width: 0;
+}
+.heatmap-month-track { align-items: start; }
 .heatmap-month { color: var(--muted); font-size: 10px; line-height: 1; white-space: nowrap; }
 /* The final column's label would run off the panel's edge, so it is anchored to its own
    column's right side - the same left-edge anchoring the others get, mirrored. */
 .heatmap-month.is-last { justify-self: end; }
-.heatmap-body { display: flex; gap: var(--heatmap-label-gap); align-items: stretch; }
 /* The gutter's rows mirror the grid's: it stretches to the grid's height and divides it into
    seven equal rows, so each label lines up with its weekday without either side knowing the
    cell size. */
@@ -1487,24 +1511,22 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   display: grid;
   grid-template-rows: repeat(7, minmax(0, 1fr));
   gap: var(--heatmap-gap);
-  flex: 0 0 var(--heatmap-label);
 }
 .heatmap-weekday { display: flex; align-items: center; color: var(--muted); font-size: 10px; line-height: 1; }
-.heatmap-grid {
-  display: grid;
-  /* One explicit track per week, each taking an equal share of what the gutter leaves. `flex-basis:
-     0` is what makes the grid take exactly that share; with `width: max-content` it claimed the
-     whole container and pushed the gutter into overflow.
-     Explicit rather than `auto-fit`: auto-fit makes as many tracks as fit at the cell floor and
-     leaves the rest of the cells in *implicit* tracks, which are sized to their content. On a phone
-     that gave 24 tracks at 9px and 29 at 10px - so the field was not the uniform grid the month axis
-     assumed, and no axis could line up with it. It also meant the declared track count was a
-     coincidence of the panel width rather than the number of weeks being drawn. */
-  flex: 1 1 0;
-  min-width: 0;
-  gap: var(--heatmap-gap);
-  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
+/* Older weeks behind the gutter are announced by a short fade over the first column in view;
+   with the scrollbar hidden nothing else says the field continues. */
+.heatmap-weekdays::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 14px;
+  background: linear-gradient(to right, var(--surface), transparent);
+  pointer-events: none;
+  opacity: 0;
 }
+.heatmap-scroll[data-has-older] .heatmap-weekdays::after { opacity: 1; }
 /* The ARIA rows exist for assistive technology only. `display: contents` keeps them out of the box
    tree, so each cell is still placed directly by its own `gridColumn`/`gridRow` and the layout is
    unchanged; the rows supply the ownership a `gridcell` requires without becoming layout boxes. */
@@ -1515,7 +1537,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   aspect-ratio: 1;
   width: 100%;
   border: 0;
-  border-radius: 2px;
+  border-radius: 3px;
   /* One step down from the panel it sits on, not a step up. The panel's own background is
      `--surface`, and in the dark theme the obvious choice for an empty cell (`--border-soft`)
      *is* `--surface`: every empty day would blend into the panel and the grid would read as a
@@ -1661,10 +1683,31 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
 .heatmap-tip-link-icon { font-size: 9px; }
+/* The key sits on the panel's bottom edge, so a panel stretched to its neighbour's height spends
+   the difference between the field and the key. */
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+}
+.heatmap-legend-scale { display: inline-flex; gap: 3px; }
+.heatmap-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--heatmap-quiet) var(--heatmap-quiet-share, 0%), var(--heatmap-busy));
+}
 /* Static skeleton, never a shimmer (design.md §7 rule 3). */
 .heatmap-skeleton {
   margin-top: 14px;
-  height: calc(var(--heatmap-skeleton-cell) * 7 + var(--heatmap-gap) * 6);
+  /* The measured field's own height: the month axis, then seven rows at the target size. */
+  height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
 }
@@ -1674,8 +1717,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .heatmap-progress { display: block; height: 2px; margin-top: 10px; background: var(--border-soft); overflow: hidden; }
 .heatmap-progress::after { content: ''; display: block; width: 30%; height: 100%; background: var(--accent); animation: heatmap-progress 1.2s linear infinite; }
 @keyframes heatmap-progress { from { transform: translateX(-100%); } to { transform: translateX(433%); } }
-/* A phone keeps the cell floor and lets the field clip rather than scroll. The tap target grows
-   **vertically only**: growing it horizontally is what the obvious implementation does and it is
+/* On a phone the tap target grows **vertically only**: growing it horizontally is what the obvious implementation does and it is
    wrong, because the pitch between cells is only cell+gap, so any real horizontal expansion lets
    the next day's target cover this day's own square - a tap in the middle of a day opens its
    neighbour. Vertical expansion is capped to the gap for the same reason, which leaves the
@@ -3643,7 +3685,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .app-header .demo-chip { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dashboard-grid { gap: 12px; margin-bottom: 16px; }
   .dashboard-tile .ant-card-body { padding: 12px; }
-  .dashboard-lower { gap: 12px; }
   .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
   .logs-toolbar { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }

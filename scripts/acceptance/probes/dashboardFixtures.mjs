@@ -4,10 +4,24 @@
  * They live together because a scenario's route table names them by value.
  */
 
+/**
+ * The UTC day every fixture day is built from, frozen at module load.
+ *
+ * Freezing it is what keeps the day grid one grid. `heatmapGridDays()` is a function rather than a
+ * value so a check can recompute the span it expects, and reading the clock per call instead
+ * shifted the whole window by a day whenever the process crossed UTC midnight between loading this
+ * module and running that check - a comparison that has nothing to do with time failed, once, on a
+ * run that straddled midnight.
+ */
+const HEATMAP_DAY_MS = (() => {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return today.getTime();
+})();
+
 /** UTC days match the console default, independent of the probe host timezone. */
 function heatmapDayEntry(dayOffset, tokens, requests, failures) {
-  const start = new Date();
-  start.setUTCHours(0, 0, 0, 0);
+  const start = new Date(HEATMAP_DAY_MS);
   start.setUTCDate(start.getUTCDate() + dayOffset);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + 1));
   const month = `${start.getUTCMonth() + 1}`.padStart(2, '0');
@@ -31,16 +45,14 @@ export const HEATMAP_WEEKS = 53;
 export const HEATMAP_TOTAL_DAYS = HEATMAP_WEEKS * 7;
 /** Days from this week's Monday to today inclusive. */
 const HEATMAP_WEEKDAY_OFFSET = (() => {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
   // JavaScript's getUTCDay() is Sunday-first; this numbers the week from Monday.
-  return (today.getUTCDay() + 6) % 7;
+  return (new Date(HEATMAP_DAY_MS).getUTCDay() + 6) % 7;
 })();
 /** The offset of the grid's first day: 52 whole weeks plus the days elapsed this week. */
 const HEATMAP_FIRST_OFFSET = -((HEATMAP_WEEKS - 1) * 7 + HEATMAP_WEEKDAY_OFFSET);
 /** The last day the window can carry data for: the days after it are clamped to the read instant. */
 export const HEATMAP_TODAY = (() => {
-  const today = new Date();
+  const today = new Date(HEATMAP_DAY_MS);
   return `${today.getUTCFullYear()}-${`${today.getUTCMonth() + 1}`.padStart(2, '0')}-${`${today.getUTCDate()}`.padStart(2, '0')}`;
 })();
 

@@ -14,6 +14,7 @@ import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   buildHeatmapGrid,
   createHeatmapCellClassifier,
+  fitHeatmapCell,
   heatmapColumnCount,
   heatmapDrillDown,
   heatmapFocusDay,
@@ -31,9 +32,9 @@ const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
 /**
  * The weekday labels, Monday first, matching the grid's rows.
  *
- * GitHub omits alternating labels to save width. They are all printed here because the
- * gutter is 28px and a full week of labels is what makes the rows readable without
- * counting them - which is the whole reason the grid has rows.
+ * GitHub omits alternating labels to save width. They are all printed here because a full
+ * week of labels is what makes the rows readable without counting them - which is the whole
+ * reason the grid has rows.
  */
 const WEEKDAY_KEYS = [
   'dash.heatmap.dow.mon',
@@ -54,6 +55,9 @@ const WEEKDAY_KEYS = [
  * browser opened the field a year in the past while Chromium opened it on today.
  */
 const HEATMAP_SCROLL_END = 1_000_000;
+
+/** Quiet-stop weights of the legend's swatches, from an empty day to the window's busiest. */
+const HEATMAP_LEGEND_SHARES = ['100%', '75%', '50%', '25%', '0%'];
 
 /**
  * The panel's own refresh cadence.
@@ -241,7 +245,8 @@ export const TOKEN_HEATMAP_QUERY_KEY = 'dashboard-token-heatmap';
  * single-row strip cannot show - and the shape and the span are one decision, since at seven rows
  * a quarter's worth of days would be thirteen columns rather than a field.
  *
- * **The year is drawn in full.** Days after today are simply days nothing is stored for: they are
+ * **The year is drawn in full, and the newest weeks are what is in view.** A panel narrower than
+ * a year of comfortable cells shows the weeks that fit and scrolls to the rest. Days after today are simply days nothing is stored for: they are
  * not queried, so they render as `unrecorded` alongside every other day with no record. The panel
  * does not distinguish a day that has not happened from one whose records were pruned, because a
  * reader comparing days can only act on one thing - whether there is data for it.
@@ -343,13 +348,12 @@ export const TokenHeatmap: React.FC = () => {
   }, [focusDay]);
 
   /**
-   * Keeps today in view when the field is swipeable.
+   * Sizes the cells to the panel and keeps today in view.
    *
-   * Only a panel too narrow for the cell floor scrolls at all; a fitted field clamps to zero.
-   * The DOM order stays oldest-to-newest - it is what the arrow keys,
-   * the month axis and a screen reader describe - so the newest column is scrolled to instead.
+   * The DOM order stays oldest-to-newest - it is what the arrow keys, the month axis and a screen
+   * reader describe - so the newest column is scrolled to instead.
    *
-   * The field stays pinned to that edge until the reader swipes away from it: a phone rotated
+   * The field stays pinned to that edge until the reader scrolls away from it: a phone rotated
    * after load, or a panel that only gets its final width a frame later, would otherwise leave
    * the newest weeks off screen again. Once the reader has chosen an older week, neither a
    * resize nor a background re-read moves the field.
@@ -358,19 +362,49 @@ export const TokenHeatmap: React.FC = () => {
     if (cells.length === 0) return;
     const container = scrollRef.current;
     if (!container) return;
-    const followNewest = () => {
-      // Layout is clean inside a ResizeObserver callback, so this is a clamp, not a forced reflow.
-      container.scrollLeft = HEATMAP_SCROLL_END;
+    let fittedWidth = -1;
+    // How far the field scrolls, known from the fit itself. Reading the container's extent for it
+    // would force layout from inside a scroll handler on every frame of a swipe.
+    let newestOffset = 0;
+    const fitCells = (width: number) => {
+      // Custom properties resolve without layout, and the observer delivers after it anyway.
+      const tokens = getComputedStyle(container);
+      const readToken = (name: string) => Number.parseFloat(tokens.getPropertyValue(name)) || 0;
+      const gutter = readToken('--heatmap-label') + readToken('--heatmap-label-gap');
+      const gap = readToken('--heatmap-gap');
+      const cell = fitHeatmapCell(width - gutter, columns, readToken('--heatmap-cell-target'), gap);
+      if (cell === null) {
+        container.style.removeProperty('--heatmap-cell');
+        newestOffset = 0;
+      } else {
+        container.style.setProperty('--heatmap-cell', `${cell}px`);
+        newestOffset = gutter + columns * cell + (columns - 1) * gap - width;
+      }
+      return cell !== null;
+    };
+    const markOlderWeeks = (hasOlderWeeks: boolean) => {
+      container.toggleAttribute('data-has-older', hasOlderWeeks);
     };
     const recordReaderPosition = () => {
-      isPinnedToNewest.current = container.scrollLeft >= container.scrollWidth - container.clientWidth - 1;
+      const offset = container.scrollLeft;
+      // Browsers round a scroll offset to a whole pixel, hence the tolerance.
+      isPinnedToNewest.current = offset >= newestOffset - 2;
+      markOlderWeeks(offset > 1);
     };
-    // ResizeObserver delivers after layout. An extent read in the mount effect instead
-    // forces the entire dashboard's pending layout into the navigation commit.
+    // ResizeObserver delivers after layout and before paint, so the first painted frame already
+    // has its cell size. An extent read in the mount effect instead forces the entire dashboard's
+    // pending layout into the navigation commit.
     const observer = new ResizeObserver((observations) => {
+      const width = observations.reduce((widest, entry) => Math.max(widest, entry.contentRect.width), 0);
+      if (width <= 0) return;
+      // The cell size changes the container's height, which re-enters this callback; only a new
+      // width is a new fit.
+      const isScrollable = width === fittedWidth ? container.hasAttribute('data-scrollable') : fitCells(width);
+      fittedWidth = width;
+      container.toggleAttribute('data-scrollable', isScrollable);
       if (!isPinnedToNewest.current) return;
-      if (!observations.some((entry) => entry.contentRect.width > 0)) return;
-      followNewest();
+      container.scrollLeft = HEATMAP_SCROLL_END;
+      markOlderWeeks(isScrollable);
     });
     observer.observe(container);
     container.addEventListener('scroll', recordReaderPosition, { passive: true });
@@ -378,7 +412,7 @@ export const TokenHeatmap: React.FC = () => {
       observer.disconnect();
       container.removeEventListener('scroll', recordReaderPosition);
     };
-  }, [cells.length]);
+  }, [cells.length, columns]);
 
   /**
    * Focusing a cell also claims the tab stop.
@@ -524,7 +558,7 @@ export const TokenHeatmap: React.FC = () => {
   // instead of leaving a skeleton up forever.
   if (isError && !data) {
     return (
-      <Card className="dashboard-tile is-wide heatmap-panel" styles={{ body: { padding: 20 } }}>
+      <Card className="dashboard-tile heatmap-panel" styles={{ body: { padding: 20 } }}>
         <div className="tile-label">{t('dash.heatmap.title')}</div>
         <LoadFailure
           className="heatmap-alert"
@@ -574,18 +608,21 @@ export const TokenHeatmap: React.FC = () => {
             ref={scrollRef}
             style={{ '--heatmap-columns': columns } as React.CSSProperties}
           >
-            {/* The month axis is a grid of its own, with the weekday gutter as padding, so a
-                label sits under the column it names. */}
+            {/* The month axis mirrors the body below - a pinned corner, then the same tracks - so a
+                label sits over the column it names at any scroll offset. */}
             <div className="heatmap-months" aria-hidden="true">
-              {monthLabels.map((entry) => (
-                <span
-                  key={entry.column}
-                  className={`heatmap-month${entry.column === columns - 1 ? ' is-last' : ''}`}
-                  style={{ gridColumn: entry.column + 1 }}
-                >
-                  {entry.label}
-                </span>
-              ))}
+              <span className="heatmap-corner" />
+              <div className="heatmap-month-track">
+                {monthLabels.map((entry) => (
+                  <span
+                    key={entry.column}
+                    className={`heatmap-month${entry.column === columns - 1 ? ' is-last' : ''}`}
+                    style={{ gridColumn: entry.column + 1 }}
+                  >
+                    {entry.label}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <div className="heatmap-body">
@@ -621,10 +658,22 @@ export const TokenHeatmap: React.FC = () => {
             </div>
           </div>
 
-          {/* No legend. A key exists to explain what a stepped scale's bands mean, and a continuous
-              ramp has none: the shade is relative to the window, so a swatch ladder would describe
-              the field's own range rather than any fixed quantity. The numbers are in each cell's
-              tooltip and accessible name, which is where a reader who wants them goes. */}
+          {/* The key names only the ramp's direction. The shade is relative to the window's own
+              busiest day, so the swatches carry no quantities; those are in each cell's tooltip
+              and accessible name. */}
+          <div className="heatmap-legend" aria-hidden="true">
+            <span>{t('dash.heatmap.legend_less')}</span>
+            <span className="heatmap-legend-scale">
+              {HEATMAP_LEGEND_SHARES.map((share) => (
+                <i
+                  key={share}
+                  className="heatmap-legend-swatch"
+                  style={{ '--heatmap-quiet-share': share } as React.CSSProperties}
+                />
+              ))}
+            </span>
+            <span>{t('dash.heatmap.legend_more')}</span>
+          </div>
           {isFetching && !isError && <span className="heatmap-progress" aria-hidden="true" />}
         </>
       )}

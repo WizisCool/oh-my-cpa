@@ -114,7 +114,7 @@ test('Agent readiness requires its welcome identity and content, not sidebar chr
 });
 
 
-test('dashboard readiness waits for both activity and health sources', () => {
+test('dashboard readiness waits for both activity and credential quota sources', () => {
   const dashboard = DEMO_ROUTES.find(route => route.path === '/dashboard');
   assert.deepEqual(dashboard.reads, [
     '/management/dashboard',
@@ -122,6 +122,8 @@ test('dashboard readiness waits for both activity and health sources', () => {
     '/management/dashboard/token-heatmap',
     '/management/overview',
     '/management/dashboard/providers',
+    '/management/auth-files',
+    '/management/quota',
   ]);
   assert.equal(dashboard.content, '.dashboard-activity-row .heatmap-grid');
 });

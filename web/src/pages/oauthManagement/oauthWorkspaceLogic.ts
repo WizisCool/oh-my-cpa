@@ -567,16 +567,4 @@ export function legacyOAuthManagementRedirect(
   return `/oauth-management${suffix ? `?${suffix}` : ''}`;
 }
 
-/**
- * What kind of toast a quota-refresh outcome is.
- *
- * A run whose targets all answered - including one that skipped credentials which were never
- * eligible, since that is decided before the run rather than by it - is an acknowledgement that
- * leaves on its own. A failed or unknown target is a result to inspect: the toast becomes a report
- * that lists each target's reason and stays until it is closed.
- */
-export function quotaRefreshOutcomeKind(
-  report: { failed: number; unknown: number },
-): 'acknowledgement' | 'report' {
-  return report.failed > 0 || report.unknown > 0 ? 'report' : 'acknowledgement';
-}
+export { quotaRefreshOutcomeKind } from '../../utils/quotaRefreshOutcome';
