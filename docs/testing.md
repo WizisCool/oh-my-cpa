@@ -872,7 +872,8 @@ independent credential exclusions, unaffected static catalogs and API-key routes
 restoration after clearing rules.
 The `oauth-model-rules` probe owns provider tab names/artwork in the picker,
 independent section drafts, section-only saves, trailing-edge close placement, native Back guards and 1440/375/320px
-Drawer geometry. Built auth-file acceptance owns both sections' verified
+Drawer geometry. It also owns the alias table's row removal control: in view without sideways
+scrolling at desktop width, and pinned in view on a phone while the fields scroll. Built auth-file acceptance owns both sections' verified
 save/close/reopen/clear paths against fake CPA. The generated Worker dataset includes
 provider-wide exclusions and static catalogs separately from credential fields.
 Demo coverage requires both maps and each exported catalog; Worker tests pin
