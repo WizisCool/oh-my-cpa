@@ -419,13 +419,8 @@
   overflow: hidden;
   position: relative;
 }
-.request-list-host > .ant-empty {
+.request-list-host > .empty-state {
   margin: 64px 16px;
-}
-.request-list-host .ant-empty-description p {
-  max-width: 50ch;
-  margin: 10px auto;
-  color: var(--muted);
 }
 .request-loading,
 .request-empty-error {

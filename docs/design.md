@@ -1180,6 +1180,37 @@ hover alone is not a substitute for that alternative. Important per-target repor
 pending work closes only when it settles, and callers can explicitly select persistence or override
 the default duration. Lifetime changes do not change the entry/exit motion budget.
 
+### Shared primitives
+
+Four patterns every page needs are one component each, in `web/src/components/common/`. A page
+supplies content and layout width; what is inside the frame is not restyled per page.
+
+- **`AppDrawer` - a side panel.** It opens from the trailing edge at one of three widths, each
+  capped at the viewport so a phone gets a full-width sheet: `narrow` 420px (a filter form, a short
+  list), `medium` 600px (an editor, one record), `wide` 760px (a record with tabs, a table or a
+  document). The close control sits at the trailing end of the head and is always named. The footer
+  is two slots - `footerStart` for a state note or a reset, `footer` for the actions that finish the
+  work, at the trailing edge - and wraps instead of squeezing. The phone navigation sheet and the
+  time-range sheet are not side panels and keep antd's `Drawer`.
+- **`SearchInput` - a filter-as-you-type field.** The search glyph in `--muted`, the text, and a
+  clear control. `label` is its accessible name and its placeholder unless a longer placeholder is
+  given; `onChange` receives the text. Width is the caller's.
+- **`EmptyState` - a region that holds nothing.** A centred column: a mark, the state in one line,
+  optionally one further line and one action. The mark is three shortening 2px rules in `--border` -
+  the rows that are not there - and replaces Ant Design's illustrated tray, since the console has no
+  illustration language (§1). `block` (40px vertical padding, with the mark) stands in for a list or
+  a page section; `compact` (20px, no mark) sits inside a panel, a picker or a drawer section.
+  Loading is `PageLoading` and failure is `LoadFailure`; neither is an empty state.
+- **`SectionHeading` - the head of a section**, at three weights: `section` (`--text-lg` / 600) opens
+  a part of a page, `group` (`--text-base` / 600) a panel, a settings group or a drawer section, and
+  `label` (`--text-xs` / 600, uppercase, 0.04em, `--muted`) a short run of fields or facts. It takes
+  an optional count in tabular numerals after the title, one description line (not on a `label`) and
+  an `extra` control at the trailing edge. The element (`h2`-`h4`, `div`) follows the document
+  outline, independent of the weight. The frame around a head stays with its caller.
+
+`pnpm check:feedback` refuses antd's `Empty` everywhere and antd's `Drawer` outside `AppDrawer` and
+the two sheets above.
+
 ### Switch
 
 Every on/off control is `web/src/components/common/Switch.tsx`; antd's `Switch` is not used, and

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Empty, Tag } from 'antd';
+import { Tag } from 'antd';
 import { DownOutlined, RightOutlined, UpOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -16,6 +16,8 @@ import {
   type AggregatedProvider,
 } from './dashboardProvidersLogic';
 import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics';
+import { EmptyState } from '../common/EmptyState';
+import { SectionHeading } from '../common/SectionHeading';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -154,14 +156,12 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 
   return (
     <section className="dashboard-section dashboard-providers-section">
-      <div className="section-heading">
-        <h2>{t('dash.providers')}</h2>
-      </div>
+      <SectionHeading level="section" as="h2" className="section-heading" title={t('dash.providers')} />
 
       {/* Full-width Aggregated Provider List Panel */}
       <div className="terminal-panel provider-list-panel">
         {aggregated.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('dash.empty_providers')} />
+          <EmptyState size="compact" title={t('dash.empty_providers')} />
         ) : (
           <div className="provider-list-items">
             {visibleProviders.map((provider) => {

@@ -1,10 +1,10 @@
 import React from 'react';
-import { Checkbox, Input, Modal } from 'antd';
-import { SearchOutlined } from '../icons';
+import { Checkbox, Modal } from 'antd';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { filterModelOptions } from '../../utils/modelOptions';
 import styles from './ModelPickerModal.module.css';
+import { SearchInput } from '../common/SearchInput';
 
 interface ModelPickerModalProps {
   isOpen: boolean;
@@ -78,14 +78,11 @@ export function ModelPickerModal({ isOpen, models, configured, onApply, onClose 
       cancelText={t('common.cancel')}
       destroyOnHidden
     >
-      <Input
+      <SearchInput
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder={t('pro.search_models')}
-        prefix={<SearchOutlined />}
-        allowClear
+        onChange={setQuery}
+        label={t('pro.search_models')}
         autoFocus
-        aria-label={t('pro.search_models')}
       />
       <div className={styles['toolbar']}>
         <Checkbox

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Empty, Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -12,6 +12,7 @@ import { LoadFailure } from '../components/feedback';
 import { PluginLogo } from '../components/plugins/PluginParts';
 import { collectPluginPages, findPluginPage, pluginFrameShell, pluginPageFrameURL } from '../components/plugins/pluginPages';
 import styles from '../components/plugins/PluginPageHost.module.css';
+import { EmptyState } from '../components/common/EmptyState';
 
 /**
  * One page a plugin registered, shown inside the console.
@@ -79,9 +80,9 @@ export const PluginPageHost: React.FC = () => {
   if (!entry) {
     return (
       <div className={styles.unavailable} data-plugin-page-unavailable>
-        <Empty description={t('plugin.page_unavailable')}>
+        <EmptyState title={t('plugin.page_unavailable')}>
           <Button type="primary" onClick={() => navigate('/plugins')}>{t('plugin.page_open_management')}</Button>
-        </Empty>
+        </EmptyState>
       </div>
     );
   }

@@ -99,7 +99,7 @@ export async function filterPanelSection(context) {
     EVENT_SEARCH_DEBOUNCE_MS,
     { detail: () => `url=${filterSuffix()}` },
   );
-  const drawerFooterText = await page.locator('.req-filter-drawer-footer').innerText().catch(() => '<no footer>');
+  const drawerFooterText = await page.locator('.req-filter-drawer .app-drawer-footer').innerText().catch(() => '<no footer>');
   check(
     'the drawer exposes reset, cancel and apply',
     /重置筛选|Reset/.test(drawerFooterText) && /取\s*消|Cancel/.test(drawerFooterText) && /应用筛选|Apply/.test(drawerFooterText),

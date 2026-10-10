@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Drawer, Dropdown } from 'antd';
+import { Button, Dropdown } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -55,6 +55,7 @@ import { AGENT_AUI_CONFIG } from './tools/registry';
 import { RunRejectedError, useAgentRun } from './useAgentRun';
 import styles from './AgentPage.module.css';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { AppDrawer } from '../../components/common/AppDrawer';
 
 /**
  * Starting questions, not templates.
@@ -690,12 +691,11 @@ export function AgentPage() {
             )}
             {isHero && !(openOperation && isQuestion) && examples}
           </main>
-          <Drawer
+          <AppDrawer
             title={t(DRAWER_TITLES[shownViewRef.current])}
-            placement="right"
             open={!!drawerView}
             onClose={closeDrawer}
-            size={shownViewRef.current === 'connect' ? 'min(560px, 92vw)' : 'min(440px, 92vw)'}
+            width={shownViewRef.current === 'connect' ? 'medium' : 'narrow'}
             className={workspace['drawer']}
             data-testid="agent-drawer"
           >
@@ -703,7 +703,7 @@ export function AgentPage() {
               <CapabilityDirectory capabilities={capabilities.data ?? []} isPending={capabilities.isPending} isError={capabilities.isError} onRetry={() => void capabilities.refetch()} />
             )}
             {shownViewRef.current === 'connect' && <ExternalAgentGuide isDemo={isDemo} />}
-          </Drawer>
+          </AppDrawer>
         </div>
       </AgentViewContext.Provider>
     </AssistantRuntimeProvider>

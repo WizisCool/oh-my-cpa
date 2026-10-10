@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Drawer, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
 import type {
   UsageCostFilter,
   UsageFacetValue,
@@ -29,6 +29,7 @@ import {
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
+import { AppDrawer } from '../common/AppDrawer';
 import './RequestFilterDrawer.css';
 
 /**
@@ -408,19 +409,15 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   };
 
   return (
-    <Drawer
+    <AppDrawer
       className="req-filter-drawer"
       title={t('events.advanced_filters')}
       open={open}
       onClose={onClose}
-      // A fixed width beats antd's responsive preset here: the panel is a form
-      // with a fixed label column, and the two-step resize it would otherwise do
-      // mid-transition is visible as a jitter.
-      size={420}
+      width="narrow"
+      footerStart={<Button onClick={() => setDraft(EMPTY_FILTER_DRAFT)}>{t('events.reset')}</Button>}
       footer={
-        <div className="req-filter-drawer-footer">
-          <Button onClick={() => setDraft(EMPTY_FILTER_DRAFT)}>{t('events.reset')}</Button>
-          <div className="req-filter-drawer-footer-actions">
+          <>
             <Button data-testid="req-filter-cancel" onClick={onClose}>
               {t('common.cancel')}
             </Button>
@@ -432,8 +429,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             >
               {t('events.apply_filters')}
             </Button>
-          </div>
-        </div>
+          </>
       }
     >
       {facetsFailed && (
@@ -573,6 +569,6 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           {rangeRow('cost', 'events.col_cost', t('events.unit_usd'))}
         </>
       )}
-    </Drawer>
+    </AppDrawer>
   );
 };

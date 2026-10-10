@@ -1,12 +1,12 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Drawer, Empty, Input, Pagination } from 'antd';
+import { Button, Pagination } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
-import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, SearchOutlined, UpOutlined } from '../components/icons';
+import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, UpOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { PageLoading } from '../components/common/PageLoading';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -37,6 +37,10 @@ import {
   type ModelSquareProvider,
 } from '../types/modelSquare';
 import styles from './ModelSquarePage.module.css';
+import { SearchInput } from '../components/common/SearchInput';
+import { EmptyState } from '../components/common/EmptyState';
+import { SectionHeading } from '../components/common/SectionHeading';
+import { AppDrawer } from '../components/common/AppDrawer';
 
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
@@ -206,7 +210,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
         <div><dt>{t('models.output_limit')}</dt><dd>{limit(metadata.limit.output)}</dd></div>
         <div><dt>{t('models.input_limit')}</dt><dd>{limit(metadata.limit.input)}</dd></div>
       </dl>
-      <h3 className={styles['fact-heading']}>{t('models.section_capabilities')}</h3>
+      <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_capabilities')} />
       <dl className={styles['model-facts']}>
         <div><dt>{t('models.input_modalities')}</dt><dd>{modalities(metadata.modalities.input)}</dd></div>
         <div><dt>{t('models.output_modalities')}</dt><dd>{modalities(metadata.modalities.output)}</dd></div>
@@ -215,7 +219,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
         <div><dt>{t('models.structured_output')}</dt><dd>{flag(metadata.structured_output)}</dd></div>
         <div><dt>{t('models.attachment')}</dt><dd>{flag(metadata.attachment)}</dd></div>
       </dl>
-      <h3 className={styles['fact-heading']}>{t('models.section_release')}</h3>
+      <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_release')} />
       <dl className={styles['model-facts']}>
         <div><dt>{t('models.openness')}</dt><dd>{openness ? t(`models.openness.${openness}`) : unknown}</dd></div>
         <div><dt>{t('models.license')}</dt><dd>{text(metadata.license)}</dd></div>
@@ -352,7 +356,7 @@ export const ModelSquarePage: React.FC = () => {
     {needsKey && <Link to="/api-keys">{t('models.manage_keys')}</Link>}
     {directory.isPending ? <PageLoading variant="block" /> : directory.data && <>
       <div className={styles['toolbar']}>
-        <Input className={styles['search']} allowClear prefix={<SearchOutlined />} aria-label={t('models.search')} placeholder={t('models.search')} value={search} onChange={event => setParam('q', event.target.value)} />
+        <SearchInput className={styles['search']} label={t('models.search')} value={search} onChange={(text) => setParam('q', text)} />
         <span className={styles['result-count']} role="status">
           {isFiltered ? t('models.showing', { shown: entries.length, total: allEntries.length }) : ''}
         </span>
@@ -368,9 +372,9 @@ export const ModelSquarePage: React.FC = () => {
         </button>)}
       </div>
       {directory.data.partial.length > 0 && <Notice tone="warning" title={t('models.provenance_partial')} />}
-      {entries.length === 0 ? <Empty className={styles['empty']} description={t(directory.data.models.length ? 'models.no_results' : 'models.empty')}>
+      {entries.length === 0 ? <EmptyState className={styles['empty']} title={t(directory.data.models.length ? 'models.no_results' : 'models.empty')}>
         {directory.data.models.length ? <Button onClick={clearFilters}>{t('models.clear_filters')}</Button> : <Link to="/ai-providers">{t('models.manage_connections')}</Link>}
-      </Empty> : <ul className={styles['group-list']}>
+      </EmptyState> : <ul className={styles['group-list']}>
         {groups.map(group => <li className={styles['model-group']} key={group.manufacturer.id} data-model-group={group.manufacturer.id}>
           <div className={styles['group-heading']}>
             <div className={styles['group-title']}>
@@ -386,19 +390,18 @@ export const ModelSquarePage: React.FC = () => {
       </ul>}
       {entries.length > PAGE_SIZE && <Pagination className={styles['pagination']} current={currentPage} pageSize={PAGE_SIZE} total={entries.length} showSizeChanger={false} onChange={setPage} />}
     </>}
-    <Drawer
+    <AppDrawer
       title={selected?.identity ?? ''}
       extra={selected && <CopyButton text={selected.identity} label={t('models.copy_model')} />}
       open={selected !== undefined}
       onClose={closeDetails}
-      size="min(560px, 100vw)"
       className={styles['details-drawer']}
       destroyOnHidden
-      footer={selected && selectedIndex >= 0 && entries.length > 1 && <div className={styles['details-footer']}>
+      footerStart={selected && selectedIndex >= 0 && entries.length > 1 && <>
         <Button icon={<UpOutlined />} disabled={selectedIndex === 0} onClick={() => stepSelection(-1)}>{t('models.previous')}</Button>
         <Button icon={<DownOutlined />} disabled={selectedIndex === entries.length - 1} onClick={() => stepSelection(1)}>{t('models.next')}</Button>
-        <span>{selectedIndex + 1} / {entries.length}</span>
-      </div>}
+      </>}
+      footer={selected && selectedIndex >= 0 && entries.length > 1 && <span className={styles['details-position']}>{selectedIndex + 1} / {entries.length}</span>}
     >
       {selected && <div ref={detailsRef}>
         <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={openPriceEditor} />
@@ -423,6 +426,6 @@ export const ModelSquarePage: React.FC = () => {
           {directory.data?.metadata_updated_at && <> {t('models.snapshot_date', { date: directory.data.metadata_updated_at })}</>}
         </p>
       </div>}
-    </Drawer>
+    </AppDrawer>
   </div>;
 };

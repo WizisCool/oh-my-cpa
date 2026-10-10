@@ -28,11 +28,11 @@ import {
   ExclamationCircleOutlined,
   PictureOutlined,
   PlusOutlined,
-  SearchOutlined,
   UploadOutlined,
 } from './icons';
 import { LoadFailure, Notice, useToast } from './feedback';
 import styles from './CustomIconLibrary.module.css';
+import { SearchInput } from './common/SearchInput';
 
 interface Props {
   currentIcon?: string;
@@ -525,14 +525,11 @@ export const CustomIconLibrary: React.FC<Props> = ({
           {t('icons.add')}
         </Button>
       </header>
-      <Input
+      <SearchInput
         className={styles['search']}
-        prefix={<SearchOutlined />}
-        aria-label={t('icons.search')}
-        placeholder={t('icons.search')}
+        label={t('icons.search')}
         value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        allowClear
+        onChange={setSearch}
       />
       {isDemo && <Notice tone="info" title={t('icons.demo')} />}
       {icons.isError ? (

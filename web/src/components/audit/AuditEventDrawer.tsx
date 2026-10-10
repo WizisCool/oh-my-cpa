@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Drawer } from 'antd';
+import { Button } from 'antd';
 import dayjs from '../../utils/time';
 import { DownOutlined, FilterOutlined, UpOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -17,6 +17,8 @@ import { StatusLabel } from '../common/StatusLabel';
 import { CopyButton } from '../common/CopyButton';
 import { auditActionLabel, auditResultLabel } from './auditText';
 import styles from './Audit.module.css';
+import { SectionHeading } from '../common/SectionHeading';
+import { AppDrawer } from '../common/AppDrawer';
 
 export interface AuditEventDrawerProps {
   /** The entry on display; undefined closes the drawer. */
@@ -121,14 +123,12 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
   );
 
   return (
-    <Drawer
+    <AppDrawer
       title={title}
-      size={560}
       open={isOpen}
       onClose={onClose}
-      closable={{ 'aria-label': t('common.close') }}
-      footer={event && (targetId || requestId) ? (
-        <div className={styles['drawer-footer']}>
+      footerStart={event && (targetId || requestId) ? (
+        <>
           {targetId && (
             <Button icon={<FilterOutlined />} onClick={() => onSearch(targetId)}>
               {t('audit.only_target')}
@@ -139,7 +139,7 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
               {t('audit.only_request')}
             </Button>
           )}
-        </div>
+        </>
       ) : undefined}
     >
       {event && (
@@ -152,12 +152,12 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
           </section>
           {details.length > 0 && (
             <section className={styles['drawer-section']} aria-label={t('audit.field_details')}>
-              <h3 className={styles['drawer-section-title']}>{t('audit.field_details')}</h3>
+              <SectionHeading level="label" className={styles['drawer-section-title']} title={t('audit.field_details')} />
               <FactList facts={details} emphasis="quiet" />
             </section>
           )}
         </div>
       )}
-    </Drawer>
+    </AppDrawer>
   );
 };

@@ -3,7 +3,6 @@ import {
   Button,
   Checkbox,
   Col,
-  Drawer,
   Form,
   Input,
   InputNumber,
@@ -33,6 +32,7 @@ import { modelOptionsProblem } from './modelOptions';
 import { ModelPickerModal } from './ModelPickerModal';
 import { SecretInput } from '../common/SecretInput';
 import styles from './ProviderEditorDrawer.module.css';
+import { AppDrawer } from '../common/AppDrawer';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -237,21 +237,15 @@ export function ProviderEditorDrawer({
 
   return (
 
-      <Drawer
-        title={
-          <div>
-            <div className={styles['drawer-title']}>
-              {editingProvider
-                ? `${t('common.edit')} · ${familyDisplayNames[formFamily] || formFamily}`
-                : `${t('pro.add_provider')} · ${familyDisplayNames[formFamily] || formFamily}`}
-            </div>
-          </div>
-        }
+      <AppDrawer
+        title={editingProvider
+          ? `${t('common.edit')} · ${familyDisplayNames[formFamily] || formFamily}`
+          : `${t('pro.add_provider')} · ${familyDisplayNames[formFamily] || formFamily}`}
         open={providerDrawerOpen}
         onClose={handleCloseProviderDrawer}
-        size="large"
+        width="wide"
         footer={
-          <div className={styles['drawer-footer']}>
+          <>
             <Button onClick={handleCloseProviderDrawer}>
               {t('common.cancel')}
             </Button>
@@ -264,7 +258,7 @@ export function ProviderEditorDrawer({
             >
               {t('common.save')}
             </Button>
-          </div>
+          </>
         }
       >
         <Form layout="vertical">
@@ -936,6 +930,6 @@ export function ProviderEditorDrawer({
           onApply={handleAddPickedModels}
           onClose={() => setIsModelPickerOpen(false)}
         />
-      </Drawer>
+      </AppDrawer>
   );
 }

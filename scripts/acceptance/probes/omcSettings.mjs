@@ -172,8 +172,8 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   check(
     'the settings page carries no static subtitle',
     (await page.locator('.omc-settings-page .terminal-subtitle').count()) === 0
-      && (await page.locator('.omc-settings-page .settings-group-desc').count()) === 0,
-    `subtitle=${await page.locator('.omc-settings-page .terminal-subtitle').count()} groupDesc=${await page.locator('.omc-settings-page .settings-group-desc').count()}`,
+      && (await page.locator('.omc-settings-page .section-head-description').count()) === 0,
+    `subtitle=${await page.locator('.omc-settings-page .terminal-subtitle').count()} groupDesc=${await page.locator('.omc-settings-page .section-head-description').count()}`,
   );
 
   // Every console setting this page owns, once. A duplicated row would be two controls for one

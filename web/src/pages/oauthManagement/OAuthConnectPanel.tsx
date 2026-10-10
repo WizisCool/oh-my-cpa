@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
-  Drawer,
   Input,
   Select,
   Space,
@@ -27,6 +26,7 @@ import type { OAuthProviderChoice } from '../oauthProviderLogic';
 import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
 import { useToast } from '../../components/feedback';
+import { AppDrawer } from '../../components/common/AppDrawer';
 
 interface OAuthConnectPanelProps {
   open: boolean;
@@ -83,9 +83,9 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   }));
 
   return (
-    <Drawer
+    <AppDrawer
       title={t('omc.connect_account')}
-      size="large"
+      width="wide"
       open={open}
       onClose={onClose}
       className={styles['connect-drawer']}
@@ -390,6 +390,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
           </>
         )}
       </div>
-    </Drawer>
+    </AppDrawer>
   );
 };

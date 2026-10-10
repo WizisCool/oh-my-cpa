@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Descriptions, Drawer, Empty, Modal, Tabs, Tooltip } from 'antd';
+import { Button, Descriptions, Modal, Tabs, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
@@ -39,6 +39,8 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { CostBreakdownView } from '../pricing/CostBreakdownView';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
+import { EmptyState } from '../common/EmptyState';
+import { AppDrawer } from '../common/AppDrawer';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -226,13 +228,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const streamPercent = latency > 0 && streamTime > 0 ? Math.min(100 - ttftPercent, Math.max(2, (streamTime / latency) * 100)) : 0;
 
   return (
-    <Drawer
+    <AppDrawer
       title={drawerTitle}
-      size={720}
+      width="wide"
       open={eventId != null}
       onClose={onClose}
       className="request-detail"
-      closable={{ 'aria-label': t('common.close') }}
     >
       {result.isLoading ? (
         <ParagraphPlaceholder rows={12} />
@@ -630,10 +631,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                               </article>
                             ))
                           : !isRelatedErrorsPartial && (
-                              <Empty
-                                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={t('events.no_correlated_errors')}
-                              />
+                              <EmptyState size="compact" title={t('events.no_correlated_errors')} />
                             )}
                       </>,
                     )}
@@ -684,6 +682,6 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
         <Notice tone="warning" description={t('events.download_log_desc')} />
         <p className="request-detail-id">Request ID: {event?.request_id}</p>
       </Modal>
-    </Drawer>
+    </AppDrawer>
   );
 };

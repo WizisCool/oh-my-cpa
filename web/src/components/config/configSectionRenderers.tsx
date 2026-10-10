@@ -23,6 +23,7 @@ import {
   type ConfigSectionId,
 } from '../../types/configSchema';
 import type { useConfigDraft } from './useConfigDraft';
+import { SectionHeading } from '../common/SectionHeading';
 
 const { Text } = Typography;
 
@@ -316,12 +317,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     if (grp.variant === 'managed-elsewhere') {
       return (
         <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-            </div>
-          </div>
+          <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           <div className="settings-group-body">
             <div className="settings-managed-elsewhere">
               <span className="settings-managed-count">
@@ -341,12 +337,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
       return (
         <div key={grp.id} className="settings-group payload-builder-group">
           {context === 'search' && (
-            <div className="settings-group-head">
-              <div>
-                <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-                {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-              </div>
-            </div>
+            <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           )}
           <div className="settings-group-body">
             <PayloadRulesEditor
@@ -383,21 +374,17 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
 
       return (
         <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && (
-                <p id="desc-tlsEnable" className="settings-group-desc">
-                  {t(grp.descKey)}
-                </p>
-              )}
-            </div>
-            {tlsEnableField && (!visibleFieldIds || visibleFieldIds.includes('tlsEnable')) && (
+          <SectionHeading
+            className="settings-group-head"
+            title={t(grp.labelKey)}
+            description={grp.descKey ? t(grp.descKey) : undefined}
+            descriptionId="desc-tlsEnable"
+            extra={tlsEnableField && (!visibleFieldIds || visibleFieldIds.includes('tlsEnable')) && (
               <div className="settings-toggle-control is-switch">
                 {renderFieldControl(view, tlsEnableField)}
               </div>
             )}
-          </div>
+          />
           <div className={`settings-tls-body${isOpen ? ' is-open' : ''}`} aria-hidden={!isOpen}>
             <div className="settings-tls-inner">
               <div className="settings-form-grid">
@@ -414,12 +401,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     if (grp.variant === 'settings-list') {
       return (
         <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-            </div>
-          </div>
+          <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           <div className="settings-list-rows">
             {groupFields.map((f) => renderToggleRow(view, f))}
           </div>
@@ -436,12 +418,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
 
     return (
       <div key={grp.id} className="settings-group">
-        <div className="settings-group-head">
-          <div>
-            <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-            {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-          </div>
-        </div>
+        <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
         <div className="settings-group-body">
           <div className="settings-form-grid">
             {combineHostPort && hostField && portField && (

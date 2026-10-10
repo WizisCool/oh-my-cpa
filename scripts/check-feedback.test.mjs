@@ -119,3 +119,29 @@ test('the feedback module itself may use the raw APIs', (t) => {
     ['web/src/pages/Page.tsx', 3, 'raw-alert'],
   ]);
 });
+
+test('a raw antd Empty or Drawer is refused, and the console\'s own are not', () => {
+  assert.deepEqual(rules("import { Button, Empty } from 'antd';"), ['raw-empty']);
+  assert.deepEqual(rules("import * as Antd from 'antd'; const blank = Antd.Empty;"), ['raw-empty']);
+  assert.deepEqual(rules("import { Drawer } from 'antd';"), ['raw-drawer']);
+  assert.deepEqual(rules("import { EmptyState } from '../common/EmptyState'; import { AppDrawer } from '../common/AppDrawer';"), []);
+  assert.deepEqual(rules("import type { DrawerProps } from 'antd';"), []);
+});
+
+test('only the files that own a primitive may hold its raw antd component', (t) => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-primitives-'));
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  const common = path.join(projectRoot, 'web', 'src', 'components', 'common');
+  const pages = path.join(projectRoot, 'web', 'src', 'pages');
+  fs.mkdirSync(common, { recursive: true });
+  fs.mkdirSync(pages, { recursive: true });
+  fs.writeFileSync(path.join(common, 'AppDrawer.tsx'), "import { Drawer } from 'antd';\n");
+  // Owning the drawer does not excuse the empty state: an exemption is per rule.
+  fs.writeFileSync(path.join(common, 'AppLayout.tsx'), "import { Drawer, Empty } from 'antd';\n");
+  fs.writeFileSync(path.join(pages, 'Page.tsx'), "import { Drawer } from 'antd';\n");
+  const failures = runCheck({ projectRoot, output: { log() {}, error() {} } });
+  assert.deepEqual(failures.map((failure) => [failure.file, failure.rule]), [
+    ['web/src/components/common/AppLayout.tsx', 'raw-empty'],
+    ['web/src/pages/Page.tsx', 'raw-drawer'],
+  ]);
+});

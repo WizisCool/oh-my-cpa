@@ -13,7 +13,6 @@ import {
   CopyOutlined,
   KeyOutlined,
   PlusOutlined,
-  SearchOutlined,
   SyncOutlined,
   TagOutlined,
 } from '../components/icons';
@@ -38,6 +37,7 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { SecretInput } from '../components/common/SecretInput';
 import styles from './ApiKeysPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
+import { SearchInput } from '../components/common/SearchInput';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;
@@ -451,14 +451,11 @@ export const ApiKeysPage: React.FC = () => {
             </div>
           </div>
           {keyCount > 0 && (
-            <Input
-              allowClear
-              placeholder={t('keys.search_placeholder')}
-              prefix={<SearchOutlined className={styles['keys-search-icon']} />}
+            <SearchInput
+              label={t('keys.search_placeholder')}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={setSearchQuery}
               className={styles['keys-search']}
-              aria-label={t('keys.search_placeholder')}
             />
           )}
         </div>

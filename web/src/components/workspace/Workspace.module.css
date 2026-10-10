@@ -1347,10 +1347,6 @@
   font-size: var(--text-sm);
 }
 
-.picker-search :global(.ant-input-prefix) {
-  color: var(--muted);
-}
-
 .picker-list {
   display: flex;
   flex-direction: column;

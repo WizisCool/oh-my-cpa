@@ -1,18 +1,3 @@
-/* ── drawer head and foot ────────────────────────────────────────────────── */
-
-.drawer-title {
-  color: var(--fg);
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 4px 0;
-}
-
 /* ── brand mark ──────────────────────────────────────────────────────────── */
 
 .icon-card {

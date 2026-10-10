@@ -1,8 +1,7 @@
 import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Input, Tag, Empty, Segmented, theme } from 'antd';
-import { SearchOutlined } from './icons';
+import { Modal, Tag, Segmented, theme } from 'antd';
 import {
   LOBE_ICON_CATALOG,
   type LobeIconCatalogEntry,
@@ -10,6 +9,8 @@ import {
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
+import { SearchInput } from './common/SearchInput';
+import { EmptyState } from './common/EmptyState';
 
 /**
  * ANTD_CONTAINER_ZINDEX_STEP is the step antd 6 reserves per container level
@@ -173,12 +174,10 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       ) : (
         <>
           <div style={{ marginBottom: 16 }}>
-            <Input
-              prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
-              placeholder={t('pro.search_icon_ph')}
+            <SearchInput
+              label={t('pro.search_icon_ph')}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              allowClear
+              onChange={setSearch}
               style={{ marginBottom: 12 }}
               autoFocus
             />
@@ -224,7 +223,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
           >
             {filteredIcons.length === 0 ? (
               <div style={{ gridColumn: '1 / -1', padding: '40px 0' }}>
-                <Empty description={t('pro.no_icons_found')} />
+                <EmptyState title={t('pro.no_icons_found')} />
               </div>
             ) : (
               filteredIcons.map((item) => {

@@ -21,17 +21,6 @@
   border-bottom: 1px solid var(--border-soft);
 }
 
-.section-title {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--fg);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  letter-spacing: normal;
-}
-
 .section-body {
   padding: 14px;
 }

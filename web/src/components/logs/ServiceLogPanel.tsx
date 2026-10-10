@@ -1,8 +1,8 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Input, Tooltip, Typography } from 'antd';
+import { Button, Tooltip, Typography } from 'antd';
 import dayjs from '../../utils/time';
-import { PauseCircleOutlined, PlayCircleOutlined, SearchOutlined } from '../icons';
+import { PauseCircleOutlined, PlayCircleOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { useServiceLogTail } from '../../hooks/useServiceLogTail';
 import { SERVICE_LOG_LEVELS, type ServiceLogRecord } from '../../types/logs';
@@ -11,6 +11,7 @@ import { CopyButton } from '../common/CopyButton';
 import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { LoadFailure, Notice } from '../feedback';
+import { SearchInput } from '../common/SearchInput';
 
 const { Text } = Typography;
 
@@ -84,13 +85,11 @@ export const ServiceLogPanel: React.FC = () => {
   return (
     <section className={styles.panel}>
       <div className="logs-toolbar">
-        <Input
-          allowClear
+        <SearchInput
           className="logs-search"
-          prefix={<SearchOutlined />}
-          placeholder={t('logs.service_search')}
+          label={t('logs.service_search')}
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={setSearch}
         />
         <div className="logs-levels">
           {SERVICE_LOG_LEVELS.map((level) => (

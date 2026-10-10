@@ -5,8 +5,6 @@ import {
   App as AntdApp,
   Button,
   Dropdown,
-  Empty,
-  Input,
   Pagination,
   Select,
   Space,
@@ -65,6 +63,8 @@ import {
 import styles from './OAuthManagementPage.module.css';
 import { PageHeader } from '../../components/common/PageHeader';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { SearchInput } from '../../components/common/SearchInput';
+import { EmptyState } from '../../components/common/EmptyState';
 
 interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
@@ -699,13 +699,10 @@ export const OAuthManagementPage: React.FC = () => {
 
       <div className={styles.toolbar}>
         <div className={styles.search}>
-          <Input
-            prefix={<SearchOutlined />}
+          <SearchInput
             value={searchValue}
-            allowClear
-            aria-label={t('af.search_ph')}
-            placeholder={t('af.search_ph')}
-            onChange={(event) => setSearchValue(event.target.value)}
+            label={t('af.search_ph')}
+            onChange={setSearchValue}
           />
         </div>
         <Button
@@ -817,10 +814,7 @@ export const OAuthManagementPage: React.FC = () => {
         </LoadingRegion>
       ) : visibleRecords.length === 0 ? (
         <div className={`terminal-panel ${styles.empty}`}>
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={records.length === 0 ? t('af.empty_all') : t('af.empty_filter')}
-          />
+          <EmptyState title={records.length === 0 ? t('af.empty_all') : t('af.empty_filter')} />
         </div>
       ) : (
         <>

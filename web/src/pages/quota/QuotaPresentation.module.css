@@ -43,12 +43,6 @@
   gap: 8px;
 }
 
-.section-title {
-  font-size: var(--text-xs);
-  color: var(--meta);
-  letter-spacing: 0.2px;
-}
-
 .reset-list {
   display: flex;
   flex-direction: column;

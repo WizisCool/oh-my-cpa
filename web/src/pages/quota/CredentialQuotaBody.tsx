@@ -10,6 +10,7 @@ import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
 import styles from './QuotaPresentation.module.css';
 import { Notice } from '../../components/feedback';
+import { SectionHeading } from '../../components/common/SectionHeading';
 
 interface CredentialQuotaBodyProps {
   item: QuotaItem;
@@ -201,9 +202,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
 
       {item.reset_credits && creditRows.length > 0 && (
         <div className={styles.section}>
-          <div className={styles['section-title']}>
-            {t('quota.reset_expiry_title_zoned', { zone: formatGmtOffsetLabel(new Date(nowMS)) })}
-          </div>
+          <SectionHeading level="label" as="div" title={t('quota.reset_expiry_title_zoned', { zone: formatGmtOffsetLabel(new Date(nowMS)) })} />
           <div className={styles['reset-list']}>
             {creditRows.map((credit, index) => (
               <div className={styles['reset-row']} key={credit.id || index}>
@@ -218,7 +217,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
       )}
 
       <div className={styles.section}>
-        <div className={styles['section-title']}>{t('quota.windows_title')}</div>
+        <SectionHeading level="label" as="div" title={t('quota.windows_title')} />
         <div className={styles['windows-list']}>
           {windows.length > 0 ? (
             renderWindowRows(windows)

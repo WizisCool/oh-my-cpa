@@ -29,6 +29,7 @@ import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
 import { useScrollSmoothingPreference } from '../hooks/useScrollSmoothing';
 import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '../utils/scrollSmoothingPreference';
+import { SectionHeading } from '../components/common/SectionHeading';
 
 
 const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
@@ -137,9 +138,7 @@ export const OmcSettingsPage: React.FC = () => {
       <PageHeader title={t('omc.title')} />
 
       <div className="settings-group omc-settings-group">
-        <div className="settings-group-head">
-          <h3 className="settings-group-title">{t('omc.section_display')}</h3>
-        </div>
+        <SectionHeading className="settings-group-head" title={t('omc.section_display')} />
         <SettingRow
           label={t('omc.timezone')}
           description={t('omc.timezone_desc')}
@@ -190,9 +189,7 @@ export const OmcSettingsPage: React.FC = () => {
       </div>
 
       <div className="settings-group omc-settings-group">
-        <div className="settings-group-head">
-          <h3 className="settings-group-title">{t('omc.section_appearance')}</h3>
-        </div>
+        <SectionHeading className="settings-group-head" title={t('omc.section_appearance')} />
         <SettingRow
           label={t('omc.theme_mode')}
           description={t(

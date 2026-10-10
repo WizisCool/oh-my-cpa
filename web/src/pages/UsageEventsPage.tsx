@@ -4,7 +4,6 @@ import {
   Badge,
   Button,
   Descriptions,
-  Empty,
   Listy,
   Popover,
 } from 'antd';
@@ -71,6 +70,7 @@ import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
+import { EmptyState } from '../components/common/EmptyState';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
@@ -687,18 +687,9 @@ export const UsageEventsPage: React.FC = () => {
                 )}
               />
             ) : !result.isError ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <>
-                    <strong>{t('events.empty_title')}</strong>
-                    <p>
-                      {t(
-                        hasActiveFilter ? 'events.empty_filtered' : 'events.empty_hint',
-                      )}
-                    </p>
-                  </>
-                }
+              <EmptyState
+                title={t('events.empty_title')}
+                description={t(hasActiveFilter ? 'events.empty_filtered' : 'events.empty_hint')}
               />
             ) : (
               <div className="request-empty-error">{t('events.load_error')}</div>

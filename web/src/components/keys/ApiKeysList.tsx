@@ -3,7 +3,6 @@ import React from 'react';
 import {
   Button,
   Dropdown,
-  Empty,
   Popconfirm,
   Table,
   Tooltip,
@@ -34,6 +33,7 @@ import { PhoneRow } from '../common/PhoneRow';
 import { phoneRowFields } from '../common/phoneRowFields';
 import styles from './ApiKeysList.module.css';
 import { useToast } from '../feedback';
+import { EmptyState } from '../common/EmptyState';
 
 /** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —
@@ -407,7 +407,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     <>
       {filteredData.length === 0 ? (
         <div className={styles['empty-box']}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('keys.search_empty')} />
+          <EmptyState size="compact" title={t('keys.search_empty')} />
         </div>
       ) : isPhone ? (
         /* One record per block below 640px. The fields are derived from `columns` rather than

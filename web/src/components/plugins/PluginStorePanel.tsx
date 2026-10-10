@@ -1,12 +1,11 @@
 import React from 'react';
-import { Button, Empty, Input, Modal, Radio, Segmented, Tooltip } from 'antd';
+import { Button, Input, Modal, Radio, Segmented, Tooltip } from 'antd';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DownloadOutlined,
   LockOutlined,
   SafetyCertificateOutlined,
-  SearchOutlined,
   SettingOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -27,6 +26,8 @@ import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './Plug
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { Notice } from '../feedback';
+import { SearchInput } from '../common/SearchInput';
+import { EmptyState } from '../common/EmptyState';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -107,14 +108,11 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
       )}
 
       <div className={`${styles.toolbar} ${styles['toolbar-spaced']}`}>
-        <Input
-          allowClear
+        <SearchInput
           className={styles.search}
-          prefix={<SearchOutlined />}
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('plugin.search_store')}
-          aria-label={t('plugin.search_store')}
+          onChange={setQuery}
+          label={t('plugin.search_store')}
         />
         <Segmented
           className={styles['store-filters']}
@@ -128,7 +126,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
       </div>
 
       {visible.length === 0 ? (
-        <Empty className={styles.empty} description={entries.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />
+        <EmptyState className={styles.empty} title={entries.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />
       ) : (
         <div className={styles['card-grid']}>
           {visible.map((entry) => (

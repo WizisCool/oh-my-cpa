@@ -1,5 +1,5 @@
 import React from 'react';
-import { Drawer, Tabs } from 'antd';
+import { Tabs } from 'antd';
 import { clsx } from 'clsx';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useVisibleViewport } from '../../hooks/useVisibleViewport';
@@ -7,6 +7,7 @@ import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useResizablePanel } from './useResizablePanel';
 import styles from './Workspace.module.css';
+import { AppDrawer } from '../common/AppDrawer';
 
 /** One tab of the side panel; the panel is where a workspace's secondary views register. */
 export interface WorkspaceAsideTab {
@@ -109,16 +110,15 @@ export function WorkspaceLayout({ testId, title, actions, notices, aside, childr
         )}
       </div>
       {isNarrow && (
-        <Drawer
+        <AppDrawer
           title={aside.title}
-          placement="right"
+          width="narrow"
           open={aside.isOpen}
           onClose={close}
-          size="min(400px, 92vw)"
           className={styles['drawer']}
         >
           {content}
-        </Drawer>
+        </AppDrawer>
       )}
     </div>
   );

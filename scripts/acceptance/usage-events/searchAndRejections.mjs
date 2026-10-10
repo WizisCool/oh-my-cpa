@@ -66,7 +66,7 @@ export async function searchAndRejectionsSection(context) {
   // after it, so the browser only has to establish that the box is wired to it.
   const navigatedTerm = 'alpha-search';
   await page.goto(`${appURL}/usage/events?preset=24h&q=${navigatedTerm}`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.request-row, .ant-empty').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('.request-row, .empty-state').first().waitFor({ state: 'visible', timeout: 15000 });
   await checkEventually(
     'the search box shows the navigated term',
     async () => (await page.locator('.request-search input').inputValue()) === navigatedTerm,
@@ -116,7 +116,7 @@ export async function searchAndRejectionsSection(context) {
   // page, so it cannot exercise this: the two URLs below share a committed `q`, so
   // only history navigation (not the committed value) distinguishes them.
   await page.goto(`${appURL}/usage/events?preset=24h&q=keep-me&provider=openai`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.request-row, .ant-empty').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('.request-row, .empty-state').first().waitFor({ state: 'visible', timeout: 15000 });
   // The rows rendering proves the shell mounted, which is also what registers the
   // popstate listener the two pushes below depend on.
   // Client-side navigation to the same view with a different unrelated dimension.

@@ -1579,10 +1579,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.search-icon {
-  color: var(--muted);
-}
-
 .directory-note {
   margin: 0;
   padding: 16px 20px;

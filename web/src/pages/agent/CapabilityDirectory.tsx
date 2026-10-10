@@ -1,7 +1,5 @@
 import React from 'react';
-import { Input } from 'antd';
 import { clsx } from 'clsx';
-import { SearchOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
@@ -10,6 +8,7 @@ import { groupCapabilities } from './state';
 import type { Capability } from './state';
 import styles from './AgentPage.module.css';
 import { LoadFailure } from '../../components/feedback';
+import { SearchInput } from '../../components/common/SearchInput';
 
 /** The pip each permission group carries: reading is not a verdict, changing is a caution, destroying is the alarm. */
 const PERMISSION_TONE: Record<string, string> = { read: 'default', write: 'warning', destructive: 'error' };
@@ -58,13 +57,10 @@ export const CapabilityDirectory = React.memo(function CapabilityDirectory({ cap
           <span className={styles['count']}>{t('agent.directory.count', { count: String(capabilities.length) })}</span>
         </div>
         <p className={workspace['field-hint']}>{t('agent.directory.hint')}</p>
-        <Input
-          aria-label={t('agent.directory.search')}
-          placeholder={t('agent.directory.search')}
-          allowClear
+        <SearchInput
+          label={t('agent.directory.search')}
           value={query}
-          prefix={<SearchOutlined aria-hidden="true" className={styles['search-icon']} />}
-          onChange={event => setQuery(event.target.value)}
+          onChange={setQuery}
         />
       </div>
       {isError && <div className={styles['directory-note']}><LoadFailure title={t('agent.error.gateway')} onRetry={onRetry} /></div>}

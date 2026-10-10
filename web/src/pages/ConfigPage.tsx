@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Card,
-  Input,
   Modal,
   Popconfirm,
   Segmented,
@@ -54,6 +53,8 @@ import {
   type ConfigGroupDefinition,
 } from '../types/configSchema';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
+import { SearchInput } from '../components/common/SearchInput';
+import { SectionHeading } from '../components/common/SectionHeading';
 
 const { Text } = Typography;
 
@@ -276,9 +277,9 @@ export const ConfigPage: React.FC = () => {
             </ActionMenu>
           </div>
           {viewMode === 'visual' && (
-            <Input size="small" className="config-search-input" prefix={<SearchOutlined />} allowClear
-              placeholder={t('cfg.search_placeholder')} aria-label={t('cfg.search_placeholder')}
-              value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+            <SearchInput size="small" className="config-search-input"
+              label={t('cfg.search_placeholder')}
+              value={searchQuery} onChange={setSearchQuery} />
           )}
         </div>
       ) : (
@@ -309,14 +310,12 @@ export const ConfigPage: React.FC = () => {
 
           <div className="config-toolbar-actions">
             {viewMode === 'visual' && (
-              <Input
+              <SearchInput
                 size="small"
                 className="config-search-input"
-                prefix={<SearchOutlined />}
-                allowClear
-                placeholder={t('cfg.search_placeholder')}
+                label={t('cfg.search_placeholder')}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={setSearchQuery}
               />
             )}
 
@@ -443,16 +442,15 @@ export const ConfigPage: React.FC = () => {
 
           {/* Right: Focused Settings Group Canvas (max-width: 920px) */}
           <main className="config-main">
-            <div className={`config-section-header${isPhone && !searchQuery ? ' config-section-header-phone' : ''}`}>
-              <h2 className="config-section-title">
-                {searchQuery
-                  ? t('cfg.search_results', { n: totalSearchMatches, q: searchQuery })
-                  : t(currentSectionDef.labelKey)}
-              </h2>
-              <p className="config-section-desc">
-                {searchQuery ? t('cfg.search_placeholder') : t(currentSectionDef.descKey)}
-              </p>
-            </div>
+            <SectionHeading
+              level="section"
+              as="h2"
+              className={`config-section-header${isPhone && !searchQuery ? ' config-section-header-phone' : ''}`}
+              title={searchQuery
+                ? t('cfg.search_results', { n: totalSearchMatches, q: searchQuery })
+                : t(currentSectionDef.labelKey)}
+              description={searchQuery ? t('cfg.search_placeholder') : t(currentSectionDef.descKey)}
+            />
 
             {searchQuery ? (
               /* Search Results: Grouped by semantic Setting Group Panels */

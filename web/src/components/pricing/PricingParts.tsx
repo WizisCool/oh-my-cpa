@@ -1,10 +1,10 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Empty, Input, InputNumber, Pagination, Segmented, Select, TimePicker, Tooltip } from 'antd';
+import { Button, Checkbox, Input, InputNumber, Pagination, Segmented, Select, TimePicker, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
-import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, SearchOutlined } from '../icons';
+import { ClockCircleOutlined, DeleteOutlined, PlusOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
 import type { PriceTier, UpstreamModel } from '../../types/pricing';
@@ -34,6 +34,8 @@ import {
   type TierRateUnit,
 } from '../../types/pricingDisplay';
 import styles from './Pricing.module.css';
+import { SearchInput } from '../common/SearchInput';
+import { EmptyState } from '../common/EmptyState';
 
 /** The words for one tier's condition, which every surface that names a tier shares. */
 export function describeTier(t: TFunc, tier: PriceTier): string {
@@ -149,19 +151,16 @@ export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggesti
   const suggestedIds = React.useMemo(() => new Set(suggestions.map((model) => model.id)), [suggestions]);
   return (
     <div className={styles.picker}>
-      <Input
-        allowClear
+      <SearchInput
         value={query}
-        onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-        prefix={<SearchOutlined aria-hidden="true" />}
-        placeholder={t('pricing.editor.pick_search')}
-        aria-label={t('pricing.editor.pick_search')}
+        onChange={(text) => { setQuery(text); setPage(1); }}
+        label={t('pricing.editor.pick_search')}
       />
       <div className={styles['picker-list']} role="listbox" aria-label={t('pricing.editor.pick_title')}>
         {results.length === 0 && isLoading ? (
           <ParagraphPlaceholder rows={6} />
         ) : results.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('pricing.editor.pick_empty')} />
+          <EmptyState size="compact" title={t('pricing.editor.pick_empty')} />
         ) : results.slice((safePage - 1) * pageSize, safePage * pageSize).map((model) => {
           const isSelected = model.id === selectedId;
           return (

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { AutoComplete, Button, Empty, Input, Table } from 'antd';
+import { AutoComplete, Button, Input, Table } from 'antd';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -11,6 +11,7 @@ import { OAUTH_MODEL_ALIAS_ENTRY_LIMIT, emptyOAuthModelAliasDraft, type Manageme
 import { matchesExcludedModelRule } from './oauthExcludedModelLogic';
 import type { OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
+import { EmptyState } from '../common/EmptyState';
 
 interface OAuthModelAliasPanelProps {
   drafts: ManagementOAuthModelAliasDraft[];
@@ -171,11 +172,11 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
         {(catalogState === 'unavailable' || catalogState === 'error') && t('af.alias_catalog_unavailable')}
       </p>
       {drafts.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('af.alias_empty')}>
+        <EmptyState size="compact" title={t('af.alias_empty')}>
           <Button icon={<PlusOutlined />} disabled={isDisabled || drafts.length >= OAUTH_MODEL_ALIAS_ENTRY_LIMIT} onClick={addDraft}>
             {t('af.alias_add_mapping')}
           </Button>
-        </Empty>
+        </EmptyState>
       ) : (
         <>
           <Table<ManagementOAuthModelAliasDraft>

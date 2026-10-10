@@ -87,18 +87,6 @@
 }
 /* Apply/Cancel stay pinned: the panel is long enough that a footer that scrolls
    with it would leave the operator hunting for the commit button. */
-.req-filter-drawer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.req-filter-drawer-footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 /* The pattern's field and the pattern are one control: the field keeps its own width and the
    pattern takes the rest, in the mono face a pattern is read in. */
 .req-filter-regex {

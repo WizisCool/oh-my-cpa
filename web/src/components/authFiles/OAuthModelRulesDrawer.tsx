@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntdApp, Button, Drawer, Empty, Segmented, Select } from 'antd';
+import { App as AntdApp, Button, Segmented, Select } from 'antd';
 import { DeleteOutlined, SaveOutlined } from '../icons';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { credentialProviderIconId, getCredentialProviderMetadata } from '../common/providerMetadata';
@@ -28,6 +28,9 @@ import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { LoadFailure, Notice, useToast } from '../feedback';
+import { EmptyState } from '../common/EmptyState';
+import { PageLoading } from '../common/PageLoading';
+import { AppDrawer } from '../common/AppDrawer';
 
 export type OAuthModelRulesSection = 'aliases' | 'excluded';
 
@@ -353,7 +356,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       );
     }
     if (!provider) {
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('af.rules_no_provider')} />;
+      return <EmptyState size="compact" title={t('af.rules_no_provider')} />;
     }
     if (section === 'aliases') {
       return (
@@ -382,55 +385,55 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     );
   };
 
+  const footerStart = (
+    <Button
+      danger
+      type="text"
+      icon={<DeleteOutlined />}
+      data-testid="oauth-model-rules-clear"
+      disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
+      title={isDemo ? t('demo.blocked') : undefined}
+      onClick={confirmClear}
+    >
+      {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
+    </Button>
+  );
   const footer = (
-    <div className={styles['footer']}>
+    <>
       <Button
-        danger
-        type="text"
-        icon={<DeleteOutlined />}
-        data-testid="oauth-model-rules-clear"
-        disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving || isDemo}
-        title={isDemo ? t('demo.blocked') : undefined}
-        onClick={confirmClear}
+        data-testid="oauth-model-rules-revert"
+        disabled={!isSectionDirty || isSaving}
+        onClick={() => (section === 'aliases' ? setAliasDrafts(aliasBaseline) : setRuleDrafts(ruleBaseline))}
       >
-        {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
+        {t('af.rules_revert')}
       </Button>
-      <span className={styles['footer-actions']}>
-        <Button
-          data-testid="oauth-model-rules-revert"
-          disabled={!isSectionDirty || isSaving}
-          onClick={() => (section === 'aliases' ? setAliasDrafts(aliasBaseline) : setRuleDrafts(ruleBaseline))}
-        >
-          {t('af.rules_revert')}
-        </Button>
-        <Button
-          type="primary"
-          icon={<SaveOutlined />}
-          data-testid="oauth-model-rules-save"
-          loading={isSaving}
-          disabled={!isSectionReady || !isSectionDirty || isDemo}
-          title={isDemo ? t('demo.blocked') : undefined}
-          onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
-        >
-          {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}
-        </Button>
-      </span>
-    </div>
+      <Button
+        type="primary"
+        icon={<SaveOutlined />}
+        data-testid="oauth-model-rules-save"
+        loading={isSaving}
+        disabled={!isSectionReady || !isSectionDirty || isDemo}
+        title={isDemo ? t('demo.blocked') : undefined}
+        onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
+      >
+        {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}
+      </Button>
+    </>
   );
 
   return (
-    <Drawer
+    <AppDrawer
       data-testid="oauth-model-rules-drawer"
       title={t('af.rules_title')}
-      closable={{ placement: 'end', 'aria-label': t('common.close') }}
-      size="min(760px, 100vw)"
+      width="wide"
       open={open}
       onClose={handleAttemptClose}
       footer={footer}
+      footerStart={footerStart}
     >
       <div className={styles['drawer-content']}>
         {!isSettled ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common.loading')} />
+          <PageLoading variant="block" />
         ) : (
           <>
             <p className={styles['intro']}>{t('af.rules_intro')}</p>
@@ -470,6 +473,6 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
           </>
         )}
       </div>
-    </Drawer>
+    </AppDrawer>
   );
 };

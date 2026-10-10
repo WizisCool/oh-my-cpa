@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Checkbox, Input } from 'antd';
-import { CloseOutlined, PlusOutlined, SearchOutlined } from '../icons';
+import { CloseOutlined, PlusOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import type { ManagementOAuthProviderModel } from '../../types/managementOAuthModelAlias';
 import { LoadFailure, Notice } from '../feedback';
@@ -16,6 +16,8 @@ import {
   type ExcludedRuleSummary,
 } from './oauthExcludedModelLogic';
 import styles from './OAuthModelRulesDrawer.module.css';
+import { SearchInput } from '../common/SearchInput';
+import { SectionHeading } from '../common/SectionHeading';
 
 export type OAuthModelCatalogState = 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -134,7 +136,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
       )}
 
       <section className={styles['section']} aria-labelledby="oauth-excluded-rules-heading">
-        <h3 id="oauth-excluded-rules-heading" className={styles['section-title']}>{t('af.excluded_rules_title')}</h3>
+        <SectionHeading level="label" id="oauth-excluded-rules-heading" title={t('af.excluded_rules_title')} />
         <div className={styles['rule-entry']}>
           <Input
             className={styles['rule-input']}
@@ -189,7 +191,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
       </section>
 
       <section className={styles['section']} aria-labelledby="oauth-excluded-catalog-heading">
-        <h3 id="oauth-excluded-catalog-heading" className={styles['section-title']}>{t('af.excluded_catalog_title')}</h3>
+        <SectionHeading level="label" id="oauth-excluded-catalog-heading" title={t('af.excluded_catalog_title')} />
         {catalogState === 'loading' && <p className={styles['hint']}>{t('af.rules_catalog_loading')}</p>}
         {catalogState === 'error' && (
           <LoadFailure title={t('af.rules_catalog_failed')} error={catalogError} onRetry={onRetryCatalog} />
@@ -200,14 +202,11 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
         {hasCatalog && (
           <>
             <div className={styles['catalog-toolbar']}>
-              <Input
+              <SearchInput
                 className={styles['catalog-search']}
-                allowClear
-                prefix={<SearchOutlined />}
                 value={query}
-                placeholder={t('af.excluded_catalog_search')}
-                aria-label={t('af.excluded_catalog_search')}
-                onChange={(event) => setQuery(event.target.value)}
+                label={t('af.excluded_catalog_search')}
+                onChange={setQuery}
               />
               <Button disabled={isDisabled || selectableVisible.length === 0} onClick={excludeVisible}>
                 {query.trim() ? t('af.excluded_catalog_exclude_shown') : t('af.excluded_catalog_exclude_all')}

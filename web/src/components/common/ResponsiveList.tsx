@@ -1,11 +1,12 @@
 import React from 'react';
-import { Empty, Pagination, Table } from 'antd';
+import { Pagination, Table } from 'antd';
 import type { TableProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { PageLoading } from './PageLoading';
 import { PhoneRow } from './PhoneRow';
 import { phoneRowFields, renderedCell } from './phoneRowFields';
+import { EmptyState } from './EmptyState';
 
 export interface ResponsiveListPhoneLayout {
   /** The column drawn as the row's headline. */
@@ -85,7 +86,7 @@ export function ResponsiveList<T extends object>({
     if (list && list.getBoundingClientRect().top < 0) list.scrollIntoView({ block: 'start' });
   };
 
-  const empty = isBlocked ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />;
+  const empty = isBlocked ? null : <EmptyState size="compact" title={emptyText} />;
 
   if (!isPhone) {
     return (

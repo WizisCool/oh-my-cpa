@@ -198,22 +198,11 @@
 
 .drawer-section-title {
   margin: 0 0 8px;
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .drawer-section :global(.fact-list-row) dd {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.drawer-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .audit-mono {

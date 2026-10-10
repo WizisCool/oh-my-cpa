@@ -1,6 +1,6 @@
 
-import { Button, Input, Segmented, Select } from 'antd';
-import { FilterOutlined, SearchOutlined } from '../icons';
+import { Button, Segmented, Select } from 'antd';
+import { FilterOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -19,6 +19,7 @@ import type {
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
+import { SearchInput } from '../common/SearchInput';
 
 interface RequestToolbarProps {
   search: string;
@@ -122,14 +123,12 @@ export function RequestToolbar({
 
         <section className="request-toolbar" aria-label={t('events.filters')}>
           <div className="request-filters">
-            <Input
+            <SearchInput
               className="request-search"
-              aria-label={t('events.search_hint')}
+              label={t('events.search_hint')}
               placeholder={t('events.search_placeholder')}
-              prefix={<SearchOutlined />}
               value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              allowClear
+              onChange={onSearchChange}
             />
             <TimeRangeControl
               preset={query.preset}

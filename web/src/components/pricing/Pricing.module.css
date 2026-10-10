@@ -25,26 +25,6 @@
   gap: 24px;
 }
 
-.drawer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.drawer-footer-note {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.drawer-footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
 .section {
   display: flex;
   flex-direction: column;

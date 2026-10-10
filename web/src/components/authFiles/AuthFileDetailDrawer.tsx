@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Drawer,
   Descriptions,
   Tag,
   Tabs,
@@ -18,7 +17,6 @@ import {
   DownloadOutlined,
   ExclamationCircleOutlined,
   CopyOutlined,
-  SearchOutlined,
   SyncOutlined,
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -55,6 +53,9 @@ import {
   readCredentialPolicyDraft,
   type CredentialPolicyDraft,
 } from './credentialPolicy';
+import { SearchInput } from '../common/SearchInput';
+import { SectionHeading } from '../common/SectionHeading';
+import { AppDrawer } from '../common/AppDrawer';
 
 const { Text } = Typography;
 
@@ -451,13 +452,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     }
     return (
       <div className={styles['models-scroll']}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined />}
+        <SearchInput
           value={modelFilter}
-          aria-label={t('omc.models_search_placeholder')}
-          onChange={(event) => setModelFilter(event.target.value)}
-          placeholder={t('omc.models_search_placeholder')}
+          onChange={setModelFilter}
+          label={t('omc.models_search_placeholder')}
           style={{ marginBottom: 12 }}
         />
         <Table<ManagementAuthFileModel>
@@ -504,10 +502,9 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   };
 
   return (
-    <Drawer
+    <AppDrawer
       title={identity?.primary || t('af.drawer_title')}
-      closable={{ placement: 'end', 'aria-label': t('common.close') }}
-      size="large"
+      width="wide"
       open={open}
       onClose={handleAttemptClose}
     >
@@ -528,10 +525,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                       <summary>{t('common.details')}</summary>
                       {/* Overview and identity */}
                       <div className={styles['drawer-section']}>
-                        <div className={styles['section-header']}>
-                          <h3 className={styles['section-title']}>{t('common.details')}</h3>
-                          {statusBadge}
-                        </div>
+                        <SectionHeading className={styles['section-header']} title={t('common.details')} extra={statusBadge} />
                         <div className={styles['section-body']}>
                           <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered className={styles['overview-table']}>
                             <Descriptions.Item label={t('af.detail_file_name')}>
@@ -575,9 +569,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
                       {/* Quota Observations */}
                       <div className={styles['drawer-section']}>
-                        <div className={styles['section-header']}>
-                          <h3 className={styles['section-title']}>{t('af.quota_title')}</h3>
-                        </div>
+                        <SectionHeading className={styles['section-header']} title={t('af.quota_title')} />
                         <div className={styles['section-body']}>
                           {quotaSignals.length > 0 ? (
                             <Descriptions column={1} size="small" bordered className={styles['overview-table']}>
@@ -603,10 +595,11 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 label: <span>{t('omc.tab_configuration')}{isDirty && <Tag color="warning">{t('cfg.dirty_bar_unsaved')}</Tag>}</span>,
                 children: (
                   <div className={styles['drawer-section']}>
-                    <div className={styles['section-header']}>
-                      <h3 className={styles['section-title']}>{t('af.fields_title')}</h3>
-                      {isDirty && <Tag color="warning">{t('cfg.dirty_bar_unsaved')}</Tag>}
-                    </div>
+                    <SectionHeading
+                      className={styles['section-header']}
+                      title={t('af.fields_title')}
+                      extra={isDirty && <Tag color="warning">{t('cfg.dirty_bar_unsaved')}</Tag>}
+                    />
                     <div className={styles['section-body']}>
                       {safeFieldsFailed && (
                         <LoadFailure
@@ -786,10 +779,11 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 disabled: saveMutation.isPending,
                 children: (
                   <div className={styles['drawer-section']}>
-                    <div className={styles['section-header']}>
-                      <h3 className={styles['section-title']}>{t('af.models_title')}</h3>
-                      {models.length > 0 && <Tag>{filteredModels.length}</Tag>}
-                    </div>
+                    <SectionHeading
+                      className={styles['section-header']}
+                      title={t('af.models_title')}
+                      count={models.length > 0 ? filteredModels.length : undefined}
+                    />
                     <div className={styles['section-body']}>
                       {renderModelsContent()}
                     </div>
@@ -826,6 +820,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           </div>
         </div>
       ) : null}
-    </Drawer>
+    </AppDrawer>
   );
 };

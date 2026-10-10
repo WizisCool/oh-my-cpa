@@ -1,14 +1,15 @@
 import React from 'react';
-import { Button, Input } from 'antd';
+import { Button } from 'antd';
 import { LabelTip } from '../common/LabelTip';
 import { useI18n } from '../../i18n';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import type { GatewayModelItem } from '../../types/gatewayModels';
 import type { ClientAPIKeyItem } from '../../types/providers';
-import { ArrowLeftOutlined, BoxOutlined, DownOutlined, KeyOutlined, LoadingOutlined, ReloadOutlined, SearchOutlined } from '../icons';
+import { ArrowLeftOutlined, BoxOutlined, DownOutlined, KeyOutlined, LoadingOutlined, ReloadOutlined } from '../icons';
 import { ModelMark } from './ModelMark';
 import { ComposerPicker, ComposerPickerList } from './ComposerPicker';
 import styles from './Workspace.module.css';
+import { SearchInput } from '../common/SearchInput';
 
 export interface TargetChipProps {
   keys: ClientAPIKeyItem[];
@@ -79,14 +80,11 @@ export function TargetChip({
           </div>
           {!isChoosingKey && callPoints.length > SEARCH_THRESHOLD && (
             <div className={styles['picker-search']} data-picker-search>
-              <Input
+              <SearchInput
                 variant="borderless"
-                allowClear
-                aria-label={t('conversation.target.search')}
-                placeholder={t('conversation.target.search')}
-                prefix={<SearchOutlined aria-hidden="true" />}
+                label={t('conversation.target.search')}
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                onChange={setQuery}
               />
             </div>
           )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card, Checkbox, Empty, Input, Select, Tooltip } from 'antd';
+import { Button, Card, Checkbox, Input, Select, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +19,8 @@ import {
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
+import { EmptyState } from '../common/EmptyState';
+import { SectionHeading } from '../common/SectionHeading';
 
 interface SettingsDraft {
   enabled: boolean;
@@ -179,10 +181,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
 
       <Card>
         <section className={styles['settings-section']}>
-          <div>
-            <h2 className={styles['settings-section-title']}>{t('plugin.settings_system')}</h2>
-            <p className={styles['settings-section-desc']}>{t('plugin.settings_system_desc')}</p>
-          </div>
+          <SectionHeading as="h2" title={t('plugin.settings_system')} description={t('plugin.settings_system_desc')} />
           <div>
             <div className={styles['setting-row']}>
               <div>
@@ -209,20 +208,21 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
 
       <Card>
         <section className={styles['settings-section']}>
-          <div className={styles['settings-section-head']}>
-            <div>
-              <h2 className={styles['settings-section-title']}>{t('plugin.settings_sources')}</h2>
-              <p className={styles['settings-section-desc']}>{t('plugin.settings_sources_desc')}</p>
-            </div>
-            <Button
-              size="small"
-              icon={<PlusOutlined />}
-              disabled={isDemo}
-              onClick={() => update({ sources: [...current.sources, ''] })}
-            >
-              {t('plugin.settings_add_source')}
-            </Button>
-          </div>
+          <SectionHeading
+            as="h2"
+            title={t('plugin.settings_sources')}
+            description={t('plugin.settings_sources_desc')}
+            extra={(
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                disabled={isDemo}
+                onClick={() => update({ sources: [...current.sources, ''] })}
+              >
+                {t('plugin.settings_add_source')}
+              </Button>
+            )}
+          />
           <div className={styles['source-list']}>
             <div className={styles['source-fixed']}>
               <SafetyCertificateOutlined />
@@ -264,22 +264,23 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
 
       <Card>
         <section className={styles['settings-section']}>
-          <div className={styles['settings-section-head']}>
-            <div>
-              <h2 className={styles['settings-section-title']}>{t('plugin.settings_auth')}</h2>
-              <p className={styles['settings-section-desc']}>{t('plugin.settings_auth_desc')}</p>
-            </div>
-            <Button
-              size="small"
-              icon={<PlusOutlined />}
-              disabled={isDemo}
-              onClick={() => update({ rules: [...current.rules, newRule()] })}
-            >
-              {t('plugin.settings_add_rule')}
-            </Button>
-          </div>
+          <SectionHeading
+            as="h2"
+            title={t('plugin.settings_auth')}
+            description={t('plugin.settings_auth_desc')}
+            extra={(
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                disabled={isDemo}
+                onClick={() => update({ rules: [...current.rules, newRule()] })}
+              >
+                {t('plugin.settings_add_rule')}
+              </Button>
+            )}
+          />
           {current.rules.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('plugin.settings_auth_empty')} />
+            <EmptyState size="compact" title={t('plugin.settings_auth_empty')} />
           ) : (
             <div className={styles['rule-list']}>
               {current.rules.map((rule, index) => {

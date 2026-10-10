@@ -498,7 +498,12 @@ and identity remain covered by the workspace and plugin-logo logic suites.
   `onChange`, activation through a wrapping label, refusal while disabled or pending, a caller-owned
   `aria-busy` that stays clickable, and `Form.Item valuePropName="checked"` binding. Its drawn
   geometry belongs to the browser.
-- `scripts/check-feedback.test.mjs` also pins the `raw-switch` rule in both directions. It checks Ant Design feedback bindings and aliases (named and namespace
+- `web/tests/shared-primitives.component.test.tsx` owns the contracts of `SearchInput` (accessible
+  name, placeholder fallback, text-valued `onChange`, clearing), `EmptyState` (the mark per size, the
+  optional second line and action), `SectionHeading` (outline element, count, description and
+  `extra` per weight) and `AppDrawer` (named close, two-slot footer, no footer without content, the
+  width step). Their drawn geometry belongs to the browser.
+- `scripts/check-feedback.test.mjs` also pins the `raw-switch`, `raw-empty` and `raw-drawer` rules in both directions, including the per-rule file exemptions for the components that own a raw antd primitive. It checks Ant Design feedback bindings and aliases (named and namespace
   imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
   strings and type-only imports, legal confirmations, diagnostic locations and the
   feedback module exemption. It is automatically discovered by the repository self-test runner.

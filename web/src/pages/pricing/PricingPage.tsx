@@ -1,11 +1,11 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Button, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
 import dayjs from '../../utils/time';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { EditOutlined, LinkOutlined, SearchOutlined, SyncOutlined } from '../../components/icons';
+import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -30,6 +30,7 @@ import { ChannelMultipliersPanel } from './ChannelMultipliersPanel';
 import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { SearchInput } from '../../components/common/SearchInput';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at either width. */
 const PAGE_SIZE = 20;
@@ -515,15 +516,12 @@ export const PricingPage: React.FC = () => {
                 ...allGroups.map((group) => ({ value: group.id, label: group.provider ? pricingProviderIdentity(group.provider).label : t('pricing.provider.unassigned') })),
               ]}
             />
-            <Input
+            <SearchInput
               data-testid="pricing-search"
               className={styles.search}
-              placeholder={t('pricing.search_placeholder')}
-              aria-label={t('pricing.search_placeholder')}
-              prefix={<SearchOutlined aria-hidden="true" />}
+              label={t('pricing.search_placeholder')}
               value={search}
-              allowClear
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={setSearch}
             />
           </div>
           {pageGroups.length === 0 && (

@@ -2,7 +2,7 @@ import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Empty, Select, Tooltip, Typography } from 'antd';
+import { Button, Card, Select, Tooltip } from 'antd';
 import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
@@ -53,8 +53,7 @@ import {
   type DashboardSeriesPoint,
 } from '../types/dashboard';
 import { LoadFailure } from '../components/feedback';
-
-const { Text } = Typography;
+import { EmptyState } from '../components/common/EmptyState';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -579,16 +578,7 @@ export const DashboardPage: React.FC = () => {
           response must not claim the deployment has never been used. */}
       {!data.coverage.has_usage && data.partial_errors.length === 0 && (
         <div className="terminal-panel dashboard-empty">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              <span>
-                {t('dash.empty_title')}
-                <br />
-                <Text type="secondary">{t('dash.empty_desc')}</Text>
-              </span>
-            }
-          />
+          <EmptyState title={t('dash.empty_title')} description={t('dash.empty_desc')} />
         </div>
       )}
 

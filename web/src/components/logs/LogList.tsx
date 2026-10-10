@@ -1,7 +1,8 @@
 import React from 'react';
-import { Button, Empty } from 'antd';
+import { Button } from 'antd';
 import { useT } from '../../i18n';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
+import { EmptyState } from '../common/EmptyState';
 
 /** RENDER_CHUNK is how many matching rows are mounted at a time. */
 const RENDER_CHUNK = 300;
@@ -67,7 +68,7 @@ export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, h
         {isLoading ? (
           <ParagraphPlaceholder rows={8} className="log-state" />
         ) : mounted.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
+          <EmptyState size="compact" title={emptyText} />
         ) : (
           <>
             {offset > 0 && (

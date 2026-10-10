@@ -2,7 +2,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Empty, Input, Popconfirm, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
+import { Button, Checkbox, Popconfirm, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -12,7 +12,6 @@ import {
   PauseCircleOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
-  SearchOutlined,
   WrapTextOutlined,
 } from '../icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
@@ -50,6 +49,8 @@ import styles from './Logs.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
+import { SearchInput } from '../common/SearchInput';
+import { EmptyState } from '../common/EmptyState';
 
 const { Text } = Typography;
 
@@ -117,7 +118,7 @@ const ErrorLogFiles: React.FC = () => {
     );
   }
   if (query.data.files.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('logs.errors_empty')} />;
+    return <EmptyState size="compact" title={t('logs.errors_empty')} />;
   }
   const columns: ColumnsType<ErrorLogFile> = [
     { title: t('logs.file_name'), dataIndex: 'name', key: 'name', ellipsis: true },
@@ -320,13 +321,11 @@ export const CpaLogPanel: React.FC = () => {
           <div className="logs-toolbar">
             {isTail && (
               <>
-                <Input
-                  allowClear
+                <SearchInput
                   className="logs-search"
-                  prefix={<SearchOutlined />}
-                  placeholder={t('logs.search_placeholder')}
+                  label={t('logs.search_placeholder')}
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={setSearch}
                 />
                 <div className="logs-levels">
                   {LOG_LEVELS.map((level) => (

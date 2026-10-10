@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Tooltip } from 'antd';
+import { App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +30,8 @@ import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
+import { SectionHeading } from '../common/SectionHeading';
+import { AppDrawer } from '../common/AppDrawer';
 
 type EditorMode = 'form' | 'json';
 
@@ -189,20 +191,17 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   const extraSummary = new Map(pluginConfigSummary(base).map((entry) => [entry.key, entry.type]));
 
   return (
-    <Drawer
+    <AppDrawer
       open={plugin !== null}
       onClose={requestClose}
-      size="min(720px, 100vw)"
+      width="wide"
       title={t('plugin.config_title', { name })}
       destroyOnHidden
+      footerStart={errorCount > 0
+        ? t('plugin.config_error_count', { n: errorCount })
+        : isDirty ? t('plugin.unsaved_changes') : t('plugin.config_no_changes')}
       footer={(
-        <div className={styles['drawer-footer']}>
-          <span className={styles['drawer-footer-note']}>
-            {errorCount > 0
-              ? t('plugin.config_error_count', { n: errorCount })
-              : isDirty ? t('plugin.unsaved_changes') : t('plugin.config_no_changes')}
-          </span>
-          <span className={styles['card-actions']}>
+        <>
             <Button onClick={requestClose} disabled={saveMutation.isPending}>{t('common.cancel')}</Button>
             <Tooltip title={isDemo ? t('demo.blocked') : undefined}>
               <Button
@@ -215,8 +214,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
                 {t('common.save')}
               </Button>
             </Tooltip>
-          </span>
-        </div>
+        </>
       )}
     >
       {plugin && (
@@ -261,7 +259,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
           ) : draft && (
             <>
               <section className={styles['config-section']}>
-                <h3 className={styles['config-section-title']}>{t('plugin.config_base')}</h3>
+                <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_base')} />
                 <div className={styles['config-field']}>
                   <div>
                     <div className={styles['config-field-label']}>enabled</div>
@@ -297,10 +295,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
               </section>
 
               <section className={styles['config-section']}>
-                <h3 className={styles['config-section-title']}>
-                  {t('plugin.config_fields_title')}
-                  <span>{fields.length}</span>
-                </h3>
+                <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_fields_title')} count={fields.length} />
                 {fields.length === 0 ? (
                   <Notice tone="info" title={t('plugin.config_no_fields')} />
                 ) : fields.map((field) => (
@@ -319,7 +314,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
 
               {installRecord && (
                 <section className={styles['config-section']} data-plugin-install-record>
-                  <h3 className={styles['config-section-title']}>{t('plugin.config_install_record')}</h3>
+                  <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_install_record')} />
                   <PluginMeta
                     items={[
                       installRecord.name,
@@ -336,7 +331,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
 
               {extraKeys.length > 0 && (
                 <section className={styles['config-section']}>
-                  <h3 className={styles['config-section-title']}>{t('plugin.config_extra_title')}</h3>
+                  <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_extra_title')} />
                   <p className={styles['config-field-desc']}>{t('plugin.config_extra_desc')}</p>
                   <div className={styles['extra-keys']}>
                     {extraKeys.map((key) => (
@@ -352,7 +347,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
           )}
         </div>
       )}
-    </Drawer>
+    </AppDrawer>
   );
 }
 

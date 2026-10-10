@@ -61,7 +61,7 @@ export async function runConfigurationPluginsAcceptance({
   await payloadNav.first().waitFor({ state: 'visible', timeout: 10000 });
   await payloadNav.first().click();
   await page.locator('.payload-rules-container').first().waitFor({ state: 'visible', timeout: 10000 });
-  const payloadHeadingCount = await page.locator('.payload-builder-group .settings-group-title').count();
+  const payloadHeadingCount = await page.locator('.payload-builder-group .section-head-title').count();
   check(
     'the Payload panel prints no second heading under the section header',
     payloadHeadingCount === 0,
