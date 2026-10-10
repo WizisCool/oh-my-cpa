@@ -182,7 +182,11 @@ export function resolveProviderInfo(
   };
 
   if (isOAuth) {
-    const providerFamily = (file?.provider || file?.type || event.provider || 'oauth').toLowerCase();
+    // A credential file may say only that it is an OAuth file. That is how it
+    // authenticates, not who it belongs to, so the record's own provider names
+    // the cell before it does.
+    const fileType = file?.type?.toLowerCase() === 'oauth' ? '' : file?.type;
+    const providerFamily = (file?.provider || fileType || event.provider || file?.type || 'oauth').toLowerCase();
     const iconId = resolveIcon(providerFamily, file?.name);
     const account = file?.email || file?.project_id;
     const credIdentity = resolveCredential(event, credentials);

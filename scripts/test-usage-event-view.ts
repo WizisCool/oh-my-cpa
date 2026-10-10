@@ -1012,6 +1012,13 @@ assert.equal(oauthResolved.isOAuth, true);
 // credential that answered is the line under it.
 assert.equal(oauthResolved.title, 'Claude', 'an OAuth cell leads with its provider, as an API-key cell does');
 assert.equal(oauthResolved.credential, 'user@example.com', 'the account is the credential line');
+// A file that records only its credential type does not name the provider; the record does.
+const typeOnlyOAuth = resolveProviderInfo(
+  oauthEvent,
+  indexCredentialFiles([{ name: 'someone.json', auth_index: 'auth-oauth', type: 'oauth', email: 'user@example.com' }]),
+);
+assert.equal(typeOnlyOAuth.title, 'Claude', 'the title is the provider, never the word for the credential type');
+assert.equal(typeOnlyOAuth.iconId, 'Claude');
 assert.equal(oauthResolved.iconId, 'Claude');
 assert.equal(oauthResolved.accountIdentity, 'user@example.com');
 
