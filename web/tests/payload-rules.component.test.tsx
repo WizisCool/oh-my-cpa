@@ -42,17 +42,17 @@ describe('payload rule disclosures', () => {
   it('keeps the chosen disclosure state when an external document arrives', () => {
     const onDocChange = vi.fn();
     const { rerender } = render(<PayloadSurface doc={parseDocument(POPULATED_YAML)} onDocChange={onDocChange} />);
-    const defaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
+    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
 
-    fireEvent.click(defaultHeader());
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(getDefaultHeader());
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
     rerender(<PayloadSurface doc={parseDocument(POPULATED_YAML.replace('0.5', '0.7'))} onDocChange={onDocChange} />);
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('true');
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
 
-    fireEvent.click(defaultHeader());
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(getDefaultHeader());
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
     rerender(<PayloadSurface doc={parseDocument(POPULATED_YAML)} onDocChange={onDocChange} />);
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('false');
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
     expect(onDocChange).not.toHaveBeenCalled();
   });
 
@@ -60,11 +60,11 @@ describe('payload rule disclosures', () => {
     const doc = parseDocument(POPULATED_YAML.replace('model-one', '""'));
     const onDocChange = vi.fn();
     const { rerender } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={0} />);
-    const defaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
+    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
 
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('false');
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
     rerender(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={1} />);
-    expect(defaultHeader().getAttribute('aria-expanded')).toBe('true');
+    expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
     expect(onDocChange).not.toHaveBeenCalled();
   });
 });
