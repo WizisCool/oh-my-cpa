@@ -1,10 +1,11 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/brand/omc-wordmark-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="web/src/assets/brand/omc-wordmark-light.svg">
-  <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA" width="340">
-</picture>
+<a href="#gh-light-mode-only">
+  <img src="web/src/assets/brand/omc-wordmark-light.svg#gh-light-mode-only" alt="Oh-My-CPA" width="340">
+</a>
+<a href="#gh-dark-mode-only">
+  <img src="web/src/assets/brand/omc-wordmark-dark.svg#gh-dark-mode-only" alt="Oh-My-CPA" width="340">
+</a>
 
 ### 集中管理 API 与 OAuth，可视化观测请求、成本、用量
 
@@ -48,39 +49,25 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 <table>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/usage-events-dark.zh.webp">
-  <img src="docs/images/readme/usage-events-light.zh.webp" alt="请求记录：每条请求的耗时、Token 与费用">
-</picture>
+<img src="docs/images/readme/usage-events-split.zh.webp" alt="请求记录：每条请求的耗时、Token 与费用">
 <p align="center"><b>请求记录</b><br />按模型、提供商、密钥、状态与费用筛选每一条请求</p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/pricing-dark.zh.webp">
-  <img src="docs/images/readme/pricing-light.zh.webp" alt="按提供商分组的模型价目表">
-</picture>
+<img src="docs/images/readme/pricing-split.zh.webp" alt="按提供商分组的模型价目表">
 <p align="center"><b>费用与用量</b><br />自动匹配 OpenRouter 价格，也可自定义覆盖</p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/oauth-management-dark.zh.webp">
-  <img src="docs/images/readme/oauth-management-light.zh.webp" alt="OAuth 凭据及其状态与配额">
-</picture>
+<img src="docs/images/readme/oauth-management-split.zh.webp" alt="OAuth 凭据及其状态与配额">
 <p align="center"><b>OAuth 管理</b><br />登录、查看配额、配置凭据，集中在一处完成</p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/ai-providers-dark.zh.webp">
-  <img src="docs/images/readme/ai-providers-light.zh.webp" alt="AI 提供商列表、启停开关与流量">
-</picture>
+<img src="docs/images/readme/ai-providers-split.zh.webp" alt="AI 提供商列表、启停开关与流量">
 <p align="center"><b>AI 提供商</b><br />端点、模型、优先级，以及由网关执行的启停开关</p>
 </td>
 </tr>
 </table>
-
-以上截图跟随 GitHub 主题切换。控制台支持浅色、深色与跟随系统三种模式，每种模式有三套内置配色和一套自定义配色。
 
 <div align="center">
   <img src="docs/images/readme/mobile.zh.webp" alt="手机上的仪表盘、请求记录与 OAuth 管理" width="88%">

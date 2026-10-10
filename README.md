@@ -1,10 +1,11 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/brand/omc-wordmark-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="web/src/assets/brand/omc-wordmark-light.svg">
-  <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA" width="340">
-</picture>
+<a href="#gh-light-mode-only">
+  <img src="web/src/assets/brand/omc-wordmark-light.svg#gh-light-mode-only" alt="Oh-My-CPA" width="340">
+</a>
+<a href="#gh-dark-mode-only">
+  <img src="web/src/assets/brand/omc-wordmark-dark.svg#gh-dark-mode-only" alt="Oh-My-CPA" width="340">
+</a>
 
 ### Manage APIs and OAuth in one place, visualize requests, cost and usage
 
@@ -51,40 +52,25 @@ signs in with CPA's management key.
 <table>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/usage-events-dark.en.webp">
-  <img src="docs/images/readme/usage-events-light.en.webp" alt="Request records with latency, tokens and cost per request">
-</picture>
+<img src="docs/images/readme/usage-events-split.en.webp" alt="Request records with latency, tokens and cost per request">
 <p align="center"><b>Request records</b><br />Every request, filterable by model, provider, key, status and cost</p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/pricing-dark.en.webp">
-  <img src="docs/images/readme/pricing-light.en.webp" alt="Model price book grouped by provider">
-</picture>
+<img src="docs/images/readme/pricing-split.en.webp" alt="Model price book grouped by provider">
 <p align="center"><b>Cost &amp; usage</b><br />A price book matched from OpenRouter, with custom overrides</p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/oauth-management-dark.en.webp">
-  <img src="docs/images/readme/oauth-management-light.en.webp" alt="OAuth credentials with their state and quota">
-</picture>
+<img src="docs/images/readme/oauth-management-split.en.webp" alt="OAuth credentials with their state and quota">
 <p align="center"><b>OAuth management</b><br />Sign in, inspect quota and configure each credential in one place</p>
 </td>
 <td width="50%" valign="top">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/ai-providers-dark.en.webp">
-  <img src="docs/images/readme/ai-providers-light.en.webp" alt="AI provider list with enable switches and traffic">
-</picture>
+<img src="docs/images/readme/ai-providers-split.en.webp" alt="AI provider list with enable switches and traffic">
 <p align="center"><b>AI providers</b><br />Endpoints, models, priority and an enable switch enforced by the gateway</p>
 </td>
 </tr>
 </table>
-
-The screenshots follow the GitHub theme. The console has light, dark and system modes,
-each with three built-in palettes and one custom palette.
 
 <div align="center">
   <img src="docs/images/readme/mobile.en.webp" alt="The dashboard, request records and OAuth management on a phone" width="88%">

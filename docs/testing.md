@@ -1052,10 +1052,13 @@ page content, no visible loading surfaces, and no mounted toast (including its e
 motion). It is automatically discovered by `pnpm test:self`; it does not launch a
 browser or certify pixels. `pnpm build && pnpm readme:screenshots` supplies the real
 Chromium evidence and regenerates the English/Chinese desktop and mobile images
-under `docs/images/readme/`. The generator waits on that predicate rather than a
-fixed delay, waits on it again immediately before capture, and leaves the Demo's
-normal arrival feedback unchanged. `scripts/readme-screenshots.test.mjs` holds the
-final wait to pin late-toast admission, timeout propagation, and context cleanup
-without launching Chromium; the immediate-check implementation fails these cases.
-Image freshness remains outside verification
-gates because the sample traffic is rebased to the capture clock.
+under `docs/images/readme/`. Desktop images combine light and dark captures in one
+rounded window with an opaque angled bevel and a shadow on the light side. README
+wordmarks follow the GitHub theme. The generator waits on that predicate rather
+than a fixed delay, waits on it again immediately before capture, and leaves the
+Demo's normal arrival feedback unchanged.
+`scripts/readme-screenshots.test.mjs` holds the final wait to pin late-toast
+admission, timeout propagation, and context cleanup without launching Chromium;
+the immediate-check implementation fails these cases. Image freshness remains
+outside verification gates because the sample traffic is rebased to the capture
+clock.
