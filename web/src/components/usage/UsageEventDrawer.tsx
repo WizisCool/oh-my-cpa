@@ -137,6 +137,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       // is an answer about retention, not an outage to retry.
       const isMissing = error instanceof ApiError
         && (error.data as { code?: string } | null)?.code === 'request_log_not_found';
+      // Confirming again cannot produce a file CPA does not hold.
+      if (isMissing) setDownloadModalOpen(false);
       toast.error(t(isMissing ? 'events.download_missing' : 'events.download_failed'));
     } finally {
       setDownloading(false);
