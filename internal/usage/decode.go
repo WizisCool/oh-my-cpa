@@ -115,6 +115,7 @@ type Payload struct {
 	Tokens              TokenStats      `json:"tokens"`
 	Stream              *bool           `json:"stream"`
 	Failed              bool            `json:"failed"`
+	Fail                FailDetail      `json:"fail"`
 	Generate            *bool           `json:"generate"`
 	Provider            string          `json:"provider"`
 	ExecutorType        string          `json:"executor_type"`
@@ -131,6 +132,18 @@ type Payload struct {
 	AccountingVersion   int             `json:"accounting_version"`
 	ResponseHeaders     json.RawMessage `json:"response_headers,omitempty"`
 }
+
+// FailDetail is how CPA reports why a request failed. A successful record
+// carries status 200 and no body; an older CPA build carries neither.
+type FailDetail struct {
+	StatusCode int    `json:"status_code"`
+	Body       string `json:"body"`
+}
+
+// MaxFailBodyRunes bounds the stored upstream error body. Provider errors
+// are a few hundred bytes of JSON; an HTML error page from a gateway is not
+// worth keeping past the part that names the failure.
+const MaxFailBodyRunes = 4096
 
 // Event is the decoded row for usage_events.
 type Event struct {
@@ -160,7 +173,15 @@ type Event struct {
 	// ModelSubstituted records that ResponseModel names a different model than
 	// the request did. It is decided here, once, so the stored verdict cannot
 	// drift from the rule that produced it.
-	ModelSubstituted    bool
+	ModelSubstituted bool
+	// FailStatusCode and FailBody are the status a failed request ended with
+	// and the upstream's error body. Both are zero for a successful request and
+	// for a record whose CPA published no failure detail.
+	FailStatusCode int
+	FailBody       string
+	// ResponseHeaders is the diagnostic part of the upstream's response headers
+	// in its stored form (EncodeResponseHeaders); empty when none were kept.
+	ResponseHeaders     string
 	ExecutorType        string
 	TimestampMS         int64
 	Source              string
@@ -247,7 +268,22 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 	}
 	event.ResponseModel = boundedSafe(payload.ResponseModel, 256)
 	event.ModelSubstituted = isServedModelSubstituted(event.Model, event.ModelAlias, event.ResponseModel)
+	event.FailStatusCode, event.FailBody = failDetail(payload)
+	event.ResponseHeaders = responseHeadersFromPayload(payload.ResponseHeaders)
 	return event, nil
+}
+
+// failDetail keeps CPA's failure only for a failed record: CPA stamps status
+// 200 on every success, which would otherwise read as a recorded outcome.
+func failDetail(payload Payload) (int, string) {
+	if !payload.Failed {
+		return 0, ""
+	}
+	statusCode := payload.Fail.StatusCode
+	if statusCode < 100 || statusCode > 599 {
+		statusCode = 0
+	}
+	return statusCode, boundedSafe(payload.Fail.Body, MaxFailBodyRunes)
 }
 
 // ErrorPayload is one CPA credential error notification.

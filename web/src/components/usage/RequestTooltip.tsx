@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Tooltip } from 'antd';
 import type { TooltipRef } from 'antd/es/tooltip';
+import { RequestFailureDetail } from './RequestFailureDetail';
 
 const TOOLTIP_INTENT_DELAY_MS = 100;
 
@@ -130,6 +131,9 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
   const element = target?.element;
   const isOpen = target?.isOpen;
   const title = target?.title;
+  // A failed pill names its record: the popup then explains the failure instead
+  // of repeating the label, and stays plain text for every other cell.
+  const failureEventId = Number(element?.dataset.requestFailure) || null;
   React.useLayoutEffect(() => {
     if (!element || !isOpen) return;
     const previousDescription = element.getAttribute('aria-describedby');
@@ -158,11 +162,13 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     <Tooltip
       ref={popupRef}
       id={popupId}
-      title={title}
+      title={failureEventId && title
+        ? <RequestFailureDetail eventId={failureEventId} statusLabel={title} />
+        : title}
       open={isOpen}
       trigger={[]}
-      placement="top"
-      classNames={{ root: 'request-cell-tooltip' }}
+      placement={failureEventId ? 'bottomLeft' : 'top'}
+      classNames={{ root: failureEventId ? 'request-cell-tooltip request-failure-tooltip' : 'request-cell-tooltip' }}
       destroyOnHidden
       afterOpenChange={(hasOpened) => {
         if (!hasOpened) setTarget((current) => current?.isOpen ? current : null);

@@ -67,6 +67,9 @@ export interface UsageEvent {
    *  flag requests the server does not. */
   model_substituted?: boolean;
   failed: boolean;
+  /** The HTTP status a failed request ended with. Absent when CPA reported none
+   *  or the record predates the field. */
+  fail_status_code?: number;
   generate: boolean;
   /** Whether the request was streamed (SSE/chunked). Null/absent for historical rows. */
   stream?: boolean | null;
@@ -114,9 +117,19 @@ export interface UsageEventRelatedError {
 
 export type UsageEventDetailSection = 'related_errors' | 'cost_breakdown';
 
+export interface UsageEventResponseHeader {
+  name: string;
+  value: string;
+}
+
 export interface UsageEventDetail {
   event: UsageEvent & {
     endpoint?: string;
+    /** The upstream's own error body for a failed request; single-record view only. */
+    fail_body?: string;
+    /** The diagnostic part of the upstream's response headers, sorted by name.
+     *  Empty when none were kept; absent from a server that predates the field. */
+    response_headers?: UsageEventResponseHeader[];
     client_ip?: string | null;
     x_forwarded_for?: string | null;
   };

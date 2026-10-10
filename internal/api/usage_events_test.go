@@ -547,8 +547,63 @@ func TestUsageEventRequestLogMapsCPAGaps(t *testing.T) {
 		t.Fatal("seed failed")
 	}
 	response, payload := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d/request-log", baseURL, page.Items[0].ID))
-	if response.StatusCode == http.StatusOK {
-		t.Fatalf("missing upstream log must not look like success: %s", payload)
+	// The console tells "CPA kept no file" apart from an outage by this code.
+	if response.StatusCode != http.StatusNotFound || !strings.Contains(string(payload), `"code":"request_log_not_found"`) {
+		t.Fatalf("missing upstream log = %d %s, want 404 request_log_not_found", response.StatusCode, payload)
+	}
+}
+
+// The list names the status a failure ended with; the upstream body can quote
+// account detail, so only the single-record view carries it.
+func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	event := eventFor("overloaded", now.Add(-time.Minute), usage.TokenStats{}, true)
+	event.FailStatusCode = 502
+	event.FailBody = `{"error":{"code":"server_is_overloaded"}}`
+	event.ResponseHeaders = `{"cf-ray":"fixture-ray-NRT","set-cookie":"fixture=1"}`
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?range=1h")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d body %s", response.StatusCode, payload)
+	}
+	var list struct {
+		Items []struct {
+			ID             int64 `json:"id"`
+			FailStatusCode int   `json:"fail_status_code"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(payload, &list); err != nil || len(list.Items) != 1 {
+		t.Fatalf("list decode: %v %s", err, payload)
+	}
+	if list.Items[0].FailStatusCode != 502 {
+		t.Fatalf("list fail status = %d, want 502", list.Items[0].FailStatusCode)
+	}
+	if strings.Contains(string(payload), "server_is_overloaded") || strings.Contains(string(payload), "fail_body") ||
+		strings.Contains(string(payload), "response_headers") {
+		t.Fatalf("list leaked the upstream error body: %s", payload)
+	}
+	response, payload = getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, list.Items[0].ID))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d body %s", response.StatusCode, payload)
+	}
+	var detail struct {
+		Event struct {
+			FailStatusCode  int                    `json:"fail_status_code"`
+			FailBody        string                 `json:"fail_body"`
+			ResponseHeaders []usage.ResponseHeader `json:"response_headers"`
+		} `json:"event"`
+	}
+	if err := json.Unmarshal(payload, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Event.FailStatusCode != 502 || detail.Event.FailBody != event.FailBody {
+		t.Fatalf("detail failure = %d %q", detail.Event.FailStatusCode, detail.Event.FailBody)
+	}
+	if len(detail.Event.ResponseHeaders) != 1 || detail.Event.ResponseHeaders[0] != (usage.ResponseHeader{Name: "cf-ray", Value: "fixture-ray-NRT"}) {
+		t.Fatalf("detail headers = %v, want the filtered snapshot", detail.Event.ResponseHeaders)
 	}
 }
 

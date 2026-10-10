@@ -244,8 +244,9 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
-			stream, channel_version_id, price_tier, response_model, model_substituted
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			stream, channel_version_id, price_tier, response_model, model_substituted,
+			fail_status_code, fail_body, response_headers
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -278,7 +279,8 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
 			event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
-			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted)); errExec != nil {
+			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
+			event.FailStatusCode, event.FailBody, event.ResponseHeaders); errExec != nil {
 			return 0, fmt.Errorf("insert usage event %s: %w", event.EventKey, errExec)
 		}
 		if _, errExec := mark.ExecContext(ctx, event.EventKey, createdMS, item.InboxID); errExec != nil {
@@ -463,8 +465,9 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
-			stream, channel_version_id, price_tier, response_model, model_substituted
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			stream, channel_version_id, price_tier, response_model, model_substituted,
+			fail_status_code, fail_body, response_headers
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -488,7 +491,8 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
 			event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
-			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted))
+			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
+			event.FailStatusCode, event.FailBody, event.ResponseHeaders)
 		if errExec != nil {
 			return lastID, fmt.Errorf("insert usage event: %w", errExec)
 		}
@@ -613,6 +617,14 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	// Redaction can blank the served model; a verdict about a name the record no
 	// longer carries would be a flag the console cannot explain.
 	event.ModelSubstituted = event.ModelSubstituted && event.ResponseModel != ""
+	if !event.Failed || event.FailStatusCode < 100 || event.FailStatusCode > 599 {
+		event.FailStatusCode = 0
+	}
+	if !event.Failed {
+		event.FailBody = ""
+	}
+	event.FailBody = persistedText(event.FailBody, usage.MaxFailBodyRunes)
+	event.ResponseHeaders = usage.EncodeResponseHeaders(usage.DecodeResponseHeaders(event.ResponseHeaders))
 	event.ExecutorType = persistedText(event.ExecutorType, 128)
 	event.Source = r.persistedFingerprint("usage-source", event.Source)
 	event.APIGroupKey, event.APIGroupLabel = r.persistedAPIGroup(event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint)

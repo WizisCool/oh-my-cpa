@@ -2,6 +2,7 @@ package usage
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"strings"
@@ -369,5 +370,114 @@ func TestDecodeErrorEventRedactsBody(t *testing.T) {
 	}
 	if strings.Contains(event.AuthStatus, secret) {
 		t.Fatalf("auth status contains secret: %q", event.AuthStatus)
+	}
+}
+
+func TestDecodeEventKeepsFailureDetailOnlyForFailedRecords(t *testing.T) {
+	failed := `{"request_id":"req-fail","failed":true,"fail":{"status_code":502,` +
+		`"body":" {\"error\":{\"code\":\"server_is_overloaded\",\"key\":\"sk-abcdefghijklmnopqrstuvwxyz123456\"}} "}}`
+	event, err := DecodeEvent(failed, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode failed record: %v", err)
+	}
+	if event.FailStatusCode != 502 {
+		t.Fatalf("fail status = %d, want 502", event.FailStatusCode)
+	}
+	if !strings.Contains(event.FailBody, "server_is_overloaded") || strings.HasPrefix(event.FailBody, " ") {
+		t.Fatalf("fail body = %q, want the trimmed upstream body", event.FailBody)
+	}
+	if strings.Contains(event.FailBody, "sk-abcdefghijklmnopqrstuvwxyz123456") {
+		t.Fatalf("fail body kept a credential: %q", event.FailBody)
+	}
+
+	// CPA stamps status 200 on every success; that is not a recorded failure.
+	succeeded, err := DecodeEvent(`{"request_id":"req-ok","failed":false,"fail":{"status_code":200,"body":""}}`, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode successful record: %v", err)
+	}
+	if succeeded.FailStatusCode != 0 || succeeded.FailBody != "" {
+		t.Fatalf("successful record carries failure detail: %d %q", succeeded.FailStatusCode, succeeded.FailBody)
+	}
+
+	// An older CPA publishes no fail block: the failure stays known, its cause unknown.
+	legacy, err := DecodeEvent(`{"request_id":"req-old","failed":true}`, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode legacy record: %v", err)
+	}
+	if !legacy.Failed || legacy.FailStatusCode != 0 || legacy.FailBody != "" {
+		t.Fatalf("legacy failure = %v %d %q", legacy.Failed, legacy.FailStatusCode, legacy.FailBody)
+	}
+}
+
+func TestDecodeEventBoundsFailureBody(t *testing.T) {
+	body := strings.Repeat("x", MaxFailBodyRunes+500)
+	event, err := DecodeEvent(`{"request_id":"req-big","failed":true,"fail":{"status_code":999,"body":"`+body+`"}}`, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := len([]rune(event.FailBody)); got != MaxFailBodyRunes {
+		t.Fatalf("fail body length = %d, want %d", got, MaxFailBodyRunes)
+	}
+	if event.FailStatusCode != 0 {
+		t.Fatalf("out-of-range status kept: %d", event.FailStatusCode)
+	}
+}
+
+func TestDecodeEventKeepsDiagnosticResponseHeadersOnly(t *testing.T) {
+	raw := `{"request_id":"req-headers","failed":true,"fail":{"status_code":502,"body":"overloaded"},"response_headers":{` +
+		`"Cf-Ray":["a4838167fd32d5c8-NRT"],"X-Request-Id":["req_upstream_1"],"Retry-After":["30"],` +
+		`"X-Ratelimit-Remaining-Requests":["12","11"],"Server":["cloudflare"],` +
+		`"Content-Type":["application/json"],"Date":["Sat, 10 Oct 2026 06:18:02 GMT"],` +
+		`"Set-Cookie":["__cf_bm=abcdef; path=/"],"X-Session-Token":["opaque"],"Authorization":["Bearer abc"],` +
+		`"X-Echo":["sk-abcdefghijklmnopqrstuvwxyz123456"]}}`
+	event, err := DecodeEvent(raw, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	headers := DecodeResponseHeaders(event.ResponseHeaders)
+	got := map[string]string{}
+	for _, header := range headers {
+		got[header.Name] = header.Value
+	}
+	want := map[string]string{
+		"cf-ray": "a4838167fd32d5c8-NRT", "x-request-id": "req_upstream_1", "retry-after": "30",
+		"x-ratelimit-remaining-requests": "12, 11", "server": "cloudflare",
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Fatalf("header %s = %q, want %q (all: %v)", name, got[name], value, got)
+		}
+	}
+	for _, dropped := range []string{"content-type", "date", "set-cookie", "x-session-token", "authorization"} {
+		if _, kept := got[dropped]; kept {
+			t.Fatalf("header %s must not be stored", dropped)
+		}
+	}
+	if strings.Contains(event.ResponseHeaders, "sk-abcdefghijklmnopqrstuvwxyz123456") {
+		t.Fatalf("a credential-shaped value was stored: %s", event.ResponseHeaders)
+	}
+	for index := 1; index < len(headers); index++ {
+		if headers[index-1].Name >= headers[index].Name {
+			t.Fatalf("headers are not sorted by name: %v", headers)
+		}
+	}
+}
+
+func TestDecodeEventToleratesUnexpectedResponseHeaderShapes(t *testing.T) {
+	flat, err := DecodeEvent(`{"request_id":"req-flat","response_headers":{"cf-ray":"abc"}}`, "default", time.Now())
+	if err != nil || len(DecodeResponseHeaders(flat.ResponseHeaders)) != 1 {
+		t.Fatalf("flat header map: %v %q", err, flat.ResponseHeaders)
+	}
+	odd, err := DecodeEvent(`{"request_id":"req-odd","response_headers":["not","a","map"]}`, "default", time.Now())
+	if err != nil || odd.ResponseHeaders != "" {
+		t.Fatalf("a malformed snapshot must not reject the record: %v %q", err, odd.ResponseHeaders)
+	}
+	crowded := map[string][]string{}
+	for index := 0; index < MaxResponseHeaders+20; index++ {
+		crowded[fmt.Sprintf("x-diagnostic-%03d", index)] = []string{strings.Repeat("v", MaxResponseHeaderValueRunes+50)}
+	}
+	bounded := FilterResponseHeaders(crowded)
+	if len(bounded) != MaxResponseHeaders || len([]rune(bounded[0].Value)) != MaxResponseHeaderValueRunes {
+		t.Fatalf("bounds not applied: %d headers, value %d runes", len(bounded), len([]rune(bounded[0].Value)))
 	}
 }

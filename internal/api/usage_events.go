@@ -16,6 +16,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 // usageEventResponse trims a stored row into what the browser needs.
@@ -68,11 +69,14 @@ type usageEventResponse struct {
 	ResponseModel    string `json:"response_model,omitempty"`
 	ModelSubstituted bool   `json:"model_substituted,omitempty"`
 	Failed           bool   `json:"failed"`
-	Generate         bool   `json:"generate"`
-	Stream           *bool  `json:"stream,omitempty"`
-	LatencyMS        int64  `json:"latency_ms"`
-	TTFTMS           *int64 `json:"ttft_ms,omitempty"`
-	Tokens           struct {
+	// FailStatusCode is the HTTP status a failed request ended with; absent when
+	// CPA reported none. The error body stays on the single-record view.
+	FailStatusCode int    `json:"fail_status_code,omitempty"`
+	Generate       bool   `json:"generate"`
+	Stream         *bool  `json:"stream,omitempty"`
+	LatencyMS      int64  `json:"latency_ms"`
+	TTFTMS         *int64 `json:"ttft_ms,omitempty"`
+	Tokens         struct {
 		Input         int64 `json:"input"`
 		Output        int64 `json:"output"`
 		Reasoning     int64 `json:"reasoning"`
@@ -115,6 +119,7 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.ResponseModel = row.ResponseModel
 	item.ModelSubstituted = row.ModelSubstituted
 	item.Failed = row.Failed
+	item.FailStatusCode = row.FailStatusCode
 	item.Generate = row.Generate
 	item.Stream = row.Stream
 	item.LatencyMS = row.LatencyMS
@@ -629,6 +634,9 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"response_model":        item.ResponseModel,
 		"model_substituted":     item.ModelSubstituted,
 		"failed":                item.Failed,
+		"fail_status_code":      item.FailStatusCode,
+		"fail_body":             row.FailBody,
+		"response_headers":      responseHeadersOrEmpty(row.ResponseHeaders),
 		"generate":              item.Generate,
 		"stream":                item.Stream,
 		"latency_ms":            item.LatencyMS,
@@ -652,6 +660,16 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 	}
 	return detail
 }
+
+// responseHeadersOrEmpty keeps the field an array for a record that kept none.
+func responseHeadersOrEmpty(stored string) []usage.ResponseHeader {
+	if headers := usage.DecodeResponseHeaders(stored); headers != nil {
+		return headers
+	}
+	return []usage.ResponseHeader{}
+}
+
+const requestLogNotFoundCode = "request_log_not_found"
 
 // downloadUsageEventRequestLog proxies CPA's raw request log for one record.
 //
@@ -688,6 +706,17 @@ func (h *Handler) downloadUsageEventRequestLog(writer http.ResponseWriter, reque
 	payload, _, fetchErr := client.DownloadRequestLog(ctx, row.RequestID)
 	if fetchErr != nil {
 		_ = h.recordAudit(request, "request_log.download", "request_log", row.RequestID, "failure", map[string]any{"error": fetchErr.Error()})
+		// CPA writes a per-request file only while request logging is on, and
+		// otherwise keeps just its newest few error logs. A 404 here is that
+		// file's absence, which the console explains differently from an outage.
+		var httpErr *management.HTTPError
+		if errors.As(fetchErr, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			writeJSON(writer, http.StatusNotFound, map[string]string{
+				"error": "CPA holds no log file for this request",
+				"code":  requestLogNotFoundCode,
+			})
+			return
+		}
 		writeCPAFacadeError(writer, fetchErr)
 		return
 	}

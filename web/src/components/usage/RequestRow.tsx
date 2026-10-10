@@ -191,13 +191,24 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 2: outcome (success/failure pill) */}
         <div className={`req-col req-col-result ${requestColumnAlignClass('result')}`}>
           <span className="req-mobile-label">{t('events.col_result')}</span>
-          <span
-            className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
-            title={resultLabel}
-          >
-            <i className="req-result-bullet" />
-            {resultLabel}
-          </span>
+          {event.failed && event.fail_status_code ? (
+            // The status is what the list knows; the popup reads the upstream's
+            // error body for this record when the pill is hovered or focused.
+            <RequestTooltip title={`HTTP ${event.fail_status_code}`}>
+              <span className="req-result-pill is-failed has-detail" data-request-failure={event.id}>
+                <i className="req-result-bullet" />
+                {resultLabel}
+              </span>
+            </RequestTooltip>
+          ) : (
+            <span
+              className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
+              title={resultLabel}
+            >
+              <i className="req-result-bullet" />
+              {resultLabel}
+            </span>
+          )}
         </div>
 
         {/* Column 3: provider (credential that answered) */}
