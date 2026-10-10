@@ -595,16 +595,17 @@ async function checkOAuthModelRules({ page, base, check }) {
     const button = panel.querySelector('tbody tr:not(.ant-table-measure-row) td:last-child button').getBoundingClientRect();
     return { left: button.left, right: button.right, frameLeft: frame.left, frameRight: frame.right, isScrollable: scroller.scrollWidth > scroller.clientWidth + 1, scrollLeft: scroller.scrollLeft };
   });
+  const aliasRemoval = drawer.getByTestId('oauth-model-alias-panel').locator('tbody tr:not(.ant-table-measure-row) td:last-child button');
   const desktopRemoval = await readAliasRemoval();
   check('the alias table fits the desktop drawer with its remove action in view',
-    !desktopRemoval.isScrollable && desktopRemoval.left >= desktopRemoval.frameLeft && desktopRemoval.right <= desktopRemoval.frameRight + 1,
+    (await aliasRemoval.isVisible()) && !desktopRemoval.isScrollable && desktopRemoval.left >= desktopRemoval.frameLeft && desktopRemoval.right <= desktopRemoval.frameRight + 1,
     JSON.stringify(desktopRemoval));
   await page.screenshot({ path: 'tmp/oauth-model-aliases-desktop.png' });
   await page.setViewportSize({ width: 375, height: 844 });
   await settleLayout(page);
   const phoneRemoval = await readAliasRemoval();
   check('a phone keeps the alias remove action in view while the fields scroll',
-    phoneRemoval.isScrollable && phoneRemoval.scrollLeft === 0 && phoneRemoval.left >= phoneRemoval.frameLeft && phoneRemoval.right <= Math.min(phoneRemoval.frameRight, 375) + 1,
+    (await aliasRemoval.isVisible()) && phoneRemoval.isScrollable && phoneRemoval.scrollLeft === 0 && phoneRemoval.left >= phoneRemoval.frameLeft && phoneRemoval.right <= Math.min(phoneRemoval.frameRight, 375) + 1,
     JSON.stringify(phoneRemoval));
   await page.screenshot({ path: 'tmp/oauth-model-aliases-phone.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
