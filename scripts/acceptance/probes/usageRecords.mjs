@@ -2,13 +2,16 @@ import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
 import { sleep } from '../probe.mjs';
-import { until } from '../harness.mjs';
+import { pastDeadline, until } from '../harness.mjs';
 
 /**
  * Probes for the request-record console: the column geometry and truncation, the
  * live tail and the hold a reader takes when they scroll away, the refresh
  * sequence, and the interactions the table answers (resize, keyboard, download).
  */
+
+/** `TOOLTIP_INTENT_DELAY_MS` in the list's tooltip layer: how long a left popup waits before closing. */
+const REQUEST_TOOLTIP_DISMISS_MS = 100;
 
 export const LONG_PROVIDER = 'openai-compatible-commandcode-goat-super-long-relay-name';
 export const LONG_MODEL = 'vendor/some-extremely-long-model-identifier-that-cannot-fit';
@@ -482,8 +485,45 @@ export async function requestListInteractions({ base, page, check }) {
     failureFit.left >= 0 && failureFit.top >= 0 && failureFit.right <= failureFit.width && failureFit.bottom <= failureFit.height,
     JSON.stringify(failureFit));
   await page.screenshot({ path: 'tmp/request-failure-popup.png' });
-  await failurePopup.locator('pre').hover();
-  check('the failure popup stays open while its text is read', await failurePopup.isVisible());
+  // A pointer travels to the popup; it does not arrive there. `hover()` would place it
+  // inside in one event and never cross the gap a reader's hand has to cross, which is
+  // where the popup used to close before its copy button could be reached. Each stop is
+  // held past the list's dismissal timer, so a stop that counted as leaving has closed it.
+  const pillBox = await failedPill.boundingBox();
+  const panelBox = await failurePopup.locator('.ant-popover-container').boundingBox();
+  const bodyBox = await failurePopup.locator('pre').boundingBox();
+  const travelX = pillBox.x + pillBox.width / 2;
+  const travelStops = [
+    pillBox.y + pillBox.height / 2,
+    (pillBox.y + pillBox.height + panelBox.y) / 2,
+    panelBox.y + 4,
+    bodyBox.y + Math.min(24, bodyBox.height / 2),
+  ];
+  const travelHeld = [];
+  for (const stopY of travelStops) {
+    await page.mouse.move(travelX, stopY);
+    await pastDeadline(REQUEST_TOOLTIP_DISMISS_MS);
+    travelHeld.push(await failurePopup.isVisible());
+  }
+  check('the failure popup stays open while the pointer travels from the pill into it',
+    travelHeld.every(Boolean), `gap=${(panelBox.y - pillBox.y - pillBox.height).toFixed(1)} held=${travelHeld.join(',')}`);
+  await page.mouse.wheel(0, 40);
+  await pastDeadline(REQUEST_TOOLTIP_DISMISS_MS);
+  check('scrolling over the error body does not dismiss the failure popup', await failurePopup.isVisible());
+  const failureSurface = await page.evaluate(() => {
+    const resolve = (token) => {
+      const swatch = document.body.appendChild(document.createElement('i'));
+      swatch.style.color = `var(${token})`;
+      const color = getComputedStyle(swatch).color;
+      swatch.remove();
+      return color;
+    };
+    const panel = document.querySelector('.request-failure-tooltip .ant-popover-container');
+    const style = panel ? getComputedStyle(panel) : null;
+    return { fill: style?.backgroundColor, ink: style?.color, elevated: resolve('--elevated'), fg: resolve('--fg') };
+  });
+  check('the failure popup is a panel on the theme surface, not the inverse tooltip block',
+    failureSurface.fill === failureSurface.elevated && failureSurface.ink === failureSurface.fg, JSON.stringify(failureSurface));
   check('a successful result carries no failure popup',
     await page.locator('.request-row .req-result-pill.is-success[data-request-failure]').count() === 0);
   await page.keyboard.press('Escape');

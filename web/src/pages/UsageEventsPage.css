@@ -1820,45 +1820,42 @@
   .request-collapsible-header { transition: none; }
 }
 
-/* The failed pill's popup quotes the upstream error, so it is wider than a label
-   tooltip and scrolls inside itself rather than growing past the list. */
+/* The failed pill's popup quotes the upstream error, so it is a floating panel
+   rather than a label: it takes the console's panel surface in either theme, is
+   wider than a tooltip, and scrolls inside itself rather than growing past the
+   list. The status chip and the body reuse the detail drawer's error vocabulary. */
 .req-result-pill.has-detail {
   cursor: help;
 }
 .request-failure-tooltip {
-  max-width: min(440px, calc(100vw - 32px));
+  width: min(440px, calc(100vw - 32px));
+}
+/* The panel hangs a few pixels off its pill, and a pointer crossing that gap is
+   over neither. The bridge extends the panel's own hit area across it, so the
+   way from the pill to the copy button never leaves the popup. */
+.request-failure-tooltip::before {
+  content: '';
+  position: absolute;
+  inset: -12px 0;
+  z-index: -1;
 }
 .request-failure-detail header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 24px;
 }
-.request-failure-detail header button {
-  display: inline-flex;
-  padding: 2px;
-  color: inherit;
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  opacity: 0.75;
-}
-.request-failure-detail header button:hover,
-.request-failure-detail header button:focus-visible {
-  opacity: 1;
-}
-.request-failure-detail pre,
 .request-failure-detail p {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
+  color: var(--fg-2);
 }
-.request-failure-detail pre {
+.request-failure-detail .req-overview-error-body {
+  margin-top: 8px;
   max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
+  word-break: normal;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* Response headers read as name/value pairs in two tracks: the names align so a
