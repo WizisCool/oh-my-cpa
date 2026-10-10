@@ -86,7 +86,7 @@ export function AuthorizePage() {
               {isExternal ? <LobeIcon iconId="MCP" size={26} variant="mono" /> : <RobotOutlined style={{ fontSize: 26 }} />}
             </span>
             <SwapOutlined className={styles['link']} />
-            <span className={styles['party']}><BrandArtwork shape="o" height={26} /></span>
+            <span className={styles['party']}><BrandArtwork shape="mark" height={26} /></span>
           </div>
           <h1 id="authorize-title" className="terminal-title auth-title">{title}</h1>
 

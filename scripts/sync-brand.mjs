@@ -1,9 +1,10 @@
 /**
- * Writes the brand artwork the READMEs embed.
+ * Writes the brand artwork that has to exist as files: what the READMEs embed, and the favicon.
  *
  * The README files are rendered by GitHub, which cannot inline the app's SVG or read its theme
- * tokens, so they need drawing *files* on disk. The app itself does not: it inlines the same artwork
- * so the accent can follow the active theme (see `web/src/assets/brand/markup.ts`).
+ * tokens, and the browser fetches the favicon outside the app, so both need drawing *files* on disk.
+ * The app itself does not: it inlines the same artwork so the accent can follow the active theme (see
+ * `web/src/assets/brand/markup.ts`).
  *
  * Those two needs used to be met by keeping four hand-maintained SVGs, which is how the mark's blue
  * drifted from the console's accent - nothing connected the two, so nothing could notice. This
@@ -72,7 +73,8 @@ function markupSource() {
  */
 function extractDrawing(shape) {
   const source = markupSource();
-  const block = new RegExp(`${shape}: \\{([\\s\\S]*?)\\n  \\},`).exec(source);
+  // Anchored to the start of the entry's line: `mark` is also the tail of `wordmark`.
+  const block = new RegExp(`\\n  ${shape}: \\{([\\s\\S]*?)\\n  \\},`).exec(source);
   if (!block) throw new Error(`brand markup has no drawing named ${shape}`);
   const [, body] = block;
   const viewBox = /viewBox: '([^']+)'/.exec(body);
@@ -97,6 +99,37 @@ export function renderBrandSvg(shape, colors) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${drawing.viewBox}" width="${drawing.width}" height="${drawing.height}">${body}</svg>\n`;
 }
 
+/**
+ * Renders the mark as the favicon: one file holding both default palettes.
+ *
+ * A tab has no console theme to follow, so the two palettes are selected by `prefers-color-scheme`
+ * inside the file. The fills therefore move from attributes into a stylesheet; an attribute cannot
+ * sit behind a media query.
+ */
+export function renderFaviconSvg(colors) {
+  const drawing = extractDrawing('mark');
+  const body = drawing.body
+    .split('fill="__INK__"').join('class="omc-ink"')
+    .split('fill="__ACCENT__"').join('class="omc-accent"');
+  if (body.includes('__')) {
+    throw new Error("brand markup's mark drawing still carries a placeholder after substitution");
+  }
+  const rules = (palette) => `.omc-ink { fill: ${palette.ink}; } .omc-accent { fill: ${palette.accent}; }`;
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${drawing.viewBox}" width="${drawing.width}" height="${drawing.height}">`,
+    '<title>Oh My CPA</title>',
+    '<style>',
+    `  ${rules(colors.light)}`,
+    `  @media (prefers-color-scheme: dark) { ${rules(colors.dark)} }`,
+    '</style>',
+    `  ${body}`,
+    '</svg>',
+    '',
+  ].join('\n');
+}
+
+export const FAVICON_FILE = 'web/public/favicon.svg';
+
 /** The files the READMEs reference, and what each should contain. */
 export function brandArtifacts() {
   return [
@@ -105,11 +138,19 @@ export function brandArtifacts() {
   ];
 }
 
+/** Every generated file with the content it should hold. */
+function brandFiles() {
+  return [
+    ...brandArtifacts().map((artifact) => ({ file: artifact.file, wanted: renderBrandSvg(artifact.shape, artifact.colors) })),
+    { file: FAVICON_FILE, wanted: renderFaviconSvg(readmeBrandColors()) },
+  ];
+}
+
 export function syncBrand({ quiet = false, check = false } = {}) {
   const stale = [];
-  for (const artifact of brandArtifacts()) {
+  for (const artifact of brandFiles()) {
     const target = path.join(root, artifact.file);
-    const wanted = renderBrandSvg(artifact.shape, artifact.colors);
+    const { wanted } = artifact;
     const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
     if (current === wanted) continue;
     if (check) {

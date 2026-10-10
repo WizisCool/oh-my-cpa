@@ -369,8 +369,8 @@ export const AppLayout: React.FC = () => {
               aria-label="Expand Sider"
             >
               {/* 58px cannot hold the wordmark at a legible size, so the collapsed rail
-                  shows the same artwork's leading O. */}
-              <BrandArtwork shape="o" height={20} />
+                  shows the square mark. */}
+              <BrandArtwork shape="mark" height={20} />
             </div>
           ) : brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>

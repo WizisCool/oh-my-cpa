@@ -177,6 +177,14 @@ Brand artwork follows the same tokens: the wordmark's accent marks and its lette
 the resolved palette, so a change here moves the logo with it — an operator's own accent included. See
 `web/src/assets/brand/markup.ts`.
 
+The brand has two drawings. The wordmark is used wherever there is width for it. The mark is the
+square drawing for the collapsed rail, the Agent authorization page and the favicon: a ring on the
+wordmark's letter grid (rounded outer edge, near-square counter, stroke a quarter of the box), cut
+twice, with its lower trailing corner in the accent — a gauge with part of its allowance spent. The
+ring is `--fg` and the corner is `--accent`. `web/public/favicon.svg` is written from the same drawing
+by `pnpm sync-brand` and holds the two default palettes behind `prefers-color-scheme`, because a
+browser tab has no console theme to follow; `pnpm check-brand` fails when it is stale.
+
 Success/warn/danger are identical in both modes.
 
 ### Status pip semantics

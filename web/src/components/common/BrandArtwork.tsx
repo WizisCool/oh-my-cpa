@@ -7,8 +7,9 @@ import { useTheme } from '../../theme/ThemeContext';
  *
  * `wordmark` spells "Oh-My-CPA" and is used wherever there is width for it. It is drawn on an
  * 875x148 canvas (about 5.9:1), so the collapsed rail cannot hold it at a legible size: at 58px
- * wide the letters would be about 5px tall. `o` is that same artwork's leading O, cut from the
- * wordmark rather than drawn separately, for exactly that case.
+ * wide the letters would be about 5px tall. `mark` is the square drawing for exactly that case, and
+ * the one the favicon is written from: a ring on the wordmark's letter grid whose trailing corner is
+ * the accent.
  *
  * Neither drawing carries a background, border or shadow, which is what lets both sit directly on
  * the shell's surfaces.
@@ -39,7 +40,8 @@ export interface BrandArtworkProps {
  * The colours come from the same `palette` the theme config mirrors, and the theme comes from the
  * console's own state rather than from `prefers-color-scheme`, because that setting is an explicit
  * user choice that may contradict the operating system. The favicon is the one case that cannot work
- * this way - the browser fetches it outside the app - so it keeps a media query of its own.
+ * this way - the browser fetches it outside the app - so it carries the default palettes behind a
+ * media query of its own.
  */
 export const BrandArtwork: React.FC<BrandArtworkProps> = ({ shape, height, className, label }) => {
   const { theme } = useTheme();
