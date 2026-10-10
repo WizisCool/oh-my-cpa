@@ -14,7 +14,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { brandArtifacts, paletteValue, readmeBrandColors, renderBrandSvg, syncBrand } from './sync-brand.mjs';
+import { brandArtifacts, FAVICON_FILE, paletteValue, readmeBrandColors, renderBrandSvg, renderFaviconSvg, syncBrand } from './sync-brand.mjs';
 
 const brandColors = readmeBrandColors();
 
@@ -38,17 +38,29 @@ test('the two themes render different files', () => {
   assert.ok(light.includes(`id="main-text" fill="${brandColors.light.ink}"`), 'the light drawing uses the light ink');
 });
 
-test('the mark only draws the accent where the artwork has accent marks', () => {
-  // The standalone `o` is monochrome: it is the wordmark's leading letter, with no hyphens or
-  // coloured letters in it. A placeholder left in it would render as literal text.
-  const mark = renderBrandSvg('o', brandColors.dark);
-  assert.ok(mark.includes(`fill="${brandColors.dark.ink}"`), 'the mark carries the ink colour');
+test('the mark renders its ring in the ink and its reading in the accent', () => {
+  const mark = renderBrandSvg('mark', brandColors.dark);
+  assert.ok(mark.includes(`id="mark-ring" fill="${brandColors.dark.ink}"`), 'the ring carries the ink colour');
+  assert.ok(mark.includes(`id="mark-reading" fill="${brandColors.dark.accent}"`), 'the reading carries the accent colour');
   assert.ok(!mark.includes('__'), 'the mark has no unsubstituted placeholder');
 });
 
-test('the committed README artwork is not stale', () => {
+test('the favicon is the mark with both default palettes behind the colour scheme', () => {
+  const favicon = renderFaviconSvg(brandColors);
+  // The geometry is the app's own drawing, so the tab and the collapsed rail cannot show two marks.
+  const ringPath = /id="mark-ring" fill="[^"]+" d="([^"]+)"/.exec(renderBrandSvg('mark', brandColors.light))[1];
+  assert.ok(favicon.includes(`id="mark-ring" class="omc-ink" d="${ringPath}"`), 'the favicon draws the mark');
+  const [lightRules, darkRules] = favicon.split('@media (prefers-color-scheme: dark)');
+  assert.ok(lightRules.includes(`fill: ${brandColors.light.ink}`) && lightRules.includes(`fill: ${brandColors.light.accent}`), 'the light palette is the default');
+  assert.ok(darkRules.includes(`fill: ${brandColors.dark.ink}`) && darkRules.includes(`fill: ${brandColors.dark.accent}`), 'the dark palette sits behind the media query');
+  // A fill attribute would outrank nothing here but would also never change with the scheme.
+  assert.ok(!/<path[^>]* fill=/.test(favicon), 'no path holds a fixed fill');
+  assert.equal(fs.readFileSync(path.join(root, FAVICON_FILE), 'utf8'), favicon, 'the committed favicon is the rendered one');
+});
+
+test('the committed brand files are not stale', () => {
   // The same check `pnpm check-brand` runs. Its value is that a change to the accent cannot leave
-  // the READMEs drawing the old one.
+  // the READMEs or the favicon drawing the old one.
   const stale = syncBrand({ check: true, quiet: true });
   assert.deepEqual(stale, [], `stale brand artwork: ${stale.join(', ')}`);
 });
