@@ -174,7 +174,7 @@ export async function runProvidersAcceptance({
   // API-key list in memory and replaces it on a write, which is what makes the
   // round trip observable: the toggle disables an entry, re-reads the list, and
   // the entry really is disabled the second time.
-  const providerSwitch = page.locator('.providers-page tbody .ant-switch').first();
+  const providerSwitch = page.locator('.providers-page tbody [role="switch"]').first();
   await providerSwitch.waitFor({ state: 'visible', timeout: 15000 });
 
   /** Reads the gateway's own answer for one provider, rather than trusting the page. */
@@ -212,7 +212,7 @@ export async function runProvidersAcceptance({
       const states = {};
       for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
         const id = row.getAttribute('data-row-key');
-        const node = row.querySelector('.ant-switch');
+        const node = row.querySelector('[role="switch"]');
         if (id && node) states[id] = node.getAttribute('aria-checked') === 'true';
       }
       return states;
@@ -253,7 +253,7 @@ export async function runProvidersAcceptance({
   // gains a provider does not make this pass by coincidence or fail for a reason
   // it is not about.
   const renderedRows = await page.locator('.providers-page tbody tr').count();
-  const renderedSwitches = await page.locator('.providers-page tbody .ant-switch').count();
+  const renderedSwitches = await page.locator('.providers-page tbody [role="switch"]').count();
   check(
     'every provider row renders exactly one enable switch',
     renderedRows > 0 && renderedSwitches === renderedRows,
@@ -313,7 +313,7 @@ export async function runProvidersAcceptance({
   // hide the very window being probed. Every click's requested value is recorded
   // in order, so the last entry is exactly "what the operator last asked for".
   const burst = await page.evaluate(() => {
-    const node = document.querySelector('.providers-page tbody .ant-switch');
+    const node = document.querySelector('.providers-page tbody [role="switch"]');
     if (!node) return { clicks: 0, intents: [], accepted: [] };
     const intents = [];
     const accepted = [];
@@ -432,7 +432,7 @@ export async function runProvidersAcceptance({
   // the whole table instead would make the check fail for the wrong reason the
   // moment the fixture gains a provider - and pass for the wrong reason if the
   // codex entries were ever removed.
-  const codexSwitchCount = await page.locator('.providers-page tbody tr[data-row-key^="codex-"] .ant-switch').count();
+  const codexSwitchCount = await page.locator('.providers-page tbody tr[data-row-key^="codex-"] [role="switch"]').count();
   check(
     'the fixture provides two codex toggles to race',
     codexSwitchCount === 2,
@@ -450,14 +450,14 @@ export async function runProvidersAcceptance({
     const intents = {};
     for (const row of codexRows) {
       const id = row.getAttribute('data-row-key');
-      const node = row.querySelector('.ant-switch');
+      const node = row.querySelector('[role="switch"]');
       if (!id || !node) continue;
       intents[id] = node.getAttribute('aria-checked') !== 'true';
     }
     // Dispatched only after every intent is recorded, so the whole burst is one
     // synchronous pass and no round trip can resolve in between.
     for (const row of codexRows) {
-      row.querySelector('.ant-switch')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      row.querySelector('[role="switch"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     }
     return intents;
   });
@@ -507,7 +507,7 @@ export async function runProvidersAcceptance({
   // than assuming it: everything after this point expects both rows enabled.
   await page.evaluate(() => {
     for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
-      const node = row.querySelector('.ant-switch');
+      const node = row.querySelector('[role="switch"]');
       if (node && node.getAttribute('aria-checked') !== 'true') {
         node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       }

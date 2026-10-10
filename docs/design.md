@@ -1089,7 +1089,7 @@ how serious it is:
 | The outcome of something the operator just did - saved, copied, refused, three of five refreshed | **Toast** | `useToast()` |
 | A region that could not be read - a chart, a list, a drawer's tab | **Inline, in the region's place, with Retry** | `LoadFailure` |
 | A condition that holds while the region is on screen - stale data, a feature switched off, a diagnostic about a record | **Inline, where it applies** | `Notice` |
-| A refusal of the input in front of the operator - a login, a composer message, a form field | **Inline, beside that input** | `Notice` / the form's own field error |
+| A refusal the operator answers in place - a login, a form field, a rejected Agent message that carries its own Retry | **Inline, beside that input** | `Notice` / the form's own field error |
 
 - **One outcome, one surface.** A toast is never repeated as a banner, and a result never opens an
   information-only dialog: `modal.confirm` asks before an action, a toast reports after it.
@@ -1112,10 +1112,34 @@ how serious it is:
   repairs the one panel without reloading the page around it. A failed re-read over data still on
   screen is the warning tone above that data; a failed first read takes the data's place, and says so
   once.
-- **A notice** has one layout whatever it carries: the icon at body size, the headline, and its detail
-  under it in `--fg-2`. It is closable only when the condition may be put away.
+- **A refusal with nothing to answer is a toast.** The Playground refuses a send, a replay or an
+  attachment through one keyed toast, so a repeat replaces the last one; a check for updates the
+  operator asked for reports its failure in a toast with the reason, and only an automatic check
+  states its failure in the versions card.
+- **A notice is a callout, not a boxed banner.** A 2px rule in the tone's colour on the leading
+  edge - the mark the navigation and a selected record use for "here" - over a `--thread-field`
+  fill with no border and the 4px radius on the trailing corners only. The tone's code takes the
+  first line, in the table header's type (10px, 600, uppercase letterforms, 0.08em) and the tone's
+  colour - `INFO` `--accent`, `WARNING` `--warn`, `ERROR` `--danger`, `SUCCESS` `--success` - so it
+  never rests on colour; the headline follows at 13px on its own line at the full measure, with its
+  detail under it in `--fg-2`, and its tools at the trailing edge.
+- **A notice's action sits beside the sentence; its close control sits in the corner.** An action
+  is a quiet control of the callout rather than a button laid on it: 26px tall, no fill of its own,
+  a `--thread-hairline` edge and the `--thread-field-hover` step on hover, its glyph in `--muted`.
+  It keeps to the trailing edge: centred beside the sentence, or on the last line under it when
+  the sentence would be left less than 220px. The close control exists only when the condition
+  may be put away: a 26px square with the same hover step, pinned to the code's line in a 40px
+  trailing gutter. A closable notice always gives its action the last line, reaching into the
+  gutter so the action's trailing edge and the close glyph's are one edge, top corner to bottom
+  corner. Under `(pointer: coarse)` the close control gains a 6px hit-area inset.
+- **The tone's code is not translated.** It is the same four words in every reading language, the
+  way a log level or an HTTP status is: recognisable at a glance and searchable in a screenshot.
+  Everything after it is in the reader's language. An `icon` is for a notice that reports work in
+  flight or a class of risk; it sits before the code and never replaces it.
+  `Notice` draws itself: antd's `Alert` is not used anywhere.
 - `pnpm check:feedback` refuses antd `Alert`, `message` and `notification`, and information-only
-  `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module. All checks resolve Ant Design
+  `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module. It also refuses antd's `Switch`
+  everywhere (Switch, below). All checks resolve Ant Design
   bindings, including namespace imports, local aliases and `App.useApp()` results; comments, strings,
   type-only imports and unrelated or shadowed bindings are ignored.
 
@@ -1137,6 +1161,36 @@ permits temporary notices when equivalent information or functionality is availa
 hover alone is not a substitute for that alternative. Important per-target reports remain persistent,
 pending work closes only when it settles, and callers can explicitly select persistence or override
 the default duration. Lifetime changes do not change the entry/exit motion budget.
+
+### Switch
+
+Every on/off control is `web/src/components/common/Switch.tsx`; antd's `Switch` is not used, and
+`pnpm check:feedback` refuses its import (`raw-switch`). The control is drawn for the console rather
+than taken as a pill:
+
+```text
+size      track     thumb    corner   use
+default   40×22     16px     6px      a settings row, a drawer field
+small     32×18     12px     5px      a list row, a table cell, a toolbar
+touch     44×24     18px     6px      both sizes under `(pointer: coarse)`
+```
+
+- **A rounded rectangle with a concentric thumb.** The thumb sits 2px inside the track's 1px edge
+  and its corner is the track's minus those 3px, so the two outlines run parallel. The travel and
+  both state marks are derived from the same four numbers, so a size is one block.
+- **Off is an outline; on is a fill.** Off is a transparent track with a `--muted` edge and a
+  `--muted` thumb, and hovering an enabled switch steps both to `--fg-2`. On fills the track with
+  `--success` and paints the thumb in `--accent-on`, the ink a filled control carries.
+- **The state is written on the track.** The stretch the thumb is not covering carries a bar when
+  on and a ring when off. Side, fill and mark agree, so the reading never rests on colour.
+- **Disabled** is 45% opacity. **Pending** (`loading`) holds the state, refuses input, reports
+  `aria-busy`, hollows the thumb and drops the marks, at full strength so a write in flight does
+  not read as unavailable; it is a static mark, not a spinner.
+- **Motion**: the thumb slides by `transform` in `base` and leans 2px toward its next side while
+  pressed; the track, edge, thumb and mark colours change in `fast`.
+- The element is a native `<button role="switch">`, so a wrapping `<label>`, `htmlFor`, Space/Enter,
+  the shared focus ring and `Form.Item valuePropName="checked"` need no wiring. It is controlled:
+  `checked` and `onChange(checked)`. A switch with no visible label of its own carries `aria-label`.
 
 ### Time range control
 
@@ -1628,8 +1682,6 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
 - Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
   `activeBarBorderWidth: 0` — kills the default blue selected block and avoids
   heavy filled blocks; active position uses the left 2px `--fg` inset rule.
-- Switch: `colorPrimary = success (#10b981)` — active toggle switch uses
-  semantic success green (enabled/healthy), never decorative blue.
 - Modal & Drawer: `1px solid var(--border)`, zero shadow, 4px/6px radii. Simple
   single-task dialogs use a clean uninterrupted body ("Title → Field/Content →
   Right-aligned Actions") without decorative header/footer hairline dividers;
@@ -2210,7 +2262,7 @@ asserting a change the design system deliberately does not make.
 | --- | --- |
 | Icon buttons and the console's own dense controls — `.config-key-action`, antd's icon-only variant, the drawer close button, pagination steps, the clear affordance | `::before { inset: -4px }` under `(pointer: coarse)`, leaving ~3px of slop beyond the drawn box once the 1px border is accounted for |
 | Tabs and segmented items, which sit edge to edge | grow on the vertical axis only — a horizontal inset would steal the neighbour's taps |
-| antd's small switch (28×16) | grows to 44×22: the floor needs real dimensions, and five surfaces use it |
+| `Switch` (40×22, or 32×18 in rows) | grows to 44×24: it sits beside other row controls, so the floor is real dimensions rather than an inset |
 | Number-input steppers (measured 1×19px) | hidden: a control a finger cannot hit is worse than an absent one, and the numeric keypad remains |
 | The request list's column resizer | hidden: a drag near a header edge means "scroll", never "resize a column" |
 | An action cluster whose gap is under 8px | the gap widens, so two 4px insets meet instead of overlapping |
@@ -2368,7 +2420,7 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
 - [ ] Nav position marked by 2px `--fg` left tick rule, not a filled block or semantic color
 - [ ] Settings and management favor open section lists over heavy card wrappers
 - [ ] Cards reserved for KPIs, summaries, and peer comparisons
-- [ ] Switches use `--success` when active (green = enabled)
+- [ ] An on/off control is `Switch` from `components/common/Switch`, never antd's (§5, Switch)
 - [ ] Status shown with pip + text, never color alone
 - [ ] Numbers tabular; empty states say what's missing (no fake data or invented workspace/account placeholders)
 - [ ] A name is a label, not an identity: renaming never changes what a filter selects, and an unnamed value falls back to something recognisable rather than a hash

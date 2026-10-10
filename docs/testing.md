@@ -491,7 +491,14 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 - `scripts/test-feedback-surfaces.ts` pins short acknowledgement lifetimes, the second-line and
   shortcut reading budgets, persistent-report precedence and explicit duration overrides. These
   policy decisions belong in the logic suite rather than browser tests that wait for real time.
-- `scripts/check-feedback.test.mjs` checks Ant Design feedback bindings and aliases (named and namespace
+- `web/tests/notice.component.test.tsx` owns the inline notice's rendered contract: the tone named as a
+  status code, a lone description promoted to the headline, the close control present only with `onClose`,
+  and `LoadFailure` carrying its reason and Retry.
+- `web/tests/switch.component.test.tsx` owns the shared `Switch` contract: the controlled value and its
+  `onChange`, activation through a wrapping label, refusal while disabled or pending, a caller-owned
+  `aria-busy` that stays clickable, and `Form.Item valuePropName="checked"` binding. Its drawn
+  geometry belongs to the browser.
+- `scripts/check-feedback.test.mjs` also pins the `raw-switch` rule in both directions. It checks Ant Design feedback bindings and aliases (named and namespace
   imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
   strings and type-only imports, legal confirmations, diagnostic locations and the
   feedback module exemption. It is automatically discovered by the repository self-test runner.
@@ -949,6 +956,9 @@ version-feedback flow and health-anomaly states. Extracted scenarios retain the
 original assertions and establish their own navigation/fixture preconditions; page
 impact rules and negative planner cases select every affected subscenario. Timings
 are per subscenario so slow flows can be balanced without shared state.
+The token-capacity scenario also owns the credential list's column claim at 1440px: every
+record starts each of its six columns where the list header does, which is what the shared
+subgrid tracks exist to guarantee.
 
 ### External agent access coverage
 

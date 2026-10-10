@@ -1,0 +1,152 @@
+/* Four numbers are the whole geometry: the thumb sits 2px inside the 1px edge, and its travel,
+   its corner and both state marks are derived from them, so a size is one block and its parts
+   cannot disagree. The thumb's corner is the track's minus that 3px, which keeps the two
+   outlines concentric. */
+.switch {
+  --switch-width: 40px;
+  --switch-height: 22px;
+  --switch-thumb: 16px;
+  --switch-radius: 6px;
+  --switch-travel: calc(var(--switch-width) - 6px - var(--switch-thumb));
+  --switch-mark: calc(var(--switch-thumb) / 2);
+  /* The centre of the stretch of track the thumb is not covering, from either edge. */
+  --switch-mark-centre: calc(var(--switch-travel) / 2 + 1px);
+
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: var(--switch-width);
+  height: var(--switch-height);
+  padding: 0;
+  vertical-align: middle;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--muted);
+  border-radius: var(--switch-radius);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+              border-color var(--motion-fast) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
+}
+
+.is-small {
+  --switch-width: 32px;
+  --switch-height: 18px;
+  --switch-thumb: 12px;
+  --switch-radius: 5px;
+}
+
+/* The thumb takes the button's `color`, so one declaration per state paints it and the marks
+   together. It moves by transform: a slide on `left` would be a layout transition. */
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-sizing: border-box;
+  width: var(--switch-thumb);
+  height: var(--switch-thumb);
+  background: currentColor;
+  border: 2px solid currentColor;
+  border-radius: calc(var(--switch-radius) - 3px);
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+/* The state is written on the track as well as shown by the thumb's side: a bar for on, a ring
+   for off, each in the space the thumb has left. Position, fill and mark agree, so the reading
+   never rests on colour. */
+.switch::before,
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  box-sizing: border-box;
+  height: var(--switch-mark);
+  margin-top: calc(var(--switch-mark) / -2);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.switch::before {
+  left: var(--switch-mark-centre);
+  width: 2px;
+  margin-left: -1px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.switch::after {
+  right: var(--switch-mark-centre);
+  width: var(--switch-mark);
+  margin-right: calc(var(--switch-mark) / -2);
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.switch:hover:enabled {
+  color: var(--fg-2);
+  border-color: var(--fg-2);
+}
+
+/* On, the track is the semantic fill and the thumb is the ink a filled control carries. */
+.is-checked,
+.is-checked:hover:enabled {
+  color: var(--accent-on);
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.is-checked .thumb {
+  transform: translateX(var(--switch-travel));
+}
+
+.is-checked::before {
+  opacity: 0.75;
+}
+
+.is-checked::after {
+  opacity: 0;
+}
+
+/* A press leans the thumb toward the side it is about to take. */
+.switch:active:enabled .thumb {
+  transform: translateX(2px);
+}
+
+.is-checked:active:enabled .thumb {
+  transform: translateX(calc(var(--switch-travel) - 2px));
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Pending is a hollow thumb, not a spinner: the write is short, and the held position already
+   says which state was asked for. It keeps full strength so it does not read as unavailable,
+   and drops the marks so the hollow thumb is the only open shape on the track. */
+.is-loading:disabled {
+  cursor: progress;
+  opacity: 1;
+}
+
+.is-loading .thumb {
+  background: transparent;
+}
+
+.is-loading::before,
+.is-loading::after {
+  opacity: 0;
+}
+
+/* A switch is small in both dimensions and sits beside other row controls, so a hit-area
+   inset would steal its neighbours' taps. It takes real dimensions under a finger instead. */
+@media (pointer: coarse) {
+  .switch {
+    --switch-width: 44px;
+    --switch-height: 24px;
+    --switch-thumb: 18px;
+    --switch-radius: 6px;
+  }
+}

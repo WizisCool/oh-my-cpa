@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Dropdown, Empty, Input, Popconfirm, Switch, Tooltip } from 'antd';
+import { Button, Dropdown, Empty, Input, Popconfirm, Tooltip } from 'antd';
+import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, SearchOutlined, SettingOutlined, ShopOutlined } from '../icons';

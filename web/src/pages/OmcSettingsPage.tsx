@@ -1,7 +1,8 @@
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, ColorPicker, Segmented, Select, Switch } from 'antd';
+import { Button, ColorPicker, Segmented, Select } from 'antd';
+import { Switch } from '../components/common/Switch';
 import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';

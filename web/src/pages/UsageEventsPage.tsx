@@ -7,8 +7,8 @@ import {
   Empty,
   Listy,
   Popover,
-  Switch,
 } from 'antd';
+import { Switch } from '../components/common/Switch';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from '../utils/time';

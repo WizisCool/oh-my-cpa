@@ -1,5 +1,6 @@
 import React from 'react';
-import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Switch, Tooltip } from 'antd';
+import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Tooltip } from 'antd';
+import { Switch } from '../common/Switch';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';

@@ -1,5 +1,6 @@
 import React from 'react';
-import { App as AntdApp, Button, Checkbox, Dropdown, Switch, Tag, Tooltip, Typography } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown, Tag, Tooltip, Typography } from 'antd';
+import { Switch } from '../../components/common/Switch';
 import {
   AppstoreOutlined,
   DeleteOutlined,

@@ -1,4 +1,5 @@
-import { Button, Input, InputNumber, Select, Switch, Typography } from 'antd';
+import { Button, Input, InputNumber, Select, Typography } from 'antd';
+import { Switch } from '../common/Switch';
 import {
   ApiOutlined,
   CodeOutlined,

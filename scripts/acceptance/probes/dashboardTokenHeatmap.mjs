@@ -1195,8 +1195,8 @@ export async function dashboardTokenHeatmapPruned({ base, page, check }) {
 export async function dashboardTokenHeatmapFailure({ base, page, check, context }) {
   // A first load against a failing endpoint: the panel reports it and offers a retry.
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.heatmap-panel .ant-alert-error').waitFor({ timeout: 20_000 });
-  const errorText = await page.locator('.heatmap-panel .ant-alert-error').innerText();
+  await page.locator('.heatmap-panel .omc-notice.is-error').waitFor({ timeout: 20_000 });
+  const errorText = await page.locator('.heatmap-panel .omc-notice.is-error').innerText();
   check('a failed first load is reported rather than left loading', errorText.length > 0, `alert=${JSON.stringify(errorText.slice(0, 120))}`);
   await page.getByTestId('dashboard-credential-quota').waitFor();
   const quotaBesideFailure = await page.getByTestId('dashboard-credential-quota').getAttribute('data-quota-panel-state');
@@ -1205,7 +1205,7 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   // its own: a panel that widened to the whole row there would drop credential quota out of the
   // row it shares, which no assertion about either panel's contents can see.
   await checkActivityHealthLayout(page, check, false);
-  check('the failed panel offers a retry', (await page.locator('.heatmap-panel .ant-alert-error button').count()) === 1);
+  check('the failed panel offers a retry', (await page.locator('.heatmap-panel .omc-notice.is-error button').count()) === 1);
   check(
     'the failed panel does not show a grid it never read',
     (await page.locator('.heatmap-grid').count()) === 0,
@@ -1266,7 +1266,7 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
     : { status: 503, json: { error: 'CPA unavailable' } }));
   await quotaPage.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   const quotaPanel = quotaPage.getByTestId('dashboard-credential-quota');
-  await quotaPanel.locator('.ant-alert-error').waitFor();
+  await quotaPanel.locator('.omc-notice.is-error').waitFor();
   check('an unread credential list is unknown rather than an empty fleet', await quotaPanel.getAttribute('data-quota-panel-state') === 'unknown');
   await quotaPage.locator('.heatmap-grid').waitFor();
   check('an unread credential list leaves token activity readable', await quotaPage.locator('.heatmap-cell').count() === HEATMAP_TOTAL_DAYS);
@@ -1282,7 +1282,7 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
 
   canReadCredentials = false;
   await quotaPage.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
-  await quotaPanel.locator('.quota-alert.ant-alert-warning').waitFor();
+  await quotaPanel.locator('.quota-alert.omc-notice.is-warning').waitFor();
   check('a failed refresh keeps the credential rows with a warning', await quotaPanel.getAttribute('data-quota-panel-state') === 'ready' && await quotaPanel.locator('.quota-row').count() === 2);
 
   canReadCredentials = true;

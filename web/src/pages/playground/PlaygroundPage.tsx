@@ -41,7 +41,7 @@ import {
 import type { Content, Message, PlaygroundParameters, PlaygroundSession, PlaygroundTarget, Turn } from './state';
 import { usePlaygroundRun } from './usePlaygroundRun';
 import styles from './PlaygroundPage.module.css';
-import { LoadFailure, Notice } from '../../components/feedback';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
 
 /**
  * How long the stored session waits for edits to settle before it is written.
@@ -77,8 +77,14 @@ export const PlaygroundPage: React.FC = () => {
   const [selectedID, setSelectedID] = React.useState('');
   const [panelTab, setPanelTab] = React.useState<PanelTab>('parameters');
   const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
-  const [notice, setNotice] = React.useState('');
   const { turns, lastRunID, isRunning, send, retry, edit, stop, recover, replaceTurns } = usePlaygroundRun(lang);
+  const toast = useToast();
+  // A refused send, replay or attachment is the outcome of that gesture, so it is a toast. One key:
+  // a repeated refusal replaces the last one. Read through a ref because the attachment adapter is
+  // built once and must still speak the current language.
+  const refuseRef = React.useRef<(code: string) => void>(() => undefined);
+  refuseRef.current = (code) => toast.error(t(playgroundErrorKey(code)), { key: 'playground-refusal' });
+  const refuse = React.useCallback((code: string) => refuseRef.current(code), []);
 
   // The console's own key list entry, so a key created or renamed on the key page is current here.
   // Only a key with a usage fingerprint can be named to the server, so the rest are not offered.
@@ -221,7 +227,7 @@ export const PlaygroundPage: React.FC = () => {
     if (!text.trim() && images.length === 0) return;
     // The demonstration has one recorded answer, for one message (ADR 0092).
     if (isDemo && (text.trim() !== t('pg.demo.example') || images.length > 0)) {
-      setNotice('demo_replay_only');
+      refuse('demo_replay_only');
       return;
     }
     const content: Content[] = [
@@ -231,7 +237,7 @@ export const PlaygroundPage: React.FC = () => {
     const user: Message = { role: 'user', content };
     const request = buildChatRequest(target, parameters, customBody.value, buildHistory(turns), user);
     if (new TextEncoder().encode(JSON.stringify(request)).byteLength > MAX_REQUEST_BYTES) {
-      setNotice('request_too_large');
+      refuse('request_too_large');
       return;
     }
     const key = keys.data?.find(item => item.usage_fingerprint === target.fingerprint);
@@ -247,21 +253,19 @@ export const PlaygroundPage: React.FC = () => {
       eventBytes: 0,
       isTruncated: false,
     };
-    setNotice('');
     setSelectedID(turn.id);
     send(turn);
   };
 
-  // A turn whose image was dropped from storage cannot be asked again; the notice says why rather
+  // A turn whose image was dropped from storage cannot be asked again; the toast says why rather
   // than the replay failing at the gateway.
   const isReplayable = React.useCallback((turn: Turn) => {
     if (hasOmittedImage(turn)) {
-      setNotice('image_omitted');
+      refuse('image_omitted');
       return false;
     }
-    setNotice('');
     return true;
-  }, []);
+  }, [refuse]);
 
   const onInspect = React.useCallback((turn: Turn) => {
     setSelectedID(turn.id);
@@ -277,8 +281,8 @@ export const PlaygroundPage: React.FC = () => {
   const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime>>();
   const attachmentAdapter = React.useMemo(() => new PlaygroundImageAdapter(
     () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
-    () => setNotice('invalid_image'),
-  ), []);
+    () => refuse('invalid_image'),
+  ), [refuse]);
   const runtime = usePlaygroundThreadRuntime({
     turns,
     isRunning,
@@ -305,7 +309,6 @@ export const PlaygroundPage: React.FC = () => {
     replaceTurns([]);
     runtime.thread.composer.reset();
     setSelectedID('');
-    setNotice('');
   };
 
   const exportConversation = (format: 'html' | 'image' | 'json') => {
@@ -342,7 +345,6 @@ export const PlaygroundPage: React.FC = () => {
       {models.isSuccess && models.data.models.length === 0 && (
         <Notice tone="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
       )}
-      {notice && <Notice tone="error" title={t(playgroundErrorKey(notice))} onClose={() => setNotice('')} />}
     </>
   );
 

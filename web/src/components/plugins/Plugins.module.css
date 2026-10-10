@@ -610,8 +610,8 @@
 }
 
 /* A switch keeps its own width; only text controls take the row. */
-.config-control :global(.ant-switch),
-.config-control-row > :global(.ant-switch):first-child {
+.config-control [role='switch'],
+.config-control-row > [role='switch']:first-child {
   flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 4px;

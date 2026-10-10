@@ -93,8 +93,8 @@ export async function searchAndRejectionsSection(context) {
   await page.goto(`${appURL}/usage/events?preset=24h&latency_min=abc&cost=maybe`, {
     waitUntil: 'domcontentloaded',
   });
-  await page.locator('.usage-events-page .ant-alert').first().waitFor({ state: 'visible', timeout: 10000 });
-  const rejectedNotice = await page.locator('.usage-events-page .ant-alert').first().innerText();
+  await page.locator('.usage-events-page .omc-notice').first().waitFor({ state: 'visible', timeout: 10000 });
+  const rejectedNotice = await page.locator('.usage-events-page .omc-notice').first().innerText();
   check('an unusable filter parameter is reported', /latency_min/.test(rejectedNotice) && /cost/.test(rejectedNotice), `notice=${JSON.stringify(rejectedNotice)}`);
   // The list must still run on the filters it could apply. The rows are awaited, so
   // the assertion is about the page from which the notice was read rather than about
@@ -110,7 +110,7 @@ export async function searchAndRejectionsSection(context) {
   // that would pass on the first poll whether or not the page had finished rendering.
   // The rows being visible is what makes the read meaningful - the page has rendered,
   // and it rendered without a notice.
-  check('a clean URL shows no notice', (await page.locator('.usage-events-page .ant-alert').count()) === 0);
+  check('a clean URL shows no notice', (await page.locator('.usage-events-page .omc-notice').count()) === 0);
 
   // Same-component navigation with a pending keystroke. `page.goto` remounts the
   // page, so it cannot exercise this: the two URLs below share a committed `q`, so
