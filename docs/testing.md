@@ -610,6 +610,16 @@ backup and secret restoration remain covered by their existing Go tests.
 
 `internal/repository/config_backups_test.go` owns encryption at rest, deduplication against the newest copy, the separate pre-v8 retention, the operator's retention and its immediate pruning, and deletion. `internal/cpa/management/client_config_test.go` owns the pre-write hook: a copy before every write, the reason each write names (an outer operation's name winning), and refusal when a copy cannot be kept. `internal/api/management_config_backups_test.go` owns the routes: the server-side restore and its whole-document write, the pre-v8 `409`, the manual copy's `created` flag, retention bounds and deletion. The `config-backups` probe owns the dialog: reason labels, the withheld pre-v8 restore, the retention write, the restore confirmation stacking above the dialog, the restore request and the editor reload after it. The configuration page and `web/src/components/config/` planner rules select it, with a negative case for the schema.
 
+### Configuration defaults and Payload disclosures
+
+`scripts/test-dirty.ts` covers omitted retry defaults, explicit example values,
+and lossless reversion for both omitted and explicit YAML baselines.
+`web/tests/payload-rules.component.test.tsx` renders the real Payload editor under
+StrictMode: empty and populated categories start collapsed, external YAML updates
+preserve disclosure choices, and save validation opens an invalid category without
+mutating the document. Both suites are automatically discovered; browser scenarios
+retain layout and rule-editing coverage.
+
 ### Route error recovery regression coverage
 
 `scripts/test-route-error-diagnostics.ts` owns diagnostic projection, HTTP route

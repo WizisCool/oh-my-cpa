@@ -459,7 +459,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     scalarEndpointKey: 'request_retry',
     min: 0,
     unitKey: 'cfg.unit_times',
-    defaultValue: 3,
+    defaultValue: 0,
     keywords: ['retry', 'request'],
   },
   {
@@ -485,7 +485,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     scalarEndpointKey: 'max_retry_interval',
     min: 0,
     unitKey: 'cfg.unit_seconds',
-    defaultValue: 30,
+    defaultValue: 0,
     keywords: ['retry', 'interval'],
   },
   {

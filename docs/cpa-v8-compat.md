@@ -45,6 +45,37 @@ Source references:
 The following measurements and mapping tables retain their CPA v8.0.2 baseline;
 the two paths above supersede the corresponding editor locations in that table.
 
+### Configuration option semantics
+
+The visual editor uses CPA's runtime defaults for omitted YAML fields, not the
+values shown in its example configuration. In CPA v8.0.16, omitted
+`routing.retry.request-retry` and `routing.retry.max-retry-interval` both mean
+`0`; the example explicitly sets `3` and `30`. Retry rounds count additional
+rounds after the first credential attempt round. The interval limits the cooldown
+wait between rounds, and `max-retry-credentials` caps distinct credentials per
+round, including the first attempt (`0` leaves that cap unlimited). Reverting a
+visual edit to an omitted baseline removes the added path and preserves the
+original document.
+
+`requests.passthrough-headers` forwards filtered **upstream response** headers to
+the client. It does not forward client request headers. `force-model-prefix`
+restricts unprefixed requests to unprefixed credentials, except when a credential
+prefix equals the requested model name. Claude's header-default timeout supplies
+`X-Stainless-Timeout`, not a local HTTP client timeout. With signature caching
+disabled, enabling `signature-bypass-strict` selects stricter Claude signature
+validation. Disabling automatic panel updates stops periodic checks; a missing
+panel is still downloaded on first access.
+
+Sources at tag `v8.0.16`:
+
+- [Runtime configuration defaults](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/config/config.go)
+- [Retry rounds and credential selection](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/sdk/cliproxy/auth/conductor_execution.go)
+- [Model-prefix registration](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/sdk/cliproxy/service_models.go)
+- [Response header filtering](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/sdk/api/handlers/header_filter.go)
+- [Claude executor headers](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/runtime/executor/claude_executor.go)
+- [Claude signature validation](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/translator/antigravity/claude/signature_validation.go)
+- [Management panel updates](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/managementasset/updater.go)
+
 Upstream sources, all at tag `v8.0.2` (commit `4a2c818`):
 
 - [management-api-v8.md](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.2/docs/management-api-v8.md) — the v8 Management API.
