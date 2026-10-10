@@ -359,8 +359,10 @@ export const SystemPage: React.FC = () => {
       }
     } catch (error: unknown) {
       const detail = describeError(error);
-      setUpdateCheckError(detail);
-      if (shouldNotify) toast.error(t('sys.check_failed'));
+      // One outcome, one surface: a check the operator asked for answers in a toast, and only an
+      // automatic check, which nobody is waiting on, states its failure in the card.
+      if (shouldNotify) toast.error(t('sys.check_failed'), { detail });
+      else setUpdateCheckError(detail);
     } finally {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['management-system-info'] }),

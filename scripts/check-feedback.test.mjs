@@ -12,6 +12,13 @@ test('a raw antd Alert is refused', () => {
   assert.deepEqual(rules("import { Button, Alert as Banner } from 'antd';"), ['raw-alert']);
 });
 
+test('a raw antd Switch is refused, and the console\'s own is not', () => {
+  assert.deepEqual(rules("import { Button, Switch } from 'antd';"), ['raw-switch']);
+  assert.deepEqual(rules("import * as Antd from 'antd'; const toggle = Antd.Switch;"), ['raw-switch']);
+  assert.deepEqual(rules("import { Switch } from '../common/Switch'; const toggle = Switch;"), []);
+  assert.deepEqual(rules("import type { SwitchProps } from 'antd';"), []);
+});
+
 test('antd message and notification are refused, imported or taken from useApp', () => {
   assert.deepEqual(rules("import { message } from 'antd';"), ['raw-toast']);
   assert.deepEqual(rules("import { notification } from 'antd';"), ['raw-toast']);

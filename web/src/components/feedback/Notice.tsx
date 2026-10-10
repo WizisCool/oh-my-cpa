@@ -1,6 +1,6 @@
 import React from 'react';
-import { Alert, Button } from 'antd';
-import { ReloadOutlined } from '../icons';
+import { Button } from 'antd';
+import { CloseOutlined, ReloadOutlined } from '../icons';
 import { describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { readableReason } from './toastContent';
@@ -25,26 +25,50 @@ export interface NoticeProps {
   'data-testid'?: string;
 }
 
-export const Notice: React.FC<NoticeProps> = ({ tone, title, description, action, icon, onClose, className, 'data-testid': testId }) => (
-  <Alert
-    type={tone}
-    showIcon
-    icon={icon}
-    // One layout for every notice: the headline and its detail share the compact row, because
-    // antd's description layout doubles the icon and enlarges the title, and a failure with a
-    // reason would otherwise read louder than the same failure without one.
-    title={(
-      <>
-        <span className="omc-notice-title">{title ?? description}</span>
-        {title && description && <span className="omc-notice-detail">{description}</span>}
-      </>
-    )}
-    action={action}
-    closable={onClose ? { onClose } : undefined}
-    className={['omc-notice', className].filter(Boolean).join(' ')}
-    data-testid={testId}
-  />
-);
+/**
+ * The tone as a status code. It is the same four words in every reading language, the way a log
+ * level or an HTTP status is: a label that changed with the language would be one more thing to
+ * translate and one less thing to recognise at a glance or to search a screenshot for.
+ */
+const TONE_CODES: Record<NoticeTone, string> = {
+  info: 'INFO',
+  warning: 'WARNING',
+  error: 'ERROR',
+  success: 'SUCCESS',
+};
+
+/**
+ * Drawn as a callout rather than a boxed banner: a 2px rule in the tone's colour, the tone's code
+ * on its own line in the console's small label type, then the sentence at the full measure. The
+ * code carries the tone, so it never rests on colour.
+ */
+export const Notice: React.FC<NoticeProps> = ({ tone, title, description, action, icon, onClose, className, 'data-testid': testId }) => {
+  const t = useT();
+  return (
+    <div role="alert" className={['omc-notice', `is-${tone}`, onClose && 'is-closable', className].filter(Boolean).join(' ')} data-testid={testId}>
+      <div className="omc-notice-main">
+        <span className="omc-notice-label">
+          {icon && <span className="omc-notice-icon" aria-hidden="true">{icon}</span>}
+          {TONE_CODES[tone]}
+        </span>
+        {/* One layout for every notice: the headline, and its detail under it when it has one, so a
+            failure with a reason reads no louder than the same failure without. */}
+        <div className="omc-notice-body">
+          <span className="omc-notice-title">{title ?? description}</span>
+          {title && description && <span className="omc-notice-detail">{description}</span>}
+        </div>
+      </div>
+      {action && <div className="omc-notice-tools">{action}</div>}
+      {/* The close control is pinned to the code's line in a gutter of its own, so it is in the same
+          corner whether the action sits beside the sentence or has wrapped under it. */}
+      {onClose && (
+        <button type="button" className="omc-notice-close" onClick={onClose} aria-label={t('common.close')}>
+          <CloseOutlined />
+        </button>
+      )}
+    </div>
+  );
+};
 
 export interface LoadFailureProps {
   /** What could not be read, in the reader's words: "Quota could not be read". */

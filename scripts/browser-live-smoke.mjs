@@ -260,7 +260,7 @@ async function main() {
     const uploadJson = await uploadListed.json();
     check('UI 上传后 CPA 真实出现新认证文件', fileName, uploadListed.ok() && uploadJson.total === 1);
 
-    await uploadedCard.locator('.ant-switch').click();
+    await uploadedCard.locator('[role="switch"]').click();
     await page.waitForTimeout(1200);
     const disabledText = await uploadedCard.innerText();
     check('UI 开关真实禁用认证文件', disabledText, /已禁用|disabled/i.test(disabledText));
@@ -298,7 +298,7 @@ async function main() {
   // Switch to logging tab to test debug switch toggle
   await page.locator('.config-visual-container .ant-tabs-tab', { hasText: '日志与诊断' }).click();
   await page.waitForTimeout(400);
-  const debugSwitch = page.locator('.config-field-row', { hasText: '调试模式' }).locator('.ant-switch');
+  const debugSwitch = page.locator('.config-field-row', { hasText: '调试模式' }).locator('[role="switch"]');
   await debugSwitch.click();
   await page.waitForTimeout(600);
   const debugToggled = await debugSwitch.getAttribute('aria-checked');

@@ -10,9 +10,9 @@ import {
   InputNumber,
   Form,
   Table,
-  Switch,
   App as AntdApp,
 } from 'antd';
+import { Switch } from '../common/Switch';
 import {
   SaveOutlined,
   DownloadOutlined,
@@ -681,7 +681,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               <span className={styles['switch-title']}>{t('af.field_disable_cooling')}</span>
                             </div>
                             <Form.Item name="disable_cooling" valuePropName="checked" noStyle>
-                              <Switch disabled={!safeFieldsReady} />
+                              <Switch disabled={!safeFieldsReady} aria-label={t('af.field_disable_cooling')} />
                             </Form.Item>
                           </div>
                           <div className={styles['switch-item']}>
@@ -689,7 +689,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               <span className={styles['switch-title']}>{t('af.field_websockets')}</span>
                             </div>
                             <Form.Item name="websockets" valuePropName="checked" noStyle>
-                              <Switch disabled={!safeFieldsReady} />
+                              <Switch disabled={!safeFieldsReady} aria-label={t('af.field_websockets')} />
                             </Form.Item>
                           </div>
                           <div className={styles['switch-item']}>
@@ -697,7 +697,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                               <span className={styles['switch-title']}>{t('af.field_using_api')}</span>
                             </div>
                             <Form.Item name="using_api" valuePropName="checked" noStyle>
-                              <Switch disabled={!safeFieldsReady} />
+                              <Switch disabled={!safeFieldsReady} aria-label={t('af.field_using_api')} />
                             </Form.Item>
                           </div>
                         </div>

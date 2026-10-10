@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, Card, Checkbox, Empty, Input, Select, Switch, Tooltip } from 'antd';
+import { Button, Card, Checkbox, Empty, Input, Select, Tooltip } from 'antd';
+import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';

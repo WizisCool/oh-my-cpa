@@ -166,7 +166,7 @@ describe('credential quota presentation', () => {
     const { rerender } = render(<QuotaSurface files={FILES} quotas={QUOTAS} isError onRetry={retry} />);
     expect(panelState()).toBe('ready');
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    expect(screen.getByRole('alert').classList.contains('ant-alert-warning')).toBe(true);
+    expect(screen.getByRole('alert').classList.contains('is-warning')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(retry).toHaveBeenCalledTimes(1);
 

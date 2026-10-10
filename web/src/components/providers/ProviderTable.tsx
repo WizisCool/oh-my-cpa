@@ -1,6 +1,7 @@
 import type React from 'react';
 import clsx from 'clsx';
-import { Button, Popconfirm, Switch, Tag, Tooltip } from 'antd';
+import { Button, Popconfirm, Tag, Tooltip } from 'antd';
+import { Switch } from '../common/Switch';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 

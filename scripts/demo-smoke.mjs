@@ -336,7 +336,7 @@ async function main() {
     // saved. This is the only check here that goes through the notice path rather than
     // calling the API directly.
     await page.goto(`${demo.base}/auth-files`, { waitUntil: 'domcontentloaded' });
-    const toggle = page.locator('.ant-switch').first();
+    const toggle = page.locator('[role="switch"]').first();
     await toggle.waitFor({ state: 'visible', timeout: 20_000 });
     await toggle.click();
     const notice = await until(async () => {

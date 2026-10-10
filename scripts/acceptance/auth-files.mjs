@@ -307,7 +307,7 @@ export async function runAuthFilesAcceptance({
     // are asserted.
     const kimiCard = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: 'kimi-fixture.json' }).first();
     check('auth-files kimi card found', await kimiCard.isVisible());
-    const kimiSwitch = kimiCard.locator('.ant-switch');
+    const kimiSwitch = kimiCard.locator('[role="switch"]');
     await kimiSwitch.click();
     await checkEventually(
       'auth-files single toggle disables card',
@@ -323,7 +323,7 @@ export async function runAuthFilesAcceptance({
     const runtimeCard = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: 'virtual-runtime.json' }).first();
     check('auth-files runtime card renders VIRTUAL badge', await runtimeCard.getByText(/VIRTUAL|虚拟/).first().isVisible());
     check('auth-files runtime card has no selection checkbox', (await runtimeCard.locator('input[type="checkbox"]').count()) === 0);
-    check('auth-files runtime card switch is disabled', await runtimeCard.locator('.ant-switch-disabled').isVisible());
+    check('auth-files runtime card switch is disabled', await runtimeCard.locator('[role="switch"]:disabled').isVisible());
 
     // 7. Drawer save submits patch and updates UI
     const xaiCard = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: 'xai-fixture.json' }).first();

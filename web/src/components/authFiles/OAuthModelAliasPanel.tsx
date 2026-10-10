@@ -1,5 +1,6 @@
 import React, { useMemo, useRef } from 'react';
-import { AutoComplete, Button, Empty, Input, Switch, Table } from 'antd';
+import { AutoComplete, Button, Empty, Input, Table } from 'antd';
+import { Switch } from '../common/Switch';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import { useT } from '../../i18n';
 import type {

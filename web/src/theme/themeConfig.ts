@@ -248,12 +248,10 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       Dropdown: { ...noShadow, colorBgElevated: t.elevated },
       Select: { optionSelectedBg: t.selected, optionSelectedColor: t.fg, colorBgElevated: t.elevated },
       Tooltip: { colorBgSpotlight: t.tooltipBg },
-      Switch: { colorPrimary: t.success, colorPrimaryHover: t.success },
       Tag: { borderRadiusSM: 4, defaultBg: t.bg },
       Progress: { remainingColor: t.border },
       Descriptions: { itemPaddingBottom: 10 },
       Statistic: { contentFontSize: 26 },
-      Alert: { borderRadiusLG: 4 },
       // Every toast is one width - a report with file names and reasons included - because antd
       // lays toasts out in a column of this width, and a wider notice would overhang it.
       Notification: { width: 420, borderRadiusLG: 4, colorBgElevated: t.elevated },

@@ -534,7 +534,7 @@ export async function systemInformationPage({ base, page, check }) {
   // must appear for a job this page never started. Scoped to the info alert rather than the card's
   // whole text: the card's static copy also contains words this check greps for, so measuring the
   // card as a whole could report a banner that was never rendered.
-  const runningAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
+  const runningAlert = page.locator('[data-testid="sys-card-maintenance"] .omc-notice.is-info');
   const bannerShown = await until(
     async () => (await runningAlert.count()) > 0,
     { label: 'the in-progress banner for a job already running', timeoutMs: 15_000 },
@@ -759,7 +759,7 @@ export async function systemInformationPage({ base, page, check }) {
     // Scoped to the info alert rather than the card's whole text, for the same reason as the assertion
     // above: the card's static copy contains words this check would otherwise match, so measuring the
     // card as a whole could report a banner that was never rendered.
-    const staleCacheAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
+    const staleCacheAlert = page.locator('[data-testid="sys-card-maintenance"] .omc-notice.is-info');
     const runningBannerShown = await until(
       async () => (await staleCacheAlert.count()) > 0,
       { label: 'the in-progress banner for a job the page just adopted', timeoutMs: 3000 },

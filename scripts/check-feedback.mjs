@@ -15,6 +15,9 @@
  * - `message` or `notification`, imported from `antd` or taken from `App.useApp()` (use `useToast`);
  * - an information-only dialog, `modal.warning/error/info/success` or `Modal.*` of the same
  *   (a confirmation is still `modal.confirm`; a result is a toast).
+ *
+ * The same resolution guards the console's one on/off control: antd's `Switch` is refused
+ * everywhere, because `components/common/Switch` is drawn without it (docs/design.md, Switch).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,6 +45,8 @@ export function findViolations(source) {
     const line = lineOf(source, node.getStart(file));
     if (kind === 'Alert') {
       violations.push({ line, rule: 'raw-alert', message: 'import `Notice` or `LoadFailure` from components/feedback instead of antd `Alert`' });
+    } else if (kind === 'Switch') {
+      violations.push({ line, rule: 'raw-switch', message: 'import `Switch` from components/common/Switch instead of antd' });
     } else if (kind === 'message' || kind === 'notification') {
       violations.push({ line, rule: 'raw-toast', message: `use \`useToast\` instead of \`${kind}\` from ${origin}` });
     }
@@ -73,7 +78,7 @@ export function findViolations(source) {
   }
 
   function memberKind(owner, name) {
-    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'message', 'notification'].includes(name)) return name;
+    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'Switch', 'message', 'notification'].includes(name)) return name;
     if (owner === 'app') {
       if (name === 'modal') return 'Modal';
       if (name === 'message' || name === 'notification') return name;

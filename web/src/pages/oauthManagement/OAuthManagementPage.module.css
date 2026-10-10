@@ -97,7 +97,10 @@
   padding-inline: 2px;
 }
 
-/* The header and every record lay out on one track list, declared once so the two cannot drift. */
+/* The list is one grid, and the header and every record are subgrids of it, so a column is one
+   track whatever any row holds. Two grids declared from the same track list still disagreed: the
+   `auto` actions track resolved per grid, and the difference shifted every flexible column
+   between the header and the rows. Below the collapse width the records lay themselves out. */
 .records {
   --oauth-record-columns: minmax(240px, 1.2fr) 88px 48px minmax(105px, 0.45fr) minmax(300px, 1.4fr) auto;
   display: flex;
@@ -106,15 +109,26 @@
   background: var(--bg);
 }
 
+@media (min-width: 1201px) {
+  .records {
+    display: grid;
+    grid-template-columns: var(--oauth-record-columns);
+    column-gap: 16px;
+  }
+
+  .records > * {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+}
+
 .records > :last-child > article {
   border-bottom: 0;
 }
 
 .table-header {
-  display: grid;
-  grid-template-columns: var(--oauth-record-columns);
   align-items: center;
-  gap: 16px;
   padding: 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border-soft);

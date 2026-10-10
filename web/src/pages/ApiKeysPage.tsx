@@ -16,7 +16,6 @@ import {
   SearchOutlined,
   SyncOutlined,
   TagOutlined,
-  WarningOutlined,
 } from '../components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
@@ -548,7 +547,7 @@ export const ApiKeysPage: React.FC = () => {
             </Button>
           </div>
           {isValueChanged && (
-            <Notice tone="warning" icon={<WarningOutlined />} title={t('keys.value_change_warning')} />
+            <Notice tone="warning" title={t('keys.value_change_warning')} />
           )}
 
           <label className="keys-key-editor-label" htmlFor="gateway-key-alias">

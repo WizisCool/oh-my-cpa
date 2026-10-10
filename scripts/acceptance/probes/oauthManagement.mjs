@@ -455,10 +455,28 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       await until(async () => (await previousEstimate.innerText()) === 'Prev ≈123,456,789,012,345 tokens', {
         label: 'the previous-cycle token estimate in full-digit style',
       });
+      // A wide record is a subgrid of the list, so its tracks are read from the list that owns them.
       await until(async () => page.getByTestId('oauth-credential-record').first().evaluate((element) => {
-        return getComputedStyle(element).gridTemplateColumns.split(' ').length === (window.innerWidth <= 640 ? 1 : 6);
+        const own = getComputedStyle(element).gridTemplateColumns;
+        const tracks = own.startsWith('subgrid') ? getComputedStyle(element.parentElement.parentElement).gridTemplateColumns : own;
+        return tracks.split(' ').length === (window.innerWidth <= 640 ? 1 : 6);
       }), { label: 'the credential row to adopt the target viewport' });
       await settleLayout(page);
+      if (width === 1440) {
+        // The header and the records share tracks only if every record does: one row with a wider
+        // action cell must not move its own columns away from the header's.
+        const columnEdges = await page.getByTestId('oauth-credential-record').evaluateAll((records) => {
+          const edges = (row) => [...row.children].slice(0, 6).map((cell) => Math.round(cell.getBoundingClientRect().left));
+          const header = records[0].parentElement.previousElementSibling;
+          return { header: edges(header), records: records.map(edges) };
+        });
+        check(
+          'every credential record starts its columns where the list header does',
+          columnEdges.records.length > 0
+            && columnEdges.records.every((row) => row.every((left, column) => left === columnEdges.header[column])),
+          JSON.stringify(columnEdges),
+        );
+      }
       const geometry = await previousEstimate.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
         const windowBounds = element.closest('[data-quota-compact-window]').getBoundingClientRect();

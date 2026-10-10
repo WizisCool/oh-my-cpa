@@ -330,7 +330,7 @@ a { color: inherit; }
 }
 .terminal-page-stack > .terminal-page-head { margin-bottom: 8px; }
 .terminal-page-stack > * { min-width: 0; }
-.terminal-page-stack > .ant-alert { margin: 0; }
+.terminal-page-stack > .omc-notice { margin: 0; }
 
 /* Feedback surfaces (docs/design.md, Feedback surfaces). A toast reports an action and leaves; a
    notice describes a region while it is on screen. Both read at the console's body size so a
@@ -409,11 +409,117 @@ a { color: inherit; }
   color: var(--fg-2);
   overflow-wrap: anywhere;
 }
+/* The inline notice (`Notice`, `LoadFailure`): a callout, not a boxed banner. The 2px rule is the
+   same mark the navigation and a selected record use for "here"; the fill is a share of the ink,
+   so it reads as an inset on the page, on a card and on an elevated panel alike. The tone's code
+   takes its own line, which leaves the sentence the full measure in a narrow drawer. */
+.omc-notice {
+  --notice-tone: var(--accent);
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 14px 12px 14px;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: start;
+  background: var(--thread-field);
+  border-inline-start: 2px solid var(--notice-tone);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+/* The basis is the narrowest measure a sentence keeps beside its tools; below it the tools wrap
+   under the text instead of squeezing it. */
+.omc-notice-main { flex: 1 1 220px; display: grid; gap: 4px; min-width: 0; }
+.omc-notice.is-warning { --notice-tone: var(--warn); }
+.omc-notice.is-error { --notice-tone: var(--danger); }
+.omc-notice.is-success { --notice-tone: var(--success); }
+/* The tone's code, in the type the table headers use. */
+.omc-notice-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--notice-tone);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.omc-notice-icon { display: inline-flex; font-size: 12px; }
+.omc-notice-body { min-width: 0; }
+.omc-notice-title { overflow-wrap: anywhere; }
 .omc-notice-detail {
   display: block;
   margin-top: 2px;
   color: var(--fg-2);
+  font-size: 12.5px;
   overflow-wrap: anywhere;
+}
+.omc-notice-detail ul { margin: 0; padding-inline-start: 16px; }
+/* A closable notice keeps a gutter for its close control, so nothing else ever shares that column. */
+.omc-notice.is-closable { padding-inline-end: 40px; }
+/* The notice's own action keeps to the trailing edge: centred beside the sentence, or on the
+   last line under it once the sentence needs the width. */
+.omc-notice-tools {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+/* Beside a close control the action always takes the last line, and reaches into the gutter so
+   its trailing edge and the close glyph's are one edge: the 7px inset, the 6px the button
+   leaves around a 14px icon and the icon's own side bearing put the drawn cross 15px from the
+   box. Sharing the sentence's line would stack the two controls in one column a few pixels
+   apart. */
+.omc-notice.is-closable .omc-notice-tools {
+  flex-basis: 100%;
+  margin-inline-end: -25px;
+}
+/* An action here is a quiet control of the callout, not a button laid on top of it: no fill of
+   its own, the callout's hairline for an edge, and the inset's hover step. The declarations
+   outrank Ant Design's variant rules, which are injected after this stylesheet. */
+.omc-notice-tools .ant-btn-default:not(:disabled) {
+  height: 26px;
+  padding-inline: 10px;
+  color: var(--fg) !important;
+  font-size: 12px;
+  background: transparent !important;
+  border-color: var(--thread-hairline) !important;
+  box-shadow: none !important;
+}
+.omc-notice-tools .ant-btn-default:not(:disabled):hover {
+  background: var(--thread-field-hover) !important;
+  border-color: var(--fg-2) !important;
+}
+.omc-notice-tools .ant-btn-default .ant-btn-icon { color: var(--muted); }
+.omc-notice-tools .ant-btn-default:not(:disabled):hover .ant-btn-icon { color: var(--fg); }
+.omc-notice-tools a { font-size: 12.5px; white-space: nowrap; }
+/* Centred on the code's line: 10px of padding and half of that line's 16px. */
+.omc-notice-close {
+  position: absolute;
+  top: 5px;
+  inset-inline-end: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+}
+.omc-notice-close:hover { color: var(--fg); background: var(--thread-field-hover); }
+@media (pointer: coarse) {
+  .omc-notice-close::before { content: ''; position: absolute; inset: -6px; }
 }
 .config-notice { margin-bottom: 16px; }
 
@@ -3530,7 +3636,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      the delay is felt as lag. It is deliberately not applied to the page: double-tap
      zoom is how a reader enlarges a dense table, and taking it away would be an
      accessibility regression dressed as a latency win. */
-  button, a, label, summary, .ant-switch, .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
+  button, a, label, summary, .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
     touch-action: manipulation;
   }
 
@@ -3561,13 +3667,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      reads the size of the element it focuses, and that is the search input above, not this
      label. Enlarging the label would trade the console's density for zoom that is already
      prevented. */
-
-  /* The switch is the one control whose drawn size cannot be rescued by a hit area: 28x16
-     is below the floor in both dimensions, and antd's small variant is used on five
-     surfaces. It grows here instead, because on a touch device the thumb is the pointer. */
-  .ant-switch-small { min-width: 44px; height: 22px; line-height: 22px; }
-  .ant-switch-small .ant-switch-handle { width: 18px; height: 18px; inset-inline-start: 2px; }
-  .ant-switch-small.ant-switch-checked .ant-switch-handle { inset-inline-start: calc(100% - 20px); }
 
   /* Tabs and segmented items sit edge to edge, so they grow on the axis nothing else
      occupies. A horizontal inset would steal the neighbour's taps, and on the request
