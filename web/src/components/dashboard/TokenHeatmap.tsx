@@ -402,9 +402,11 @@ export const TokenHeatmap: React.FC = () => {
       const isScrollable = width === fittedWidth ? container.hasAttribute('data-scrollable') : fitCells(width);
       fittedWidth = width;
       container.toggleAttribute('data-scrollable', isScrollable);
-      if (!isPinnedToNewest.current) return;
-      container.scrollLeft = HEATMAP_SCROLL_END;
-      markOlderWeeks(isScrollable);
+      if (isPinnedToNewest.current) container.scrollLeft = HEATMAP_SCROLL_END;
+      // Read where the field ended up rather than assuming the pinned edge: a panel that grew until
+      // the whole year fits clamps the offset to zero without firing a scroll event, and the fade
+      // it left behind would claim older weeks that are no longer off screen.
+      markOlderWeeks(container.scrollLeft > 1);
     });
     observer.observe(container);
     container.addEventListener('scroll', recordReaderPosition, { passive: true });

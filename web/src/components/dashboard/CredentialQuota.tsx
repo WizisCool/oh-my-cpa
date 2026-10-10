@@ -325,15 +325,20 @@ export const CredentialQuota: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [isRefreshingQuota, setIsRefreshingQuota] = React.useState(false);
+  // The glyph turns instead of the button locking, so a second click can arrive before the first
+  // run has rendered as in-flight. State is what the button reads; this ref is what the lock reads,
+  // because two clicks inside one commit both see the state that was rendered before either ran.
+  const isRefreshRunningRef = React.useRef(false);
   const files = filesQuery.data?.files;
   const quotas = quotaQuery.data?.quotas;
   const refreshQuota = React.useCallback(async () => {
-    if (isRefreshingQuota) return;
+    if (isRefreshRunningRef.current) return;
     const targets = credentialQuotaRefreshTargets(files ?? [], quotas ?? []);
     if (targets.length === 0) {
       toast.info(t('omc.quota_refresh_none'), { key: QUOTA_REFRESH_TOAST_KEY });
       return;
     }
+    isRefreshRunningRef.current = true;
     setIsRefreshingQuota(true);
     try {
       const outcome = await refreshCredentialQuotas(targets);
@@ -352,9 +357,10 @@ export const CredentialQuota: React.FC = () => {
       }
       await queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] });
     } finally {
+      isRefreshRunningRef.current = false;
       setIsRefreshingQuota(false);
     }
-  }, [files, isRefreshingQuota, queryClient, quotas, t, toast]);
+  }, [files, queryClient, quotas, t, toast]);
 
   return (
     <CredentialQuotaPanel

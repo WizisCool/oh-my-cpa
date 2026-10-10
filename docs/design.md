@@ -438,12 +438,15 @@ credential fleet: what can still serve, and what is about to stop. A count of cr
 that something is wrong and stop there — the reader's next question is always which credential, why,
 and when it recovers — so the panel lists them instead.
 
-**One row per credential, most urgent first.** A credential that cannot serve says why in place of
-its windows — sign-in required, cooling down, unavailable — and one that can shows its plan's two
-shortest quota windows as remaining-share bars, with the countdown to when its tightest window
-refills (or, when blocked, to when it serves again). The order is the reading: sign-in required,
-cooling down, exhausted, unavailable, running low, healthy, no reading. Disabled credentials are the
-operator's own decision and are only counted, in the header beside the serving and blocked counts.
+**One row per credential, most urgent first.** A row draws its credential's plan: the two shortest
+quota windows as remaining-share bars, with the countdown to the tightest of them refilling. Four
+states have no reading to draw and state the reason in its place — sign-in required, cooling down,
+unavailable, and no quota reading — so the row carries the cause instead of an empty bar. An
+exhausted credential keeps its windows, because they *are* the statement: every window it can serve
+from stands at zero, and the countdown beside them is when it serves again. The order is the
+reading: sign-in required, cooling down, exhausted, unavailable, running low, healthy, no reading.
+Disabled credentials are the operator's own decision and are only counted, in the header beside the
+serving and blocked counts.
 
 **The list scrolls inside the panel.** Every credential is listed, so a large fleet is readable
 without leaving the dashboard, and the panel keeps the height of the row it shares: the list takes

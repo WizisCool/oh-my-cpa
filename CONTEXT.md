@@ -548,11 +548,13 @@ and the places it deliberately differs from the hand-tuned values it replaced.
 - **Credential Quota**: The dashboard panel beside the Token Activity Grid, listing every enabled
   credential of the deployment by urgency - sign-in required, cooling down, exhausted, unavailable,
   running low, healthy, no quota reading - with the ones that cannot serve first, because on a
-  deployment holding many credentials the rows that need a decision are the ones in view. A
-  credential that cannot serve states why in place of its windows, and when it recovers; one that
-  can shows its plan's two shortest **Quota Windows** as remaining-share bars and the countdown to
-  the tightest of them refilling. Disabled credentials are the operator's own decision and are only
-  counted, in the header. It is a **live read of stored readings, not a measurement of its own**: the
+  deployment holding many credentials the rows that need a decision are the ones in view. A row
+  draws its credential's plan - its two shortest **Quota Windows** as remaining-share bars and the
+  countdown to the tightest of them refilling - except in the four states that have no reading to
+  draw (sign-in required, cooling down, unavailable, no quota reading), which state the reason in
+  the bars' place. An exhausted credential keeps its windows, all of them at zero, because that is
+  the statement, with the countdown to when it serves again. Disabled credentials are the
+  operator's own decision and are only counted, in the header. It is a **live read of stored readings, not a measurement of its own**: the
   panel reads the credential list and the last recorded quota observations, and never a provider,
   so it answers "can this deployment serve traffic, and for how much longer" where the grid answers
   "how has the year gone". That is why it sits outside the Range Preset's reach, and why its numbers
