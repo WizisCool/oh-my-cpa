@@ -184,7 +184,8 @@ type UsageEventRow struct {
 	Failed           bool   `json:"failed"`
 	// FailStatusCode and FailBody are the status a failed request ended with and
 	// the upstream's error body, as CPA published them; zero when it published
-	// none or the record predates the columns.
+	// none or the record predates the columns. Only the single-record read loads
+	// the body: a list page would otherwise read hundreds of bodies it never shows.
 	FailStatusCode int    `json:"fail_status_code,omitempty"`
 	FailBody       string `json:"fail_body,omitempty"`
 	// ResponseHeaders is the stored upstream header snapshot. Only the
@@ -320,7 +321,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
-		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body
+		       e.response_model, e.model_substituted, e.fail_status_code
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -357,7 +358,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
-			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody); errScan != nil {
+			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode); errScan != nil {
 			return page, fmt.Errorf("scan usage event: %w", errScan)
 		}
 		row.Failed = failed == 1

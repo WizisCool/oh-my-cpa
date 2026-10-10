@@ -277,6 +277,10 @@ func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
 	if ok := page.Items[0]; ok.FailStatusCode != 0 || ok.FailBody != "" {
 		t.Fatalf("successful row carries failure detail: %d %q", ok.FailStatusCode, ok.FailBody)
 	}
+	// The list names the status; it does not read the body.
+	if failed := page.Items[1]; failed.FailStatusCode != 502 || failed.FailBody != "" {
+		t.Fatalf("list failure = %d %q, want the status alone", failed.FailStatusCode, failed.FailBody)
+	}
 	detail, err := repo.GetUsageEvent(context.Background(), page.Items[1].ID)
 	if err != nil {
 		t.Fatalf("get usage event: %v", err)
