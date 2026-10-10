@@ -21,7 +21,7 @@ MCP · 可视化 · 管理
 
 <br />
 
-**[在线演示](https://omc-demo.junze.dev)** ·
+**[Live Demo](https://omc-demo.junze.dev)** ·
 [安装](#安装) ·
 [功能特性](#功能特性) ·
 [智能体与 MCP](#智能体与-mcp) ·
@@ -37,44 +37,11 @@ MCP · 可视化 · 管理
 </div>
 
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）是一个 API 网关，负责协议适配、凭据管理与请求代理。
-**Oh My CPA**（OMC）是配套的 Web 控制台：管理网关的提供商、凭据与配置，并记录每条请求的用量与费用（CPA 本身不保存这些记录）。
+**Oh My CPA**（OMC）是配套的 Web 控制台：管理网关的提供商、凭据与配置，并记录每条请求的用量与费用。
 OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本地 SQLite，可离线运行，登录使用 CPA 的管理密钥。
 
-<table>
-<tr>
-<td width="25%" valign="top">
-
-### 观测
-
-实时仪表盘、全年 Token 热力图，以及可按多个维度筛选的请求记录，包含耗时、首字延迟、Token 与费用。
-
-</td>
-<td width="25%" valign="top">
-
-### 管理
-
-提供商、OAuth 登录、客户端密钥、配额、插件，以及 CPA 的 `config.yaml`，表单或 YAML 两种方式均可编辑。模型广场按厂商列出客户端可调用的模型名，并给出价格、近期请求与 models.dev 规格资料。
-
-</td>
-<td width="25%" valign="top">
-
-### 计费
-
-每条请求的费用在完成时确定。价格取自 OpenRouter 或自定义费率，之后调价不影响已有记录。
-
-</td>
-<td width="25%" valign="top">
-
-### 自动化
-
-内置智能体与 MCP 服务通过预先声明的能力操作控制台，低风险写入之外的变更需经批准后执行。
-
-</td>
-</tr>
-</table>
-
-[在线演示](https://omc-demo.junze.dev) 提供带工具调用与生成式 UI 的智能体示例，以及操练场示例；均为本地回放，不调用模型。
-会话 HTML 保持生成式界面和工具链的原有顺序，PNG 也能展示生成式 UI。
+> [!TIP]
+> **[立即体验 Live Demo](https://omc-demo.junze.dev)**
 
 ## 界面截图
 
@@ -117,7 +84,7 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 
 <div align="center">
   <img src="docs/images/readme/mobile.zh.webp" alt="手机上的仪表盘、请求记录与 OAuth 管理" width="88%">
-  <p><b>移动端布局。</b>每个页面都适配窄屏。</p>
+  <p><b>移动端布局</b><br />每个页面都适配窄屏</p>
 </div>
 
 ## 安装
@@ -326,13 +293,13 @@ CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其�
 
 ## 智能体与 MCP
 
-**控制台内。** 在 `/agent` 页面，由 CPA 路由的模型回答问题并操作控制台：
+**控制台内：**在 `/agent` 页面，由 CPA 路由的模型回答问题并操作控制台：
 用量与请求分析、提供商、OAuth、配额、客户端密钥、配置与定价。读操作直接执行；
 变更先在服务端生成，在控制台点击「允许」后才执行。密钥、令牌与 OAuth 授权不会进入模型上下文。
 回答可以混合文字与随生成逐步出现的无边框交互组件，包括本地筛选器、计算器、图解和图表。
 组件沿用控制台的视觉风格；需要新数据或操作的后续请求，仍通过可审阅的对话流程处理。
 
-**外部 Agent。** 同一套能力通过 MCP 在 `<控制台地址>/api/mcp` 提供（Streamable HTTP），
+**外部 Agent：**同一套能力通过 MCP 在 `<控制台地址>/api/mcp` 提供（Streamable HTTP），
 其他机器上的 Agent 凭地址和作为 Bearer 令牌的 CPA 管理密钥即可远程接入，Agent 一侧无需安装任何程序。
 `/agent` 页面顶部的「外部接入」入口给出当前部署的实际地址和可直接复制的配置。
 
