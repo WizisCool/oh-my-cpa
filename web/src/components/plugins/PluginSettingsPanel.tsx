@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card, Checkbox, Input, Select, Tooltip } from 'antd';
+import { Button, Checkbox, Input, Select, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
+import { Panel } from '../common/Panel';
 
 interface SettingsDraft {
   enabled: boolean;
@@ -179,7 +180,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
         />
       )}
 
-      <Card>
+      <Panel>
         <section className={styles['settings-section']}>
           <SectionHeading as="h2" title={t('plugin.settings_system')} description={t('plugin.settings_system_desc')} />
           <div>
@@ -204,9 +205,9 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
             </div>
           </div>
         </section>
-      </Card>
+      </Panel>
 
-      <Card>
+      <Panel>
         <section className={styles['settings-section']}>
           <SectionHeading
             as="h2"
@@ -260,9 +261,9 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
             })}
           </div>
         </section>
-      </Card>
+      </Panel>
 
-      <Card>
+      <Panel>
         <section className={styles['settings-section']}>
           <SectionHeading
             as="h2"
@@ -379,7 +380,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
           )}
           <span className={styles['setting-hint']}>{t('plugin.settings_auth_secret_note')}</span>
         </section>
-      </Card>
+      </Panel>
 
       <div className={styles['settings-actions']}>
         {isDirty && <span className={styles['drawer-footer-note']}>{t('plugin.unsaved_changes')}</span>}

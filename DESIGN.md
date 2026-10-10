@@ -385,7 +385,14 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **`SearchInput`**: every filter-as-you-type field; `--muted` search glyph, clear control, `label` as accessible name and default placeholder.
 - **`EmptyState`**: every empty region; a mark of three shortening 2px `--border` rules, one state line, optional second line and one action; `block` (with mark) for lists and sections, `compact` (no mark) inside panels and pickers.
 - **`SectionHeading`**: every section head at three weights - `section` (`--text-lg`/600), `group` (`--text-base`/600), `label` (`--text-xs`/600 uppercase `--muted`) - with optional count, description and trailing `extra`.
-- antd's `Empty` is refused everywhere and antd's `Drawer` outside `AppDrawer` and the navigation and time-range sheets (`pnpm check:feedback`).
+- **`Tag`**: a short fact about a row; 22px, `--radius-sm`, `--text-sm` (`small`: 18px, `--radius-xs`, `--text-2xs`), no margin; tones `neutral`, `success`, `warn`, `danger`, `accent` (tone ink on a 10% tint with a 36% edge). `ToggleTag` is the pressable form for a small exclusive filter set.
+- **`ConfirmAction`**: a confirmation anchored to its trigger; fixed cancel label, confirming button named for the action, `isDanger` for a deletion.
+- **`SelectionBar`**: shown only while rows are selected; count (live region), optional note and selection controls leading, actions trailing; `framed` above a list or `inline` inside its frame.
+- **`Toolbar`**: the row above a list; wraps, 8px between lines and 12px between controls, `end` at the trailing edge; `ruled` sets it between two `--border-soft` hairlines.
+- **`Panel`**: the framed `--surface` content sits on; inset 20px, 16px on a phone (12px on a dashboard tile), owned by the stylesheet; optional ruled header from `title` and `extra`.
+- **`FactList`**: a label/value description list; `--muted` label leading, value right-aligned in tabular numerals; `strong` or `quiet` values.
+- **`CopyButton`**: copies a value and acknowledges in place with a check mark for 1.5s; only a failure raises a toast.
+- `pnpm check:feedback` refuses the antd component each replaces: `Empty`, `Tag` and `Descriptions` everywhere, `Drawer` outside `AppDrawer` and the navigation and time-range sheets, `Popconfirm` outside `ConfirmAction`, `Card` outside `Panel`.
 
 ### Switches
 - **One control**: every on/off control is the shared `Switch` (`web/src/components/common/Switch.tsx`); antd's `Switch` is refused by `pnpm check:feedback`.

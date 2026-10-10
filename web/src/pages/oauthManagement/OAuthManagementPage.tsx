@@ -65,6 +65,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
 import { EmptyState } from '../../components/common/EmptyState';
+import { Toolbar } from '../../components/common/Toolbar';
 
 interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
@@ -697,7 +698,7 @@ export const OAuthManagementPage: React.FC = () => {
         onDelete={() => void actions.batchDelete(selectedRecords)}
       />
 
-      <div className={styles.toolbar}>
+      <Toolbar className={styles.toolbar}>
         <div className={styles.search}>
           <SearchInput
             value={searchValue}
@@ -740,7 +741,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
           </Dropdown>
         </Space.Compact>
-      </div>
+      </Toolbar>
       {isFiltersOpen && (
         <div id="oauth-collection-filters" className={styles['advanced-filters']}>
           <div className={styles['filter-field']}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, InputNumber, Popconfirm, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckOutlined, UndoOutlined } from '../../components/icons';
 import { api } from '../../api/client';
@@ -14,6 +14,7 @@ import { pricingErrorText } from '../../components/pricing/pricingErrors';
 import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
 import { useToast } from '../../components/feedback';
+import { ConfirmAction } from '../../components/common/ConfirmAction';
 
 /**
  * Channel multipliers: what one CPA provider actually charges relative to list price. A relay
@@ -147,10 +148,9 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
           />
         </Tooltip>
         {channel.is_configured && (
-          <Popconfirm
+          <ConfirmAction
             title={t('pricing.channels.reset_confirm', { channel: label })}
-            okText={t('pricing.channels.reset')}
-            cancelText={t('common.cancel')}
+            confirmLabel={t('pricing.channels.reset')}
             onConfirm={() => reset.mutate()}
           >
             <Tooltip title={t('pricing.channels.reset')}>
@@ -162,7 +162,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
                 aria-label={`${t('pricing.channels.reset')}: ${label}`}
               />
             </Tooltip>
-          </Popconfirm>
+          </ConfirmAction>
         )}
       </div>
     </div>

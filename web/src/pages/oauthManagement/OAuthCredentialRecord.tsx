@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Button, Checkbox, Dropdown, Tag, Tooltip, Typography } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown, Tooltip, Typography } from 'antd';
 import { Switch } from '../../components/common/Switch';
 import {
   AppstoreOutlined,
@@ -26,6 +26,7 @@ import {
   summarizeAuthFileStatusMessage,
 } from '../../components/authFiles/authFileLogic';
 import styles from './OAuthCredentialRecord.module.css';
+import { Tag } from '../../components/common/Tag';
 
 const { Text } = Typography;
 
@@ -138,12 +139,12 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
             >
               {file.auth_index || '—'}
             </span>
-            {file.runtime_only && <Tag className={styles['virtual-tag']}>{t('af.status_virtual_badge')}</Tag>}
+            {file.runtime_only && <Tag size="small">{t('af.status_virtual_badge')}</Tag>}
             {file.priority !== undefined && (
-              <Tag className={styles['routing-tag']}>{t('omc.priority_value', { n: file.priority })}</Tag>
+              <Tag size="small" className={styles['routing-tag']}>{t('omc.priority_value', { n: file.priority })}</Tag>
             )}
             {file.weight !== undefined && (
-              <Tag className={styles['routing-tag']}>{t('omc.weight_value', { n: file.weight })}</Tag>
+              <Tag size="small" className={styles['routing-tag']}>{t('omc.weight_value', { n: file.weight })}</Tag>
             )}
             {file.note && (
               <Tooltip title={file.note}>

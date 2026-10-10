@@ -64,23 +64,18 @@
 }
 
 .protocol-tag {
-  display: inline-flex !important;
-  align-items: center;
   gap: 5px;
-  margin: 0 !important;
-  padding: 2px 8px !important;
-  font-size: var(--text-sm);
+  height: 24px;
+  padding: 0 8px;
   font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
 }
 
 /* The family's brand colour arrives as `--family-color`; the tint and the edge are mixed over the
    page so the tag sits on the active palette's surface in either mode. */
 .protocol-tag-branded {
-  border-color: color-mix(in srgb, var(--family-color) 40%, var(--bg)) !important;
-  background: color-mix(in srgb, var(--family-color) 10%, var(--bg)) !important;
-  color: var(--family-color) !important;
+  border-color: color-mix(in srgb, var(--family-color) 40%, var(--bg));
+  background: color-mix(in srgb, var(--family-color) 10%, var(--bg));
+  color: var(--family-color);
 }
 
 /* A long endpoint breaks onto a second line rather than holding one wide line: the row is two

@@ -3,7 +3,6 @@ import React from 'react';
 import {
   Button,
   Dropdown,
-  Popconfirm,
   Table,
   Tooltip,
 } from 'antd';
@@ -34,6 +33,7 @@ import { phoneRowFields } from '../common/phoneRowFields';
 import styles from './ApiKeysList.module.css';
 import { useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
+import { ConfirmAction } from '../common/ConfirmAction';
 
 /** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —
@@ -309,13 +309,12 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
           </button>
         </Tooltip>
         {pendingDeleteId === record.id ? (
-          <Popconfirm
+          <ConfirmAction
             open
             title={t('cfg.api_keys_delete_confirm')}
             description={t('keys.delete_confirm_desc')}
-            okText={t('cfg.api_keys_delete')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
+            confirmLabel={t('cfg.api_keys_delete')}
+            isDanger
             onConfirm={() => {
               setPendingDeleteId(null);
               handleDelete(record);
@@ -329,7 +328,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
             }}
           >
             {moreButton}
-          </Popconfirm>
+          </ConfirmAction>
         ) : (
           <Dropdown menu={{ items: menuItems(record) }} trigger={['click']} placement="bottomRight">
             {moreButton}

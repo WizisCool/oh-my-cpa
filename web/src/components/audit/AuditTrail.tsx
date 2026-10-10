@@ -51,6 +51,7 @@ import styles from './Audit.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
+import { Toolbar } from '../common/Toolbar';
 
 /** How long typing settles before the search asks the server. */
 const SEARCH_SETTLE_MS = 300;
@@ -365,7 +366,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         }))}
       />
 
-      <div className={clsx('logs-toolbar', styles.toolbar)}>
+      <Toolbar variant="ruled" className={clsx('logs-toolbar', styles.toolbar)}>
         <SearchInput
           className={styles['audit-search']}
           label={t('audit.search_placeholder')}
@@ -419,7 +420,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
             </Button>
           )}
         </FilterDisclosure>
-      </div>
+      </Toolbar>
 
       {isBlocked && (
         <LoadFailure

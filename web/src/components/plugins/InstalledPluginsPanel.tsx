@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dropdown, Popconfirm, Tooltip } from 'antd';
+import { Button, Dropdown, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,8 @@ import styles from './Plugins.module.css';
 import { useToast } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
+import { ConfirmAction } from '../common/ConfirmAction';
+import { Toolbar } from '../common/Toolbar';
 
 interface InstalledPluginsPanelProps {
   plugins: PluginItem[];
@@ -126,14 +128,14 @@ export function InstalledPluginsPanel({
 
   return (
     <div data-plugin-panel="installed">
-      <div className={styles.toolbar}>
+      <Toolbar>
         <SearchInput
           className={styles.search}
           value={query}
           onChange={setQuery}
           label={t('plugin.search_installed')}
         />
-      </div>
+      </Toolbar>
 
       {visible.length === 0 ? (
         <EmptyState className={styles.empty} title={t('plugin.search_empty')} />
@@ -226,7 +228,7 @@ export function InstalledPluginsPanel({
                       />
                     </Tooltip>
                     {pendingDeleteId === plugin.id ? (
-                      <Popconfirm
+                      <ConfirmAction
                         open
                         title={t('plugin.delete_confirm_title', { name })}
                         description={t('plugin.delete_confirm_desc')}
@@ -238,12 +240,11 @@ export function InstalledPluginsPanel({
                         onOpenChange={(isOpen) => {
                           if (!isOpen) setPendingDeleteId(null);
                         }}
-                        okText={t('plugin.delete')}
-                        cancelText={t('common.cancel')}
-                        okButtonProps={{ danger: true }}
+                        confirmLabel={t('plugin.delete')}
+                        isDanger
                       >
                         {moreButton}
-                      </Popconfirm>
+                      </ConfirmAction>
                     ) : (
                       <Dropdown
                         trigger={['click']}

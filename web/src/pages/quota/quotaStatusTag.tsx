@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tag, Tooltip } from 'antd';
+import { Tooltip } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -9,6 +9,7 @@ import {
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { resolveQuotaCooldownTooltip } from './quotaCooldown';
+import { Tag } from '../../components/common/Tag';
 
 /**
  * The one status vocabulary for credential quota.
@@ -21,28 +22,28 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
     const reason = item.active_cooldown?.reason;
     return (
       <Tooltip title={resolveQuotaCooldownTooltip(reason, t('quota.cooldown_active_desc'))}>
-        <Tag color="error" icon={<StopOutlined />} style={{ margin: 0 }}>{t('quota.status_cooldown')}</Tag>
+        <Tag tone="danger" icon={<StopOutlined />}>{t('quota.status_cooldown')}</Tag>
       </Tooltip>
     );
   }
   switch (item.status) {
     case 'healthy':
-      return <Tag color="success" icon={<CheckCircleOutlined />} style={{ margin: 0 }}>{t('quota.status_normal')}</Tag>;
+      return <Tag tone="success" icon={<CheckCircleOutlined />}>{t('quota.status_normal')}</Tag>;
     case 'warning':
-      return <Tag color="warning" icon={<WarningOutlined />} style={{ margin: 0 }}>{t('quota.status_warning')}</Tag>;
+      return <Tag tone="warn" icon={<WarningOutlined />}>{t('quota.status_warning')}</Tag>;
     case 'exhausted':
-      return <Tag color="error" icon={<CloseCircleOutlined />} style={{ margin: 0 }}>{t('quota.status_exceeded')}</Tag>;
+      return <Tag tone="danger" icon={<CloseCircleOutlined />}>{t('quota.status_exceeded')}</Tag>;
     case 'error':
-      return <Tag color="error" style={{ margin: 0 }}>{t('quota.status_error')}</Tag>;
+      return <Tag tone="danger">{t('quota.status_error')}</Tag>;
     case 'stale':
-      return <Tag style={{ margin: 0 }}>{t('quota.status_stale')}</Tag>;
+      return <Tag>{t('quota.status_stale')}</Tag>;
     case 'unpublished':
       // Distinct from idle: the read happened, and the provider published no window. The two must
       // not share a label, because only one of them is worth repeating.
-      return <Tag style={{ margin: 0 }}>{t('quota.status_unpublished')}</Tag>;
+      return <Tag>{t('quota.status_unpublished')}</Tag>;
     case 'loading':
-      return <Tag color="processing" style={{ margin: 0 }}>{t('common.loading')}</Tag>;
+      return <Tag tone="accent">{t('common.loading')}</Tag>;
     default:
-      return <Tag style={{ margin: 0 }}>{t('quota.status_idle')}</Tag>;
+      return <Tag>{t('quota.status_idle')}</Tag>;
   }
 }

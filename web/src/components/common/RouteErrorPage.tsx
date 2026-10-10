@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card } from 'antd';
+import { Button } from 'antd';
 import { useRouteError } from 'react-router-dom';
 import { ReloadOutlined } from '../icons';
 import { BrandArtwork } from './BrandArtwork';
@@ -12,6 +12,7 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { getAppConfig } from '../../types/config';
 import { createRouteErrorDiagnostics, formatRouteErrorReport } from '../../utils/routeErrorDiagnostics';
 import styles from './RouteErrorPage.module.css';
+import { Panel } from './Panel';
 
 export const RouteErrorPage: React.FC = () => {
   const t = useT();
@@ -47,7 +48,7 @@ export const RouteErrorPage: React.FC = () => {
           <BrandArtwork shape="wordmark" height={22} label="Oh My CPA" />
           <StatusLabel tone="danger">{t('route_error.status')}</StatusLabel>
         </header>
-        <Card className={styles['recovery-panel']}>
+        <Panel className={styles['recovery-panel']}>
           <h1 id="route-error-title" ref={headingRef} tabIndex={-1} className={`terminal-title ${styles['error-title']}`}>
             {t('route_error.title')}
           </h1>
@@ -76,7 +77,7 @@ export const RouteErrorPage: React.FC = () => {
               </pre>
             </details>
           </section>
-        </Card>
+        </Panel>
         <p className={styles['recovery-hint']}>{t('route_error.hint')}</p>
       </div>
     </main>

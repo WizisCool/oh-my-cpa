@@ -6,7 +6,6 @@ import {
   Select,
   Space,
   Spin,
-  Tag,
 } from 'antd';
 import {
   ArrowRightOutlined,
@@ -27,6 +26,7 @@ import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
 import { useToast } from '../../components/feedback';
 import { AppDrawer } from '../../components/common/AppDrawer';
+import { Tag } from '../../components/common/Tag';
 
 interface OAuthConnectPanelProps {
   open: boolean;
@@ -134,11 +134,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                     <div className={styles['tile-copy']}>
                       <div className={styles['tile-title-row']}>
                         <span className={styles['tile-title']}>{candidate.title}</span>
-                        <Tag style={{ margin: 0 }}>
+                        <Tag>
                           {t(candidate.flow === 'plugin' ? 'omc.flow_plugin' : candidate.flow === 'device' ? 'omc.flow_device' : 'omc.flow_redirect')}
                         </Tag>
                         {candidate.pluginId && (
-                          <Tag className={styles['plugin-tag']} style={{ margin: 0 }}>{t('oauth.plugin_tag')}</Tag>
+                          <Tag className={styles['plugin-tag']}>{t('oauth.plugin_tag')}</Tag>
                         )}
                       </div>
                       <span className={styles['tile-desc']} title={candidate.description}>
@@ -286,10 +286,10 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                           {t('oauth.submit_callback_btn')}
                         </Button>
                         {session?.callbackStatus === 'success' && (
-                          <Tag color="success" icon={<CheckCircleOutlined />}>{t('oauth.callback_submitted')}</Tag>
+                          <Tag tone="success" icon={<CheckCircleOutlined />}>{t('oauth.callback_submitted')}</Tag>
                         )}
                         {session?.callbackStatus === 'error' && (
-                          <Tag color="error" icon={<CloseCircleOutlined />}>
+                          <Tag tone="danger" icon={<CloseCircleOutlined />}>
                             {session.callbackError || t('oauth.callback_failed', { msg: '' })}
                           </Tag>
                         )}

@@ -1015,7 +1015,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
      - **Trigger**: Appears only when unsaved edits exist (`isDirty === true`), fully hidden otherwise; the top toolbar concurrently shows a Discard button;
      - **Viewport Centered & Non-intrusive**: Centered dynamically within the content column based on `--app-sider-width`; outer container uses `pointer-events: none` to avoid blocking lower page interactions;
      - **Terminal-Flat Tone**: 1px border, solid `--surface` background, and amber dirty indicator pip;
-     - **Confirmation Rules**: Save actions trigger a Popconfirm (and `Ctrl+S`/`Cmd+S` triggers a confirmation modal); Discard actions revert immediately without confirmation, cleanly dismissing the dirty bar; Save is disabled with tooltip explanations when YAML has syntax errors or required fields are incomplete.
+     - **Confirmation Rules**: Save actions trigger a `ConfirmAction` (and `Ctrl+S`/`Cmd+S` triggers a confirmation modal); Discard actions revert immediately without confirmation, cleanly dismissing the dirty bar; Save is disabled with tooltip explanations when YAML has syntax errors or required fields are incomplete.
    - **Modular Payload Rules Builder**:
      - **Structured Collapsible Panels**: Replaces generic raw textareas with structured panels (Default rules, Default Raw rules, Override rules, Override Raw rules, Filter rules); all categories start collapsed, explicit disclosure choices survive external document updates, and a failed save opens the first invalid category;
      - **Bi-directional Lossless AST Mapping**: Directly manipulates the YAML Document AST; models, protocols, typed parameters, raw fragments, and filter paths use dedicated controls; preserves non-payload configurations, ordering, and comments, round-tripping unknown fields (`_extra`);
@@ -1052,7 +1052,7 @@ reader moving between pages never sees the refresh control jump or resize:
 - **Row actions are quiet 28px squares** (`.row-actions` / `.row-action-btn`), 8px apart so the
   touch rules' hit insets meet rather than overlap. The glyph takes the accent on hover, and a
   destructive action shows the danger colour only on hover - a column of red bins read as a column
-  of errors. Destructive actions confirm in a `Popconfirm` whose OK button is the danger one.
+  of errors. Destructive actions confirm in a `ConfirmAction` whose confirming button is the danger one.
   Installed plugin rows keep configuration directly accessible beside a matching overflow button;
   repository/homepage links and uninstall live in that menu. The enable switch is separated from
   the action pair by a quiet rule, and uninstall confirms against the same row. These controls use
@@ -1075,7 +1075,7 @@ reader moving between pages never sees the refresh control jump or resize:
   a strip of counted tiles on `--bg` with a 1px `--border` frame, a 12px label (a `StatusLabel` for
   a toned tile, plain for the "everything" tile) over a 22px tabular count, which paints in its tone
   only when non-zero. Each tile is also the list's filter (`aria-pressed`; the selected one takes
-  the accent frame and `--hover-inset`), and the `.logs-toolbar` strip of search and selects sits
+  the accent frame and `--hover-inset`), and the ruled `Toolbar` of search and selects sits
   directly under it. The audit trail's outcomes and the AI provider list's states both use it.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (antd's simple `Empty`), and no paginator for a single page.
@@ -1182,7 +1182,7 @@ the default duration. Lifetime changes do not change the entry/exit motion budge
 
 ### Shared primitives
 
-Four patterns every page needs are one component each, in `web/src/components/common/`. A page
+The patterns every page needs are one component each, in `web/src/components/common/`. A page
 supplies content and layout width; what is inside the frame is not restyled per page.
 
 - **`AppDrawer` - a side panel.** It opens from the trailing edge at one of three widths, each
@@ -1207,9 +1207,41 @@ supplies content and layout width; what is inside the frame is not restyled per 
   an optional count in tabular numerals after the title, one description line (not on a `label`) and
   an `extra` control at the trailing edge. The element (`h2`-`h4`, `div`) follows the document
   outline, independent of the weight. The frame around a head stays with its caller.
+- **`Tag` - a short fact about a row**: a type, a state, a count. 22px tall, `--radius-sm`,
+  `--text-sm`, tabular numerals; `small` is 18px, `--radius-xs`, `--text-2xs`. It carries no margin -
+  spacing is the row's gap. Five tones: `neutral` (`--fg-2` on `--bg` with a `--border` edge) and
+  `success`, `warn`, `danger`, `accent`, each the tone's ink on a 10% tint with a 36% edge. A tone
+  states health or emphasis and nothing else; a brand colour is a per-site custom property, not a
+  sixth tone. `ToggleTag` is the pressable form, for a small set of mutually exclusive filters: muted
+  and frameless at rest, `--hover-inset` with a `--border` edge when pressed.
+- **`ConfirmAction` - a confirmation anchored to its trigger**, for an action that is cheap to
+  confirm and local to a row. The cancel label is fixed; the confirming button is named for the
+  action (`confirmLabel`) and `isDanger` colours it for a deletion. A decision that needs a paragraph
+  or a typed name is a modal, not this.
+- **`SelectionBar` - what can be done with the ticked rows.** It is rendered only while something is
+  selected. The leading side holds the count (a live region), an optional qualifying note and the
+  controls that change the selection; the actions sit at the trailing edge and wrap below on a
+  narrow screen. `framed` is a strip of its own above a list; `inline` is a row inside the list's
+  frame.
+- **`Toolbar` - the row above a list**: search, then the filters that narrow it, then `end`, the
+  controls that act on the whole result, pushed to the trailing edge. It wraps instead of scrolling
+  and owns only the gap (8px between lines, 12px between controls); each control owns its width.
+  `ruled` sets the row between two `--border-soft` hairlines in `--muted` `--text-md`, for a log or
+  an audit list whose filters would otherwise run into the rows.
+- **`Panel` - the framed surface content sits on**: `--surface`, one `--border` edge, and an inset of
+  20px that the stylesheet lowers to 16px on a phone (12px on a dashboard tile). The inset is not a
+  prop: an inline padding outranks the phone rule. `title` and `extra` draw a ruled header; a panel
+  whose heading needs a description or a count opens its body with a `SectionHeading` instead.
+- **`FactList` - a label/value list.** A description list with the label in `--muted` at the leading
+  edge and the value right-aligned in tabular numerals, rows divided by `--border-soft`. `strong`
+  draws values at 600 in `--fg`; `quiet` at reading weight in `--fg-2`, for a record's detail where
+  every value is of equal standing.
+- **`CopyButton` - a button that copies a value** and acknowledges it in place: the glyph becomes a
+  check mark for 1.5s, and only a failure raises a toast.
 
-`pnpm check:feedback` refuses antd's `Empty` everywhere and antd's `Drawer` outside `AppDrawer` and
-the two sheets above.
+`pnpm check:feedback` refuses the antd component each of these replaces: `Empty`, `Tag` and
+`Descriptions` everywhere, `Drawer` outside `AppDrawer` and the two sheets above, `Popconfirm`
+outside `ConfirmAction`, and `Card` outside `Panel`.
 
 ### Switch
 

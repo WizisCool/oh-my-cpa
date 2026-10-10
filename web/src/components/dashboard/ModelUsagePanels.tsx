@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Segmented, Tooltip } from 'antd';
+import { Segmented, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
@@ -22,6 +22,7 @@ import {
 import { formatCost } from '../../types/tokenDisplay';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 import { LoadFailure } from '../feedback';
+import { Panel } from '../common/Panel';
 
 const LazyModelTokenTrend = React.lazy(() =>
   import('../../charts/ModelTokenTrend').then((module) => ({ default: module.ModelTokenTrend }))
@@ -109,9 +110,8 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
 
   return (
     <div className="dashboard-models">
-      <Card
+      <Panel
         className="dashboard-tile is-wide model-trend-card"
-        styles={{ body: { padding: 20 } }}
         title={<span className="tile-label">{t('dash.models.trend_title')}</span>}
       >
         {!data && !isError ? (
@@ -141,11 +141,10 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
             )}
           </>
         )}
-      </Card>
+      </Panel>
 
-      <Card
+      <Panel
         className="dashboard-tile is-wide model-usage-card"
-        styles={{ body: { padding: 20 } }}
         title={<span className="tile-label">{t('dash.models.usage_title')}</span>}
         extra={viewToggle}
       >
@@ -213,7 +212,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
             )}
           </>
         )}
-      </Card>
+      </Panel>
     </div>
   );
 };

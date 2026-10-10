@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Button, InputNumber, Modal, Popconfirm, Table, Tag, Tooltip, Typography } from 'antd';
+import { Button, InputNumber, Modal, Table, Tooltip, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
@@ -15,6 +15,8 @@ import { DeleteOutlined, DownloadOutlined, HistoryOutlined, PlusOutlined, Rollba
 import { useToast } from '../feedback';
 import { describeConfigSaveError } from './configSaveErrors';
 import styles from './ConfigBackupsButton.module.css';
+import { Tag } from '../common/Tag';
+import { ConfirmAction } from '../common/ConfirmAction';
 
 const { Text } = Typography;
 
@@ -214,7 +216,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
               render: (_, backup) => (
                 <span className={styles['backups-reason']}>
                   {describeReason(backup.reason)}
-                  {backup.layout !== 'v8' && <Tag className={styles['backups-layout']}>{t('cfg.backups_layout_legacy')}</Tag>}
+                  {backup.layout !== 'v8' && <Tag>{t('cfg.backups_layout_legacy')}</Tag>}
                 </span>
               ),
             },
@@ -226,11 +228,10 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                 const blockedReason = restoreBlockedReason(backup);
                 return (
                   <span className={styles['backups-actions']}>
-                    <Popconfirm
+                    <ConfirmAction
                       title={t('cfg.backups_restore_confirm')}
                       description={t('cfg.backups_restore_confirm_desc', { time: dayjs(backup.created_at_ms).format('YYYY-MM-DD HH:mm:ss') })}
-                      okText={t('cfg.backups_restore')}
-                      cancelText={t('common.cancel')}
+                      confirmLabel={t('cfg.backups_restore')}
                       disabled={Boolean(blockedReason)}
                       onConfirm={() => restoreMutation.mutateAsync(backup).catch(() => undefined)}
                     >
@@ -244,7 +245,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                           {t('cfg.backups_restore')}
                         </Button>
                       </Tooltip>
-                    </Popconfirm>
+                    </ConfirmAction>
                     <Button
                       size="small"
                       icon={<DownloadOutlined />}
@@ -253,11 +254,10 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                       title={t('cfg.backups_download')}
                       onClick={() => void downloadBackup(backup)}
                     />
-                    <Popconfirm
+                    <ConfirmAction
                       title={t('cfg.backups_delete_confirm')}
-                      okText={t('common.delete')}
-                      okButtonProps={{ danger: true }}
-                      cancelText={t('common.cancel')}
+                      confirmLabel={t('common.delete')}
+                      isDanger
                       disabled={isDemo}
                       onConfirm={() => deleteMutation.mutateAsync(backup).catch(() => undefined)}
                     >
@@ -270,7 +270,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                         aria-label={t('common.delete')}
                         title={isDemo ? t('demo.blocked') : t('common.delete')}
                       />
-                    </Popconfirm>
+                    </ConfirmAction>
                   </span>
                 );
               },

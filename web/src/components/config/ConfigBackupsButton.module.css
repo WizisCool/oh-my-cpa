@@ -34,10 +34,6 @@
   white-space: nowrap;
 }
 
-.backups-layout {
-  margin-inline-end: 0;
-}
-
 .backups-actions {
   display: inline-flex;
   gap: 6px;

@@ -37,6 +37,7 @@ import {
 import { api } from '../api/client';
 import { LoadFailure, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
+import { Toolbar } from '../components/common/Toolbar';
 
 /**
  * The window the list's traffic column counts. It is the key list's window too, so the two pages
@@ -284,7 +285,7 @@ export const ProvidersPage: React.FC = () => {
           }))}
         />
 
-        <div className="logs-toolbar">
+        <Toolbar variant="ruled" className="logs-toolbar">
           <SearchInput
             className={styles['provider-search']}
             label={t('pro.search_placeholder')}
@@ -334,7 +335,7 @@ export const ProvidersPage: React.FC = () => {
               <span>{trafficQuery.isPending ? '…' : t('pro.traffic_unknown')}</span>
             )}
           </div>
-        </div>
+        </Toolbar>
       </section>
 
       <ProviderTable

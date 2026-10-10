@@ -18,6 +18,7 @@ import {
 import styles from './OAuthModelRulesDrawer.module.css';
 import { SearchInput } from '../common/SearchInput';
 import { SectionHeading } from '../common/SectionHeading';
+import { Toolbar } from '../common/Toolbar';
 
 export type OAuthModelCatalogState = 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -201,7 +202,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
         )}
         {hasCatalog && (
           <>
-            <div className={styles['catalog-toolbar']}>
+            <Toolbar>
               <SearchInput
                 className={styles['catalog-search']}
                 value={query}
@@ -214,7 +215,7 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
               <Button disabled={isDisabled || exactVisible.length === 0} onClick={clearVisible}>
                 {t('af.excluded_catalog_clear')}
               </Button>
-            </div>
+            </Toolbar>
             {visibleModels.length === 0 ? (
               <p className={styles['hint']}>{t('af.excluded_catalog_no_match', { query: query.trim() })}</p>
             ) : (

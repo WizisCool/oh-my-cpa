@@ -999,7 +999,7 @@ export async function requestExport({ base, page, check }) {
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
 
   const rowBox = (index) => page.locator('.request-row').nth(index).locator('.req-select-box');
-  const count = page.locator('.request-selection-count');
+  const count = page.locator('.request-selection-bar .selection-bar-count');
 
   await rowBox(0).click();
   await count.waitFor();

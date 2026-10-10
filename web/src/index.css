@@ -279,7 +279,6 @@ a { color: inherit; }
 /* ── console chrome: bend antd away from its admin-template defaults ────── */
 .ant-card .ant-card-body { padding: 20px; }
 .ant-form-item .ant-form-item-label > label { font-size: var(--text-md); color: var(--muted); letter-spacing: .04em; }
-.ant-descriptions-item-label { font-size: var(--text-md); color: var(--muted) !important; }
 .ant-table-wrapper .ant-table-thead > tr > th {
   /* A header names its column in one line: a squeezed column wraps its cells, never its name,
      which is how "前缀" came to read one glyph per line. The strip is the OAuth list's header,
@@ -675,6 +674,99 @@ a { color: inherit; }
   line-height: 1.5;
 }
 .section-head-extra { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+
+/* Toolbar (components/common/Toolbar.tsx): the row above a list. It owns the gap; each control
+   owns its width. `ruled` sets the row between two hairlines. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+.toolbar.is-ruled {
+  gap: 8px 16px;
+  margin-bottom: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.toolbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-inline-start: auto; }
+
+/* SelectionBar (components/common/SelectionBar.tsx): the count and the controls that change the
+   selection lead, the actions on the selected rows trail. Link buttons lose their inline padding so
+   the bar's gap is the only spacing between them. */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-height: 40px;
+  padding: 4px 16px;
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+.selection-bar.is-framed {
+  margin-bottom: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.selection-bar.is-inline { border-bottom: 1px solid var(--border); }
+.selection-bar-start,
+.selection-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
+.selection-bar-actions { gap: 8px; margin-inline-start: auto; }
+.selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.selection-bar-note { color: var(--muted); }
+.selection-bar-start .ant-btn-link { padding-inline: 0; }
+
+/* Tag (components/common/Tag.tsx): a short label on a tinted chip. The tone sets one custom
+   property and the ink, edge and tint are mixed from it, so a caller that brings its own colour
+   (a provider family's brand) sets the same three properties and nothing else. */
+.tag {
+  --tag-tone: var(--fg-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--tag-tone);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.tag.is-small {
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+}
+.tag.is-success { --tag-tone: var(--success); }
+.tag.is-warn { --tag-tone: var(--warn); }
+.tag.is-danger { --tag-tone: var(--danger); }
+.tag.is-accent { --tag-tone: var(--accent); }
+.tag.is-success, .tag.is-warn, .tag.is-danger, .tag.is-accent {
+  border-color: color-mix(in srgb, var(--tag-tone) 36%, transparent);
+  background: color-mix(in srgb, var(--tag-tone) 10%, transparent);
+}
+.tag-icon { display: inline-flex; font-size: var(--text-sm); }
+.tag.is-toggle {
+  cursor: pointer;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+}
+.tag.is-toggle:hover { color: var(--fg); }
+.tag.is-toggle[aria-pressed="true"] { border-color: var(--border); background: var(--hover-inset); color: var(--fg); }
 
 /* SearchInput (components/common/SearchInput.tsx): the glyph is chrome, so it takes the muted ink
    on every surface the field appears on. */
@@ -1091,29 +1183,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.provider-badge {
-  margin: 0 !important;
-  font-size: var(--text-2xs) !important;
-  line-height: 16px !important;
-  padding: 0 5px !important;
-  border-radius: var(--radius-xs) !important;
-}
-.provider-badge.is-oauth {
-  color: var(--accent) !important;
-  border-color: var(--border) !important;
-  background: var(--surface) !important;
-}
-.provider-badge.is-ai {
-  color: var(--fg-2) !important;
-  border-color: var(--border) !important;
-  background: transparent !important;
-}
-.provider-badge.is-disabled {
-  color: var(--danger) !important;
-  border-color: var(--border) !important;
-  background: var(--surface) !important;
-}
-
 .provider-jump-arrow {
   color: var(--meta);
   font-size: var(--text-xs);
@@ -2203,18 +2272,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* ── logs: a tail, not a table ────────────────────────────────────────────── */
 .logs-page .terminal-page-head { margin-bottom: 12px; }
 .logs-search { width: 216px; }
-.logs-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-bottom: 10px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-size: var(--text-md);
-}
 .logs-levels { display: inline-flex; gap: 4px; }
 .log-level-chip {
   border: 1px solid var(--border);
@@ -3259,15 +3316,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   line-height: 1.4;
 }
 
-.payload-count-badge {
-  font-size: var(--text-xs) !important;
-  padding: 0 6px !important;
-  background: var(--hover-inset) !important;
-  border-color: var(--border) !important;
-  color: var(--fg-2) !important;
-  margin: 0 !important;
-}
-
 .payload-empty-box {
   display: flex;
   flex-direction: column;
@@ -3896,7 +3944,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .dashboard-grid { gap: 12px; margin-bottom: 16px; }
   .dashboard-tile .ant-card-body { padding: 12px; }
   .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
-  .logs-toolbar { gap: 8px; margin-bottom: 12px; }
+  .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
   .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
   .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
   .config-phone-status { font-size: var(--text-sm); color: var(--muted); min-width: 0; overflow-wrap: anywhere; }

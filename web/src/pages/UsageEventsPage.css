@@ -728,25 +728,8 @@
 }
 
 .request-selection-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-height: 40px;
-  padding: 4px var(--req-pad-inline);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  font-size: var(--text-sm);
+  padding-inline: var(--req-pad-inline);
   flex-shrink: 0;
-}
-.request-selection-count {
-  margin-right: 4px;
-  color: var(--fg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.request-selection-export {
-  margin-left: auto;
 }
 
 /* The preview is the image itself, fitted to the dialog's width: the whole picture is in view
@@ -1636,15 +1619,6 @@
   margin: 0 0 16px;
   font-size: var(--text-md);
 }
-.request-detail-section .ant-descriptions-item-label {
-  font-size: var(--text-sm);
-  min-width: 112px;
-}
-.request-detail-section .ant-descriptions-item-content {
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
 .request-served-model {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1661,9 +1635,6 @@
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
-}
-.request-detail .ant-descriptions-view table {
-  table-layout: fixed;
 }
 .request-source-chain {
   display: grid;

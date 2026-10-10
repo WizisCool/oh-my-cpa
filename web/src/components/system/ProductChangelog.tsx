@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tag, Tooltip, Typography } from 'antd';
+import { Tooltip, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
 import XMarkdown from '@ant-design/x-markdown';
@@ -11,6 +11,7 @@ import type { ReleaseProduct } from '../../types/system';
 import { PageLoading } from '../common/PageLoading';
 import styles from '../../pages/SystemPage.module.css';
 import { LoadFailure, Notice } from '../feedback';
+import { Tag } from '../common/Tag';
 
 const { Text } = Typography;
 
@@ -76,7 +77,7 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
             <div className={styles['release-tag-group']}>
               <Tag className={styles['release-tag']}>{release.tag}</Tag>
               {release.in_range && (
-                <Tag color="processing">{t('sys.changelog_in_range')}</Tag>
+                <Tag tone="accent">{t('sys.changelog_in_range')}</Tag>
               )}
               {release.name && release.name !== release.tag && (
                 <Text strong className={styles['release-name']}>{release.name}</Text>

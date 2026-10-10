@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Popconfirm, Tag } from 'antd';
+import { Button } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
@@ -11,6 +11,8 @@ import { quotaStatusTag } from './quotaStatusTag';
 import styles from './QuotaPresentation.module.css';
 import { Notice } from '../../components/feedback';
 import { SectionHeading } from '../../components/common/SectionHeading';
+import { Tag } from '../../components/common/Tag';
+import { ConfirmAction } from '../../components/common/ConfirmAction';
 
 interface CredentialQuotaBodyProps {
   item: QuotaItem;
@@ -107,10 +109,10 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
       <div className={styles['quota-status-row']}>
         {quotaStatusTag(item, t)}
         {!item.capabilities?.refresh_supported && (
-          <Tag style={{ margin: 0 }}>{t('omc.quota_unsupported')}</Tag>
+          <Tag>{t('omc.quota_unsupported')}</Tag>
         )}
         {item.recommendation?.action === 'reauth' && (
-          <Tag color="warning" style={{ margin: 0 }}>{t('omc.reauthenticate')}</Tag>
+          <Tag tone="warn">{t('omc.reauthenticate')}</Tag>
         )}
       </div>
 
@@ -257,13 +259,11 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         <div className={styles['card-meta-time']}>{formatObservedAgo(item.observed_at_ms, nowMS, t)}</div>
         <div className={styles['card-actions']}>
           {canRedeem && (
-            <Popconfirm
+            <ConfirmAction
               title={t('quota.redeem_credit_confirm_title')}
               description={t('quota.redeem_credit_confirm_desc')}
               onConfirm={() => onRedeemCredit?.(item.auth_index)}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
-              okButtonProps={{ danger: true }}
+              isDanger
             >
               <Button
                 size="small"
@@ -273,7 +273,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
               >
                 {t('quota.btn_reset_quota')}
               </Button>
-            </Popconfirm>
+            </ConfirmAction>
           )}
           {onRefresh && (
             <Button

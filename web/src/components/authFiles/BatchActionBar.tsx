@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Space, Button, Popconfirm, Typography } from 'antd';
+import { Button } from 'antd';
 import {
   CheckCircleOutlined,
   StopOutlined,
@@ -8,6 +8,8 @@ import {
   SyncOutlined,
 } from '../icons';
 import { useT } from '../../i18n';
+import { ConfirmAction } from '../common/ConfirmAction';
+import { SelectionBar } from '../common/SelectionBar';
 
 interface BatchActionBarProps {
   selectedCount: number;
@@ -43,57 +45,23 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   }
 
   return (
-    <Card
-      size="small"
-      style={{
-        marginBottom: 16,
-        borderColor: 'var(--accent)',
-        background: 'var(--surface)',
-      }}
-      styles={{
-        body: {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-          padding: '8px 16px',
-        },
-      }}
-    >
-      <Space size={12} wrap>
-        <Typography.Text strong>
-          {t('af.selected_n', { n: selectedCount })}
-        </Typography.Text>
-        {hiddenCount > 0 && (
-          <Typography.Text type="secondary">
-            {t('omc.hidden_selection', { n: hiddenCount })}
-          </Typography.Text>
-        )}
-        {selectablePageCount > 0 && (
-          <Button
-            size="small"
-            type="link"
-            style={{ padding: 0 }}
-            disabled={isMutating}
-            onClick={onSelectPage}
-          >
-            {t('af.select_page')}
+    <SelectionBar
+      label={t('af.selected_n', { n: selectedCount })}
+      summary={t('af.selected_n', { n: selectedCount })}
+      note={hiddenCount > 0 ? t('omc.hidden_selection', { n: hiddenCount }) : undefined}
+      selection={(
+        <>
+          {selectablePageCount > 0 && (
+            <Button size="small" type="link" disabled={isMutating} onClick={onSelectPage}>
+              {t('af.select_page')}
+            </Button>
+          )}
+          <Button size="small" type="link" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
+            {t('af.clear_selection')}
           </Button>
-        )}
-        <Button
-          size="small"
-          type="link"
-          icon={<CloseOutlined />}
-          style={{ padding: 0, color: 'var(--muted)' }}
-          disabled={isMutating}
-          onClick={onClearSelection}
-        >
-          {t('af.clear_selection')}
-        </Button>
-      </Space>
-
-      <Space size={8} wrap>
+        </>
+      )}
+    >
         <Button
           size="small"
           icon={<CheckCircleOutlined />}
@@ -119,14 +87,13 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         >
           {t('af.batch_refresh')}
         </Button>
-        <Popconfirm
+        <ConfirmAction
           title={t('af.delete_selected_title')}
           description={hiddenCount > 0
             ? `${t('af.delete_selected_desc')} ${t('omc.delete_hidden_scope', { hidden: hiddenCount, total: selectedCount })}`
             : t('af.delete_selected_desc')}
-          okText={t('common.delete')}
-          cancelText={t('common.cancel')}
-          okButtonProps={{ danger: true }}
+          confirmLabel={t('common.delete')}
+          isDanger
           onConfirm={onDelete}
         >
           <Button
@@ -137,8 +104,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
           >
             {t('af.delete_selected')}
           </Button>
-        </Popconfirm>
-      </Space>
-    </Card>
+        </ConfirmAction>
+    </SelectionBar>
   );
 };

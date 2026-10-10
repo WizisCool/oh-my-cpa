@@ -308,13 +308,12 @@
   min-width: 0;
 }
 
-.head :global(.ant-tag) {
-  margin: 0 !important;
-  font-size: var(--text-xs) !important;
-  line-height: 18px !important;
-  padding: 0 6px !important;
-  border-radius: var(--radius-xs) !important;
-  font-weight: 550 !important;
+.head :global(.tag) {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: 550;
 }
 
 .plan {

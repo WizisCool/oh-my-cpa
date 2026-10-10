@@ -12,6 +12,7 @@ import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { LoadFailure, Notice } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
+import { Toolbar } from '../common/Toolbar';
 
 const { Text } = Typography;
 
@@ -84,7 +85,7 @@ export const ServiceLogPanel: React.FC = () => {
 
   return (
     <section className={styles.panel}>
-      <div className="logs-toolbar">
+      <Toolbar variant="ruled" className="logs-toolbar">
         <SearchInput
           className="logs-search"
           label={t('logs.service_search')}
@@ -123,7 +124,7 @@ export const ServiceLogPanel: React.FC = () => {
           </Tooltip>
           <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} />
         </div>
-      </div>
+      </Toolbar>
 
       <div className="logs-tail">
         {tail.phase === 'off' && <Notice className="logs-alert" tone="info" title={t('logs.service_off')} />}

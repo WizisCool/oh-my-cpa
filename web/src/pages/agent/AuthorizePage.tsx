@@ -1,5 +1,4 @@
 import React from 'react';
-import { Tag } from 'antd';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
@@ -19,6 +18,7 @@ import { isOperationID } from './connect';
 import { ApprovalCard } from './interrupts/ApprovalCard';
 import { callStatusKey, statusTone } from './state';
 import styles from './AuthorizePage.module.css';
+import { Tag } from '../../components/common/Tag';
 
 /**
  * The consent screen an external agent's approval link opens.
@@ -110,7 +110,7 @@ export function AuthorizePage() {
               <div className={styles['request']} data-destructive={permission === 'destructive' || undefined}>
                 <div className={styles['request-head']}>
                   <span className={styles['request-title']}>{capabilityTitle(data.capability, t)}</span>
-                  <Tag color={permission === 'destructive' ? 'error' : 'warning'}>{t(`agent.permission.${permission}`)}</Tag>
+                  <Tag tone={permission === 'destructive' ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
                 </div>
                 <code className={styles['request-name']}>{data.capability}</code>
                 {isPending ? (

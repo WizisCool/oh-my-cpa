@@ -23,12 +23,6 @@
   object-fit: contain;
 }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
 
 .toolbar-spaced {
   margin-top: 12px;

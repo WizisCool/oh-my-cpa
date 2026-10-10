@@ -31,6 +31,7 @@ import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
+import { Toolbar } from '../../components/common/Toolbar';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at either width. */
 const PAGE_SIZE = 20;
@@ -490,7 +491,7 @@ export const PricingPage: React.FC = () => {
 
       {tab === 'models' ? (
         <section className={styles.workbench} data-testid="pricing-model-list" ref={listRef}>
-          <div className={styles.toolbar}>
+          <Toolbar className={styles.toolbar}>
             <Segmented<ModelFilter>
               value={filter}
               onChange={setFilter}
@@ -523,7 +524,7 @@ export const PricingPage: React.FC = () => {
               value={search}
               onChange={setSearch}
             />
-          </div>
+          </Toolbar>
           {pageGroups.length === 0 && (
             <ResponsiveList<BookRow>
               columns={priceColumns} dataSource={[]} rowKey="model"

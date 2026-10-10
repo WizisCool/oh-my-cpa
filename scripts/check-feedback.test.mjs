@@ -120,10 +120,16 @@ test('the feedback module itself may use the raw APIs', (t) => {
   ]);
 });
 
-test('a raw antd Empty or Drawer is refused, and the console\'s own are not', () => {
+test('a raw antd Empty, Tag, Popconfirm or Drawer is refused, and the console\'s own are not', () => {
   assert.deepEqual(rules("import { Button, Empty } from 'antd';"), ['raw-empty']);
   assert.deepEqual(rules("import * as Antd from 'antd'; const blank = Antd.Empty;"), ['raw-empty']);
   assert.deepEqual(rules("import { Drawer } from 'antd';"), ['raw-drawer']);
+  assert.deepEqual(rules("import { Tag } from 'antd'; const chip = Tag.CheckableTag;"), ['raw-tag']);
+  assert.deepEqual(rules("import { Button, Popconfirm } from 'antd';"), ['raw-popconfirm']);
+  assert.deepEqual(rules("import { Card } from 'antd';"), ['raw-card']);
+  assert.deepEqual(rules("import { Descriptions } from 'antd';"), ['raw-descriptions']);
+  assert.deepEqual(rules("import type { CardProps } from 'antd';"), []);
+  assert.deepEqual(rules("import { Tag } from '../common/Tag'; const chip = Tag;"), []);
   assert.deepEqual(rules("import { EmptyState } from '../common/EmptyState'; import { AppDrawer } from '../common/AppDrawer';"), []);
   assert.deepEqual(rules("import type { DrawerProps } from 'antd';"), []);
 });

@@ -2,12 +2,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
-  Card,
   Modal,
-  Popconfirm,
   Segmented,
   Space,
-  Tag,
   Typography,
 } from 'antd';
 import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
@@ -17,7 +14,6 @@ import {
   ArrowLeftOutlined,
   FullscreenOutlined,
   CodeOutlined,
-  CopyOutlined,
   FormatPainterOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -26,7 +22,6 @@ import {
 } from '../components/icons';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
-import { copyText } from '../utils/clipboard';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { useConfigDraft } from '../components/config/useConfigDraft';
@@ -55,6 +50,10 @@ import {
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
 import { SectionHeading } from '../components/common/SectionHeading';
+import { Tag } from '../components/common/Tag';
+import { ConfirmAction } from '../components/common/ConfirmAction';
+import { Panel } from '../components/common/Panel';
+import { CopyButton } from '../components/common/CopyButton';
 
 const { Text } = Typography;
 
@@ -233,20 +232,7 @@ export const ConfigPage: React.FC = () => {
       >
         {t('cfg.source_format')}
       </Button>
-      <Button
-        size="small"
-        icon={<CopyOutlined />}
-        disabled={!rawYaml}
-        onClick={async () => {
-          if (await copyText(rawYaml)) {
-            toast.success(t('cfg.source_copy_success'));
-            return;
-          }
-          toast.error(t('cfg.copy_failed'));
-        }}
-      >
-        {t('cfg.source_copy')}
-      </Button>
+      <CopyButton showLabel text={rawYaml} label={t('cfg.source_copy')} disabled={!rawYaml} />
     </>
   );
   return (
@@ -289,13 +275,13 @@ export const ConfigPage: React.FC = () => {
             {configQuery.isPending && !rawYaml ? (
               <Tag className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_loading') })}</Tag>
             ) : configQuery.isError && !rawYaml ? (
-              <Tag color="error" className="config-sync-badge">{t('cfg.status_error')}</Tag>
+              <Tag tone="danger" className="config-sync-badge">{t('cfg.status_error')}</Tag>
             ) : configQuery.isError && rawYaml ? (
-              <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
+              <Tag tone="warn" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
             ) : isDirty ? (
-              <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
+              <Tag tone="warn" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
             ) : (
-              <Tag color="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
+              <Tag tone="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
             )}
             <Segmented
               size="small"
@@ -362,12 +348,10 @@ export const ConfigPage: React.FC = () => {
                 {t('cfg.source_save')}
               </Button>
             ) : (
-              <Popconfirm
+              <ConfirmAction
                 title={t('cfg.source_save_confirm')}
                 description={t('cfg.source_save_confirm_desc')}
                 onConfirm={saveConfig}
-                okText={t('common.confirm')}
-                cancelText={t('common.cancel')}
                 disabled={!isDirty || saveMutation.isPending || isDemo}
               >
                 <Button
@@ -380,7 +364,7 @@ export const ConfigPage: React.FC = () => {
                 >
                   {t('cfg.source_save')}
                 </Button>
-              </Popconfirm>
+              </ConfirmAction>
             )}
           </div>
         </div>
@@ -403,9 +387,9 @@ export const ConfigPage: React.FC = () => {
       )}
 
       {configQuery.isPending && !rawYaml ? (
-        <Card size="small" className="config-card">
+        <Panel className="config-card">
           <ParagraphPlaceholder rows={10} />
-        </Card>
+        </Panel>
       ) : configQuery.isError && !rawYaml ? (
         <LoadFailure
           title={t('cfg.load_failed')}
@@ -477,7 +461,7 @@ export const ConfigPage: React.FC = () => {
         >
           <div className="config-source-toolbar">
             {!isPhone && !isSourceFocused && <Space size={12}>
-              <Tag color={isDirty ? 'warning' : 'success'}>
+              <Tag tone={isDirty ? 'warn' : 'success'}>
                 {isDirty ? t('cfg.source_dirty') : t('cfg.source_clean')}
               </Tag>
               {rawYaml && (
@@ -569,19 +553,7 @@ export const ConfigPage: React.FC = () => {
         open={Boolean(conflictState)}
         title={t('cfg.conflict_title')}
         footer={[
-          <Button
-            key="copy"
-            icon={<CopyOutlined />}
-            onClick={async () => {
-              if (await copyText(rawYaml)) {
-                toast.success(t('cfg.source_copy_success'));
-                return;
-              }
-              toast.error(t('cfg.copy_failed'));
-            }}
-          >
-            {t('cfg.conflict_copy')}
-          </Button>,
+          <CopyButton key="copy" showLabel size="middle" text={rawYaml} label={t('cfg.conflict_copy')} />,
           <Button
             key="reload"
             type="primary"

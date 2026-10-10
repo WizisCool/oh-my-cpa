@@ -4,7 +4,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
-  Card,
   Input,
   Modal,
 } from 'antd';
@@ -38,6 +37,7 @@ import { SecretInput } from '../components/common/SecretInput';
 import styles from './ApiKeysPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
+import { Panel } from '../components/common/Panel';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;
@@ -429,7 +429,7 @@ export const ApiKeysPage: React.FC = () => {
           rather than a card holding another card holding a toolbar (design.md: prefer
           border-separated open rows over nested card wrappers). The card keeps its own 20px
           inset, which is what makes this list exactly as wide as every other list. */}
-      <Card className={styles['keys-panel']}>
+      <Panel className={styles['keys-panel']}>
         <div className={styles['keys-head']}>
           <div className={styles['keys-head-title']}>
             <h2 className={styles['keys-head-name']}>{t('cfg.api_keys_list')}</h2>
@@ -487,7 +487,7 @@ export const ApiKeysPage: React.FC = () => {
             onViewRequests={viewRequestsFor}
           />
         )}
-      </Card>
+      </Panel>
 
       {/* One editor for both of a key's editable parts: the secret CPA authenticates it with,
           and the name this console shows it by. */}

@@ -2,7 +2,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Popconfirm, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
+import { Button, Checkbox, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -51,6 +51,8 @@ import { LoadFailure, Notice } from '../feedback';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
+import { ConfirmAction } from '../common/ConfirmAction';
+import { Toolbar } from '../common/Toolbar';
 
 const { Text } = Typography;
 
@@ -318,7 +320,7 @@ export const CpaLogPanel: React.FC = () => {
           tabIndex={-1}
           className={`${styles.panel}${isFullscreen ? ` ${styles['panel-fullscreen']}` : ''}`}
         >
-          <div className="logs-toolbar">
+          <Toolbar variant="ruled" className="logs-toolbar">
             {isTail && (
               <>
                 <SearchInput
@@ -393,20 +395,20 @@ export const CpaLogPanel: React.FC = () => {
               <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
               {/* Truncating the file is irreversible, so it asks first - in the same popover every
                   other destructive action in the console uses. */}
-              <Popconfirm
+              <ConfirmAction
                 title={t('logs.clear_hint')}
-                okText={t('logs.clear_confirm')}
-                cancelText={t('common.cancel')}
-                okButtonProps={{ danger: true, loading: truncate.isPending }}
+                confirmLabel={t('logs.clear_confirm')}
+                isDanger
+                isConfirming={truncate.isPending}
                 onConfirm={() => truncate.mutate()}
                 disabled={isDemo}
               >
                 <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear')}>
                   <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
                 </Tooltip>
-              </Popconfirm>
+              </ConfirmAction>
             </div>
-          </div>
+          </Toolbar>
 
           {isTail && isFiltersOpen && (
             <div id="log-request-filters" className={styles.filters}>

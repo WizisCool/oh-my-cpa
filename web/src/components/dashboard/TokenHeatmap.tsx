@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Card, Tooltip } from 'antd';
+import { Tooltip } from 'antd';
 import type { TooltipRef } from 'antd/es/tooltip';
 import { createPortal } from 'react-dom';
 import { RightOutlined } from '../icons';
@@ -26,6 +26,7 @@ import {
 } from '../../types/tokenHeatmap';
 import { LoadFailure } from '../feedback';
 import { formatCalendarDay } from '../../utils/dateTimeFormat';
+import { Panel } from '../common/Panel';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -560,7 +561,7 @@ export const TokenHeatmap: React.FC = () => {
   // instead of leaving a skeleton up forever.
   if (isError && !data) {
     return (
-      <Card className="dashboard-tile heatmap-panel" styles={{ body: { padding: 20 } }}>
+      <Panel className="dashboard-tile heatmap-panel">
         <div className="tile-label">{t('dash.heatmap.title')}</div>
         <LoadFailure
           className="heatmap-alert"
@@ -568,14 +569,13 @@ export const TokenHeatmap: React.FC = () => {
           detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
           onRetry={() => void refetch()}
         />
-      </Card>
+      </Panel>
     );
   }
 
   return (
-    <Card
+    <Panel
       className="dashboard-tile heatmap-panel"
-      styles={{ body: { padding: 20 } }}
       // The sizing travels as custom properties, not as per-cell inline styles: a style
       // attribute on each of 372 cells is 372 objects for React to diff on every render and
       // defeats the browser's style-sharing for identical elements.
@@ -681,7 +681,7 @@ export const TokenHeatmap: React.FC = () => {
       )}
 
       </div>
-    </Card>
+    </Panel>
   );
 };
 

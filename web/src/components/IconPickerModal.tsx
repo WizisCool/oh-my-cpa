@@ -1,7 +1,7 @@
 import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Tag, Segmented, theme } from 'antd';
+import { Modal, Segmented, theme } from 'antd';
 import {
   LOBE_ICON_CATALOG,
   type LobeIconCatalogEntry,
@@ -11,6 +11,7 @@ import { useT } from '../i18n';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { SearchInput } from './common/SearchInput';
 import { EmptyState } from './common/EmptyState';
+import { ToggleTag } from './common/Tag';
 
 /**
  * ANTD_CONTAINER_ZINDEX_STEP is the step antd 6 reserves per container level
@@ -183,30 +184,30 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
             />
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <Tag.CheckableTag
+              <ToggleTag
                 checked={selectedGroup === 'all'}
                 onChange={() => setSelectedGroup('all')}
               >
                 {t('common.all')} ({groupCounts.all})
-              </Tag.CheckableTag>
-              <Tag.CheckableTag
+              </ToggleTag>
+              <ToggleTag
                 checked={selectedGroup === 'provider'}
                 onChange={() => setSelectedGroup('provider')}
               >
                 {t('pro.group_providers')} ({groupCounts.provider})
-              </Tag.CheckableTag>
-              <Tag.CheckableTag
+              </ToggleTag>
+              <ToggleTag
                 checked={selectedGroup === 'model'}
                 onChange={() => setSelectedGroup('model')}
               >
                 {t('pro.group_models')} ({groupCounts.model})
-              </Tag.CheckableTag>
-              <Tag.CheckableTag
+              </ToggleTag>
+              <ToggleTag
                 checked={selectedGroup === 'application'}
                 onChange={() => setSelectedGroup('application')}
               >
                 {t('pro.group_apps')} ({groupCounts.application})
-              </Tag.CheckableTag>
+              </ToggleTag>
             </div>
           </div>
 

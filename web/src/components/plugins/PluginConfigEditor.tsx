@@ -1,10 +1,11 @@
 import React from 'react';
-import { Button, Input, Tag, Typography } from 'antd';
+import { Button, Input, Typography } from 'antd';
 import { CheckOutlined, FormatPainterOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { parsePluginConfig, pluginConfigSummary } from './pluginConfig';
 import styles from './PluginConfigEditor.module.css';
 import { Notice } from '../feedback';
+import { Tag } from '../common/Tag';
 
 const { Text } = Typography;
 
@@ -33,11 +34,11 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
       <div className={styles.toolbar}>
         <div className={styles.validity}>
           {parsed.error === 'duplicate-key' ? (
-            <Tag color="error">{t('plugin.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
+            <Tag tone="danger">{t('plugin.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
           ) : parsed.error ? (
-            <Tag color="error">{t('plugin.config_invalid_json')}</Tag>
+            <Tag tone="danger">{t('plugin.config_invalid_json')}</Tag>
           ) : (
-            <Tag color="success" icon={<CheckOutlined />}>{t('plugin.config_valid')}</Tag>
+            <Tag tone="success" icon={<CheckOutlined />}>{t('plugin.config_valid')}</Tag>
           )}
           <Text type="secondary">{t('plugin.config_top_level', { n: summary.length })}</Text>
         </div>

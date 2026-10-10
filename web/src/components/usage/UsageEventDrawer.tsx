@@ -1,6 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Descriptions, Modal, Tabs, Tooltip } from 'antd';
+import { Button, Modal, Tabs, Tooltip } from 'antd';
+import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
@@ -103,11 +104,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
   const value = (text: string | null | undefined) => text || missing;
   const fields = (items: Array<[string, React.ReactNode]>) => (
-    <Descriptions
-      size="small"
-      column={1}
-      colon={false}
-      items={items.map(([label, children], index) => ({ key: index, label, children }))}
+    <FactList
+      emphasis="quiet"
+      facts={items.map(([label, content], index) => ({ key: String(index), label, value: content }))}
     />
   );
   const section = (title: string, content: React.ReactNode) => (

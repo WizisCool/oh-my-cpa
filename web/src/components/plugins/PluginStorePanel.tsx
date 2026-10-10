@@ -28,6 +28,7 @@ import { useToast } from '../feedback';
 import { Notice } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
+import { Toolbar } from '../common/Toolbar';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -107,7 +108,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
         />
       )}
 
-      <div className={`${styles.toolbar} ${styles['toolbar-spaced']}`}>
+      <Toolbar className={styles['toolbar-spaced']}>
         <SearchInput
           className={styles.search}
           value={query}
@@ -123,7 +124,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
             label: `${filterLabels[value]} ${counts[value]}`,
           }))}
         />
-      </div>
+      </Toolbar>
 
       {visible.length === 0 ? (
         <EmptyState className={styles.empty} title={entries.length === 0 ? t('plugin.store_empty') : t('plugin.search_empty')} />

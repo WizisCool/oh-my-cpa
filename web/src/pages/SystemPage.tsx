@@ -1,7 +1,6 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Card,
   Button,
   Typography,
   Spin,
@@ -48,6 +47,7 @@ import { deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/ve
 import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
+import { Panel } from '../components/common/Panel';
 
 const { Text, Paragraph } = Typography;
 
@@ -490,7 +490,7 @@ export const SystemPage: React.FC = () => {
           and a phone all meet the cards in the order the grid draws them. */}
       <div className={styles['system-grid']}>
         {/* Card 1: Versions & Updates */}
-        <Card
+        <Panel
           className={styles['system-card']}
           data-testid="sys-card-versions"
           title={
@@ -533,10 +533,10 @@ export const SystemPage: React.FC = () => {
               />
             </>
           )}
-        </Card>
+        </Panel>
 
         {/* Card 2: Maintenance & Diagnostics */}
-        <Card
+        <Panel
           className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-maintenance"
           title={(
@@ -696,10 +696,10 @@ export const SystemPage: React.FC = () => {
               )}
             </div>
           )}
-        </Card>
+        </Panel>
 
         {/* Card 3: SQLite Storage */}
-        <Card
+        <Panel
           className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-storage"
           title={(
@@ -740,10 +740,10 @@ export const SystemPage: React.FC = () => {
 
             </>
           )}
-        </Card>
+        </Panel>
 
         {/* Card 4: Component Topology & Health */}
-        <Card
+        <Panel
           className={`${styles['system-card']} ${styles['detail-card']}`}
           data-testid="sys-card-health"
           title={(
@@ -832,7 +832,7 @@ export const SystemPage: React.FC = () => {
               </div>
             </div>
           )}
-        </Card>
+        </Panel>
       </div>
 
       {/* The change log drawer. Its title names the product it belongs to, because the two

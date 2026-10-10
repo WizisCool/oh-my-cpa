@@ -1,6 +1,6 @@
 import type React from 'react';
 import clsx from 'clsx';
-import { Button, Popconfirm, Tag, Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -24,6 +24,8 @@ import {
   providerModelCount,
   type ProviderTraffic,
 } from './providerOverview';
+import { Tag } from '../common/Tag';
+import { ConfirmAction } from '../common/ConfirmAction';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -355,12 +357,10 @@ export function ProviderTable({
               aria-label={`${t('common.edit')}: ${record.name}`}
             />
           </Tooltip>
-          <Popconfirm
+          <ConfirmAction
             title={t('pro.delete_provider_confirm')}
             onConfirm={() => deleteProviderMutation.mutate(record.id)}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
+            isDanger
             disabled={isDemo}
           >
             <Tooltip title={isDemo ? t('demo.blocked') : t('common.delete')}>
@@ -374,7 +374,7 @@ export function ProviderTable({
                 aria-label={`${t('common.delete')}: ${record.name}`}
               />
             </Tooltip>
-          </Popconfirm>
+          </ConfirmAction>
         </div>
       ),
     },

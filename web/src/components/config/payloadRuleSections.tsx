@@ -1,4 +1,4 @@
-import { Button, Input, InputNumber, Popconfirm, Select, Typography } from 'antd';
+import { Button, Input, InputNumber, Select, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined, SettingOutlined } from '../icons';
 
 import {
@@ -13,6 +13,7 @@ import {
   type TypedParamItem,
 } from './payloadRules';
 import type { PayloadRulesDraft } from './usePayloadRulesDraft';
+import { ConfirmAction } from '../common/ConfirmAction';
 
 const { Text } = Typography;
 
@@ -505,16 +506,16 @@ export function renderTypedCategoryContent(draft: PayloadRulesDraft, category: '
               <span className="payload-rule-card-title">
                 {t('cfg.payload_rule_num', { n: rIdx + 1 })}
               </span>
-              <Popconfirm
+              <ConfirmAction
                 title={t('cfg.payload_delete_rule_confirm')}
+                confirmLabel={t('common.delete')}
+                isDanger
                 onConfirm={() => deleteTypedRule(category, rIdx)}
-                okText={t('common.confirm')}
-                cancelText={t('common.cancel')}
               >
                 <Button size="small" type="text" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
-              </Popconfirm>
+              </ConfirmAction>
             </div>
 
             <div className="payload-rule-card-body">
@@ -572,16 +573,16 @@ export function renderRawCategoryContent(draft: PayloadRulesDraft, category: 'de
               <span className="payload-rule-card-title">
                 {t('cfg.payload_rule_num', { n: rIdx + 1 })}
               </span>
-              <Popconfirm
+              <ConfirmAction
                 title={t('cfg.payload_delete_rule_confirm')}
+                confirmLabel={t('common.delete')}
+                isDanger
                 onConfirm={() => deleteRawRule(category, rIdx)}
-                okText={t('common.confirm')}
-                cancelText={t('common.cancel')}
               >
                 <Button size="small" type="text" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
-              </Popconfirm>
+              </ConfirmAction>
             </div>
 
             <div className="payload-rule-card-body">
@@ -637,16 +638,16 @@ export function renderFilterCategoryContent(draft: PayloadRulesDraft) {
               <span className="payload-rule-card-title">
                 {t('cfg.payload_rule_num', { n: rIdx + 1 })}
               </span>
-              <Popconfirm
+              <ConfirmAction
                 title={t('cfg.payload_delete_rule_confirm')}
+                confirmLabel={t('common.delete')}
+                isDanger
                 onConfirm={() => deleteFilterRule(rIdx)}
-                okText={t('common.confirm')}
-                cancelText={t('common.cancel')}
               >
                 <Button size="small" type="text" danger icon={<DeleteOutlined />}>
                   {t('cfg.payload_delete_rule')}
                 </Button>
-              </Popconfirm>
+              </ConfirmAction>
             </div>
 
             <div className="payload-rule-card-body">

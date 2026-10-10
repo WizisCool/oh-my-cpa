@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Button, Collapse, Input, Modal, Select, Tag } from 'antd';
+import { Button, Collapse, Input, Modal, Select } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { Document } from 'yaml';
 
@@ -17,6 +17,7 @@ import {
 } from './payloadRuleSections';
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { Tag } from '../common/Tag';
 
 /** Re-exported for the page, which reports the issues back to the operator. */
 export type { PayloadValidationIssue };
@@ -66,7 +67,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             <span className="payload-panel-desc">{t('cfg.payload_cat_default_desc')}</span>
           </div>
           {defaultRules.length > 0 && (
-            <Tag className="payload-count-badge">{defaultRules.length}</Tag>
+            <Tag>{defaultRules.length}</Tag>
           )}
         </div>
       ),
@@ -81,7 +82,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             <span className="payload-panel-desc">{t('cfg.payload_cat_default_raw_desc')}</span>
           </div>
           {defaultRawRules.length > 0 && (
-            <Tag className="payload-count-badge">{defaultRawRules.length}</Tag>
+            <Tag>{defaultRawRules.length}</Tag>
           )}
         </div>
       ),
@@ -96,7 +97,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             <span className="payload-panel-desc">{t('cfg.payload_cat_override_desc')}</span>
           </div>
           {overrideRules.length > 0 && (
-            <Tag className="payload-count-badge">{overrideRules.length}</Tag>
+            <Tag>{overrideRules.length}</Tag>
           )}
         </div>
       ),
@@ -111,7 +112,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             <span className="payload-panel-desc">{t('cfg.payload_cat_override_raw_desc')}</span>
           </div>
           {overrideRawRules.length > 0 && (
-            <Tag className="payload-count-badge">{overrideRawRules.length}</Tag>
+            <Tag>{overrideRawRules.length}</Tag>
           )}
         </div>
       ),
@@ -126,7 +127,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
             <span className="payload-panel-desc">{t('cfg.payload_cat_filter_desc')}</span>
           </div>
           {filterRules.length > 0 && (
-            <Tag className="payload-count-badge">{filterRules.length}</Tag>
+            <Tag>{filterRules.length}</Tag>
           )}
         </div>
       ),

@@ -419,7 +419,6 @@
 
 
 .plugin-tag {
-  color: var(--accent);
   border-color: var(--accent);
   background: var(--surface);
 }

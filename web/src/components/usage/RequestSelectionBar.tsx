@@ -1,6 +1,7 @@
 import { Button } from 'antd';
 
 import { useT } from '../../i18n';
+import { SelectionBar } from '../common/SelectionBar';
 import { DownloadOutlined } from '../icons';
 
 interface RequestSelectionBarProps {
@@ -27,20 +28,25 @@ export function RequestSelectionBar({
 }: RequestSelectionBarProps) {
   const t = useT();
   return (
-    <div className="request-selection-bar" role="region" aria-label={t('events.selection')}>
-      <span className="request-selection-count" role="status">
-        {t('events.selected_count', { n: count })}
-      </span>
-      {!isEveryLoadedSelected && (
-        <Button type="link" size="small" onClick={onSelectLoaded}>
-          {t('events.select_all')}
-        </Button>
+    <SelectionBar
+      variant="inline"
+      className="request-selection-bar"
+      label={t('events.selection')}
+      summary={t('events.selected_count', { n: count })}
+      selection={(
+        <>
+          {!isEveryLoadedSelected && (
+            <Button type="link" size="small" onClick={onSelectLoaded}>
+              {t('events.select_all')}
+            </Button>
+          )}
+          <Button type="link" size="small" onClick={onClear}>
+            {t('events.clear_selection')}
+          </Button>
+        </>
       )}
-      <Button type="link" size="small" onClick={onClear}>
-        {t('events.clear_selection')}
-      </Button>
+    >
       <Button
-        className="request-selection-export"
         type="primary"
         size="small"
         icon={<DownloadOutlined />}
@@ -49,6 +55,6 @@ export function RequestSelectionBar({
       >
         {t('events.export')}
       </Button>
-    </div>
+    </SelectionBar>
   );
 }

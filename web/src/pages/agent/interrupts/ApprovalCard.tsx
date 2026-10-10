@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, Tag } from 'antd';
+import { Button, Input } from 'antd';
 import { ParagraphPlaceholder } from '../../../components/common/ContentPlaceholder';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { Notice } from '../../../components/feedback';
@@ -11,6 +11,7 @@ import { failureCode, startOperationOAuth } from '../api';
 import { failureKey, previewEntries } from '../state';
 import type { Capability, Operation } from '../state';
 import styles from '../AgentPage.module.css';
+import { Tag } from '../../../components/common/Tag';
 
 export interface ApprovalCardProps {
   operation: Operation | undefined;
@@ -99,7 +100,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
         <>
           <header className={styles['approval-head']}>
             <span className={styles['approval-title']}>{t('agent.operation.title')}</span>
-            <Tag color={isDestructive ? 'error' : 'warning'}>{t(`agent.permission.${permission}`)}</Tag>
+            <Tag tone={isDestructive ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
           </header>
           <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
         </>

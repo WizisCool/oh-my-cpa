@@ -21,8 +21,15 @@
  *
  * - `Switch` is refused everywhere, because `components/common/Switch` is drawn without it;
  * - `Empty` is refused everywhere, because `components/common/EmptyState` is;
+ * - `Tag` is refused everywhere, because `components/common/Tag` is;
  * - `Drawer` is refused outside `components/common/AppDrawer` and the two sheets that are not side
- *   panels - the navigation sheet and the time-range sheet (`PRIMITIVE_OWNERS`).
+ *   panels - the navigation sheet and the time-range sheet (`PRIMITIVE_OWNERS`);
+ * - `Popconfirm` is refused outside `components/common/ConfirmAction`, which fixes the cancel
+ *   label and colours a destructive confirmation;
+ * - `Card` is refused outside `components/common/Panel`, which keeps the inset in the stylesheet
+ *   where the phone rules can reach it;
+ * - `Descriptions` is refused everywhere, because `components/common/FactList` is the console's
+ *   label/value list.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,6 +46,8 @@ const PRIMITIVE_OWNERS = {
     'web/src/components/common/AppLayout.tsx',
     'web/src/components/common/timeRange/TimeRangePicker.tsx',
   ],
+  'raw-popconfirm': ['web/src/components/common/ConfirmAction.tsx'],
+  'raw-card': ['web/src/components/common/Panel.tsx'],
 };
 
 function lineOf(source, index) {
@@ -62,6 +71,14 @@ export function findViolations(source) {
       violations.push({ line, rule: 'raw-switch', message: 'import `Switch` from components/common/Switch instead of antd' });
     } else if (kind === 'Empty') {
       violations.push({ line, rule: 'raw-empty', message: 'import `EmptyState` from components/common/EmptyState instead of antd `Empty`' });
+    } else if (kind === 'Tag') {
+      violations.push({ line, rule: 'raw-tag', message: 'import `Tag` from components/common/Tag instead of antd' });
+    } else if (kind === 'Popconfirm') {
+      violations.push({ line, rule: 'raw-popconfirm', message: 'import `ConfirmAction` from components/common/ConfirmAction instead of antd `Popconfirm`' });
+    } else if (kind === 'Card') {
+      violations.push({ line, rule: 'raw-card', message: 'import `Panel` from components/common/Panel instead of antd `Card`' });
+    } else if (kind === 'Descriptions') {
+      violations.push({ line, rule: 'raw-descriptions', message: 'import `FactList` from components/common/FactList instead of antd `Descriptions`' });
     } else if (kind === 'Drawer') {
       violations.push({ line, rule: 'raw-drawer', message: 'import `AppDrawer` from components/common/AppDrawer instead of antd `Drawer`' });
     } else if (kind === 'message' || kind === 'notification') {
@@ -95,7 +112,7 @@ export function findViolations(source) {
   }
 
   function memberKind(owner, name) {
-    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'Switch', 'Empty', 'Drawer', 'message', 'notification'].includes(name)) return name;
+    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'Switch', 'Empty', 'Tag', 'Drawer', 'Popconfirm', 'message', 'notification'].includes(name)) return name;
     if (owner === 'app') {
       if (name === 'modal') return 'Modal';
       if (name === 'message' || name === 'notification') return name;
@@ -179,7 +196,7 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console } = {}) 
       output.error(`  ${failure.file}:${failure.line} [${failure.rule}] ${failure.message}`);
     }
   } else {
-    output.log('Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, empty state and side panel through its shared component.');
+    output.log('Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, tag, empty state, panel, fact list, side panel and anchored confirmation through its shared component.');
   }
   return failures;
 }

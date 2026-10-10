@@ -197,12 +197,6 @@
   flex: none;
 }
 
-.catalog-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .catalog-search {
   flex: 1 1 200px;
   min-width: 0;

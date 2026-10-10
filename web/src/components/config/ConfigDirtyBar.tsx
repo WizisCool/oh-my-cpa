@@ -1,9 +1,10 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Popconfirm, Space } from 'antd';
+import { Button, Space } from 'antd';
 import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { ConfirmAction } from '../common/ConfirmAction';
 
 export interface ConfigDirtyBarProps {
   isDirty: boolean;
@@ -115,7 +116,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               {t('cfg.dirty_bar_save')}
             </Button>
           ) : (
-            <Popconfirm
+            <ConfirmAction
               title={t('cfg.source_save_confirm')}
               description={t('cfg.source_save_confirm_desc')}
               open={isConfirmOpen}
@@ -126,9 +127,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
                 setIsConfirmOpen(false);
                 onSave();
               }}
-              okButtonProps={{ 'aria-label': t('common.confirm') }}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
+              confirmButtonProps={{ 'aria-label': t('common.confirm') }}
               disabled={isSaving || disabled}
               placement="topRight"
             >
@@ -144,7 +143,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               >
                 {t('cfg.dirty_bar_save')}
               </Button>
-            </Popconfirm>
+            </ConfirmAction>
           )}
         </Space>
       </div>

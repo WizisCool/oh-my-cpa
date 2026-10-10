@@ -1,6 +1,6 @@
 import { ActionMenu } from '../components/common/ActionMenu';
 import React from 'react';
-import { Button, Card, Segmented } from 'antd';
+import { Button, Segmented } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -16,6 +16,7 @@ import { PluginConfigDrawer } from '../components/plugins/PluginConfigDrawer';
 import { storeListingsByPluginId } from '../components/plugins/pluginStoreLogic';
 import styles from '../components/plugins/Plugins.module.css';
 import { LoadFailure, Notice } from '../components/feedback';
+import { Panel } from '../components/common/Panel';
 
 const PLUGIN_TABS = ['installed', 'store', 'settings'] as const;
 type PluginTab = (typeof PLUGIN_TABS)[number];
@@ -193,7 +194,7 @@ export const PluginsPage: React.FC = () => {
       )}
 
       {tab === 'installed' && (
-        <Card>
+        <Panel>
           <InstalledPluginsPanel
             plugins={plugins}
             isLoading={pluginsQuery.isLoading}
@@ -203,7 +204,7 @@ export const PluginsPage: React.FC = () => {
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
           />
-        </Card>
+        </Panel>
       )}
       {tab === 'store' && (
         <PluginStorePanel

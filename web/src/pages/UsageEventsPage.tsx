@@ -3,7 +3,6 @@ import React from 'react';
 import {
   Badge,
   Button,
-  Descriptions,
   Listy,
   Popover,
 } from 'antd';
@@ -71,6 +70,7 @@ import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
+import { FactList } from '../components/common/FactList';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
@@ -511,26 +511,13 @@ export const UsageEventsPage: React.FC = () => {
                 title={t('events.ingest_status')}
                 content={
                   <div className="request-ingest">
-                    <Descriptions
-                      size="small"
-                      column={1}
-                      items={[
-                        {
-                          key: 'mode',
-                          label: t('events.collector_mode'),
-                          children: status?.collector?.mode || '—',
-                        },
-                        {
-                          key: 'captured',
-                          label: t('events.captured'),
-                          children: status?.collector?.captured ?? '—',
-                        },
-                        {
-                          key: 'gaps',
-                          label: t('events.coverage_gaps'),
-                          children: status?.collector?.coverage_gaps ?? '—',
-                        },
-                        { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
+                    <FactList
+                      emphasis="quiet"
+                      facts={[
+                        { key: 'mode', label: t('events.collector_mode'), value: status?.collector?.mode || '—' },
+                        { key: 'captured', label: t('events.captured'), value: status?.collector?.captured ?? '—' },
+                        { key: 'gaps', label: t('events.coverage_gaps'), value: status?.collector?.coverage_gaps ?? '—' },
+                        { key: 'pending', label: t('events.pending'), value: status?.stats?.pending ?? '—' },
                       ]}
                     />
                     <p>{t('events.delivery_semantics_hint')}</p>

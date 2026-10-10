@@ -46,10 +46,6 @@
   border-radius: var(--radius-xs);
 }
 
-.overview-table {
-  border-radius: var(--radius-sm);
-}
-
 .overview-quota {
   margin-top: 14px;
   padding: 12px;
@@ -212,4 +208,11 @@
 /* A failed read of the safe fields sits above the fields it could not fill. */
 .safe-fields-failure {
   margin-bottom: 12px;
+}
+
+/* A tab's name and the state tag beside it. */
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

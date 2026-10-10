@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Tag } from 'antd';
 import { DownOutlined, RightOutlined, UpOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -18,6 +17,7 @@ import {
 import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics';
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
+import { Tag } from '../common/Tag';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -202,10 +202,10 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                     <div className="provider-title-line">
                       <span className="provider-title">{provider.name}</span>
                       {isOAuth && (
-                        <Tag className="provider-badge is-oauth">{t('dash.providers_type_oauth')}</Tag>
+                        <Tag size="small" tone="accent">{t('dash.providers_type_oauth')}</Tag>
                       )}
                       {provider.disabled && (
-                        <Tag className="provider-badge is-disabled">{t('dash.providers_status_disabled')}</Tag>
+                        <Tag size="small" tone="danger">{t('dash.providers_status_disabled')}</Tag>
                       )}
                       <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
                     </div>

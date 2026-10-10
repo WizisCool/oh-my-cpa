@@ -1,5 +1,4 @@
 import React from 'react';
-import { Card } from 'antd';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
@@ -40,6 +39,7 @@ import {
   type CredentialQuotaState,
   type QuotaWindowPeriod,
 } from './credentialQuotaLogic';
+import { Panel } from '../common/Panel';
 
 /** The prefixes the page's refresh button invalidates; shared with the credential workspace. */
 export const CREDENTIAL_FILES_QUERY_KEY = 'management-auth-files';
@@ -203,9 +203,8 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
   const state = resolveCredentialQuotaPanelState(board, isLoading);
 
   return (
-    <Card
+    <Panel
       className={clsx('dashboard-tile credential-quota-panel', className)}
-      styles={{ body: { padding: 20 } }}
       data-testid="dashboard-credential-quota"
       data-quota-panel-state={state}
     >
@@ -287,7 +286,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
           </>
         )}
       </div>
-    </Card>
+    </Panel>
   );
 };
 

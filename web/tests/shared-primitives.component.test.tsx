@@ -1,9 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDrawer } from '../src/components/common/AppDrawer';
+import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
+import { Panel } from '../src/components/common/Panel';
 import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
+import { SelectionBar } from '../src/components/common/SelectionBar';
+import { Tag, ToggleTag } from '../src/components/common/Tag';
+import { Toolbar } from '../src/components/common/Toolbar';
 import { I18nProvider } from '../src/i18n';
 
 describe('SearchInput', () => {
@@ -102,5 +107,101 @@ describe('AppDrawer', () => {
     expect(document.querySelector('.ant-drawer-footer')).toBeNull();
     const panel = document.querySelector<HTMLElement>('.ant-drawer-content-wrapper');
     expect(panel?.style.width).toBe('min(420px, 100vw)');
+  });
+});
+
+describe('Tag', () => {
+  it('carries its tone and size as classes and hides the glyph from assistive technology', () => {
+    const { container } = render(<Tag tone="warn" size="small" icon={<svg />}>Unsaved</Tag>);
+    const tag = container.querySelector('.tag')!;
+    expect(tag.classList.contains('is-warn')).toBe(true);
+    expect(tag.classList.contains('is-small')).toBe(true);
+    expect(tag.querySelector('.tag-icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(tag.textContent).toBe('Unsaved');
+  });
+
+  it('as a toggle reports the opposite of its pressed state', () => {
+    const onChange = vi.fn();
+    render(<ToggleTag checked={false} onChange={onChange}>Providers (12)</ToggleTag>);
+    const toggle = screen.getByRole('button', { name: 'Providers (12)' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(toggle);
+
+    expect(onChange.mock.calls).toEqual([[true]]);
+  });
+});
+
+describe('ConfirmAction', () => {
+  beforeEach(() => {
+    window.localStorage.setItem('omc-lang', 'en');
+    // The anchored overlay measures its trigger, which jsdom has no observer for.
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('fixes the cancel label, names the confirming button and colours a destructive one', () => {
+    const onConfirm = vi.fn();
+    render(
+      <I18nProvider>
+        <ConfirmAction open title="Delete this key?" confirmLabel="Delete" isDanger onConfirm={onConfirm}>
+          <button type="button">Remove</button>
+        </ConfirmAction>
+      </I18nProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    const confirm = screen.getByRole('button', { name: 'Delete' });
+    expect(confirm.classList.contains('ant-btn-dangerous')).toBe(true);
+
+    fireEvent.click(confirm);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a plain confirmation that is not coloured', () => {
+    render(
+      <I18nProvider>
+        <ConfirmAction open title="Save the source?"><button type="button">Save</button></ConfirmAction>
+      </I18nProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Confirm' }).classList.contains('ant-btn-dangerous')).toBe(false);
+  });
+});
+
+describe('SelectionBar', () => {
+  it('announces the count, keeps the note beside it and the actions at the trailing edge', () => {
+    const { container } = render(
+      <SelectionBar label="Selection" summary="3 selected" note="2 on other pages">
+        <button type="button">Delete</button>
+      </SelectionBar>,
+    );
+    expect(screen.getByRole('status').textContent).toBe('3 selected');
+    expect(container.querySelector('.selection-bar.is-framed')).toBeTruthy();
+    expect(container.querySelector('.selection-bar-note')?.textContent).toBe('2 on other pages');
+    expect(container.querySelector('.selection-bar-actions button')?.textContent).toBe('Delete');
+  });
+});
+
+describe('Toolbar', () => {
+  it('sets trailing controls apart and draws no trailing slot without them', () => {
+    const { container, rerender } = render(
+      <Toolbar variant="ruled" end={<button type="button">Export</button>}><input aria-label="Search" /></Toolbar>,
+    );
+    expect(container.querySelector('.toolbar.is-ruled > input')).toBeTruthy();
+    expect(container.querySelector('.toolbar-end button')?.textContent).toBe('Export');
+
+    rerender(<Toolbar><input aria-label="Search" /></Toolbar>);
+
+    expect(container.querySelector('.toolbar.is-ruled')).toBeNull();
+    expect(container.querySelector('.toolbar-end')).toBeNull();
+  });
+});
+
+describe('Panel', () => {
+  it('draws the header from its title and leaves the inset to the stylesheet', () => {
+    const { container } = render(<Panel title="Versions" extra={<button type="button">Check</button>} className="system-card">body</Panel>);
+    expect(container.querySelector('.panel.system-card .ant-card-head-title')?.textContent).toBe('Versions');
+    expect(container.querySelector('.ant-card-extra button')?.textContent).toBe('Check');
+    expect((container.querySelector('.ant-card-body') as HTMLElement).style.padding).toBe('');
   });
 });

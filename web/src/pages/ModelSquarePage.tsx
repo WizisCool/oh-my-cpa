@@ -41,6 +41,7 @@ import { SearchInput } from '../components/common/SearchInput';
 import { EmptyState } from '../components/common/EmptyState';
 import { SectionHeading } from '../components/common/SectionHeading';
 import { AppDrawer } from '../components/common/AppDrawer';
+import { Toolbar } from '../components/common/Toolbar';
 
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
@@ -355,13 +356,13 @@ export const ModelSquarePage: React.FC = () => {
     {directory.isError && <LoadFailure title={t(needsKey ? 'models.key_required' : 'models.load_failed')} error={directory.error} onRetry={() => void directory.refetch()} />}
     {needsKey && <Link to="/api-keys">{t('models.manage_keys')}</Link>}
     {directory.isPending ? <PageLoading variant="block" /> : directory.data && <>
-      <div className={styles['toolbar']}>
+      <Toolbar>
         <SearchInput className={styles['search']} label={t('models.search')} value={search} onChange={(text) => setParam('q', text)} />
         <span className={styles['result-count']} role="status">
           {isFiltered ? t('models.showing', { shown: entries.length, total: allEntries.length }) : ''}
         </span>
         {isFiltered && <Button type="link" size="small" className={styles['clear-filters']} onClick={clearFilters}>{t('models.clear_filters')}</Button>}
-      </div>
+      </Toolbar>
       <div className={clsx(styles['chip-group'], styles['maker-strip'])} role="group" aria-label={t('models.filter_makers')}>
         <button type="button" className={styles['chip']} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
           {t('common.all')}<span className={styles['chip-count']}>{searched.length}</span>
