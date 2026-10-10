@@ -80,7 +80,7 @@ maintainers with repository rules; a version tag is a publishing authority.
   linker. The config, health endpoint, SPA runtime config, System Information and
   outbound default User-Agent all use that value. `OMCPA_VERSION` remains an operator
   override; the Compose files do not override the embedded version.
-- Docker version aliases are `v0.2.0` and `0.2.0`; `latest` advances only for the
+- Docker version aliases are `v0.2.1` and `0.2.1`; `latest` advances only for the
   numerically newest stable release. A backport never moves either Docker `latest`
   or GitHub's latest pointer backwards. Compose defaults to `latest` for both
   OMC and CPA. Operators can override
@@ -91,7 +91,7 @@ maintainers with repository rules; a version tag is a publishing authority.
 ## Prepare and publish
 
 Version-specific changes and upgrade notes are kept under `docs/releases/`; see
-the [v0.2.0 release notes](releases/v0.2.0.md).
+the [v0.2.1 release notes](releases/v0.2.1.md).
 
 1. Change both package versions together and document user-visible changes. The
    install guides download from `releases/latest/download/` and Compose defaults to
@@ -106,8 +106,8 @@ the [v0.2.0 release notes](releases/v0.2.0.md).
    git switch master
    git pull --ff-only
    test -z "$(git status --porcelain)"
-   git tag -a v0.2.0 -m "Oh My CPA v0.2.0"
-   git push origin v0.2.0
+   git tag -a v0.2.1 -m "Oh My CPA v0.2.1"
+   git push origin v0.2.1
    ```
 
 4. Follow `.github/workflows/release.yml` in Actions:
@@ -147,8 +147,8 @@ the native packaged-image smoke complements the product's built-browser acceptan
 
 ```bash
 gh run list --workflow release.yml --repo WizisCool/oh-my-cpa
-docker buildx imagetools inspect wiziscool/oh-my-cpa:v0.2.0
-gh release view v0.2.0 --repo WizisCool/oh-my-cpa
+docker buildx imagetools inspect wiziscool/oh-my-cpa:v0.2.1
+gh release view v0.2.1 --repo WizisCool/oh-my-cpa
 ```
 
 Workflows use a serialized `queue: max` concurrency group: pending releases queue
