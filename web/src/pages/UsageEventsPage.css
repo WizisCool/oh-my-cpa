@@ -1819,3 +1819,79 @@
   .req-back-to-top-btn .anticon,
   .request-collapsible-header { transition: none; }
 }
+
+/* The failed pill's popup quotes the upstream error, so it is wider than a label
+   tooltip and scrolls inside itself rather than growing past the list. */
+.req-result-pill.has-detail {
+  cursor: help;
+}
+.request-failure-tooltip {
+  max-width: min(440px, calc(100vw - 32px));
+}
+.request-failure-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.request-failure-detail header button {
+  display: inline-flex;
+  padding: 2px;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  opacity: 0.75;
+}
+.request-failure-detail header button:hover,
+.request-failure-detail header button:focus-visible {
+  opacity: 1;
+}
+.request-failure-detail pre,
+.request-failure-detail p {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.request-failure-detail pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* Response headers read as name/value pairs in two tracks: the names align so a
+   reader scans one column for the header they came for. */
+.request-header-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.request-header-group {
+  margin: 0 0 16px;
+}
+.request-header-group h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.request-header-group dl {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.request-header-group dt {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.request-header-group dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

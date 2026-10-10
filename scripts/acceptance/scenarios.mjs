@@ -71,6 +71,7 @@ import {
   columnAlignment,
   exportRecords,
   interactionRecords,
+  interactionRecordDetail,
   refreshRecords,
   requestExport,
   facetMarks,
@@ -699,6 +700,10 @@ export const SCENARIOS = [
       routes: [
         ...systemFixtures(),
         [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [
+          (url) => /\/usage\/events\/\d+$/.test(url.pathname),
+          (url) => interactionRecordDetail(Number(url.pathname.split('/').pop())),
+        ],
         [
           (url) => url.pathname.includes('/usage/events'),
           () => ({ items: interactionRecords, has_more: false, limit: 100 }),

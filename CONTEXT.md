@@ -473,6 +473,34 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   once at ingestion (`internal/usage/served_model.go`, following CPA's own
   substitution rule) and stored, so the list, the filter and the detail view
   agree on it.
+- **Failure Detail**: Why one failed request failed, as CPA publishes it in the
+  `fail` block of the usage record: the HTTP status the request ended with and
+  the upstream's own error body. Oh My CPA stores both on the request record
+  (`usage_events.fail_status_code`, `fail_body`), the body redacted and bounded
+  (`usage.MaxFailBodyRunes`). It belongs to the request itself, unlike a
+  correlated credential error, which is matched by credential and time. Unknown
+  is a distinct state - a CPA that published no failure block, or a record
+  ingested before the fields were stored - and such a record shows the failed
+  state alone. A successful record carries none: CPA stamps status 200 on every
+  success, which is not recorded as an outcome. The request list carries the
+  status only; the body can quote account detail, so it is read from the
+  single-record view. It is the primary way to read a failure, because CPA keeps
+  a per-request log file only while its `request-log` setting is on and
+  otherwise retains just its newest few error logs.
+- **Response Header Snapshot**: The diagnostic part of the upstream's response
+  headers for one request, from `response_headers` on CPA's usage record, stored
+  on the request record (`usage_events.response_headers`) for successes and
+  failures alike. It answers what the body does not: the upstream's own request
+  id, the edge that answered, and the rate-limit or quota state at that moment.
+  It is deliberately not the full header set. Transport headers (content type,
+  date, CORS, caching) are dropped because they are the same on every request,
+  and any header whose name suggests a credential or session (cookie,
+  authorization, token, key, signature, session) is dropped before storage;
+  values are redacted and bounded (`internal/usage/response_headers.go`). Only
+  the single-record view carries it. The console groups it by purpose - request
+  identifiers, quota and rate limits, routing and edge, other - by header-name
+  fragments (`web/src/types/responseHeaderGroups.ts`), without interpreting any
+  provider's values.
 - **Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the upstream model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' call view one

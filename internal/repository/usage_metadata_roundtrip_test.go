@@ -250,3 +250,46 @@ func TestStreamFlagSurvivesPersistence(t *testing.T) {
 		t.Fatalf("req-omitted: want stream=nil, got %v", *s)
 	}
 }
+
+// TestFailureDetailSurvivesIngestAndPersistence walks a failed record through
+// decode and insert: the status and the upstream body are what make a failure
+// diagnosable once CPA no longer holds a log file for it.
+func TestFailureDetailSurvivesIngestAndPersistence(t *testing.T) {
+	repo := usageTestRepository(t)
+	raw := `{"request_id":"fixture-failed-1","failed":true,"model":"fixture-model","timestamp":"2026-10-01T00:00:00Z",` +
+		`"fail":{"status_code":502,"body":"{\"error\":{\"code\":\"server_is_overloaded\"}}"},` +
+		`"response_headers":{"Cf-Ray":["fixture-ray-NRT"],"Set-Cookie":["fixture=1"],"Date":["now"]}}`
+	event, err := usage.DecodeEvent(raw, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode usage payload: %v", err)
+	}
+	// A success must not inherit a failure detail through the persistence boundary.
+	succeeded := event
+	succeeded.EventKey, succeeded.RequestID, succeeded.Failed = "fixture-ok-1", "fixture-ok-1", false
+	succeeded.TimestampMS++
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event, succeeded}); err != nil {
+		t.Fatalf("insert usage events: %v", err)
+	}
+	page, err := repo.ListUsageEvents(context.Background(), UsageEventFilter{Limit: 5})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("list usage events: %v (%d rows)", err, len(page.Items))
+	}
+	if ok := page.Items[0]; ok.FailStatusCode != 0 || ok.FailBody != "" {
+		t.Fatalf("successful row carries failure detail: %d %q", ok.FailStatusCode, ok.FailBody)
+	}
+	// The list names the status; it does not read the body.
+	if failed := page.Items[1]; failed.FailStatusCode != 502 || failed.FailBody != "" {
+		t.Fatalf("list failure = %d %q, want the status alone", failed.FailStatusCode, failed.FailBody)
+	}
+	detail, err := repo.GetUsageEvent(context.Background(), page.Items[1].ID)
+	if err != nil {
+		t.Fatalf("get usage event: %v", err)
+	}
+	if detail.FailStatusCode != 502 || detail.FailBody != `{"error":{"code":"server_is_overloaded"}}` {
+		t.Fatalf("stored failure = %d %q", detail.FailStatusCode, detail.FailBody)
+	}
+	// The header snapshot is read by the single-record view alone, already filtered.
+	if detail.ResponseHeaders != `{"cf-ray":"fixture-ray-NRT"}` || page.Items[1].ResponseHeaders != "" {
+		t.Fatalf("stored headers = %q, list carried %q", detail.ResponseHeaders, page.Items[1].ResponseHeaders)
+	}
+}

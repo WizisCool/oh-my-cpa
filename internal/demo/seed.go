@@ -690,6 +690,13 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 	// An upstream reports the model it served only when it answered. The
 	// substituted share is derived from the latency already drawn, so adding it
 	// leaves every other generated value where it was.
+	if failed {
+		// Derived from the latency already drawn, so every other generated value
+		// stays where it was.
+		failure := demoFailures[int(latency)%len(demoFailures)]
+		event.FailStatusCode, event.FailBody = failure.statusCode, failure.body
+	}
+	event.ResponseHeaders = demoResponseHeaders(started, latency, failed)
 	if !failed {
 		event.ResponseModel = profile.name
 		if profile.servedAs != "" && latency%4 == 0 {
@@ -950,4 +957,35 @@ func seedCustomIcon(ctx context.Context, repo *repository.Repository, now time.T
 		return fmt.Errorf("pin demo custom icon identity: %w", err)
 	}
 	return nil
+}
+
+// demoFailures are the upstream errors a failed demonstration request reports:
+// the shapes an operator actually meets, with nothing that names an account.
+var demoFailures = []struct {
+	statusCode int
+	body       string
+}{
+	{502, `{"error":{"type":"service_unavailable_error","code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later.","param":null}}`},
+	{429, `{"error":{"type":"rate_limit_error","message":"This request would exceed the rate limit for this credential. Please retry later."}}`},
+	{401, `{"error":{"type":"authentication_error","message":"The access token has expired."}}`},
+	{504, `{"error":{"type":"timeout","message":"The upstream did not answer before the gateway deadline."}}`},
+}
+
+// demoResponseHeaders is the upstream header snapshot a demonstration request
+// keeps: an upstream request id, the edge that answered and the rate-limit
+// state, all derived from values already drawn.
+func demoResponseHeaders(started time.Time, latency int64, failed bool) string {
+	headers := map[string][]string{
+		"x-request-id":                   {fmt.Sprintf("req_%012x", uint64(started.UnixMilli())^uint64(latency)*2654435761)},
+		"cf-ray":                         {fmt.Sprintf("%016x-NRT", uint64(started.UnixMilli())*31+uint64(latency))},
+		"cf-cache-status":                {"DYNAMIC"},
+		"server":                         {"cloudflare"},
+		"x-ratelimit-limit-requests":     {"500"},
+		"x-ratelimit-remaining-requests": {fmt.Sprintf("%d", 40+latency%440)},
+		"x-ratelimit-reset-requests":     {fmt.Sprintf("%ds", 1+latency%59)},
+	}
+	if failed {
+		headers["retry-after"] = []string{fmt.Sprintf("%d", 5+latency%55)}
+	}
+	return usage.EncodeResponseHeaders(usage.FilterResponseHeaders(headers))
 }

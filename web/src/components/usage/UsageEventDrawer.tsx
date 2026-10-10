@@ -12,8 +12,9 @@ import {
   UpOutlined,
 } from '../icons';
 import { useQuery } from '@tanstack/react-query';
+import { groupResponseHeaders, responseHeadersText } from '../../types/responseHeaderGroups';
 import dayjs from '../../utils/time';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
@@ -90,6 +91,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const providerKeyFields: Array<[string, React.ReactNode]> = providerKeyMask
     ? [[t('events.provider_key'), providerKeyMask]]
     : [];
+  const headerGroups = groupResponseHeaders(event?.response_headers);
   const errors = result.data?.related_errors || [];
   const isRelatedErrorsPartial = !!result.data?.partial_errors?.includes('related_errors');
   const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
@@ -130,8 +132,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setDownloadModalOpen(false);
       toast.success(t('events.download_success'));
-    } catch {
-      toast.error(t('events.download_failed'));
+    } catch (error) {
+      // CPA keeps a per-request file only while request logging is on; its absence
+      // is an answer about retention, not an outage to retry.
+      const isMissing = error instanceof ApiError
+        && (error.data as { code?: string } | null)?.code === 'request_log_not_found';
+      // Confirming again cannot produce a file CPA does not hold.
+      if (isMissing) setDownloadModalOpen(false);
+      toast.error(t(isMissing ? 'events.download_missing' : 'events.download_failed'));
     } finally {
       setDownloading(false);
     }
@@ -517,14 +525,55 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 key: 'diagnostics',
                 label: `${t('events.diagnostics')}${errors.length ? ` (${errors.length})` : ''}`,
                 children: (
+                  // Sections follow the order a failure is worked out: what the upstream
+                  // answered, the headers it answered with, what the credential was
+                  // doing around then, who asked, and last the raw log.
                   <>
+                    {event.failed && (event.fail_status_code || event.fail_body)
+                      ? section(
+                          t('events.fail_reason'),
+                          <article className="request-error">
+                            <header>
+                              <strong>{event.fail_status_code ? `HTTP ${event.fail_status_code}` : t('events.filter_failed')}</strong>
+                            </header>
+                            {event.fail_body
+                              ? <pre>{event.fail_body}</pre>
+                              : <p className="request-detail-note">{t('events.fail_no_body')}</p>}
+                          </article>,
+                        )
+                      : null}
                     {section(
-                      t('events.network'),
-                      fields([
-                        [t('events.client_ip'), value(event.client_ip)],
-                        ['X-Forwarded-For', value(event.x_forwarded_for)],
-                        ['User-Agent', value(event.user_agent)],
-                      ]),
+                      t('events.response_headers'),
+                      headerGroups.length ? (
+                        <>
+                          <p className="request-detail-note request-header-note">
+                            <span>{t('events.response_headers_note')}</span>
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={<CopyOutlined />}
+                              aria-label={t('events.response_headers_copy')}
+                              title={t('events.response_headers_copy')}
+                              onClick={() => void copy(responseHeadersText(event.response_headers ?? []))}
+                            />
+                          </p>
+                          {headerGroups.map((group) => (
+                            <div className="request-header-group" key={group.id}>
+                              <h4>{t(`events.response_headers_${group.id}`)}</h4>
+                              <dl>
+                                {group.headers.map((header) => (
+                                  <React.Fragment key={header.name}>
+                                    <dt>{header.name}</dt>
+                                    <dd>{header.value}</dd>
+                                  </React.Fragment>
+                                ))}
+                              </dl>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <p className="request-detail-note">{t('events.response_headers_none')}</p>
+                      ),
                     )}
                     {section(
                       t('events.correlated_errors'),
@@ -566,6 +615,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                               />
                             )}
                       </>,
+                    )}
+                    {section(
+                      t('events.network'),
+                      fields([
+                        [t('events.client_ip'), value(event.client_ip)],
+                        ['X-Forwarded-For', value(event.x_forwarded_for)],
+                        ['User-Agent', value(event.user_agent)],
+                      ]),
                     )}
                     {section(
                       t('events.raw_log'),

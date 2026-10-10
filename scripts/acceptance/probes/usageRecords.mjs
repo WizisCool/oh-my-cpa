@@ -351,6 +351,7 @@ export const interactionRecords = (() => {
     user_agent: index % 10 === 0 ? undefined : 'fixture-client/1.0',
     executor_type: 'responses',
     failed: index % 7 === 0,
+    ...(index % 7 === 0 ? { fail_status_code: 502 } : {}),
     generate: true,
     latency_ms: 1830 + index * 3,
     ttft_ms: 284,
@@ -360,6 +361,30 @@ export const interactionRecords = (() => {
   }));
 })();
 
+export const INTERACTION_FAILURE_BODY =
+  '{"error":{"type":"service_unavailable_error","code":"server_is_overloaded","message":"Our servers are currently overloaded."}}';
+
+export const INTERACTION_RESPONSE_HEADERS = [
+  { name: 'cf-cache-status', value: 'DYNAMIC' },
+  { name: 'cf-ray', value: 'a4838167fd32d5c8-NRT' },
+  { name: 'retry-after', value: '30' },
+  { name: 'server', value: 'cloudflare' },
+  { name: 'x-ratelimit-remaining-requests', value: '0' },
+  { name: 'x-request-id', value: 'req_upstream_0001' },
+];
+
+/** The single-record view of one interaction record: the list omits the upstream body. */
+export function interactionRecordDetail(id) {
+  const record = interactionRecords.find((candidate) => candidate.id === id);
+  if (!record) return { status: 404, json: { error: 'usage event not found' } };
+  return {
+    event: {
+      ...record,
+      ...(record.failed ? { fail_body: INTERACTION_FAILURE_BODY } : {}),
+      response_headers: INTERACTION_RESPONSE_HEADERS,
+    },
+  };
+}
 
 /**
  * The request list's reader interactions: virtualization bounds, the column
@@ -432,6 +457,37 @@ export async function requestListInteractions({ base, page, check }) {
   await page.keyboard.press('Escape');
   await cellPopup.waitFor({ state: 'hidden' });
   check('Escape dismisses the shared request tooltip', await cacheCell.getAttribute('aria-describedby') === null);
+  await page.mouse.move(0, 0);
+
+  // A failed pill explains itself: the list knows the status, and the upstream's
+  // own error body is read for that one record when the pill is pointed at.
+  const detailReads = [];
+  page.on('request', (request) => {
+    if (/\/usage\/events\/\d+$/.test(new URL(request.url()).pathname)) detailReads.push(request.url());
+  });
+  const failedPill = page.locator('.request-row .req-result-pill.is-failed').first();
+  await failedPill.hover();
+  const failurePopup = page.locator('.request-failure-tooltip');
+  await failurePopup.waitFor({ state: 'visible' });
+  await until(async () => (await failurePopup.innerText()).includes('server_is_overloaded'), { label: 'upstream error body' });
+  const failureText = await failurePopup.innerText();
+  const failureFit = await page.evaluate(() => {
+    const bounds = document.querySelector('.request-failure-tooltip').getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: innerWidth, height: innerHeight };
+  });
+  check('hovering a failed result shows its HTTP status and the upstream error body',
+    failureText.includes('HTTP 502') && failureText.includes(INTERACTION_FAILURE_BODY) && detailReads.length === 1,
+    `reads=${detailReads.length} text=${failureText.slice(0, 80)}`);
+  check('the failure popup stays inside the viewport',
+    failureFit.left >= 0 && failureFit.top >= 0 && failureFit.right <= failureFit.width && failureFit.bottom <= failureFit.height,
+    JSON.stringify(failureFit));
+  await page.screenshot({ path: 'tmp/request-failure-popup.png' });
+  await failurePopup.locator('pre').hover();
+  check('the failure popup stays open while its text is read', await failurePopup.isVisible());
+  check('a successful result carries no failure popup',
+    await page.locator('.request-row .req-result-pill.is-success[data-request-failure]').count() === 0);
+  await page.keyboard.press('Escape');
+  await failurePopup.waitFor({ state: 'hidden' });
   await page.mouse.move(0, 0);
 
   const priceAction = page.locator('[data-testid="request-set-price"]').first();
@@ -584,6 +640,30 @@ export async function requestListInteractions({ base, page, check }) {
   // deliberate.
   await rows.first().click();
   await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
+  // Diagnostics reads top-down in the order a failure is worked out: the upstream's
+  // answer, the headers it came with, the credential's state, the caller, the log.
+  await page.locator('.request-detail .ant-tabs-tab[data-node-key="diagnostics"]').click();
+  await page.locator('.request-detail .request-header-group').first().waitFor({ state: 'visible' });
+  const diagnostics = await page.evaluate(() => {
+    const panel = document.querySelector('.request-header-group').closest('[role="tabpanel"]');
+    return {
+      sections: [...panel.querySelectorAll('.request-detail-section > h3')].map((heading) => heading.textContent),
+      status: panel.querySelector('.request-error header strong')?.textContent,
+      body: panel.querySelector('.request-error pre')?.textContent,
+      groups: [...panel.querySelectorAll('.request-header-group')].map((group) =>
+        [...group.querySelectorAll('dt')].map((name) => name.textContent)),
+      overflow: panel.scrollWidth - panel.clientWidth,
+    };
+  });
+  check('diagnostics names the failure, then its headers, before credential, client and log context',
+    diagnostics.sections.length === 5 && diagnostics.status === 'HTTP 502' && diagnostics.body === INTERACTION_FAILURE_BODY,
+    JSON.stringify(diagnostics.sections));
+  check('response headers are grouped as identifiers, limits and routing',
+    JSON.stringify(diagnostics.groups) === JSON.stringify([
+      ['cf-ray', 'x-request-id'], ['retry-after', 'x-ratelimit-remaining-requests'], ['cf-cache-status', 'server'],
+    ]) && diagnostics.overflow <= 0,
+    JSON.stringify(diagnostics.groups));
+  await page.screenshot({ path: 'tmp/request-diagnostics.png' });
   const downloadsBefore = downloads.length;
   const downloadButton = page.getByRole('button', { name: /下载请求日志|Download request log/ }).first();
   if ((await downloadButton.count()) > 0) {
