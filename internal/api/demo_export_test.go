@@ -1171,13 +1171,21 @@ func TestDemoExportKeepsSeriesAndDayGridsIntact(t *testing.T) {
 			Days []struct {
 				Day    string `json:"day"`
 				FromMS int64  `json:"from_ms"`
+				Tokens int64  `json:"tokens"`
 			} `json:"days"`
 		}
 		if err := json.Unmarshal([]byte(exported.Responses[name].Body), &payload); err != nil {
 			t.Fatalf("%s is not the expected shape: %v", name, err)
 		}
-		if len(payload.Days) == 0 {
-			t.Fatalf("%s has no days", name)
+		if len(payload.Days) != heatmapWeeks*7 {
+			t.Fatalf("%s: days = %d, want %d", name, len(payload.Days), heatmapWeeks*7)
+		}
+		tokenLevels := make(map[int64]bool)
+		for _, day := range payload.Days {
+			tokenLevels[day.Tokens] = true
+		}
+		if !tokenLevels[0] || len(tokenLevels) < 32 {
+			t.Fatalf("%s: demo must contain quiet days and varied activity, got %d token levels", name, len(tokenLevels))
 		}
 		checked := 0
 		for _, day := range payload.Days {
@@ -1472,5 +1480,36 @@ func TestDemoExportPreservesSeededLatencyAndSourceSize(t *testing.T) {
 				t.Fatalf("runtime measurements drift: %v", output)
 			}
 		})
+	}
+}
+
+func TestDemoDashboardHealthIncludesEveryState(t *testing.T) {
+	router, _ := demoExportRouter(t)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/management/overview", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("overview status = %d: %s", response.Code, response.Body.String())
+	}
+	var overview managementOverviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &overview); err != nil {
+		t.Fatal(err)
+	}
+	health := overview.Credentials
+	if health == nil || health.Total != 9 || health.Active != 7 || health.Unavailable != 1 || health.Disabled != 1 {
+		t.Fatalf("demo credential health = %#v", health)
+	}
+	if overview.Counts.Credentials == nil || *overview.Counts.Credentials != health.Total {
+		t.Fatalf("overview count does not match credential health: %#v", overview.Counts)
+	}
+	typeTotal := 0
+	for _, entry := range health.ByType {
+		typeTotal += entry.Count
+	}
+	if typeTotal != health.Total {
+		t.Fatalf("type total = %d, want %d", typeTotal, health.Total)
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache control = %q", response.Header().Get("Cache-Control"))
 	}
 }

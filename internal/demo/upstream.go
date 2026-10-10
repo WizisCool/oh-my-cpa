@@ -158,9 +158,9 @@ func newUpstreamState(now time.Time) *upstreamState {
 			"type":            item.kind,
 			"provider":        item.provider,
 			"label":           item.label,
-			"status":          statusFor(item.isDisabled, false),
+			"status":          statusFor(item.isDisabled, item.isUnavailable),
 			"disabled":        item.isDisabled,
-			"unavailable":     false,
+			"unavailable":     item.isUnavailable,
 			"runtime_only":    false,
 			"account_type":    item.accountType,
 			"success":         item.success,
@@ -496,7 +496,8 @@ func (u *Upstream) patchAuthFileStatus(writer http.ResponseWriter, request *http
 			continue
 		}
 		file["disabled"] = payload.Disabled
-		file["status"] = statusFor(payload.Disabled, false)
+		isUnavailable, _ := file["unavailable"].(bool)
+		file["status"] = statusFor(payload.Disabled, isUnavailable)
 	}
 	writeFixtureJSON(writer, http.StatusOK, map[string]any{"status": "ok", "disabled": payload.Disabled})
 }

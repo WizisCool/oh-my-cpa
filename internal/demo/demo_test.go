@@ -988,3 +988,42 @@ func TestDaySwingUsesUTCCalendarDates(t *testing.T) {
 		}
 	}
 }
+
+func TestUpstreamPreservesUnavailableStateAcrossDisablement(t *testing.T) {
+	upstream := startTestUpstream(t)
+	client := upstreamClient(upstream)
+	for _, isDisabled := range []bool{true, false} {
+		readBody(t, patchJSON(t, client, upstream.BaseURL()+managementPrefix+"/credentials/status", map[string]any{
+			"name": "codex-billing-target.json", "disabled": isDisabled,
+		}))
+		body := readBody(t, getWithClient(t, client, upstream.BaseURL()+managementPrefix+"/credentials"))
+		var payload struct {
+			Files []struct {
+				Name        string `json:"name"`
+				Status      string `json:"status"`
+				Disabled    bool   `json:"disabled"`
+				Unavailable bool   `json:"unavailable"`
+			} `json:"files"`
+		}
+		if err := json.Unmarshal([]byte(body), &payload); err != nil {
+			t.Fatal(err)
+		}
+		isFound := false
+		for _, file := range payload.Files {
+			if file.Name != "codex-billing-target.json" {
+				continue
+			}
+			isFound = true
+			wantStatus := "unavailable"
+			if isDisabled {
+				wantStatus = "disabled"
+			}
+			if file.Disabled != isDisabled || !file.Unavailable || file.Status != wantStatus {
+				t.Fatalf("credential after disabled=%t: %#v", isDisabled, file)
+			}
+		}
+		if !isFound {
+			t.Fatal("billing-target credential is missing")
+		}
+	}
+}

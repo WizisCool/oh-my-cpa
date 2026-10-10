@@ -20,22 +20,23 @@ const fixtureInstanceName = "Default CPA"
 // account behind such a row would be a token; here it is a description, and the
 // fixture never emits anything shaped like a secret.
 type credential struct {
-	name        string
-	authIndex   string
-	kind        string
-	provider    string
-	label       string
-	email       string
-	accountType string
-	plan        string
-	projectID   string
-	models      []string
-	success     int64
-	failed      int64
-	priority    int
-	weight      int64
-	note        string
-	isDisabled  bool
+	name          string
+	authIndex     string
+	kind          string
+	provider      string
+	label         string
+	email         string
+	accountType   string
+	plan          string
+	projectID     string
+	models        []string
+	success       int64
+	failed        int64
+	priority      int
+	weight        int64
+	note          string
+	isDisabled    bool
+	isUnavailable bool
 }
 
 // credentialCatalog is deliberately recognisable: the providers a real gateway
@@ -88,7 +89,7 @@ func credentialCatalog() []credential {
 			name: "codex-billing-target.json", authIndex: "auth-codex-04", kind: "codex", provider: "codex",
 			label: "Codex · billing target", email: "billing@acme-labs.example", accountType: "oauth", plan: "pro",
 			models:  []string{"gpt-5-codex", "gpt-5"},
-			success: 611, failed: 9, priority: 3, weight: 2, note: "seat the team is migrating onto",
+			success: 611, failed: 9, priority: 3, weight: 2, isUnavailable: true, note: "seat the team is migrating onto",
 		},
 		{
 			name: "codex-standby.json", authIndex: "auth-codex-03", kind: "codex", provider: "codex",

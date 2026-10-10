@@ -10,9 +10,16 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import {
   buildQuotaRefreshTargets,
-  quotaRefreshOutcomeKind,
   type OAuthWorkspaceRecord,
 } from './oauthWorkspaceLogic';
+import {
+  quotaRefreshFailureReason,
+  refreshCredentialQuotas,
+} from '../../utils/quotaRefresh';
+import {
+  QUOTA_REFRESH_TOAST_KEY,
+  quotaRefreshOutcomeKind,
+} from '../../utils/quotaRefreshOutcome';
 
 export interface OAuthWorkspaceActions {
   busyFileKeys: Set<string>;
@@ -39,8 +46,6 @@ export interface OAuthWorkspaceActions {
   isRecordBusy: (record: OAuthWorkspaceRecord) => boolean;
 }
 
-/** Quota refreshes answer under one key: a new run's outcome replaces the last run's report. */
-const QUOTA_REFRESH_TOAST_KEY = 'omc-quota-refresh';
 const BATCH_REFRESH_CONCURRENCY = 3;
 
 function errorMessage(error: unknown, t: TFunc): string {
@@ -460,39 +465,21 @@ export function useOAuthWorkspaceActions(
     const conflicting = planIndexes.filter((index) => !reserved.includes(`quota:${index}`));
     // Kept apart so the report lists what needs attention first: a failure, then a target with no
     // outcome, then what was never eligible.
-    const failures: ToastItem[] = [];
     const unknowns: ToastItem[] = conflicting.map((index) => ({ name: index, reason: t('omc.operation_conflict') }));
-    let succeeded = 0;
-    let failed = 0;
-    // A target held by another operation was not refreshed either. Counting it as skipped
-    // would let a run that refreshed nothing report a clean acknowledgement, so it is
-    // unrefreshed: the run is reported, with the conflict named per target.
-    let unknown = conflicting.length;
     markQuotaBusy(targetIndexes, true);
     try {
-      for (const chunk of chunkItems(targetIndexes, 10)) {
-        try {
-          const response = await api.batchRefreshCredentialQuotas(chunk);
-          const returned = new Map(response.quotas.map((item) => [item.auth_index, item]));
-          mergeReturnedQuota(response.quotas);
-          for (const index of chunk) {
-            const item = returned.get(index);
-            if (!item) {
-              unknown += 1;
-              unknowns.push({ name: index, reason: t('omc.quota_refresh_unknown') });
-            } else if (item.status === 'error' || item.error) {
-              failed += 1;
-              failures.push({ name: item.name || index, reason: item.error || t('quota.status_error') });
-            } else {
-              succeeded += 1;
-            }
-          }
-        } catch (error) {
-          const reason = errorMessage(error, t);
-          failed += chunk.length;
-          chunk.forEach((index) => failures.push({ name: index, reason }));
-        }
-      }
+      const outcome = await refreshCredentialQuotas(targetIndexes, mergeReturnedQuota);
+      const failures: ToastItem[] = outcome.failures.map((failure) => ({
+        name: failure.name,
+        reason: quotaRefreshFailureReason(failure, t),
+      }));
+      outcome.unknownIndexes.forEach((index) => unknowns.push({ name: index, reason: t('omc.quota_refresh_unknown') }));
+      const succeeded = outcome.succeeded;
+      const failed = failures.length;
+      // A target held by another operation was not refreshed either. Counting it as skipped
+      // would let a run that refreshed nothing report a clean acknowledgement, so it is
+      // unrefreshed: the run is reported, with the conflict named per target.
+      const unknown = unknowns.length;
       // A clean run - including one that skipped targets which were never eligible - is an
       // acknowledgement that leaves on its own. A run with a failed or unknown target is a report:
       // it lists each target's reason and stays until it is closed, because the reasons are what

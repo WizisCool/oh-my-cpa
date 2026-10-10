@@ -401,12 +401,23 @@ because there would be nothing to open. The panel distinguishes "there is stored
 data" from "there is not"; it does not ask the reader to hold "hasn't happened yet" apart from
 "records were pruned", because those are the same fact to anyone comparing days.
 
-**It fills its panel.** The tracks are `repeat(columns, minmax(--heatmap-min-cell, 1fr))`, so a year
-of weeks divides whatever width the card has and reaches both edges. That is why the sizing is CSS
-rather than JavaScript: an integer cell size cannot divide an arbitrary width evenly, and the
-remainder is a visible gutter at the field's edge — which is what made the fixed-size version look
-like an unfinished widget. There is no horizontal scrollbar at any desktop width; below the cell
-floor the field swipes instead (see rule 9).
+**It shows the weeks that fit, at a readable size.** The panel fits as many of the newest weeks as
+its width holds at `--heatmap-cell-target` (18px with a 4px `--heatmap-gap`; 14px and 3px below
+900px) and stretches them to
+reach its edge, so a square is a comfortable target at every width. The older weeks stay in the
+field and scroll inside the panel, behind a pinned weekday gutter; a short fade over the first
+visible column says the field continues. The component writes the fitted size as `--heatmap-cell`
+(`fitHeatmapCell` in `web/src/types/tokenHeatmap.ts`), rounded down so the weeks in
+view never exceed the field. When the whole year fits, no size is written and the tracks fall back
+to `minmax(--heatmap-min-cell, 1fr)`, which divides the panel exactly. Dividing the year into
+whatever width the panel has was the earlier rule, and in a half-width column it left 8px squares
+in a strip a third the height of its neighbour.
+
+**It shares its row.** On desktop the field is the left half of a two-column row
+(`.dashboard-activity-row`), with credential quota on the right. The field sets the row's height:
+the quota list beside it takes whatever height that is and scrolls inside its own panel, and the
+ramp's key sits on the heatmap panel's bottom edge. Below 900px the row becomes a single column
+and the two panels stack.
 
 **The current week is a complete column.** Its later days have not happened, so nothing is stored for
 them — the same fact as a day whose records were pruned, and they are drawn and treated identically
@@ -419,6 +430,48 @@ rendering hole: the shape promises a full week.
 | `--heatmap-busy` | `#00a2fb` | `#005d8f` | the ramp's ceiling: the window's busiest day |
 | `--heatmap-zero-recorded` | `#2c2c30` | `#e5e5ea` | recorded, no traffic |
 | `--heatmap-zero-unrecorded` | `#212124` | `#f1f1f4` | nothing stored for that day |
+
+### Credential quota
+
+The panel beside the activity grid answers the one question a dashboard can usefully ask of a
+credential fleet: what can still serve, and what is about to stop. A count of credentials would say
+that something is wrong and stop there — the reader's next question is always which credential, why,
+and when it recovers — so the panel lists them instead.
+
+**One row per credential, most urgent first.** A row draws its credential's plan: the two shortest
+quota windows as remaining-share bars, with the countdown to the tightest of them refilling. Four
+states have no reading to draw and state the reason in its place — sign-in required, cooling down,
+unavailable, and no quota reading — so the row carries the cause instead of an empty bar. An
+exhausted credential keeps its windows, because they *are* the statement: every window it can serve
+from stands at zero, and the countdown beside them is when it serves again. The order is the
+reading: sign-in required, cooling down, exhausted, unavailable, running low, healthy, no reading.
+Disabled credentials are the operator's own decision and are only counted, in the header beside the
+serving and blocked counts.
+
+**The list scrolls inside the panel.** Every credential is listed, so a large fleet is readable
+without leaving the dashboard, and the panel keeps the height of the row it shares: the list takes
+the height the activity grid gives the row (never less than three rows) and scrolls natively, by
+wheel, scrollbar or touch. Stacked below 900px it shows up to four and a half rows, the half row
+being what says there is more.
+
+**It displays, with one control.** A row is not interactive — it scrolls under a finger, and a row
+that navigated would turn a touch meant to move the list into leaving the page. The header carries
+a refresh glyph that asks the providers for fresh readings: it is the one action worth having where
+the readings are read, and it runs the same refresh the credential workspace does
+(`web/src/utils/quotaRefresh.ts`), reporting under the same toast. Clearing a cooldown, signing in
+again and everything else done to a single credential stay in `/oauth-management`, which the footer
+links to. The panel reads
+`GET /management/auth-files` and `GET /management/quota` — the stored readings, never a provider —
+and interprets those two responses in its own module
+(`web/src/components/dashboard/credentialQuotaLogic.ts`). Beyond the shared refresh run it shares
+no code with the workspace, so the workspace can change how it selects, labels or acts on quota
+without moving the dashboard.
+
+A bar's hue is the remaining share — `--success` from 70%, `--warn` from 25%, `--danger` below —
+and never the heatmap ramp: "plenty left" and "a lot of tokens" must not be the same colour. Its
+states are about freshness: a re-read that fails keeps the rows and says so in the warning tone, only a
+credential list that was never read is reported as unknown, with a retry, and a deployment holding
+no credential gets an empty state that links to connecting one.
 
 A measured cell mixes these two stops in **OKLCH** at a weight its own `--heatmap-quiet-share`
 carries, so the whole ramp is one declaration and the endpoint it reaches is the accent token above.
@@ -463,10 +516,11 @@ Rules:
    spans several orders of magnitude, so a fixed ladder would paint every cell of a busy install at
    the ceiling and every quiet one at the floor. The cost is that the same shade means different
    absolute volumes on two installs, which is why every cell states its counts in text.
-5. **Colour is redundant, and there is no legend.** Every cell carries its date and both counts in
-   its accessible name and in its tooltip, so the shade is never the only encoding — and a key exists
-   to explain what a *stepped* scale's bands mean, which a continuous ramp does not have. The shade is
-   relative to the window, so a swatch ladder would describe the field's own range rather than any
+5. **Colour is redundant, and the key carries no quantities.** Every cell carries its date and both
+   counts in its accessible name and in its tooltip, so the shade is never the only encoding. The key
+   under the field is five swatches between "Less" and "More": it names the ramp's direction and
+   nothing else, because the shade is relative to the window and a labelled ladder would describe the
+   field's own range rather than any
    fixed quantity. The numbers are one click away, which is where a reader who wants them goes. The
    tooltip's token volume prints in the console's **Token Unit Style** — the same layer the KPI tiles
    above it read — with the exact count on the value, while the request count keeps grouped digits
@@ -494,10 +548,9 @@ Rules:
    of 1.0 - and the link uses its own step (`--heatmap-tip-link`) rather than either accent,
    because the bright accent reads 3.4:1 on the dark surface and the deeper hover step reads
    1.96:1 there while being the only legible one on the light surface.
-10. **The field swipes only when it must.** Below the cell floor (a phone) the container scrolls with
-   the scrollbar hidden — a bar inside a dashboard card is noise and touch shows none — and it opens
-   on today's column. Clipping instead would hide two thirds of the year silently, which is worse
-   than either alternative. The probe asserts no scrollbar is rendered at desktop widths.
+10. **The field scrolls only when it must.** A panel narrower than a year of target-size cells
+   scrolls inside itself with the scrollbar hidden — a bar inside a dashboard card is noise and touch
+   shows none — and it opens on today's column. Clipping instead would drop the older weeks silently.
 11. **The grid is DOM, not a chart mark** — see `docs/adr/0005-token-heatmap-as-a-dom-grid.md`.
 
 ### Categorical series palette
@@ -2449,7 +2502,7 @@ The sidebar's native vertical viewport has a 6px overlay indicator instead of co
 scrollbar column. Hover, scrolling, dragging or keyboard focus reveals it; touch retains
 native content scrolling. The thumb tracks the viewport/content ratio and can be dragged;
 pressing the bare track pages toward it. The motion uses the existing fast/base tokens.
-The mobile heatmap starts at the newest edge with a signed-32-bit-safe scroll offset and
+The heatmap starts at the newest edge with a signed-32-bit-safe scroll offset and
 stays pinned through resize only until the reader chooses an older date.
 
 The demonstration announces its nature using the global arrival toast, with contextual

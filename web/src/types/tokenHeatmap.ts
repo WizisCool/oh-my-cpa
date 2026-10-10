@@ -157,45 +157,23 @@ export function buildHeatmapGrid(days: DashboardTokenHeatmapDay[]): HeatmapCell[
 }
 
 /**
- * The grid's sizing contract, mirrored from the stylesheet.
+ * fitHeatmapCell sizes the cell so a whole number of weeks spans the field exactly.
  *
- * The *implementation* is CSS: the grid's tracks are
- * `repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr))`, where the column count is
- * the week count the component passes down, which makes a year of weeks span its panel exactly at
- * any width. It is an explicit count rather than `auto-fit`, so the tracks are uniform and the month
- * axis above can build the identical grid - `auto-fit` left the overflow cells in implicit tracks
- * sized to their content, which no axis can align with. That is deliberate rather than incidental - an integer
- * cell size computed in JavaScript cannot divide an arbitrary panel width evenly, and the
- * remainder shows up as a gutter at the field's edge, which is what made the panel look like
- * an unfinished widget.
+ * The field shows as many of the newest weeks as fit at the comfortable cell size and lets the
+ * older ones scroll, because a year divided into a half-width panel leaves squares too small to
+ * read or to hit. `null` means every week fits, where the stylesheet's fractional tracks already
+ * divide the panel exactly and a pixel size could only add a rounding seam. The size is rounded
+ * down so the weeks in view never exceed the field by a fraction and cut the newest column.
  *
- * These constants exist so the contract can be asserted without a browser: which panels fill
- * their grid and which scroll instead. They must match the custom properties on `:root` in
- * `web/src/index.css`, and the test fails if the two drift.
+ * `fieldWidth` is the panel without its weekday gutter. The sizes are the stylesheet's own
+ * tokens, read by the caller at run time, so this arithmetic cannot drift from the CSS.
  */
-export const HEATMAP_GRID = {
-  /** The cell floor: below this a square stops reading as a measured value. */
-  minCell: 9,
-  /** Space between cells, and between the gutter and the grid. */
-  gap: 4,
-  /** The weekday gutter's width. */
-  label: 22,
-  /** Space between the gutter and the grid. */
-  labelGap: 8,
-} as const;
-
-/**
- * The smallest panel that holds `columns` columns at the cell floor, or `null` when the
- * arguments describe no grid at all.
- *
- * This is a property of the grid and the floor, not of the panel: every panel narrower than
- * the returned width scrolls, and every panel at least that wide fills. A caller compares its
- * own measured width against it, which is why the function does not take one.
- */
-export function heatmapMinPanelWidth(columns: number): number | null {
-  if (!Number.isFinite(columns) || columns <= 0) return null;
-  const grid = columns * HEATMAP_GRID.minCell + (columns - 1) * HEATMAP_GRID.gap;
-  return grid + HEATMAP_GRID.label + HEATMAP_GRID.labelGap;
+export function fitHeatmapCell(fieldWidth: number, columns: number, targetCell: number, gap: number): number | null {
+  if (!(fieldWidth > 0) || !(targetCell > 0) || columns <= 0) return null;
+  const visibleColumns = Math.floor((fieldWidth + gap) / (targetCell + gap));
+  if (visibleColumns >= columns) return null;
+  const fitted = Math.max(visibleColumns, 1);
+  return Math.floor(((fieldWidth - (fitted - 1) * gap) / fitted) * 100) / 100;
 }
 
 /** The number of columns a grid's cells occupy. */

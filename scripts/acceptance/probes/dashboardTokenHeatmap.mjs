@@ -15,6 +15,34 @@ import {
 
 
 
+async function checkActivityHealthLayout(page, check, isStacked) {
+  const quota = page.getByTestId('dashboard-credential-quota');
+  await quota.waitFor();
+  const layout = await page.evaluate(() => {
+    const heatmap = document.querySelector('.heatmap-panel').getBoundingClientRect();
+    const health = document.querySelector('[data-testid="dashboard-credential-quota"]').getBoundingClientRect();
+    const row = document.querySelector('.dashboard-activity-row').getBoundingClientRect();
+    return {
+      heatmap: { left: heatmap.left, right: heatmap.right, top: heatmap.top, bottom: heatmap.bottom, width: heatmap.width },
+      health: { left: health.left, right: health.right, top: health.top, bottom: health.bottom, width: health.width },
+      rowWidth: row.width,
+      runtimePanels: document.querySelectorAll('.runtime-list').length,
+    };
+  });
+  check('the dashboard has no runtime information panel', layout.runtimePanels === 0, `panels=${layout.runtimePanels}`);
+  if (isStacked) {
+    check('credential quota stacks below token activity', layout.health.top >= layout.heatmap.bottom - 1,
+      `heatmapBottom=${layout.heatmap.bottom} healthTop=${layout.health.top}`);
+    check('both mobile panels fill their row', Math.abs(layout.heatmap.width - layout.rowWidth) <= 1 && Math.abs(layout.health.width - layout.rowWidth) <= 1,
+      `heatmap=${layout.heatmap.width} health=${layout.health.width} row=${layout.rowWidth}`);
+  } else {
+    check('credential quota sits to the right of token activity', layout.health.left >= layout.heatmap.right && Math.abs(layout.health.top - layout.heatmap.top) <= 1,
+      `heatmap=${JSON.stringify(layout.heatmap)} health=${JSON.stringify(layout.health)}`);
+    check('token activity and credential quota occupy equal half-width columns', Math.abs(layout.heatmap.width - layout.health.width) <= 1 && layout.heatmap.width / layout.rowWidth > 0.45 && layout.heatmap.width / layout.rowWidth < 0.5,
+      `heatmap=${layout.heatmap.width} health=${layout.health.width} row=${layout.rowWidth}`);
+  }
+}
+
 export async function dashboardTokenHeatmap({ base, page, check }) {
   await page.addInitScript(() => {
     window.__heatmapExtentReads = [];
@@ -31,6 +59,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await checkActivityHealthLayout(page, check, false);
   const extentReads = await page.evaluate(() => window.__heatmapExtentReads);
   check('initial heatmap positioning does not synchronously read its scroll extent', extentReads.length === 0, JSON.stringify(extentReads));
 
@@ -138,8 +167,8 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     `future=[${future.futureFills.join(', ')}] zeros=[${future.zeroFills.join(', ')}]`,
   );
 
-  // The field has to reach its panel's edges, and it must never scroll: a field that only shows
-  // part of the year is not the reading it was built for.
+  // The field shows a whole number of the newest weeks at a comfortable cell size and reaches its
+  // panel's edges; the older weeks scroll behind the pinned weekday gutter.
   const fit = await page.evaluate(() => {
     const scroll = document.querySelector('.heatmap-scroll');
     const panel = scroll.parentElement;
@@ -148,11 +177,12 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     const months = document.querySelector('.heatmap-months');
     return {
       panelWidth: panel.clientWidth,
+      scrollRight: scroll.getBoundingClientRect().right,
+      gutterRight: document.querySelector('.heatmap-weekdays').getBoundingClientRect().right,
+      newestRight: Math.max(...[...grid.querySelectorAll('.heatmap-cell')].map((cell) => cell.getBoundingClientRect().right)),
       bodyWidth: body.getBoundingClientRect().width,
-      gridWidth: grid.getBoundingClientRect().width,
-      horizontalOverflow: scroll.scrollWidth - scroll.clientWidth,
+      gap: parseFloat(getComputedStyle(grid).columnGap),
       verticalOverflow: scroll.scrollHeight - scroll.clientHeight,
-      monthsOverflow: months.scrollWidth - months.clientWidth,
       // Each label against the column it names. Comparing widths cannot see this: the axis was 30px
       // wider than the grid for as long as it drifted, and an overflow check passes on a misaligned
       // axis because both are still inside the scroll container. Measured per label, the drift
@@ -178,23 +208,28 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     };
   });
   check(
-    'the grid fills the panel rather than leaving a gutter',
-    fit.bodyWidth >= fit.panelWidth - 1 && fit.gridWidth / fit.panelWidth > 0.95,
-    `panel=${fit.panelWidth} body=${Math.round(fit.bodyWidth)} grid=${Math.round(fit.gridWidth)}`,
+    'the newest week reaches the panel edge rather than leaving a gutter',
+    Math.abs(fit.newestRight - fit.scrollRight) <= 1 && fit.bodyWidth >= fit.panelWidth - 1,
+    `newestRight=${fit.newestRight} scrollRight=${fit.scrollRight} panel=${fit.panelWidth} body=${fit.bodyWidth}`,
   );
-  check('the field never scrolls horizontally', fit.horizontalOverflow <= 0, `horizontalOverflow=${fit.horizontalOverflow}`);
+  const weeksInView = (fit.scrollRight - fit.gutterRight + fit.gap) / (fit.cell + fit.gap);
+  check(
+    'a whole number of weeks is in view beside the weekday gutter',
+    Math.abs(weeksInView - Math.round(weeksInView)) < 0.1 && Math.round(weeksInView) >= 1,
+    `weeksInView=${weeksInView.toFixed(3)} cell=${fit.cell} gap=${fit.gap}`,
+  );
   check('the field never scrolls vertically', fit.verticalOverflow <= 0, `verticalOverflow=${fit.verticalOverflow}`);
   // The axis is aligned with the columns it names. Measured per label rather than by comparing
   // widths, which passes on a drifting axis.
   check(
     'the month axis lines up with the columns it names',
-    fit.monthsOverflow <= 0 && fit.monthDrift.length > 0 && fit.monthDrift.every((drift) => Math.abs(drift) <= 1),
-    `monthsOverflow=${fit.monthsOverflow} maxDrift=${Math.max(...fit.monthDrift.map(Math.abs))}`,
+    fit.monthDrift.length > 0 && fit.monthDrift.every((drift) => Math.abs(drift) <= 1),
+    `maxDrift=${Math.max(...fit.monthDrift.map(Math.abs))}`,
   );
   check('the cells are square', Math.abs(fit.cellRatio - 1) < 0.02, `height/width=${fit.cellRatio.toFixed(3)}`);
-  check('the cells are large enough to read', fit.cell >= 12, `cell=${fit.cell}px`);
+  check('the cells reach the comfortable target size', fit.cell >= 18, `cell=${fit.cell}px`);
 
-  // The panel carries the title, the grid and the legend and nothing else: the three readouts the
+  // The panel carries the title, the grid and the ramp's key and nothing else: the readouts the
   // earlier versions had were restating what a tooltip says on demand.
   const chrome = await page.evaluate(() => ({
     title: document.querySelector('.heatmap-panel .tile-label')?.textContent ?? null,
@@ -203,7 +238,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     metricSwitcher: document.querySelectorAll('.heatmap-metric').length,
     range: document.querySelectorAll('.heatmap-span').length,
     legend: document.querySelectorAll('.heatmap-legend').length,
-    foot: document.querySelectorAll('.heatmap-foot').length,
+    swatches: new Set([...document.querySelectorAll('.heatmap-legend-swatch')].map((swatch) => getComputedStyle(swatch).backgroundColor)).size,
   }));
   check('the panel is titled', (chrome.title ?? '').length > 0, `title=${JSON.stringify(chrome.title)}`);
   check(
@@ -211,13 +246,11 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     chrome.readout === 0 && chrome.caption === 0 && chrome.range === 0 && chrome.metricSwitcher === 0,
     JSON.stringify(chrome),
   );
-  // No legend either. A key explains what a stepped scale's bands mean, and a continuous ramp has
-  // none: the shade is relative to the window, so a swatch ladder would describe the field's own
-  // range rather than a fixed quantity. The numbers are in each cell's tooltip and accessible name.
+  // The key names the ramp's direction with a ladder of distinct shades and carries no quantities.
   check(
-    'the panel carries no legend, because a continuous ramp has no bands to explain',
-    chrome.legend === 0 && chrome.foot === 0,
-    `legend=${chrome.legend} foot=${chrome.foot}`,
+    'the panel carries one key whose swatches step through the ramp',
+    chrome.legend === 1 && chrome.swatches === 5,
+    `legend=${chrome.legend} swatches=${chrome.swatches}`,
   );
 
   // The ramp is continuous, so the assertion is that distinct volumes paint distinct fills rather
@@ -924,6 +957,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
 export async function dashboardTokenHeatmapMobile({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await checkActivityHealthLayout(page, check, true);
 
   // The page itself must never scroll sideways; the field swipes inside its own container so the
   // rest of the dashboard keeps its layout.
@@ -950,7 +984,7 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
   check('the grid keeps all seven rows on a phone', shape.rows === 7, `rows=${shape.rows}`);
   check('the grid keeps its 53 columns on a phone', shape.columns === HEATMAP_WEEKS, `columns=${shape.columns}`);
   check('the grid labels all seven rows on a phone', shape.weekdays === 7, `weekdays=${shape.weekdays}`);
-  check('the cells stay at the legible floor', shape.cell >= 9, `cell=${shape.cell}px`);
+  check('the cells reach the comfortable target size', shape.cell >= 14, `cell=${shape.cell}px`);
   // A year of weeks cannot fit a phone at a legible size, so the field is swipeable - with the bar
   // hidden, since a scrollbar in the card is noise.
   check('a too-narrow panel is swipeable rather than clipped', shape.scrollable, `scrollable=${shape.scrollable}`);
@@ -1164,6 +1198,13 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   await page.locator('.heatmap-panel .ant-alert-error').waitFor({ timeout: 20_000 });
   const errorText = await page.locator('.heatmap-panel .ant-alert-error').innerText();
   check('a failed first load is reported rather than left loading', errorText.length > 0, `alert=${JSON.stringify(errorText.slice(0, 120))}`);
+  await page.getByTestId('dashboard-credential-quota').waitFor();
+  const quotaBesideFailure = await page.getByTestId('dashboard-credential-quota').getAttribute('data-quota-panel-state');
+  check('a failed heatmap leaves credential quota to its own read', quotaBesideFailure !== null, `state=${quotaBesideFailure}`);
+  // The failure path renders a different card from the loaded one, and its geometry is a claim of
+  // its own: a panel that widened to the whole row there would drop credential quota out of the
+  // row it shares, which no assertion about either panel's contents can see.
+  await checkActivityHealthLayout(page, check, false);
   check('the failed panel offers a retry', (await page.locator('.heatmap-panel .ant-alert-error button').count()) === 1);
   check(
     'the failed panel does not show a grid it never read',
@@ -1188,7 +1229,10 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
 
   // Pressing the page's refresh button re-reads the grid, and that read fails.
   failNext = true;
+  const overviewRefresh = page2.waitForResponse(response => response.url().includes('/management/overview') && response.request().method() === 'GET');
   await page2.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  const refreshedOverview = await overviewRefresh;
+  check('the page refresh also re-reads the management overview', refreshedOverview.ok());
   await page2.locator('.heatmap-stale-alert').waitFor({ timeout: 20_000 });
   const cellsAfter = await page2.locator('.heatmap-grid .heatmap-cell').count();
   check(
@@ -1205,6 +1249,47 @@ export async function dashboardTokenHeatmapFailure({ base, page, check, context 
   await page2.locator('.heatmap-stale-alert button').click();
   await page2.locator('.heatmap-stale-alert').waitFor({ state: 'detached', timeout: 20_000 });
   check('a successful retry clears the warning', (await page2.locator('.heatmap-stale-alert').count()) === 0);
+
+  // The quota panel owns its reads, so its failures are its own: an unread credential list is
+  // unknown rather than an empty fleet, and a refresh that fails keeps the rows on screen.
+  const quotaPage = await context.newPage();
+  const credentialFile = (name, authIndex, type, unavailable) => ({
+    name, auth_index: authIndex, type, disabled: false, unavailable, runtime_only: false, success: 0, failed: 0,
+  });
+  const credentialFiles = {
+    total: 2,
+    files: [credentialFile('claude-probe.json', 'probe-claude', 'claude', false), credentialFile('codex-probe.json', 'probe-codex', 'codex', true)],
+  };
+  let canReadCredentials = false;
+  await quotaPage.route('**/omc/api/**/management/auth-files*', route => fulfillFixture(route, canReadCredentials
+    ? { status: 200, json: credentialFiles }
+    : { status: 503, json: { error: 'CPA unavailable' } }));
+  await quotaPage.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const quotaPanel = quotaPage.getByTestId('dashboard-credential-quota');
+  await quotaPanel.locator('.ant-alert-error').waitFor();
+  check('an unread credential list is unknown rather than an empty fleet', await quotaPanel.getAttribute('data-quota-panel-state') === 'unknown');
+  await quotaPage.locator('.heatmap-grid').waitFor();
+  check('an unread credential list leaves token activity readable', await quotaPage.locator('.heatmap-cell').count() === HEATMAP_TOTAL_DAYS);
+
+  canReadCredentials = true;
+  await quotaPanel.getByRole('button', { name: 'Retry' }).click();
+  await quotaPanel.locator('.quota-row').first().waitFor();
+  check(
+    'the retry lists the credentials with the one that cannot serve first',
+    await quotaPanel.locator('.quota-row').count() === 2 && await quotaPanel.locator('.quota-row').first().getAttribute('data-quota-state') === 'problem',
+  );
+  check('the rows are not interactive, so a touch on the list cannot leave the page', await quotaPanel.locator('.quota-list a, .quota-list button').count() === 0);
+
+  canReadCredentials = false;
+  await quotaPage.locator('.terminal-page-head button:has(.anticon-reload)').first().click();
+  await quotaPanel.locator('.quota-alert.ant-alert-warning').waitFor();
+  check('a failed refresh keeps the credential rows with a warning', await quotaPanel.getAttribute('data-quota-panel-state') === 'ready' && await quotaPanel.locator('.quota-row').count() === 2);
+
+  canReadCredentials = true;
+  await quotaPanel.getByRole('button', { name: 'Retry' }).click();
+  await quotaPanel.locator('.quota-alert').waitFor({ state: 'detached' });
+  check('a successful retry clears the stale quota warning', await quotaPanel.locator('.quota-row').count() === 2);
+
 }
 
 // ---------------------------------------------------------------------------

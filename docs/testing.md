@@ -90,6 +90,16 @@ surviving component unmount. Test-local
 queues are drained even after failures before globals/cache/unmounted trees are
 released. Do not mock the hook/cache/transport under test or suppress console errors.
 
+`web/tests/credential-quota.component.test.tsx` applies the same layer to the dashboard's
+credential-quota panel. It pins the board's urgency order and recovery arithmetic as plain
+functions, then the rendered panel's state machine - a first load that claims nothing, an unread
+credential list reported as unknown with a retry rather than as an empty fleet, and a failed
+refresh that keeps the rows with an additive warning - plus the row's two readings, the single
+footer link resolving under the deployment basename, rows that are not interactive and the
+refresh control with the credentials it may be asked about. Chromium still owns what
+only it can measure: the panel's geometry against the grid, the grid's own scrolling and the real
+refetch lifecycle.
+
 This layer owns rendered state, not engine facts. The OMC settings probe still owns
 its actual radio wiring, reload and phone geometry; context readout geometry and
 real navigation/keepalive remain browser claims. No assertion is removed merely
@@ -534,7 +544,12 @@ and identity remain covered by the workspace and plugin-logo logic suites.
 
 - The existing `dashboard-heatmap` probe owns active popup anchor geometry, one-popup
   ownership, its cell's ARIA description, pointer/keyboard dismissal, focus restoration,
-  rapid switching, active-cell data refresh and route cleanup. After rapid switching it waits for
+  rapid switching, active-cell data refresh and route cleanup. It also measures the activity row
+  the grid shares: the grid and the credential-quota panel as equal halves on desktop,
+  stacked in that order on a phone, with the newest weeks reaching the panel's edge. The failure
+  scenario owns the quota panel's states beside a grid that could not be read - unknown with a
+  retry when the credential list was never read, the rows kept with a warning when a refresh
+  fails, and the warning cleared by a successful retry. After rapid switching it waits for
   the final cell's active state and its own visible ARIA-linked popup, not an outgoing tooltip;
   anchor, popup-count and DOM-identity assertions still run afterward. It instruments scroll extent getters before navigation
   to detect synchronous mount measurements; these portal, focus and layout claims require

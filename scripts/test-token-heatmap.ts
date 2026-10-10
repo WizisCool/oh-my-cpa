@@ -8,12 +8,11 @@ import {
 } from '../web/src/theme/heatmapRamp.ts';
 import {
   buildHeatmapGrid,
-  HEATMAP_GRID,
   heatmapCellState,
   heatmapColumnCount,
   heatmapDrillDown,
   heatmapFocusDay,
-  heatmapMinPanelWidth,
+  fitHeatmapCell,
   heatmapMonthLabels,
   heatmapMoveFocus,
   localDayOf,
@@ -105,63 +104,38 @@ assert.equal(heatmapColumnCount([]), 0, 'an empty grid has no columns');
 
 // ── panel sizing contract ──────────────────────────────────────────────────
 
-// The grid has to reach its panel's edges: a fixed cell size left most of a wide card empty,
-// which is what made the panel look like an unfinished widget. The sizing itself is CSS
-// (`minmax(--heatmap-min-cell, 1fr)` tracks), so what is asserted here is the *contract* -
-// which panels fit and which scroll.
-const WIDE_COLUMNS = 54;
-/**
- * Panels that hold a year of weeks, and panels that do not.
- *
- * The boundary is arithmetic, not a guess: 54 columns at the 9px floor with 4px gaps need
- * 698px, plus the 30px gutter, so 728px is the narrowest panel that fills. The two lists
- * below straddle it rather than sitting on round numbers, because that is what makes the
- * caption's measurement-driven behaviour testable - a 720px viewport scrolls, a 740px one
- * does not, and no single breakpoint describes both.
- */
-const MIN_PANEL_WIDTH = heatmapMinPanelWidth(WIDE_COLUMNS);
-assert.equal(MIN_PANEL_WIDTH, 728, 'a year of weeks needs 728px at the cell floor');
-for (const width of [MIN_PANEL_WIDTH, 740, 850, 1000, 1150, 1330]) {
-  assert.ok(width >= MIN_PANEL_WIDTH!, `${width}px holds a year of weeks, so it fills rather than scrolls`);
+// The field shows a whole number of the newest weeks at a comfortable cell size and stretches
+// them to its edge. What is asserted is the arithmetic: how many weeks fit, that they span the
+// field exactly, and that a panel holding the whole year is left to the stylesheet's own tracks.
+const WIDE_COLUMNS = 53;
+const TARGET_CELL = 18;
+const CELL_GAP = 4;
+for (const fieldWidth of [262, 298, 500, 612, 900]) {
+  const cell = fitHeatmapCell(fieldWidth, WIDE_COLUMNS, TARGET_CELL, CELL_GAP);
+  assert.ok(cell !== null, `${fieldWidth}px cannot hold a year of weeks, so the cell is fitted`);
+  const weeks = Math.floor((fieldWidth + CELL_GAP) / (TARGET_CELL + CELL_GAP));
+  const span = weeks * cell! + (weeks - 1) * CELL_GAP;
+  assert.ok(cell! >= TARGET_CELL, `${fieldWidth}px keeps the cell at or above the target`);
+  assert.ok(span <= fieldWidth && fieldWidth - span < 1, `${fieldWidth}px is spanned by ${weeks} whole weeks`);
 }
-for (const width of [320, 390, 560, 640, MIN_PANEL_WIDTH! - 1]) {
-  assert.ok(
-    heatmapMinPanelWidth(WIDE_COLUMNS)! > width,
-    `${width}px is narrower than the floor needs, so the grid scrolls`,
-  );
-}
+const yearWidth = WIDE_COLUMNS * TARGET_CELL + (WIDE_COLUMNS - 1) * CELL_GAP;
+assert.equal(fitHeatmapCell(yearWidth, WIDE_COLUMNS, TARGET_CELL, CELL_GAP), null, 'a panel that holds the year writes no cell size');
+assert.equal(fitHeatmapCell(yearWidth + 400, WIDE_COLUMNS, TARGET_CELL, CELL_GAP), null, 'a wider panel is divided by the fractional tracks');
+assert.ok(fitHeatmapCell(yearWidth - 1, WIDE_COLUMNS, TARGET_CELL, CELL_GAP) !== null, 'one pixel short of the year scrolls');
+assert.ok(fitHeatmapCell(10, WIDE_COLUMNS, TARGET_CELL, CELL_GAP)! > 0, 'a panel narrower than one cell still draws one week');
+assert.equal(fitHeatmapCell(0, WIDE_COLUMNS, TARGET_CELL, CELL_GAP), null, 'an unmeasured panel is not sized');
+assert.equal(fitHeatmapCell(600, 0, TARGET_CELL, CELL_GAP), null, 'no columns means no cell size');
+assert.equal(fitHeatmapCell(600, WIDE_COLUMNS, 0, CELL_GAP), null, 'a missing target token is not a size');
 
-// Read the tokens out of the stylesheet rather than restating them here. Comparing a constant
-// against itself proves nothing: the values below were literals that matched by construction, so a
-// change to `--heatmap-min-cell` would have left this passing while the scrolling arithmetic above
-// silently disagreed with the CSS. Parsing the sheet is what makes the file the source of truth.
-const sheet = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
-function tokenValue(name: string): number {
-  const match = new RegExp(`--${name}:\\s*(\\d+)px`).exec(sheet);
-  assert.ok(match, `web/src/index.css defines --${name}`);
-  return Number(match![1]);
-}
-assert.equal(HEATMAP_GRID.minCell, tokenValue('heatmap-min-cell'), 'the cell floor matches --heatmap-min-cell');
-assert.equal(HEATMAP_GRID.gap, tokenValue('heatmap-gap'), 'the gap matches --heatmap-gap');
-assert.equal(HEATMAP_GRID.label, tokenValue('heatmap-label'), 'the gutter matches --heatmap-label');
-assert.equal(HEATMAP_GRID.labelGap, tokenValue('heatmap-label-gap'), 'the gutter gap matches --heatmap-label-gap');
 // The grid and the month axis must build the same tracks, or every label points at the wrong column.
-// Both read one custom property for that reason, and neither may hardcode `auto-fit` again: implicit
-// tracks are sized to their content, which is what let the axis drift ahead of its own columns.
+// One rule sizes both for that reason, and it may not hardcode `auto-fit` again: implicit tracks
+// are sized to their content, which is what let the axis drift ahead of its own columns.
+const sheet = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
 assert.match(
   sheet,
-  /\.heatmap-grid\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,
-  'the grid builds an explicit track per week',
+  /\.heatmap-month-track,\s*\.heatmap-grid\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,
+  'the grid and the month axis build one explicit track per week from the same rule',
 );
-assert.match(
-  sheet,
-  /\.heatmap-months\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,
-  'the month axis builds the identical track list',
-);
-
-// A grid with no columns has no width requirement, so nothing is claimed.
-assert.equal(heatmapMinPanelWidth(0), null, 'no columns means no minimum width');
-assert.equal(heatmapMinPanelWidth(Number.NaN), null, 'a non-numeric column count is not a width');
 
 // ── local-day reading ──────────────────────────────────────────────────────
 

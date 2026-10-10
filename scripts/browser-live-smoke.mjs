@@ -115,16 +115,14 @@ async function main() {
     overviewResponse.ok() && Boolean(overview.cpa_version) && overview.status !== 'unconfigured');
 
   await page.waitForSelector('.terminal-title', { timeout: 15000 });
-  // The runtime block is a second, independent query that mounts only once the
-  // dashboard window has data. Waiting for it keeps this check about content
-  // rather than about which of two requests wins the race.
-  await page.waitForSelector('.runtime-list', { timeout: 15000 });
+  // Credential quota reads the credential list on its own, independent of the dashboard window.
+  await page.waitForSelector('[data-testid="dashboard-credential-quota"]:not([data-quota-panel-state="loading"])', { timeout: 15000 });
+  const quotaPanelState = await page.locator('[data-testid="dashboard-credential-quota"]').getAttribute('data-quota-panel-state');
+  check('Dashboard credential quota settles on a read state', quotaPanelState,
+    ['ready', 'empty', 'unknown'].includes(quotaPanelState));
+  check('Dashboard omits the runtime panel', await page.locator('.runtime-list').count(),
+    (await page.locator('.runtime-list').count()) === 0);
   const dashboardText = await page.locator('main').innerText();
-  check('Dashboard 展示真实 CPA 版本', overview.cpa_version, dashboardText.includes(overview.cpa_version));
-  const instanceName = overview.cpa_instance_name || '';
-  if (instanceName) {
-    check('Dashboard 展示真实实例名', instanceName, dashboardText.includes(instanceName));
-  }
   const hasRequests = dashboardText.includes('请求总数') || dashboardText.includes('请求');
   const silent = dashboardText.includes('静候') || dashboardText.includes('暂无') || dashboardText.includes('尚未捕获');
   check('Dashboard 展示流量吞吐或真实静默态', `hasRequests=${hasRequests} silent=${silent}`, hasRequests || silent);

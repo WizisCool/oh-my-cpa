@@ -1,6 +1,6 @@
 /** Initial reads and rendered content, not polling silence, define a ready demo route. */
 export const DEMO_ROUTES = [
-  { path: '/dashboard', heading: '仪表盘', reads: ['/management/dashboard'], content: '.dashboard-grid .dashboard-tile' },
+  { path: '/dashboard', heading: '仪表盘', reads: ['/management/dashboard', '/management/dashboard/models', '/management/dashboard/token-heatmap', '/management/overview', '/management/dashboard/providers', '/management/auth-files', '/management/quota'], content: '.dashboard-activity-row .heatmap-grid' },
   { path: '/model-square', heading: '模型广场', reads: ['/management/model-square', '/pricing', '/usage/facets'], content: '.model-square-page [data-model-identity]' },
   { path: '/playground', heading: '操练场', reads: ['/management/api-keys'], content: '[data-testid="playground-empty"]' },
   { path: '/agent', heading: 'Oh My CPA', headingSelector: '[data-testid="agent-empty"] [aria-label="Oh My CPA"]', reads: ['/agent/session', '/capabilities'], content: '[data-testid="agent-empty"]' },

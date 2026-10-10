@@ -31,9 +31,13 @@ import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
+import {
+  CredentialQuota,
+  CREDENTIAL_FILES_QUERY_KEY,
+  CREDENTIAL_QUOTA_QUERY_KEY,
+} from '../components/dashboard/CredentialQuota';
 import { ModelUsagePanels, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
-import type { ManagementOverview } from '../types/management';
 import {
   applyTail,
   DASHBOARD_RANGE_PREFERENCE,
@@ -239,6 +243,15 @@ export const DashboardPage: React.FC = () => {
   // key prefix is what keeps one button meaning "re-read this page". Today's total in
   // particular keeps growing, so a refresh that left the one panel tracking the current
   // day stale would be lying about what it did.
+  const overviewQuery = useQuery({
+    queryKey: ['management-overview'],
+    queryFn: api.getManagementOverview,
+    refetchInterval: 30000,
+    meta: { silent: true },
+    staleTime: 10000,
+    placeholderData: keepPreviousData,
+  });
+
   const queryClient = useQueryClient();
   const refreshAll = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [TOKEN_HEATMAP_QUERY_KEY] });
@@ -248,6 +261,8 @@ export const DashboardPage: React.FC = () => {
     void queryClient.invalidateQueries({ queryKey: [DASHBOARD_MODELS_QUERY_KEY] });
     void queryClient.invalidateQueries({ queryKey: ['dashboard-providers'] });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
+    void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_FILES_QUERY_KEY] });
+    void queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] });
     void refetch();
   }, [queryClient, refetch]);
 
@@ -542,13 +557,23 @@ export const DashboardPage: React.FC = () => {
       <ModelUsagePanels query={query} range={range} enabled={rangeReady} />
 
       {/* Under the six tiles, and outside the time-range control's reach: the strip has
-          its own fixed fifty-three-week span, so it keeps its own query and its own failure -
-          an unavailable read leaves the tiles above it readable. It is still reached by
-          the page's refresh button, through a key-prefix invalidation rather than a
-          prop. */}
-      <TokenHeatmap />
+          its own fixed fifty-three-week span, paired on desktop in a half-width column
+          with credential quota on the right. Both stack on mobile. */}
+      <div className="dashboard-activity-row">
+        <TokenHeatmap />
+        <CredentialQuota />
+      </div>
 
-      <OverviewSecondary query={query} range={range} enabled={rangeReady} />
+      {overviewQuery.data && (
+        <div className="dashboard-secondary">
+          <DashboardProviders
+            overview={overviewQuery.data}
+            query={query}
+            range={range}
+            enabled={rangeReady}
+          />
+        </div>
+      )}
 
       {/* has_usage is false when the server could not tell, too; a partial
           response must not claim the deployment has never been used. */}
@@ -569,77 +594,6 @@ export const DashboardPage: React.FC = () => {
 
       <div className="dashboard-footnote">
         <span>{t('dash.window_minutes', { n: data.window.minutes })}</span>
-      </div>
-    </div>
-  );
-};
-
-/**
- * OverviewSecondary keeps the CPA-level facts that the six traffic tiles do not
- * carry: which instance answered, provider fleet totals, credential health and
- * runtime versions. It reads the overview endpoint, not the request store.
- */
-const OverviewSecondary: React.FC<{
-  query?: string;
-  range?: DashboardRange;
-  enabled?: boolean;
-}> = ({ query, range, enabled }) => {
-  useTimeZone();
-  const t = useT();
-  const { data } = useQuery({
-    queryKey: ['management-overview'],
-    queryFn: api.getManagementOverview,
-    refetchInterval: 30000,
-    meta: { silent: true },
-    staleTime: 10000,
-    placeholderData: keepPreviousData,
-  });
-  if (!data) return null;
-  const overview: ManagementOverview = data;
-  const credentials = overview.credentials;
-
-  return (
-    <div className="dashboard-secondary">
-      <DashboardProviders
-        overview={overview}
-        query={query}
-        range={range}
-        enabled={enabled}
-      />
-
-      <div className="dashboard-lower">
-        <div className="terminal-panel dashboard-card">
-          <div className="section-heading"><h2>{t('dash.health')}</h2></div>
-          {credentials && credentials.total > 0 ? (
-            <>
-              <div className="health-meter">
-                <span className="health-active" style={{ flexGrow: credentials.active }} />
-                <span className="health-unavailable" style={{ flexGrow: credentials.unavailable }} />
-                <span className="health-disabled" style={{ flexGrow: credentials.disabled }} />
-              </div>
-              <div className="health-legend">
-                <span><i className="legend-dot success" />{t('dash.legend_active')} <b>{credentials.active}</b></span>
-                <span><i className="legend-dot warning" />{t('dash.legend_unavailable')} <b>{credentials.unavailable}</b></span>
-                <span><i className="legend-dot failure" />{t('dash.legend_disabled')} <b>{credentials.disabled}</b></span>
-              </div>
-              <div className="type-list">
-                {credentials.by_type.map((entry) => <span key={entry.type}>{entry.type} <b>{entry.count}</b></span>)}
-              </div>
-            </>
-          ) : (
-            <p className="empty-copy">{t('dash.health_empty')}</p>
-          )}
-        </div>
-
-        <div className="terminal-panel dashboard-card">
-          <div className="section-heading"><h2>{t('dash.runtime')}</h2></div>
-          <dl className="runtime-list">
-            <div><dt>{t('dash.runtime_instance')}</dt><dd>{overview.cpa_instance_name || '—'}</dd></div>
-            <div><dt>{t('dash.runtime_version')}</dt><dd>{overview.cpa_version || '—'}</dd></div>
-            <div><dt>{t('dash.runtime_omc')}</dt><dd>{overview.omc_version || '—'}</dd></div>
-            <div><dt>{t('dash.runtime_baseurl')}</dt><dd>{overview.cpa_base_url || '—'}</dd></div>
-          </dl>
-        </div>
       </div>
     </div>
   );
