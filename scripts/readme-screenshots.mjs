@@ -109,7 +109,7 @@ const DASHBOARD_RANGE = { preset: '30d' };
  * would be a write, and a write in the demonstration raises its "changes are not
  * persisted" notice over the page being pictured.
  */
-async function capture(browser, { routePath, mode, lang, viewport }) {
+export async function capture(browser, { routePath, mode, lang, viewport }) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: viewport.scale,
@@ -136,9 +136,7 @@ async function capture(browser, { routePath, mode, lang, viewport }) {
     // Charts draw on animation frames after their data arrives; two frames settle them.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    if (!await page.evaluate(hasReadmeScreenshotContent, contentSelectorFor(routePath))) {
-      throw new Error(`screenshot content became unsettled: ${routePath} (${lang}, ${mode})`);
-    }
+    await page.waitForFunction(hasReadmeScreenshotContent, contentSelectorFor(routePath), { timeout: 30_000 });
     const png = await page.screenshot({ type: 'png' });
     return { dataUrl: `data:image/png;base64,${png.toString('base64')}`, background };
   } finally {
@@ -258,7 +256,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
