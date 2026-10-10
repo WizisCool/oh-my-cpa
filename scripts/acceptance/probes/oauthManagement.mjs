@@ -587,6 +587,28 @@ async function checkOAuthModelRules({ page, base, check }) {
   const drawerBounds = await drawer.boundingBox();
   check('model rules keep the close action at the trailing header edge',
     closeBounds.x > drawerBounds.x + drawerBounds.width / 2);
+  // The row's removal control is the only way to drop one alias, so it has to
+  // be inside the table's visible box before any sideways scroll.
+  const readAliasRemoval = () => drawer.getByTestId('oauth-model-alias-panel').evaluate((panel) => {
+    const scroller = panel.querySelector('.ant-table-content');
+    const frame = scroller.getBoundingClientRect();
+    const button = panel.querySelector('tbody tr:not(.ant-table-measure-row) td:last-child button').getBoundingClientRect();
+    return { left: button.left, right: button.right, frameLeft: frame.left, frameRight: frame.right, isScrollable: scroller.scrollWidth > scroller.clientWidth + 1, scrollLeft: scroller.scrollLeft };
+  });
+  const desktopRemoval = await readAliasRemoval();
+  check('the alias table fits the desktop drawer with its remove action in view',
+    !desktopRemoval.isScrollable && desktopRemoval.left >= desktopRemoval.frameLeft && desktopRemoval.right <= desktopRemoval.frameRight + 1,
+    JSON.stringify(desktopRemoval));
+  await page.screenshot({ path: 'tmp/oauth-model-aliases-desktop.png' });
+  await page.setViewportSize({ width: 375, height: 844 });
+  await settleLayout(page);
+  const phoneRemoval = await readAliasRemoval();
+  check('a phone keeps the alias remove action in view while the fields scroll',
+    phoneRemoval.isScrollable && phoneRemoval.scrollLeft === 0 && phoneRemoval.left >= phoneRemoval.frameLeft && phoneRemoval.right <= Math.min(phoneRemoval.frameRight, 375) + 1,
+    JSON.stringify(phoneRemoval));
+  await page.screenshot({ path: 'tmp/oauth-model-aliases-phone.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await settleLayout(page);
   const provider = drawer.getByTestId('oauth-model-rules-provider');
   const identity = provider.getByTestId('oauth-model-rules-provider-identity');
   check('model rules use the provider tab name and mark in the selected control',

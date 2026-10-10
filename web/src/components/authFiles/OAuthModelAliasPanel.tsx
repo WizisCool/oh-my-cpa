@@ -54,12 +54,13 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
     return name ? excludedRules.find((rule) => matchesExcludedModelRule(rule, name)) : undefined;
   };
 
+  // The fixed widths leave the upstream model the remainder, so the whole row
+  // fits the drawer's content width without scrolling sideways.
   const columns = [
     {
       title: t('af.alias_col_name'),
       dataIndex: 'name',
       key: 'name',
-      width: 200,
       render: (value: string, row: ManagementOAuthModelAliasDraft) => {
         const excludingRule = excludingRuleOf(value);
         return (
@@ -87,7 +88,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       title: t('af.alias_col_alias'),
       dataIndex: 'alias',
       key: 'alias',
-      width: 180,
+      width: 160,
       render: (value: string, row: ManagementOAuthModelAliasDraft) => (
         <Input
           data-alias-field="alias"
@@ -102,7 +103,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       title: t('af.alias_col_display'),
       dataIndex: 'display_name',
       key: 'display_name',
-      width: 160,
+      width: 132,
       render: (value: string | undefined, row: ManagementOAuthModelAliasDraft) => (
         <Input
           data-alias-field="display_name"
@@ -144,7 +145,10 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
     {
       title: '',
       key: 'actions',
-      width: 52,
+      width: 48,
+      // Pinned: a phone still scrolls the fields sideways, and the row's only
+      // removal control must not scroll out of sight with them.
+      fixed: 'end' as const,
       render: (_: unknown, row: ManagementOAuthModelAliasDraft) => (
         <Button
           type="text"
@@ -174,12 +178,13 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       ) : (
         <>
           <Table<ManagementOAuthModelAliasDraft>
+            className={styles['alias-table']}
             rowKey="rowKey"
             size="small"
             pagination={false}
             dataSource={drafts}
             columns={columns}
-            scroll={{ x: 800 }}
+            scroll={{ x: 680 }}
           />
           <div>
             <Button icon={<PlusOutlined />} disabled={isDisabled || drafts.length >= OAUTH_MODEL_ALIAS_ENTRY_LIMIT} onClick={addDraft}>
