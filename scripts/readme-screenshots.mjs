@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { DEMO_ROUTES } from './demo-readiness.mjs';
+import { hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'docs', 'images', 'readme');
@@ -130,16 +131,14 @@ async function capture(browser, { routePath, mode, lang, viewport }) {
   const page = await context.newPage();
   try {
     await page.goto(`${base}${routePath}`, { waitUntil: 'networkidle' });
-    await page.waitForFunction((selector) => {
-      const isVisible = (element) => Boolean(element && element.getClientRects().length > 0);
-      const isLoading = [...document.querySelectorAll('.ant-spin-spinning, .ant-skeleton, .request-loading, [aria-busy="true"]')]
-        .some(isVisible);
-      return isVisible(document.querySelector(selector)) && !isLoading;
-    }, contentSelectorFor(routePath), { timeout: 30_000 });
+    await page.waitForFunction(hasReadmeScreenshotContent, contentSelectorFor(routePath), { timeout: 30_000 });
     await page.evaluate(() => document.fonts.ready);
     // Charts draw on animation frames after their data arrives; two frames settle them.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    if (!await page.evaluate(hasReadmeScreenshotContent, contentSelectorFor(routePath))) {
+      throw new Error(`screenshot content became unsettled: ${routePath} (${lang}, ${mode})`);
+    }
     const png = await page.screenshot({ type: 'png' });
     return { dataUrl: `data:image/png;base64,${png.toString('base64')}`, background };
   } finally {

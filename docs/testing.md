@@ -1034,3 +1034,15 @@ The existing `agent-stream` probe exports a generated component as standalone HT
 it requires script-set content in the opaque sandbox and an exact fixture color in PNG
 pixels, then checks temporary-frame cleanup. The common conversation-export helper retains
 real download/controls/mobile checks. These browser claims are not replaced by DOM tests.
+
+### README screenshot readiness
+
+`scripts/readme-screenshot-readiness.test.mjs` pins the capture predicate: visible
+page content, no visible loading surfaces, and no mounted toast (including its exit
+motion). It is automatically discovered by `pnpm test:self`; it does not launch a
+browser or certify pixels. `pnpm build && pnpm readme:screenshots` supplies the real
+Chromium evidence and regenerates the English/Chinese desktop and mobile images
+under `docs/images/readme/`. The generator waits on that predicate rather than a
+fixed delay, checks it again immediately before capture, and leaves the Demo's
+normal arrival feedback unchanged. Image freshness remains outside verification
+gates because the sample traffic is rebased to the capture clock.
