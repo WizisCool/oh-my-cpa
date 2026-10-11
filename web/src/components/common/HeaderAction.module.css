@@ -18,6 +18,7 @@
 @media (hover: none) {
   .fold { grid-template-columns: 1fr; opacity: 1; }
 }
+/* Reduced motion removes the movement, not the fold: the label still waits to be asked for. */
 @media (prefers-reduced-motion: reduce) {
   .fold { transition: none; }
 }

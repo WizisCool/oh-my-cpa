@@ -961,7 +961,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-breadcrumb .ant-breadcrumb-link { color: var(--muted); }
 .app-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--fg); }
 .app-breadcrumb-current { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-weight: 500; }
-.header-star-icon { color: var(--warn); }
+/* Neutral, not amber: amber is the console's warning hue, and this star is a count. */
+.header-star-icon { color: var(--fg-2); }
 .header-star-count { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .app-header-divider { flex: none; width: 1px; height: 16px; margin: 0 2px; background: var(--border); }
 /* The demonstration's marker. It borrows the credential card's own badge language -

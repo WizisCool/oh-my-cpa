@@ -148,7 +148,9 @@ per-address budget.
 The header's GitHub link shows the project's star count, read by the server from the same
 host and held in memory. It costs at most one request an hour: the sweep refreshes it, and
 so does a console page load when page-load checks are allowed. With both switches below
-off, or while GitHub cannot be reached, the link simply shows no count.
+off, or until a first read has succeeded, the link simply shows no count. Once a read has
+succeeded the count stays for the life of the process: a refresh that fails keeps the
+previous count.
 
 Two switches, because they answer different questions.
 `OMCPA_UPDATE_CHECK_ENABLED=false` stops the sweep on an offline deployment; the page
