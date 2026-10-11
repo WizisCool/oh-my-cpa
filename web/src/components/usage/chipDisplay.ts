@@ -19,6 +19,7 @@
  */
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageFacets } from '../../types/usageEvents';
+import { displayEffortName } from '../../theme/effortScale';
 
 export interface ChipDisplayInput {
   key: EventFilterKey;
@@ -59,6 +60,7 @@ export function chipDisplayValue({
     return facet?.alias?.trim() || facet?.mask?.trim() || value;
   }
   if (key === 'provider') return resolveProviderName(value);
+  if (key === 'reasoning') return displayEffortName(value);
   if (key === 'cost') return value === 'priced' ? costLabels.priced : costLabels.unpriced;
   if (key === 'served') return value === 'matched' ? servedLabels.matched : servedLabels.substituted;
   if (key.endsWith('_min') || key.endsWith('_max')) {

@@ -95,7 +95,7 @@
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
      where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
-  /* Categorical series palette (design.md §2, ADR 0006): ZCode & CodeX inspired developer console
+  /* Categorical series palette (design.md §2, ADR 0006): ZCode & Codex inspired developer console
      palette matching AntV and Tremor. Alternates vibrant primary hues (Blue -> Emerald -> Purple ->
      Coral -> Amber -> Cyan) ensuring immediate visual hierarchy, warm-cool harmony, and rich telemetry. */
   --series-1: #3b82f6;

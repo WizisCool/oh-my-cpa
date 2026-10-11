@@ -136,7 +136,7 @@ const modeSheet = (masks: ReturnType<typeof effectiveMasks>) =>
   buildRequestSheet({ rows: moded, masks, colWidths: {}, caption: 'caption', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials });
 const modeCell = modeSheet(effectiveMasks([], [])).rows[0].cells.mode.lines;
 assert.deepEqual(modeCell, [[
-  { kind: 'tag', text: 'xhigh', tone: 'fg2', effortStep: 5 },
+  { kind: 'tag', text: 'xHigh', tone: 'fg2', effortStep: 5 },
   { kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true },
 ]], 'the mode cell draws the effort on its scale step, then the non-streaming mark');
 assert.equal(modeSheet(effectiveMasks([], [])).rows[0].cells.model.lines.length, 1, 'the model cell is the name alone');
@@ -152,7 +152,7 @@ const fastSheet = buildRequestSheet({
 assert.deepEqual(fastSheet.rows[0].cells.mode.lines, [[{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true }]],
   'a request served on the fast lane draws the lightning mark');
 const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
-assert.ok(!modeHidden.includes('xhigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
+assert.ok(!modeHidden.includes('xHigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
 const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>
   buildRequestExport({ rows: moded, masks: effectiveMasks([], columns), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
 assert.equal(modeJson(['model']).reasoning_effort, 'xhigh', 'the JSON keeps the effort when only the model is withheld');

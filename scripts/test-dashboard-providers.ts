@@ -13,7 +13,7 @@ import type { ProviderItem } from '../web/src/types/providers';
 console.log('--- Testing Dashboard Providers Logic ---');
 
 // Test 1: OAuth channel metadata check
-assert.equal(OAUTH_CHANNEL_META.codex.name, 'CodeX');
+assert.equal(OAUTH_CHANNEL_META.codex.name, 'Codex');
 assert.equal(OAUTH_CHANNEL_META.meta.name, 'Meta');
 assert.equal(OAUTH_CHANNEL_META.devin.name, 'Devin');
 assert.equal(OAUTH_CHANNEL_META.antigravity.name, 'Antigravity');
@@ -25,7 +25,7 @@ assert.equal(isOAuthChannel('devin'), true);
 assert.equal(isOAuthChannel('antigravity'), true);
 assert.equal(isOAuthChannel('codebuddy'), true);
 assert.equal(isOAuthChannel('cline'), false);
-assert.equal(resolveChannelName('codex'), 'CodeX');
+assert.equal(resolveChannelName('codex'), 'Codex');
 assert.equal(resolveChannelName('meta'), 'Meta');
 assert.equal(resolveChannelName('devin'), 'Devin');
 assert.equal(resolveChannelName('codebuddy'), 'Codebuddy');
@@ -96,10 +96,10 @@ const aggregated = aggregateProviders({
 // Check that all 4 configured providers + 2 OAuth channels (antigravity, codex) = 6 providers
 assert.equal(aggregated.length, 6, `Expected 6 aggregated providers, got ${aggregated.length}`);
 
-// Check codex was mapped to CodeX and marked as OAuth
-const codexRow = aggregated.find((p) => p.name === 'CodeX' || p.id === 'codex');
+// Check codex was mapped to Codex and marked as OAuth
+const codexRow = aggregated.find((p) => p.name === 'Codex' || p.id === 'codex');
 assert.ok(codexRow, 'Codex row must exist');
-assert.equal(codexRow.name, 'CodeX', 'Codex must use channel name CodeX');
+assert.equal(codexRow.name, 'Codex', 'Codex must use channel name Codex');
 assert.equal(codexRow.kind, 'oauth', 'Codex must be kind oauth');
 assert.equal(codexRow.iconId, 'Codex', 'Codex must have iconId Codex');
 assert.equal(codexRow.credentials, 2);
@@ -252,9 +252,9 @@ const credentialState = aggregateProviders({
     },
   ],
 });
-const codexChannel = credentialState.find((p) => p.name === 'CodeX');
-assert.ok(codexChannel, 'CodeX row must exist');
-assert.equal(codexChannel.disabled, true, 'Every CodeX credential is disabled, so the channel is disabled');
+const codexChannel = credentialState.find((p) => p.name === 'Codex');
+assert.ok(codexChannel, 'Codex row must exist');
+assert.equal(codexChannel.disabled, true, 'Every Codex credential is disabled, so the channel is disabled');
 assert.equal(codexChannel.credentials, 2, 'The credential count still reports the files the gateway holds');
 const kimiChannel = credentialState.find((p) => p.name === 'Kimi');
 assert.ok(kimiChannel, 'Kimi row must exist');
@@ -262,7 +262,7 @@ assert.equal(kimiChannel.disabled, false, 'One enabled Kimi credential keeps the
 const relayRow = credentialState.find((p) => p.name === 'gemini-relay');
 assert.ok(relayRow, 'Relay row must exist');
 assert.equal(relayRow.disabled, false, 'A disabled type key must not disable a provider that merely contains it');
-assert.equal(credentialState[credentialState.length - 1].name, 'CodeX', 'The disabled channel sorts last');
+assert.equal(credentialState[credentialState.length - 1].name, 'Codex', 'The disabled channel sorts last');
 console.log('✓ All-credentials-disabled channel detection verified');
 
 // Test 7: The all-disabled claim follows only the credentials a row owns
@@ -500,7 +500,7 @@ const renamedRelay = aggregateProviders({
   configuredProviders: [{
     id: 'openai-compat-0',
     family: 'openai-compatibility',
-    name: 'CodeX',
+    name: 'Codex',
     upstream_name: 'myrelay',
     protocol: 'OpenAI Chat Completions',
     auth_indexes: ['relay-key'],

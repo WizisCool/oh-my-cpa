@@ -203,6 +203,18 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         // light would otherwise draw a white label on it. `accentOn` is solved by the derivation, so
         // this is the same value on a built-in palette and on an operator's own.
         primaryColor: t.accentOn,
+        // The ink an outlined button - default or dashed - takes under the pointer and while pressed.
+        // Ant Design derives all four from `colorPrimaryHover` and `colorPrimaryActive`, which this
+        // config points at `accentActive` so that a filled control deepens. That step is a fill: it is
+        // solved to carry `accentOn`, not to be read against the page, and as a label on `bg` it
+        // measured 2.70:1 in OMC Dark and 2.69:1 in Midnight. `accent` is the ladder's text step - the
+        // one the palette editor reports against 4.5:1 on the page - and the ink a row action already
+        // takes on hover. Pressed keeps the hover ink, as the filled control's pressed fill keeps its
+        // hover fill.
+        defaultHoverColor: t.accent,
+        defaultHoverBorderColor: t.accent,
+        defaultActiveColor: t.accent,
+        defaultActiveBorderColor: t.accent,
         primaryShadow: 'none',
         defaultShadow: 'none',
         dangerShadow: 'none',

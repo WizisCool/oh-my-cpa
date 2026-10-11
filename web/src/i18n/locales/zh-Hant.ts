@@ -456,7 +456,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "conversation.reasoning_effort.low": "低 (low)",
   "conversation.reasoning_effort.medium": "中 (medium)",
   "conversation.reasoning_effort.high": "高 (high)",
-  "conversation.reasoning_effort.xhigh": "極高 (xhigh)",
+  "conversation.reasoning_effort.xhigh": "極高 (xHigh)",
   "conversation.reasoning_effort.max": "最大 (max)",
   "conversation.reasoning_effort.ultra": "極致 (ultra)",
   "pg.user_agent": "User-Agent",

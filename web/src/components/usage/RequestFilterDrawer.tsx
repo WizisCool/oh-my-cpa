@@ -28,6 +28,7 @@ import {
   validateFilterDraft,
 } from '../../types/usageEventFilters';
 import { useT } from '../../i18n';
+import { displayEffortName } from '../../theme/effortScale';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { AppDrawer } from '../common/AppDrawer';
@@ -198,7 +199,9 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           ? `${credentialName(entry.value)} · ${usageFacetLabel(entry)}`
           : spec.key === 'provider'
             ? providerFacetLabel(providerName(entry.value), entry.requests)
-            : usageFacetLabel(entry),
+            : spec.key === 'reasoning'
+              ? usageFacetLabel({ ...entry, value: displayEffortName(entry.value) })
+              : usageFacetLabel(entry),
     }));
     const known = new Set(options.map((option) => option.value));
     for (const value of draft.multi[spec.key] ?? []) {
@@ -211,7 +214,9 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             ? `${credentialName(value)} · ${value}`
             : spec.key === 'provider'
               ? providerName(value)
-              : value,
+              : spec.key === 'reasoning'
+                ? displayEffortName(value)
+                : value,
       });
     }
     return options;
