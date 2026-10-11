@@ -55,6 +55,7 @@ import {
 import { LoadFailure } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
+import '../components/dashboard/dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 

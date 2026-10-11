@@ -1,0 +1,83 @@
+.data-table-flush { border: 0; border-radius: 0; }
+/* The key editor: the secret first, because it is what the dialog exists for, then the
+   console-only name. */
+.keys-key-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.keys-key-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.keys-key-editor-label:not(:first-child) {
+  margin-top: 12px;
+}
+.keys-key-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* The secret and the two actions that touch it, as one unit: a code chip and two quiet
+   glyphs, 8px apart so the touch rules' hit insets meet rather than overlap. Nothing here
+   clips, because a clipped parent would cut those insets off. */
+.config-key-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+/* A fixed width rather than a maximum: this box is what stops the reveal toggle
+   from resizing the key column, so its contribution to the table's layout must
+   not depend on how long the value inside it happens to be. A key longer than the
+   box scrolls inside it. */
+.config-key-box {
+  display: inline-flex;
+  flex-shrink: 1;
+  align-items: center;
+  width: 280px;
+  max-width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  white-space: nowrap;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+.config-key-box::-webkit-scrollbar {
+  display: none;
+}
+.config-key-text {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--fg);
+  letter-spacing: .02em;
+  user-select: all;
+}
+/* The mask and the secret are the same shape and length, so the ink is what says
+   which one is on screen: a mask reads in the secondary ink, a revealed secret takes the
+   console's full-contrast ink. */
+.config-key-text.is-masked {
+  color: var(--fg-2);
+}
+.config-key-text.is-revealed {
+  color: var(--fg);
+}
+/* The row's action cluster: edit inline, everything else behind the overflow trigger. */
+.keys-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* 8px, so the touch rules' 4px insets on these controls meet instead of overlapping. */
+  gap: 8px;
+}

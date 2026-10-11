@@ -34,6 +34,7 @@ import styles from './ApiKeysList.module.css';
 import { useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
+import './keys.css';
 
 /** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —

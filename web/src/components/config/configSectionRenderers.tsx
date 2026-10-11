@@ -24,6 +24,7 @@ import {
 } from '../../types/configSchema';
 import type { useConfigDraft } from './useConfigDraft';
 import { SectionHeading } from '../common/SectionHeading';
+import './config.css';
 
 const { Text } = Typography;
 

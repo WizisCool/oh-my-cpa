@@ -40,6 +40,7 @@ import {
   type QuotaWindowPeriod,
 } from './credentialQuotaLogic';
 import { Panel } from '../common/Panel';
+import './dashboard.css';
 
 /** The prefixes the page's refresh button invalidates; shared with the credential workspace. */
 export const CREDENTIAL_FILES_QUERY_KEY = 'management-auth-files';

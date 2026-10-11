@@ -1,0 +1,90 @@
+.logs-search { width: 216px; }
+.logs-levels { display: inline-flex; gap: 4px; }
+.log-level-chip {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--meta);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.log-level-chip:hover { color: var(--fg-2); border-color: var(--muted); }
+.log-level-chip.is-active { color: var(--fg); border-color: var(--accent); background: var(--hover-inset); }
+.log-level-chip.is-warn.is-active { color: var(--warn); border-color: var(--warn); }
+.log-level-chip.is-error.is-active, .log-level-chip.is-fatal.is-active { color: var(--danger); border-color: var(--danger); }
+.logs-counts { margin-left: auto; color: var(--meta); font-size: var(--text-sm); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.logs-tail { position: relative; }
+.logs-alert { margin-bottom: 10px; }
+.log-list {
+  /* `dvh` rather than `vh`: the logs tail is sized against a fixed chrome budget, and on a
+     phone the URL bar changes what `100vh` means continuously - the list grew and shrank
+     under the reader as they scrolled. The `vh` line stays first as the fallback for a
+     browser without dynamic viewport units. */
+  height: calc(100vh - 330px);
+  height: calc(100dvh - 330px);
+  min-height: 300px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.log-more {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.log-more:hover { color: var(--fg); }
+.log-row { border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+.log-row:hover { background: var(--surface); }
+.log-line { display: flex; gap: 8px; padding: 4px 12px; font-size: var(--text-md); line-height: 1.6; white-space: pre; }
+.log-time, .log-req, .log-latency { flex: none; color: var(--meta); font-variant-numeric: tabular-nums; }
+.log-level { flex: none; font-size: var(--text-xs); letter-spacing: .04em; text-transform: uppercase; }
+.log-level.is-info { color: var(--muted); }
+.log-level.is-debug, .log-level.is-trace { color: var(--meta); }
+.log-level.is-warn { color: var(--warn); }
+.log-level.is-error, .log-level.is-fatal { color: var(--danger); }
+.log-status { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.log-status.is-success { color: var(--success); }
+.log-status.is-warn { color: var(--warn); }
+.log-status.is-danger { color: var(--danger); }
+.log-method { flex: none; color: var(--fg-2); }
+.log-path { flex: none; max-width: 42ch; overflow: hidden; color: var(--fg-2); text-overflow: ellipsis; }
+.log-msg { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: pre; }
+.log-raw {
+  margin: 0;
+  padding: 6px 12px 10px 14px;
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-list.is-wrapped .log-line { flex-wrap: wrap; white-space: pre-wrap; }
+.log-list.is-wrapped .log-path { flex: 0 1 auto; max-width: none; overflow: visible; overflow-wrap: anywhere; }
+/* The message keeps the rest of the row while that leaves it a readable measure, and takes
+   a row of its own only once the fields before it have used the width up. */
+.log-list.is-wrapped .log-msg { flex: 1 1 28ch; min-width: 0; overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; }
+.logs-jump { position: absolute; right: 14px; bottom: 14px; }
+.log-files { min-height: 220px; }
+.log-files-state { color: var(--muted); font-size: var(--text-sm); padding: 24px 0; }
+.log-state { padding: 24px 12px; color: var(--muted); font-size: var(--text-sm); }
+@media (max-width: 900px) {
+  .logs-search { width: 148px; }
+  .logs-counts { margin-left: 0; width: 100%; }
+  .log-list { height: calc(100vh - 380px); height: calc(100dvh - 380px); }
+}
+@media (pointer: coarse) and (max-height: 640px) {
+  .log-list { min-height: 240px; }
+}

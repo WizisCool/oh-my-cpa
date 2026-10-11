@@ -1,0 +1,753 @@
+.dashboard-page { max-width: 1440px; }
+.dashboard-alert { margin-bottom: 16px; }
+.dashboard-section { margin-bottom: 32px; }
+.section-heading { margin-bottom: 12px; }
+.status-pip { width: 7px; height: 7px; border-radius: var(--radius-xs); background: var(--success); }
+/* ── Dashboard Providers Section ─────────────────────────────────────────── */
+.dashboard-providers-section { margin-bottom: 32px; }
+.provider-list-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.provider-list-items {
+  display: flex;
+  flex-direction: column;
+}
+.provider-row-enhanced {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.8fr) minmax(90px, .9fr) 80px 75px minmax(110px, 1.2fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.provider-row-enhanced.is-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+.provider-row-enhanced:last-child {
+  border-bottom: none;
+}
+.provider-row-enhanced:hover {
+  background-color: var(--hover-inset);
+}
+.provider-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 18px;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.provider-list-toggle:hover {
+  background-color: var(--hover-inset);
+  color: var(--fg);
+}
+/* The panel clips its overflow, so the global outer focus ring is drawn inside the toggle. */
+.provider-list-toggle:focus-visible { box-shadow: inset 0 0 0 2px var(--accent) !important; }
+.provider-main-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.provider-brand-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.provider-brand-badge .status-pip {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--surface);
+}
+.status-pip.is-active { background: var(--success); }
+.status-pip.is-disabled { background: var(--danger); }
+.provider-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.provider-title {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.provider-jump-arrow {
+  color: var(--meta);
+  font-size: var(--text-xs);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+}
+.provider-row-enhanced:hover .provider-jump-arrow {
+  opacity: 0.8;
+  transform: translateX(0);
+}
+.provider-creds-col {
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.provider-total-col {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+/* The rate's own colour is set inline from the row's band, which is why this rule carries only the
+   neutral fallback: the number is the one mark that stays readable at a measured 0%, where the
+   meter beneath it has no width to paint. */
+.provider-rate-col {
+  font-size: var(--text-md);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.provider-visual-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .provider-row-enhanced {
+    grid-template-columns: minmax(130px, 1fr) auto auto;
+    gap: 10px 12px;
+  }
+  .provider-creds-col {
+    grid-column: 1;
+  }
+  .provider-total-col, .provider-rate-col {
+    text-align: right;
+  }
+  .provider-visual-col {
+    grid-column: 1 / -1;
+  }
+}
+.empty-copy { color: var(--muted); font-size: var(--text-md); }
+/* ── dashboard tiles: six cards in two rows, flat by design.md ─────────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-placeholder-hero { margin: 14px 0 0; }
+.tile-placeholder-spark { margin-top: 18px; }
+.tile-placeholder-value { margin: 14px 0 12px; }
+.dashboard-key-filter { min-width: 180px; max-width: 240px; }
+.dashboard-key-filter-icon { color: var(--muted); }
+.tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+.tile-help { color: var(--meta); font-size: var(--text-sm); }
+.tile-value {
+  margin-top: 8px;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.tile-value.is-small { font-size: 26px; letter-spacing: -.02em; }
+/* One pip, on the verdict. What sits beside it is the evidence for that number,
+   so a hairline separates the two and the failure count carries the colour the
+   pip would otherwise repeat. */
+.tile-rate { display: inline-flex; align-items: center; gap: 6px; }
+.tile-split {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-soft);
+}
+.tile-split .is-danger, .tile-split .is-danger b { color: var(--danger); }
+.tile-split .is-zero, .tile-split .is-zero b { color: var(--meta); }
+/* The dashboard's window picker keeps one width across presets, so the header's other
+   actions do not shift when the window is changed. */
+.range-trigger { min-width: 138px; }
+.dashboard-secondary { margin-bottom: 32px; }
+.dashboard-footnote {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--meta);
+  font-size: var(--text-2xs);
+  letter-spacing: .04em;
+}
+.dashboard-empty { margin-bottom: 16px; padding: 40px 24px; }
+@media (max-width: 1100px) {
+  .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .tile-value { font-size: 28px; }
+}
+.model-trend-card { grid-column: span 2; }
+.model-usage-card {
+  grid-column: span 2;
+  /* Both model cards share one grid row, so the taller trend card stretches the usage card even
+     when its own row is shorter. A flex column lets the body claim that spare height instead of
+     leaving the row at the top of the card with an empty strip beneath it. */
+  display: flex;
+  flex-direction: column;
+}
+/* The trend's key. It wraps rather than scrolls: a legend that scrolls hides the very series the
+   reader is looking for, and six entries in a two-column card is at most two rows. */
+.model-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.model-legend-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.model-legend-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); flex: none; }
+.model-legend-label {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-usage-card .ant-card-body {
+  flex: 1 1 auto;
+  /* Centre the row in the height the card actually has below its header. Grid centring keeps the
+     row stretched to the body's full width, unlike flex centring, which would shrink it to its
+     content width and let the list collapse. */
+  display: grid;
+  align-content: center;
+  container-type: inline-size;
+  container-name: modelusage;
+}
+.model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
+@container modelusage (max-width: 500px) {
+  .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
+  .model-usage-list { max-height: none; min-width: 0; }
+}
+/* The ranked list is the ring's legend and its values in one. It takes the remaining width and
+   caps its own height, because a deployment can serve more models than a card can show and the
+   list must not push the card taller than its peer beside it.
+
+   The columns live on the list, not on each row. Per-row tracks are resolved against that row's
+   own content, so a single row whose cost is a character wider - an amount with an extra digit,
+   or a plain figure where another row shows an em dash - pulls its volume and share cells to the
+   right and the two numeric columns stop lining up down the card. One grid for the whole list makes
+   every row resolve the same tracks, which is what the header's reading order promises. */
+.model-usage-list {
+  flex: 1 1 auto;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  /* The track floor is what a model name needs in order to read as a name. */
+  grid-template-columns: 8px minmax(140px, 1fr) minmax(56px, max-content) max-content minmax(42px, max-content);
+  column-gap: 8px;
+  align-content: start;
+  /* The list refuses to shrink past its own columns, so the shrink lands on the ring rather than
+     pushing the share cell out of the card. `min-content` resolves to the tracks' own floors rather
+     than to the widest name, which is what keeps one long model name from bidding the ring down to
+     nothing. */
+  min-width: min-content;
+}
+@container modelusage (max-width: 500px) {
+  .model-usage-list {
+    min-width: 0;
+    grid-template-columns: 8px minmax(0, 1fr) minmax(56px, max-content) max-content minmax(42px, max-content);
+  }
+}
+.model-usage-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums;
+}
+.model-usage-row:last-child { border-bottom: none; }
+.model-usage-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); }
+.model-usage-name {
+  color: var(--fg);
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-usage-tokens { color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
+.model-usage-share { color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; text-align: right; }
+/* The cost cell follows the name, so it is left-aligned against it rather than against the right
+   edge the two value columns share - a spend column flush right beside a name would read as a
+   second name. Its track is `max-content`, so the amount's own width sets the column and every row
+   starts it on the same edge; the partial and unpriced states are text-plus-tooltip rather than
+   colour, per design.md's rule that state may not ride on hue alone. */
+.model-usage-cost { color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; text-align: left; }
+.model-usage-cost.is-partial { color: var(--muted); }
+.model-usage-cost.is-unpriced { color: var(--muted); }
+.model-usage-cost-action { padding: 0; font: inherit; cursor: pointer; background: transparent; border: 0; text-decoration: underline dotted var(--warn); text-underline-offset: 3px; transition: color var(--motion-fast) ease; }
+.model-usage-cost-action:hover, .model-usage-cost-action:focus-visible { color: var(--fg); }
+/* The grouping toggle sits in the card's header row, opposite the title. */
+.model-view-toggle { flex: none; }
+.model-empty { margin: 16px 0 0; }
+.model-chart-skeleton { height: 220px; }
+.model-alert, .model-stale-alert { margin-top: 12px; }
+@media (max-width: 1100px) {
+  .model-trend-card, .model-usage-card { grid-column: span 2; }
+}
+@media (max-width: 640px) {
+  .model-trend-card, .model-usage-card { grid-column: span 1; }
+}
+/* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
+   A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
+   the newest weeks as fit at `--heatmap-cell-target` and stretches them to reach its edge, so the
+   squares stay a readable, hittable size at any width; the older weeks scroll inside the panel,
+   behind a pinned weekday gutter. Dividing the whole year into the panel was the alternative, and
+   in a half-width column it leaves 8px squares in a strip a third the height of its neighbour.
+
+   The component writes the fitted size as `--heatmap-cell`. Until it has measured - and whenever
+   the whole year fits - the tracks are `minmax(--heatmap-min-cell, 1fr)`, which divides the
+   panel exactly with no rounding seam. */
+/* ── dashboard activity & credential health row ────────────────────────────── */
+.dashboard-activity-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+  align-items: stretch;
+}
+/* Both panels stretch to the row's height and lay their content out as a column, so whichever
+   is shorter spends the difference above its footer instead of ending early. */
+.heatmap-panel, .credential-quota-panel { margin-bottom: 0; min-width: 0; }
+.heatmap-inner, .quota-inner {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+/* ── credential quota: what the fleet can still serve ─────────────────────────
+   Every credential, ordered by urgency, in a list that scrolls inside the panel: the panel keeps
+   the height of the row it shares however many credentials a deployment holds. The rows are not
+   interactive, so a touch that scrolls the list can never leave the page. */
+.credential-quota-panel { --quota-row-height: 46px; }
+.quota-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.quota-head-aside { display: inline-flex; align-items: center; gap: 10px; }
+.quota-summary { display: inline-flex; gap: 16px; color: var(--muted); font-size: var(--text-md); line-height: 1; }
+.quota-summary b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.quota-summary .is-blocked, .quota-summary .is-blocked b { color: var(--danger); }
+/* The list takes whatever height the activity grid beside it gives the row, and never less than
+   three rows. A zero basis is what stops a long list from setting the row's height itself. */
+.quota-list {
+  flex: 1 1 0;
+  min-height: calc(var(--quota-row-height) * 3);
+  margin: 10px -8px 0 0;
+  padding: 0 8px 0 0;
+  list-style: none;
+  /* Vertical only: `overflow-y: auto` alone computes the other axis to `auto` as well, and a list
+     that can be nudged sideways under a finger reads as a broken page. */
+  overflow: hidden auto;
+  /* The page takes over once the list reaches either end, as it does everywhere else. */
+  overscroll-behavior-y: auto;
+}
+.quota-row + .quota-row { border-top: 1px solid var(--border-soft); }
+.quota-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.7fr) 78px;
+  grid-template-areas: "icon name reading when";
+  align-items: center;
+  gap: 6px 12px;
+  min-height: var(--quota-row-height);
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+.quota-row-icon { grid-area: icon; }
+.quota-row-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-row-windows {
+  grid-area: reading;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+.quota-window { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: center; gap: 8px; min-width: 0; }
+.quota-window-label { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-sm); }
+.quota-window-track { display: block; height: 6px; border-radius: var(--radius-xs); background: var(--border); overflow: hidden; }
+.quota-window-fill { display: block; height: 100%; border-radius: inherit; }
+.quota-window-fill.is-ample { background: var(--success); }
+.quota-window-fill.is-partial { background: var(--warn); }
+.quota-window-fill.is-low { background: var(--danger); }
+.quota-window-value { color: var(--fg); font-size: var(--text-sm); text-align: right; font-variant-numeric: tabular-nums; }
+.quota-row-status { grid-area: reading; display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+/* A credential that recovers on its own clock is a warning; one that waits for the operator is a
+   failure. */
+.quota-row.is-blocked .quota-row-status { color: var(--danger); }
+.quota-row.is-cooldown .quota-row-status { color: var(--warn); }
+.quota-row-status-icon { font-size: var(--text-base); flex: none; }
+.quota-row-when {
+  grid-area: when;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.quota-row-when-icon { font-size: var(--text-sm); flex: none; }
+.quota-foot { display: flex; justify-content: flex-end; padding-top: 12px; }
+/* Without a list above it the footer still sits on the panel's bottom edge. */
+.quota-all-disabled + .quota-foot { margin-top: auto; }
+.quota-foot-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-sm); line-height: 1; }
+.quota-foot-link:hover { color: var(--accent); }
+.quota-link-icon { font-size: var(--text-2xs); }
+.quota-skeleton { display: flex; flex-direction: column; gap: 22px; margin-top: 20px; }
+.quota-alert { margin-top: 12px; }
+.quota-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 14px; }
+.quota-all-disabled { margin-top: 14px; }
+@media (max-width: 900px) {
+  .quota-list { flex: none; min-height: 0; max-height: calc(var(--quota-row-height) * 4.5); }
+}
+@media (max-width: 640px) {
+  .credential-quota-panel { --quota-row-height: 68px; }
+  .quota-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas: "icon name when" "reading reading reading";
+    align-content: center;
+  }
+}
+@media (max-width: 900px) {
+  .dashboard-activity-row { grid-template-columns: 1fr; }
+  /* A phone shows fewer weeks either way; the smaller target keeps a quarter in view. */
+  .heatmap-scroll { --heatmap-cell-target: 14px; --heatmap-gap: 3px; }
+}
+.heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* The field scrolls sideways inside its panel whenever a year of weeks is wider than it - with
+   the scrollbar itself hidden, because a bar inside a dashboard card is visual noise and touch
+   has no scrollbar anyway. Clipping instead would silently drop the older weeks.
+   `overflow-y: hidden` alongside is what stops the pair from computing to `auto` on both axes,
+   which is the gotcha that drew a stray vertical scrollbar on a field with room to spare. */
+.heatmap-scroll {
+  margin-top: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+  overscroll-behavior-x: contain;
+  /* A cell brought into view by the keyboard stops clear of the pinned gutter, not under it. */
+  scroll-padding-left: calc(var(--heatmap-label) + var(--heatmap-label-gap));
+  /* `!important` because a global `* { scrollbar-width: thin }` further down the sheet would
+     otherwise win this declaration, and the bar is exactly what must not appear here. */
+  scrollbar-width: none !important;
+  /* The container's bottom edge is flush with the grid's last row, so `overflow-y: hidden` would
+     cut off the bottom row's hover lift. `scale(1.18)` reaches 0.09 of a cell past its own box
+     and this is the room it paints into. The other three edges need none: the month axis pushes
+     the top row down, and the gutter and the scrolling track already leave space on the sides. */
+  padding-bottom: 2px;
+}
+.heatmap-scroll::-webkit-scrollbar { display: none !important; }
+/* The axis and the body are the same two boxes - a pinned gutter, then the week tracks - so both
+   divide the same remaining width into the same columns. They are as wide as their content
+   rather than as the panel: a pinned box only travels inside its parent, and a parent the width
+   of the panel would release the gutter partway through the year. */
+.heatmap-months, .heatmap-body {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+.heatmap-months { margin-bottom: 6px; height: 10px; }
+/* The gutter carries the space beside it as its own padding, so a week scrolling past is covered
+   up to the first visible column instead of showing a sliver between the labels and the field. */
+.heatmap-corner, .heatmap-weekdays {
+  flex: 0 0 calc(var(--heatmap-label) + var(--heatmap-label-gap));
+  box-sizing: border-box;
+  padding-right: var(--heatmap-label-gap);
+  position: sticky;
+  left: 0;
+  /* Above the hovered cell's lifted mark. */
+  z-index: 2;
+  background: var(--surface);
+}
+.heatmap-month-track, .heatmap-grid {
+  display: grid;
+  /* One explicit track per week. Explicit rather than `auto-fit`: auto-fit makes as many tracks
+     as fit and leaves the rest of the cells in *implicit* tracks, which are sized to their
+     content - so the field was not the uniform grid the month axis assumed, and no axis could
+     line up with it. */
+  grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell, minmax(var(--heatmap-min-cell), 1fr)));
+  gap: var(--heatmap-gap);
+  flex: 1 0 auto;
+  min-width: 0;
+}
+.heatmap-month-track { align-items: start; }
+.heatmap-month { color: var(--muted); font-size: var(--text-2xs); line-height: 1; white-space: nowrap; }
+/* The final column's label would run off the panel's edge, so it is anchored to its own
+   column's right side - the same left-edge anchoring the others get, mirrored. */
+.heatmap-month.is-last { justify-self: end; }
+/* The gutter's rows mirror the grid's: it stretches to the grid's height and divides it into
+   seven equal rows, so each label lines up with its weekday without either side knowing the
+   cell size. */
+.heatmap-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: var(--heatmap-gap);
+}
+.heatmap-weekday { display: flex; align-items: center; color: var(--muted); font-size: var(--text-2xs); line-height: 1; }
+/* Older weeks behind the gutter are announced by a short fade over the first column in view;
+   with the scrollbar hidden nothing else says the field continues. */
+.heatmap-weekdays::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 14px;
+  background: linear-gradient(to right, var(--surface), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+.heatmap-scroll[data-has-older] .heatmap-weekdays::after { opacity: 1; }
+/* The ARIA rows exist for assistive technology only. `display: contents` keeps them out of the box
+   tree, so each cell is still placed directly by its own `gridColumn`/`gridRow` and the layout is
+   unchanged; the rows supply the ownership a `gridcell` requires without becoming layout boxes. */
+.heatmap-row { display: contents; }
+.heatmap-cell {
+  /* Square by aspect ratio rather than by a height: the width comes from the fractional
+     tracks, so a fixed height would be wrong at every panel width. */
+  aspect-ratio: 1;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-xs);
+  /* One step down from the panel it sits on, not a step up. The panel's own background is
+     `--surface`, and in the dark theme the obvious choice for an empty cell (`--border-soft`)
+     *is* `--surface`: every empty day would blend into the panel and the grid would read as a
+     scatter of isolated marks. `--bg` is the inset step in both themes, which is the same
+     token the hover states use for the same reason. */
+  background: var(--heatmap-zero-recorded);
+  padding: 0;
+}
+.heatmap-cell.is-unrecorded { background: var(--heatmap-zero-unrecorded); box-shadow: none; }
+/* A measured cell's fill, mixed by the browser between the two ramp stops. The custom properties
+   are set per cell by the component from a square root of the day's volume, so the ramp is
+   continuous rather than four fixed steps - which is what lets two days of different volume read as
+   different. `--heatmap-quiet-share` is the weight of the quiet stop: 100% is no traffic, 0% is the
+   busiest day in the window. */
+.heatmap-cell.is-measured {
+  background: color-mix(
+    in oklch,
+    var(--heatmap-quiet) var(--heatmap-quiet-share, 0%),
+    var(--heatmap-busy)
+  );
+}
+/* Every cell is interactive, so every cell advertises the pointer. A day with nothing recorded has
+   no drill-down to offer, but it still answers the question the reader is asking - its tooltip says
+   that nothing is stored - so refusing the cursor would hide an interaction that does happen. */
+.heatmap-cell.is-interactive { cursor: pointer; }
+/* Hover acknowledges the pointer on the frame it arrives, and the motion is a `transform` scale
+   rather than a fade: design.md §7 rule 1 allows compositor-only properties and rule 7 forbids a
+   *colour* transition on hover, which is what would smear behind a fast sweep. A transform is
+   handed to the compositor, so the lift costs no layout and no paint of the grid around it.
+   The transition is on the transform only, and `position: relative` + `z-index` let the enlarged
+   square sit above its neighbours instead of being tucked under them. */
+/* The cell is the layout box and the tooltip's anchor, so it never moves: the hover scale is
+   applied to the inner mark instead. Scaling the cell itself moved antd's positioning target under
+   the popper, which stranded an open tooltip ~100px from its cell. */
+.heatmap-cell-mark {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  /* The hover target is the cell, not this square: the mark is decoration over a stationary
+     anchor. */
+  pointer-events: none;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+/* The popup's only anchor shares the cell's stationary box without becoming a hit target. */
+.heatmap-tooltip-anchor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.heatmap-cell.is-interactive:hover .heatmap-cell-mark {
+  box-shadow: inset 0 0 0 1px var(--fg-2);
+  transform: scale(1.18);
+  z-index: 1;
+}
+/* The cell needs a positioning context for the mark, and the mark has to be able to sit above its
+   neighbours without the cell itself being transformed. */
+.heatmap-cell { position: relative; }
+/* The colour lives on the mark so the cell's own background stays the layout-neutral empty fill;
+   the state and level classes above set it on the cell, and this carries it onto the square. */
+.heatmap-cell > .heatmap-cell-mark { background: inherit; }
+.heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+/* The cell whose tooltip is open keeps the ring, so the tooltip is visibly attached to it while
+   the pointer moves off to the link inside. */
+.heatmap-cell.ant-tooltip-open { box-shadow: inset 0 0 0 1px var(--fg-2); }
+/* The heatmap tooltip's content. antd owns the popper, the placement, the arrow and the motion,
+   so what is styled here is only the inside - which is what keeps this tooltip's chrome from
+   diverging from the app's other forty-odd tooltips.
+   The rows are a definition list with the values right-aligned: the pairing is the point, since
+   "Requests 6" and "Tokens 6,000" only mean something read against each other. */
+/* The panel's own class on antd's popper, rather than a selector reaching into `.ant-tooltip`: the
+   tooltip is click-triggered and contains a link, so the popper's box, placement and arrow stay
+   antd's business. What this owns is only the box's fit - `max-width: none` is what lets the value
+   column sit beside its label instead of wrapping under it. */
+.heatmap-tip-popper {
+  max-width: none;
+  /* The panel's tooltip paints its own text from the palette's text tokens, because its rows are a
+     definition list rather than a sentence. That makes the global spotlight wrong for it: antd's
+     spotlight is near-black in the light theme to suit its white text, which put near-black text on
+     a near-black box - a measured 1.0:1. Overriding the fill and the arrow here keeps the fix
+     inside this popper, where the reason applies, instead of moving a token every other tooltip
+     in the console also reads. */
+  --ant-tooltip-arrow-background-color: var(--surface);
+}
+.heatmap-tip-popper .ant-tooltip-container {
+  /* The columns need room; below this the value wraps away from the label it belongs to. */
+  min-width: 176px;
+  background: var(--surface);
+}
+/* The rows lay out two-column, so the box has to be at least as wide as the widest label plus the
+   longest value; below that the value column would wrap away from its label. antd's container
+   supplies the inset, which is why nothing here sets padding. */
+.heatmap-tip {
+  margin: 0;
+  min-width: 176px;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  /* The popper's fill is `--surface`, but antd colours a popup's text with `colorTextLightSolid`
+     - white - which is meant for its own dark spotlight. Every row below sets its own colour, so
+     the panel's text was legible while this inherited value went unnoticed; the empty state has
+     no rows to set one, and rendered white on a near-white box at 1.15:1. Setting it on the box
+     rather than on `.heatmap-tip-empty` covers any future child that forgets, which is the class
+     of bug this was. */
+  color: var(--fg);
+}
+.heatmap-tip-day {
+  color: var(--fg);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+/* The label uses the secondary text token rather than `--muted`: muted is calibrated for the page
+   background, and against the popper's surface it lands at 4.4:1 - just under the WCAG AA floor
+   design.md requires. `--fg-2` clears it in both themes. */
+.heatmap-tip-row dt { color: var(--fg-2); }
+.heatmap-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.heatmap-tip-row dt { font-weight: 400; }
+.heatmap-tip-row dd {
+  margin: 0;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+/* The drill-down is a real anchor, so it reads as a link and opens in a new tab if asked. */
+.heatmap-tip-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+  width: 100%;
+  /* A dedicated step, because neither accent clears 4.5:1 on the popper's surface in both themes:
+     the bright accent reads 3.4:1 on the dark surface, and `--accent-hover` (the deeper step, meant
+     for filled buttons) reads 1.96:1 there while being the only legible one on the light surface.
+     So the light theme uses the deeper step and the dark theme lightens the accent until it clears
+     the floor - the same "lighten a semantic hue until its text is legible" rule the cache scale
+     follows in design.md §2. */
+  color: var(--heatmap-tip-link);
+  font-size: var(--text-xs);
+}
+.heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
+.heatmap-tip-link-icon { font-size: 9px; }
+/* The key sits on the panel's bottom edge, so a panel stretched to its neighbour's height spends
+   the difference between the field and the key. */
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 14px;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: 1;
+}
+.heatmap-legend-scale { display: inline-flex; gap: 3px; }
+.heatmap-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in oklch, var(--heatmap-quiet) var(--heatmap-quiet-share, 0%), var(--heatmap-busy));
+}
+/* Static skeleton, never a shimmer (design.md §7 rule 3). */
+.heatmap-skeleton {
+  margin-top: 14px;
+  /* The measured field's own height: the month axis, then seven rows at the target size. */
+  height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+.heatmap-alert { margin-top: 12px; }
+/* A 2px indeterminate bar for the panel's own background re-read: one composited layer, no layout,
+   no shimmer. Indeterminate because the panel's one read carries no measure of its own progress. */
+.heatmap-progress { display: block; height: 2px; margin-top: 10px; background: var(--border-soft); overflow: hidden; }
+.heatmap-progress::after { content: ''; display: block; width: 30%; height: 100%; background: var(--accent); animation: heatmap-progress 1.2s linear infinite; }
+@media (max-width: 640px) {
+  .heatmap-cell { position: relative; }
+  .heatmap-cell::after { content: ''; position: absolute; inset: -1px; }
+  .heatmap-head { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }
+  /* Keep the acknowledgement, drop the movement: the ring still marks the cell under the pointer. */
+  .heatmap-cell-mark { transition: none; }
+  .heatmap-cell.is-interactive:hover .heatmap-cell-mark { transform: none; }
+}
+@media (hover: none) {
+  .provider-jump-arrow { opacity: .5; transform: none; }
+}
+@media (max-width: 640px) {
+  .dashboard-grid { gap: 12px; margin-bottom: 16px; }
+  .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
+}

@@ -27,6 +27,7 @@ import {
 import { LoadFailure } from '../feedback';
 import { formatCalendarDay } from '../../utils/dateTimeFormat';
 import { Panel } from '../common/Panel';
+import './dashboard.css';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
 

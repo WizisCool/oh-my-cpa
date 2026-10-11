@@ -5,6 +5,7 @@ import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { ConfirmAction } from '../common/ConfirmAction';
+import './config.css';
 
 export interface ConfigDirtyBarProps {
   isDirty: boolean;

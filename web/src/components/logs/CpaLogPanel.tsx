@@ -54,6 +54,7 @@ import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Count } from '../common/Count';
+import './logs.css';
 
 const { Text } = Typography;
 

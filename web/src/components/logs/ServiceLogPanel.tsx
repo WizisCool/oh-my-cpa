@@ -13,6 +13,7 @@ import styles from './Logs.module.css';
 import { LoadFailure, Notice } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { Toolbar } from '../common/Toolbar';
+import './logs.css';
 
 const { Text } = Typography;
 

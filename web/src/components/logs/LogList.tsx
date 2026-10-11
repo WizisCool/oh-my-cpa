@@ -3,6 +3,7 @@ import { Button } from 'antd';
 import { useT } from '../../i18n';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { EmptyState } from '../common/EmptyState';
+import './logs.css';
 
 /** RENDER_CHUNK is how many matching rows are mounted at a time. */
 const RENDER_CHUNK = 300;

@@ -18,6 +18,7 @@ import {
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { Tag } from '../common/Tag';
+import './config.css';
 
 /** Re-exported for the page, which reports the issues back to the operator. */
 export type { PayloadValidationIssue };

@@ -130,7 +130,7 @@ assert.equal(fitHeatmapCell(600, WIDE_COLUMNS, 0, CELL_GAP), null, 'a missing ta
 // The grid and the month axis must build the same tracks, or every label points at the wrong column.
 // One rule sizes both for that reason, and it may not hardcode `auto-fit` again: implicit tracks
 // are sized to their content, which is what let the axis drift ahead of its own columns.
-const sheet = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
+const sheet = readFileSync(new URL('../web/src/components/dashboard/dashboard.css', import.meta.url), 'utf8');
 assert.match(
   sheet,
   /\.heatmap-month-track,\s*\.heatmap-grid\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,

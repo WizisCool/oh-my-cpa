@@ -4,6 +4,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { useT } from '../../i18n';
 import { TimeRangePicker } from '../common/timeRange/TimeRangePicker';
 import { DASHBOARD_PRESETS, type DashboardPreset, type DashboardRange } from '../../types/dashboard';
+import './dashboard.css';
 
 /**
  * A day-granular window, written the way people read it: one date when the

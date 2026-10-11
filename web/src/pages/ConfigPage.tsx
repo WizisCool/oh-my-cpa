@@ -54,6 +54,7 @@ import { Tag } from '../components/common/Tag';
 import { ConfirmAction } from '../components/common/ConfirmAction';
 import { Panel } from '../components/common/Panel';
 import { CopyButton } from '../components/common/CopyButton';
+import '../components/config/config.css';
 
 const { Text } = Typography;
 

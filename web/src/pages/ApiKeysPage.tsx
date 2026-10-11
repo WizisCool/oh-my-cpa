@@ -37,6 +37,7 @@ import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
 import { Panel } from '../components/common/Panel';
 import { CopyButton } from '../components/common/CopyButton';
+import '../components/keys/keys.css';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;

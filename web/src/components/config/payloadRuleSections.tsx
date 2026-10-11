@@ -14,6 +14,7 @@ import {
 } from './payloadRules';
 import type { PayloadRulesDraft } from './usePayloadRulesDraft';
 import { ConfirmAction } from '../common/ConfirmAction';
+import './config.css';
 
 const { Text } = Typography;
 

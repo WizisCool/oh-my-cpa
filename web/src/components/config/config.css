@@ -1,0 +1,623 @@
+.config-notice { margin-bottom: 16px; }
+.config-sync-badge {
+  font-size: var(--text-sm);
+  padding: 1px 7px;
+  font-weight: 500;
+}
+.config-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.config-search-input {
+  width: 240px;
+}
+/* Balanced three-track workbench */
+.config-workbench {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 920px) 216px;
+  align-items: start;
+  gap: 32px;
+  width: min(100%, 1416px);
+  margin-inline: auto;
+}
+.config-section-nav {
+  grid-column: 1;
+  position: sticky;
+  top: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 0;
+}
+.config-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  transition: none;
+}
+.config-nav-btn:hover {
+  color: var(--fg);
+  background: var(--surface);
+}
+.config-nav-btn.is-active {
+  color: var(--fg);
+  font-weight: 600;
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--fg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.config-nav-btn.is-active:hover {
+  background: var(--surface);
+}
+.config-nav-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.config-main {
+  grid-column: 2;
+  width: 100%;
+  max-width: 920px;
+  min-width: 0;
+}
+.config-section-header {
+  margin-bottom: 20px;
+}
+/* Settings Group Panels Stack */
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* A group whose field is edited on its own page: the panel states how much is
+   configured and leads to the surface that owns it, rather than carrying a second
+   editor that could disagree with the first. */
+.settings-managed-elsewhere {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.settings-managed-count {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+/* Variant 1: Form Grid */
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-field.is-full {
+  grid-column: 1 / -1;
+}
+.settings-field-label {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--fg);
+}
+.settings-field-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.4;
+  margin-top: 1px;
+}
+/* Variant 2: Settings List (Toggle switches) */
+.settings-list-rows {
+  display: flex;
+  flex-direction: column;
+}
+/* Variant 3: TLS Accordion */
+.settings-tls-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows var(--motion-base) var(--ease-standard),
+              opacity var(--motion-base) var(--ease-standard),
+              visibility 0s var(--motion-base);
+}
+.settings-tls-body.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.settings-tls-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px;
+  border-top: 1px solid var(--border-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-tls-body { transition: none; }
+}
+.config-mono-textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  border-radius: var(--radius-sm);
+}
+@media (max-width: 1719px) {
+  .config-workbench {
+    grid-template-columns: 216px minmax(0, 920px);
+    width: min(100%, 1168px);
+  }
+}
+@media (max-width: 1100px) {
+  .config-workbench {
+    grid-template-columns: 200px minmax(0, 1fr);
+    width: 100%;
+    margin-inline: 0;
+    gap: 24px;
+  }
+}
+@media (max-width: 900px) {
+  .config-workbench {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .config-section-nav,
+  .config-main {
+    grid-column: 1;
+  }
+  .config-section-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .config-nav-btn {
+    width: auto;
+    white-space: nowrap;
+  }
+  .config-nav-btn.is-active {
+    box-shadow: inset 0 -2px 0 var(--fg);
+    border-radius: var(--radius-sm);
+  }
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+@media (max-width: 640px) {
+  .config-toolbar-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .config-search-input {
+    width: 100%;
+  }
+}
+.config-source-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 1148px);
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+.config-source-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+  gap: 10px;
+  position: relative;
+  z-index: 0;
+}
+.config-editor-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  position: relative;
+  overflow: visible;
+  z-index: 1;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.config-editor-wrap:focus-within {
+  border-color: var(--muted);
+}
+.config-monaco-shell,
+.config-monaco-shell .monaco-editor {
+  border-radius: var(--radius-sm);
+}
+.config-monaco-shell {
+  width: 100%;
+  /* `dvh` for the same reason as the logs tail: the toolbar above this editor is sticky, so a
+     viewport unit that changes with the on-screen keyboard resizes the editor underneath the
+     caret while it is being typed into. */
+  height: clamp(520px, calc(100vh - 280px), 800px);
+  height: clamp(520px, calc(100dvh - 280px), 800px);
+  position: relative;
+  /* Monaco writes its own pixel width and only corrects it when its resize observer runs. Until
+     then a narrowed shell holds an editor of the old width, which would widen the whole page -
+     visibly on a rotation, and for as long as the browser is busy. Clipped, not scrollable: a
+     scroll container here could be scrolled out from under the editor by a focus. */
+  overflow: clip;
+}
+.config-monaco-loading {
+  min-height: 520px;
+  padding: 24px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.config-source-hint {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 2px 0;
+}
+.config-source-hint kbd {
+  padding: 0 4px;
+  font: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+/* ── Floating dirty action bar (sticky bottom bar) ──────────────────── */
+.config-dirty-bar-portal {
+  position: fixed;
+  inset-inline-start: var(--app-sider-width, 236px);
+  inset-inline-end: 0;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1100;
+  padding: 0 24px;
+  transition: inset-inline-start var(--motion-base) var(--ease-standard);
+}
+.config-dirty-bar {
+  pointer-events: auto;
+  width: min(100%, 720px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.config-dirty-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--fg);
+}
+.config-dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.config-dirty-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  margin-left: 4px;
+}
+.config-dirty-bar-actions .ant-btn {
+  height: 32px;
+  padding-inline: 14px;
+  font-size: var(--text-md);
+  border-radius: var(--radius-sm);
+}
+.config-dirty-btn-discard {
+  background: transparent !important;
+  border-color: var(--border) !important;
+  color: var(--fg-2) !important;
+}
+.config-dirty-btn-discard:hover {
+  background: var(--hover-inset) !important;
+  border-color: var(--muted) !important;
+  color: var(--fg) !important;
+}
+.config-dirty-btn-save {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-on) !important;
+  font-weight: 500;
+}
+.config-dirty-btn-save:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+.payload-rules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.payload-collapse {
+  background: transparent !important;
+  border: none !important;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.payload-collapse > .ant-collapse-item {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  overflow: hidden;
+}
+.payload-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 14px 18px !important;
+  align-items: center !important;
+  color: var(--fg) !important;
+}
+.payload-collapse > .ant-collapse-item > .ant-collapse-content {
+  background: var(--bg) !important;
+  border-top: 1px solid var(--border-soft) !important;
+}
+.payload-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+  padding: 16px !important;
+}
+.payload-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 12px;
+  gap: 12px;
+}
+.payload-panel-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.payload-panel-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--fg);
+}
+.payload-panel-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.payload-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 20px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-align: center;
+}
+.payload-rules-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.payload-rule-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.payload-rule-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.payload-rule-card-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--fg);
+  font-family: var(--font-mono);
+}
+.payload-sub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.payload-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.payload-sub-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--meta);
+}
+.payload-models-list,
+.payload-params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.payload-model-row,
+.payload-param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.payload-model-input {
+  flex: 1 1 auto;
+}
+.payload-protocol-select {
+  width: 120px !important;
+  flex: 0 0 120px;
+}
+.payload-param-path {
+  flex: 1 1 200px;
+}
+.payload-param-type-select {
+  width: 100px !important;
+  flex: 0 0 100px;
+}
+.payload-param-value-wrap {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.payload-param-row.is-raw .payload-param-path {
+  flex: 0 0 240px;
+}
+.payload-sub-actions,
+.payload-add-rule-footer {
+  margin-top: 4px;
+}
+.payload-adv-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+.payload-adv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.payload-adv-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.payload-field-error {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--danger);
+  margin-top: 3px;
+  font-family: var(--font-mono);
+}
+.payload-adv-kv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.payload-adv-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.payload-adv-kv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .config-dirty-bar-portal {
+    inset-inline-start: 0;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 0 12px;
+  }
+  .config-dirty-bar {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .payload-model-row {
+    flex-wrap: wrap;
+  }
+  .payload-param-row {
+    flex-wrap: wrap;
+  }
+  .payload-protocol-select {
+    width: 100% !important;
+    flex: 1 1 100%;
+  }
+  .payload-param-type-select {
+    width: 90px !important;
+    flex: 0 0 90px;
+  }
+}
+@media (pointer: coarse) and (max-height: 640px) {
+  /* The editor's floor is the `520px` *inside* its clamp, so overriding `min-height` alone left it
+     520px tall on a 640px-tall screen and pushed the page past the viewport anyway. The clamp's lower
+     bound is what has to move. */
+  .config-monaco-shell { height: clamp(240px, calc(100dvh - 280px), 800px); }
+}
+.config-source-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.config-source-container.is-focused {
+  position: fixed;
+  inset-inline: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 12px);
+  background: var(--bg);
+  box-sizing: border-box;
+}
+.config-source-container.is-focused .config-source-toolbar { flex: none; }
+.config-source-container.is-focused .config-editor-wrap { flex: 1; min-height: 0; }
+.config-source-container.is-focused .config-monaco-shell { height: 100%; min-height: 0; }
+.config-source-container.is-focused .config-source-hint { display: none; }
+.config-dirty-bar-portal.is-contained {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+}
+@media (max-width: 640px) {
+  .config-phone-status { font-size: var(--text-sm); color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+  .config-workbench { gap: 12px; }
+  .config-nav-btn { padding: 10px 8px; min-height: 44px; }
+  .config-section-header-phone { display: none; }
+  .settings-stack { gap: 12px; }
+  .settings-form-grid { gap: 12px; }
+  .config-source-container { gap: 8px; }
+  .config-source-toolbar { padding: 4px 0; border: 0; background: transparent; gap: 8px; }
+  .config-source-actions { gap: 4px; width: 100%; }
+  .config-source-actions > .ant-btn { padding-inline: 8px; min-height: 40px; }
+  .config-monaco-shell { height: var(--source-available-height, 440px); }
+  .config-monaco-loading { min-height: 0; height: 100%; padding: 12px; }
+  .config-source-hint { display: none; }
+  .config-dirty-bar-portal { inset-inline: 0; padding-inline: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .config-dirty-bar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .config-dirty-bar-left { gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .config-dirty-bar-actions { margin-inline-start: auto; }
+  .config-dirty-bar-actions .ant-btn { min-height: 40px; }
+}

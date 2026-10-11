@@ -18,6 +18,7 @@ import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
 import type { ResolvedPalette, ThemeMode, ThemePalette } from '../../theme/palette';
 import { contrastRatio, oklchLightness, relativeLuminance, withLightness } from '../../theme/colorMath';
+import './config.css';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
 if (typeof window !== 'undefined') {

@@ -23,6 +23,7 @@ import { formatCost } from '../../types/tokenDisplay';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 import { LoadFailure } from '../feedback';
 import { Panel } from '../common/Panel';
+import './dashboard.css';
 
 const LazyModelTokenTrend = React.lazy(() =>
   import('../../charts/ModelTokenTrend').then((module) => ({ default: module.ModelTokenTrend }))

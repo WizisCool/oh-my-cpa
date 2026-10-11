@@ -19,6 +19,7 @@ import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
 import { Tag } from '../common/Tag';
 import { Meter } from '../common/Meter';
+import './dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
