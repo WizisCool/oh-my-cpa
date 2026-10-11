@@ -78,6 +78,20 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 		return nil, newProviderWriteError(http.StatusBadGateway, fmt.Sprintf("redeem reset credit failed: %v", err))
 	}
 
+	// A spent credit does not clear the gateway's own error cooldown: without
+	// this second step the credential stays cooled down and the operator's next
+	// click would spend another credit. A failed clear must never read as a
+	// failed redemption, or the retry spends again; it reads as a redemption
+	// that still needs the credential page's Clear cooldown action.
+	cooldownCleared := true
+	cooldownError := ""
+	if err := client.ResetQuota(ctx, authIndex); err != nil {
+		cooldownCleared = false
+		cooldownError = err.Error()
+	} else if h.repo != nil {
+		_ = h.repo.ClearCooldownEvidence(ctx, authIndex)
+	}
+
 	// Re-read usage right away so the redeemed credit is reflected before the
 	// next scheduled poll.
 	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
@@ -87,10 +101,15 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 	}
 	h.attachWindowCapacity(ctx, refreshed, h.now().UnixMilli())
 
-	_ = audit("quota.redeem_credit", "quota", authIndex, "success", nil)
+	_ = audit("quota.redeem_credit", "quota", authIndex, "success", map[string]any{"cooldown_cleared": cooldownCleared})
 
-	return map[string]any{
-		"status": "ok",
-		"quota":  refreshed,
-	}, nil
+	result := map[string]any{
+		"status":           "ok",
+		"quota":            refreshed,
+		"cooldown_cleared": cooldownCleared,
+	}
+	if !cooldownCleared {
+		result["cooldown_error"] = cooldownError
+	}
+	return result, nil
 }

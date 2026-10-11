@@ -110,6 +110,8 @@ type CPAClient interface {
 	ApiCall(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error)
 	ResetQuota(ctx context.Context, authIndex string) error
 	AuthFiles(ctx context.Context) (management.AuthFilesResponse, error)
+	Plugins(ctx context.Context) ([]management.PluginItem, error)
+	FetchPluginQuota(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error)
 }
 
 // Service manages live upstream quota fetching, normalization, and actions.
@@ -152,6 +154,17 @@ func DetectProvider(fileType, provider string) string {
 		}
 		return "unknown"
 	}
+}
+
+// CapabilitiesForFile returns supported operations for a credential: a file
+// whose quota comes from a plugin resolves through its plugin reader, so
+// the overview and detail views advertise the same refresh the refresh path
+// serves. Everything else uses the built-in provider table.
+func CapabilitiesForFile(file management.AuthFile) QuotaCapabilities {
+	if isPluginQuotaFile(file) {
+		return pluginQuotaCapabilities()
+	}
+	return CapabilitiesForProvider(DetectProvider(file.Type, file.Provider))
 }
 
 // CapabilitiesForProvider returns supported operations for a provider.
@@ -260,7 +273,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 	nowMS := time.Now().UnixMilli()
 	authIndex := strings.TrimSpace(file.AuthIndex)
 	stdProvider := DetectProvider(file.Type, file.Provider)
-	caps := CapabilitiesForProvider(stdProvider)
+	caps := CapabilitiesForFile(file)
 
 	result := &NormalizedQuota{
 		AuthIndex:    authIndex,
@@ -291,78 +304,96 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 
 	var fetchErr error
 
-	switch stdProvider {
-	case "codex":
-		plan, windows, credits, err := s.fetchCodexQuota(ctx, file, nowMS)
+	// Plugin-provided credentials resolve through the installed plugin list
+	// rather than the built-in readers below; built-ins win even when a plugin
+	// also advertises quota for the same provider.
+	if isPluginQuotaFile(file) {
+		pluginID, err := s.pluginQuotaTarget(ctx, file)
 		if err != nil {
 			fetchErr = err
+		} else if windows, plan, err := s.fetchPluginQuota(ctx, pluginID, authIndex, nowMS); err != nil {
+			fetchErr = err
 		} else {
-			result.Plan = plan
 			result.Windows = windows
-			result.ResetCredits = credits
+			result.Plan = plan
 		}
-
-	case "claude":
-		plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			if plan != nil {
-				plan.ExtraUsage = extraUsage
+	} else {
+		switch stdProvider {
+		case "codex":
+			plan, windows, credits, err := s.fetchCodexQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
 				result.Plan = plan
+				result.Windows = windows
+				result.ResetCredits = credits
 			}
-			result.Windows = windows
-		}
 
-	case "antigravity":
-		windows, err := s.fetchAntigravityQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			result.Windows = windows
-			result.Plan = s.fetchAntigravitySubscription(ctx, file)
-		}
-
-	case "kimi":
-		windows, err := s.fetchKimiQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			result.Windows = windows
-			if result.Plan == nil {
-				result.Plan = &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi Coding API", Tier: "standard"}
+		case "claude":
+			plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				if plan != nil {
+					plan.ExtraUsage = extraUsage
+					result.Plan = plan
+				}
+				result.Windows = windows
+				// Grant listing is supplementary: a failed or malformed
+				// grants read leaves the quota itself untouched.
+				result.ResetGrants = s.fetchClaudeResetGrants(ctx, file)
 			}
-		}
 
-	case "xai":
-		plan, windows, err := s.fetchXaiQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			result.Plan = plan
-			result.Windows = windows
-		}
+		case "antigravity":
+			windows, err := s.fetchAntigravityQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				result.Windows = windows
+				result.Plan = s.fetchAntigravitySubscription(ctx, file)
+			}
 
-	case "meta":
-		plan, windows, err := s.fetchMetaQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			result.Plan = plan
-			result.Windows = windows
-		}
+		case "kimi":
+			windows, err := s.fetchKimiQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				result.Windows = windows
+				if result.Plan == nil {
+					result.Plan = &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi Coding API", Tier: "standard"}
+				}
+			}
 
-	case "devin":
-		plan, windows, err := s.fetchDevinQuota(ctx, file, nowMS)
-		if err != nil {
-			fetchErr = err
-		} else {
-			result.Plan = plan
-			result.Windows = windows
-		}
+		case "xai":
+			plan, windows, err := s.fetchXaiQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				result.Plan = plan
+				result.Windows = windows
+			}
 
-	default:
-		fetchErr = fmt.Errorf("provider %q does not support live quota refresh", stdProvider)
+		case "meta":
+			plan, windows, err := s.fetchMetaQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				result.Plan = plan
+				result.Windows = windows
+			}
+
+		case "devin":
+			plan, windows, err := s.fetchDevinQuota(ctx, file, nowMS)
+			if err != nil {
+				fetchErr = err
+			} else {
+				result.Plan = plan
+				result.Windows = windows
+			}
+
+		default:
+			fetchErr = fmt.Errorf("provider %q does not support live quota refresh", stdProvider)
+		}
 	}
 
 	if fetchErr != nil {
@@ -570,6 +601,27 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	return plan, windows, extraUsage, nil
 }
 
+// fetchClaudeResetGrants lists Anthropic reset grants for display. It is a
+// read of the same usage endpoint with the grant program's query parameters,
+// and it never claims anything: spending an entitlement is out of scope.
+// Any failure yields no grants rather than failing the quota refresh.
+func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.AuthFile) []ClaudeResetGrant {
+	headers := management.WithQuotaCredential(map[string]string{
+		"Accept":         "application/json",
+		"Content-Type":   "application/json",
+		"anthropic-beta": "oauth-2025-04-20",
+	})
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL+"?cedar_ember=1&skip_spend=1", headers, "")
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil
+	}
+	normBody, err := resp.NormalizedBody()
+	if err != nil {
+		return nil
+	}
+	return ParseClaudeResetGrants(normBody)
+}
+
 func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
 	projectID := resolveAntigravityProjectID(file)
 	if projectID == "" {
@@ -775,6 +827,18 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return errors.New(sanitizeError(resp.StatusCode, normBody))
+	}
+	// A 2xx alone does not spend a credit: only an explicit confirmation does.
+	// Anything else is an unknown outcome, so the operator refreshes and decides
+	// instead of blindly spending another credit on retry.
+	var consumeOutcome struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(normBody, &consumeOutcome); err != nil {
+		return fmt.Errorf("redeem codex credit: unexpected upstream response: %w", err)
+	}
+	if consumeOutcome.Code != "reset" && consumeOutcome.Code != "already_redeemed" {
+		return errors.New("redeem codex credit: upstream did not confirm the reset; refresh the quota before trying again")
 	}
 	return nil
 }

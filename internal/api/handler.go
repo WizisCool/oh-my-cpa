@@ -277,6 +277,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/providers", h.listManagementProviders)
 				v1.Post("/management/providers", h.createManagementProvider)
 				v1.Post("/management/providers/pull-models", h.pullProviderModels)
+				v1.Post("/management/providers/probe", h.probeProvider)
 				v1.Put("/management/providers/{id}", h.updateManagementProvider)
 				v1.Delete("/management/providers/{id}", h.deleteManagementProvider)
 				v1.Patch("/management/providers/status", h.patchManagementProviderStatus)

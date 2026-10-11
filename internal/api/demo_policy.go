@@ -259,6 +259,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Anything that would reach outside this process.
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
+	{http.MethodPost, "/api/v1/management/providers/probe", demoRefuse, "probing a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call openrouter.ai"},
 	{http.MethodGet, "/api/v1/management/system/diagnostics", demoRefuse, "generating a diagnostic bundle is disabled"},
 

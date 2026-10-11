@@ -54,6 +54,8 @@ type ProviderBehaviorDTO struct {
 	CodexCloaking           string `json:"codex_cloaking,omitempty"`
 	RebuildMidSystemMessage *bool  `json:"rebuild_mid_system_message,omitempty"`
 	SupportPromptCacheKey   *bool  `json:"support_prompt_cache_key,omitempty"`
+	// Interactions is vertex-only: native Vertex Interactions API routing.
+	Interactions *bool `json:"interactions,omitempty"`
 }
 
 // providerPolicyCapabilities states which optional settings a family's CPA
@@ -65,6 +67,7 @@ type providerPolicyCapabilities struct {
 	hasCodexCloaking           bool
 	hasRebuildMidSystemMessage bool
 	hasPromptCacheKey          bool
+	hasVertexInteractions      bool
 }
 
 func providerPolicyCapabilitiesFor(family string) providerPolicyCapabilities {
@@ -74,7 +77,7 @@ func providerPolicyCapabilitiesFor(family string) providerPolicyCapabilities {
 	case management.ConfigFamilyClaude:
 		return providerPolicyCapabilities{hasErrorRules: true, hasRebuildMidSystemMessage: true}
 	case management.ConfigFamilyVertex:
-		return providerPolicyCapabilities{}
+		return providerPolicyCapabilities{hasVertexInteractions: true}
 	}
 	if family == openAICompatibilityFamily {
 		return providerPolicyCapabilities{hasErrorRules: true, hasPromptCacheKey: true}
@@ -143,6 +146,10 @@ func configKeyBehaviorDTO(entry management.ConfigAPIKey, capabilities providerPo
 		isEnabled := entry.RebuildMidSystemMessage
 		behavior.RebuildMidSystemMessage = &isEnabled
 	}
+	if capabilities.hasVertexInteractions {
+		isEnabled := entry.Interactions
+		behavior.Interactions = &isEnabled
+	}
 	if *behavior == (ProviderBehaviorDTO{}) {
 		return nil
 	}
@@ -185,7 +192,8 @@ func resolveProviderPolicyEdit(family string, req SaveProviderRequest) (provider
 		case behavior.AlphaSearch != nil && !capabilities.hasAlphaSearch,
 			behavior.CodexCloaking != "" && !capabilities.hasCodexCloaking,
 			behavior.RebuildMidSystemMessage != nil && !capabilities.hasRebuildMidSystemMessage,
-			behavior.SupportPromptCacheKey != nil && !capabilities.hasPromptCacheKey:
+			behavior.SupportPromptCacheKey != nil && !capabilities.hasPromptCacheKey,
+			behavior.Interactions != nil && !capabilities.hasVertexInteractions:
 			return refuse("behavior names a setting this provider family does not have")
 		}
 		if behavior.CodexCloaking != "" {
@@ -301,6 +309,9 @@ func (e providerPolicyEdit) applyToConfigKey(entry *management.ConfigAPIKey, isL
 		}
 		if behavior.RebuildMidSystemMessage != nil {
 			entry.RebuildMidSystemMessage = *behavior.RebuildMidSystemMessage
+		}
+		if behavior.Interactions != nil {
+			entry.Interactions = *behavior.Interactions
 		}
 	}
 	return nil

@@ -389,6 +389,10 @@ export function interactionRecordDetail(id) {
       ...record,
       ...(record.failed ? { fail_body: INTERACTION_FAILURE_BODY } : {}),
       response_headers: INTERACTION_RESPONSE_HEADERS,
+      // The access path is diagnostic: the single-record view carries it while
+      // the list projection omits it. The values are CPA's own vocabulary.
+      access_provider: 'config-inline',
+      is_native_key: true,
     },
   };
 }
@@ -774,6 +778,10 @@ export async function requestListInteractions({ base, page, check }) {
   await rows.first().click();
   await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
   check('clicking a row opens the request detail', await page.locator('.request-detail').isVisible());
+  // The first record rode the inline access path: the routing facts name it.
+  // The value is CPA's vocabulary, so the assertion holds in every language.
+  check('the detail names the access path that served the request',
+    (await page.locator('.request-detail').innerText()).includes('config-inline'));
   await page.keyboard.press('Escape');
   await page
     .locator('.request-detail')

@@ -106,6 +106,8 @@ export interface ProviderBehavior {
   codex_cloaking?: ProviderOverride;
   rebuild_mid_system_message?: boolean;
   support_prompt_cache_key?: boolean;
+  /** Vertex-only: native Vertex Interactions API routing for the key. */
+  interactions?: boolean;
 }
 
 export type ProviderBehaviorSwitch = keyof ProviderBehavior;

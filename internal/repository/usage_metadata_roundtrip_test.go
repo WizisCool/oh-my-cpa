@@ -16,6 +16,7 @@ import (
 // identifiers - so the test never carries a real capture's addresses or indexes.
 const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",` +
 	`"api_key":"sk-fixture-caller-key","auth_index":"fixture-auth-index","auth_type":"apikey",` +
+	`"access_provider":"config-inline","is_native_key":true,` +
 	`"client_ip":"192.0.2.10","endpoint":"POST /v1/chat/completions",` +
 	`"executor_type":"OpenAICompatExecutor","failed":false,"generate":true,"latency_ms":3614,` +
 	`"model":"fixture-vendor/fixture-model","provider":"openai-compatible-fixture vendor",` +
@@ -99,6 +100,14 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	}
 	if detail.ResponseModel != "fixture-model-mini" || !detail.ModelSubstituted {
 		t.Fatalf("detail served model = %q substituted = %v", detail.ResponseModel, detail.ModelSubstituted)
+	}
+	// The access path is diagnostic: the single-record view carries it while
+	// the list projection omits it, like the other diagnostic fields.
+	if row.AccessProvider != "" || row.IsNativeKey {
+		t.Fatalf("list access = (%q, %v), want it omitted", row.AccessProvider, row.IsNativeKey)
+	}
+	if detail.AccessProvider != "config-inline" || !detail.IsNativeKey {
+		t.Fatalf("detail access = (%q, %v), want (config-inline, true)", detail.AccessProvider, detail.IsNativeKey)
 	}
 }
 

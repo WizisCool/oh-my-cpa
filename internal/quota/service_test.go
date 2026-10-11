@@ -17,6 +17,8 @@ type mockCPAClient struct {
 	apiCallFunc   func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error)
 	resetQuotaFn  func(ctx context.Context, authIndex string) error
 	authFilesFunc func(ctx context.Context) (management.AuthFilesResponse, error)
+	pluginsFunc   func(ctx context.Context) ([]management.PluginItem, error)
+	pluginQuotaFn func(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error)
 }
 
 func (m *mockCPAClient) ApiCall(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
@@ -38,6 +40,20 @@ func (m *mockCPAClient) AuthFiles(ctx context.Context) (management.AuthFilesResp
 		return m.authFilesFunc(ctx)
 	}
 	return management.AuthFilesResponse{}, nil
+}
+
+func (m *mockCPAClient) Plugins(ctx context.Context) ([]management.PluginItem, error) {
+	if m.pluginsFunc != nil {
+		return m.pluginsFunc(ctx)
+	}
+	return nil, errors.New("unimplemented")
+}
+
+func (m *mockCPAClient) FetchPluginQuota(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error) {
+	if m.pluginQuotaFn != nil {
+		return m.pluginQuotaFn(ctx, pluginID, authIndex)
+	}
+	return nil, errors.New("unimplemented")
 }
 
 func TestSSRFProtection(t *testing.T) {
@@ -264,6 +280,83 @@ func TestRedeemCodexCreditOmitsAccountHeaderWhenUnresolved(t *testing.T) {
 	}
 	if _, ok := calledHeaders["Chatgpt-Account-Id"]; ok {
 		t.Errorf("Chatgpt-Account-Id = %q, want it omitted", calledHeaders["Chatgpt-Account-Id"])
+	}
+}
+
+// Only an explicit upstream confirmation spends a credit: a 2xx without a
+// reset/already_redeemed code is an unknown outcome, and the operator refreshes
+// and decides instead of blindly spending another credit on retry.
+func TestRedeemCodexCreditRequiresUpstreamConfirmation(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{name: "reset confirmed", body: `{"code":"reset"}`, wantErr: false},
+		{name: "already redeemed", body: `{"code":"already_redeemed"}`, wantErr: false},
+		{name: "missing code", body: `{}`, wantErr: true},
+		{name: "unconfirmed code", body: `{"code":"pending"}`, wantErr: true},
+		{name: "not JSON", body: `reset`, wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			client := &mockCPAClient{
+				apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+					return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(testCase.body)}, nil
+				},
+			}
+			err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
+				AuthIndex: "auth-codex",
+				Name:      "codex.json",
+				Type:      "codex",
+				Provider:  "codex",
+			})
+			if testCase.wantErr && err == nil {
+				t.Fatalf("RedeemCodexCredit with body %q succeeded, want an error", testCase.body)
+			}
+			if !testCase.wantErr && err != nil {
+				t.Fatalf("RedeemCodexCredit with body %q failed: %v", testCase.body, err)
+			}
+		})
+	}
+}
+
+func TestRefreshCredentialQuotaAttachesClaudeResetGrants(t *testing.T) {
+	// The grants read is supplementary: it must use the grant program's query
+	// on the same usage endpoint, and its failure must not fail the refresh.
+	// No test here spends anything; the claim path does not exist.
+	var grantsURL string
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			switch {
+			case strings.Contains(req.URL, "cedar_ember"):
+				grantsURL = req.URL
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(
+					`{"cedar_ember":{"eligible":true,"grants":[{"id":"grant-9","label":"Weekly","resets_total":3,"resets_left":2,"ends_at":"2026-10-09T00:00:00Z"}]}}`)}, nil
+			case strings.Contains(req.URL, "oauth/usage"):
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"five_hour":{"utilization":30}}`)}, nil
+			case strings.Contains(req.URL, "oauth/profile"):
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"account":{"has_claude_pro":true}}`)}, nil
+			}
+			return management.ApiCallResponse{}, errors.New("unimplemented")
+		},
+	}
+	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{
+		AuthIndex: "auth-claude",
+		Name:      "claude.json",
+		Type:      "claude",
+		Provider:  "claude",
+	}, nil)
+	if err != nil {
+		t.Fatalf("RefreshCredentialQuota error: %v", err)
+	}
+	if !strings.Contains(grantsURL, "cedar_ember=1") || !strings.Contains(grantsURL, "skip_spend=1") {
+		t.Fatalf("grants URL = %q, want the grant program query", grantsURL)
+	}
+	if len(result.ResetGrants) != 1 || result.ResetGrants[0].ID != "grant-9" || result.ResetGrants[0].ResetsLeft != 2 {
+		t.Fatalf("reset grants = %+v, want the weekly grant", result.ResetGrants)
+	}
+	if len(result.Windows) == 0 {
+		t.Fatal("grants read must not displace the quota windows")
 	}
 }
 

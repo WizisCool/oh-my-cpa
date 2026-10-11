@@ -425,13 +425,21 @@ func isSensitivePath(path []string) bool {
 	joined = strings.ReplaceAll(joined, "_", "-")
 	switch joined {
 	case "remote-management.secret-key",
+		"server.github-token",
 		"tls.key":
 		return true
 	default:
 		// `api-key` is an upstream provider credential wherever it appears (under
 		// each `api-keys.<family>` entry in v8). The caller keys at
 		// `access.api-keys` stay readable: the key page lists and reveals them.
-		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key") || strings.HasSuffix(joined, ".api-key")
+		if strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key") || strings.HasSuffix(joined, ".api-key") {
+			return true
+		}
+		// A Codex live-media-relay ICE server carries TURN secrets beside its
+		// URLs (`...live-media-relay.ice-servers.username`, `.credential`).
+		// Sequence entries share their parent path, so the leaf names match
+		// here whatever the server's position in the list.
+		return strings.HasSuffix(joined, ".ice-servers.username") || strings.HasSuffix(joined, ".ice-servers.credential")
 	}
 }
 

@@ -75,6 +75,10 @@ type ConfigAPIKey struct {
 	// family strictly: one of them written to a family that lacks it makes CPA
 	// refuse the whole configuration. Callers set them per family.
 	AlphaSearch bool `json:"alpha-search,omitempty"`
+	// Interactions enables native Vertex Interactions API routing for a vertex
+	// key; CPA omits an unset or false value, so a plain checkbox is the
+	// honest model rather than an inherit choice.
+	Interactions bool `json:"interactions,omitempty"`
 	// DisableCodexCloaking overrides the global Codex cloaking switch; nil
 	// inherits it.
 	DisableCodexCloaking    *bool `json:"disable-codex-cloaking,omitempty"`

@@ -368,6 +368,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         [t('events.source'), value(event.source)],
                         [t('events.auth_index'), value(event.auth_index)],
                         [t('events.auth_type'), value(event.auth_type)],
+                        [t('events.access_provider'), value(event.access_provider)],
+                        [
+                          t('events.native_key'),
+                          event.access_provider ? t(event.is_native_key ? 'events.native_key_yes' : 'events.native_key_no') : missing,
+                        ],
                         [t('events.caller'), value(requestGroupName(event))],
                         [t('events.api_group_key'), value(event.api_group_key)],
                         [t('events.group_category'), value(event.api_group_label)],

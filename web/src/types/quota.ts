@@ -106,6 +106,17 @@ export interface CodexResetCreditsInfo {
   error?: string;
 }
 
+// One Anthropic rate-limit reset grant, display-only. OMC lists grants beside
+// the Claude quota; claiming one spends an entitlement and is not implemented.
+export interface ClaudeResetGrant {
+  id: string;
+  label?: string;
+  resets_total: number;
+  resets_left: number;
+  ends_at_ms?: number;
+  clears?: string[];
+}
+
 export interface ActiveCooldown {
   is_active: boolean;
   reason?: string;
@@ -138,6 +149,7 @@ export interface QuotaItem {
   plan?: QuotaPlan;
   windows: QuotaWindow[];
   reset_credits?: CodexResetCreditsInfo;
+  reset_grants?: ClaudeResetGrant[];
   active_cooldown?: ActiveCooldown;
   recommendation: QuotaRecommendation;
   capabilities: QuotaCapabilities;

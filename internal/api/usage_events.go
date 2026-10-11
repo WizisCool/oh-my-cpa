@@ -637,6 +637,8 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"fail_status_code":      item.FailStatusCode,
 		"fail_body":             row.FailBody,
 		"response_headers":      responseHeadersOrEmpty(row.ResponseHeaders),
+		"access_provider":       row.AccessProvider,
+		"is_native_key":         row.IsNativeKey,
 		"generate":              item.Generate,
 		"stream":                item.Stream,
 		"latency_ms":            item.LatencyMS,

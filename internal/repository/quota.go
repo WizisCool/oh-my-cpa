@@ -22,6 +22,7 @@ type QuotaSnapshotRecord struct {
 	PlanJSON         string `json:"plan_json,omitempty"`
 	WindowsJSON      string `json:"windows_json"`
 	ResetCreditsJSON string `json:"reset_credits_json,omitempty"`
+	ResetGrantsJSON  string `json:"reset_grants_json,omitempty"`
 	ObservedAtMS     int64  `json:"observed_at_ms"`
 	CreatedAtMS      int64  `json:"created_at_ms"`
 }
@@ -61,8 +62,8 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 	query := `
 		INSERT INTO quota_snapshots (
 			id, auth_index, provider, status, plan_type, plan_tier, plan_json,
-			windows_json, reset_credits_json, observed_at_ms, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			windows_json, reset_credits_json, reset_grants_json, observed_at_ms, created_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.SQL().ExecContext(ctx, query,
 		snapshot.ID,
@@ -74,6 +75,7 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		snapshot.PlanJSON,
 		snapshot.WindowsJSON,
 		snapshot.ResetCreditsJSON,
+		snapshot.ResetGrantsJSON,
 		snapshot.ObservedAtMS,
 		snapshot.CreatedAtMS,
 	)
@@ -133,7 +135,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 
 	query := fmt.Sprintf(`
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, reset_grants_json, plan_json, observed_at_ms, created_at_ms
 		FROM (
 			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC) as rn
 			FROM quota_snapshots
@@ -161,7 +163,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 
 func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 	var record QuotaSnapshotRecord
-	var resetCredits, planJSON sql.NullString
+	var resetCredits, resetGrants, planJSON sql.NullString
 	if err := rows.Scan(
 		&record.ID,
 		&record.AuthIndex,
@@ -171,6 +173,7 @@ func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 		&record.PlanTier,
 		&record.WindowsJSON,
 		&resetCredits,
+		&resetGrants,
 		&planJSON,
 		&record.ObservedAtMS,
 		&record.CreatedAtMS,
@@ -179,6 +182,9 @@ func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 	}
 	if resetCredits.Valid {
 		record.ResetCreditsJSON = resetCredits.String
+	}
+	if resetGrants.Valid {
+		record.ResetGrantsJSON = resetGrants.String
 	}
 	if planJSON.Valid {
 		record.PlanJSON = planJSON.String
@@ -198,7 +204,7 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 
 	query := `
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, reset_grants_json, plan_json, observed_at_ms, created_at_ms
 		FROM quota_snapshots
 		WHERE auth_index = ?
 		ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC

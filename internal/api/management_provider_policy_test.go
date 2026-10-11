@@ -160,3 +160,40 @@ func TestProviderPolicyRefusesWhatCPAWouldSkipOrReject(t *testing.T) {
 		t.Fatal("vertex entry gained error rules")
 	}
 }
+
+func TestProviderVertexInteractionsRoundTrip(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	vertexList := []map[string]any{{
+		"api-key": "sk-vertex-1", "auth-index": "vx-1", "base-url": "https://vertex.test/v1",
+	}}
+	fixture.state.mu.Lock()
+	if fixture.state.familyLists == nil {
+		fixture.state.familyLists = map[string]*[]map[string]any{}
+	}
+	fixture.state.familyLists["vertex"] = &vertexList
+	fixture.state.mu.Unlock()
+
+	body := `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],
+		"behavior":{"interactions":true}}`
+	if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-0", body); resp.StatusCode != http.StatusOK {
+		t.Fatalf("update = %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	stored := vertexList[0]
+	fixture.state.mu.Unlock()
+	if stored["interactions"] != true {
+		t.Fatalf("stored interactions = %#v, want true", stored["interactions"])
+	}
+	listed := listedProvider(t, fixture, "vertex-0")
+	if listed.Behavior == nil || listed.Behavior.Interactions == nil || !*listed.Behavior.Interactions {
+		t.Fatalf("listed behaviour = %+v, want the vertex interactions switch", listed.Behavior)
+	}
+
+	// The switch belongs to vertex alone: codex must refuse it the way CPA would
+	// refuse the whole configuration.
+	body = `{"family":"codex","name":"Codex","base_url":"https://codex.test/v1","keys":[{"api_key":""}],
+		"behavior":{"interactions":true}}`
+	if resp, _ := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", body); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("codex update = %d, want a refusal for a switch its family lacks", resp.StatusCode)
+	}
+}

@@ -716,6 +716,14 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 	} else if !failed {
 		event.ResponseServiceTier = "default"
 	}
+	// A share of the requests arrived on the gateway's inline access path.
+	// Derived from the latency already drawn, like the tiers above. The values
+	// are CPA's own access-provider vocabulary, not operator data.
+	if latency%5 == 0 {
+		event.AccessProvider, event.IsNativeKey = "config-inline", true
+	} else if latency%5 == 1 {
+		event.AccessProvider, event.IsNativeKey = "config-api-key", true
+	}
 	return event
 }
 

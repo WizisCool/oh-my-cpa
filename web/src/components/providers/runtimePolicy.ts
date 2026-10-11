@@ -41,6 +41,7 @@ export const EMPTY_BEHAVIOR_DRAFT: BehaviorDraft = {
   codex_cloaking: 'inherit',
   rebuild_mid_system_message: false,
   support_prompt_cache_key: false,
+  interactions: false,
 };
 
 export function readRuntimePolicyDraft(provider: ProviderItem): RuntimePolicyDraft {

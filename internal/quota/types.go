@@ -139,21 +139,24 @@ const (
 
 // NormalizedQuota is the unified DTO representing all quota dimensions for a credential.
 type NormalizedQuota struct {
-	AuthIndex      string                 `json:"auth_index"`
-	Name           string                 `json:"name"`
-	Type           string                 `json:"type"`
-	Provider       string                 `json:"provider"`
-	Disabled       bool                   `json:"disabled"`
-	Status         string                 `json:"status"` // "idle", "loading", "healthy", "warning", "exhausted", "error", "stale", "unpublished"
-	ObservedAtMS   int64                  `json:"observed_at_ms"`
-	Plan           *QuotaPlan             `json:"plan,omitempty"`
-	Windows        []QuotaWindow          `json:"windows"`
-	ResetCredits   *CodexResetCreditsInfo `json:"reset_credits,omitempty"`
-	ActiveCooldown *ActiveCooldown        `json:"active_cooldown,omitempty"`
-	Recommendation QuotaRecommendation    `json:"recommendation"`
-	Capabilities   QuotaCapabilities      `json:"capabilities"`
-	RawSignals     map[string]string      `json:"raw_signals,omitempty"`
-	Error          string                 `json:"error,omitempty"`
+	AuthIndex    string                 `json:"auth_index"`
+	Name         string                 `json:"name"`
+	Type         string                 `json:"type"`
+	Provider     string                 `json:"provider"`
+	Disabled     bool                   `json:"disabled"`
+	Status       string                 `json:"status"` // "idle", "loading", "healthy", "warning", "exhausted", "error", "stale", "unpublished"
+	ObservedAtMS int64                  `json:"observed_at_ms"`
+	Plan         *QuotaPlan             `json:"plan,omitempty"`
+	Windows      []QuotaWindow          `json:"windows"`
+	ResetCredits *CodexResetCreditsInfo `json:"reset_credits,omitempty"`
+	// ResetGrants lists Anthropic rate-limit reset grants beside the Claude
+	// quota, display-only: claiming one spends an entitlement and is out of scope.
+	ResetGrants    []ClaudeResetGrant  `json:"reset_grants,omitempty"`
+	ActiveCooldown *ActiveCooldown     `json:"active_cooldown,omitempty"`
+	Recommendation QuotaRecommendation `json:"recommendation"`
+	Capabilities   QuotaCapabilities   `json:"capabilities"`
+	RawSignals     map[string]string   `json:"raw_signals,omitempty"`
+	Error          string              `json:"error,omitempty"`
 }
 
 // QuotaOverviewSummary provides fleet-wide counts and stats.

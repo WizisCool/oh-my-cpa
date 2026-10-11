@@ -710,6 +710,22 @@ export const api = {
     });
   },
 
+  async probeProvider(payload: {
+    provider_id?: string;
+    family?: string;
+    base_url?: string;
+    api_key?: string;
+    proxy_url?: string;
+    model?: string;
+    headers?: Record<string, string>;
+    interactions?: boolean;
+  }): Promise<{ ok: boolean; status_code?: number; error?: string }> {
+    return request<{ ok: boolean; status_code?: number; error?: string }>('/management/providers/probe', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
     /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
   async getLogsStatus(): Promise<LogsStatus> {
     return request<LogsStatus>('/management/logs/status', { method: 'GET' });
@@ -1108,8 +1124,8 @@ export const api = {
     });
   },
 
-  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem }> {
-    return request<{ status: string; quota: QuotaItem }>('/management/quota/redeem-credit', {
+  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }> {
+    return request<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }>('/management/quota/redeem-credit', {
       method: 'POST',
       body: JSON.stringify({ auth_index: authIndex }),
     });

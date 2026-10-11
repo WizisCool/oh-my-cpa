@@ -201,6 +201,25 @@ func pluginEndpoint(id, suffix string) (string, error) {
 	return "/plugins/" + url.PathEscape(id) + suffix, nil
 }
 
+// FetchPluginQuota reads one credential's quota through the plugin that
+// provides it (`POST /plugins/:id/quota`). It is an ordinary CPA management
+// read, like the credential list itself: no plugin page is involved.
+func (c *Client) FetchPluginQuota(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error) {
+	endpoint, err := pluginEndpoint(pluginID, "/quota")
+	if err != nil {
+		return nil, err
+	}
+	authIndex = strings.TrimSpace(authIndex)
+	if authIndex == "" {
+		return nil, errors.New("auth_index is required")
+	}
+	var raw json.RawMessage
+	if err := c.doJSONBody(ctx, http.MethodPost, endpoint, map[string]string{"auth_index": authIndex}, &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
 // pluginConfigPath is `plugins.configs.<id>` in the v8 configuration.
 func pluginConfigPath(id string) ([]string, error) {
 	id = strings.TrimSpace(id)

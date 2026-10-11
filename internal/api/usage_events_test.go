@@ -562,6 +562,8 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 	event.FailStatusCode = 502
 	event.FailBody = `{"error":{"code":"server_is_overloaded"}}`
 	event.ResponseHeaders = `{"cf-ray":"fixture-ray-NRT","set-cookie":"fixture=1"}`
+	event.AccessProvider = "config-inline"
+	event.IsNativeKey = true
 	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
 		t.Fatal(err)
 	}
@@ -582,7 +584,8 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 		t.Fatalf("list fail status = %d, want 502", list.Items[0].FailStatusCode)
 	}
 	if strings.Contains(string(payload), "server_is_overloaded") || strings.Contains(string(payload), "fail_body") ||
-		strings.Contains(string(payload), "response_headers") {
+		strings.Contains(string(payload), "response_headers") || strings.Contains(string(payload), "access_provider") ||
+		strings.Contains(string(payload), "is_native_key") {
 		t.Fatalf("list leaked the upstream error body: %s", payload)
 	}
 	response, payload = getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, list.Items[0].ID))
@@ -594,10 +597,15 @@ func TestUsageEventFailureDetailStaysOnTheDetailView(t *testing.T) {
 			FailStatusCode  int                    `json:"fail_status_code"`
 			FailBody        string                 `json:"fail_body"`
 			ResponseHeaders []usage.ResponseHeader `json:"response_headers"`
+			AccessProvider  string                 `json:"access_provider"`
+			IsNativeKey     bool                   `json:"is_native_key"`
 		} `json:"event"`
 	}
 	if err := json.Unmarshal(payload, &detail); err != nil {
 		t.Fatal(err)
+	}
+	if detail.Event.AccessProvider != "config-inline" || !detail.Event.IsNativeKey {
+		t.Fatalf("detail access = (%q, %v), want (config-inline, true)", detail.Event.AccessProvider, detail.Event.IsNativeKey)
 	}
 	if detail.Event.FailStatusCode != 502 || detail.Event.FailBody != event.FailBody {
 		t.Fatalf("detail failure = %d %q", detail.Event.FailStatusCode, detail.Event.FailBody)

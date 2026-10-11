@@ -510,6 +510,9 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   identifiers, quota and rate limits, routing and edge, other - by header-name
   fragments (`web/src/types/responseHeaderGroups.ts`), without interpreting any
   provider's values.
+- **Access Path / Native Key**: Which of CPA's access providers authenticated the caller, and whether the caller's key came from CPA's native configured-key provider (`access_provider` / `is_native_key` on CPA's usage record, stored on the request record (`usage_events.access_provider`,
+  `is_native_key`). Caller authentication and the upstream credential type are independent facts: a caller on a native key can still be served by an upstream OAuth credential, so these fields never answer which upstream credential executed the request. An empty `access_provider` means the publishing gateway predates both fields; with a path present, `is_native_key` is a real answer — false on an OAuth path reads as a negative, not as unknown. Only the single-record view carries them, beside the
+authentication facts.
 - **Call Model / Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' and request list's call view one

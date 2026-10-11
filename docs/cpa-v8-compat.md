@@ -9,13 +9,21 @@ treats a v7 configuration file, which is what an upgraded deployment starts from
 
 ### Codex behavior path compatibility
 
-CPA v8.0.16 renders multi-agent optimization at
-`client.codex.optimize-multi-agent-v2` and orphan delegation compatibility at
-`upstream.codex.orphan-delegation-compatibility`. Its root configuration writes
-accept the historical `oauth.providers.codex.*` spellings and normalize the
-submitted values before merging them into the canonical document. Canonical
-values win by presence when both spellings are submitted, including explicit
-`false` and `null`.
+CPA moved the shared Codex, Claude and xAI provider behavior out of
+`oauth.providers.*` to `upstream.*` (the `v8SharedPaths` table in CPA's
+internal/config/config_v8.go), and multi-agent optimization to
+`client.codex.optimize-multi-agent-v2`. The canonical set the editor follows is:
+`upstream.codex` response-steering, disable-codex-cloaking, model-level-cooling,
+stream-bootstrap-buffering/timeout and orphan-delegation-compatibility;
+`upstream.claude` model-level-cooling, disable-claude-cloak-mode,
+disable-cloaking-model-list and the whole header-defaults subtree;
+`upstream.xai` inject-x-search; plus `client.codex.optimize-multi-agent-v2`.
+Codex live-media-relay and header-defaults, Antigravity, aistudio and Devin
+settings stay under `oauth.providers.*`: they are OAuth-only and were not
+relocated. Root configuration writes accept the historical `oauth.providers.*`
+spellings and normalize the submitted values before merging them into the
+canonical document. Canonical values win by presence when both spellings are
+submitted, including explicit `false` and `null`.
 
 The visual editor reads and edits a canonical field when that field is present.
 Otherwise it uses its historical v8 path, also when both spellings are absent:
@@ -26,7 +34,8 @@ paths before saving, visual edits use its draft location, and reverting a visual
 value preserves the independent source relocation. Edits made during a save follow the field if CPA relocates it
 in that readback. No gateway version-string guess or whole-document migration is
 required. `ConfigFieldDefinition.legacyYamlPath` declares this compatibility for
-these two controls only.
+each relocated control: the canonical `upstream.*` / `client.codex.*` path with
+the historical `oauth.providers.*` spelling as the fallback.
 
 This was verified with the official CPA v8.0.16 Linux ARM64 no-plugin binary:
 a historical root PATCH returned `200`, both canonical values remained enabled
@@ -43,7 +52,8 @@ Source references:
 - [v8.0.16 management alias normalization](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.16/internal/config/config_v8_api.go)
 
 The following measurements and mapping tables retain their CPA v8.0.2 baseline;
-the two paths above supersede the corresponding editor locations in that table.
+the canonical `upstream.*` / `client.codex.*` paths above supersede the
+corresponding editor locations in that table.
 
 ### Configuration option semantics
 
@@ -243,12 +253,14 @@ page field that edits it.
 | `server` | `discovery.service-name` | `server.discovery.service-name` | `discoveryServiceName` |
 | `server` | `discovery.service-type` | `server.discovery.service-type` | — |
 | `server` | `discovery.subtypes` | `server.discovery.subtypes` | — |
+| `server` | `github-token` | `server.github-token` | `githubToken` |
 | `server` | `host` | `server.host` | `host` |
 | `server` | `port` | `server.port` | `port` |
 | `server` | `tls.cert` | `server.tls.cert` | `tlsCert` |
 | `server` | `tls.enable` | `server.tls.enable` | `tlsEnable` |
 | `server` | `tls.key` | `server.tls.key` | `tlsKey` |
 | `server` | `trusted-proxies` | `server.trusted-proxies` | `trustedProxies` |
+| `client` | — | `client.codex.enable-apply-patch` | `codexEnableApplyPatch` |
 | `management` | `remote-management.allow-remote` | `management.allow-remote` | `rmAllowRemote` |
 | `management` | `remote-management.base-url` | `management.base-url` | `rmBaseUrl` |
 | `management` | `remote-management.disable-auto-update-panel` | `management.disable-auto-update-panel` | `rmDisableAutoUpdatePanel` |
@@ -305,18 +317,18 @@ page field that edits it.
 | `oauth` | `antigravity.sensitive-words` | `oauth.providers.antigravity.sensitive-words` | `antigravitySensitiveWords` |
 | `oauth` | `antigravity-signature-bypass-strict` | `oauth.providers.antigravity.signature-bypass-strict` | `antigravitySignatureBypassStrict` |
 | `oauth` | `antigravity-signature-cache-enabled` | `oauth.providers.antigravity.signature-cache-enabled` | `antigravitySignatureCacheEnabled` |
-| `oauth` | `claude-code.disable-cloaking-model-list` | `oauth.providers.claude.claude-code.disable-cloaking-model-list` | `claudeDisableCloakingModelList` |
-| `oauth` | `disable-claude-cloak-mode` | `oauth.providers.claude.disable-claude-cloak-mode` | `claudeDisableCloakMode` |
-| `oauth` | `claude-header-defaults.arch` | `oauth.providers.claude.header-defaults.arch` | `claudeHeaderArch` |
-| `oauth` | `claude-header-defaults.os` | `oauth.providers.claude.header-defaults.os` | `claudeHeaderOs` |
-| `oauth` | `claude-header-defaults.package-version` | `oauth.providers.claude.header-defaults.package-version` | `claudeHeaderPackageVersion` |
-| `oauth` | `claude-header-defaults.runtime-version` | `oauth.providers.claude.header-defaults.runtime-version` | `claudeHeaderRuntimeVersion` |
-| `oauth` | `claude-header-defaults.stabilize-device-profile` | `oauth.providers.claude.header-defaults.stabilize-device-profile` | `claudeHeaderStabilizeDeviceProfile` |
-| `oauth` | `claude-header-defaults.timeout` | `oauth.providers.claude.header-defaults.timeout` | `claudeHeaderTimeout` |
-| `oauth` | `claude-header-defaults.timezone` | `oauth.providers.claude.header-defaults.timezone` | `claudeHeaderTimezone` |
-| `oauth` | `claude-header-defaults.user-agent` | `oauth.providers.claude.header-defaults.user-agent` | `claudeHeaderUserAgent` |
-| `oauth` | `claude.model-level-cooling` | `oauth.providers.claude.model-level-cooling` | `claudeModelLevelCooling` |
-| `oauth` | `codex.disable-codex-cloaking` | `oauth.providers.codex.disable-codex-cloaking` | `codexDisableCloaking` |
+| `upstream` | `claude-code.disable-cloaking-model-list` | `upstream.claude.disable-cloaking-model-list` | `claudeDisableCloakingModelList` |
+| `upstream` | `disable-claude-cloak-mode` | `upstream.claude.disable-claude-cloak-mode` | `claudeDisableCloakMode` |
+| `upstream` | `claude-header-defaults.arch` | `upstream.claude.header-defaults.arch` | `claudeHeaderArch` |
+| `upstream` | `claude-header-defaults.os` | `upstream.claude.header-defaults.os` | `claudeHeaderOs` |
+| `upstream` | `claude-header-defaults.package-version` | `upstream.claude.header-defaults.package-version` | `claudeHeaderPackageVersion` |
+| `upstream` | `claude-header-defaults.runtime-version` | `upstream.claude.header-defaults.runtime-version` | `claudeHeaderRuntimeVersion` |
+| `upstream` | `claude-header-defaults.stabilize-device-profile` | `upstream.claude.header-defaults.stabilize-device-profile` | `claudeHeaderStabilizeDeviceProfile` |
+| `upstream` | `claude-header-defaults.timeout` | `upstream.claude.header-defaults.timeout` | `claudeHeaderTimeout` |
+| `upstream` | `claude-header-defaults.timezone` | `upstream.claude.header-defaults.timezone` | `claudeHeaderTimezone` |
+| `upstream` | `claude-header-defaults.user-agent` | `upstream.claude.header-defaults.user-agent` | `claudeHeaderUserAgent` |
+| `upstream` | `claude.model-level-cooling` | `upstream.claude.model-level-cooling` | `claudeModelLevelCooling` |
+| `upstream` | `codex.disable-codex-cloaking` | `upstream.codex.disable-codex-cloaking` | `codexDisableCloaking` |
 | `oauth` | `codex-header-defaults.beta-features` | `oauth.providers.codex.header-defaults.beta-features` | `codexHeaderBetaFeatures` |
 | `oauth` | `codex-header-defaults.user-agent` | `oauth.providers.codex.header-defaults.user-agent` | `codexHeaderUserAgent` |
 | `oauth` | `codex.identity-confuse` | `oauth.providers.codex.identity-confuse` | `codexIdentityConfuse` |
@@ -327,14 +339,14 @@ page field that edits it.
 | `oauth` | `codex.live-media-relay.public-ip` | `oauth.providers.codex.live-media-relay.public-ip` | `codexLivePublicIp` |
 | `oauth` | `codex.live-media-relay.udp-port-max` | `oauth.providers.codex.live-media-relay.udp-port-max` | `codexLiveUdpPortMax` |
 | `oauth` | `codex.live-media-relay.udp-port-min` | `oauth.providers.codex.live-media-relay.udp-port-min` | `codexLiveUdpPortMin` |
-| `oauth` | `codex.model-level-cooling` | `oauth.providers.codex.model-level-cooling` | `codexModelLevelCooling` |
-| `oauth` | `codex.optimize-multi-agent-v2` | `oauth.providers.codex.optimize-multi-agent-v2` | `codexOptimizeMultiAgentV2` |
-| `oauth` | `codex.orphan-delegation-compatibility` | `oauth.providers.codex.orphan-delegation-compatibility` | `codexOrphanDelegationCompatibility` |
-| `oauth` | `codex.response-steering` | `oauth.providers.codex.response-steering` | `codexResponseSteering` |
-| `oauth` | `codex.stream-bootstrap-buffering` | `oauth.providers.codex.stream-bootstrap-buffering` | `codexStreamBootstrapBuffering` |
-| `oauth` | `codex.stream-bootstrap-timeout` | `oauth.providers.codex.stream-bootstrap-timeout` | `codexStreamBootstrapTimeout` |
+| `upstream` | `codex.model-level-cooling` | `upstream.codex.model-level-cooling` | `codexModelLevelCooling` |
+| `client` | `codex.optimize-multi-agent-v2` | `client.codex.optimize-multi-agent-v2` | `codexOptimizeMultiAgentV2` |
+| `upstream` | `codex.orphan-delegation-compatibility` | `upstream.codex.orphan-delegation-compatibility` | `codexOrphanDelegationCompatibility` |
+| `upstream` | `codex.response-steering` | `upstream.codex.response-steering` | `codexResponseSteering` |
+| `upstream` | `codex.stream-bootstrap-buffering` | `upstream.codex.stream-bootstrap-buffering` | `codexStreamBootstrapBuffering` |
+| `upstream` | `codex.stream-bootstrap-timeout` | `upstream.codex.stream-bootstrap-timeout` | `codexStreamBootstrapTimeout` |
 | `oauth` | `devin.sensitive-words` | `oauth.providers.devin.sensitive-words` | `devinSensitiveWords` |
-| `oauth` | `xai.inject-x-search` | `oauth.providers.xai.inject-x-search` | `xaiInjectXSearch` |
+| `upstream` | `xai.inject-x-search` | `upstream.xai.inject-x-search` | `xaiInjectXSearch` |
 | `oauth` | `oauth-request-scoped-errors` | `oauth.request-scoped-errors` | — |
 | `multimedia` | `disable-image-generation` | `multimedia.disable-image-generation` | `disableImageGeneration` |
 | `multimedia` | `gpt-image-2-base-model` | `multimedia.gpt-image-2-base-model` | `gptImage2BaseModel` |

@@ -134,6 +134,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     color: '#4285F4',
     iconId: 'Google',
     protocolMatchers: ['vertex'],
+    behaviorSwitches: ['interactions'],
   },
   {
     id: 'interactions',
