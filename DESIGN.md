@@ -257,8 +257,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 │ nav      │                                          │
 │ (236px)  │ page content        ← scrolls alone      │
 │          │ (max-width: 1440px)                      │
-│ foot:    │                                          │
-│ CPA conn │                                          │
+│          │                                          │
 └──────────┴──────────────────────────────────────────┘
 ```
 
