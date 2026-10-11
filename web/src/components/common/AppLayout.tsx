@@ -311,34 +311,6 @@ export const AppLayout: React.FC = () => {
 
   const isCpaUnsupported = health?.cpa_management_api === 'unsupported';
   const isCpaManagementDisabled = health?.cpa_management_api === 'disabled';
-  const cpaState = health
-    ? (isCpaUnsupported ? t('shell.cpa_unsupported')
-      : isCpaManagementDisabled ? t('shell.cpa_management_disabled')
-        : health.cpa_connected ? t('shell.connected') : t('shell.offline'))
-    : '—';
-
-  /**
-   * The rail's foot: live CPA connection and version.
-   *
-   * It is one component because both navigations show it. The sheet used to omit it, which meant
-   * the surface a phone actually navigates from was the one surface that could not answer "is the
-   * gateway up" - and that answer is the reason an operator opens this console at all.
-   */
-  const siderFoot = (
-    <div className="app-sider-foot">
-      <div className="app-sider-foot-row">
-        <span>{t('shell.cpa')}</span>
-        <span className="terminal-mono">{cpaState}</span>
-      </div>
-      {health?.version && (
-        <div className="app-sider-foot-row">
-          <span>{t('shell.version')}</span>
-          <span className="terminal-mono">{health.version}</span>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <Layout
       className="app-shell"
@@ -374,18 +346,6 @@ export const AppLayout: React.FC = () => {
             </div>
           ) : brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
-          {isCollapsed ? (
-            <Tooltip
-              title={`${t('shell.cpa')} · ${cpaState}`}
-              placement="right"
-            >
-              <div className="app-sider-foot is-collapsed">
-                <span className={`legend-dot ${health ? (isCpaUnsupported || isCpaManagementDisabled ? 'warning' : health.cpa_connected ? 'success' : 'danger') : 'neutral'}`} />
-              </div>
-            </Tooltip>
-          ) : (
-            siderFoot
-          )}
         </Sider>
       )}
       <Layout className="app-body">
@@ -441,7 +401,7 @@ export const AppLayout: React.FC = () => {
         </Content>
       </Layout>
       {isMobile && (
-        /* The sheet carries the same three parts as the rail - brand, nav, foot - because it is the
+        /* The sheet carries the same parts as the rail - brand and nav - because it is the
            rail at a phone width, not a menu of links. Its width is bounded in `vw` as well as `px:`
            at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask, and the
            reader loses the sense that this is a layer over where they were. The safe-area inset
@@ -457,7 +417,6 @@ export const AppLayout: React.FC = () => {
         >
           {brand}
           <OverlayScrollArea className="app-sider-scroll" viewportClassName="app-sider-viewport">{menu}</OverlayScrollArea>
-          {siderFoot}
         </Drawer>
       )}
     </Layout>

@@ -912,11 +912,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; border-radius: var(--radius-xs); object-fit: contain; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
 .app-menu .ant-menu-item-selected:hover { background: var(--surface) !important; }
-.app-sider-foot { border-top: 1px solid var(--border); padding: 10px 12px; color: var(--muted); font-size: var(--text-2xs); line-height: 1.8; display: flex; flex-direction: column; gap: 2px; min-height: 33px; justify-content: center; }
-/* Collapsed, the two label rows wrap to one character per line and blow the
-   footer up to 113px in a 57px column. A single pip says the same thing, and
-   the header already carries the full connection pill. */
-.app-sider-foot.is-collapsed { align-items: center; padding: 10px 0; }
 /* Stands in for every page while the gateway is older than CPA v8. The steps read
    left-aligned under the centred result, like instructions rather than a slogan. */
 .cpa-blocked { max-width: 680px; margin: 48px auto; padding: 0 16px; }
@@ -940,7 +935,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    line, which is what dragged the icon left of centre. Take it out of the
    layout; the row's own `title` and antd's tooltip still carry the name. */
 .ant-layout-sider-collapsed .app-menu .ant-menu-title-content { display: none; }
-.app-sider-foot-row { display: flex; justify-content: space-between; gap: 8px; }
 /* Collapsed there is no room for a wordmark, so the row centres the O instead. */
 .app-brand-collapsed { justify-content: center; padding: 0; border-bottom: 1px solid var(--border); }
 /* With `viewport-fit=cover` the shell owns the whole screen, which in landscape puts the

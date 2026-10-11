@@ -967,7 +967,8 @@ and halo. Ringing the inner field too drew a second rectangle inside the control
   uppercase `--meta`. Items: icon + label only, no subtitles. Selected item =
   2px `--fg` inset rule (`box-shadow: inset 2px 0 0 var(--fg)`) + `--fg` bold text,
   never a filled background block. Hover uses `--surface` for immediate feedback.
-- Sider foot shows live CPA connection + version in `--meta`.
+- The rail ends with its navigation: CPA connection and version are read on the
+  System Information page, not repeated in the shell.
 
 ### OpenCode-inspired patterns
 
@@ -995,7 +996,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - The left side hosts the navigation toggle and the current group/page breadcrumb; product artwork belongs to the side rail or the phone navigation sheet;
    - The right side houses five fixed-width actions: the project GitHub link, refresh, the theme mode control, the language menu, and sign out. **The mode control cycles and the language control is a menu**, and that asymmetry is deliberate. The theme was a menu while the console carried six palettes and a toggle could only answer "the other one"; the palettes now belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the whole console as it is picked, so the header's remaining question is light or dark - with follow-the-system as the third state, one icon per state (a sun, a moon, a desktop). The control's tooltip is its own name and deliberately not a sentence about its state; the states are named in words on the settings page's own row. The language stays a menu because four languages, one of which the reader may not read, is exactly the case a list answers: it names every choice by its **endonym** - its own name in its own script, never a translation. The settings page's language picker lists the same endonyms.
    - The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; it shows no tooltip — the mark names it and the unfolding count answers the hover — while its accessible name follows the reading language, and it remains available in the demonstration. At rest the link is the mark alone; pointed at or focused, it unfolds the project's star count before the mark over `base` — a star glyph and the count, exact below a thousand and truncated thousands with two decimals above (`1.23k`) — once the server has read one, and under reduced motion it still waits for the pointer or focus but appears at once, without the transition. It is the first control of a right-aligned row and the label leads, so unfolding widens it away from the others and the mark stays under the pointer; a device with no hover shows the count throughout. A hairline separates the link from the console's own actions. All five actions are one component, `web/src/components/common/HeaderAction.tsx`: 32px high, borderless at rest, the same hover and the same label treatment for the star count and the language code. **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
-   - On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
+   - On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. Connection status and version are the System Information page's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 8. **Form Workbench & Setting Group Panels**
    - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
@@ -2313,16 +2314,13 @@ move, and that coast kept firing while the finger was still down. The console mo
 
 ### The phone's navigation is the rail, in a sheet
 
-There is no bottom bar and no phone-specific menu. The sheet carries the rail's own three parts —
-brand, grouped nav, then the CPA connection and version — because a phone does not have less to
-navigate, it has less room to show it in, and a second navigation would be a second place for the
-grouping to drift. Two consequences follow:
+There is no bottom bar and no phone-specific menu. The sheet carries the rail's own two parts —
+brand and grouped nav — because a phone does not have less to navigate, it has less room to show
+it in, and a second navigation would be a second place for the grouping to drift.
 
-- **The foot is not optional.** The connection state is why an operator opens this console at all,
-  and a sheet that omits it makes the phone the one surface that cannot answer "is the gateway up".
-- **The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
-  320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
-  layer over where they were — which is also what tells them Back will put it away.
+**The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
+320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
+layer over where they were — which is also what tells them Back will put it away.
 
 A bottom tab bar was considered and rejected: it costs 56px of vertical space plus the home-indicator
 inset on every screen, in a console whose subject is dense tables, and it cannot express four groups
