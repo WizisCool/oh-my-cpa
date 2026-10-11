@@ -863,16 +863,6 @@ a { color: inherit; }
 .ant-btn.row-action-btn:not(:disabled):hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 .ant-btn.row-action-btn.ant-btn-dangerous:not(:disabled):hover { border-color: var(--danger) !important; color: var(--danger) !important; }
 .ant-btn.row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
-/* A switch and the word for its state, side by side in one cell. */
-.switch-status-cell { display: inline-flex; align-items: center; gap: 8px; }
-
-
-.terminal-eyebrow {
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
 .terminal-title { margin: 4px 0 0; font-size: var(--text-xl); line-height: 1.25; }
 .terminal-panel {
   border: 1px solid var(--border);
@@ -880,7 +870,6 @@ a { color: inherit; }
   background: var(--surface);
 }
 .terminal-muted { color: var(--muted); }
-.terminal-meta { color: var(--meta); }
 .terminal-mono { font-variant-numeric: tabular-nums; }
 
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
@@ -923,9 +912,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; border-radius: var(--radius-xs); object-fit: contain; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
 .app-menu .ant-menu-item-selected:hover { background: var(--surface) !important; }
-/* A page waiting on the operator (models without a price) carries a warn pip after its label. */
-.nav-label-with-count { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.nav-count { min-width: 20px; padding: 0 5px; border: 1px solid var(--warn); border-radius: var(--radius-sm); color: var(--warn); font-size: var(--text-2xs); text-align: center; line-height: 17px; }
 .app-sider-foot { border-top: 1px solid var(--border); padding: 10px 12px; color: var(--muted); font-size: var(--text-2xs); line-height: 1.8; display: flex; flex-direction: column; gap: 2px; min-height: 33px; justify-content: center; }
 /* Collapsed, the two label rows wrap to one character per line and blow the
    footer up to 113px in a 57px column. A single pip says the same thing, and
@@ -988,7 +974,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 @media (max-width: 900px) {
   .app-content { overflow-x: hidden; }
 }
-.app-footer { display: none; }
 
 /* ── mobile navigation sheet ────────────────────────────────────────────────
    The sheet is the side rail at a phone width, so it carries the rail's three parts -
@@ -1084,8 +1069,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 @media (max-width: 900px) {
   .terminal-page { padding: 24px 16px 40px; }
-  .app-footer { padding-inline: 16px; flex-direction: column; gap: 4px; }
-  .dashboard-hero { align-items: flex-start; flex-direction: column; padding: 20px; }
 }
 
 @media (max-width: 900px) {
@@ -1656,13 +1639,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* Form Controls */
-.config-field-control,
 .settings-field-control {
   display: flex;
   align-items: center;
 }
 
-.config-field-control .ant-input-affix-wrapper,
 .settings-field-control .ant-input-affix-wrapper {
   width: 100% !important;
   height: 40px !important;
@@ -1675,7 +1656,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   box-sizing: border-box !important;
 }
 
-.config-field-control .ant-input-affix-wrapper > input.ant-input,
 .settings-field-control .ant-input-affix-wrapper > input.ant-input {
   height: auto !important;
   line-height: 1.5 !important;
@@ -1683,7 +1663,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   margin: 0 !important;
 }
 
-.config-field-control > .ant-input,
 .settings-field-control > .ant-input {
   width: 100% !important;
   height: 40px !important;
@@ -1694,7 +1673,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* Number inputs: compact semantic width 132px + unit, left-aligned text avoiding stepper overlap */
-.config-number-control,
 .settings-number-control {
   display: inline-flex;
   align-items: center;
@@ -1702,7 +1680,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: auto;
 }
 
-.config-number-control .ant-input-number,
 .settings-number-control .ant-input-number {
   flex: 0 0 132px !important;
   width: 132px !important;
@@ -1711,14 +1688,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   border-radius: var(--radius-sm) !important;
 }
 
-.config-number-control .ant-input-number-input-wrap,
 .settings-number-control .ant-input-number-input-wrap {
   height: 100% !important;
   display: flex !important;
   align-items: center !important;
 }
 
-.config-number-control .ant-input-number-input,
 .settings-number-control .ant-input-number-input {
   height: 38px !important;
   line-height: 38px !important;
@@ -1728,7 +1703,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* Select dropdowns */
-.config-field-control .ant-select,
 .settings-field-control .ant-select {
   width: 100% !important;
   max-width: 280px !important;
@@ -1736,7 +1710,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-size: var(--text-base) !important;
 }
 
-.config-field-control .ant-select-selector,
 .settings-field-control .ant-select-selector {
   height: 40px !important;
   padding-inline: 12px !important;
@@ -1745,7 +1718,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   align-items: center !important;
 }
 
-.config-field-control .ant-select-selection-item,
 .settings-field-control .ant-select-selection-item {
   line-height: 38px !important;
   font-size: var(--text-base) !important;
@@ -1775,12 +1747,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .config-mono-input {
   font-family: var(--font-mono);
-}
-
-.keys-key-editor-hint {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
 }
 
 /* Square key action buttons: a 1px frame on the row's own actions, none on the glyphs that sit
@@ -1975,18 +1941,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   height: 34px;
 }
 
-.theme-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.theme-menu-swatch {
-  width: 44px;
-  height: 14px;
-  flex: none;
-}
-
 /* A flag is drawn at a fixed size so a language switch cannot resize the control it
    sits in. The hairline border is the same one the swatches wear: several flags carry
    a white field, which would otherwise dissolve into a light theme's surface. */
@@ -2171,7 +2125,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      `!important` is deliberate here and is not a shortcut. antd injects its component styles
      into the document at runtime, after this stylesheet, so an equal-specificity rule from
      here loses on source order; and the console's own field wrappers
-     (`.settings-field-control`, `.config-number-control`) raise specificity above it again.
+     (`.settings-field-control`, `.settings-number-control`) raise specificity above it again.
      Enumerating those wrappers would mean this floor silently stops applying the next time a
      field gains one, which is the defect it exists to prevent. It is a device-level floor,
      so it is meant to outrank the component layer. */

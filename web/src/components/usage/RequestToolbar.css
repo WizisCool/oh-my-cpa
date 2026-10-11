@@ -3,8 +3,7 @@
   flex-direction: column;
   gap: 12px;
 }
-.request-filters,
-.request-advanced {
+.request-filters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
