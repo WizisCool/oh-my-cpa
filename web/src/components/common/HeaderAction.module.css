@@ -4,3 +4,20 @@
 .muted.muted { color: var(--muted); }
 /* Tabular figures hold the control's width when a digit changes under it. */
 .label { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: var(--text-md); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+
+/* A folded label. At rest the control is exactly an icon button: no gap, and the label's
+   track is zero wide. A trailing spacer inside the label stands in for the gap, so it is
+   clipped away with the label instead of leaving the control wider than its neighbours;
+   padding could not do this, because a box never shrinks below its own padding. */
+.folding.folding { flex-direction: row-reverse; gap: 0; padding: 0 8px; }
+.fold { display: grid; grid-template-columns: 0fr; opacity: 0; transition: grid-template-columns var(--motion-base), opacity var(--motion-base); }
+.fold > .label { min-width: 0; overflow: hidden; }
+.fold > .label::after { content: ''; flex: none; width: 2px; }
+.folding:hover .fold, .folding:focus-visible .fold { grid-template-columns: 1fr; opacity: 1; }
+/* Nothing to point with: the label would otherwise never be seen. */
+@media (hover: none) {
+  .fold { grid-template-columns: 1fr; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fold { transition: none; }
+}

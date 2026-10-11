@@ -153,6 +153,13 @@ const EXCEPTIONS = [
     property: 'margin',
     why: 'Part of the same disclosure: collapsing the header to zero height still leaves its box gap, and the negative margin is what takes that back.',
   },
+  {
+    kind: 'layout',
+    file: 'components/common/HeaderAction.module.css',
+    selector: '.fold',
+    property: 'grid-template-columns',
+    why: 'A disclosure, turned sideways. A header action unfolds its label under the pointer, at a width known only once drawn; the grid 0fr/1fr technique folds it from that width within `base`, and reduced motion removes it. The control is first in a right-aligned row, so the reflow moves nothing the pointer is on.',
+  },
 ];
 
 /** Strip comments so prose about a duration is never read as one. */

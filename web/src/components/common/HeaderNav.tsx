@@ -36,14 +36,14 @@ interface HeaderNavProps {
  * the exit-door icon carries the meaning at a glance.
  *
  * Every desktop control is a `HeaderAction`, which is what gives the row one height, one
- * weight and one hover. The repository link is the exception to fixed width: once the
- * server has read the project's star count it carries it as its label. It sits first in
- * a right-aligned cluster, so the count arriving widens it away from the other controls
- * and none of them moves. The count comes from the server, never from the browser asking
- * GitHub, which keeps the console free of third-party requests; until it is known the
- * link is the icon alone. The tooltip names the action only - the count is already on
- * the control. A hairline separates the link from the console's own actions: it leaves
- * the console, they act on it.
+ * weight and one hover. The repository link is the exception to fixed width, and only
+ * while it is pointed at or focused: at rest it is the GitHub mark alone, and it unfolds
+ * the project's star count once the server has read one. It sits first in a
+ * right-aligned cluster, so unfolding widens it away from the other controls and none of
+ * them moves. The count comes from the server, never from the browser asking GitHub,
+ * which keeps the console free of third-party requests. The tooltip names the action
+ * only - the count is already on the control. A hairline separates the link from the
+ * console's own actions: it leaves the console, they act on it.
  *
  * This cluster carries actions only. Connection status and version are the side rail
  * foot's, which is their one place, and a mount path is fixed for the life of a
@@ -128,6 +128,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
         href={REPOSITORY_URL}
         target="_blank"
         rel="noopener noreferrer"
+        isLabelFolded
       >
         {stars}
       </HeaderAction>

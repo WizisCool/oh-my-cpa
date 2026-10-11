@@ -9,6 +9,11 @@ interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' 
   accessibleLabel?: string;
   /** `muted` recedes an action that is rarely the one reached for. */
   tone?: 'default' | 'muted';
+  /**
+   * Fold the label away until the control is pointed at or focused. For a reading that is
+   * worth having on request but not worth a permanent place in the row.
+   */
+  isLabelFolded?: boolean;
 }
 
 /**
@@ -20,21 +25,27 @@ interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' 
  * and gets the same label treatment as the others instead of a form of its own; that is
  * what keeps the cluster reading as a row of equals rather than five designs.
  *
+ * A folded label unfolds before the icon rather than after it. The cluster is
+ * right-aligned, so a control can only grow to the left: with the label leading, the icon
+ * stays where the pointer found it instead of sliding out from under it.
+ *
  * Props and the ref pass through to the button so a `Dropdown` can use it as its trigger.
  */
 export const HeaderAction = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, HeaderActionProps>(
-  ({ tooltip, accessibleLabel, tone = 'default', className, children, ...buttonProps }, ref) => {
+  ({ tooltip, accessibleLabel, tone = 'default', isLabelFolded = false, className, children, ...buttonProps }, ref) => {
     const hasLabel = children !== undefined && children !== null && children !== false;
     const classNames = [
       styles['action'],
-      hasLabel ? styles['labelled'] : '',
+      hasLabel && !isLabelFolded ? styles['labelled'] : '',
+      hasLabel && isLabelFolded ? styles['folding'] : '',
       tone === 'muted' ? styles['muted'] : '',
       className,
     ].filter(Boolean).join(' ');
+    const label = hasLabel ? <span className={styles['label']}>{children}</span> : null;
     return (
       <Tooltip title={tooltip}>
         <Button ref={ref} type="text" className={classNames} aria-label={accessibleLabel ?? tooltip} {...buttonProps}>
-          {hasLabel ? <span className={styles['label']}>{children}</span> : null}
+          {label && isLabelFolded ? <span className={styles['fold']}>{label}</span> : label}
         </Button>
       </Tooltip>
     );
