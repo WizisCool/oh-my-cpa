@@ -1,0 +1,18 @@
+.request-failure-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+.request-failure-detail p {
+  margin: 8px 0 0;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+}
+.request-failure-detail .req-overview-error-body {
+  margin-top: 8px;
+  max-height: 220px;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}

@@ -37,6 +37,8 @@ import { ModelMark } from '../ModelMark';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useToast } from '../feedback';
+import './RequestList.css';
+import './requestMarks.css';
 
 export interface RequestRowProps {
   event: UsageEvent;

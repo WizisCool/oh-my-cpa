@@ -10,6 +10,7 @@ import {
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import type { UsageEvent } from '../../types/usageEvents';
 import { ProviderBrandIcon, getProviderDefaultIcon } from '../LobeIcon';
+import './requestMarks.css';
 
 const MARK_SIZE = 16;
 

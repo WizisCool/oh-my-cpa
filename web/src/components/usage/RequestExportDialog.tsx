@@ -27,6 +27,7 @@ import {
 } from './requestSelection';
 import { buildRequestSheet } from './requestSheetModel';
 import { canvasToPng, paintRequestSheet, type SheetImageCache } from './requestSheetPainter';
+import './RequestExportDialog.css';
 
 export interface RequestExportDialogProps {
   open: boolean;

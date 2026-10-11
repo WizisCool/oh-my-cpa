@@ -189,7 +189,7 @@ export const SHEET_GRID_CHROME: RequestGridChrome = { hasSelection: false, hasCh
 /**
  * The list width at and below which each record is a stacked card instead of a
  * row of columns. It is the `reqstream` container threshold in
- * `UsageEventsPage.css`; a stacked record labels every field, so nothing folds.
+ * `RequestList.css`; a stacked record labels every field, so nothing folds.
  */
 export const REQUEST_STACK_WIDTH = 920;
 

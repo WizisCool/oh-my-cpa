@@ -1,4 +1,5 @@
 import React from 'react';
+import './requestMarks.css';
 
 /** The two verdicts the filter controls can name. 'all' is not a third verdict:
  *  it is the absence of one, so it gets no marker at all. */

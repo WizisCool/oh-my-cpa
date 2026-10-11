@@ -1,0 +1,125 @@
+/* A filter option led by the mark its rows carry. The label keeps the truncation; the mark never
+   shrinks, so a long model name cannot squeeze the picture that identifies it. */
+.req-facet-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.req-facet-option-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.req-facet-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The compact status marker used by the verdict filter controls. It shares the
+   Result column's square-bullet vocabulary and its success/danger tokens, so an
+   outcome is legible the same way in the filter and in the rows it filters.
+   Only the verdicts carry one; the all-requests segment is labelled in words. */
+.req-result-marker {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-xs);
+  background: currentColor;
+  flex-shrink: 0;
+}
+.req-result-marker.is-success {
+  color: var(--success);
+}
+.req-result-marker.is-failed {
+  color: var(--danger);
+}
+.req-result-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.req-model-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* A mark is an icon in the badge's own box, so a row of them reads as one strip. */
+.req-mode-mark,
+.req-non-stream-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  cursor: help;
+  flex-shrink: 0;
+}
+/* The fast lane is the accent, not amber: lightning is conventionally yellow, but
+   amber is this console's warning hue and a request served quickly is not one. */
+.req-fast-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.req-fast-icon svg {
+  fill: currentColor;
+}
+.req-non-stream-icon {
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.req-non-stream-icon:hover {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
+}
+.request-served-model {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.request-failure-tooltip {
+  width: min(440px, calc(100vw - 32px));
+}
+/* The panel hangs a few pixels off its pill, and a pointer crossing that gap is
+   over neither. The bridge extends the panel's own hit area across it, so the
+   way from the pill to the copy button never leaves the popup. */
+.request-failure-tooltip::before {
+  content: '';
+  position: absolute;
+  inset: -12px 0;
+  z-index: -1;
+}
+.req-overview-error-status {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono, monospace);
+}
+.req-overview-error-body {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono, monospace);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

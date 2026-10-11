@@ -141,14 +141,14 @@ const EXCEPTIONS = [
   },
   {
     kind: 'layout',
-    file: 'pages/UsageEventsPage.css',
+    file: 'components/usage/RequestFoldControls.css',
     selector: '.request-collapsible-header',
     property: 'grid-template-rows',
     why: 'A disclosure, and a large one: this block is the request page\u2019s own header and its whole filter toolbar, folded away so a reader can scroll it out of the way. The grid 0fr/1fr technique folds it from its own height, as `.settings-tls-body` does. Its `margin` rides along in the same declaration for the same reason.',
   },
   {
     kind: 'layout',
-    file: 'pages/UsageEventsPage.css',
+    file: 'components/usage/RequestFoldControls.css',
     selector: '.request-collapsible-header',
     property: 'margin',
     why: 'Part of the same disclosure: collapsing the header to zero height still leaves its box gap, and the negative margin is what takes that back.',

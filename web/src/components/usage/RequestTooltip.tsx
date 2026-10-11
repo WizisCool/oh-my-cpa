@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Popover, Tooltip } from 'antd';
 import { RequestFailureDetail } from './RequestFailureDetail';
+import './requestMarks.css';
 
 const TOOLTIP_INTENT_DELAY_MS = 100;
 /** The class both popups carry on their root; the page has one of them at a time. */

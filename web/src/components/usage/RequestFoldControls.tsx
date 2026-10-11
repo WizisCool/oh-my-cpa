@@ -4,6 +4,7 @@ import { Button, Tooltip } from 'antd';
 import { useT } from '../../i18n';
 import { FullscreenExitOutlined, FullscreenOutlined, VerticalAlignTopOutlined } from '../icons';
 import { useViewFlag, type ViewFlag } from './viewFlag';
+import './RequestFoldControls.css';
 
 /**
  * The request page's elements that show a scroll-driven flag. Each subscribes to

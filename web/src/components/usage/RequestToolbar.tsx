@@ -20,6 +20,8 @@ import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
 import { SearchInput } from '../common/SearchInput';
+import './RequestToolbar.css';
+import './requestMarks.css';
 
 interface RequestToolbarProps {
   search: string;

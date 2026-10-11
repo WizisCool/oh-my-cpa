@@ -33,6 +33,7 @@ import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { AppDrawer } from '../common/AppDrawer';
 import styles from './RequestFilterDrawer.module.css';
 import { SectionHeading } from '../common/SectionHeading';
+import './requestMarks.css';
 
 /**
  * canonicalViewKey gives the committed view a stable identity so the drawer can

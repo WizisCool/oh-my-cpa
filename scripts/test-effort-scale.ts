@@ -115,7 +115,7 @@ for (const [mode, id] of [['dark', 'omc-dark'], ['light', 'omc-light']] as const
 
 // The neutral step the list paints must be the one measured above.
 const listCss = fs.readFileSync(
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'web/src/pages/UsageEventsPage.css'),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'web/src/components/usage/RequestList.css'),
   'utf8',
 );
 assert.match(

@@ -62,7 +62,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireWeb = createRequire(new URL('../web/package.json', import.meta.url));
 const { theme: antdTheme } = requireWeb('antd');
 const css = readFileSync(path.join(root, 'web', 'src', 'index.css'), 'utf8');
-const requestCss = readFileSync(path.join(root, 'web', 'src', 'pages', 'UsageEventsPage.css'), 'utf8');
+const requestCss = readFileSync(path.join(root, 'web', 'src', 'components', 'usage', 'RequestList.css'), 'utf8');
 const requestRowRule = requestCss.match(/\.request-row\s*\{([^}]+)\}/)?.[1] ?? '';
 const requestRowMinHeight = Number(requestRowRule.match(/min-height:\s*(\d+)px/)?.[1]);
 

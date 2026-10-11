@@ -1,0 +1,64 @@
+/* The preview is the image itself, fitted to the dialog's width: the whole picture is in view
+   and only its height scrolls. */
+.req-export-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.req-export-format {
+  margin-bottom: 12px;
+}
+.req-export-json {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg-2);
+  font: 12px/1.6 var(--font-mono);
+  white-space: pre;
+  overflow: auto;
+}
+.req-export-masks {
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.req-export-masks legend {
+  padding: 0;
+  margin-bottom: 2px;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.req-export-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.req-export-mask-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+}
+.req-export-masks .ant-checkbox-group {
+  gap: 6px 16px;
+}
+.req-export-columns {
+  flex: 1 1 220px;
+  max-width: 360px;
+  min-width: 0;
+}
+.req-export-dialog .omc-notice {
+  margin-bottom: 12px;
+}
+.req-export-preview {
+  max-height: min(52vh, 560px);
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+}
+.req-export-preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

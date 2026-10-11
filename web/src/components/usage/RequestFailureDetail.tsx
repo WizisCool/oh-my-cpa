@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { CopyButton } from '../common/CopyButton';
+import './RequestFailureDetail.css';
+import './requestMarks.css';
 
 /**
  * Why one failed request failed, for the list's hover popup.

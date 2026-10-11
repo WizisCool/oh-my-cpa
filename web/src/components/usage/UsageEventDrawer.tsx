@@ -41,6 +41,8 @@ import { LoadFailure, Notice } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { AppDrawer } from '../common/AppDrawer';
 import { CopyButton } from '../common/CopyButton';
+import './UsageEventDrawer.css';
+import './requestMarks.css';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;

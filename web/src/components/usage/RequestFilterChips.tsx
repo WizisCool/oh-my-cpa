@@ -4,6 +4,7 @@ import { CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { activeFilterCount } from '../../types/usageEventQuery';
+import './RequestFilterChips.css';
 
 /** How one chip names itself, given the raw committed value. */
 export interface ChipDescriptor {

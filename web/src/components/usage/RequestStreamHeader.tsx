@@ -7,6 +7,7 @@ import {
   type RequestColumnId,
   type RequestColumnWidths,
 } from './requestColumns';
+import './RequestList.css';
 
 interface RequestStreamHeaderProps {
   colWidths: RequestColumnWidths;
