@@ -301,7 +301,7 @@ func (l *cpaModelLister) ListConfiguredModelSnapshot(ctx context.Context) (prici
 	}
 	providers := make([]pricing.CatalogProvider, 0, len(snapshot.Providers))
 	for _, provider := range snapshot.Providers {
-		providers = append(providers, pricing.CatalogProvider{ID: provider.ID, Family: provider.Family, Name: provider.Name, Prefix: provider.Prefix, EndpointHost: provider.EndpointHost, Channel: provider.Channel, Priority: provider.Priority, IsOAuth: provider.IsOAuth, Models: provider.Models})
+		providers = append(providers, pricing.CatalogProvider{ID: provider.ID, Family: provider.Family, Name: provider.Name, Prefix: provider.Prefix, EndpointHost: provider.EndpointHost, Channel: provider.Channel, Priority: provider.Priority, IsOAuth: provider.IsOAuth, Models: provider.ListPricingModelIDs()})
 	}
 	return pricing.ModelCatalogSnapshot{Models: snapshot.Models, Providers: providers}, nil
 }

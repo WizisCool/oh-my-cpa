@@ -3094,6 +3094,14 @@ live advertised IDs. Unmatched live models retain empty provider/upstream identi
 failed enrichment emits named `partial` conditions without hiding the live list. This
 additional in-memory projection does not change pricing persistence.
 
+The shared management snapshot also reads sanitized global OAuth alias rules once
+when enabled credentials exist. Only rules matching a credential's registered ID
+add their upstream to the pricing identity map and OAuth route provenance.
+Provider `Models` remain client-visible; `internal/app` adapts OAuth membership
+through `ConfiguredModelProvider.ListPricingModelIDs` for the price book. A failed
+alias read makes pricing discovery incomplete, preserving its persisted catalog;
+Model Square continues to intersect provenance with the live advertised list.
+
 The HTTP handler projects API-owned DTO allowlists for the directory, its model
 references and their nested facts/links, independent of operation/catalog type growth.
 The DTO contains advertised `models`, safe `providers`, exact `routes`, `partial`,

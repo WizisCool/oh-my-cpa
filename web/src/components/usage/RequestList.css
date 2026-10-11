@@ -408,15 +408,21 @@
   color: var(--muted);
   flex-shrink: 0;
 }
-.req-model-served {
+.req-model-served,
+.req-model-routed {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   max-width: 100%;
   font-size: var(--text-xs);
   font-family: var(--font-mono, monospace);
-  color: var(--warn);
   overflow: hidden;
+}
+.req-model-served {
+  color: var(--warn);
+}
+.req-model-routed {
+  color: var(--fg-2);
 }
 .req-model-served-icon {
   flex-shrink: 0;

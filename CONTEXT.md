@@ -508,6 +508,15 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   detail) reads as one line, because the split between them is not a difference
   the caller chose. The requested-model view keeps the model CPA actually routed to distinct.
   Call view is the default; the choice is stored as the `omc_models_view` preference.
+  An aliased request leads with its call model and shows the routed upstream on a
+  neutral second line. A served substitution takes that line instead; the routed
+  upstream remains in the tooltip. Requested-model view does not repeat it.
+- **OAuth pricing identity**: An enabled credential's registered alias resolves
+  through its provider's global OAuth alias rules. Both the alias and its upstream
+  belong to the pricing catalog even if CPA only advertises the alias; this does
+  not make the upstream a callable Model Square entry. An unreadable alias map
+  cannot replace the last complete catalog. Locks use the recorded requested
+  model, and linking a price never changes historical unpriced snapshots.
 - **Requested Model**: The model name that CPA routed and requested from the upstream
   provider (`usage_events.model`).
 - **Actual Model / Served Model**: The model an upstream reported having served for one

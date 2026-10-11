@@ -354,6 +354,9 @@ The geometric form language is compact, rectangular, and tightly controlled:
 
 - **Payload Rules**: All categories start collapsed. Disclosure does not edit the YAML; external document updates preserve the chosen state. A failed save opens the first invalid category.
 
+### Request Model Identity
+- **Caller-first by default**: The request row leads with the call model. An alias adds its routed upstream as a neutral `--fg-2` second line. Requested-model view leads with the upstream without repeating it. A served substitution takes priority on the second line in `--warn`; the routed upstream remains in the tooltip. The cell stays within two lines and the 68px row estimate. See `docs/design.md` §2.
+
 ### Caller-Key Masks
 - **One Pattern, One Chip**: The request list's pattern filter is a field select joined to a mono pattern input, committed and removed as a single chip; its hint states RE2, match-anywhere and `(?i)`. See `docs/design.md` §2.
 - **Marked Options**: A model, provider or credential filter option is led by the 16px mark its rows carry - the maker's mark by Model Square's rule, the provider's through the request row's own resolver - so the option and the rows it leaves show one picture. Vocabularies of plain words get no mark. See `docs/design.md` §2.

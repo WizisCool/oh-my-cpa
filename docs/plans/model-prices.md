@@ -113,6 +113,22 @@ offers it instead, restricted to the family's first-party authors. A recognized 
 
 A CPA alias with conflicting targets is persisted with an empty `price_model`. It stays visible but does not auto-match; other models continue syncing. A newly ambiguous alias retires its previous automatic price, while custom prices and operator links remain authoritative. Invalid model identities still reject the entire snapshot.
 
+OAuth discovery combines enabled credentials' registered IDs with their provider's
+sanitized global OAuth alias rules. An alias present in a credential contributes
+both its call point and its resolved upstream to the pricing catalog, including
+when CPA hides the original name (`fork: false`). Alias targets are price-matching
+identities, not implicit links: a reasoning variant without an exact safe match
+still needs an operator link or custom price. Inactive rules and disabled
+credentials contribute nothing. Unreadable alias rules reject the snapshot and
+retain the last complete persisted catalog.
+
+The management snapshot keeps provider `Models` client-visible for Model Square;
+its OAuth `Routes` retain the upstream separately. The app's pricing adapter uses
+`ListPricingModelIDs` to include both in provider membership, so an upstream can
+be edited in the price book without being advertised as callable. Request locks
+continue using the recorded upstream `usage_events.model`; existing unpriced
+requests are not backfilled when an operator links that upstream.
+
 ## Components
 
 - `migrations/028_openrouter_pricing.sql`: rebuilds `model_prices` (tiers, upstream

@@ -77,6 +77,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     const isCallView = modelView === 'call';
     const callModel = event.model_alias || event.model;
     const requestModel = event.model;
+    const hasServedModel = Boolean(event.model_substituted && event.response_model);
+    const hasRoutedModel = isCallView && callModel !== requestModel && Boolean(requestModel);
     const displayModel = (isCallView ? callModel : requestModel) || t('events.not_captured');
 
     const modelTooltip = React.useMemo(() => {
@@ -294,10 +296,9 @@ export const RequestRow = React.memo<RequestRowProps>(
               </span>
             )}
           </div>
-          {/* Only a substitution earns a line: a served model that is the
-              requested one, or its dated snapshot, is the expected case and stays
-              in the detail drawer. */}
-          {event.model_substituted && event.response_model && (
+          {/* Substitutions take priority over routing detail to keep the cell
+              within two lines; the routed name remains in the primary tooltip. */}
+          {hasServedModel && event.response_model ? (
             <RequestTooltip
               title={t('events.served_model_differs', { served: event.response_model })}
             >
@@ -306,7 +307,14 @@ export const RequestRow = React.memo<RequestRowProps>(
                 <span className="req-model-served-name">{event.response_model}</span>
               </span>
             </RequestTooltip>
-          )}
+          ) : hasRoutedModel ? (
+            <RequestTooltip title={`${t('events.request_model')}: ${requestModel}`}>
+              <span className="req-model-routed" data-testid="request-routed-model">
+                <RightOutlined className="req-model-served-icon" aria-hidden />
+                <span className="req-model-served-name">{requestModel}</span>
+              </span>
+            </RequestTooltip>
+          ) : null}
         </div>
 
         {/* Column 5: mode - the reasoning effort, then a mark per way this request

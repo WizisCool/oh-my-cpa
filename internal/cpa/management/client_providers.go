@@ -267,6 +267,21 @@ type ConfiguredModelProvider struct {
 	ExcludedModels []string
 }
 
+// ListPricingModelIDs includes the upstreams OAuth usage records are billed under,
+// without adding those hidden names to the provider's client-visible Models.
+func (provider ConfiguredModelProvider) ListPricingModelIDs() []string {
+	models := slices.Clone(provider.Models)
+	if provider.IsOAuth {
+		for _, route := range provider.Routes {
+			if route.UpstreamModel != "" {
+				models = append(models, route.UpstreamModel)
+			}
+		}
+	}
+	sort.Strings(models)
+	return slices.Compact(models)
+}
+
 // Only the hostname is needed to reuse provider icon inference; URL credentials,
 // paths and query parameters never belong in pricing identity metadata.
 func pricingEndpointHost(rawURL string) string {
@@ -337,6 +352,18 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 	if authResp, err := c.AuthFiles(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("auth-files: %w", err))
 	} else {
+		aliases := map[string][]OAuthModelAlias{}
+		for _, file := range authResp.Files {
+			if file.Disabled {
+				continue
+			}
+			var aliasErr error
+			aliases, aliasErr = c.OAuthModelAliases(ctx)
+			if aliasErr != nil {
+				errs = append(errs, fmt.Errorf("oauth model aliases: %w", aliasErr))
+			}
+			break
+		}
 		// Auth-files commonly omits its models. Resolve missing lists in waves
 		// of at most four, not one HTTP call per card/render or unbounded fanout.
 		resolved := make([][]AuthModel, len(authResp.Files))
@@ -384,14 +411,33 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 			if family == "" {
 				family = "unknown"
 			}
+			if file.Disabled {
+				continue
+			}
 			identities := make([]string, 0, len(models))
-			for _, m := range models {
-				add(m.ID, m.ID)
-				identities = append(identities, m.ID)
+			routes := make([]ConfiguredModelRoute, 0, len(models))
+			for _, model := range models {
+				callPoint := strings.TrimSpace(model.ID)
+				if callPoint == "" {
+					continue
+				}
+				target := callPoint
+				for _, alias := range aliases[family] {
+					if strings.EqualFold(alias.Alias, callPoint) {
+						target = alias.Name
+						break
+					}
+				}
+				// The registered call point proves this rule is active. Its hidden
+				// upstream is billable even when fork=false, but is not a callable ID.
+				if target != callPoint {
+					add(target, target)
+				}
+				add(callPoint, target)
+				identities = append(identities, callPoint)
+				routes = append(routes, ConfiguredModelRoute{UpstreamModel: target, CallPoint: callPoint})
 			}
-			if !file.Disabled {
-				addProvider(ConfiguredModelProvider{ID: "oauth:" + family, Family: family, Name: family, Channel: family, Priority: file.Priority, IsOAuth: true}, identities)
-			}
+			addProvider(ConfiguredModelProvider{ID: "oauth:" + family, Family: family, Name: family, Channel: family, Priority: file.Priority, IsOAuth: true, Routes: routes}, identities)
 		}
 	}
 
