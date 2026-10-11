@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { runCheck } from './check-style-tokens.mjs';
+import { findViolations, runCheck } from './check-style-tokens.mjs';
 
 const TOKENS = ':root { --text-sm: 12px; --text-md: 13px; --radius-xs: 2px; --radius-sm: 4px; }\n';
 const silent = { log() {}, error() {} };
@@ -57,4 +57,14 @@ test('a token reference must resolve and carry no fallback', (t) => {
 
 test('a commented-out declaration is not a violation', (t) => {
   assert.equal(messages(t, { 'a.css': `${TOKENS}/* .a { font-size: 12px; } */\n` }), '');
+});
+
+test('a value on the line after its property is still checked, and reported where it starts', (t) => {
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  font-size:\n    12px;\n}\n` }), /var\(--text-sm\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  border-radius:\n    0\n    4px;\n}\n` }), /var\(--radius-sm\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  font-size: var(\n    --text-md,\n    13px\n  );\n}\n` }), /carries a fallback/);
+  assert.deepEqual(
+    findViolations('.a {\n  color: red;\n  font-size:\n    12px;\n}\n', new Set()).map((violation) => violation.line),
+    [3],
+  );
 });

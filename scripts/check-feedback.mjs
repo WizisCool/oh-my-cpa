@@ -120,7 +120,7 @@ export function findViolations(source) {
   }
 
   function memberKind(owner, name) {
-    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'Switch', 'Empty', 'Tag', 'Drawer', 'Popconfirm', 'message', 'notification'].includes(name)) return name;
+    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'Switch', 'Empty', 'Tag', 'Drawer', 'Popconfirm', 'Card', 'Descriptions', 'Pagination', 'Progress', 'message', 'notification'].includes(name)) return name;
     if (owner === 'app') {
       if (name === 'modal') return 'Modal';
       if (name === 'message' || name === 'notification') return name;

@@ -1078,7 +1078,7 @@ reader moving between pages never sees the refresh control jump or resize:
   the accent frame and `--hover-inset`), and the ruled `Toolbar` of search and selects sits
   directly under it. The audit trail's outcomes and the AI provider list's states both use it.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
-  one empty state (antd's simple `Empty`), and no paginator for a single page.
+  one empty state (a compact `EmptyState`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
   scrolls the page, however many lists a page stacks.
 - **A counted filter over an open-ended set stays a `Select`** whose options carry the count (the

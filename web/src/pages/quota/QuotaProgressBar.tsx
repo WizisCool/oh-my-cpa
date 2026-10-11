@@ -88,7 +88,8 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           size="thick"
           value={clampedRemaining ?? 0}
           color={strokeColor}
-          label={resolvedLabel || t('quota.col_windows')}
+          // An unread window has no reading to announce; a labelled meter would state zero.
+          label={hasData ? resolvedLabel || t('quota.col_windows') : undefined}
         />
       </div>
 

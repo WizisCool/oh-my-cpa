@@ -49,33 +49,36 @@ function stripComments(source) {
 
 export function findViolations(source, definedTokens) {
   const violations = [];
-  const lines = stripComments(source).split('\n');
-  lines.forEach((text, index) => {
-    const line = index + 1;
-    for (const match of text.matchAll(/(?<![-\w])font-size:\s*([0-9]*\.?[0-9]+)px/g)) {
-      const size = Number(match[1]);
-      if (!Number.isInteger(size)) {
-        violations.push({ line, message: `\`font-size: ${match[1]}px\` sits between two steps of the type scale; use a \`--text-*\` token` });
-      } else if (TEXT_SCALE[size]) {
-        violations.push({ line, message: `\`font-size: ${size}px\` is \`var(--text-${TEXT_SCALE[size]})\`` });
+  // Scanned whole rather than line by line: a value on the line after its property is still one
+  // declaration, and `\s*` has to be able to cross that break to see it.
+  const text = stripComments(source);
+  const lineAt = (offset) => text.slice(0, offset).split('\n').length;
+  for (const match of text.matchAll(/(?<![-\w])font-size:\s*([0-9]*\.?[0-9]+)px/g)) {
+    const size = Number(match[1]);
+    const line = lineAt(match.index);
+    if (!Number.isInteger(size)) {
+      violations.push({ line, message: `\`font-size: ${match[1]}px\` sits between two steps of the type scale; use a \`--text-*\` token` });
+    } else if (TEXT_SCALE[size]) {
+      violations.push({ line, message: `\`font-size: ${size}px\` is \`var(--text-${TEXT_SCALE[size]})\`` });
+    }
+  }
+  for (const match of text.matchAll(/border(?:-[a-z]+)*-radius:\s*([^;}]+)/g)) {
+    const line = lineAt(match.index);
+    for (const part of match[1].trim().split(/\s+/)) {
+      const literal = /^([0-9]+)px$/.exec(part);
+      if (literal && RADIUS_SCALE[literal[1]]) {
+        violations.push({ line, message: `a ${literal[1]}px corner is \`var(--radius-${RADIUS_SCALE[literal[1]]})\`` });
       }
     }
-    for (const match of text.matchAll(/border(?:-[a-z]+)*-radius:\s*([^;}]+)/g)) {
-      for (const part of match[1].split(/\s+/)) {
-        const literal = /^([0-9]+)px$/.exec(part);
-        if (literal && RADIUS_SCALE[literal[1]]) {
-          violations.push({ line, message: `a ${literal[1]}px corner is \`var(--radius-${RADIUS_SCALE[literal[1]]})\`` });
-        }
-      }
+  }
+  for (const match of text.matchAll(/var\(\s*(--(?:text|radius)-[a-z0-9-]+)\s*(,)?/g)) {
+    const line = lineAt(match.index);
+    if (match[2]) {
+      violations.push({ line, message: `\`${match[1]}\` carries a fallback, which is where a second value hides` });
+    } else if (!definedTokens.has(match[1])) {
+      violations.push({ line, message: `\`${match[1]}\` is not defined by any stylesheet, so the declaration is dropped` });
     }
-    for (const match of text.matchAll(/var\(\s*(--(?:text|radius)-[a-z0-9-]+)\s*(,)?/g)) {
-      if (match[2]) {
-        violations.push({ line, message: `\`${match[1]}\` carries a fallback, which is where a second value hides` });
-      } else if (!definedTokens.has(match[1])) {
-        violations.push({ line, message: `\`${match[1]}\` is not defined by any stylesheet, so the declaration is dropped` });
-      }
-    }
-  });
+  }
   return violations;
 }
 
