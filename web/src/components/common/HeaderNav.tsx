@@ -41,8 +41,8 @@ interface HeaderNavProps {
  * the project's star count once the server has read one. It sits first in a
  * right-aligned cluster, so unfolding widens it away from the other controls and none of
  * them moves. The count comes from the server, never from the browser asking GitHub,
- * which keeps the console free of third-party requests. The tooltip names the action
- * only - the count is already on the control. A hairline separates the link from the
+ * which keeps the console free of third-party requests. It has no tooltip: the mark is
+ * its own name, and the unfolding count is already its answer to a hover. A hairline separates the link from the
  * console's own actions: it leaves the console, they act on it.
  *
  * This cluster carries actions only. Connection status and version are the side rail
@@ -123,7 +123,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
         </Tooltip>
       )}
       <HeaderAction
-        tooltip={t('header.open_repository')}
+        label={t('header.open_repository')}
+        tooltip={false}
         icon={<GithubOutlined />}
         href={REPOSITORY_URL}
         target="_blank"
@@ -133,13 +134,13 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
         {stars}
       </HeaderAction>
       <span className="app-header-divider" aria-hidden="true" />
-      <HeaderAction tooltip={t('header.refresh_all')} icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} />
+      <HeaderAction label={t('header.refresh_all')} icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} />
       <PreferenceMenus />
       {!isDemo && (
         <HeaderAction
           className="header-logout"
           tone="muted"
-          tooltip={t('header.logout')}
+          label={t('header.logout')}
           icon={<LogoutOutlined />}
           loading={isLoggingOut}
           onClick={onLogout}

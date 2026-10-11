@@ -3,10 +3,13 @@ import { Button, Tooltip, type ButtonProps } from 'antd';
 import styles from './HeaderAction.module.css';
 
 interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' | 'title'> {
-  /** The control's name, shown on hover. */
-  tooltip: string;
-  /** The accessible name, when it must say more than the tooltip does; defaults to the tooltip. */
-  accessibleLabel?: string;
+  /** The accessible name. */
+  label: string;
+  /**
+   * What hovering shows: the label unless given, or nothing when `false` - for a control
+   * whose own hover already says what it is.
+   */
+  tooltip?: string | false;
   /** `muted` recedes an action that is rarely the one reached for. */
   tone?: 'default' | 'muted';
   /**
@@ -20,7 +23,7 @@ interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' 
  * One control in the header's action cluster.
  *
  * Every action there - link, toggle, menu trigger - is this component, so they share one
- * height, one resting weight, one hover and one way of naming themselves. A control that
+ * height, one resting weight, one hover and one accessible name. A control that
  * carries a short reading beside its icon (a count, a language code) passes it as children
  * and gets the same label treatment as the others instead of a form of its own; that is
  * what keeps the cluster reading as a row of equals rather than five designs.
@@ -32,7 +35,7 @@ interface HeaderActionProps extends Omit<ButtonProps, 'type' | 'size' | 'shape' 
  * Props and the ref pass through to the button so a `Dropdown` can use it as its trigger.
  */
 export const HeaderAction = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, HeaderActionProps>(
-  ({ tooltip, accessibleLabel, tone = 'default', isLabelFolded = false, className, children, ...buttonProps }, ref) => {
+  ({ label: accessibleLabel, tooltip, tone = 'default', isLabelFolded = false, className, children, ...buttonProps }, ref) => {
     const hasLabel = children !== undefined && children !== null && children !== false;
     const classNames = [
       styles['action'],
@@ -42,13 +45,12 @@ export const HeaderAction = React.forwardRef<HTMLButtonElement | HTMLAnchorEleme
       className,
     ].filter(Boolean).join(' ');
     const label = hasLabel ? <span className={styles['label']}>{children}</span> : null;
-    return (
-      <Tooltip title={tooltip}>
-        <Button ref={ref} type="text" className={classNames} aria-label={accessibleLabel ?? tooltip} {...buttonProps}>
-          {label && isLabelFolded ? <span className={styles['fold']}>{label}</span> : label}
-        </Button>
-      </Tooltip>
+    const button = (
+      <Button ref={ref} type="text" className={classNames} aria-label={accessibleLabel} {...buttonProps}>
+        {label && isLabelFolded ? <span className={styles['fold']}>{label}</span> : label}
+      </Button>
     );
+    return tooltip === false ? button : <Tooltip title={tooltip ?? accessibleLabel}>{button}</Tooltip>;
   },
 );
 HeaderAction.displayName = 'HeaderAction';

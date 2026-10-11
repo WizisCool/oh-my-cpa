@@ -114,7 +114,6 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // states whose only other signal is an icon, and a screen reader cannot see an icon - so the name states
   // the mode, and this pins that it does.
   const headerActions = [
-    { name: 'GitHub', role: 'link', matcher: /^Open project on GitHub$/ },
     { name: 'Refresh all', matcher: /^Refresh all$/ },
     { name: 'Theme', matcher: /^Theme: (Light|Dark|Follow system)$/ },
     { name: 'Language', matcher: /^Language$/ },

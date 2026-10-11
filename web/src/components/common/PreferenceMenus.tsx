@@ -75,8 +75,8 @@ export const PreferenceMenus: React.FC = () => {
           because the icon that carries it is decoration to a screen reader - without the state there, all
           three states of the cycle announce identically. */}
       <HeaderAction
+        label={t('header.theme_state', { mode: t(MODE_LABEL_KEYS[modePreference]) })}
         tooltip={t('header.theme')}
-        accessibleLabel={t('header.theme_state', { mode: t(MODE_LABEL_KEYS[modePreference]) })}
         icon={MODE_ICONS[modePreference]}
         onClick={cycleModePreference}
       />
@@ -97,8 +97,8 @@ export const PreferenceMenus: React.FC = () => {
         }}
       >
         <HeaderAction
+          label={t('header.language')}
           tooltip={`${t('header.language')} · ${activeLanguage ? activeLanguage.name : lang}`}
-          accessibleLabel={t('header.language')}
           icon={activeLanguage ? <LanguageFlag country={activeLanguage.country} /> : undefined}
         >
           <span className="language-trigger-code">{activeLanguage?.code ?? lang}</span>
