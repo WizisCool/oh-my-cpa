@@ -99,7 +99,10 @@ the [v0.2.5 release notes](releases/v0.2.5.md).
    consistent if a package update requires it.
 2. Run `pnpm test:fast`, `pnpm verify` and `pnpm check:ui`; run `pnpm verify:full`
    for build/workflow changes. Review secrets and changes, then merge through the
-   normal protected pull-request checks.
+   normal protected pull-request checks. Title the pull request
+   `chore(release): prepare vX.Y.Z`: `.coderabbit.yaml` skips the automated review
+   for that prefix, because the changes a release describes were reviewed when they
+   merged.
 3. From a clean checkout of the verified merged commit, create and push the tag:
 
    ```bash

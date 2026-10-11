@@ -21,6 +21,14 @@ reviews:
   # which is what a maintainer needs when judging a finding.
   in_progress_fortune: false
   review_details: true
+  # A release preparation pull request changes two version fields and release
+  # notes for changes that were each reviewed when they merged, so a second
+  # review has nothing new to read. Its gates are the required CI checks and
+  # `scripts/release-plan.mjs`. The keyword is the title prefix such a pull
+  # request carries (`chore(release): prepare vX.Y.Z`), matched case-insensitively.
+  auto_review:
+    ignore_title_keywords:
+      - 'chore(release)'
   # Generated artifacts whose freshness a gate already proves. The README
   # screenshots are binary, so a review can say nothing about them, and the
   # demonstration dataset is regenerated from the real handlers and pinned by

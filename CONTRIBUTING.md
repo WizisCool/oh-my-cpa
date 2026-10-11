@@ -99,6 +99,6 @@ User-facing strings must never be hardcoded in backend responses or React compon
    pnpm check:ui
    ```
 4. Push your branch to your fork and open a Pull Request against `master`.
-5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md).
+5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md). A release preparation pull request, titled `chore(release): prepare vX.Y.Z`, is exempt: the changes it describes were reviewed when they merged.
 6. Fill in the pull request template ([`.github/pull_request_template.md`](.github/pull_request_template.md)): the problem and the solution, the context documents updated, and the gates that were run. Title the pull request `type(scope): lowercase subject`.
 7. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.
