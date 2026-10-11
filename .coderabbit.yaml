@@ -29,6 +29,11 @@ reviews:
   auto_review:
     ignore_title_keywords:
       - 'chore(release)'
+    # One automatic review per pull request, when it opens. A push that answers
+    # that review would otherwise start another, and each round raises new
+    # findings on a diff the required CI checks already gate. A further review
+    # is asked for by commenting `@coderabbitai review`.
+    auto_incremental_review: false
   # Generated artifacts whose freshness a gate already proves. The README
   # screenshots are binary, so a review can say nothing about them, and the
   # demonstration dataset is regenerated from the real handlers and pinned by
