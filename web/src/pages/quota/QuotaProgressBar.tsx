@@ -1,5 +1,4 @@
 import React from 'react';
-import { Progress } from 'antd';
 import { useT } from '../../i18n';
 import { formatShortDateTime, formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
 import { quotaRemainingStroke } from './quotaThresholds';
@@ -7,6 +6,7 @@ import { describeQuotaCapacity } from './quotaCapacity';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { QuotaWindow } from '../../types/quota';
 import styles from './QuotaPresentation.module.css';
+import { Meter } from '../../components/common/Meter';
 
 interface QuotaProgressBarProps {
   nowMS: number;
@@ -18,7 +18,6 @@ interface QuotaProgressBarProps {
   resetAtMS?: number | null;
   resetLabel?: string;
   resetAccuracy?: 'exact' | 'derived' | 'approximate';
-  height?: number;
   showPercent?: boolean;
   /** The window's recorded usage and estimated capacity, when the estimate applies to it. */
   capacity?: Pick<QuotaWindow, 'usage' | 'capacity' | 'capacity_unavailable'>;
@@ -34,7 +33,6 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   resetAtMS,
   resetLabel,
   resetAccuracy = 'exact',
-  height = 8,
   showPercent = true,
   capacity,
 }) => {
@@ -85,17 +83,12 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
         </span>
       </div>
 
-      <div
-        style={{ width: '100%', lineHeight: 1 }}
-        title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
-      >
-        <Progress
-          percent={clampedRemaining ?? 0}
-          showInfo={false}
-          strokeColor={strokeColor}
-          size={{ height }}
-          style={{ margin: 0, padding: 0, display: 'block' }}
-          aria-label={resolvedLabel || t('quota.col_windows')}
+      <div title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}>
+        <Meter
+          size="thick"
+          value={clampedRemaining ?? 0}
+          color={strokeColor}
+          label={resolvedLabel || t('quota.col_windows')}
         />
       </div>
 

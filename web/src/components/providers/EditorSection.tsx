@@ -1,6 +1,7 @@
 import React from 'react';
 import { DownOutlined, UpOutlined } from '../icons';
 import styles from './ProviderEditorDrawer.module.css';
+import { Count } from '../common/Count';
 
 export interface EditorSectionProps {
   title: React.ReactNode;
@@ -23,7 +24,7 @@ export function EditorSection({ title, count, isOpen, onToggle, children }: Edit
       <button type="button" className={styles['section-head']} aria-expanded={isOpen} onClick={onToggle}>
         <span className={styles['section-title']}>
           {title}
-          {count !== undefined && <span className={styles['section-count']}>{count}</span>}
+          {count !== undefined && <Count className={styles['section-count']}>{count}</Count>}
         </span>
         <span className={styles['section-chevron']} aria-hidden="true">
           {isOpen ? <UpOutlined /> : <DownOutlined />}

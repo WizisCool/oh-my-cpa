@@ -38,6 +38,7 @@ import { api } from '../api/client';
 import { LoadFailure, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
 import { Toolbar } from '../components/common/Toolbar';
+import { Count } from '../components/common/Count';
 
 /**
  * The window the list's traffic column counts. It is the key list's window too, so the two pages
@@ -306,7 +307,7 @@ export const ProvidersPage: React.FC = () => {
                   label: (
                     <span className={styles['family-option']}>
                       <span>{familyDisplayNames[family] ?? family}</span>
-                      <span className={styles['family-count']}>{overview.familyCounts[family] ?? 0}</span>
+                      <Count>{overview.familyCounts[family] ?? 0}</Count>
                     </span>
                   ),
                 })),

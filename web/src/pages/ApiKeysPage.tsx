@@ -9,7 +9,6 @@ import {
 } from 'antd';
 import { PageLoading } from '../components/common/PageLoading';
 import {
-  CopyOutlined,
   KeyOutlined,
   PlusOutlined,
   SyncOutlined,
@@ -23,7 +22,6 @@ import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
-import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
 import { updateFieldWithBaseline, getFieldSemanticValue } from '../components/config/configDirty';
 import { computeConfigChanges } from '../components/config/configPatch';
@@ -38,6 +36,7 @@ import styles from './ApiKeysPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
 import { Panel } from '../components/common/Panel';
+import { CopyButton } from '../components/common/CopyButton';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;
@@ -528,20 +527,7 @@ export const ApiKeysPage: React.FC = () => {
             >
               {t('cfg.api_keys_generate')}
             </Button>
-            <Button
-              size="small"
-              icon={<CopyOutlined />}
-              disabled={!keyInput.trim()}
-              onClick={async () => {
-                if (await copyText(keyInput.trim())) {
-                  toast.success(t('cfg.source_copy_success'));
-                  return;
-                }
-                toast.error(t('cfg.copy_failed'));
-              }}
-            >
-              {t('cfg.api_keys_copy')}
-            </Button>
+            <CopyButton showLabel text={keyInput.trim()} label={t('cfg.api_keys_copy')} disabled={!keyInput.trim()} />
           </div>
           {isValueChanged && (
             <Notice tone="warning" title={t('keys.value_change_warning')} />

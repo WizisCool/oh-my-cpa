@@ -104,8 +104,8 @@ export async function runObservabilityAcceptance({
   // Verify progress bars are visible with positive fill width after live refresh
   await checkEventually(
     'quota page renders progress bars',
-    async () => (await page.locator('[data-quota-body] .ant-progress').count()) > 0,
-    { detail: async () => `count=${await page.locator('[data-quota-body] .ant-progress').count()}`, timeoutMs: 60000 },
+    async () => (await page.locator('[data-quota-body] .meter').count()) > 0,
+    { detail: async () => `count=${await page.locator('[data-quota-body] .meter').count()}`, timeoutMs: 60000 },
   );
   await checkEventually(
     'Quota tab exposes six model/group windows after a live refresh',
@@ -116,7 +116,7 @@ export async function runObservabilityAcceptance({
       timeoutMs: 120000,
     },
   );
-  const firstProgressBg = page.locator('[data-quota-body] .ant-progress-track').first();
+  const firstProgressBg = page.locator('[data-quota-body] .meter-fill').first();
   await checkEventually(
     'quota progress bar fill has positive width',
     async () => (await firstProgressBg.evaluate((el) => parseFloat(window.getComputedStyle(el).width))) > 0,

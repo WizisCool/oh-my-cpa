@@ -134,7 +134,7 @@ export async function runAuthFilesAcceptance({
     await expandedBody.waitFor({ state: 'visible', timeout: 10000 });
     const expandedAudit = await expandedBody.evaluate((body) => ({
       declared: Number(body.getAttribute('data-quota-window-count') || '0'),
-      rendered: body.querySelectorAll('.ant-progress').length,
+      rendered: body.querySelectorAll('.meter').length,
     }));
     check(
       'expanded quota body renders every returned window',

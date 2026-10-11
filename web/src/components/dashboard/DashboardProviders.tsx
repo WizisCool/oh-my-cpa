@@ -18,6 +18,7 @@ import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
 import { Tag } from '../common/Tag';
+import { Meter } from '../common/Meter';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -232,14 +233,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 
                   {/* The same rate, drawn as a meter. */}
                   <div className="provider-visual-col">
-                    <div className="dashboard-meter">
-                      <span
-                        style={{
-                          width: `${Math.max(0, Math.min(100, provider.successRate ?? 0))}%`,
-                          background: rateColor,
-                        }}
-                      />
-                    </div>
+                    <Meter className="dashboard-meter" value={provider.successRate ?? 0} color={rateColor} />
                   </div>
                 </div>
               );

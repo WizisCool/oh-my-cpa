@@ -396,21 +396,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.bar,
-.bar :global(.ant-progress-line) {
-  line-height: 0;
-  font-size: 0;
-}
-
-.bar :global(.ant-progress-outer) {
-  padding-inline-end: 0 !important;
-}
-
-.bar :global(.ant-progress-inner) {
-  background-color: var(--border-soft) !important;
-  border-radius: var(--radius-xs) !important;
-}
-
 .window-foot {
   display: flex;
   flex-wrap: wrap;

@@ -1238,10 +1238,21 @@ supplies content and layout width; what is inside the frame is not restyled per 
   every value is of equal standing.
 - **`CopyButton` - a button that copies a value** and acknowledges it in place: the glyph becomes a
   check mark for 1.5s, and only a failure raises a toast.
+- **`Pager` - page navigation for a list whose length is known.** Small controls, nothing at all
+  when the list fits on one page, and no page-size menu - page size is a view preference and sits
+  with the list's other view controls. `numbered` lists the pages; `stepped` is previous, the page
+  out of the count, next, for a phone or a narrow column. A list paged by cursor has no total and
+  keeps its own footer.
+- **`Meter` - a reading as a share of a track**: 4px tall (`thick`: 8px), `--radius-xs`, on
+  `--border`. The fill takes the token of the band the reading falls in, or `--fg-2` for a share
+  with no health to state, and does not animate. Given a `label` it is a `meter` to assistive
+  technology; beside the same figure in text it is hidden so the figure is not read twice.
+- **`Count` - how many rows a label stands for**: `--meta`, tabular numerals, `--text-sm`, or
+  `--text-xs` (`small`) inside a filter segment or a chip.
 
-`pnpm check:feedback` refuses the antd component each of these replaces: `Empty`, `Tag` and
-`Descriptions` everywhere, `Drawer` outside `AppDrawer` and the two sheets above, `Popconfirm`
-outside `ConfirmAction`, and `Card` outside `Panel`.
+`pnpm check:feedback` refuses the antd component each of these replaces: `Empty`, `Tag`,
+`Descriptions` and `Progress` everywhere, `Drawer` outside `AppDrawer` and the two sheets above,
+`Popconfirm` outside `ConfirmAction`, `Card` outside `Panel`, and `Pagination` outside `Pager`.
 
 ### Switch
 

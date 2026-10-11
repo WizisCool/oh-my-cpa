@@ -1,5 +1,4 @@
 import React from 'react';
-import { Progress } from 'antd';
 import { ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
@@ -19,6 +18,7 @@ import { compactCooldownDiagnostic } from './quotaCooldown';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import styles from './QuotaPresentation.module.css';
+import { Meter } from '../../components/common/Meter';
 
 interface CompactQuotaViewProps {
   item: QuotaItem;
@@ -102,14 +102,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
                   </span>
                   <span className={styles['window-value']}>{quotaRemainingText(window)}</span>
                 </div>
-                <div className={styles.bar}>
-                  <Progress
-                    percent={remaining ?? 0}
-                    showInfo={false}
-                    strokeColor={quotaRemainingStroke(remaining)}
-                    size={{ height: 4 }}
-                  />
-                </div>
+                <Meter value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={quotaWindowLabel(kind, window.label, t)} />
                 <div className={styles['window-foot']}>
                   <span className={styles['window-reset']} title={quotaResetText(window, nowMS, t)}>
                     {quotaResetCountdown(window, nowMS, t)}

@@ -49,7 +49,7 @@ const ROWS = [
 const READ_MARKS = `(() => {
   const rows = [...document.querySelectorAll('.provider-row-enhanced')];
   return rows.map((row) => {
-    const meter = row.querySelector('.dashboard-meter span');
+    const meter = row.querySelector('.dashboard-meter .meter-fill');
     const track = row.querySelector('.dashboard-meter');
     return {
       name: row.querySelector('.provider-title')?.textContent ?? '',

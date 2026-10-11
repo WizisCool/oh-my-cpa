@@ -392,7 +392,10 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **`Panel`**: the framed `--surface` content sits on; inset 20px, 16px on a phone (12px on a dashboard tile), owned by the stylesheet; optional ruled header from `title` and `extra`.
 - **`FactList`**: a label/value description list; `--muted` label leading, value right-aligned in tabular numerals; `strong` or `quiet` values.
 - **`CopyButton`**: copies a value and acknowledges in place with a check mark for 1.5s; only a failure raises a toast.
-- `pnpm check:feedback` refuses the antd component each replaces: `Empty`, `Tag` and `Descriptions` everywhere, `Drawer` outside `AppDrawer` and the navigation and time-range sheets, `Popconfirm` outside `ConfirmAction`, `Card` outside `Panel`.
+- **`Pager`**: page navigation for a list of known length; small, absent on a single page, no page-size menu; `numbered` or `stepped` (phone, narrow column).
+- **`Meter`**: a reading as a share of a 4px track (`thick`: 8px), `--radius-xs` on `--border`; fill in the band's token or `--fg-2`; no animation.
+- **`Count`**: a row count beside its label; `--meta`, tabular numerals, `--text-sm` (`small`: `--text-xs`).
+- `pnpm check:feedback` refuses the antd component each replaces: `Empty`, `Tag`, `Descriptions` and `Progress` everywhere, `Drawer` outside `AppDrawer` and the navigation and time-range sheets, `Popconfirm` outside `ConfirmAction`, `Card` outside `Panel`, `Pagination` outside `Pager`.
 
 ### Switches
 - **One control**: every on/off control is the shared `Switch` (`web/src/components/common/Switch.tsx`); antd's `Switch` is refused by `pnpm check:feedback`.

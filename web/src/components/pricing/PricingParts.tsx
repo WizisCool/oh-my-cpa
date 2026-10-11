@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Checkbox, Input, InputNumber, Pagination, Segmented, Select, TimePicker, Tooltip } from 'antd';
+import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker, Tooltip } from 'antd';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
@@ -36,6 +36,7 @@ import {
 import styles from './Pricing.module.css';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
+import { Pager } from '../common/Pager';
 
 /** The words for one tier's condition, which every surface that names a tier shares. */
 export function describeTier(t: TFunc, tier: PriceTier): string {
@@ -183,7 +184,7 @@ export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggesti
           );
         })}
       </div>
-      <Pagination size="small" current={safePage} pageSize={pageSize} total={results.length} onChange={setPage} showSizeChanger={false} hideOnSinglePage />
+      <Pager page={safePage} pageSize={pageSize} total={results.length} onChange={setPage} />
     </div>
   );
 };

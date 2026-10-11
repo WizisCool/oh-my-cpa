@@ -504,9 +504,10 @@ and identity remain covered by the workspace and plugin-logo logic suites.
   `extra` per weight), `AppDrawer` (named close, two-slot footer, no footer without content, the
   width step), `Tag` and `ToggleTag` (tone and size classes, hidden glyph, pressed state),
   `ConfirmAction` (fixed cancel label, named and coloured confirmation), `SelectionBar` (live count,
-  note, trailing actions), `Toolbar` (the trailing slot and the ruled variant) and `Panel` (header
-  from `title`, no inline inset). Their drawn geometry belongs to the browser.
-- `scripts/check-feedback.test.mjs` also pins the `raw-switch`, `raw-empty`, `raw-tag`, `raw-drawer`, `raw-popconfirm`, `raw-card` and `raw-descriptions` rules in both directions, including the per-rule file exemptions for the components that own a raw antd primitive. It checks Ant Design feedback bindings and aliases (named and namespace
+  note, trailing actions), `Toolbar` (the trailing slot and the ruled variant), `Panel` (header
+  from `title`, no inline inset), `Meter` (share, clamping, semantics with and without a label) and
+  `Pager` (absent on one page, no page-size menu, the stepped variant). Their drawn geometry belongs to the browser.
+- `scripts/check-feedback.test.mjs` also pins the `raw-switch`, `raw-empty`, `raw-tag`, `raw-drawer`, `raw-popconfirm`, `raw-card`, `raw-descriptions`, `raw-pagination` and `raw-progress` rules in both directions, including the per-rule file exemptions for the components that own a raw antd primitive. It checks Ant Design feedback bindings and aliases (named and namespace
   imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
   strings and type-only imports, legal confirmations, diagnostic locations and the
   feedback module exemption. It is automatically discovered by the repository self-test runner.

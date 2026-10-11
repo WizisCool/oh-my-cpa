@@ -236,19 +236,16 @@ export async function runKeyManagementAcceptance({
     // outside the dialog selects nothing, and `execCommand('copy')` answers `true` for
     // that empty selection. The draft is pasted back with the dialog closed, because
     // its focus trap would keep the probe input from taking focus while it is open.
-    const dialogCopyMessage = page.locator('.omc-toast').getByText(/已复制到剪贴板|Copied to clipboard/);
-    // Waited for rather than edited away: the message nodes belong to React, and removing
-    // one detaches the holder the next message is rendered into, so the copy below would
-    // report itself nowhere. Waiting for a leftover carrying this exact text also keeps
-    // the assertion below from passing on a toast an earlier step left behind.
-    await dialogCopyMessage.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
+    // The control acknowledges in place, so the acknowledgement cannot be one an earlier
+    // step left behind: it belongs to this button and lasts only while its check mark shows.
+    const dialogCopyState = keyModal.locator('.keys-key-editor-actions [data-copy-state="copied"]');
     await keyModal.locator('.keys-key-editor-actions button').filter({ hasText: /^(复制|Copy)$/ }).click();
     // The app's own statement that the copy completed, rather than a fixed pause that
     // only guesses when it did.
     await checkEventually(
       'the key dialog copy control reports a copy it made',
-      async () => (await dialogCopyMessage.count()) > 0,
-      { label: "the key dialog's copy success message" },
+      async () => (await dialogCopyState.count()) > 0,
+      { label: "the key dialog's copy acknowledgement" },
     );
     await keyModal.locator('.ant-modal-footer .ant-btn-default').first().click();
     await keyModal.waitFor({ state: 'hidden', timeout: 5000 });

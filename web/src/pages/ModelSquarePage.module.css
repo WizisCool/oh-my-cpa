@@ -16,8 +16,7 @@
 .chip:hover { color: var(--fg); background: var(--hover); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chip[aria-pressed="true"] { color: var(--fg); border-color: var(--fg-2); background: var(--selected-inset); }
-.chip-count { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.chip[aria-pressed="true"] .chip-count { color: var(--fg-2); }
+.chip[aria-pressed="true"] :global(.count) { color: var(--fg-2); }
 
 /* Drawn from the palette at chrome weight; the frame gives the glyph a brand mark's footprint. */
 .generic-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--muted); }

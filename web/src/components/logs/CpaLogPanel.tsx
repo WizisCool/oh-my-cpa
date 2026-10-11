@@ -53,6 +53,7 @@ import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
+import { Count } from '../common/Count';
 
 const { Text } = Typography;
 
@@ -443,7 +444,7 @@ export const CpaLogPanel: React.FC = () => {
                           })}
                         >
                           {method}
-                          <span className={styles['method-count']}>{facets.methods[method] ?? 0}</span>
+                          <Count className={styles['method-count']}>{facets.methods[method] ?? 0}</Count>
                         </button>
                       );
                     })}
@@ -468,7 +469,7 @@ export const CpaLogPanel: React.FC = () => {
                     optionRender={(option) => (
                       <span className={styles['path-option']}>
                         <span className={styles['path-option-name']}>{option.value}</span>
-                        <span className={styles['path-option-count']}>{option.data.count}</span>
+                        <Count className={styles['path-option-count']}>{option.data.count}</Count>
                       </span>
                     )}
                   />

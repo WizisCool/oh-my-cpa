@@ -142,19 +142,16 @@ export async function refreshAndLayoutSection(context) {
   await page.locator('.request-row').first().click();
   await page.locator('.request-detail-id').waitFor({ state: 'visible', timeout: 10000 });
   const drawerRequestId = (await page.locator('.request-detail-id span').first().innerText()).trim();
-  const drawerCopyMessage = page.locator('.omc-toast').getByText(/已复制|Copied/);
-  // Waited for rather than edited away: the message nodes belong to React, and removing
-  // one detaches the holder the next message is rendered into, so the copy below would
-  // report itself nowhere. Waiting for a leftover carrying this text also keeps the
-  // assertion below from passing on a toast an earlier step left behind.
-  await drawerCopyMessage.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
+  // The control acknowledges in place, so the acknowledgement cannot be one an earlier step
+  // left behind: it belongs to this button and lasts only while its check mark shows.
+  const drawerCopyState = page.locator('.request-detail-id [data-copy-state="copied"]');
   await page.locator('.request-detail-id').getByRole('button').first().click();
   // The app's own statement that the copy completed, rather than a fixed pause that
   // only guesses when it did.
   await checkEventually(
     'the request detail copy control reports a copy it made',
-    async () => (await drawerCopyMessage.count()) > 0,
-    { label: "the drawer's copy success message" },
+    async () => (await drawerCopyState.count()) > 0,
+    { label: "the drawer's copy acknowledgement" },
   );
   await page.keyboard.press('Escape');
   // Waited for rather than tolerated: a drawer still closing leaves a mask over the

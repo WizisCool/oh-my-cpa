@@ -46,11 +46,14 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
   };
 
   const icon = hasCopied ? <CheckOutlined /> : <CopyOutlined />;
+  // The labelled form keeps its name while acknowledging, so the state is also an attribute: a
+  // browser check can then wait for the copy without reading the glyph.
+  const copyState = hasCopied ? 'copied' : undefined;
   if (showLabel) {
     // The label stays the action's name while the glyph acknowledges the copy, so the button keeps
     // its width and the control beside it does not move.
     return (
-      <Button size={size} className={className} disabled={disabled} icon={icon} onClick={() => void onClick()}>
+      <Button size={size} className={className} disabled={disabled} icon={icon} data-copy-state={copyState} onClick={() => void onClick()}>
         {label ?? t('common.copy')}
       </Button>
     );
@@ -62,6 +65,7 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
         size={size}
         className={className}
         aria-label={name}
+        data-copy-state={copyState}
         disabled={disabled}
         icon={icon}
         onClick={() => void onClick()}

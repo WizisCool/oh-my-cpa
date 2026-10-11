@@ -29,7 +29,10 @@
  * - `Card` is refused outside `components/common/Panel`, which keeps the inset in the stylesheet
  *   where the phone rules can reach it;
  * - `Descriptions` is refused everywhere, because `components/common/FactList` is the console's
- *   label/value list.
+ *   label/value list;
+ * - `Pagination` is refused outside `components/common/Pager`, which hides itself on one page and
+ *   never offers a page-size menu;
+ * - `Progress` is refused everywhere, because `components/common/Meter` draws a reading.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,6 +51,7 @@ const PRIMITIVE_OWNERS = {
   ],
   'raw-popconfirm': ['web/src/components/common/ConfirmAction.tsx'],
   'raw-card': ['web/src/components/common/Panel.tsx'],
+  'raw-pagination': ['web/src/components/common/Pager.tsx'],
 };
 
 function lineOf(source, index) {
@@ -79,6 +83,10 @@ export function findViolations(source) {
       violations.push({ line, rule: 'raw-card', message: 'import `Panel` from components/common/Panel instead of antd `Card`' });
     } else if (kind === 'Descriptions') {
       violations.push({ line, rule: 'raw-descriptions', message: 'import `FactList` from components/common/FactList instead of antd `Descriptions`' });
+    } else if (kind === 'Pagination') {
+      violations.push({ line, rule: 'raw-pagination', message: 'import `Pager` from components/common/Pager instead of antd `Pagination`' });
+    } else if (kind === 'Progress') {
+      violations.push({ line, rule: 'raw-progress', message: 'import `Meter` from components/common/Meter instead of antd `Progress`' });
     } else if (kind === 'Drawer') {
       violations.push({ line, rule: 'raw-drawer', message: 'import `AppDrawer` from components/common/AppDrawer instead of antd `Drawer`' });
     } else if (kind === 'message' || kind === 'notification') {
@@ -196,7 +204,7 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console } = {}) 
       output.error(`  ${failure.file}:${failure.line} [${failure.rule}] ${failure.message}`);
     }
   } else {
-    output.log('Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, tag, empty state, panel, fact list, side panel and anchored confirmation through its shared component.');
+    output.log('Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, tag, empty state, panel, fact list, pager, meter, side panel and anchored confirmation through its shared component.');
   }
   return failures;
 }

@@ -5,7 +5,6 @@ import {
   App as AntdApp,
   Button,
   Dropdown,
-  Pagination,
   Select,
   Space,
 } from 'antd';
@@ -66,6 +65,7 @@ import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Toolbar } from '../../components/common/Toolbar';
+import { Pager } from '../../components/common/Pager';
 
 interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
@@ -887,16 +887,13 @@ export const OAuthManagementPage: React.FC = () => {
               options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}
             />
 
-            {visibleRecords.length > pageSize && (
-              <Pagination
-                current={page}
-                pageSize={pageSize}
-                total={visibleRecords.length}
-                showSizeChanger={false}
-                showQuickJumper
-                onChange={(nextPage) => setSearch({ page: nextPage === 1 ? null : nextPage })}
-              />
-            )}
+            <Pager
+              page={page}
+              pageSize={pageSize}
+              total={visibleRecords.length}
+              hasQuickJumper
+              onChange={(nextPage) => setSearch({ page: nextPage === 1 ? null : nextPage })}
+            />
           </div>
         </>
       )}

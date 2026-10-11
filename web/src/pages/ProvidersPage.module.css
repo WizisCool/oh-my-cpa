@@ -28,12 +28,6 @@
   gap: 16px;
 }
 
-.family-count {
-  color: var(--meta);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
 .window-summary {
   display: inline-flex;
   align-items: center;

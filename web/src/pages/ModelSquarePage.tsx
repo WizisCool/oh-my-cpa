@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, Pagination } from 'antd';
+import { Button } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
@@ -42,6 +42,8 @@ import { EmptyState } from '../components/common/EmptyState';
 import { SectionHeading } from '../components/common/SectionHeading';
 import { AppDrawer } from '../components/common/AppDrawer';
 import { Toolbar } from '../components/common/Toolbar';
+import { Pager } from '../components/common/Pager';
+import { Count } from '../components/common/Count';
 
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
@@ -365,11 +367,11 @@ export const ModelSquarePage: React.FC = () => {
       </Toolbar>
       <div className={clsx(styles['chip-group'], styles['maker-strip'])} role="group" aria-label={t('models.filter_makers')}>
         <button type="button" className={styles['chip']} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
-          {t('common.all')}<span className={styles['chip-count']}>{searched.length}</span>
+          {t('common.all')}<Count size="small">{searched.length}</Count>
         </button>
         {makers.map(({ manufacturer, count }) => <button key={manufacturer.id} type="button" className={styles['chip']} data-maker={manufacturer.id} aria-pressed={manufacturerId === manufacturer.id} onClick={() => setParam('maker', manufacturerId === manufacturer.id ? '' : manufacturer.id)}>
           <ManufacturerMark manufacturer={manufacturer} size={14} />
-          {manufacturerLabel(manufacturer, t)}<span className={styles['chip-count']}>{count}</span>
+          {manufacturerLabel(manufacturer, t)}<Count size="small">{count}</Count>
         </button>)}
       </div>
       {directory.data.partial.length > 0 && <Notice tone="warning" title={t('models.provenance_partial')} />}
@@ -389,7 +391,7 @@ export const ModelSquarePage: React.FC = () => {
           </ul>
         </li>)}
       </ul>}
-      {entries.length > PAGE_SIZE && <Pagination className={styles['pagination']} current={currentPage} pageSize={PAGE_SIZE} total={entries.length} showSizeChanger={false} onChange={setPage} />}
+      <Pager className={styles['pagination']} page={currentPage} pageSize={PAGE_SIZE} total={entries.length} onChange={setPage} />
     </>}
     <AppDrawer
       title={selected?.identity ?? ''}

@@ -52,6 +52,7 @@ import { useToast } from '../feedback';
 import { LoadFailure } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { Toolbar } from '../common/Toolbar';
+import { Count } from '../common/Count';
 
 /** How long typing settles before the search asks the server. */
 const SEARCH_SETTLE_MS = 300;
@@ -389,7 +390,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
                 label: (
                   <span className={styles['category-option']}>
                     <span>{t(`audit.cat.${name}`)}</span>
-                    {hasCounts && <span className={styles['category-count']}>{facets.categories[name] ?? 0}</span>}
+                    {hasCounts && <Count>{facets.categories[name] ?? 0}</Count>}
                   </span>
                 ),
               })),

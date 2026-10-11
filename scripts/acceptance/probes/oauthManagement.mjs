@@ -124,7 +124,7 @@ export async function oauthManagement({ base, page, check }) {
     'a compact record bars its five-hour and weekly windows',
     (await twoWindowRow.locator('[data-quota-compact-window="five_hour"]').count()) === 1
       && (await twoWindowRow.locator('[data-quota-compact-window="weekly"]').count()) === 1
-      && (await twoWindowRow.locator('[data-quota-compact-window] .ant-progress').count()) === 2,
+      && (await twoWindowRow.locator('[data-quota-compact-window] .meter').count()) === 2,
     (await twoWindowRow.innerText()).replace(/\n/g, ' | '),
   );
   const plainRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"]');
@@ -164,7 +164,7 @@ export async function oauthManagement({ base, page, check }) {
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
   check('an explicitly inactive subscription is visible in credential details', await detailPanel.locator('[data-subscription-inactive]').isVisible());
   check('quota tab shows every model group without unrelated configuration',
-    (await detailPanel.locator('.ant-progress').count()) === 6
+    (await detailPanel.locator('.meter').count()) === 6
       && (await detailPanel.innerText()).includes('Model group 3 · Window 2')
       && !(await detailPanel.locator('#note').isVisible()));
   const labels = await detailPanel.locator('[class*=progress-label-row]').allInnerTexts();

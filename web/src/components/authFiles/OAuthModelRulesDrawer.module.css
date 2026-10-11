@@ -100,20 +100,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.meter {
-  display: block;
-  height: 4px;
-  border-radius: var(--radius-sm);
-  background: var(--border);
-  overflow: hidden;
-}
-
-.meter-fill {
-  display: block;
-  height: 100%;
-  background: var(--fg-2);
-}
-
 .section {
   display: flex;
   flex-direction: column;

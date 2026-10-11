@@ -65,8 +65,6 @@
 
 .method-count {
   margin-left: 5px;
-  color: var(--meta);
-  font-variant-numeric: tabular-nums;
 }
 
 .path-select {
@@ -89,9 +87,6 @@
 
 .path-option-count {
   flex: none;
-  color: var(--meta);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ── fullscreen: the panel takes the viewport and the list takes what the toolbar leaves.

@@ -1,0 +1,68 @@
+.source-tabs { margin-bottom: 16px; }
+
+.filters { margin-bottom: 16px; }
+
+.search { margin-bottom: 12px; }
+
+.groups {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  max-height: 420px;
+  padding: 4px 2px;
+  overflow-y: auto;
+}
+
+.grid-empty {
+  grid-column: 1 / -1;
+  padding: 40px 0;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+}
+
+.tile[aria-pressed="true"] {
+  border-width: 2px;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+/* Holds the glyph's box until the tile scrolls into view and the icon is requested. */
+.tile-placeholder {
+  width: 28px;
+  height: 28px;
+}
+
+.tile-name {
+  width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-xs);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile[aria-pressed="true"] .tile-name {
+  color: var(--accent);
+  font-weight: 600;
+}

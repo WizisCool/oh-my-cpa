@@ -26,6 +26,7 @@ import {
 } from './providerOverview';
 import { Tag } from '../common/Tag';
 import { ConfirmAction } from '../common/ConfirmAction';
+import { Meter } from '../common/Meter';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -280,9 +281,7 @@ export function ProviderTable({
               <span className={styles['traffic-requests']}>{t('pro.traffic_requests', { n: row.total.toLocaleString() })}</span>
               <span className={clsx(styles['traffic-rate'], styles[`tone-${tone}`])}>{`${rate.toFixed(1)}%`}</span>
             </div>
-            <div className={clsx('dashboard-meter', styles['traffic-meter'])} aria-hidden="true">
-              <span className={styles[`meter-${tone}`]} style={{ width: `${Math.max(0, Math.min(100, rate))}%` }} />
-            </div>
+            <Meter className={styles['traffic-meter']} value={rate} color={`var(--${tone === 'neutral' ? 'meta' : tone})`} />
             {row.failure > 0 && (
               <span className={styles['traffic-failed']}>{t('pro.traffic_failed', { n: row.failure.toLocaleString() })}</span>
             )}

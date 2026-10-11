@@ -1,7 +1,7 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Button, Popover, Segmented, Select, Tooltip } from 'antd';
 import dayjs from '../../utils/time';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,6 +32,8 @@ import styles from './PricingPage.module.css';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
 import { Toolbar } from '../../components/common/Toolbar';
+import { Pager } from '../../components/common/Pager';
+import { Count } from '../../components/common/Count';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at either width. */
 const PAGE_SIZE = 20;
@@ -253,7 +255,6 @@ export const PricingPage: React.FC = () => {
     setPage(nextPage);
     if (listRef.current && listRef.current.getBoundingClientRect().top < 0) listRef.current.scrollIntoView({ block: 'start' });
   };
-  const pagination = { current: safePage, pageSize: PAGE_SIZE, total: totalRows, showSizeChanger: false, hideOnSinglePage: true, onChange: changePage };
 
 
   const selectTab = (next: PricingTab) => setSearchParams((current) => {
@@ -502,7 +503,7 @@ export const PricingPage: React.FC = () => {
                   label: (
                     <span className={styles['filter-option']}>
                       {value === 'all' ? t('common.all') : value === 'candidates' ? t('pricing.candidate.filter') : t(`pricing.mode.${value}`)}
-                      <span className={styles['filter-count']}>{counts[value]}</span>
+                      <Count size="small">{counts[value]}</Count>
                     </span>
                   ),
                 }))}
@@ -560,7 +561,7 @@ export const PricingPage: React.FC = () => {
               <span className={styles['pagination-range']} aria-live="polite" aria-atomic="true">
                 {t('pricing.pagination.range', { start: (safePage - 1) * PAGE_SIZE + 1, end: Math.min(safePage * PAGE_SIZE, totalRows), total: totalRows })}
               </span>
-              <Pagination {...pagination} size="small" showLessItems simple={isPhone ? { readOnly: true } : false} />
+              <Pager page={safePage} pageSize={PAGE_SIZE} total={totalRows} onChange={changePage} variant={isPhone ? 'stepped' : 'numbered'} />
             </nav>
           )}
         </section>

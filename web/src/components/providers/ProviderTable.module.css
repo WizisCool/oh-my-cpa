@@ -179,9 +179,3 @@
 .tone-warn { color: var(--warn); }
 .tone-danger { color: var(--danger); }
 .tone-neutral { color: var(--meta); }
-
-/* Scoped under the meter so the tone outranks the shared `.dashboard-meter span` fill. */
-.traffic-meter .meter-success { background: var(--success); }
-.traffic-meter .meter-warn { background: var(--warn); }
-.traffic-meter .meter-danger { background: var(--danger); }
-.traffic-meter .meter-neutral { background: var(--meta); }

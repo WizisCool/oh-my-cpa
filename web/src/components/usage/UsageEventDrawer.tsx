@@ -6,7 +6,6 @@ import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
   ArrowRightOutlined,
   NonStreamOutlined,
-  CopyOutlined,
   DownloadOutlined,
   DownOutlined,
   SwapOutlined,
@@ -19,7 +18,6 @@ import dayjs from '../../utils/time';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
-import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { ModelMark } from '../ModelMark';
@@ -42,6 +40,7 @@ import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { AppDrawer } from '../common/AppDrawer';
+import { CopyButton } from '../common/CopyButton';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -115,13 +114,6 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       {content}
     </section>
   );
-  const copy = async (text: string) => {
-    if (await copyText(text)) {
-      toast.success(t('res.copied'));
-      return;
-    }
-    toast.error(t('events.copy_failed'));
-  };
   const download = async () => {
     if (eventId == null || !event?.request_id) return;
     setDownloading(true);
@@ -277,13 +269,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             <div className="request-detail-id">
               <span>{event.request_id || t('events.no_request_id')}</span>
               {event.request_id && (
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<CopyOutlined />}
-                  aria-label={t('events.copy_id')}
-                  onClick={() => void copy(event.request_id!)}
-                />
+                <CopyButton text={event.request_id} label={t('events.copy_id')} />
               )}
             </div>
             <p className="request-window">{dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}</p>
@@ -331,14 +317,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           </span>
                           <div className="req-overview-error-btns">
                             {errors.length > 0 && errors[0].body && (
-                              <Button
-                                size="small"
-                                type="text"
-                                icon={<CopyOutlined />}
-                                onClick={() => void copy(errors[0].body || '')}
-                              >
-                                {t('events.copy_error')}
-                              </Button>
+                              <CopyButton showLabel text={errors[0].body} label={t('events.copy_error')} />
                             )}
                             <Button
                               size="small"
@@ -569,14 +548,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         <>
                           <p className="request-detail-note request-header-note">
                             <span>{t('events.response_headers_note')}</span>
-                            <Button
-                              size="small"
-                              type="text"
-                              icon={<CopyOutlined />}
-                              aria-label={t('events.response_headers_copy')}
-                              title={t('events.response_headers_copy')}
-                              onClick={() => void copy(responseHeadersText(event.response_headers ?? []))}
-                            />
+                            <CopyButton text={responseHeadersText(event.response_headers ?? [])} label={t('events.response_headers_copy')} />
                           </p>
                           {headerGroups.map((group) => (
                             <div className="request-header-group" key={group.id}>

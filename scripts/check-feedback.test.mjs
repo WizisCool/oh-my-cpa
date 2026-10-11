@@ -129,6 +129,8 @@ test('a raw antd Empty, Tag, Popconfirm or Drawer is refused, and the console\'s
   assert.deepEqual(rules("import { Card } from 'antd';"), ['raw-card']);
   assert.deepEqual(rules("import { Descriptions } from 'antd';"), ['raw-descriptions']);
   assert.deepEqual(rules("import type { CardProps } from 'antd';"), []);
+  assert.deepEqual(rules("import { Pagination } from 'antd';"), ['raw-pagination']);
+  assert.deepEqual(rules("import { Progress } from 'antd';"), ['raw-progress']);
   assert.deepEqual(rules("import { Tag } from '../common/Tag'; const chip = Tag;"), []);
   assert.deepEqual(rules("import { EmptyState } from '../common/EmptyState'; import { AppDrawer } from '../common/AppDrawer';"), []);
   assert.deepEqual(rules("import type { DrawerProps } from 'antd';"), []);

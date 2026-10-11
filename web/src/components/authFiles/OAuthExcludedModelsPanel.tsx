@@ -19,6 +19,7 @@ import styles from './OAuthModelRulesDrawer.module.css';
 import { SearchInput } from '../common/SearchInput';
 import { SectionHeading } from '../common/SectionHeading';
 import { Toolbar } from '../common/Toolbar';
+import { Meter } from '../common/Meter';
 
 export type OAuthModelCatalogState = 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -108,7 +109,6 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
     onChange(rules.filter((rule) => !cleared.has(rule)));
   };
 
-  const meterPercent = view.totalCount > 0 ? Math.round((view.excludedCount / view.totalCount) * 100) : 0;
 
   return (
     <div className={styles['pane']} data-testid="oauth-excluded-models-panel">
@@ -119,16 +119,11 @@ export const OAuthExcludedModelsPanel: React.FC<OAuthExcludedModelsPanelProps> =
             : t('af.excluded_summary_rules', { n: rules.length })}
         </span>
         {hasCatalog && (
-          <span
-            className={styles['meter']}
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={view.totalCount}
-            aria-valuenow={view.excludedCount}
-            aria-label={t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })}
-          >
-            <span className={styles['meter-fill']} style={{ width: `${meterPercent}%` }} />
-          </span>
+          <Meter
+            value={view.excludedCount}
+            max={view.totalCount}
+            label={t('af.excluded_summary_models', { excluded: view.excludedCount, total: view.totalCount })}
+          />
         )}
       </div>
 

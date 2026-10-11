@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
+import { Meter } from '../src/components/common/Meter';
+import { Pager } from '../src/components/common/Pager';
 import { Panel } from '../src/components/common/Panel';
 import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
@@ -203,5 +205,57 @@ describe('Panel', () => {
     expect(container.querySelector('.panel.system-card .ant-card-head-title')?.textContent).toBe('Versions');
     expect(container.querySelector('.ant-card-extra button')?.textContent).toBe('Check');
     expect((container.querySelector('.ant-card-body') as HTMLElement).style.padding).toBe('');
+  });
+});
+
+describe('Meter', () => {
+  it('draws the share, clamps a reading outside the range and names itself only when labelled', () => {
+    const { container, rerender } = render(<Meter value={3} max={12} label="3 of 12 excluded" />);
+    const meter = screen.getByRole('meter', { name: '3 of 12 excluded' });
+    expect(meter.getAttribute('aria-valuenow')).toBe('3');
+    expect((container.querySelector('.meter-fill') as HTMLElement).style.width).toBe('25%');
+
+    rerender(<Meter value={140} color="var(--danger)" size="thick" />);
+
+    const hidden = container.querySelector('.meter.is-thick') as HTMLElement;
+    expect(hidden.getAttribute('aria-hidden')).toBe('true');
+    expect(hidden.getAttribute('role')).toBeNull();
+    expect((container.querySelector('.meter-fill') as HTMLElement).style.width).toBe('100%');
+  });
+
+  it('draws an empty track for a range with nothing in it', () => {
+    const { container } = render(<Meter value={0} max={0} label="0 of 0" />);
+    expect((container.querySelector('.meter-fill') as HTMLElement).style.width).toBe('0%');
+  });
+});
+
+describe('Pager', () => {
+  // antd's pagination subscribes to breakpoints, which jsdom does not implement.
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+    }));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('renders nothing when the list fits on one page', () => {
+    const { container } = render(<Pager page={1} pageSize={20} total={20} onChange={() => undefined} />);
+    expect(container.querySelector('.pager')).toBeNull();
+  });
+
+  it('reports the page chosen and offers no page-size menu', () => {
+    const onChange = vi.fn();
+    const { container } = render(<Pager page={1} pageSize={20} total={48} onChange={onChange} />);
+    expect(container.querySelector('.ant-pagination-options')).toBeNull();
+
+    fireEvent.click(container.querySelector('.ant-pagination-item-2') as HTMLElement);
+
+    expect(onChange).toHaveBeenCalledWith(2, 20);
+  });
+
+  it('steps through pages without a field to type in', () => {
+    const { container } = render(<Pager variant="stepped" page={2} pageSize={10} total={48} onChange={() => undefined} />);
+    expect(container.querySelector('.ant-pagination-simple')).toBeTruthy();
+    expect(container.querySelector('input')).toBeNull();
   });
 });

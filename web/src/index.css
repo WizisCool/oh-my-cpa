@@ -675,6 +675,16 @@ a { color: inherit; }
 }
 .section-head-extra { flex: none; display: inline-flex; align-items: center; gap: 8px; }
 
+/* Count (components/common/Count.tsx): how many rows a label stands for. */
+.count { color: var(--meta); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.count.is-small { font-size: var(--text-xs); }
+
+/* Meter (components/common/Meter.tsx): a reading as a share of a track. The fill takes its colour
+   from the caller's band; without one it is the secondary ink. */
+.meter { display: block; width: 100%; height: 4px; overflow: hidden; border-radius: var(--radius-xs); background: var(--border); }
+.meter.is-thick { height: 8px; }
+.meter-fill { display: block; height: 100%; background: var(--fg-2); }
+
 /* Toolbar (components/common/Toolbar.tsx): the row above a list. It owns the gap; each control
    owns its width. `ruled` sets the row between two hairlines. */
 .toolbar {
@@ -1075,10 +1085,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .legend-dot.danger, .legend-dot.failure { background: var(--danger); }
 .legend-dot.accent { background: var(--accent); }
 .legend-dot.neutral { background: var(--meta); }
-/* The meter's fill colour is supplied by the row from the success-rate token its rate falls in,
-   which is why the accent here is only the fallback for a meter drawn without a rate. */
-.dashboard-meter { height: 4px; overflow: hidden; background: var(--border); border-radius: var(--radius-xs); }
-.dashboard-meter span { display: block; height: 100%; background: var(--accent); }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
 .status-pip { width: 7px; height: 7px; border-radius: var(--radius-xs); background: var(--success); }
