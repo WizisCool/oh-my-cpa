@@ -456,7 +456,7 @@ export const MS: Readonly<Record<string, string>> = {
   "conversation.reasoning_effort.low": "Rendah (low)",
   "conversation.reasoning_effort.medium": "Sederhana (medium)",
   "conversation.reasoning_effort.high": "Tinggi (high)",
-  "conversation.reasoning_effort.xhigh": "Sangat tinggi (xhigh)",
+  "conversation.reasoning_effort.xhigh": "Sangat tinggi (xHigh)",
   "conversation.reasoning_effort.max": "Maksimum (max)",
   "conversation.reasoning_effort.ultra": "Ultra (ultra)",
   "pg.user_agent": "User-Agent",

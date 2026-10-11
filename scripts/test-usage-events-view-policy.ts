@@ -585,4 +585,9 @@ test('a plain text dimension is shown exactly as it was committed', () => {
   assert.equal(chipDisplayValue({ ...chipBase, key: 'model', value: 'gpt-5-codex' }), 'gpt-5-codex');
 });
 
+test('a reasoning chip shows the parameter spelling', () => {
+  assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'xhigh' }), 'xHigh');
+  assert.equal(chipDisplayValue({ ...chipBase, key: 'reasoning', value: 'high' }), 'high');
+});
+
 console.log(`\n${checks} view-policy suites passed.`);

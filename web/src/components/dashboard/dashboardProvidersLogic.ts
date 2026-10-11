@@ -14,7 +14,7 @@ export interface AggregatedProvider {
   id: string;
   /** Configured provider id from settings if matched, e.g. "openai-compat-0" */
   providerId?: string;
-  /** Display title, e.g. "CodeX", "Meta", "Devin", "Cline", "Inception", "DeepSeek" */
+  /** Display title, e.g. "Codex", "Meta", "Devin", "Cline", "Inception", "DeepSeek" */
   name: string;
   /** Whether this is an OAuth channel or a configured AI provider */
   kind: ProviderKind;
@@ -71,10 +71,10 @@ const OPENAI_COMPATIBILITY_FAMILY = 'openai-compatibility';
 
 /**
  * Built-in and known OAuth channels and their display channel names, brand icon IDs, and protocols.
- * As requested, CodeX, Meta, Devin, Codebuddy, etc. use their official channel titles rather than raw IDs.
+ * As requested, Codex, Meta, Devin, Codebuddy, etc. use their official channel titles rather than raw IDs.
  */
 export const OAUTH_CHANNEL_META: Record<string, { name: string; iconId: string; protocol: string }> = {
-  codex: { name: 'CodeX', iconId: 'Codex', protocol: 'OpenAI Responses (OAuth)' },
+  codex: { name: 'Codex', iconId: 'Codex', protocol: 'OpenAI Responses (OAuth)' },
   meta: { name: 'Meta', iconId: 'Meta', protocol: 'Meta Muse (OAuth)' },
   devin: { name: 'Devin', iconId: 'Devin', protocol: 'Cognition Devin (OAuth)' },
   antigravity: { name: 'Antigravity', iconId: 'Antigravity', protocol: 'Antigravity (OAuth)' },
@@ -142,7 +142,7 @@ export interface AggregateProvidersOptions {
  * 1. ONLY active channels currently configured in CPA or possessing valid credentials are displayed.
  *    Deleted channels (those removed from settings and lacking any active credentials) are NEVER displayed.
  * 2. Each channel is unified under its canonical identity; no channel is ever displayed twice.
- * 3. OAuth channels (CodeX, Meta, Devin, Antigravity, Kimi, Codebuddy, etc.) use their proper channel names and icons.
+ * 3. OAuth channels (Codex, Meta, Devin, Antigravity, Kimi, Codebuddy, etc.) use their proper channel names and icons.
  * 4. If windowProviders is supplied (from the dashboard time-range selector), traffic stats reflect that exact window.
  *    A configured provider is credited only with what its own keys served (`windowCredentials`, by auth
  *    index) and, for an OpenAI-compatible provider, the label CPA gives it alone. Never by family: CPA

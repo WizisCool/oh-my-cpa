@@ -179,7 +179,7 @@ family in the app, and the only exception to the semantic-only rule above; see
 
 - **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
   purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
-  `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/CodeX data visualization standards.
+  `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/Codex data visualization standards.
 - **Track** (`--series-track`, `#2c2c30` dark / `#e5e5ea` light): the trend's plot floor and the usage
   ring's unfilled track, which is each mode's border step.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,

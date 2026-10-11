@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { groupResponseHeaders, responseHeadersText } from '../../types/responseHeaderGroups';
 import dayjs from '../../utils/time';
 import { api, ApiError } from '../../api/client';
+import { displayEffortName } from '../../theme/effortScale';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { maskKeyText } from '../../utils/maskKey';
@@ -399,7 +400,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                             <span className="terminal-muted">{t('events.served_model_unknown')}</span>
                           ),
                         ],
-                        [t('events.reasoning_effort'), value(event.reasoning_effort)],
+                        [t('events.reasoning_effort'), value(displayEffortName(event.reasoning_effort))],
                         [t('events.service_tier'), value(event.service_tier)],
                         [t('events.response_tier'), value(event.response_service_tier)],
                         [

@@ -10,7 +10,7 @@ import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
-import { effortColor, effortStep } from '../../theme/effortScale';
+import { displayEffortName, effortColor, effortStep } from '../../theme/effortScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveProviderInfo,
@@ -131,6 +131,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     // The level's place on the effort scale, as a token reference; absent for
     // `none` and for a level the scale does not rank, which keep the neutral badge.
     const effortHue = effortColor(effortStep(event.reasoning_effort));
+    const effortLabel = displayEffortName(event.reasoning_effort);
     const isNonStreaming = isNonStreamingEvent(event);
     const isFastTier = isFastTierEvent(event);
 
@@ -326,12 +327,12 @@ export const RequestRow = React.memo<RequestRowProps>(
           {event.reasoning_effort || isFastTier || isNonStreaming ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
-                <RequestTooltip title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}>
+                <RequestTooltip title={`${t('events.reasoning_effort')}: ${effortLabel}`}>
                   <span
                     className="req-effort-badge"
                     style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
                   >
-                    {event.reasoning_effort}
+                    {effortLabel}
                   </span>
                 </RequestTooltip>
               )}

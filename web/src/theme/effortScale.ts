@@ -25,6 +25,18 @@ export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 export const EFFORT_STEPS = EFFORT_LEVELS.length - 1;
 
 /**
+ * displayEffortName maps a stored effort to the parameter spelling the
+ * composer shows: the `xhigh` level reads `xHigh` everywhere a reader sees
+ * it, while the stored wire value stays lowercase. Case-insensitive so a
+ * record stored either way still reads the same.
+ */
+export function displayEffortName(effort: string | undefined | null): string {
+  const trimmed = (effort ?? '').trim();
+  if (trimmed.toLowerCase() === 'xhigh') return 'xHigh';
+  return trimmed;
+}
+
+/**
  * effortStep places a recorded effort on the scale: 0 for `none`, 1 to
  * `EFFORT_STEPS` for a level that reasons, and null for a value the scale does
  * not know.

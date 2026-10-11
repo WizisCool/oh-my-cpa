@@ -175,7 +175,7 @@ export async function agentWorkspace({ base, page, check }) {
   await modelDefault.waitFor();
   await until(async () => modelDefault.evaluate(option => option === document.activeElement));
   check('reasoning default is an explicit selected choice', await modelDefault.getAttribute('aria-selected') === 'true');
-  const extraHighColumns = await effortPicker.getByRole('option', { name: 'Extra high (xhigh)', exact: true }).evaluate(row => {
+  const extraHighColumns = await effortPicker.getByRole('option', { name: 'Extra high (xHigh)', exact: true }).evaluate(row => {
     const [parameter, description] = row.children;
     return {
       parameter: parameter.textContent,
@@ -215,7 +215,7 @@ export async function agentWorkspace({ base, page, check }) {
     weight: getComputedStyle(row.querySelector('span')).fontWeight,
   }));
   check('the current effort has a filled row and bold name', selectedStyle.fill !== 'rgba(0, 0, 0, 0)' && Number(selectedStyle.weight) >= 600, JSON.stringify(selectedStyle));
-  await effortPicker.getByRole('option', { name: 'Extra high (xhigh)', exact: true }).click();
+  await effortPicker.getByRole('option', { name: 'Extra high (xHigh)', exact: true }).click();
   await effortPicker.waitFor({ state: 'hidden' });
   check('the composer names extra-high reasoning with its parameter spelling', (await effortChip.innerText()).trim() === 'xHigh');
   await effortChip.click();

@@ -657,7 +657,7 @@ const DICT: Record<string, [string, string]> = {
   'conversation.reasoning_effort.low': ["低 (low)", "Low (low)"],
   'conversation.reasoning_effort.medium': ["中 (medium)", "Medium (medium)"],
   'conversation.reasoning_effort.high': ["高 (high)", "High (high)"],
-  'conversation.reasoning_effort.xhigh': ["极高 (xhigh)", "Extra high (xhigh)"],
+  'conversation.reasoning_effort.xhigh': ["极高 (xHigh)", "Extra high (xHigh)"],
   'conversation.reasoning_effort.max': ["最大 (max)", "Max (max)"],
   'conversation.reasoning_effort.ultra': ["极致 (ultra)", "Ultra (ultra)"],
   'pg.user_agent': ["User-Agent", "User-Agent"],
