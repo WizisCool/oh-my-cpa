@@ -164,15 +164,17 @@ legible as text on a dark one:
 
 | Step | Dark | Light | Measured use |
 | --- | --- | --- | --- |
-| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.03:1** on the dark background, **6.92:1** on the light one |
-| `--accent-hover` | `#0077b8` | `#004770` | white label on a filled control: **4.85:1** and **9.83:1** |
-| `--accent-active` | `#005d8f` | `#00344f` | pressed state |
+| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.74:1** on the dark background, **7.09:1** on the light one |
+| `--accent-hover` | `#0579bd` | `#004a73` | white label on a filled control: **4.69:1** and **9.43:1** |
+| `--accent-active` | `#025e94` | `#023b5d` | pressed state: the same label reads **6.93:1** and **11.76:1** |
 | `--accent-on` | `#ffffff` | `#ffffff` | the label on a filled control — the colour both filled-control steps above are measured against |
 
-The dark theme's link step is the light theme's *filled-control* step, which is the same value doing
-two jobs in two themes. That is deliberate: it is the only step of this hue that clears 4.5:1 as text
-on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.71:1** on a light
-page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
+The two modes share the hue and no value. Each palette authors its own link step, and `derivePalette`
+computes the two filled-control steps from it: a proportional OKLCH lightness step, then both fills
+deepened together until one label ink clears 4.5:1 on the resting fill and the pressed one alike. OMC
+Light's link step is the deeper `#005d8f` because the bright `#00a2fb` reads **2.78:1** against white -
+which is both the light page and the label on a filled control - so it can only ever be the dark
+theme's text colour.
 
 Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
 the resolved palette, so a change here moves the logo with it — an operator's own accent included. See
@@ -186,7 +188,9 @@ ring is `--fg` and the corner is `--accent`. `web/public/favicon.svg` is written
 by `pnpm sync-brand` and holds the two default palettes behind `prefers-color-scheme`, because a
 browser tab has no console theme to follow; `pnpm check-brand` fails when it is stale.
 
-Success/warn/danger are identical in both modes.
+Success, warn and danger are per-mode constants rather than derived tokens (`MODE_SEMANTICS` in
+`web/src/theme/palette.ts`): `#10b981` / `#f59e0b` / `#ef4444` in dark mode, `#059669` / `#b45309` /
+`#dc2626` in light mode.
 
 ### Status pip semantics
 
@@ -362,7 +366,7 @@ failed requests, so a weakly-cached request never reads as an error.
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
 | `--cache-rate-yellow` | `#f59e0b` | `#b45309` | 0% stop |
-| `--cache-rate-green` | `#10b981` | `#047857` | 100% stop |
+| `--cache-rate-green` | `#10b981` | `#059669` | 100% stop |
 | `--cache-rate-tint` | `14%` | `20%` | badge fill = hue over `--bg` |
 | `--cache-rate-edge` | `32%` | `34%` | badge border = hue over `--bg` |
 
@@ -373,15 +377,21 @@ Rules:
    component, and OKLCH keeps the hue sweep even. The component never names a
    colour: `cacheScale.ts` returns the two stops as `var()` references plus the
    low stop's weight, and the CSS mixes them.
-2. **The stops are palette steps, not new colours.** The dark stops are the
-   semantic hues lightened until the 11px badge text clears **4.5:1** against the
-   badge's own tint; the light stops are the darker reading of the same hues
-   (the low end is ochre — a saturated yellow cannot also be legible on a light
-   page). Measured worst case across the ramp in the browser harness: **6.70:1**
-   dark, **4.69:1** light (asserted at ≥ 4.5:1 for every sampled rate, including
-   the row's hover state). The light fill is stronger than the dark one because
-   a light page needs more tint before the badge reads as a badge, which is why
-   the two values differ.
+2. **The stops are palette steps, not new colours.** `derivePalette` sets
+   `--cache-rate-yellow` to the mode's `--warn` and `--cache-rate-green` to its
+   `--success` (`scripts/test-theme-presets.ts` asserts both), so the light stops
+   are the darker reading of the same two hues (the low end is ochre — a
+   saturated yellow cannot also be legible on a light page). The rule for the
+   11px badge text is **4.5:1** against the badge's own tint, and only the dark
+   stops meet it. Measured with `contrastRatio` (`web/src/theme/colorMath.ts`),
+   each stop against its own tint composited over the ground: OMC Dark reads
+   **6.87:1** at the 0% stop and **6.06:1** at the 100% stop on the page,
+   **6.16:1** and **5.38:1** on a hovered or selected row (`--surface`); OMC
+   Light reads **3.81:1** and **2.95:1** on the page, **3.54:1** and **2.77:1**
+   on such a row. These are measurements rather than a pinned bound: no check
+   asserts them. The light fill is stronger than the dark one because a light
+   page needs more tint before the badge reads as a badge, which is why the two
+   tints differ.
 3. **The top of the scale is presentation policy.** `100%` is not shown: the
    badge stops at **99.9%** (`MAX_CACHE_RATE`; the Go dashboard aggregate caps
    identically) so the app never claims a perfect hit rate. Readings carry **one
@@ -1769,7 +1779,7 @@ Non-obvious decisions, keep these when editing:
 
 Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/chartTooltip.ts`: content-sized columns, 8px decorative swatches and 6px gutters keep each marker, optional name, value and optional share together. Timestamp headings do not stretch those tracks; names align on the left and numeric edges on the right across rows. Full names and exact values remain available in escaped titles. Existing palette, font and motion tokens are unchanged.
 
-- `colorPrimary: accentHover` (`#0077b8` in OMC Dark, `#004770` in OMC Light) — filled controls
+- `colorPrimary: accentHover` (`#0579bd` in OMC Dark, `#004a73` in OMC Light) — filled controls
   use the deeper step; `colorInfo/colorLink: accent` (`#00a2fb` / `#005d8f`). This is why buttons
   don't glow antd-blue while links stay recognizable.
 - Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
