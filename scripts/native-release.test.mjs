@@ -67,24 +67,48 @@ test('release integrity rejects missing, unexpected, empty, symlinked or corrupt
   assert.throws(() => verifyReleaseAssets(directory, PLAN));
 }));
 
+test('GNU tar treats drive-letter archive paths as local files', () => {
+  const target = PLAN.find(target => target.goos === 'linux');
+  const staging = 'C:\\OMC release\\staging';
+  const output = 'C:\\OMC release\\output';
+  const commands = [];
+  packageNativeArchive(target, staging, output, 1720000000, (command, args, options) => {
+    commands.push({ command, args, options });
+  });
+  assert.equal(commands.length, 1);
+  const command = commands[0];
+  assert.equal(command.command, 'tar');
+  assert.ok(command.args.includes('--force-local'), 'A colon in an archive path must not enable a remote shell');
+  assert.equal(command.args[command.args.indexOf('-czf') + 1], path.join(output, target.archive));
+  assert.equal(command.args[command.args.indexOf('-C') + 1], staging);
+  for (const argument of ['--sort=name', '--mtime=@1720000000', '--owner=0', '--group=0', '--numeric-owner']) {
+    assert.ok(command.args.includes(argument), `Deterministic archive setting is missing: ${argument}`);
+  }
+});
+
 test('tar and zip archives extract the exact payload with executable permission on Unix', () => runWithDirectory(directory => {
   for (const goos of ['linux', 'windows']) {
-    const target = PLAN.find(target => target.goos === goos);
+    const target = { ...PLAN.find(target => target.goos === goos) };
+    // A relative colon-bearing name exercises GNU tar's remote-host parsing on Unix too.
+    const hasDriveLetterFixture = goos === 'linux' && process.platform !== 'win32';
+    if (hasDriveLetterFixture) target.archive = `C:${target.archive}`;
     const staging = path.join(directory, goos);
     fs.mkdirSync(staging);
     for (const name of [target.binary, ...ARCHIVE_DOCUMENTS, '.env.example']) {
       fs.mkdirSync(path.dirname(path.join(staging, name)), { recursive: true });
       fs.writeFileSync(path.join(staging, name), name, { mode: name === target.binary ? 0o755 : 0o644 });
     }
-    packageNativeArchive(target, staging, directory, 1720000000);
+    packageNativeArchive(target, staging, hasDriveLetterFixture ? '.' : directory, 1720000000,
+      (command, args, options) => execFileSync(command, args, { ...options, cwd: options.cwd ?? directory }));
     const extracted = path.join(directory, `${goos}-extracted`);
     fs.mkdirSync(extracted);
     if (goos === 'windows') execFileSync('unzip', ['-q', path.join(directory, target.archive), '-d', extracted]);
-    else execFileSync('tar', ['-xzf', path.join(directory, target.archive), '-C', extracted]);
+    else execFileSync('tar', ['--force-local', '-xzf', hasDriveLetterFixture ? target.archive : path.join(directory, target.archive),
+      '-C', extracted], { cwd: directory });
     assert.deepEqual(fs.readdirSync(extracted, { recursive: true }).sort(), fs.readdirSync(staging, { recursive: true }).sort());
     for (const name of [...ARCHIVE_DOCUMENTS, '.env.example']) assert.equal(fs.readFileSync(path.join(extracted, name), 'utf8'), name);
     assert.equal(fs.readFileSync(path.join(extracted, target.binary), 'utf8'), target.binary);
-    if (goos !== 'windows') assert.equal(fs.statSync(path.join(extracted, target.binary)).mode & 0o777, 0o755);
+    if (process.platform !== 'win32' && goos !== 'windows') assert.equal(fs.statSync(path.join(extracted, target.binary)).mode & 0o777, 0o755);
   }
 }));
 

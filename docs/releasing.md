@@ -48,7 +48,9 @@ The builder validates both package versions, builds/syncs the SPA once before th
 Go targets, verifies the actual Go build metadata, packages all targets into
 `tmp/native-release`, and validates the complete checksum manifest. Archive member
 timestamps use the source commit date; tar owners are normalized and zip strips
-extra metadata. A clean output directory prevents stale assets from entering a retry.
+extra metadata. GNU tar creation uses `--force-local`, so drive-letter archive paths
+are treated as local files rather than remote hosts. A clean output directory
+prevents stale assets from entering a retry.
 The smoke check extracts the host-architecture Linux archive into a new directory
 and checks SQLite, login, `/omc`, root and nested base paths, embedded JavaScript and
 the running tag. Foreign targets are cross-compiled, not executed on Linux.

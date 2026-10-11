@@ -342,7 +342,9 @@ than to `internal/operations`.
 
 `database_schema` and `database_query` read OMC's own database through a second, read-only
 SQLite pool that `internal/repository` opens on first use (`mode=ro`, `query_only`, no attached
-databases). The repository checks each statement's compiled `EXPLAIN` program against a table and
+databases). Its escaped absolute file URI keeps Windows drive letters in the path
+(`file:///C:/...`), with reserved filename characters escaped and the connection
+settings unchanged. The repository checks each statement's compiled `EXPLAIN` program against a table and
 column classification before running it, and bounds and masks what it returns (ADR 0036,
 `docs/agent-capabilities.md`).
 

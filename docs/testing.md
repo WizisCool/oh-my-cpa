@@ -178,7 +178,11 @@ Native release planning, archive payloads, manifest integrity and workflow order
 are repository self-tests in `scripts/native-release.test.mjs` and
 `scripts/release-plan.test.mjs`, discovered automatically. They do not build Go or
 launch browsers. Archive payload self-tests use GNU tar, zip and unzip, matching
-the Linux packaging runner. The tag workflow's **native** job runs `scripts/native-release.mjs`
+the Linux packaging runner. The builder and archive payload self-tests force local
+GNU tar paths, so a Windows drive-letter colon never requests a remote shell;
+injected-command regressions retain the deterministic archive settings. Extracted executable permission
+checks run on Unix hosts, which can represent those permission bits; payload and checksum
+assertions run on every host. The tag workflow's **native** job runs `scripts/native-release.mjs`
 to build all eight CGO-free targets after embedding the SPA, then
 `scripts/native-release-smoke.mjs` to extract/run the host Linux archive and assert
 HTTP readiness, SQLite, login, prefix handling, local JavaScript and injected version.
@@ -258,6 +262,17 @@ permissions. These diagnostic lanes do not replace or delay the hermetic PR gate
 Maintenance logs are retained for 30 days. A failing lane belongs to the repository
 maintainer: distinguish an assertion/race, scanner infrastructure failure and a
 reported advisory, preserve the evidence, then rerun only that lane after remediation.
+
+### Read-only database path compatibility
+
+`internal/repository/readonly_query_test.go` owns absolute file URI construction for
+Unix and Windows drive paths, including spaces, Unicode and URI-reserved characters.
+Its real SQLite test reads a marker inserted through the writable pool from an escaped
+filename, then asserts both write refusal after disabling `query_only` (the independent
+`mode=ro` boundary) and attachment refusal. The existing query suites retain compiled
+program admission, hidden-table/column refusals, bounded results and masking coverage.
+These tests run in `go test ./...`, without Chromium or a new runner. Drive-letter URI
+cases run on every host; actual Windows filesystem behavior still needs a Windows run.
 
 ## 2. Registering a new test
 

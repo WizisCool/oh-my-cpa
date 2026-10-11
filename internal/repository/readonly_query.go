@@ -129,6 +129,16 @@ type QueryTable struct {
 	Redacted []string      `json:"redacted,omitempty"`
 }
 
+func formatReadOnlyDSN(absolutePath string) string {
+	// A Windows drive must be part of the URI path, never its authority; otherwise
+	// SQLite treats the drive letter as a remote host instead of opening the local file.
+	if !strings.HasPrefix(absolutePath, "/") {
+		absolutePath = "/" + absolutePath
+	}
+	location := (&url.URL{Scheme: "file", Path: absolutePath}).String()
+	return location + "?mode=ro&_pragma=busy_timeout(2000)&_pragma=query_only(1)"
+}
+
 // readOnlyPool opens, once, the connection pool operator queries run on.
 func (db *DB) readOnlyPool() (*sql.DB, error) {
 	db.readOnlyOnce.Do(func() {
@@ -141,8 +151,7 @@ func (db *DB) readOnlyPool() (*sql.DB, error) {
 			db.readOnlyErr = err
 			return
 		}
-		location := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolute)}).String()
-		pool, err := sql.Open("sqlite", location+"?mode=ro&_pragma=busy_timeout(2000)&_pragma=query_only(1)")
+		pool, err := sql.Open("sqlite", formatReadOnlyDSN(filepath.ToSlash(absolute)))
 		if err != nil {
 			db.readOnlyErr = err
 			return
