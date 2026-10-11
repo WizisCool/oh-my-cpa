@@ -154,7 +154,7 @@ export async function runConfigurationPluginsAcceptance({
   if (sourceModeOpened) {
     check(
       'source mode opens without re-authentication',
-      (await sourceToolbar.locator('.ant-tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
+      (await sourceToolbar.locator('.tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
     );
     // Only built-artifact acceptance can catch worker asset paths or chunk loading defects.
     try {

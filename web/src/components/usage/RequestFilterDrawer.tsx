@@ -232,7 +232,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   // Keyed by the control's id: the rows are rendered from the facet and field lists, and the id is
   // the one value already unique across them.
   const row = (labelKey: string, labelFor: string, control: React.ReactNode, errorKeys?: string[]) => (
-    <div className={styles['row']} key={labelFor}>
+    <div className={clsx('req-filter-row', styles['row'])} key={labelFor}>
       <label className={styles['label']} htmlFor={labelFor}>
         {t(labelKey)}
       </label>

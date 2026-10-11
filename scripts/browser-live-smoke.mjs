@@ -316,12 +316,12 @@ async function main() {
   const yamlLen = (await yamlEditor.inputValue()).length;
   await yamlEditor.fill((await yamlEditor.inputValue()) + '\n# acceptance-test-comment\n');
   await page.waitForTimeout(400);
-  const dirtyTag = await page.locator('.config-source-toolbar .ant-tag').innerText();
+  const dirtyTag = await page.locator('.config-source-toolbar .tag').innerText();
   await page.locator('.config-header-actions button', { hasText: '刷新' }).click();
   await page.waitForTimeout(300);
   await page.locator('.ant-popconfirm .ant-btn-primary, .ant-popover .ant-btn-primary').click();
   await page.waitForTimeout(600);
-  const cleanTag = await page.locator('.config-source-toolbar .ant-tag').innerText();
+  const cleanTag = await page.locator('.config-source-toolbar .tag').innerText();
   check('配置源码按需加载并支持脏状态保护与重载', `len=${yamlLen} dirtyTag=${dirtyTag} cleanTag=${cleanTag}`,
     yamlLen > 1000 && dirtyTag.includes('已修改') && cleanTag.includes('已同步'));
 
