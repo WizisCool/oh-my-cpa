@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import React from 'react';
 import { Button, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
 import type {
@@ -30,7 +31,8 @@ import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { AppDrawer } from '../common/AppDrawer';
-import './RequestFilterDrawer.css';
+import styles from './RequestFilterDrawer.module.css';
+import { SectionHeading } from '../common/SectionHeading';
 
 /**
  * canonicalViewKey gives the committed view a stable identity so the drawer can
@@ -215,9 +217,9 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   };
 
   const section = (titleKey: string, children: React.ReactNode) => (
-    <section className="req-filter-group">
-      <h3 className="req-filter-group-title">{t(titleKey)}</h3>
-      <div className="req-filter-group-body">{children}</div>
+    <section className={styles['group']}>
+      <SectionHeading as="h3" level="label" className={clsx('req-filter-group-title', styles['group-title'])} title={t(titleKey)} />
+      <div className={styles['group-body']}>{children}</div>
     </section>
   );
 
@@ -230,15 +232,15 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   // Keyed by the control's id: the rows are rendered from the facet and field lists, and the id is
   // the one value already unique across them.
   const row = (labelKey: string, labelFor: string, control: React.ReactNode, errorKeys?: string[]) => (
-    <div className="req-filter-row" key={labelFor}>
-      <label className="req-filter-label" htmlFor={labelFor}>
+    <div className={styles['row']} key={labelFor}>
+      <label className={styles['label']} htmlFor={labelFor}>
         {t(labelKey)}
       </label>
-      <div className="req-filter-control">
+      <div className={styles['control']}>
         {control}
         {errorKeys?.map((key) =>
           errors[key] ? (
-            <p className="req-filter-error" key={key}>
+            <p className={clsx('req-filter-error', styles['error'])} key={key}>
               {t(errors[key]!)}
             </p>
           ) : null,
@@ -258,7 +260,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         // a rename or a retired alias is exactly when they go looking. The other
         // dimensions are facets of what exists, so they stay selection-only.
         mode={spec.key === 'model_alias' ? 'tags' : 'multiple'}
-        className="req-filter-select"
+        className={styles['select']}
         aria-label={t(spec.labelKey)}
         placeholder={t(spec.labelKey)}
         value={draft.multi[spec.key] ?? []}
@@ -298,9 +300,9 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     'events.regex',
     'req-regex-pattern',
     <>
-      <Space.Compact className="req-filter-regex">
+      <Space.Compact className={styles['regex']}>
         <Select<UsageRegexField>
-          className="req-filter-regex-field"
+          className={styles['regex-field']}
           aria-label={t('events.regex_field')}
           value={regexField}
           popupMatchSelectWidth={false}
@@ -312,7 +314,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         />
         <Input
           id="req-regex-pattern"
-          className="req-filter-regex-pattern"
+          className={styles['regex-pattern']}
           aria-label={t('events.regex')}
           placeholder="^claude-.*-(opus|sonnet)"
           value={committedRegex?.pattern ?? ''}
@@ -325,7 +327,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
           onPressEnter={handleApply}
         />
       </Space.Compact>
-      <p className="req-filter-hint">{t('events.regex_hint')}</p>
+      <p className={styles['hint']}>{t('events.regex_hint')}</p>
     </>,
     ['regex'],
   );
@@ -352,11 +354,11 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     return row(
       labelKey,
       `req-range-${key}-min`,
-      <div className="req-range-pair">
+      <div className={styles['range-pair']}>
         {isDecimal ? (
           <Input
             id={`req-range-${key}-min`}
-            className="req-range-input"
+            className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_min')}`}
             placeholder={t('events.range_min')}
             value={bound('min')}
@@ -366,7 +368,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         ) : (
           <InputNumber
             id={`req-range-${key}-min`}
-            className="req-range-input"
+            className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_min')}`}
             placeholder={t('events.range_min')}
             min={0}
@@ -376,13 +378,13 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             status={errors[`${key}_min`] ? 'error' : undefined}
           />
         )}
-        <span className="req-range-sep" aria-hidden="true">
+        <span className={styles['range-sep']} aria-hidden="true">
           —
         </span>
         {isDecimal ? (
           <Input
             id={`req-range-${key}-max`}
-            className="req-range-input"
+            className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_max')}`}
             placeholder={t('events.range_max')}
             value={bound('max')}
@@ -392,7 +394,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
         ) : (
           <InputNumber
             id={`req-range-${key}-max`}
-            className="req-range-input"
+            className={styles['range-input']}
             aria-label={`${t(labelKey)} · ${t('events.range_max')}`}
             placeholder={t('events.range_max')}
             min={0}
@@ -402,7 +404,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
             status={errors[`${key}_max`] ? 'error' : undefined}
           />
         )}
-        <span className="req-range-unit">{unit}</span>
+        <span className={styles['range-unit']}>{unit}</span>
       </div>,
       errorKeys,
     );
@@ -410,7 +412,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
 
   return (
     <AppDrawer
-      className="req-filter-drawer"
+      className={clsx('req-filter-drawer', styles['drawer'])}
       title={t('events.advanced_filters')}
       open={open}
       onClose={onClose}
@@ -433,7 +435,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       }
     >
       {facetsFailed && (
-        <p className="req-filter-note" role="status">
+        <p className={styles['note']} role="status">
           {t('events.facets_error')}
         </p>
       )}
