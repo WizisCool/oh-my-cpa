@@ -28,6 +28,15 @@ type ReleaseManager interface {
 	// can distinguish a real check from an answer served by the floor.
 	CheckReportingFreshness(ctx context.Context, product string) (bool, error)
 	Products() []release.Product
+	// Stargazers answers the project's star count; mayFetch permits spending a request.
+	Stargazers(ctx context.Context, mayFetch bool) (int64, bool)
+}
+
+// SystemRepositoryDTO is what the shell's repository link shows beside its icon.
+type SystemRepositoryDTO struct {
+	// StargazersCount is null until a read has succeeded, which the link renders as
+	// no count at all rather than as zero.
+	StargazersCount *int64 `json:"stargazers_count"`
 }
 
 // SystemInfoDTO is the System Information page's payload.
@@ -390,6 +399,23 @@ func gatewayProviderCount(ctx context.Context, client *management.Client) *int {
 		return nil
 	}
 	return &total
+}
+
+// getSystemRepository serves the project's star count for the header link.
+//
+// The shell reads this on every page, so it never fails the way the page's own routes
+// do: a handler built without the service, an offline deployment and a refused request
+// all answer `200` with a null count, and the link stays a plain link. A page visit may
+// spend the read only where the operator allows page visits to check for updates.
+func (h *Handler) getSystemRepository(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	dto := SystemRepositoryDTO{}
+	if h.release != nil {
+		if count, isKnown := h.release.Stargazers(request.Context(), h.cfg.Release.AutoCheck); isKnown {
+			dto.StargazersCount = &count
+		}
+	}
+	writeJSON(writer, http.StatusOK, dto)
 }
 
 // getSystemReleases serves one product's merged change log.

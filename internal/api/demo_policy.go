@@ -189,6 +189,7 @@ var demoPolicy = []demoPolicyRule{
 	// process, and "the demonstration performs no outbound request" has to be a
 	// property of the code rather than a promise about the environment.
 	{http.MethodGet, "/api/v1/management/system/releases", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/system/repository", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/system/check-updates", demoRefuse, "checking for updates is disabled: it would call the GitHub API"},
 
 	// Database maintenance. Reads are allowed so the page renders; both actions are

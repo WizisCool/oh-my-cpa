@@ -141,7 +141,7 @@ var ErrRateLimited = errors.New("the GitHub API rate limit for this address is e
 type Client struct {
 	httpClient *http.Client
 	// baseURL exists for tests, which point it at an httptest server. Production
-	// always uses the constant host through newRequest.
+	// always uses the constant host.
 	baseURL string
 }
 

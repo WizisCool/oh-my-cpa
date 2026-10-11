@@ -1,13 +1,21 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button, Tooltip } from 'antd';
-import { GithubOutlined, LogoutOutlined, ReloadOutlined } from '../icons';
+import { api } from '../../api/client';
+import { GithubOutlined, LogoutOutlined, ReloadOutlined, Star } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useI18n, LANGUAGES } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
 import { ActionMenu } from './ActionMenu';
+import { HeaderAction } from './HeaderAction';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
+import { formatStarCount } from '../../utils/format';
+
+const REPOSITORY_URL = 'https://github.com/WizisCool/oh-my-cpa';
+/** The server reads the count at most hourly, so asking more often learns nothing. */
+const STAR_COUNT_STALE_MS = 60 * 60 * 1000;
 
 interface HeaderNavProps {
   isDiscovering?: boolean;
@@ -26,6 +34,16 @@ interface HeaderNavProps {
  * moves the controls beside it, so the operator has to re-aim at a button they were
  * already pointing at. Its name is on the tooltip and on the accessible label instead;
  * the exit-door icon carries the meaning at a glance.
+ *
+ * Every desktop control is a `HeaderAction`, which is what gives the row one height, one
+ * weight and one hover. The repository link is the exception to fixed width: once the
+ * server has read the project's star count it carries it as its label. It sits first in
+ * a right-aligned cluster, so the count arriving widens it away from the other controls
+ * and none of them moves. The count comes from the server, never from the browser asking
+ * GitHub, which keeps the console free of third-party requests; until it is known the
+ * link is the icon alone. The tooltip names the action only - the count is already on
+ * the control. A hairline separates the link from the console's own actions: it leaves
+ * the console, they act on it.
  *
  * This cluster carries actions only. Connection status and version are the side rail
  * foot's, which is their one place, and a mount path is fixed for the life of a
@@ -51,6 +69,21 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   const isPhone = useIsPhoneViewport();
   const { lang, setLang } = useI18n();
   const { modePreference, setModePreference } = useTheme();
+  // A failed read is not retried or reported: the count is decoration on a link that
+  // works without it.
+  const { data: repository } = useQuery({
+    queryKey: ['system-repository'],
+    queryFn: api.getSystemRepository,
+    staleTime: STAR_COUNT_STALE_MS,
+    retry: false,
+  });
+  const starCount = repository?.stargazers_count ?? null;
+  const stars = starCount === null ? null : (
+    <>
+      <Star className="header-star-icon" size="1em" fill="currentColor" aria-hidden="true" />
+      {formatStarCount(starCount)}
+    </>
+  );
 
   if (isPhone) {
     return (
@@ -70,8 +103,9 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               {language.name}
             </Button>
           ))}
-          <Button type="text" icon={<GithubOutlined />} href="https://github.com/WizisCool/oh-my-cpa" target="_blank" rel="noopener noreferrer">
+          <Button type="text" icon={<GithubOutlined />} href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
             {t('header.open_repository')}
+            {stars === null ? null : <span className="header-star-count">{stars}</span>}
           </Button>
           {!isDemo && <Button type="text" icon={<LogoutOutlined />} loading={isLoggingOut} onClick={onLogout}>{t('header.logout')}</Button>}
         </ActionMenu>
@@ -88,31 +122,27 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           </span>
         </Tooltip>
       )}
-      <Tooltip title={t('header.open_repository')}>
-        <Button
-          type="text"
-          icon={<GithubOutlined />}
-          href="https://github.com/WizisCool/oh-my-cpa"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={t('header.open_repository')}
-        />
-      </Tooltip>
-      <Tooltip title={t('header.refresh_all')}>
-        <Button type="text" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
-      </Tooltip>
+      <HeaderAction
+        tooltip={t('header.open_repository')}
+        icon={<GithubOutlined />}
+        href={REPOSITORY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {stars}
+      </HeaderAction>
+      <span className="app-header-divider" aria-hidden="true" />
+      <HeaderAction tooltip={t('header.refresh_all')} icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} />
       <PreferenceMenus />
       {!isDemo && (
-        <Tooltip title={t('header.logout')}>
-          <Button
-            className="header-logout"
-            type="text"
-            icon={<LogoutOutlined />}
-            loading={isLoggingOut}
-            onClick={onLogout}
-            aria-label={t('header.logout')}
-          />
-        </Tooltip>
+        <HeaderAction
+          className="header-logout"
+          tone="muted"
+          tooltip={t('header.logout')}
+          icon={<LogoutOutlined />}
+          loading={isLoggingOut}
+          onClick={onLogout}
+        />
       )}
     </div>
   );

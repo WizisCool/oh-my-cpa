@@ -113,6 +113,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "overview", Path: "/api/v1/management/overview"},
 		{Name: "system", Path: "/api/v1/management/system"},
 		{Name: "system-releases", Path: "/api/v1/management/system/releases"},
+		{Name: "system-repository", Path: "/api/v1/management/system/repository"},
 		{Name: "system-maintenance", Path: "/api/v1/management/system/maintenance"},
 		{Name: "config", Path: "/api/v1/management/config"},
 		{Name: "config-source", Path: "/api/v1/management/config/source"},

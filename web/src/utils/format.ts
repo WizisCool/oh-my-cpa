@@ -18,6 +18,18 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 /**
+ * A repository's star count as the header shows it: exact below a thousand, then
+ * thousands with two decimals ("1.23k").
+ *
+ * Truncated rather than rounded, so the badge never claims a star the repository does
+ * not have: 1,999 reads "1.99k", not "2.00k".
+ */
+export function formatStarCount(count: number): string {
+  if (count < 1000) return String(count);
+  return `${(Math.floor(count / 10) / 100).toFixed(2)}k`;
+}
+
+/**
  * How long ago an instant was: "just now", minutes, hours, then days.
  *
  * Coarse on purpose - a list reads "3 hours ago" at a glance, and the exact instant belongs in

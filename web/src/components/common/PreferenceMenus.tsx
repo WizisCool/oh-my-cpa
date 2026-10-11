@@ -1,6 +1,7 @@
 import React from 'react';
-import { Button, Dropdown, Tooltip, type MenuProps } from 'antd';
+import { Dropdown, type MenuProps } from 'antd';
 import { DesktopOutlined, MoonOutlined, SunOutlined } from '../icons';
+import { HeaderAction } from './HeaderAction';
 import { LanguageFlag } from './LanguageFlag';
 import { LANGUAGES, useI18n, useT } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
@@ -73,40 +74,36 @@ export const PreferenceMenus: React.FC = () => {
       {/* The tooltip is the control's name; the accessible name additionally states the mode in force,
           because the icon that carries it is decoration to a screen reader - without the state there, all
           three states of the cycle announce identically. */}
-      <Tooltip title={t('header.theme')}>
-        <Button
-          type="text"
-          icon={MODE_ICONS[modePreference]}
-          aria-label={t('header.theme_state', { mode: t(MODE_LABEL_KEYS[modePreference]) })}
-          onClick={cycleModePreference}
-        />
-      </Tooltip>
+      <HeaderAction
+        tooltip={t('header.theme')}
+        accessibleLabel={t('header.theme_state', { mode: t(MODE_LABEL_KEYS[modePreference]) })}
+        icon={MODE_ICONS[modePreference]}
+        onClick={cycleModePreference}
+      />
       {/* The trigger keeps the language's own code beside its flag inside a fixed
           slot, so switching language never resizes it and never slides the buttons
           an operator is aiming at. */}
-      <Tooltip title={`${t('header.language')} · ${activeLanguage ? activeLanguage.name : lang}`}>
-        <Dropdown
-          trigger={['click']}
-          placement="bottomRight"
-          menu={{
-            items: languageItems,
-            selectable: true,
-            selectedKeys: [lang],
-            onClick: ({ key }) => {
-              const picked = LANGUAGES.find((language) => language.id === key);
-              if (picked) setLang(picked.id);
-            },
-          }}
+      <Dropdown
+        trigger={['click']}
+        placement="bottomRight"
+        menu={{
+          items: languageItems,
+          selectable: true,
+          selectedKeys: [lang],
+          onClick: ({ key }) => {
+            const picked = LANGUAGES.find((language) => language.id === key);
+            if (picked) setLang(picked.id);
+          },
+        }}
+      >
+        <HeaderAction
+          tooltip={`${t('header.language')} · ${activeLanguage ? activeLanguage.name : lang}`}
+          accessibleLabel={t('header.language')}
+          icon={activeLanguage ? <LanguageFlag country={activeLanguage.country} /> : undefined}
         >
-          <Button
-            type="text"
-            aria-label={t('header.language')}
-            icon={activeLanguage ? <LanguageFlag country={activeLanguage.country} /> : undefined}
-          >
-            <span className="terminal-mono language-trigger-code">{activeLanguage?.code ?? lang}</span>
-          </Button>
-        </Dropdown>
-      </Tooltip>
+          <span className="language-trigger-code">{activeLanguage?.code ?? lang}</span>
+        </HeaderAction>
+      </Dropdown>
     </>
   );
 };

@@ -294,6 +294,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/system", h.getSystemInfo)
 				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
 				v1.Get("/management/system/releases", h.getSystemReleases)
+				v1.Get("/management/system/repository", h.getSystemRepository)
 				v1.Post("/management/system/check-updates", h.postSystemCheckUpdates)
 				v1.Get("/management/system/maintenance", h.getSystemMaintenance)
 				v1.Post("/management/system/maintenance/checkpoint", h.postSystemMaintenanceCheckpoint)

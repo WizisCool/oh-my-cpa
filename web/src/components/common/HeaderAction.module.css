@@ -1,0 +1,6 @@
+/* The doubled class outranks antd's own button rules without `!important`. */
+.action.action { height: 32px; min-width: 32px; }
+.labelled.labelled { gap: 6px; padding: 0 8px; }
+.muted.muted { color: var(--muted); }
+/* Tabular figures hold the control's width when a digit changes under it. */
+.label { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: var(--text-md); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }

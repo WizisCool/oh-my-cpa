@@ -576,6 +576,11 @@
       "content_type": "application/json; charset=utf-8",
       "body": "{\"attempted_at_ms\":1767225600000,\"check_error\":\"\",\"checked_at_ms\":1767225600000,\"checking\":false,\"latest_version\":\"v0.2.0\",\"product\":\"omc\",\"range_complete\":true,\"reason\":\"running_version_not_comparable\",\"releases\":[{\"body\":\"## Highlights\\n\\n- The console reports both products' versions and the changes between them.\\n- The database's own facts are read rather than assumed.\\n\",\"body_available\":true,\"html_url\":\"https://github.com/WizisCool/oh-my-cpa/releases/tag/v0.2.0\",\"in_range\":false,\"name\":\"v0.2.0\",\"prerelease\":false,\"published_at_ms\":1765497600000,\"tag\":\"v0.2.0\"}],\"repository\":\"WizisCool/oh-my-cpa\",\"repository_url\":\"https://github.com/WizisCool/oh-my-cpa\",\"running_version\":\"v0.1.0-demo\",\"state\":\"indeterminate\"}"
     },
+    "system-repository": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"stargazers_count\":null}"
+    },
     "usage-event-detail": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",

@@ -221,6 +221,12 @@ export interface SystemReleaseEntry {
   body_available: boolean;
 }
 
+/** What the header's repository link shows beside its icon. */
+export interface SystemRepositoryResponse {
+  /** Null until the server has read the count, which renders as no count rather than zero. */
+  stargazers_count: number | null;
+}
+
 /** One product's merged change log. */
 export interface SystemReleasesResponse {
   product: ReleaseProduct;

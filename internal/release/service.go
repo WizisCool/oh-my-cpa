@@ -75,6 +75,8 @@ type Service struct {
 	// A validator only describes the page it came from, so a conditional request is
 	// only safe while the cached snapshot was that single page.
 	singlePageByProduct map[string]bool
+
+	stargazers stargazerCache
 }
 
 // Options configures the service.
@@ -178,6 +180,11 @@ func (s *Service) CheckAll(ctx context.Context) {
 		if _, err := s.CheckNow(ctx, product.Key); err != nil {
 			s.logger.Warn("release check failed", "product", product.Key, "error", err)
 		}
+	}
+	// The sweep also refreshes the header's star count, so a deployment that forbids
+	// page-visit requests still learns it.
+	if ctx.Err() == nil {
+		s.Stargazers(ctx, true)
 	}
 }
 

@@ -46,6 +46,7 @@ import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from 
 import {
   SystemInfoResponse,
   SystemReleasesResponse,
+  SystemRepositoryResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
 } from '../types/system';
@@ -1045,6 +1046,10 @@ export const api = {
     return request<SystemReleasesResponse>(`/management/system/releases?product=${encodeURIComponent(product)}`, {
       method: 'GET',
     });
+  },
+
+  async getSystemRepository(): Promise<SystemRepositoryResponse> {
+    return request<SystemRepositoryResponse>('/management/system/repository', { method: 'GET' });
   },
 
   async checkUpdates(): Promise<{
