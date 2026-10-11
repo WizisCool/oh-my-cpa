@@ -405,6 +405,63 @@ for (const mode of ['dark', 'light'] as const) {
   }
 }
 
+// ── the outlined control's ink, hovered and pressed ──────────────────────────
+//
+// Ant Design reads a default or dashed button's hover and pressed ink from `colorPrimaryHover` and
+// `colorPrimaryActive` unless the Button component names its own, and the projection points both of
+// those at the pressed *fill* so that a filled control deepens. A fill is solved to sit under
+// `accentOn`, not to be read on the page: as a label it measured 2.70:1 in OMC Dark and 2.69:1 in
+// Midnight for as long as the button stayed under the pointer. So the ink is taken the way Ant Design
+// resolves it - the component token where the projection pins one, the alias it falls back to where
+// it does not - which is what makes a projection that drops a pin fail here on the ratio it would
+// paint rather than on a missing key.
+const OUTLINED_BUTTON_STATES = [
+  { state: 'hovered', label: 'defaultHoverColor', edge: 'defaultHoverBorderColor', fallback: 'colorPrimaryHover' },
+  { state: 'pressed', label: 'defaultActiveColor', edge: 'defaultActiveBorderColor', fallback: 'colorPrimaryActive' },
+] as const;
+
+function outlinedButtonInks(config: ReturnType<typeof createThemeConfig>) {
+  const aliases = antdTheme.getDesignToken(config);
+  const button = config.components?.Button;
+  return OUTLINED_BUTTON_STATES.map(({ state, label, edge, fallback }) => ({
+    state,
+    label: button?.[label] ?? aliases[fallback],
+    edge: button?.[edge] ?? aliases[fallback],
+  }));
+}
+
+const textFloor = CONTRAST_FLOORS.text;
+assert.ok(textFloor !== undefined, 'text is a role with a contrast floor');
+for (const definition of BUILT_IN_PALETTES) {
+  const resolved = resolvedBuiltInPalette(definition.id);
+  for (const { state, label, edge } of outlinedButtonInks(createThemeConfig(resolved))) {
+    // An outlined button's own fill is the container colour, which the projection sets to the page.
+    const ratio = contrastRatio(label, resolved.palette.bg);
+    assert.ok(
+      ratio >= textFloor,
+      `${definition.id}: a ${state} default button's label (${label}) reads ${ratio.toFixed(2)}:1 on the page (${resolved.palette.bg}), want >= ${textFloor}:1`,
+    );
+    // One ink per state: a label that moved to a legible step beside an edge left on the fill step
+    // is the same defect, half repaired.
+    assert.equal(edge, label, `${definition.id}: a ${state} default button's edge takes its label's ink`);
+  }
+}
+
+// An operator's palette has no floor to assert - the console renders the accent it is given - so what
+// is pinned for it is where the ink comes from: its own accent, the token the editor already measures
+// against the page. The hovered label then reads exactly as that row reports, rather than through a
+// second pair the editor never shows.
+for (const mode of ['dark', 'light'] as const) {
+  const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light');
+  for (const accent of ACCENT_SWEEP) {
+    const authored = resolvePalette(mode, 'custom', { base: base.id, core: { ...base.core, accent } });
+    for (const { state, label, edge } of outlinedButtonInks(createThemeConfig(authored))) {
+      assert.equal(label, authored.palette.accent, `${mode} accent ${accent}: a ${state} default button's label is the authored accent`);
+      assert.equal(edge, authored.palette.accent, `${mode} accent ${accent}: a ${state} default button's edge is the authored accent`);
+    }
+  }
+}
+
 // ── a palette reference belongs to one mode ─────────────────────────────────
 //
 // `palettes.dark = 'omc-light'` is a document that claims dark mode and paints a light console. The UI
