@@ -73,9 +73,9 @@ console renders what the operator asked for.
 | `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels, chart crosshair rules |
 | `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
-| `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
+| `--accent` | `#00a2fb` | `colorInfo`, `colorLink`, Button `defaultHover*` / `defaultActive*` | Links, info, active bars, selection, an outlined button's hover and pressed ink |
 | `--accent-hover` | `#0579bd` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | A filled control, hovered or pressed |
 | `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
 | `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
@@ -1798,6 +1798,20 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   would otherwise draw white on it. `createThemeConfig` takes the *resolved* palette rather than an id,
   so the antd tokens are a projection of the same object the stylesheet, the charts and the Monaco theme
   read, and an operator's own palette reaches Ant Design through the same path a registered one does.
+- Button, outlined (default and dashed): `defaultHoverColor`, `defaultHoverBorderColor`,
+  `defaultActiveColor` and `defaultActiveBorderColor` are all `accent`. Ant Design derives the four
+  from `colorPrimaryHover` and `colorPrimaryActive`, which are `accentActive` here so that a filled
+  control deepens under the pointer. That step is a *fill* - solved to carry `accentOn`, not to be
+  read against the page - and as a label on the button's own `--bg` fill it would read **2.70:1** in
+  OMC Dark and **2.69:1** in Midnight for as long as a "Refresh" or "Details" stayed hovered.
+  `accent` is the ladder's text step: on `--bg` it reads **4.95:1** (Sandstone) to **12.12:1**
+  (Forest) across the six registered palettes, and in an operator's palette it is the token whose
+  ratio the editor already reports against the page, so a hovered label is as legible as that row
+  says. It is also the ink a row action takes on hover (§5), so an outlined button and a row action
+  answer the pointer alike; a field's hover edge stays `muted`, because the accent is a field's focus
+  state. Pressed keeps the hover ink, as the filled control's pressed fill keeps its hover fill.
+  `scripts/test-theme-presets.ts` measures the hovered and pressed label against `--bg` in every
+  registered palette.
 - Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
