@@ -47,7 +47,8 @@ export function logsFixtures(auditRequests) {
     [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
     [(url) => url.pathname.endsWith('/management/logs'), () => ({
       lines: [
-        '[2026-09-28 10:00:00] [abc12345] [info ] [gin_logger.go:1] 200 |   12ms | 127.0.0.1 | POST "/v1/chat/completions"',
+        // Refused before a credential was chosen: the line and its log file report the same 503.
+        '[2026-09-28 10:00:00] [abc12345] [error] [gin_logger.go:1] 503 |   12ms | 127.0.0.1 | POST "/v1/chat/completions"',
         '[2026-09-28 10:00:01] [def12345] [info ] [gin_logger.go:1] 200 |   10ms | 127.0.0.1 | GET "/v1/models"',
       ],
       latest_after: 0,
@@ -149,6 +150,8 @@ export async function logsSources({ base, page, check }) {
   await logText.waitFor();
   await settleLayout(page);
   check('the request id opens its log file without unfolding the row', await firstRow.getAttribute('aria-expanded') === 'false');
+  check('the opened request is the one the gateway refused with 503', (await firstRow.locator('.log-status').innerText()).trim() === '503'
+    && (await logText.innerText()).includes('Status: 503'));
   check('the viewer is titled as the file and shows what the gateway answered',
     (await logDrawer.innerText()).includes('request-abc12345.log') && (await logText.innerText()).includes('auth_unavailable: no auth available'));
   // The panel slides in, so its place is read once it has stopped moving.
