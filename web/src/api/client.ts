@@ -769,6 +769,12 @@ export const api = {
     return downloadBlob(`${apiBaseUrl}/management/request-error-logs/${encodeURIComponent(name)}`);
   },
 
+  /** The log file CPA holds for one request id, as printed on a gateway log line. */
+  async downloadRequestLogById(requestId: string): Promise<Blob> {
+    const { apiBaseUrl } = getAppConfig();
+    return downloadBlob(`${apiBaseUrl}/management/request-logs/${encodeURIComponent(requestId)}`);
+  },
+
   async getUsageEvents(query: string): Promise<UsageEventPage> {
     return request<UsageEventPage>(`/usage/events${query ? `?${query}` : ''}`, { method: 'GET' });
   },

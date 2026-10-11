@@ -29,6 +29,19 @@ const AUDIT_BUCKETS = [
   { prefix: 'auth', outcome: 'succeeded', count: 1 },
 ];
 
+/** A request refused before a credential was chosen, as CPA writes its log file. */
+const REQUEST_LOG = [
+  '=== REQUEST INFO ===',
+  'URL: /v1/chat/completions',
+  '',
+  '=== REQUEST BODY ===',
+  `{"model":"claude-opus-5-5","messages":[{"role":"user","content":"${'long request body '.repeat(40)}"}]}`,
+  '',
+  '=== RESPONSE ===',
+  'Status: 503',
+  'auth_unavailable: no auth available (providers=claude, model=claude-opus-5-5)',
+].join('\n');
+
 export function logsFixtures(auditRequests) {
   return [
     [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
@@ -42,6 +55,16 @@ export function logsFixtures(auditRequests) {
       cursor_reset: false,
       limit: 2000,
     })],
+    // The first line's request left a log file behind; the second one's was not kept.
+    [(url) => url.pathname.endsWith('/management/request-logs/abc12345'), () => ({ contentType: 'text/plain; charset=utf-8', body: REQUEST_LOG })],
+    [(url) => url.pathname.endsWith('/management/request-logs/def12345'), () => ({
+      status: 404,
+      json: { error: 'CPA holds no log file for this request', code: 'request_log_not_found' },
+    })],
+    [(url) => url.pathname.endsWith('/management/request-error-logs'), () => ({
+      files: [{ name: 'error-v1-messages-2026-09-28T100000-abc12345.log', size: 1622, modified: Math.floor(NOW / 1000) - 600 }],
+    })],
+    [(url) => url.pathname.endsWith('/management/request-error-logs/error-v1-messages-2026-09-28T100000-abc12345.log'), () => ({ contentType: 'text/plain; charset=utf-8', body: REQUEST_LOG })],
     [(url) => url.pathname.endsWith('/management/service-logs'), (url) => {
       const after = Number(url.searchParams.get('after') ?? 0);
       const records = [
@@ -117,6 +140,53 @@ export async function logsSources({ base, page, check }) {
   await page.keyboard.press('Escape');
   await page.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden' });
   check('Escape closes the path popup before fullscreen', await page.getByRole('button', { name: 'Exit fullscreen (Esc)', exact: true }).isVisible());
+
+  // ── a line's request id opens that request's log file, above the fullscreen viewer ──
+  const firstRow = page.locator('.log-row').first();
+  const logDrawer = page.locator('.ant-drawer-content-wrapper');
+  await firstRow.getByRole('button', { name: 'View the log file of request abc12345', exact: true }).click();
+  const logText = logDrawer.locator('pre');
+  await logText.waitFor();
+  await settleLayout(page);
+  check('the request id opens its log file without unfolding the row', await firstRow.getAttribute('aria-expanded') === 'false');
+  check('the viewer is titled as the file and shows what the gateway answered',
+    (await logDrawer.innerText()).includes('request-abc12345.log') && (await logText.innerText()).includes('auth_unavailable: no auth available'));
+  // The panel slides in, so its place is read once it has stopped moving.
+  const readLogTextPlace = () => logText.evaluate((node) => {
+    const bounds = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + Math.min(bounds.height, 40) / 2);
+    return { isOnTop: node.contains(hit), isWrapped: node.scrollWidth <= node.clientWidth + 1, isInView: bounds.right <= window.innerWidth + 1 };
+  });
+  await until(async () => (await readLogTextPlace()).isInView, { label: 'the log file panel at rest' }).catch(() => {});
+  const logTextPlace = await readLogTextPlace();
+  check('the log file opens above the fullscreen viewer', logTextPlace.isOnTop && logTextPlace.isInView);
+  check('a long request body wraps inside the panel', logTextPlace.isWrapped);
+  check('the loaded file can be copied and saved', await logDrawer.getByRole('button', { name: 'Copy', exact: true }).isEnabled()
+    && await logDrawer.getByRole('button', { name: /Download/ }).isEnabled());
+  await page.keyboard.press('Escape');
+  await logDrawer.waitFor({ state: 'hidden' });
+  check('Escape closes the log file before fullscreen', await page.getByRole('button', { name: 'Exit fullscreen (Esc)', exact: true }).isVisible());
+
+  await page.locator('.log-row').nth(1).getByRole('button', { name: 'View the log file of request def12345', exact: true }).click();
+  const missingNotice = logDrawer.getByRole('alert');
+  await missingNotice.waitFor();
+  check('a request whose file CPA did not keep is explained as retention, with nothing to save',
+    (await missingNotice.innerText()).includes('CPA holds no log file for this request')
+    && await logDrawer.getByRole('button', { name: /Download/ }).isDisabled()
+    && await logDrawer.getByRole('button', { name: 'Retry' }).count() === 0);
+  await logDrawer.getByRole('button', { name: 'Close', exact: true }).click();
+  await logDrawer.waitFor({ state: 'hidden' });
+
+  await page.getByRole('tab', { name: 'Error log files' }).click();
+  await page.getByRole('button', { name: 'View error-v1-messages-2026-09-28T100000-abc12345.log', exact: true }).click();
+  await logText.waitFor();
+  check('an error log file is read in place under its own name',
+    (await logDrawer.innerText()).includes('error-v1-messages-2026-09-28T100000-abc12345.log') && (await logText.innerText()).includes('Status: 503'));
+  await logDrawer.getByRole('button', { name: 'Close', exact: true }).click();
+  await logDrawer.waitFor({ state: 'hidden' });
+  await page.getByRole('tab', { name: 'Live tail' }).click();
+  await page.locator('.log-row').first().waitFor();
+
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).waitFor();
   await page.reload({ waitUntil: 'domcontentloaded' });

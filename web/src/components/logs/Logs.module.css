@@ -199,3 +199,37 @@
     margin-left: auto;
   }
 }
+
+/* ── log file viewer: one request's log read in place ── */
+.file-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.viewer-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.viewer-meta {
+  color: var(--meta);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The file is preformatted, but a request body is one very long line: it wraps so the
+   reader scrolls one way only. */
+.viewer-text {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

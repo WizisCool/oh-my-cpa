@@ -3,10 +3,14 @@ import test from 'node:test';
 
 import {
   countLogFacets,
+  canPreviewLog,
   DEFAULT_LOG_FILTERS,
   isManagementLine,
+  isViewableRequestId,
+  logViewerFileName,
   matchesLogFilters,
   MAX_LOG_PATH_FILTERS,
+  MAX_LOG_PREVIEW_BYTES,
   parseLogFilters,
   parseLogLine,
   shouldExitLogFullscreen,
@@ -83,4 +87,29 @@ test('Escape leaves fullscreen only when nothing inside it claims the key', () =
   assert.equal(shouldExitLogFullscreen('Escape', false, true), false);
   assert.equal(shouldExitLogFullscreen('Escape', true, false), false);
   assert.equal(shouldExitLogFullscreen('Enter', false, false), false);
+});
+
+// A request refused before a credential was chosen is named only by the id on its log line.
+test('the id on a gateway line names the request log it opens', () => {
+  const refused = parseLogLine('[2026-10-11 09:18:25] [41dbb9ee] [error] [gin_logger.go:104] 503 |          15ms |      172.19.0.8 | POST    "/v1/messages"');
+  assert.equal(refused.requestId, '41dbb9ee');
+  assert.equal(isViewableRequestId(refused.requestId), true);
+  assert.equal(logViewerFileName({ kind: 'request', requestId: '41dbb9ee' }), 'request-41dbb9ee.log');
+  assert.equal(
+    logViewerFileName({ kind: 'file', file: { name: 'error-v1-messages-2026-10-11T091825-41dbb9ee.log', size: 1, modified: 0 } }),
+    'error-v1-messages-2026-10-11T091825-41dbb9ee.log',
+  );
+  // A line outside any request carries CPA's placeholder, which is not an id at all.
+  assert.equal(isViewableRequestId(startupLine.requestId), false);
+  // Only a plain token is offered: the server resolves the id as a filename suffix.
+  for (const id of ['', '../etc', 'a/b', 'a.log', '-leading', 'a b', 'x'.repeat(129)]) {
+    assert.equal(isViewableRequestId(id), false, id);
+  }
+  assert.equal(isViewableRequestId('01a129f7-2024-7074-8b8c-1ceb0ec5e76b'), true);
+});
+
+test('a log is drawn in the page up to the preview limit and offered as a download past it', () => {
+  assert.equal(canPreviewLog(0), true);
+  assert.equal(canPreviewLog(MAX_LOG_PREVIEW_BYTES), true);
+  assert.equal(canPreviewLog(MAX_LOG_PREVIEW_BYTES + 1), false);
 });

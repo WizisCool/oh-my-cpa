@@ -847,7 +847,15 @@ than by following a tail. An older `/logs?source=audit` link redirects there.
 
 - **Gateway log** — CPA's own log file and request error files, proxied through the
   typed management client (`/management/logs`, `/management/logs/status`,
-  `/management/request-error-logs`). The console tails it; it owns none of it.
+  `/management/request-error-logs`, `/management/request-logs/{id}`). The console tails
+  it; it owns none of it. A line's request id opens that request's log file in a side
+  panel (`components/logs/LogFileViewer.tsx`), as does an error log file: the file is
+  fetched once per opening, drawn up to `MAX_LOG_PREVIEW_BYTES`, saved from the same
+  copy, and dropped from the query cache when the panel closes because it quotes
+  request content. `downloadRequestLogByID` accepts only a plain-token id, audits the
+  read as `request_log.download` and is refused in demo mode. This route, not the
+  request list, is how a request with no usage record is read (see Failure Detail in
+  `CONTEXT.md`).
 - **Service log** — Oh My CPA's own process log. `cmd/oh-my-cpa` builds the logger as
   `applog.NewHandler(jsonStderrHandler, buffer)`, so stderr remains the durable log a
   deployment collects, and `NewHandler` in `internal/api` finds the buffer through

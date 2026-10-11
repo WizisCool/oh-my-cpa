@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -158,6 +160,59 @@ func (h *Handler) downloadRequestErrorLog(writer http.ResponseWriter, request *h
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
+	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(data)
+}
+
+// requestLogIDPattern is the shape of a request id as CPA prints it: the short
+// id on a gateway log line or the full id on a usage record.
+//
+// CPA resolves the id as a filename suffix inside its log directory, so anything
+// that is not a plain token is refused here rather than escaped and forwarded.
+var requestLogIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+
+// downloadRequestLogByID returns CPA's log file for one request id.
+//
+// The gateway log names requests the request list never holds: one refused
+// before a credential was chosen publishes no usage record, so its log cannot be
+// reached through a record and is asked for by the id on its log line instead.
+func (h *Handler) downloadRequestLogByID(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	requestID := chi.URLParam(request, "id")
+	if !requestLogIDPattern.MatchString(requestID) {
+		writeError(writer, http.StatusBadRequest, "invalid request id")
+		return
+	}
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), h.queryTimeout())
+	defer cancel()
+	data, _, err := client.DownloadRequestLog(ctx, requestID)
+	if err != nil {
+		_ = h.recordAudit(request, "request_log.download", "request_log", requestID, "failure", map[string]any{"error": err.Error()})
+		// CPA keeps a per-request file only while request logging is on, and
+		// otherwise just its newest few error logs: a 404 is an answer about
+		// retention, which the console words differently from an outage.
+		var httpErr *management.HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			writeJSON(writer, http.StatusNotFound, map[string]string{
+				"error": "CPA holds no log file for this request",
+				"code":  requestLogNotFoundCode,
+			})
+			return
+		}
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "request_log.download", "request_log", requestID, "success", map[string]any{"size_bytes": len(data)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; request log download aborted")
+		return
+	}
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "request-"+requestID+".log"))
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(data)

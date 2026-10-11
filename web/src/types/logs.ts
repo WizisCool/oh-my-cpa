@@ -182,6 +182,38 @@ export interface ErrorLogFile {
 }
 
 /**
+ * What the log viewer shows: the file CPA holds for one request id, or one named error log.
+ *
+ * A request refused before a credential was chosen publishes no usage record, so the id on
+ * its gateway log line is the only handle the console has on it.
+ */
+export type LogViewerTarget =
+  | { kind: 'request'; requestId: string }
+  | { kind: 'file'; file: ErrorLogFile };
+
+/**
+ * The largest file drawn in the page. A request log carries the whole request body, so one can
+ * run to megabytes; past this it is offered as a download instead of stalling the tab.
+ */
+export const MAX_LOG_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+/** The ids the server's request-log route accepts; anything else is not offered as a link. */
+const REQUEST_LOG_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function isViewableRequestId(requestId: string | undefined): requestId is string {
+  return requestId !== undefined && REQUEST_LOG_ID.test(requestId);
+}
+
+/** The name the viewer is titled with and a download is saved under. */
+export function logViewerFileName(target: LogViewerTarget): string {
+  return target.kind === 'file' ? target.file.name : `request-${target.requestId}.log`;
+}
+
+export function canPreviewLog(sizeBytes: number): boolean {
+  return sizeBytes <= MAX_LOG_PREVIEW_BYTES;
+}
+
+/**
  * Log view filters, persisted as a server-side preference.
  *
  * They are stored next to the dashboard window rather than in localStorage: an

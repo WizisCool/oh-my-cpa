@@ -306,6 +306,8 @@ a new capability must not add them:
 - provider runtime-policy and advanced model edits through the console's whole-entry
   provider-edit facade, which also handles credential material. A dedicated
   secret-free shared operation is required before those edits become Agent tools;
+- request log and error log file contents: they quote request bodies, so the Logs
+  page's viewer stays a console-only read;
 - raw credential reads, auth-file downloads, or key reveals; Vertex service-account
   import remains a console-only file handoff, not raw key material supplied through
   model-visible capability arguments or previews;

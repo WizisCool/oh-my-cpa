@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,6 +55,13 @@ func (f *logsFixtureCPA) serve(writer http.ResponseWriter, request *http.Request
 	case strings.HasPrefix(path, "/logs/errors/"):
 		writer.Header().Set("Content-Type", "text/plain")
 		_, _ = writer.Write([]byte("=== REQUEST INFO ===\nupstream 401\n"))
+	case path == "/logs/requests/41dbb9ee":
+		writer.Header().Set("Content-Type", "text/x-log; charset=utf-8")
+		_, _ = writer.Write([]byte("=== REQUEST INFO ===\nStatus: 503\n"))
+	case strings.HasPrefix(path, "/logs/requests/"):
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = writer.Write([]byte(`{"error":"log file not found for the given request ID"}`))
 	default:
 		writer.WriteHeader(http.StatusNotFound)
 		_, _ = writer.Write([]byte(`{"error":"not found"}`))
@@ -210,5 +219,65 @@ func TestManagementLogsReportsFileLoggingDisabled(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), "file_logging_disabled") {
 		t.Fatalf("expected file_logging_disabled: %s", payload)
+	}
+}
+
+// A request refused before a credential was chosen has no usage record, so its
+// log is asked for by the id on its gateway log line.
+func TestRequestLogByIDServesAuditsAndExplainsAbsence(t *testing.T) {
+	fixture := &logsFixtureCPA{}
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+	api := baseURL + "/omc/api/v1/management/request-logs/"
+
+	found, err := client.Get(api + "41dbb9ee")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(found.Body)
+	found.Body.Close()
+	if found.StatusCode != http.StatusOK || !strings.Contains(string(body), "Status: 503") {
+		t.Fatalf("status = %d body %s", found.StatusCode, body)
+	}
+	if got := found.Header.Get("Content-Disposition"); !strings.Contains(got, "request-41dbb9ee.log") {
+		t.Fatalf("disposition = %q", got)
+	}
+	if got := found.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache-control = %q", got)
+	}
+
+	// CPA's 404 is a retention answer, told apart from an outage by its code.
+	response, payload := getJSON(t, client, api+"deadbeef")
+	if response.StatusCode != http.StatusNotFound || !strings.Contains(string(payload), requestLogNotFoundCode) {
+		t.Fatalf("missing status = %d body %s", response.StatusCode, payload)
+	}
+
+	// Anything that is not a plain token is refused before it reaches CPA.
+	before := len(fixture.seen())
+	for _, id := range []string{"..%2F..%2Fetc%2Fpasswd", "a.log", "%20", "-leading", strings.Repeat("a", 129)} {
+		bad, err := client.Get(api + id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bad.Body.Close()
+		if bad.StatusCode != http.StatusBadRequest && bad.StatusCode != http.StatusNotFound {
+			t.Fatalf("id %q status = %d", id, bad.StatusCode)
+		}
+	}
+	if after := fixture.seen()[before:]; len(after) != 0 {
+		t.Fatalf("invalid ids reached CPA: %v", after)
+	}
+
+	events, err := repo.ListAuditEvents(context.Background(), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcomes := map[string]string{}
+	for _, event := range events {
+		if event.Action == "request_log.download" && event.TargetType == "request_log" {
+			outcomes[event.TargetID] = event.Result
+		}
+	}
+	if outcomes["41dbb9ee"] != "success" || outcomes["deadbeef"] != "failure" {
+		t.Fatalf("audit outcomes = %v", outcomes)
 	}
 }

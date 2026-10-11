@@ -49,6 +49,9 @@
 .log-row:hover { background: var(--surface); }
 .log-line { display: flex; gap: 8px; padding: 4px 12px; font-size: var(--text-md); line-height: 1.6; white-space: pre; }
 .log-time, .log-req, .log-latency { flex: none; color: var(--meta); font-variant-numeric: tabular-nums; }
+/* The request id opens that request's log file; it reads as the id it is until pointed at. */
+.log-req.is-link { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.log-req.is-link:hover, .log-req.is-link:focus-visible { color: var(--accent); text-decoration-style: solid; }
 .log-level { flex: none; font-size: var(--text-xs); letter-spacing: .04em; text-transform: uppercase; }
 .log-level.is-info { color: var(--muted); }
 .log-level.is-debug, .log-level.is-trace { color: var(--meta); }

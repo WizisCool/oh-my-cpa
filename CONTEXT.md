@@ -487,6 +487,15 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   single-record view. It is the primary way to read a failure, because CPA keeps
   a per-request log file only while its `request-log` setting is on and
   otherwise retains just its newest few error logs.
+- **Unrecorded Refusal**: A request CPA answers itself before choosing a
+  credential, so no executor runs and no usage record is published - typically
+  `503 auth_unavailable` when every matching credential is cooling down, which a
+  client's automatic retry after an upstream `500` hits within a second. The
+  request list and every usage total are built from usage records, so such a
+  request appears in neither; it exists only as a line in the gateway log and,
+  while CPA retains it, as an error log file. The Logs page reads that file by
+  the request id on the line. It is not a failed request record with a missing
+  status, and Oh My CPA does not synthesise one.
 - **Response Header Snapshot**: The diagnostic part of the upstream's response
   headers for one request, from `response_headers` on CPA's usage record, stored
   on the request record (`usage_events.response_headers`) for successes and

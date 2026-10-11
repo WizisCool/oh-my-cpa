@@ -6,6 +6,7 @@ import { Button, Checkbox, Segmented, Select, Tabs, Tooltip, Typography } from '
 import {
   ClearOutlined,
   DownloadOutlined,
+  EyeOutlined,
   FilterOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
@@ -29,6 +30,7 @@ import { formatBytes } from '../../utils/format';
 import {
   countLogFacets,
   DEFAULT_LOG_FILTERS,
+  isViewableRequestId,
   LOG_LEVELS,
   LOG_METHODS,
   LOG_STATUS_CLASSES,
@@ -43,7 +45,9 @@ import {
   type LogFilters,
   type LogLineParts,
   type LogStatusClass,
+  type LogViewerTarget,
 } from '../../types/logs';
+import { LogFileViewer } from './LogFileViewer';
 import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { useToast } from '../feedback';
@@ -62,7 +66,7 @@ const { Text } = Typography;
 // the log line itself says 400, and a localized UI must not caption it SUCCESS
 // under a different reading language (design.md rule 3).
 /** Anything of antd's that Escape should close before it closes the fullscreen viewer. */
-const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"])';
+const OPEN_OVERLAY_SELECTOR = '.ant-select-open, .ant-popover:not(.ant-popover-hidden), .ant-modal-wrap:not([style*="display: none"]), .ant-drawer-open';
 
 const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
   all: '',
@@ -77,14 +81,36 @@ const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
  * Per-row expansion rather than a whole-list raw mode: structure for the hundred lines
  * being skimmed, raw text for the one line that matters, without losing the context.
  */
-const CpaLogLine: React.FC<{ parts: LogLineParts; isOpen: boolean }> = ({ parts, isOpen }) => {
+const CpaLogLine: React.FC<{
+  parts: LogLineParts;
+  isOpen: boolean;
+  /** Absent where a request log may not be read at all; the id is then plain text. */
+  onViewRequest?: (requestId: string) => void;
+}> = ({ parts, isOpen, onViewRequest }) => {
   useTimeZone();
+  const t = useT();
   const tone = statusTone(parts.status);
+  const requestId = parts.requestId;
   return (
     <>
       <div className="log-line">
         <span className="log-time">{parts.timestamp ? formatGatewayTimestamp(parts.timestamp) : ''}</span>
-        {parts.requestId && <span className="log-req">{parts.requestId}</span>}
+        {requestId && (onViewRequest && isViewableRequestId(requestId) ? (
+          // The row itself toggles its raw text, so the id keeps its own click and keys.
+          <button
+            type="button"
+            className="log-req is-link"
+            title={t('logs.view_request', { id: requestId })}
+            aria-label={t('logs.view_request', { id: requestId })}
+            onClick={(event) => {
+              event.stopPropagation();
+              onViewRequest(requestId);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {requestId}
+          </button>
+        ) : <span className="log-req">{requestId}</span>)}
         {parts.level && <span className={`log-level is-${parts.level}`}>{parts.level}</span>}
         {parts.status !== undefined && (
           <span className={`log-status${tone ? ` is-${tone}` : ''}`}>{parts.status}</span>
@@ -99,7 +125,7 @@ const CpaLogLine: React.FC<{ parts: LogLineParts; isOpen: boolean }> = ({ parts,
   );
 };
 
-const ErrorLogFiles: React.FC = () => {
+const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onView }) => {
   useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
@@ -143,25 +169,36 @@ const ErrorLogFiles: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      width: 56,
+      width: 88,
       render: (_value, file) => (
-        <Button
-          size="small"
-          type="text"
-          icon={<DownloadOutlined />}
-          aria-label={`${t('logs.download')} ${file.name}`}
-          // An error log quotes request content, so the demonstration does not hand
-          // one back at all; the server refuses the download too.
-          disabled={isDemo}
-          title={isDemo ? t('demo.blocked') : undefined}
-          onClick={async () => {
-            try {
-              saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
-            } catch (err: unknown) {
-              toast.error(describeError(err));
-            }
-          }}
-        />
+        <span className={styles['file-actions']}>
+          <Button
+            size="small"
+            type="text"
+            icon={<EyeOutlined />}
+            aria-label={`${t('logs.view_file')} ${file.name}`}
+            disabled={isDemo}
+            title={isDemo ? t('demo.blocked') : t('logs.view_file')}
+            onClick={() => onView(file)}
+          />
+          <Button
+            size="small"
+            type="text"
+            icon={<DownloadOutlined />}
+            aria-label={`${t('logs.download')} ${file.name}`}
+            // An error log quotes request content, so the demonstration does not hand
+            // one back at all; the server refuses the download too.
+            disabled={isDemo}
+            title={isDemo ? t('demo.blocked') : undefined}
+            onClick={async () => {
+              try {
+                saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
+              } catch (err: unknown) {
+                toast.error(describeError(err));
+              }
+            }}
+          />
+        </span>
       ),
     },
   ];
@@ -194,6 +231,13 @@ export const CpaLogPanel: React.FC = () => {
   );
   const [search, setSearch] = React.useState('');
   const [tab, setTab] = React.useState<'tail' | 'errors'>('tail');
+  const [viewerTarget, setViewerTarget] = React.useState<LogViewerTarget | null>(null);
+  // A request log quotes request content, so the demonstration offers no way to open one;
+  // the server refuses the read too.
+  const viewRequest = React.useMemo(
+    () => (isDemo ? undefined : (requestId: string) => setViewerTarget({ kind: 'request', requestId })),
+    [isDemo],
+  );
 
   const status = useQuery({
     queryKey: ['logs-status'],
@@ -514,7 +558,7 @@ export const CpaLogPanel: React.FC = () => {
                         isLoading={isLoading}
                         isWrapped={filters.wrapLines}
                         emptyText={parsed.length > 0 ? t('logs.filter_empty') : t('logs.tail_empty')}
-                        renderItem={(parts, isOpen) => <CpaLogLine parts={parts} isOpen={isOpen} />}
+                        renderItem={(parts, isOpen) => <CpaLogLine parts={parts} isOpen={isOpen} onViewRequest={viewRequest} />}
                       />
                     )}
                   </div>
@@ -523,12 +567,13 @@ export const CpaLogPanel: React.FC = () => {
               {
                 key: 'errors',
                 label: t('logs.tab_errors'),
-                children: <div className="log-files"><ErrorLogFiles /></div>,
+                children: <div className="log-files"><ErrorLogFiles onView={(file) => setViewerTarget({ kind: 'file', file })} /></div>,
               },
             ]}
           />
         </section>
       ), panelHost)}
+      <LogFileViewer target={viewerTarget} onClose={() => setViewerTarget(null)} />
     </div>
   );
 };

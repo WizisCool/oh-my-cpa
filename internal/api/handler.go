@@ -210,6 +210,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/service-logs", h.serviceLogs)
 				v1.Get("/management/request-error-logs", h.requestErrorLogs)
 				v1.Get("/management/request-error-logs/{name}", h.downloadRequestErrorLog)
+				v1.Get("/management/request-logs/{id}", h.downloadRequestLogByID)
 				v1.Get("/custom-icons", h.listCustomIcons)
 				v1.Post("/custom-icons/preview", h.previewCustomIcon)
 				v1.Post("/custom-icons", h.createCustomIcon)

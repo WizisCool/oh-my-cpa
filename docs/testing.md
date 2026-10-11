@@ -916,14 +916,24 @@ Demo browser acceptance opens both rule sections and checks read-only controls.
 `scripts/test-error-rules.ts`, `scripts/test-model-options.ts`,
 `scripts/test-credential-policy.ts` and `scripts/test-vertex-import.ts` own pure
 validation and request normalization. `scripts/test-log-lines.ts` owns method/path
-matching, facet counts, wrapping preference parsing and the Escape decision.
+matching, facet counts, wrapping preference parsing, the Escape decision, which
+request ids are offered as a link, the viewed file's name and the preview limit.
 Go tests beside the management facades own provider policy/model projections,
 credential field readback, token-free manual refresh and Vertex multipart import.
 `internal/quota/kimi_test.go` owns account-system selection and the international
 endpoint boundary; Codex tests own plan labels and prepaid credit projection.
 
 The existing `logs-sources` probe owns the disclosed gateway request filters,
-method wiring, wrapping persistence and fullscreen portal/Escape ordering. The
+method wiring, wrapping persistence and fullscreen portal/Escape ordering. It also
+owns the log file viewer's browser claims: a request id opening its file without
+unfolding the row, the panel stacking above the fullscreen viewer, a long body
+wrapping inside it, Escape closing it before fullscreen, the retention wording for
+a file CPA did not keep and an error log file read in place.
+`web/tests/log-file-viewer.component.test.tsx` owns the viewer's states against the
+real typed client - the route each target reads, retention versus a retryable
+failure, the preview limit and no read while closed - and
+`TestRequestLogByIDServesAuditsAndExplainsAbsence` owns id validation before CPA,
+the audit record and the `request_log_not_found` answer. The
 existing `oauth-management` probe owns credential-alias draft retention across
 tabs, phone geometry, Vertex identity-only preview, region validation and key
 selection clearing when reopened, including a held file read released after cancellation. Its screenshots use only synthetic fixture
