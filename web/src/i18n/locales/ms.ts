@@ -2450,7 +2450,7 @@ export const MS: Readonly<Record<string, string>> = {
   "quota.redeem_credit_confirm_desc": "Ini akan menggunakan 1 kredit tetapan semula had kadar daripada akaun huluan anda untuk memulihkan kuota dengan segera. Teruskan?",
   "quota.redeem_credit_success": "Kredit berjaya ditebus, kuota dipulihkan",
   "quota.redeem_credit_failed": "Gagal menebus kredit: {msg}",
-  "quota.redeem_cooldown_warning": "Kuota ditetapkan semula, tetapi penyejukan get laluan tidak dapat dikosongkan ({msg}). Gunakan Padam penyejukan pada kelayakan ini; jangan tebus penetapan semula yang lain",
+  "quota.redeem_cooldown_warning": "Kuota ditetapkan semula, tetapi penyejukan get laluan tidak dapat dikosongkan. Gunakan Padam penyejukan pada kelayakan ini; jangan tebus penetapan semula yang lain",
   "quota.credential_disabled": "Kredensial dilumpuhkan dalam CPA",
   "quota.not_observed_yet": "Kuota belum dibaca — guna Muat semula kuota",
   "quota.usage_not_published": "Pembekal menjawab tanpa menerbitkan tetingkap kuota",

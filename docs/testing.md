@@ -641,6 +641,18 @@ preserve disclosure choices, and save validation opens an invalid category witho
 mutating the document. Both suites are automatically discovered; browser scenarios
 retain layout and rule-editing coverage.
 
+### Quota and TURN secret regression coverage
+
+`internal/quota/plugin_test.go` owns exact plugin resolution and refusal to send
+an unmatched credential's auth index to an unrelated plugin, even when it is the
+only candidate. `internal/api/management_quota_test.go` owns the redemption wire
+contract: a failed cooldown clear still returns HTTP 200 with a successful
+redemption and the fixed `cooldown_clear_failed` code, without the raw CPA body.
+`web/tests/ice-servers-editor.component.test.tsx` owns the rendered secret state:
+Replace and an emptied replacement retain the sentinel; typed nonempty text
+replaces it, and only explicit Clear emits an empty value. Existing configuration
+browser probes retain layout and save-flow coverage.
+
 ### Route error recovery regression coverage
 
 `scripts/test-route-error-diagnostics.ts` owns diagnostic projection, HTTP route

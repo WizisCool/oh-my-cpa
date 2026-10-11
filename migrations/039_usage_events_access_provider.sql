@@ -1,10 +1,10 @@
--- Which access path served the request and whether a native (API-key)
--- credential served it, from CPA's usage record: newer gateways propagate the
--- authenticated API key, the access provider and the native-key flag into each
--- record, with automatic fallback resolution when the record omits them.
+-- CPA reports the access provider that authenticated the caller and whether
+-- the caller used a native configured API key, independently of the upstream
+-- credential that executed the request.
 --
--- Empty and 0 mean unknown: an older CPA build that published neither, or a
--- record ingested before these columns existed, which cannot be backfilled
--- because the queue record was never stored.
+-- Empty access_provider means unknown for older gateways and historical rows
+-- that cannot be backfilled because the queue record was never stored.
+-- is_native_key = 0 means unknown only when access_provider is empty; with a
+-- nonempty access_provider it means the caller did not use a native key.
 ALTER TABLE usage_events ADD COLUMN access_provider TEXT NOT NULL DEFAULT '';
 ALTER TABLE usage_events ADD COLUMN is_native_key INTEGER NOT NULL DEFAULT 0;

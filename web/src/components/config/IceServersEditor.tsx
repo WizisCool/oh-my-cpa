@@ -23,6 +23,8 @@ type IceSecretMode = 'keep' | 'set' | 'clear' | 'absent' | 'undecided';
 interface IceServerRow {
   key: string;
   urlsText: string;
+  hasStoredUsername: boolean;
+  hasStoredCredential: boolean;
   usernameMode: IceSecretMode;
   usernameValue: string;
   credentialMode: IceSecretMode;
@@ -58,6 +60,8 @@ function rowFromWire(value: IceServerWireValue): IceServerRow {
   return {
     key: `ice_${nextRowKey++}`,
     urlsText: (value.urls ?? []).join('\n'),
+    hasStoredUsername: usernameKept,
+    hasStoredCredential: credentialKept,
     usernameMode: usernameKept ? 'keep' : value.username != null && value.username !== '' ? 'set' : 'absent',
     usernameValue: usernameKept || value.username == null ? '' : value.username,
     credentialMode: credentialKept ? 'keep' : value.credential != null && value.credential !== '' ? 'set' : 'absent',
@@ -67,9 +71,9 @@ function rowFromWire(value: IceServerWireValue): IceServerRow {
 
 function rowToWire(row: IceServerRow): IceServerWireValue {
   const wire: IceServerWireValue = { urls: parseUrls(row.urlsText) };
-  // keep and undecided both carry the sentinel: keep restores the stored
-  // secret, while undecided is refused by the server instead of being paired
-  // with another server's secret or silently cleared.
+  // An empty replacement retains the stored secret via the sentinel. The
+  // server refuses restoration if the server identities changed, rather than
+  // pairing the secret with another server or silently clearing it.
   if (row.usernameMode === 'keep' || row.usernameMode === 'undecided') {
     wire.username = ICE_UNCHANGED_SENTINEL;
   } else if (row.usernameMode === 'set') {
@@ -114,8 +118,8 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
   onChange,
 }) => {
   // Rows live in local state rather than deriving from the value prop on every
-  // render: a secret just switched to "set" with nothing typed yet encodes as
-  // an empty string, which is indistinguishable from "absent" on the way back.
+  // render: keep and undecided share a sentinel on the wire, but only one
+  // displays a replacement input. Own echoes must not erase that distinction.
   // An external change (discard, or an edit in the source view) resyncs; the
   // editor's own emits echo back identically and are ignored.
   const [rows, setRows] = React.useState<IceServerRow[]>(() => rowsFromWire(value));
@@ -172,6 +176,8 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
     emit([...rows, {
       key: `ice_${nextRowKey++}`,
       urlsText: '',
+      hasStoredUsername: false,
+      hasStoredCredential: false,
       usernameMode: 'absent',
       usernameValue: '',
       credentialMode: 'absent',
@@ -198,13 +204,23 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
     const mode = secret === 'username' ? row.usernameMode : row.credentialMode;
     const secretValue = secret === 'username' ? row.usernameValue : row.credentialValue;
     const label = secret === 'username' ? t('cfg.ice_username') : t('cfg.ice_credential');
+    const hasStoredSecret = secret === 'username' ? row.hasStoredUsername : row.hasStoredCredential;
+    const startReplacement = () => patchRow(row.key, secret === 'username'
+      ? { usernameMode: hasStoredSecret ? 'undecided' : 'set', usernameValue: '' }
+      : { credentialMode: hasStoredSecret ? 'undecided' : 'set', credentialValue: '' });
+    const updateReplacement = (text: string) => {
+      const nextMode: IceSecretMode = text !== '' ? 'set' : hasStoredSecret ? 'undecided' : 'absent';
+      patchRow(row.key, secret === 'username'
+        ? { usernameMode: nextMode, usernameValue: text }
+        : { credentialMode: nextMode, credentialValue: text });
+    };
     return (
       <div style={{ marginTop: 8 }}>
         <div style={{ fontSize: 12, marginBottom: 4 }}>{label}</div>
         {mode === 'keep' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Input value="••••••••" disabled style={{ maxWidth: 220 }} aria-label={label} />
-            <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'set')}>
+            <Button size="small" disabled={disabled} onClick={startReplacement}>
               {t('cfg.ice_replace')}
             </Button>
             <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
@@ -220,9 +236,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
               style={{ maxWidth: 220 }}
               aria-label={label}
               placeholder={label}
-              onChange={(event) => patchRow(row.key, secret === 'username'
-                ? { usernameValue: event.target.value }
-                : { credentialValue: event.target.value })}
+              onChange={(event) => updateReplacement(event.target.value)}
             />
             <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
               {t('cfg.ice_clear')}
@@ -232,13 +246,13 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
         {mode === 'clear' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, opacity: 0.65 }}>{t('cfg.ice_will_clear')}</span>
-            <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'set')}>
+            <Button size="small" disabled={disabled} onClick={startReplacement}>
               {t('cfg.ice_replace')}
             </Button>
           </div>
         )}
         {mode === 'absent' && (
-          <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'set')}>
+          <Button size="small" disabled={disabled} onClick={startReplacement}>
             {t('cfg.ice_add_secret', { secret: label })}
           </Button>
         )}
@@ -250,12 +264,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
               style={{ maxWidth: 220 }}
               aria-label={label}
               placeholder={t('cfg.ice_reenter_placeholder')}
-              onChange={(event) => patchRow(row.key, {
-                ...(secret === 'username'
-                  ? { usernameValue: event.target.value }
-                  : { credentialValue: event.target.value }),
-                ...(secret === 'username' ? { usernameMode: 'set' as IceSecretMode } : { credentialMode: 'set' as IceSecretMode }),
-              })}
+              onChange={(event) => updateReplacement(event.target.value)}
             />
             <Button size="small" disabled={disabled} onClick={() => setSecretMode(row.key, secret, 'clear')}>
               {t('cfg.ice_clear')}
@@ -308,7 +317,7 @@ export const IceServersEditor: React.FC<IceServersEditorProps> = ({
       <Button icon={<PlusOutlined />} disabled={disabled} onClick={addRow}>
         {t('cfg.ice_add_server')}
       </Button>
-      {needsReentry && (
+      {shapeChanged && needsReentry && (
         <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>{t('cfg.ice_reentry_hint')}</div>
       )}
     </div>

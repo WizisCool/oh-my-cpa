@@ -50,10 +50,9 @@ func nonNullJSON(raw json.RawMessage) json.RawMessage {
 }
 
 // resolvePluginQuotaID maps a credential's advertised quota provider to the
-// installed plugin that serves it, mirroring CPA's first-pass match (quota
-// identifier, plugin id, then auth provider). A plugin matched only through a
-// quota provider CPA does not expose under /plugins cannot be addressed, so a
-// lone quota plugin is the only fallback.
+// installed plugin that serves it (quota identifier, plugin id, then auth
+// provider). An unmatched credential must not be sent to an unrelated plugin,
+// even when it is the only registered quota plugin.
 func resolvePluginQuotaID(plugins []management.PluginItem, provider string) (string, error) {
 	target := strings.ToLower(strings.TrimSpace(provider))
 	if target == "" {
@@ -81,9 +80,6 @@ func resolvePluginQuotaID(plugins []management.PluginItem, provider string) (str
 	}
 	if id := matchID(func(plugin management.PluginItem) string { return plugin.OAuthProvider }); id != "" {
 		return id, nil
-	}
-	if len(candidates) == 1 {
-		return candidates[0].ID, nil
 	}
 	return "", fmt.Errorf("no enabled plugin provides quota for %q", provider)
 }

@@ -2450,7 +2450,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "quota.redeem_credit_confirm_desc": "該操作將消耗上游賬戶中分配的重置積分並立即恢復配額。確定繼續？",
   "quota.redeem_credit_success": "積分重置成功，配額已恢復",
   "quota.redeem_credit_failed": "使用重置積分失敗：{msg}",
-  "quota.redeem_cooldown_warning": "額度已重置，但閘道冷卻清除失敗（{msg}）。請對該憑證使用「清除冷卻」，不要再消耗一次重置",
+  "quota.redeem_cooldown_warning": "額度已重置，但閘道冷卻清除失敗。請對該憑證使用「清除冷卻」，不要再消耗一次重置",
   "quota.credential_disabled": "該憑據已在 CPA 中停用",
   "quota.not_observed_yet": "尚未讀取配額，請點選「重新整理額度」取得",
   "quota.usage_not_published": "上游已回應但未回傳配額視窗",

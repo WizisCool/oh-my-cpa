@@ -49,7 +49,7 @@ describe('ice servers editor', () => {
       { urls: ['turn:turn.example.com:3478'], username: ICE_UNCHANGED_SENTINEL, credential: ICE_UNCHANGED_SENTINEL },
     ]);
     fireEvent.click(screen.getAllByText('cfg.ice_replace')[0]);
-    const input = screen.getByPlaceholderText('cfg.ice_username');
+    const input = screen.getByLabelText('cfg.ice_username');
     fireEvent.change(input, { target: { value: 'new-user' } });
     const last = onChange.mock.calls.at(-1)![0] as { username?: string; credential?: string }[];
     expect(last[0].username).toBe('new-user');
@@ -59,6 +59,45 @@ describe('ice servers editor', () => {
     fireEvent.click(screen.getAllByText('cfg.ice_clear')[0]);
     const cleared = onChange.mock.calls.at(-1)![0] as { username?: string }[];
     expect(cleared[0].username).toBe('');
+  });
+
+  it.each(['username', 'credential'] as const)('keeps %s until nonempty replacement text or explicit clear', (secret) => {
+    const onChange = renderEditor([
+      { urls: ['turn:turn.example.com:3478'], username: ICE_UNCHANGED_SENTINEL, credential: ICE_UNCHANGED_SENTINEL },
+    ]);
+    fireEvent.click(screen.getAllByText('cfg.ice_replace')[secret === 'username' ? 0 : 1]);
+    const latestSecret = () => (onChange.mock.calls.at(-1)![0] as Record<string, string>[])[0][secret];
+    expect(latestSecret()).toBe(ICE_UNCHANGED_SENTINEL);
+    expect(screen.queryByText('cfg.ice_reentry_hint')).toBeNull();
+    const input = screen.getByLabelText(`cfg.ice_${secret}`);
+    fireEvent.change(input, { target: { value: 'replacement' } });
+    expect(latestSecret()).toBe('replacement');
+    fireEvent.change(screen.getByLabelText(`cfg.ice_${secret}`), { target: { value: '' } });
+    expect(latestSecret()).toBe(ICE_UNCHANGED_SENTINEL);
+    fireEvent.click(screen.getAllByText('cfg.ice_clear')[secret === 'username' ? 0 : 1]);
+    expect(latestSecret()).toBe('');
+    fireEvent.click(screen.getAllByText('cfg.ice_replace')[secret === 'username' ? 0 : 1]);
+    expect(latestSecret()).toBe(ICE_UNCHANGED_SENTINEL);
+  });
+
+  it('discards a typed replacement when Clear is followed by Replace', () => {
+    const onChange = renderEditor([
+      { urls: ['turn:turn.example.com:3478'], username: ICE_UNCHANGED_SENTINEL },
+    ]);
+    fireEvent.click(screen.getByText('cfg.ice_replace'));
+    fireEvent.change(screen.getByLabelText('cfg.ice_username'), { target: { value: 'discarded-replacement' } });
+    fireEvent.click(screen.getByText('cfg.ice_clear'));
+    fireEvent.click(screen.getByText('cfg.ice_replace'));
+    expect((screen.getByLabelText('cfg.ice_username') as HTMLInputElement).value).toBe('');
+    expect(onChange.mock.calls.at(-1)![0][0].username).toBe(ICE_UNCHANGED_SENTINEL);
+  });
+
+  it('leaves a new optional secret absent when its draft text is erased', () => {
+    const onChange = renderEditor([{ urls: ['stun:example.test'] }]);
+    fireEvent.click(screen.getAllByText('cfg.ice_add_secret')[0]);
+    fireEvent.change(screen.getByLabelText('cfg.ice_username'), { target: { value: 'draft-user' } });
+    fireEvent.change(screen.getByLabelText('cfg.ice_username'), { target: { value: '' } });
+    expect(onChange.mock.calls.at(-1)![0][0].username).toBeUndefined();
   });
 
   it('turns remaining keeps into re-entry decisions when the list shape changes', () => {

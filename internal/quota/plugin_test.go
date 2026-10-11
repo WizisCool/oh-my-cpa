@@ -58,10 +58,10 @@ func TestResolvePluginQuotaID(t *testing.T) {
 			want:     "fixture-oauth",
 		},
 		{
-			name:     "single candidate fallback",
+			name:     "unmatched single candidate refused",
 			provider: "something-else",
 			plugins:  []management.PluginItem{{ID: "only-one", Registered: true, SupportsQuota: true, QuotaProvider: "other"}},
-			want:     "only-one",
+			wantErr:  true,
 		},
 		{name: "empty provider", provider: "", plugins: plugins, wantErr: true},
 		{name: "no match", provider: "unknown-provider", plugins: plugins, wantErr: true},
@@ -176,5 +176,30 @@ func TestCapabilitiesForFileFollowsTheQuotaReader(t *testing.T) {
 	plain := management.AuthFile{Type: "codebuddy", Provider: "codebuddy"}
 	if caps := CapabilitiesForFile(plain); caps.RefreshSupported {
 		t.Fatalf("unadvertised capabilities = %+v, want no refresh", caps)
+	}
+}
+
+func TestRefreshCredentialQuotaRejectsUnrelatedPlugin(t *testing.T) {
+	hasCalledQuotaPlugin := false
+	client := &mockCPAClient{
+		pluginsFunc: func(ctx context.Context) ([]management.PluginItem, error) {
+			return []management.PluginItem{{ID: "unrelated", Registered: true, SupportsQuota: true, QuotaProvider: "other"}}, nil
+		},
+		pluginQuotaFn: func(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error) {
+			hasCalledQuotaPlugin = true
+			return json.RawMessage(pluginQuotaFixture), nil
+		},
+	}
+	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{
+		AuthIndex: "auth-plugin-unmatched", Type: "codebuddy", SupportsQuota: true, QuotaProvider: "codebuddy",
+	}, nil)
+	if err != nil {
+		t.Fatalf("RefreshCredentialQuota error: %v", err)
+	}
+	if hasCalledQuotaPlugin {
+		t.Fatal("unrelated plugin received the credential auth index")
+	}
+	if result.Status != "error" || result.Error == "" || len(result.Windows) != 0 || result.Plan != nil {
+		t.Fatalf("result = %+v, want an error without unrelated windows or plan", result)
 	}
 }

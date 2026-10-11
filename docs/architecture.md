@@ -896,6 +896,15 @@ caller's own `X-Request-ID` is never the pairing key - one value sent on two req
 would pair an attempt with another request's outcome - and is recorded on the audit
 row as `client_request_id` for correlation instead.
 
+### Quota resolution and partial-success boundary
+
+Plugin quota resolution requires a matching quota identifier, plugin ID, or auth
+provider; an unmatched credential is never sent to another plugin. A successful
+Codex redemption with a failed gateway cooldown clear stays successful and
+returns `cooldown_cleared: false` plus `cooldown_error: "cooldown_clear_failed"`;
+only the HTTP status is retained in the service diagnostic, and the console
+renders localized guidance.
+
 ## 3. Frontend shape
 
 The console scroll engine distinguishes native option lists by their computed overflow, not merely the shared holder DOM structure. Library-native `auto`/`scroll` holders retain browser-owned wheel scrolling because their deferred React offset reconciliation would race frame-by-frame writes; ordinary native regions still glide through `scrollTop`, and hidden-overflow virtual holders are driven through their wheel handler. This keeps nonvirtualized Select popups scrollable without bypassing the request-list virtualizer.

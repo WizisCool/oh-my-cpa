@@ -573,7 +573,7 @@ export function useOAuthWorkspaceActions(
       // cleared: warn and point at Clear cooldown instead of reporting success,
       // so the operator does not spend a second credit on retry.
       if (outcome && outcome.cooldown_cleared === false) {
-        toast.warning(t('quota.redeem_cooldown_warning', { msg: outcome.cooldown_error ?? '' }));
+        toast.warning(t('quota.redeem_cooldown_warning'));
       } else {
         toast.success(t('quota.redeem_credit_success'));
       }

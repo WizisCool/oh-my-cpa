@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -87,7 +88,15 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 	cooldownError := ""
 	if err := client.ResetQuota(ctx, authIndex); err != nil {
 		cooldownCleared = false
-		cooldownError = err.Error()
+		cooldownError = "cooldown_clear_failed"
+		// CPA errors can contain upstream bodies. Retain only the status in the
+		// service diagnostic; the console localizes the stable error code.
+		var httpError *management.HTTPError
+		statusCode := 0
+		if errors.As(err, &httpError) {
+			statusCode = httpError.StatusCode
+		}
+		h.logger.Warn("redeemed quota credit but gateway cooldown clear failed", "status_code", statusCode)
 	} else if h.repo != nil {
 		_ = h.repo.ClearCooldownEvidence(ctx, authIndex)
 	}

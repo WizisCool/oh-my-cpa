@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	const managementKey = "management-secret"
 
 	var cpaResetCalledWith string
+	var shouldFailReset bool
 	var cpaApiCallCalledWith string
 	var cpaConsumeMethod string
 	var cpaConsumeHeader map[string]string
@@ -66,6 +68,11 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 			}
 			_ = json.NewDecoder(request.Body).Decode(&payload)
 			cpaResetCalledWith = payload.AuthIndex
+			if shouldFailReset {
+				writer.WriteHeader(http.StatusBadGateway)
+				_, _ = writer.Write([]byte(`{"error":"private-upstream-diagnostic"}`))
+				return
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 
 		case "/v8/management/requests/api-call":
@@ -325,6 +332,37 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	if !strings.Contains(cpaConsumeBody, "redeem_request_id") {
 		t.Errorf("consume body = %q, want a redeem_request_id", cpaConsumeBody)
 	}
+
+	// Redemption remains successful when the separate gateway clear fails, but
+	// the ordinary response must not expose CPA's raw diagnostic body.
+	shouldFailReset = true
+	failedClearResp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
+	if err != nil {
+		t.Fatalf("POST /redeem-credit with failed cooldown clear: %v", err)
+	}
+	failedClearBody, readErr := io.ReadAll(failedClearResp.Body)
+	failedClearResp.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if failedClearResp.StatusCode != http.StatusOK {
+		t.Fatalf("failed clear status = %d, want 200", failedClearResp.StatusCode)
+	}
+	var failedClearResult struct {
+		Status          string `json:"status"`
+		CooldownCleared bool   `json:"cooldown_cleared"`
+		CooldownError   string `json:"cooldown_error"`
+	}
+	if err := json.Unmarshal(failedClearBody, &failedClearResult); err != nil {
+		t.Fatal(err)
+	}
+	if failedClearResult.Status != "ok" || failedClearResult.CooldownCleared || failedClearResult.CooldownError != "cooldown_clear_failed" {
+		t.Fatalf("failed clear result = %+v, want successful redemption with a stable cooldown error", failedClearResult)
+	}
+	if strings.Contains(string(failedClearBody), "private-upstream-diagnostic") {
+		t.Fatal("redemption response exposed the upstream diagnostic")
+	}
+	shouldFailReset = false
 
 	// 5. GET /api/v1/management/quota/{authIndex}
 	detailResp, err := client.Get(appServer.URL + "/api/v1/management/quota/codex-idx-1")
