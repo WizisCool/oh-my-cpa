@@ -750,6 +750,8 @@ export const SCENARIOS = [
   },
   {
     id: 'scroll-smoothing',
+    // Asserts motion frame by frame; a sibling context on the same CPU drops frames (ADR 0095).
+    shouldRunAlone: true,
     name: 'a wheel notch glides on an ordinary scroller and on the virtualized request list, as the preference says',
     options: {
       viewport: { width: 1280, height: 560 },
@@ -769,6 +771,8 @@ export const SCENARIOS = [
   },
   {
     id: 'request-list-touch',
+    // Asserts motion frame by frame; a sibling context on the same CPU drops frames (ADR 0095).
+    shouldRunAlone: true,
     name: 'on a phone the request list is the only scroller, and a finger folds and unfolds its header',
     options: {
       // A phone short enough that the unfolded header leaves the list less than half the screen.

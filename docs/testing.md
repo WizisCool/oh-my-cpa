@@ -221,6 +221,8 @@ The probe runner owns Vite through an unpredictable readiness header, rejects po
 collisions, uses a fresh context per scenario, and retains a 120-second scenario
 budget and the 480-second batch watchdog. Catalog entrypoints use at most two
 independent scenario contexts; `--workers 1` reproduces identical coverage serially.
+A scenario marked `shouldRunAlone`, one that asserts motion frame by frame, runs after
+the rest of its batch with no sibling (ADR 0095).
 Separate built/browser/demo lanes and separate local batches still never overlap.
 Each worker owns its fixture/error/late-fault ledger and outcome; failures are
 collated in catalog order, every admitted worker is joined before shared teardown,
@@ -471,6 +473,8 @@ The automatically discovered composer-picker logic suite owns navigation indexin
 The phone header breakpoint sweep observes layout completion after each viewport resize before counting rendered controls, including the 640/641px boundary. The check still requires the exact two-tool phone and five-tool desktop shapes.
 
 The existing `dashboard-charts` and `dashboard-model-panels` probes measure compact tooltip gutters, row centers, marker/name columns and numeric edges, including the donut's shared readout, while logic tests cover escaped full names, exact values and localized units. `scroll-smoothing` exercises native Playground model popups with the list library's shared holder structure, repeated/reversed notches, filtering and reopening, alongside the virtual time-zone popup and request list. `provider-model-picker` verifies newly added custom models remain collapsed until explicit disclosure; `oauth-management` and the automatically discovered quota-cooldown logic suite distinguish recognized quota conditions from unexpected reasons, use the generic explanation for blank cooldown tooltips and preserve full Drawer diagnostics.
+
+`dashboard-model-panels` also narrows and re-widens the ring's frame without a window resize and requires the ring to refill it on the readout's centre, the case G2's own window-only refit missed when the console font arrived after the first paint.
 
 ### Dashboard model-view regressions
 
@@ -1089,7 +1093,11 @@ changes scheduling only, not selected IDs, assertions, waits or verdicts.
 increase concurrency or a budget to make a run pass. Watchdog diagnostics name all
 active scenarios/steps. Existing condition-based readiness and complete hosted
 shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
-wall/CPU/memory trade-offs and retained failure ownership.
+wall/CPU/memory trade-offs and retained failure ownership. Scenarios marked
+`shouldRunAlone` in `scripts/acceptance/scenarios.mjs` (`scroll-smoothing`,
+`request-list-touch`) run after the shared part of their batch, one at a time, because a
+sibling context drops frames their checks would count as the defect (ADR 0095). The mark
+states its frame-level reason; it is not a way to quiet a scenario that fails for others.
 
 ### Demo replay and generated-UI exports
 

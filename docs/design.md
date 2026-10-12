@@ -746,6 +746,12 @@ The shared tooltip names each item by its own series key and lists measured zero
 stepped visibly on every steep section. The browser scales the bitmap down, so the geometry is unchanged
 and only its edges are averaged.
 
+**Chart canvases follow their container.** G2's `autoFit` refits a chart only on a window resize, so
+`useChartPlugins` also observes each chart's own container and refits it when that box changes size for
+any other reason - the console font arriving after the first paint and re-measuring the text beside a
+chart is the common one. A canvas left at its first size kept the model ring inscribed in a smaller
+square than its frame, with the total beside the hole.
+
 **No y-axis.** The reading is the shape of each line against its own baseline - which models rose, and
 when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
 the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the

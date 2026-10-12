@@ -97,26 +97,37 @@ async function runLimited(tasks, limit) {
 // held to a few at a time.
 const SUBSET_CONCURRENCY = Math.min(os.availableParallelism(), 4);
 
-const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'font-subset-'));
+// Inside the repository's tmp/ rather than the system's, so the finished directory can be renamed
+// into place: a rename is atomic only within one filesystem.
+fs.mkdirSync(path.join(root, 'tmp'), { recursive: true });
+const workDirectory = fs.mkdtempSync(path.join(root, 'tmp', 'font-subset-'));
 const outputDirectory = path.join(root, FONT_DIRECTORY);
-let plan;
-let label;
+const GENERATED_FILE = /\.woff2$|^(?:manifest\.json|core\.css|shardUrls\.ts)$/;
+let shardCount = 0;
+let totalBytes = 0;
+let shouldKeepWorkDirectory = false;
 try {
   const resolved = await resolveSources(workDirectory);
-  label = resolved.label;
+  const { label } = resolved;
   const { sources } = resolved;
   const codePointSets = FONT_WEIGHTS.map((weight) => readSfntCodePoints(fs.readFileSync(sources[weight])));
   // One plan serves every weight, so a character's shard never depends on its weight.
   if (codePointSets.some((codePoints) => codePoints.size !== codePointSets[0].size || [...codePoints].some((codePoint) => !codePointSets[0].has(codePoint)))) {
     throw new Error('the source weights cover different characters');
   }
-  plan = planShards(codePointSets[0], collectSourceCharacters(root));
+  const plan = planShards(codePointSets[0], collectSourceCharacters(root));
   console.log(`[font-subset] ${codePointSets[0].size} characters in ${plan.length} shards per weight`);
 
-  // Shards are written beside the work files and replace the committed ones only once every
-  // one of them exists, so a failed run leaves the previous font intact.
-  const stagedDirectory = path.join(workDirectory, 'shards');
+  // The whole directory is built beside the work files - every shard, the manifest, the core
+  // stylesheet, the URL module and the files kept from the committed directory, such as the
+  // licence - and then swapped in at once, so the committed font is never half replaced.
+  const stagedDirectory = path.join(workDirectory, 'sarasa');
   fs.mkdirSync(stagedDirectory);
+  if (fs.existsSync(outputDirectory)) {
+    for (const file of fs.readdirSync(outputDirectory)) {
+      if (!GENERATED_FILE.test(file)) fs.copyFileSync(path.join(outputDirectory, file), path.join(stagedDirectory, file));
+    }
+  }
   const tasks = FONT_WEIGHTS.flatMap((weight) => plan.map((shard) => async () => {
     const unicodesFile = path.join(workDirectory, `${weight}-${shard.name}.txt`);
     fs.writeFileSync(unicodesFile, shard.codePoints.map((codePoint) => codePoint.toString(16)).join('\n'));
@@ -132,27 +143,37 @@ try {
   }));
   await runLimited(tasks, SUBSET_CONCURRENCY);
 
-  fs.mkdirSync(outputDirectory, { recursive: true });
-  for (const file of fs.readdirSync(outputDirectory)) {
-    if (file.endsWith('.woff2')) fs.rmSync(path.join(outputDirectory, file));
-  }
-  for (const file of fs.readdirSync(stagedDirectory)) {
-    fs.copyFileSync(path.join(stagedDirectory, file), path.join(outputDirectory, file));
+  const manifest = {
+    family: FONT_FAMILY,
+    source: label,
+    weights: FONT_WEIGHTS,
+    local: LOCAL_NAMES,
+    shards: plan.map((shard) => ({ name: shard.name, unicodeRange: formatUnicodeRange(shard.codePoints) })),
+  };
+  fs.writeFileSync(path.join(stagedDirectory, path.basename(MANIFEST_FILE)), `${JSON.stringify(manifest, null, 1)}\n`);
+  fs.writeFileSync(path.join(stagedDirectory, path.basename(CORE_CSS_FILE)), renderCoreCss(manifest));
+  fs.writeFileSync(path.join(stagedDirectory, path.basename(SHARD_URLS_FILE)), renderShardUrlsModule(manifest));
+  shardCount = plan.length * FONT_WEIGHTS.length;
+  totalBytes = fs.readdirSync(stagedDirectory).filter((file) => file.endsWith('.woff2'))
+    .reduce((total, file) => total + fs.statSync(path.join(stagedDirectory, file)).size, 0);
+
+  const previousDirectory = path.join(workDirectory, 'previous');
+  if (fs.existsSync(outputDirectory)) fs.renameSync(outputDirectory, previousDirectory);
+  try {
+    fs.renameSync(stagedDirectory, outputDirectory);
+  } catch (error) {
+    if (fs.existsSync(previousDirectory)) {
+      try {
+        fs.renameSync(previousDirectory, outputDirectory);
+      } catch {
+        shouldKeepWorkDirectory = true;
+        throw new Error(`installing the font failed and the previous font could not be restored; it is in ${previousDirectory}`, { cause: error });
+      }
+    }
+    throw error;
   }
 } finally {
-  fs.rmSync(workDirectory, { recursive: true, force: true });
+  if (!shouldKeepWorkDirectory) fs.rmSync(workDirectory, { recursive: true, force: true });
 }
 
-const manifest = {
-  family: FONT_FAMILY,
-  source: label,
-  weights: FONT_WEIGHTS,
-  local: LOCAL_NAMES,
-  shards: plan.map((shard) => ({ name: shard.name, unicodeRange: formatUnicodeRange(shard.codePoints) })),
-};
-fs.writeFileSync(path.join(root, MANIFEST_FILE), `${JSON.stringify(manifest, null, 1)}\n`);
-fs.writeFileSync(path.join(root, CORE_CSS_FILE), renderCoreCss(manifest));
-fs.writeFileSync(path.join(root, SHARD_URLS_FILE), renderShardUrlsModule(manifest));
-const totalBytes = fs.readdirSync(outputDirectory).filter((file) => file.endsWith('.woff2'))
-  .reduce((total, file) => total + fs.statSync(path.join(outputDirectory, file)).size, 0);
-console.log(`[font-subset] Wrote ${plan.length * FONT_WEIGHTS.length} shards (${(totalBytes / 1024 / 1024).toFixed(1)} MiB), the manifest, the core stylesheet and the URL module.`);
+console.log(`[font-subset] Wrote ${shardCount} shards (${(totalBytes / 1024 / 1024).toFixed(1)} MiB), the manifest, the core stylesheet and the URL module.`);
