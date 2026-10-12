@@ -813,7 +813,7 @@ const DICT: Record<string, [string, string]> = {
   'omc.quota_auto_refresh_minutes': ['每 {n} 分钟', 'Every {n} min'],
   'omc.quota_auto_refresh_hours': ['每 {n} 小时', 'Every {n} h'],
   'omc.quota_refresh_on_reset': ['额度重置后自动刷新', 'Refresh after a quota resets'],
-  'omc.quota_refresh_on_reset_desc': ['任一额度窗口重置约 1 分钟后，自动刷新该凭证一次。', 'Refreshes a credential once, about a minute after any of its quota windows resets.'],
+  'omc.quota_refresh_on_reset_desc': ['任一额度窗口重置后，自动刷新该凭证一次。', 'Refreshes a credential once after any of its quota windows resets.'],
   'omc.quota_auto_refresh_invalid': ['刷新间隔需为 5 分钟到 24 小时之间', 'The refresh interval must be between 5 minutes and 24 hours'],
   'omc.section_display': ['数据显示', 'Data display'],
   'omc.section_appearance': ['界面外观', 'Appearance'],

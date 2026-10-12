@@ -625,7 +625,7 @@ export const MS: Readonly<Record<string, string>> = {
   "omc.quota_auto_refresh_minutes": "Setiap {n} min",
   "omc.quota_auto_refresh_hours": "Setiap {n} jam",
   "omc.quota_refresh_on_reset": "Segarkan selepas kuota ditetapkan semula",
-  "omc.quota_refresh_on_reset_desc": "Menyegarkan kelayakan sekali, kira-kira seminit selepas mana-mana tetingkap kuotanya ditetapkan semula.",
+  "omc.quota_refresh_on_reset_desc": "Menyegarkan kelayakan sekali selepas mana-mana tetingkap kuotanya ditetapkan semula.",
   "omc.quota_auto_refresh_invalid": "Selang penyegaran mestilah antara 5 minit dan 24 jam",
   "omc.section_display": "Paparan data",
   "omc.section_appearance": "Rupa",

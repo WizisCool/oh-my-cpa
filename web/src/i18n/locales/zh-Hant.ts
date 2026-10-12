@@ -625,7 +625,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "omc.quota_auto_refresh_minutes": "每 {n} 分鐘",
   "omc.quota_auto_refresh_hours": "每 {n} 小時",
   "omc.quota_refresh_on_reset": "額度重設後自動重新整理",
-  "omc.quota_refresh_on_reset_desc": "任一額度視窗重設約 1 分鐘後，自動重新整理該憑證一次。",
+  "omc.quota_refresh_on_reset_desc": "任一額度視窗重設後，自動重新整理該憑證一次。",
   "omc.quota_auto_refresh_invalid": "重新整理間隔需介於 5 分鐘到 24 小時之間",
   "omc.section_display": "資料顯示",
   "omc.section_appearance": "介面外觀",
