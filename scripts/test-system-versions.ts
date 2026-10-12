@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
+import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../web/src/utils/updateDismissals.ts';
 import type { SystemProductVersion } from '../web/src/types/system.ts';
 
 function createVersion(overrides: Partial<SystemProductVersion> = {}): SystemProductVersion {
@@ -68,4 +69,31 @@ test('HTTP success with per-product errors reports partial or complete failure, 
   assert.equal(summarizeUpdateCheck([healthy, { ...failed, check_error: '' }], true).kind, 'cached');
   assert.equal(summarizeUpdateCheck([healthy], false).kind, 'success');
   assert.equal(summarizeUpdateCheck([{ ...healthy, checking: true }], true).kind, 'checking');
+});
+
+test('a dismissal silences only the release it names', () => {
+  const available = createVersion();
+  assert.deepEqual(listPendingUpdates([available], {}), ['omc']);
+  assert.equal(isUpdateDismissed(available, { omc: 'v1.1.0' }), true);
+  assert.deepEqual(listPendingUpdates([available], { omc: 'v1.1.0' }), []);
+  // A newer release than the dismissed one is announced again.
+  assert.deepEqual(listPendingUpdates([createVersion({ latest_version: 'v1.2.0' })], { omc: 'v1.1.0' }), ['omc']);
+  // Dismissals are per product.
+  assert.deepEqual(listPendingUpdates([available, createVersion({ product: 'cpa' })], { omc: 'v1.1.0' }), ['cpa']);
+});
+
+test('only a known newer release is pending', () => {
+  for (const state of ['up_to_date', 'update_ahead', 'indeterminate'] as const) {
+    assert.deepEqual(listPendingUpdates([createVersion({ state })], {}), []);
+    // A stored tag that happens to match must not read as a dismissed update.
+    assert.equal(isUpdateDismissed(createVersion({ state }), { omc: 'v1.1.0' }), false);
+  }
+});
+
+test('stored dismissals are read defensively and edited per product', () => {
+  assert.equal(parseUpdateDismissals(undefined), undefined);
+  assert.equal(parseUpdateDismissals(['v1.1.0']), undefined);
+  assert.deepEqual(parseUpdateDismissals({ omc: 'v1.1.0', cpa: 7, other: 'v2' }), { omc: 'v1.1.0' });
+  assert.deepEqual(withDismissal({ omc: 'v1.1.0' }, 'cpa', 'v6.0.0'), { omc: 'v1.1.0', cpa: 'v6.0.0' });
+  assert.deepEqual(withDismissal({ omc: 'v1.1.0', cpa: 'v6.0.0' }, 'omc', null), { cpa: 'v6.0.0' });
 });

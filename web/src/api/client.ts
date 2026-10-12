@@ -47,6 +47,7 @@ import {
   SystemInfoResponse,
   SystemReleasesResponse,
   SystemRepositoryResponse,
+  SystemUpdatesResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
 } from '../types/system';
@@ -1066,6 +1067,10 @@ export const api = {
 
   async getSystemRepository(): Promise<SystemRepositoryResponse> {
     return request<SystemRepositoryResponse>('/management/system/repository', { method: 'GET' });
+  },
+
+  async getSystemUpdates(): Promise<SystemUpdatesResponse> {
+    return request<SystemUpdatesResponse>('/management/system/updates', { method: 'GET' });
   },
 
   async checkUpdates(): Promise<{

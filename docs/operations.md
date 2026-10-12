@@ -145,6 +145,13 @@ button also check, subject to a fifteen-minute floor per product — inside it t
 comes from the stored index and the message says so, because the feed is one shared
 per-address budget.
 
+When either product has a newer published release, the **System Information** entry in
+the navigation carries a small amber dot. It reflects the stored answer and costs no
+request of its own, so it appears once a sweep or a check has found the release; an open
+console re-reads that answer hourly. **Ignore this version** on the product's row clears the
+dot for that one release and is remembered by the deployment, not the browser; pressing it
+again restores the reminder, and a later release is flagged regardless.
+
 The header's GitHub link shows the project's star count, read by the server from the same
 host and held in memory. It costs at most one request an hour: the sweep refreshes it, and
 so does a console page load when page-load checks are allowed. With both switches below

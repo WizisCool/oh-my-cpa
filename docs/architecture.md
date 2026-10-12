@@ -2124,9 +2124,11 @@ once for both the gateway's version header and its credential count), the plugin
 provider counts, and the database, collector, record-count and admission reads - so the page
 waits for its slowest read rather than for the sum of them.
 
-The management system surface is six routes: `GET /management/system` (the page),
+The management system surface is seven routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `GET
-/management/system/repository` (the project's star count for the header link), `POST
+/management/system/repository` (the project's star count for the header link), `GET
+/management/system/updates` (both products' stored version answers for the shell's update
+indicator), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
 /management/system/maintenance` (the running or last job) and `POST
 /management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
@@ -2134,8 +2136,20 @@ products' states and `served_from_cache`; a maintenance POST answers `202` on ad
 `409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
 `503` once the service is shutting down. Every one of them answers `503` when the handler was
 built without the corresponding service, which is how a deployment that does not offer the
-surface behaves. The repository route is the exception, because the shell reads it on every
-page: it always answers `200`, with a null `stargazers_count` whenever no count is known.
+surface behaves. The repository and updates routes are the exception, because the shell reads
+them on every page: they always answer `200`, the first with a null `stargazers_count`
+whenever no count is known and the second with both products `indeterminate` /
+`not_checked_yet` when there is no release service.
+
+The updates route never reads the feed. It reports what the sweep or the page's own check
+last stored, in the same per-product shape the page uses, so the shell can ask on every page
+without spending the shared budget; an open console re-reads it hourly
+(`UPDATE_STATUS_REFRESH_MS`). The shell marks the System Information navigation entry when
+either product is `update_available` and that release has not been dismissed. A dismissal is
+the `update_dismissals` preference, a product-to-tag map written from the page: it names one
+published tag, so a later release is marked again, and being a preference it holds across
+browsers and restarts. The comparison of the two lives in the browser
+(`web/src/utils/updateDismissals.ts`); the server stores the document and nothing else.
 
 Migrations are embedded from `migrations/` and applied in filename order inside
 one transaction each. A migration against an existing on-disk database first

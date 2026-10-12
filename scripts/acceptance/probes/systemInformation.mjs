@@ -1180,8 +1180,9 @@ export async function systemInformationNarrow({ base, page, check }) {
         }
       }
     }
+    // Both products' change-log actions, plus the ignore toggle the gateway's available update adds.
     const changelogControls = Array.from(document.querySelectorAll('[data-testid^="sys-product-"] button'));
-    const areChangelogControlsContained = changelogControls.length === 2 && changelogControls.every((control) => {
+    const areChangelogControlsContained = changelogControls.length === 3 && changelogControls.every((control) => {
       const versionRow = control.closest('[data-testid="sys-version-row"]');
       const comparison = versionRow?.querySelector('[data-testid="sys-version-comparison"]');
       if (!comparison || comparison.contains(control)) return false;
@@ -1226,7 +1227,7 @@ export async function systemInformationNarrow({ base, page, check }) {
     result.collapsed.length === 0,
     result.collapsed.join(' | '),
   );
-  check('change-log controls have their own space beside the comparison, a product name and an aimable hit area at 320px', result.areChangelogControlsContained);
+  check('version row actions have their own space beside the comparison, a product name and an aimable hit area at 320px', result.areChangelogControlsContained);
   check('all four components expose paired labelled facts at 320px', result.hasStructuredComponentFacts);
   check('detail card titles remain fully readable at 320px', result.areDetailTitlesReadable);
   check('maintenance actions have three dedicated title/control rows at 320px', result.hasMaintenanceActionHeads);
@@ -1440,4 +1441,78 @@ export async function systemVersionFeedback(fixtures) {
 }
 export async function systemHealthAnomalies(fixtures) {
   await fixtures.step('health anomaly projections', () => verifySystemHealthAnomalies(fixtures));
+}
+
+/**
+ * The shell's update indicator and the per-version dismissal that clears it.
+ *
+ * A browser claim because two of its parts are geometry: the dot sits on the System
+ * Information entry's icon, and pressing the toggle moves nothing on the card - its label is
+ * fixed and its outcome is a toast.
+ */
+export async function systemUpdateIndicator({ base, page, check }) {
+  const system = systemFixtures().find(([matches]) => matches(new URL('http://probe/omc/api/v1/management/system')))[1]();
+  await page.route('**/omc/api/v1/management/system/updates', (route) => fulfillFixture(route, {
+    status: 200, json: { omc_version: system.omc_version, cpa_version: system.cpa_version },
+  }));
+
+  await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
+  const dot = page.locator('.app-menu [data-testid="nav-update-dot"]');
+  const toggle = page.locator('[data-testid="sys-product-cpa"] [data-testid="sys-dismiss-update"]');
+  await dot.waitFor({ timeout: 20_000 });
+  await toggle.waitFor({ timeout: 20_000 });
+
+  const mark = await dot.evaluate((node) => {
+    const pip = node.querySelector('.app-menu-update-dot');
+    const probe = document.createElement('span');
+    probe.style.background = 'var(--warn)';
+    document.body.append(probe);
+    const warn = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const pipBox = pip.getBoundingClientRect();
+    const iconBox = node.getBoundingClientRect();
+    return {
+      route: node.closest('[data-route-path]')?.getAttribute('data-route-path'),
+      isWarnTone: getComputedStyle(pip).backgroundColor === warn,
+      width: pipBox.width,
+      isOnCorner: pipBox.left >= iconBox.left && pipBox.top <= iconBox.top + iconBox.height / 2,
+    };
+  });
+  check('an available update marks the System Information entry', mark.route === '/system', JSON.stringify(mark));
+  check('the mark is a small warning-tone dot on the icon corner', mark.isWarnTone && mark.width <= 8 && mark.isOnCorner, JSON.stringify(mark));
+  check(
+    'a build that cannot be compared offers nothing to ignore',
+    (await page.locator('[data-testid="sys-product-omc"] [data-testid="sys-dismiss-update"]').count()) === 0,
+  );
+
+  const measure = () => page.evaluate(() => {
+    const box = (selector) => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return [rect.left, rect.top, rect.width, rect.height].map((value) => Math.round(value * 10) / 10).join(',');
+    };
+    return [
+      box('[data-testid="sys-product-cpa"] [data-testid="sys-dismiss-update"]'),
+      box('[data-testid="sys-product-cpa"]'),
+      box('[data-testid="sys-card-versions"]'),
+    ].join(' | ');
+  });
+  const before = await measure();
+
+  await toggle.click();
+  await dot.waitFor({ state: 'detached', timeout: 10_000 });
+  const toast = page.locator('.omc-toast, .ant-message-notice').filter({ hasText: 'v7.3.7' });
+  await toast.first().waitFor({ timeout: 10_000 });
+  check('ignoring the version clears the mark and presses the toggle', (await toggle.getAttribute('aria-pressed')) === 'true');
+  const after = await measure();
+  check('ignoring the version moves nothing on the card', before === after, `${before} -> ${after}`);
+
+  // The dismissal is stored with the deployment, so a fresh load starts without the mark.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await toggle.waitFor({ timeout: 20_000 });
+  await until(async () => (await toggle.getAttribute('aria-pressed')) === 'true', { label: 'the stored dismissal' });
+  check('a reload keeps the dismissed version unmarked', (await dot.count()) === 0);
+
+  await toggle.click();
+  await dot.waitFor({ timeout: 10_000 });
+  check('pressing again restores the mark', (await toggle.getAttribute('aria-pressed')) === 'false');
 }

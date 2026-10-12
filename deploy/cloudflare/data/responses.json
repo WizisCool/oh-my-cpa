@@ -581,6 +581,11 @@
       "content_type": "application/json; charset=utf-8",
       "body": "{\"stargazers_count\":null}"
     },
+    "system-updates": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"cpa_version\":{\"attempted_at_ms\":1767225600000,\"check_error\":\"\",\"checked_at_ms\":1767225600000,\"checking\":false,\"latest_version\":\"v8.0.3\",\"merge_count\":2,\"notes_available\":true,\"product\":\"cpa\",\"range_complete\":true,\"repository\":\"router-for-me/CLIProxyAPI\",\"repository_url\":\"https://github.com/router-for-me/CLIProxyAPI\",\"running_version\":\"8.0.1\",\"state\":\"update_available\"},\"omc_version\":{\"attempted_at_ms\":1767225600000,\"check_error\":\"\",\"checked_at_ms\":1767225600000,\"checking\":false,\"latest_version\":\"v0.2.0\",\"merge_count\":1,\"notes_available\":true,\"product\":\"omc\",\"range_complete\":true,\"reason\":\"running_version_not_comparable\",\"repository\":\"WizisCool/oh-my-cpa\",\"repository_url\":\"https://github.com/WizisCool/oh-my-cpa\",\"running_version\":\"v0.1.0-demo\",\"state\":\"indeterminate\"}}"
+    },
     "usage-event-detail": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",

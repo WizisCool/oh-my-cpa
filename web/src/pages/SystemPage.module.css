@@ -137,9 +137,20 @@
   overflow-wrap: anywhere;
 }
 
-.changelog-trigger {
+/* The row's trailing actions share one group, so the comparison keeps its alignment whether
+   a release offers one action, both or neither. */
+.version-actions {
+  display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 8px;
   margin-inline-start: auto;
+  max-width: 100%;
+}
+
+.version-action {
+  flex: 0 0 auto;
   max-width: 100%;
   min-height: 32px;
   height: auto;
@@ -148,6 +159,11 @@
   font-size: var(--text-sm);
   line-height: 1.5;
   white-space: normal;
+}
+
+.version-action-pressed,
+.version-action-pressed:hover {
+  color: var(--fg);
 }
 
 .changelog-count {
@@ -189,7 +205,7 @@
     flex-shrink: 0;
   }
 
-  .changelog-trigger {
+  .version-actions {
     align-self: flex-end;
   }
 

@@ -10,7 +10,8 @@
     "oauth-workspace-scale",
     "oauth-plugin-connections",
     "system-version-feedback",
-    "system-health-anomalies"
+    "system-health-anomalies",
+    "system-update-indicator"
   ],
   "weights": {
     "agent": 6.0,
@@ -76,6 +77,7 @@
     "oauth-workspace-scale": 12,
     "oauth-plugin-connections": 7,
     "system-version-feedback": 7,
-    "system-health-anomalies": 3
+    "system-health-anomalies": 3,
+    "system-update-indicator": 4
   }
 }

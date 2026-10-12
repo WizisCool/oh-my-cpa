@@ -46,6 +46,11 @@ const (
 	// point and the reasoning effort. It is the operator's current choice, kept apart from the
 	// stored conversation's target, which records what a turn actually ran with.
 	PreferenceAgentTarget = "agent_target"
+
+	// PreferenceUpdateDismissals maps a release product to the one published tag the operator
+	// chose to stop being reminded about. It names a version rather than recording a switch, so
+	// a release newer than the dismissed one is announced again without anyone re-enabling it.
+	PreferenceUpdateDismissals = "update_dismissals"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

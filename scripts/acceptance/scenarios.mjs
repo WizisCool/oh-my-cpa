@@ -62,7 +62,7 @@ import { requestListTouch } from './probes/requestListTouch.mjs';
 import { oauthManagement, oauthVertexImport, oauthModelRules, oauthTokenCapacity, oauthAuthorizationOutcomes, oauthWorkspaceScale, oauthPluginConnections, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
-import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemFixtures } from './probes/systemInformation.mjs';
+import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemUpdateIndicator, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import { configBackups, configBackupsFixtures } from './probes/configBackups.mjs';
 import {
@@ -824,6 +824,7 @@ export const SCENARIOS = [
     run: systemInformationPage,
   },
   { id: 'system-version-feedback', name: 'System version check feedback and held responses', options: {routes: systemFixtures()}, run: systemVersionFeedback },
+  { id: 'system-update-indicator', name: 'an available update marks the System Information entry until that version is ignored', options: {routes: systemFixtures()}, run: systemUpdateIndicator },
   { id: 'system-health-anomalies', name: 'System health partial reads and anomaly projections', options: {routes: systemFixtures()}, run: systemHealthAnomalies },
   {
     // A 320px screen, because the page's defects appeared there and at no wider size. The

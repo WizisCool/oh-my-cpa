@@ -911,6 +911,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 600; background: transparent !important; box-shadow: inset 2px 0 0 var(--fg) !important; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .app-menu .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; border-radius: var(--radius-xs); object-fit: contain; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
+/* An available update marks the System Information entry: a `--warn` dot just outside the
+   icon's corner, where it touches neither the glyph nor the row's hover fill. */
+.app-menu .app-menu-flagged-icon { position: relative; display: inline-flex; align-items: center; flex: none; }
+.app-menu .app-menu-update-dot { position: absolute; top: -3px; inset-inline-end: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
 .app-menu .ant-menu-item-selected:hover { background: var(--surface) !important; }
 /* Stands in for every page while the gateway is older than CPA v8. The steps read
    left-aligned under the centred result, like instructions rather than a slogan. */

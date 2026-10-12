@@ -102,6 +102,10 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   time, and whether it was published as a prerelease. Records are the index the console
   stores. They are replaced as a unit per product each time a feed is read, so a
   withdrawn release stops being claimed.
+- **Update Dismissal**: The operator's choice to stop being reminded about one published
+  tag of one product, stored as the `update_dismissals` Preference. It silences the
+  navigation's update indicator for exactly that tag: the version card still reports the
+  release as available, and any later release is indicated again.
 - **Release Notes**: A release's own Markdown description, held only in the running
   process's memory. They are untrusted remote text: the console never executes HTML
   from them and never loads an image they reference, so opening the page makes no

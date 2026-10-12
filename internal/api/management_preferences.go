@@ -36,6 +36,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceScrollSmoothing:     true,
 	repository.PreferencePlaygroundSession:   true,
 	repository.PreferenceAgentTarget:         true,
+	repository.PreferenceUpdateDismissals:    true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.

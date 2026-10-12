@@ -18,7 +18,8 @@
     "omc_theme",
     "omc_scroll_smoothing",
     "playground_session",
-    "agent_target"
+    "agent_target",
+    "update_dismissals"
   ],
   "cases": [
     {

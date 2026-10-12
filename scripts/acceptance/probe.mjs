@@ -186,6 +186,15 @@ export function dashboardBody(series = [], { bucketMS = 60_000, preset = '1h' } 
  * `installRoutes` call keeps the state inside one scenario's context, which is where
  * the isolation lives: a write in one scenario cannot be read by another.
  */
+/** A product whose releases have not been read, which draws no update indicator. */
+function uncheckedVersion(product) {
+  return {
+    product, running_version: 'probe', latest_version: '', state: 'indeterminate', reason: 'not_checked_yet',
+    repository: '', repository_url: '', checked_at_ms: null, attempted_at_ms: null, check_error: '', checking: false,
+    merge_count: 0, range_complete: true, notes_available: false,
+  };
+}
+
 export function defaultRoutes() {
   const respondPreference = createPreferenceFixture();
   return [
@@ -207,6 +216,7 @@ export function defaultRoutes() {
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/healthz', () => ({ cpa_connected: true, version: 'probe', status: 'ok' })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/plugins', () => ({ plugins: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/repository', () => ({ stargazers_count: null })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/updates', () => ({ omc_version: uncheckedVersion('omc'), cpa_version: uncheckedVersion('cpa') })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/api-keys', () => ({ keys: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/pricing/attention', () => ({ unpriced: [] })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/models', () => ({ window: dashboardBody().window, total_tokens: 0, models: [], partial_errors: [] })],

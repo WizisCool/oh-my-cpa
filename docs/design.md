@@ -2621,12 +2621,24 @@ The change-log action occupies its own trailing space alongside the comparison. 
 count; its accessible name identifies both product and count. On phones it follows the
 comparison on a separate line, keeping both readings aligned and the action label intact.
 The action appears only for actual entries; the repository link stays with the product
-identity. Long comparison explanations belong below the readings rather than in the
+identity. A known newer release adds an **Ignore this version** toggle before it, in the
+same 32px text-button form with a bell icon. Its label never changes: the pressed state is
+the struck bell, `--fg` ink and `aria-pressed`, and the outcome of each press is a toast,
+so neither the row nor the card moves when it is used. Long comparison explanations belong below the readings rather than in the
 status slot. A missing-notes hint belongs only to a known change-log range; an empty or
 unchecked feed does not acquire a second warning about notes. A failed check retains the
 readings and shows its reason and, when available, the last successful check time.
 The log remains a Drawer and remote images remain links, never automatically fetched media.
 These are page-level arrangements using the existing visual tokens, not new theme mappings.
+
+### Update indicator
+
+An available, undismissed release marks the System Information navigation entry with a 6px
+`--warn` dot just outside the top trailing corner of its icon. It rides the icon because
+that is the one part of an entry the expanded rail, the collapsed rail and the phone sheet
+all keep. The dot does not animate and adds no control to the rail; the entry's accessible
+name gains "Update available". This is the warning tone used as a status, not decoration:
+it says the deployment is behind a published release.
 
 ### System information status cards
 
