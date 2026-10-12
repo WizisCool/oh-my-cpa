@@ -46,9 +46,23 @@ func TestResolveAutoRefreshSettingsFallsBackToDefaults(t *testing.T) {
 	for _, input := range []struct {
 		raw      string
 		isStored bool
-	}{{"", false}, {`{"interval_minutes":30,"refresh_on_reset":false}`, false}, {"", true}, {`"future"`, true}} {
+	}{{"", false}, {`{"interval_minutes":30,"refresh_on_reset":false}`, false}, {"", true}, {`"future"`, true}, {`{}`, true}, {`null`, true}} {
 		if got := ResolveAutoRefreshSettings(input.raw, input.isStored); got != defaults {
 			t.Fatalf("%+v resolved to %+v, want defaults", input, got)
+		}
+	}
+	// A newer build's extra field, or one field this build cannot honour, must not turn
+	// the operator's choice for the other field back into the default.
+	for raw, want := range map[string]AutoRefreshSettings{
+		`{"interval_minutes":0,"refresh_on_reset":false,"future_field":1}`: {},
+		`{"refresh_on_reset":false}`:                                       {},
+		`{"interval_minutes":3,"refresh_on_reset":false}`:                  {},
+		`{"interval_minutes":45,"refresh_on_reset":"no"}`:                  {IntervalMinutes: 45, IsRefreshOnResetEnabled: true},
+		`{"interval_minutes":"30","refresh_on_reset":true}`:                defaults,
+		`{"interval_minutes":15,"refresh_on_reset":null}`:                  {IntervalMinutes: 15, IsRefreshOnResetEnabled: true},
+	} {
+		if got := ResolveAutoRefreshSettings(raw, true); got != want {
+			t.Fatalf("%s resolved to %+v, want %+v", raw, got, want)
 		}
 	}
 	stored := ResolveAutoRefreshSettings(`{"interval_minutes":60,"refresh_on_reset":false}`, true)
@@ -88,6 +102,7 @@ func TestAutoRefreshTrigger(t *testing.T) {
 		{"never read is not reset-driven", resetOnly, AutoRefreshCandidate{Provider: "codex", IsSupported: true}, AutoRefreshTriggerNone},
 		{"reset trigger off", intervalOnly, read(10*minute, 2*minute), AutoRefreshTriggerNone},
 		{"interval elapsed", intervalOnly, read(31 * minute), AutoRefreshTriggerInterval},
+		{"reading stamped after its tick is due on the tick that ends the interval", intervalOnly, read(30*minute - 5_000), AutoRefreshTriggerInterval},
 		{"interval not elapsed", intervalOnly, read(29 * minute), AutoRefreshTriggerNone},
 		{"never read is due on schedule", intervalOnly, AutoRefreshCandidate{Provider: "claude", IsSupported: true}, AutoRefreshTriggerInterval},
 		{"reset wins over interval", both, read(31*minute, 2*minute), AutoRefreshTriggerReset},
@@ -102,6 +117,21 @@ func TestAutoRefreshTrigger(t *testing.T) {
 		{"failed attempt delays the interval", intervalOnly, func() AutoRefreshCandidate {
 			c := read(60 * minute)
 			c.LastAttemptAtMS = nowMS - 10*minute
+			return c
+		}(), AutoRefreshTriggerNone},
+		{"failed reset read is retried after the backoff", resetOnly, func() AutoRefreshCandidate {
+			c := read(3*60*minute, 20*minute)
+			c.LastAttemptAtMS = nowMS - 15*minute
+			return c
+		}(), AutoRefreshTriggerReset},
+		{"failed reset read is not retried inside the backoff", resetOnly, func() AutoRefreshCandidate {
+			c := read(3*60*minute, 20*minute)
+			c.LastAttemptAtMS = nowMS - 5*minute
+			return c
+		}(), AutoRefreshTriggerNone},
+		{"failed reset read stops after the retry window", resetOnly, func() AutoRefreshCandidate {
+			c := read(5*60*minute, 2*60*minute)
+			c.LastAttemptAtMS = nowMS - 30*minute
 			return c
 		}(), AutoRefreshTriggerNone},
 		{"attempt before a later reset still allows it", resetOnly, func() AutoRefreshCandidate {

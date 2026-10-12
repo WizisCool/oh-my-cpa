@@ -100,9 +100,8 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusBadRequest, "preference value must be a JSON document")
 		return
 	}
-	// The automatic quota refresh policy is the one preference the server acts on, so its
-	// shape is enforced on the way in: the scheduler must never be steered by a document
-	// it would have to guess about.
+	// The automatic quota refresh policy decides when the server makes provider requests on
+	// its own, so its shape is enforced on the way in rather than guessed at by the loop.
 	if key == repository.PreferenceQuotaAutoRefresh {
 		if _, err := quota.ParseAutoRefreshSettings(body); err != nil {
 			writeError(writer, http.StatusBadRequest, quota.ErrInvalidAutoRefreshSettings.Error())

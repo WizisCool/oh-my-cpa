@@ -13,14 +13,28 @@ import (
 // credential itself, so a cadence shorter than a few minutes spends the provider's
 // patience without telling the operator anything a window's own countdown does not.
 const (
-	AutoRefreshMinIntervalMinutes = 5
-	AutoRefreshMaxIntervalMinutes = 24 * 60
+	AUTO_REFRESH_MIN_INTERVAL_MINUTES = 5
+	AUTO_REFRESH_MAX_INTERVAL_MINUTES = 24 * 60
 
-	// AutoRefreshResetGrace is how long after a window's stated reset a credential is
+	// AUTO_REFRESH_RESET_GRACE is how long after a window's stated reset a credential is
 	// re-read. Upstream counters roll over on their own clock, and a read at the exact
-	// boundary can still return the cycle that just ended - which would spend the one
+	// boundary can still return the cycle that just ended - which would spend the
 	// reset-driven read on the reading it was meant to replace.
-	AutoRefreshResetGrace = time.Minute
+	AUTO_REFRESH_RESET_GRACE = time.Minute
+
+	// AUTO_REFRESH_INTERVAL_SLACK lets a scheduled read fire on the tick that lands on its
+	// interval. A stored observation is stamped when its read finishes, a little after the
+	// tick that started it, so the next whole interval measured from it always ends just
+	// after a tick; without the slack every interval would run one tick long.
+	AUTO_REFRESH_INTERVAL_SLACK = 30 * time.Second
+
+	// A reset-driven read that fails is retried at this backoff, but only within the
+	// window after the reset. The reset is the moment an operator is waiting on, so one
+	// transient failure must not leave an exhausted reading in place until the next manual
+	// click; a credential that keeps failing (one that needs signing in again) stops
+	// costing requests once the window has passed.
+	AUTO_REFRESH_RESET_RETRY_BACKOFF = 10 * time.Minute
+	AUTO_REFRESH_RESET_RETRY_WINDOW  = time.Hour
 )
 
 // ErrInvalidAutoRefreshSettings rejects a stored document the scheduler cannot honour.
@@ -60,7 +74,7 @@ func (s AutoRefreshSettings) Validate() error {
 	if s.IntervalMinutes == 0 {
 		return nil
 	}
-	if s.IntervalMinutes < AutoRefreshMinIntervalMinutes || s.IntervalMinutes > AutoRefreshMaxIntervalMinutes {
+	if s.IntervalMinutes < AUTO_REFRESH_MIN_INTERVAL_MINUTES || s.IntervalMinutes > AUTO_REFRESH_MAX_INTERVAL_MINUTES {
 		return ErrInvalidAutoRefreshSettings
 	}
 	return nil
@@ -89,17 +103,30 @@ func ParseAutoRefreshSettings(raw []byte) (AutoRefreshSettings, error) {
 	return settings, nil
 }
 
-// ResolveAutoRefreshSettings reads a stored document for the scheduler: an absent or
-// unreadable one falls back to the defaults rather than stopping the loop, because the
-// write path already refuses anything invalid and a value written by a future build
-// must not turn the feature off silently in an older one.
+// ResolveAutoRefreshSettings reads a stored document for the scheduler, field by field.
+//
+// Reading is lenient where writing is strict: a document a newer build wrote may carry
+// fields this build does not know, and rejecting the whole document would replace an
+// operator's "off" with the defaults - turning on reads they had turned off. Each known
+// field is kept when it is valid, and only a missing or invalid field takes its default.
 func ResolveAutoRefreshSettings(raw string, isStored bool) AutoRefreshSettings {
+	settings := DefaultAutoRefreshSettings()
 	if !isStored || strings.TrimSpace(raw) == "" {
-		return DefaultAutoRefreshSettings()
+		return settings
 	}
-	settings, err := ParseAutoRefreshSettings([]byte(raw))
-	if err != nil {
-		return DefaultAutoRefreshSettings()
+	// Fields are decoded one at a time so that a malformed one cannot discard the other.
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(raw), &fields) != nil {
+		return settings
+	}
+	var intervalMinutes int
+	if json.Unmarshal(fields["interval_minutes"], &intervalMinutes) == nil && (AutoRefreshSettings{IntervalMinutes: intervalMinutes}).Validate() == nil {
+		settings.IntervalMinutes = intervalMinutes
+	}
+	// A JSON null decodes into a bool as false without an error; it is not a stated "off".
+	var isRefreshOnResetEnabled bool
+	if value := fields["refresh_on_reset"]; string(value) != "null" && json.Unmarshal(value, &isRefreshOnResetEnabled) == nil {
+		settings.IsRefreshOnResetEnabled = isRefreshOnResetEnabled
 	}
 	return settings
 }
@@ -132,28 +159,36 @@ func IsAutoRefreshProvider(provider string) bool {
 
 // AutoRefreshTrigger decides whether a credential is due for an automatic read.
 //
-// A reset trigger fires once per boundary: it needs a window whose reset, plus the grace,
-// has passed since both the latest observation and this process's latest attempt. A read
-// that fails is therefore not repeated every tick until the credential recovers; the
-// scheduled interval, when enabled, is what keeps retrying it. The interval counts from
-// the newer of the observation and the attempt for the same reason.
+// A reset trigger needs a window whose reset, plus the grace, has passed since the latest
+// stored observation. It fires on the first tick after that instant; when that read
+// fails - it is not stored, so the observation stays older than the reset - it is retried
+// at a backoff for a bounded window rather than on every tick. The interval counts from
+// the newer of the observation and the attempt, so a failing scheduled read waits a
+// whole interval too.
 func AutoRefreshTrigger(settings AutoRefreshSettings, candidate AutoRefreshCandidate, nowMS int64) string {
 	if candidate.IsDisabled || !candidate.IsSupported || !IsAutoRefreshProvider(candidate.Provider) {
 		return AutoRefreshTriggerNone
 	}
-	lastMS := max(candidate.LastObservedAtMS, candidate.LastAttemptAtMS)
 	if settings.IsRefreshOnResetEnabled && candidate.LastObservedAtMS > 0 {
-		graceMS := AutoRefreshResetGrace.Milliseconds()
+		graceMS := AUTO_REFRESH_RESET_GRACE.Milliseconds()
 		for _, resetAtMS := range candidate.ResetAtMS {
 			dueAtMS := resetAtMS + graceMS
-			if resetAtMS > 0 && dueAtMS <= nowMS && lastMS < dueAtMS {
+			if resetAtMS <= 0 || dueAtMS > nowMS || candidate.LastObservedAtMS >= dueAtMS {
+				continue
+			}
+			if candidate.LastAttemptAtMS < dueAtMS {
+				return AutoRefreshTriggerReset
+			}
+			isInRetryWindow := nowMS-dueAtMS < AUTO_REFRESH_RESET_RETRY_WINDOW.Milliseconds()
+			if isInRetryWindow && nowMS-candidate.LastAttemptAtMS >= AUTO_REFRESH_RESET_RETRY_BACKOFF.Milliseconds() {
 				return AutoRefreshTriggerReset
 			}
 		}
 	}
 	if settings.IntervalMinutes > 0 {
+		lastMS := max(candidate.LastObservedAtMS, candidate.LastAttemptAtMS)
 		intervalMS := int64(settings.IntervalMinutes) * time.Minute.Milliseconds()
-		if lastMS == 0 || nowMS-lastMS >= intervalMS {
+		if lastMS == 0 || nowMS-lastMS+AUTO_REFRESH_INTERVAL_SLACK.Milliseconds() >= intervalMS {
 			return AutoRefreshTriggerInterval
 		}
 	}

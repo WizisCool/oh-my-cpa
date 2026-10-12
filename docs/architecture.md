@@ -2103,12 +2103,15 @@ in `internal/api/quota_auto_refresh.go` wakes every minute, reads the
 `omc_quota_auto_refresh` preference, lists the credentials and their latest snapshots,
 and asks `quota.AutoRefreshTrigger` (`internal/quota/auto_refresh.go`) which are due: a
 reset-driven read once a stored window's `reset_at_ms` plus a one-minute grace has
-passed both the observation and the process's last attempt, and a scheduled read once
-the newer of the two is `interval_minutes` old. Due credentials - reset-driven first,
+passed the observation (a failed one is retried every ten minutes during the following
+hour), and a scheduled read once the newer of the observation and the process's last
+attempt is `interval_minutes` old, less a thirty-second slack for the observation being
+stamped after its tick. Due credentials - reset-driven first,
 then oldest reading first, at most sixteen per round and four at a time - go through
 `RefreshCredentialQuota` and `persistNormalizedQuotaSnapshot`, exactly as a manual
 refresh does. Attempts are remembered in process memory because a failed read is not
-persisted. Disabled credentials, providers without a probe, duplicated `auth_index`
+persisted, and a round failure is logged when it starts or changes rather than every
+minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`
 claims and Meta (whose observation is an audited key exchange) are skipped. The
 preference API refuses any document for this key other than
 `{"interval_minutes": 0 | 5-1440, "refresh_on_reset": bool}` with

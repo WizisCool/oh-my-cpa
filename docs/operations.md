@@ -432,8 +432,9 @@ OMC Settings → Quota holds the deployment-wide automatic quota refresh policy 
 by default: about a minute after a window a stored reading reported has reset, that
 credential is read again once. **Scheduled quota refresh** is off by default; when set
 (every 5 minutes to 24 hours) every enabled credential whose reading is that old is
-read. Each automatic read is a provider request made with the credential through CPA's
-`api-call`, at most sixteen per minute. Meta credentials are only read on a manual
+read. Each automatic read is a provider request made with the credential through CPA
+(`api-call`, or the plugin's quota endpoint for a plugin credential), at most sixteen per
+minute; a failed reset-driven read is retried every ten minutes for an hour. Meta credentials are only read on a manual
 refresh, because that read exchanges a key upstream. Turning both off restores
 operator-only reads. A demonstration never runs it.
 

@@ -14,7 +14,8 @@ carried the instant that would change - each window's `reset_at_ms` - so the con
 knew when its own answer had become wrong and did nothing about it.
 
 A background read is not free. Each one is a request to the provider made with the
-credential itself, relayed by CPA's `api-call`, and a deployment can hold many
+credential itself, relayed by CPA (its `api-call`, or the plugin's quota endpoint for a
+plugin credential), and a deployment can hold many
 credentials. One provider's read has a side effect: Meta's observation exchanges the
 stored DCA token for a key upstream, and that exchange is audited per attempt as an
 operator's action.
@@ -29,12 +30,14 @@ restart. The rules are pure functions in `internal/quota/auto_refresh.go`.
 
 - **Reset-driven read** (`refresh_on_reset`, on by default): a credential is read once
   a window its latest stored observation reported has passed its reset by
-  `AutoRefreshResetGrace` (one minute), and only if neither that observation nor this
-  process's last attempt is already later than that instant. It fires once per
-  boundary; a credential nobody has read has no boundary and is never read by it.
+  `AUTO_REFRESH_RESET_GRACE` (one minute), on the first tick after that instant. A read
+  that fails is not stored, so it is retried every ten minutes during the hour after the
+  reset and then left for the operator or the schedule; a credential nobody has read has
+  no boundary and is never read by it.
 - **Scheduled read** (`interval_minutes`, off by default, 5-1440 when on): a credential
   is read once the newer of its observation and the last attempt is that old,
-  including a credential nobody has read.
+  including a credential nobody has read. A thirty-second slack lets the read fire on the
+  tick that ends the interval, because an observation is stamped when its read finishes.
 
 The defaults follow from cost. A reset-driven read only re-reads a credential an
 operator already read, once per boundary that reading announced; a schedule would
@@ -45,7 +48,8 @@ is read by `quota.Service.RefreshCredentialQuota` and stored by the same functio
 manual refresh uses, so a failed or stale read never replaces the last good
 observation. Because a failed read is not stored, the loop remembers its attempts in
 process memory, and both triggers count from the attempt as well as the observation:
-a credential that keeps failing is not re-read every minute.
+a credential that keeps failing is not re-read every minute. `app.Run` joins the loop
+before returning, because a round in flight writes to the database the caller closes.
 
 **Bounds.** A round reads at most sixteen credentials, four at a time; the rest stay
 due for the next tick. Disabled credentials, providers without a probe, and an
@@ -54,8 +58,10 @@ because a timer must not mint keys an audit trail records as operator decisions.
 
 **The policy is a validated preference.** The preference API accepts this key only as
 `{"interval_minutes": int, "refresh_on_reset": bool}` within the bounds and answers
-`invalid_quota_auto_refresh` otherwise, because the server acts on it. The loop treats
-an absent or unreadable value as the defaults. `quota_auto_refresh_get` and
+`invalid_quota_auto_refresh` otherwise, because the server acts on it. The loop reads it
+field by field: a field it cannot read takes its default while the other keeps the
+operator's value, so a document a newer build wrote cannot turn reads the operator
+switched off back on. `quota_auto_refresh_get` and
 `quota_auto_refresh_set` expose the same policy to the Agent and MCP.
 
 **A demonstration never starts the loop.** Its gateway is the fixture, and the

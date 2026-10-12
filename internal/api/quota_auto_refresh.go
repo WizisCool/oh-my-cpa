@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
@@ -18,8 +17,9 @@ import (
 )
 
 // Automatic quota refresh cadence. The loop wakes every minute, which is the resolution a
-// reset-driven read needs; each wake only reads what is due, so an idle deployment costs one
-// local settings read and nothing upstream.
+// reset-driven read needs. A wake with nothing due makes no provider request: it costs the
+// settings read, CPA's credential list and the latest stored observations, the same reads
+// the dashboard's Credential Quota panel already makes each minute.
 const (
 	QUOTA_AUTO_REFRESH_TICK = time.Minute
 	// A round reads at most this many credentials, and the rest are due again on the next
@@ -36,6 +36,9 @@ const (
 type quotaAutoRefreshState struct {
 	mu             sync.Mutex
 	lastAttemptsMS map[string]int64
+	// lastRoundError keeps a gateway that stays unreachable from logging the same warning
+	// every minute: a failure is logged when it starts or changes, and recovery once.
+	lastRoundError string
 }
 
 // quotaAutoRefreshRound summarizes one round for the service log.
@@ -60,9 +63,10 @@ func (h *Handler) RunQuotaAutoRefresh(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			round, err := h.runQuotaAutoRefreshRound(ctx)
-			if err != nil && ctx.Err() == nil && h.logger != nil {
-				h.logger.Warn("automatic quota refresh round failed", "error", err)
+			if ctx.Err() != nil {
+				return ctx.Err()
 			}
+			h.logQuotaAutoRefreshFailure(err)
 			if round.Due > 0 && h.logger != nil {
 				h.logger.Info("automatic quota refresh round",
 					"due", round.Due, "refreshed", round.Refreshed, "failed", round.Failed, "after_reset", round.ByReset)
@@ -130,6 +134,7 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 
 	type dueCredential struct {
 		file       management.AuthFile
+		prior      *quota.NormalizedQuota
 		trigger    string
 		observedMS int64
 	}
@@ -144,12 +149,14 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 			IsSupported:     quota.CapabilitiesForFile(file).RefreshSupported,
 			LastAttemptAtMS: lastAttempts[authIndex],
 		}
+		var prior *quota.NormalizedQuota
 		if snapshot, ok := snapshots[authIndex]; ok {
+			prior = normalizedQuotaFromSnapshot(authIndex, snapshot)
 			candidate.LastObservedAtMS = snapshot.ObservedAtMS
-			candidate.ResetAtMS = quota.WindowResetTimes(decodeSnapshotWindows(snapshot))
+			candidate.ResetAtMS = quota.WindowResetTimes(prior.Windows)
 		}
 		if trigger := quota.AutoRefreshTrigger(settings, candidate, nowMS); trigger != quota.AutoRefreshTriggerNone {
-			due = append(due, dueCredential{file: file, trigger: trigger, observedMS: candidate.LastObservedAtMS})
+			due = append(due, dueCredential{file: file, prior: prior, trigger: trigger, observedMS: candidate.LastObservedAtMS})
 		}
 	}
 	// Reset-driven reads go first, because they answer whether a credential can serve
@@ -176,12 +183,11 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 		authIndex := strings.TrimSpace(credential.file.AuthIndex)
 		h.quotaAutoRefresh.recordAttempt(authIndex, nowMS)
 		wg.Add(1)
-		go func(file management.AuthFile, trigger string) {
+		go func(file management.AuthFile, prior *quota.NormalizedQuota, trigger string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			prior := h.loadPriorNormalizedQuota(ctx, authIndex)
 			refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
 			// The same persistence rule as a manual refresh: a failed or stale read
 			// never replaces the last good observation.
@@ -201,24 +207,30 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 			if trigger == quota.AutoRefreshTriggerReset {
 				round.ByReset++
 			}
-		}(credential.file, credential.trigger)
+		}(credential.file, credential.prior, credential.trigger)
 	}
 	wg.Wait()
 	h.quotaAutoRefresh.forgetExcept(filesByIndex)
 	return round, nil
 }
 
-// decodeSnapshotWindows reads a stored observation's windows; an unreadable document
-// has no reset to wait for.
-func decodeSnapshotWindows(snapshot repository.QuotaSnapshotRecord) []quota.QuotaWindow {
-	if snapshot.WindowsJSON == "" || snapshot.WindowsJSON == "[]" {
-		return nil
+func (h *Handler) logQuotaAutoRefreshFailure(err error) {
+	message := ""
+	if err != nil {
+		message = err.Error()
 	}
-	var windows []quota.QuotaWindow
-	if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err != nil {
-		return nil
+	h.quotaAutoRefresh.mu.Lock()
+	previous := h.quotaAutoRefresh.lastRoundError
+	h.quotaAutoRefresh.lastRoundError = message
+	h.quotaAutoRefresh.mu.Unlock()
+	if h.logger == nil || message == previous {
+		return
 	}
-	return windows
+	if message == "" {
+		h.logger.Info("automatic quota refresh rounds recovered")
+		return
+	}
+	h.logger.Warn("automatic quota refresh round failed", "error", message)
 }
 
 func (s *quotaAutoRefreshState) snapshotAttempts() map[string]int64 {
