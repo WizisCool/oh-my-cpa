@@ -808,12 +808,12 @@ const DICT: Record<string, [string, string]> = {
   // Both rows say what the process will do on its own, because each automatic read is a
   // request to the provider made with the credential itself.
   'omc.quota_auto_refresh_interval': ['定时刷新额度', 'Scheduled quota refresh'],
-  'omc.quota_auto_refresh_interval_desc': ['在后台按此间隔用凭证向服务商读取额度；Meta 凭证只在手动刷新时读取。', 'Reads each credential\'s quota from its provider in the background at this interval. Meta credentials are read only on a manual refresh.'],
+  'omc.quota_auto_refresh_interval_desc': ['后台按所选间隔刷新所有凭证的额度；Meta 凭证仅支持手动刷新。', 'Refreshes every credential\'s quota in the background at this interval. Meta credentials refresh manually only.'],
   'omc.quota_auto_refresh_off': ['关闭', 'Off'],
   'omc.quota_auto_refresh_minutes': ['每 {n} 分钟', 'Every {n} min'],
   'omc.quota_auto_refresh_hours': ['每 {n} 小时', 'Every {n} h'],
   'omc.quota_refresh_on_reset': ['额度重置后自动刷新', 'Refresh after a quota resets'],
-  'omc.quota_refresh_on_reset_desc': ['窗口过了重置时间约一分钟后，自动重新读取该凭证一次。', 'About a minute after a window\'s reset time passes, that credential is read again once.'],
+  'omc.quota_refresh_on_reset_desc': ['任一额度窗口重置约 1 分钟后，自动刷新该凭证一次。', 'Refreshes a credential once, about a minute after any of its quota windows resets.'],
   'omc.quota_auto_refresh_invalid': ['刷新间隔需为 5 分钟到 24 小时之间', 'The refresh interval must be between 5 minutes and 24 hours'],
   'omc.section_display': ['数据显示', 'Data display'],
   'omc.section_appearance': ['界面外观', 'Appearance'],
