@@ -40,8 +40,8 @@ func TestParseAutoRefreshSettingsIsStrict(t *testing.T) {
 
 func TestResolveAutoRefreshSettingsFallsBackToDefaults(t *testing.T) {
 	defaults := DefaultAutoRefreshSettings()
-	if defaults.IntervalMinutes != 0 || !defaults.IsRefreshOnResetEnabled {
-		t.Fatalf("defaults = %+v, want schedule off and reset-driven reads on", defaults)
+	if defaults.IntervalMinutes != 360 || !defaults.IsRefreshOnResetEnabled {
+		t.Fatalf("defaults = %+v, want a six-hour schedule and reset-driven reads on", defaults)
 	}
 	for _, input := range []struct {
 		raw      string
@@ -55,8 +55,8 @@ func TestResolveAutoRefreshSettingsFallsBackToDefaults(t *testing.T) {
 	// the operator's choice for the other field back into the default.
 	for raw, want := range map[string]AutoRefreshSettings{
 		`{"interval_minutes":0,"refresh_on_reset":false,"future_field":1}`: {},
-		`{"refresh_on_reset":false}`:                                       {},
-		`{"interval_minutes":3,"refresh_on_reset":false}`:                  {},
+		`{"refresh_on_reset":false}`:                                       {IntervalMinutes: 360},
+		`{"interval_minutes":3,"refresh_on_reset":false}`:                  {IntervalMinutes: 360},
 		`{"interval_minutes":45,"refresh_on_reset":"no"}`:                  {IntervalMinutes: 45, IsRefreshOnResetEnabled: true},
 		`{"interval_minutes":"30","refresh_on_reset":true}`:                defaults,
 		`{"interval_minutes":15,"refresh_on_reset":null}`:                  {IntervalMinutes: 15, IsRefreshOnResetEnabled: true},

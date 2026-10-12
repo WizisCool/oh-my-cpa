@@ -34,14 +34,18 @@ restart. The rules are pure functions in `internal/quota/auto_refresh.go`.
   that fails is not stored, so it is retried every ten minutes during the hour after the
   reset and then left for the operator or the schedule; a credential nobody has read has
   no boundary and is never read by it.
-- **Scheduled read** (`interval_minutes`, off by default, 5-1440 when on): a credential
+- **Scheduled read** (`interval_minutes`, 360 - six hours - by default, 5-1440, or 0
+  for off): a credential
   is read once the newer of its observation and the last attempt is that old,
   including a credential nobody has read. A thirty-second slack lets the read fire on the
   tick that ends the interval, because an observation is stamped when its read finishes.
 
-The defaults follow from cost. A reset-driven read only re-reads a credential an
-operator already read, once per boundary that reading announced; a schedule would
-start reading the whole fleet on a cadence nobody chose.
+Both triggers are on by default. A reset-driven read only re-reads a credential an
+operator already read, once per boundary that reading announced. The six-hour schedule
+keeps no reading older than the shortest common window (five hours) is long, so a
+credential nobody has opened still has a recent reading, at four reads per credential a
+day; a deployment holding many credentials or wanting fewer upstream requests can
+lengthen it or turn it off.
 
 **Automatic reads reuse the manual path and its persistence rule.** A due credential
 is read by `quota.Service.RefreshCredentialQuota` and stored by the same function a
@@ -72,9 +76,11 @@ demonstration starts no loop of its own beyond the HTTP server.
 - An exhausted credential reads as recovered about a minute after its window resets,
   with no operator action, and the console pages that poll the stored readings - the
   dashboard panel and the OAuth management workspace, each every minute - show it.
-- A deployment upgraded to this version starts making reset-driven reads for the
-  credentials it has already read. Turning `refresh_on_reset` off restores
-  operator-only reads.
+- A deployment upgraded to this version starts reading its credentials on its own:
+  within its first minutes every enabled credential whose reading is older than six
+  hours, or that nobody has read, is read (sixteen per minute), then each about every
+  six hours and after each reset. Turning both triggers off restores operator-only
+  reads.
 - The attempt memory is lost on restart, so a failing credential that is due may be
   tried once more after a restart; the round limit still bounds that.
 - No table or migration is added; the readings remain `quota_snapshots` rows.

@@ -56,12 +56,17 @@ type AutoRefreshSettings struct {
 	IsRefreshOnResetEnabled bool `json:"refresh_on_reset"`
 }
 
-// DefaultAutoRefreshSettings is the policy of a deployment that never chose one. The
-// reset-driven read is on because it only re-reads credentials an operator has already
-// read, once per boundary their own reading announced; the schedule is off because it
-// would start reading every credential of the deployment on a cadence nobody chose.
+// AUTO_REFRESH_DEFAULT_INTERVAL_MINUTES is the schedule of a deployment that never chose
+// one. Six hours keeps every reading younger than the shortest common window (five hours)
+// is long, so a credential nobody has looked at still has a recent reading, at a cost of
+// four reads per credential a day.
+const AUTO_REFRESH_DEFAULT_INTERVAL_MINUTES = 6 * 60
+
+// DefaultAutoRefreshSettings is the policy of a deployment that never chose one: both
+// triggers on, the reset-driven read for the moment an operator waits on and the six-hour
+// schedule so no reading goes stale for long.
 func DefaultAutoRefreshSettings() AutoRefreshSettings {
-	return AutoRefreshSettings{IntervalMinutes: 0, IsRefreshOnResetEnabled: true}
+	return AutoRefreshSettings{IntervalMinutes: AUTO_REFRESH_DEFAULT_INTERVAL_MINUTES, IsRefreshOnResetEnabled: true}
 }
 
 // IsEnabled reports whether either trigger can schedule a read.

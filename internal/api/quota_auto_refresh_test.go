@@ -111,6 +111,35 @@ func saveAutoRefreshSnapshot(t *testing.T, handler *Handler, authIndex, provider
 	}
 }
 
+func setAutoRefreshPolicy(t *testing.T, handler *Handler, policy string) {
+	t.Helper()
+	if err := handler.repo.PutPreference(context.Background(), repository.PreferenceQuotaAutoRefresh, policy); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQuotaAutoRefreshDefaultsReadResetsAndASixHourSchedule(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	hour := time.Hour.Milliseconds()
+	saveAutoRefreshSnapshot(t, handler, "codex-reset", "codex", nowMS-2*hour, nowMS-2*time.Minute.Milliseconds())
+	saveAutoRefreshSnapshot(t, handler, "codex-fresh", "codex", nowMS-5*hour, nowMS+4*hour)
+
+	// No stored policy: the reset credential is read after its reset, the one nobody has
+	// read is read on schedule, and a five-hour-old reading is not yet six hours old.
+	round, err := handler.runQuotaAutoRefreshRound(ctx)
+	if err != nil || round.Due != 2 || round.Refreshed != 2 || round.ByReset != 1 {
+		t.Fatalf("default round = %+v err=%v", round, err)
+	}
+	for authIndex, want := range map[string]int{"codex-reset": 1, "codex-unread": 1, "codex-fresh": 0, "codex-off": 0, "meta-reset": 0, "codex-dup": 0} {
+		if got := fixture.usageReads(authIndex); got != want {
+			t.Errorf("%s read %d times, want %d", authIndex, got, want)
+		}
+	}
+}
+
 func TestQuotaAutoRefreshReadsOnceAfterAReset(t *testing.T) {
 	ctx := context.Background()
 	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
@@ -123,7 +152,7 @@ func TestQuotaAutoRefreshReadsOnceAfterAReset(t *testing.T) {
 	saveAutoRefreshSnapshot(t, handler, "meta-reset", "meta", nowMS-5*hour, nowMS-2*time.Minute.Milliseconds())
 	saveAutoRefreshSnapshot(t, handler, "codex-dup", "codex", nowMS-5*hour, nowMS-2*time.Minute.Milliseconds())
 
-	// No stored policy means the defaults: reset-driven reads only.
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":0,"refresh_on_reset":true}`)
 	round, err := handler.runQuotaAutoRefreshRound(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -160,6 +189,7 @@ func TestQuotaAutoRefreshDoesNotRepeatAFailedRead(t *testing.T) {
 	nowMS := time.Now().UnixMilli()
 	observedAtMS := nowMS - 5*time.Hour.Milliseconds()
 	saveAutoRefreshSnapshot(t, handler, "codex-reset", "codex", observedAtMS, nowMS-2*time.Minute.Milliseconds())
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":0,"refresh_on_reset":true}`)
 
 	round, err := handler.runQuotaAutoRefreshRound(ctx)
 	if err != nil || round.Due != 1 || round.Failed != 1 || round.Refreshed != 0 {

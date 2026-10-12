@@ -410,8 +410,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   (ADR 0094). It has two independent triggers. A **reset-driven read** (on by default)
   reads a credential once, about a minute after a window its latest reading reported
   has reset, so an exhausted credential reads as recovered without anyone asking; a
-  credential nobody has read has no reset to wait for. A **scheduled read** (off by
-  default, every 5 minutes to 24 hours) reads every credential whose reading is that
+  credential nobody has read has no reset to wait for. A **scheduled read** (every six
+  hours by default; 5 minutes to 24 hours, or off) reads every credential whose reading is that
   old, including one nobody has read. Automatic reads are the manual refresh with the
   same persistence rule - a failed read never replaces the last good one - and are not
   repeated every minute when they fail: a failed reset-driven read is retried every ten

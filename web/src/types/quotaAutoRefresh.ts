@@ -12,8 +12,8 @@ export interface QuotaAutoRefreshSettings {
 
 export const QUOTA_AUTO_REFRESH_PREFERENCE = 'omc_quota_auto_refresh';
 
-/** Mirrors `DefaultAutoRefreshSettings`: reset-driven reads on, schedule off. */
-export const DEFAULT_QUOTA_AUTO_REFRESH: QuotaAutoRefreshSettings = { interval_minutes: 0, refresh_on_reset: true };
+/** Mirrors `DefaultAutoRefreshSettings`: reset-driven reads on, and a six-hour schedule. */
+export const DEFAULT_QUOTA_AUTO_REFRESH: QuotaAutoRefreshSettings = { interval_minutes: 360, refresh_on_reset: true };
 
 export const QUOTA_AUTO_REFRESH_MIN_MINUTES = 5;
 export const QUOTA_AUTO_REFRESH_MAX_MINUTES = 24 * 60;

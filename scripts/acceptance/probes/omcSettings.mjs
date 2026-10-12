@@ -69,8 +69,8 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   const intervalPicker = page.getByRole('combobox', { name: 'Scheduled quota refresh', exact: true });
   const intervalControl = page.locator('.ant-select').filter({ has: intervalPicker });
   await until(() => resetSwitch.isEnabled(), { label: 'the quota refresh controls after the preference read' });
-  check('quota refresh defaults to reset-driven reads with no schedule',
-    await resetSwitch.getAttribute('aria-checked') === 'true' && (await intervalControl.innerText()).includes('Off'));
+  check('quota refresh defaults to reset-driven reads and a six-hour schedule',
+    await resetSwitch.getAttribute('aria-checked') === 'true' && (await intervalControl.innerText()).includes('Every 6 h'));
   await resetSwitch.click();
   await until(() => preferences.omc_quota_auto_refresh?.refresh_on_reset === false, { label: 'the reset-driven refresh write' });
   await intervalPicker.click();
@@ -78,7 +78,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   await until(() => preferences.omc_quota_auto_refresh?.interval_minutes === 30, { label: 'the scheduled refresh write' });
   check('quota refresh writes the whole policy and keeps the other trigger',
     writes.filter((write) => write.key === 'omc_quota_auto_refresh').map((write) => write.body).join(' ')
-      === '{"interval_minutes":0,"refresh_on_reset":false} {"interval_minutes":30,"refresh_on_reset":false}');
+      === '{"interval_minutes":360,"refresh_on_reset":false} {"interval_minutes":30,"refresh_on_reset":false}');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await until(() => resetSwitch.isEnabled(), { label: 'the quota refresh controls after reload' });
   check('a reloaded settings page reads the saved quota refresh policy',
