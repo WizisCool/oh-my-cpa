@@ -68,6 +68,8 @@ interface ProductBlockProps {
   isChecking: boolean;
   /** True when the operator dismissed the newer release this product reports. */
   isDismissed: boolean;
+  /** False until the stored dismissals are known, when a press would write over them. */
+  canChangeDismissal: boolean;
   onDismiss: () => void;
   onRestore: () => void;
 }
@@ -78,6 +80,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   onOpenChangelog,
   isChecking,
   isDismissed,
+  canChangeDismissal,
   onDismiss,
   onRestore,
 }) => {
@@ -133,6 +136,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
                 className={`${styles['version-action']} ${isDismissed ? styles['version-action-pressed'] : ''}`}
                 icon={isDismissed ? <BellOffOutlined /> : <BellOutlined />}
                 aria-pressed={isDismissed}
+                disabled={!canChangeDismissal}
                 aria-label={t('sys.dismiss_update_named', { product: productTitle, version: version.latest_version })}
                 data-testid="sys-dismiss-update"
                 onClick={isDismissed ? onRestore : onDismiss}
@@ -184,7 +188,7 @@ export const SystemPage: React.FC = () => {
   const isDemo = isDemoMode();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { dismissals, dismiss, restore } = useUpdateDismissals();
+  const { dismissals, isLoaded: areDismissalsLoaded, dismiss, restore } = useUpdateDismissals();
   // The write's own failure is reported by the preference hook; this speaks only for a
   // dismissal that was actually stored.
   const changeDismissal = async (version: SystemProductVersion, shouldDismiss: boolean) => {
@@ -574,6 +578,7 @@ export const SystemPage: React.FC = () => {
                 isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('omc')}
                 isDismissed={isUpdateDismissed(sysInfo.omc_version, dismissals)}
+                canChangeDismissal={areDismissalsLoaded}
                 onDismiss={() => void changeDismissal(sysInfo.omc_version, true)}
                 onRestore={() => void changeDismissal(sysInfo.omc_version, false)}
               />
@@ -583,6 +588,7 @@ export const SystemPage: React.FC = () => {
                 isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('cpa')}
                 isDismissed={isUpdateDismissed(sysInfo.cpa_version, dismissals)}
+                canChangeDismissal={areDismissalsLoaded}
                 onDismiss={() => void changeDismissal(sysInfo.cpa_version, true)}
                 onRestore={() => void changeDismissal(sysInfo.cpa_version, false)}
               />

@@ -8,6 +8,11 @@ export interface Preference<T> {
   value: T;
   /** False until the stored value has been read, so a page can wait instead of painting a default and correcting it. */
   ready: boolean;
+  /**
+   * True once the stored document has been read. Unlike `ready`, a failed read leaves it false:
+   * a caller whose write is derived from the stored value must not build one on the fallback.
+   */
+  loaded: boolean;
   set: (next: T) => Promise<PreferenceWrite>;
 }
 
@@ -42,7 +47,7 @@ export function usePreference<T>(
   const toast = useToast();
   const t = useT();
   const queryClient = useQueryClient();
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, isSuccess } = useQuery({
     queryKey: ['preferences'],
     queryFn: api.getPreferences,
     staleTime: Infinity,
@@ -111,5 +116,5 @@ export function usePreference<T>(
     return nextPromise.then(() => ({ ok }));
   }, [key, toast, queryClient, t]);
 
-  return { value, ready: !isPending || isError, set };
+  return { value, ready: !isPending || isError, loaded: isSuccess, set };
 }

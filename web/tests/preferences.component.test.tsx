@@ -32,6 +32,7 @@ function PreferenceControl({ name, preferenceKey = 'omc_tps_calculation_mode' }:
   return <section aria-label={name}>
     <output aria-label={`${name} value`}>{preference.value}</output>
     <output aria-label={`${name} ready`}>{String(preference.ready)}</output>
+    <output aria-label={`${name} loaded`}>{String(preference.loaded)}</output>
     <button onClick={() => { writeResults.push(preference.set('include_ttft')); }}>{name} include</button>
     <button onClick={() => { writeResults.push(preference.set('exclude_ttft')); }}>{name} exclude</button>
   </section>;
@@ -104,11 +105,13 @@ describe('real preference hook and cache integration', () => {
     readResponse = read.promise;
     mount(<><PreferenceControl name="first" /><PreferenceControl name="second" /></>);
     expect(screen.getByLabelText('first ready').textContent).toBe('false');
+    expect(screen.getByLabelText('first loaded').textContent).toBe('false');
     expect(screen.getByLabelText('first value').textContent).toBe('exclude_ttft');
     await act(async () => { read.resolve(jsonResponse({ preferences: { omc_tps_calculation_mode: 'include_ttft' } })); });
     await waitFor(() => expect(screen.getByLabelText('second value').textContent).toBe('include_ttft'));
     expect(reads).toBe(1);
     expect(screen.getByLabelText('first ready').textContent).toBe('true');
+    expect(screen.getByLabelText('first loaded').textContent).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'first exclude' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     await waitFor(() => expect(screen.getByLabelText('second value').textContent).toBe('exclude_ttft'));
@@ -189,6 +192,8 @@ describe('real preference hook and cache integration', () => {
     mount(<PreferenceControl name="setting" />);
     await waitFor(() => expect(screen.getByLabelText('setting ready').textContent).toBe('true'));
     expect(screen.getByLabelText('setting value').textContent).toBe('exclude_ttft');
+    // Usable is not the same as known: a write derived from the stored document must wait.
+    expect(screen.getByLabelText('setting loaded').textContent).toBe('false');
     expect(reads).toBe(1);
   });
 

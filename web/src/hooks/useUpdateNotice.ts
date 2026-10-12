@@ -22,9 +22,15 @@ export const UPDATE_STATUS_QUERY_KEY = ['system-updates'] as const;
  */
 export const UPDATE_STATUS_REFRESH_MS = 60 * 60 * 1000;
 
-/** The stored dismissals and the two writes the System Information page offers. */
+/**
+ * The stored dismissals and the two writes the System Information page offers.
+ *
+ * Both products share one document and each write replaces it whole, so a write is only
+ * sound once the stored document is known: built on the empty fallback it would erase the
+ * other product's dismissal. `isLoaded` is what a caller gates its controls on.
+ */
 export function useUpdateDismissals() {
-  const { value: dismissals, ready: isReady, set } = usePreference(
+  const { value: dismissals, loaded: isLoaded, set } = usePreference(
     UPDATE_DISMISSALS_PREFERENCE,
     NO_UPDATE_DISMISSALS,
     parseUpdateDismissals,
@@ -37,7 +43,7 @@ export function useUpdateDismissals() {
     (product: ReleaseProduct) => set(withDismissal(dismissals, product, null)),
     [dismissals, set],
   );
-  return { dismissals, isReady, dismiss, restore };
+  return { dismissals, isLoaded, dismiss, restore };
 }
 
 /**
@@ -58,9 +64,9 @@ export function usePendingUpdates(): ReleaseProduct[] {
     retry: false,
     meta: { silent: true },
   });
-  const { dismissals, isReady } = useUpdateDismissals();
+  const { dismissals, isLoaded } = useUpdateDismissals();
   return React.useMemo(
-    () => (data && isReady ? listPendingUpdates([data.omc_version, data.cpa_version], dismissals) : []),
-    [data, dismissals, isReady],
+    () => (data && isLoaded ? listPendingUpdates([data.omc_version, data.cpa_version], dismissals) : []),
+    [data, dismissals, isLoaded],
   );
 }

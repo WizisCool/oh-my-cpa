@@ -2624,7 +2624,8 @@ The action appears only for actual entries; the repository link stays with the p
 identity. A known newer release adds an **Ignore this version** toggle before it, in the
 same 32px text-button form with a bell icon. Its label never changes: the pressed state is
 the struck bell, `--fg` ink and `aria-pressed`, and the outcome of each press is a toast,
-so neither the row nor the card moves when it is used. Long comparison explanations belong below the readings rather than in the
+so neither the row nor the card moves when it is used. It is disabled until the stored
+dismissals have been read. Long comparison explanations belong below the readings rather than in the
 status slot. A missing-notes hint belongs only to a known change-log range; an empty or
 unchecked feed does not acquire a second warning about notes. A failed check retains the
 readings and shows its reason and, when available, the last successful check time.

@@ -1461,6 +1461,8 @@ export async function systemUpdateIndicator({ base, page, check }) {
   const toggle = page.locator('[data-testid="sys-product-cpa"] [data-testid="sys-dismiss-update"]');
   await dot.waitFor({ timeout: 20_000 });
   await toggle.waitFor({ timeout: 20_000 });
+  // The toggle is inert until the stored dismissals are known; the dot waits on the same read.
+  check('the toggle is usable once the stored dismissals have been read', await toggle.isEnabled());
 
   const mark = await dot.evaluate((node) => {
     const pip = node.querySelector('.app-menu-update-dot');
