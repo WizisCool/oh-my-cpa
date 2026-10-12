@@ -1,25 +1,6 @@
-/* ── Sarasa Gothic subsetted font-face ──────────────────────────── */
-@font-face {
-  font-family: "Sarasa Mono SC";
-  src: local("Sarasa Mono SC"),
-       local("Sarasa UI SC"),
-       local("更纱黑体 SC"),
-       url("./assets/fonts/sarasa-mono-sc-regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Sarasa Mono SC";
-  src: local("Sarasa Mono SC Bold"),
-       local("Sarasa UI SC Bold"),
-       local("更纱黑体 SC Bold"),
-       url("./assets/fonts/sarasa-mono-sc-bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+/* ── Sarasa Mono SC: the core shard of each weight ──────────────── */
+/* The rest of the font is registered asynchronously by `web/src/theme/sarasaFont.ts`. */
+@import "./assets/fonts/sarasa/core.css";
 
 :root {
   font-family: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;

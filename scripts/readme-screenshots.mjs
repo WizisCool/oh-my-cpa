@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { DEMO_ROUTES } from './demo-readiness.mjs';
-import { hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
+import { hasDeferredFontShards, hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'docs', 'images', 'readme');
@@ -136,6 +136,7 @@ export async function capture(browser, { routePath, mode, lang, viewport }) {
   try {
     await page.goto(`${base}${routePath}`, { waitUntil: 'networkidle' });
     await page.waitForFunction(hasReadmeScreenshotContent, contentSelectorFor(routePath), { timeout: 30_000 });
+    await page.waitForFunction(hasDeferredFontShards, null, { timeout: 30_000 });
     await page.evaluate(() => document.fonts.ready);
     // Charts draw on animation frames after their data arrives; two frames settle them.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));

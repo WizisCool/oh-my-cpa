@@ -9,7 +9,8 @@ export const ANOMALY_LIMITS = {
   initialCSS: { raw: 256 * 1024, gzip: 96 * 1024 },
   largestJS: { raw: 4096 * 1024 },
   totalJS: { raw: 16 * 1024 * 1024 },
-  totalDist: { raw: 20 * 1024 * 1024 },
+  // ADR 0094: the complete console font is about 12.5 MiB of shards a browser fetches on demand.
+  totalDist: { raw: 32 * 1024 * 1024 },
   lobeSVG: { raw: 2 * 1024 * 1024 },
 };
 

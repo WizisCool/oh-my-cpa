@@ -231,6 +231,8 @@ saturated at the top; see `docs/design.md` §2.
 **Body Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 **Label/Mono Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 
+**Embedded font:** the complete Regular and Bold Sarasa Mono SC, cut into `unicode-range` woff2 shards: the core shard (ASCII, punctuation and the console's own copy) loads with the first frame, the rest only when a page draws one of their characters (ADR 0094). `pnpm subset-font` regenerates them.
+
 **Character:** Unified, technical, and precise. The monospaced character set across Chinese, English, Malay, and code symbols gives Oh My CPA the rhythm of an interactive terminal monitor while retaining high CJK legibility.
 
 ### Hierarchy

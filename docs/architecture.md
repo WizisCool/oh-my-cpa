@@ -1066,6 +1066,18 @@ number, a fractional font size, a 2–4px corner written as a number, and a
 `--text-*` or `--radius-*` reference that no stylesheet defines or that carries a
 fallback (`docs/design.md` §3 and §4).
 
+The console font ships complete (ADR 0094). `web/src/assets/fonts/sarasa/` holds Sarasa
+Mono SC cut into `unicode-range` shards by `pnpm subset-font` (`scripts/subset-font.mjs`,
+with the pure planning in `scripts/font-shards.mjs`), plus `manifest.json`, `core.css` and
+`shardUrls.ts` (one static `?url` import per shard, so built modules hold only hashed URLs).
+`index.css` imports `core.css`, which declares only shard 000 of each weight, so startup
+waits for one file per weight. At startup `main.tsx` also starts an asynchronous import of
+`web/src/theme/sarasaFont.ts`, which registers every other shard through the `FontFace`
+API; a browser fetches one only when a page draws a character it holds. Exports embed the
+shards their text draws through the same module (`shardsForText` in
+`web/src/theme/fontShards.ts`). `scripts/font-shards.test.mjs` holds the committed shards,
+manifest, core stylesheet and URL module to each other.
+
 
 ### Route error recovery
 
@@ -2715,7 +2727,7 @@ Gzip estimates are not HTTP transfer measurements or execution-time guarantees.
 
 Ordinary growth is advisory. Hard anomaly ceilings allow substantial headroom:
 startup JS 3 MiB raw / 1 MiB gzip, startup CSS 256 / 96 KiB, largest JS 4 MiB raw,
-all JS 16 MiB raw, distribution 20 MiB raw and Lobe SVGs 2 MiB raw. Reports retain
+all JS 16 MiB raw, distribution 32 MiB raw (ADR 0094: the complete font) and Lobe SVGs 2 MiB raw. Reports retain
 per-file sizes, source ownership and the largest JS files for investigation.
 `scripts/bundle-baseline.mjs` compares only an exact-revision reference: an explicit
 `BUNDLE_BASELINE` file or the successful push CI artifact for `BUNDLE_BASE_SHA`.
@@ -2980,8 +2992,8 @@ with.
 (`web/src/components/workspace/useConversationExport.ts`). `conversationSnapshot.ts` projects what the
 page displays into a `ConversationSnapshot` - never the stored session - and drops execution
 identities (key fingerprints, tokens, operation and run ids) at any depth. `conversationHtml.ts` renders
-that snapshot to one HTML string: the palette's resolved tokens as custom properties, the console's
-font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
+that snapshot to one HTML string: the palette's resolved tokens as custom properties, the font
+shards its text draws embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
 sandboxed frame, and a Content-Security-Policy that allows no network. Its only script is the fixed
 `conversationControls.ts` (search, side panel, copy, table sorting, print). The PNG is the same
 document laid out as an 840px share card in a sandboxed, script-free iframe. Generated interfaces are first drawn in separate opaque-origin, network-blocked frames using the shared `canvasCapture.ts` path, inserted as PNG data images, then the document is rasterized through an

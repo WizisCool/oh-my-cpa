@@ -857,12 +857,23 @@ length, so the mask never reveals the secret's length.
 Font stack   "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC",
              "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
              Menlo, Monaco, Consolas, "Liberation Mono", monospace
-Subset font  Build-time subsetted woff2 (~105KB per weight, Regular & Bold)
-             embedded in assets; local Sarasa Mono SC takes zero-latency priority.
+Font files   Complete Sarasa Mono SC, Regular & Bold, in unicode-range woff2
+             shards embedded in assets; local Sarasa Mono SC takes priority.
 Base size    14px (antd token fontSize)
 Line height  1.5
 Tabular      font-variant-numeric: tabular-nums on all numeric data
 ```
+
+**The embedded font is complete, and a page fetches only what it draws.** The woff2 files
+under `web/src/assets/fonts/sarasa/` are the whole of Sarasa Mono SC cut into shards with
+`unicode-range` (ADR 0094), so any character the font has - in the console's copy, an Agent
+answer or a model name - is drawn in it rather than in a system font. Shard 000 (ASCII,
+Latin-1, common punctuation and every character in `web/src`) is declared in render-blocking
+CSS by `core.css`; the rest are registered by `web/src/theme/sarasaFont.ts`, an
+asynchronous chunk started at startup, and fetched only when a page draws one of their
+characters, which then swaps in from the fallback. `pnpm subset-font` regenerates the
+shards, the manifest, `core.css` and `shardUrls.ts`; copy added since then still renders in
+Sarasa, from a deferred shard.
 
 **The type scale is seven variables**, defined in `web/src/index.css`:
 

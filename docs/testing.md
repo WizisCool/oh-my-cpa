@@ -531,6 +531,14 @@ and identity remain covered by the workspace and plugin-logo logic suites.
   end in `font-size`, small radii in shorthand and longhand, undefined and fallback-carrying token
   references, commented-out declarations, and an empty tree. It is automatically discovered by the
   repository self-test runner.
+- `scripts/font-shards.test.mjs` pins the font sharding (ADR 0094): `cmap` formats 4 and 12,
+  WOFF2 and sfnt table directories, `unicode-range` formatting, and the shard plan's order
+  (core, frequency tiers, remainder) with each code point in exactly one shard. It also holds
+  the committed outputs together: `core.css` and `shardUrls.ts` equal what the manifest renders, the shard files
+  are exactly the manifest's, every shard draws every character it declares, ranges never
+  overlap, and every character in `web/src` (colour emoji aside) is in some shard. It is
+  automatically discovered by the repository self-test runner. The logic suite
+  `scripts/test-font-shards.ts` pins which shards an export embeds for its text.
 - The `oauth-management` browser scenario checks that ordinary copy acknowledgements cannot evict
   a persistent quota report, another refresh replaces it, and its close action removes it. It also
   checks one credential-aware authorization toast for a unique new credential, an ambiguous result
@@ -726,7 +734,7 @@ startup. The configuration page must defer its YAML editor until requested.
 
 The hard size checks are broad anomaly ceilings, not per-chunk feature quotas:
 startup JS 3 MiB raw / 1 MiB gzip; startup CSS 256 / 96 KiB; largest JS 4 MiB raw;
-all JS 16 MiB raw; distribution 20 MiB raw; Lobe SVGs 2 MiB raw. Gzip values are
+all JS 16 MiB raw; distribution 32 MiB raw (ADR 0094); Lobe SVGs 2 MiB raw. Gzip values are
 level-6 per-file estimates, including binary files in aggregate estimates, not
 actual served bytes or browser-performance measurements. Growth greater than both
 10% and 16 KiB for entry/startup metrics, or 128 KiB for other metrics, is advisory.
@@ -1110,7 +1118,8 @@ real download/controls/mobile checks. These browser claims are not replaced by D
 
 `scripts/readme-screenshot-readiness.test.mjs` pins the capture predicate: visible
 page content, no visible loading surfaces, and no mounted toast (including its exit
-motion). It is automatically discovered by `pnpm test:self`; it does not launch a
+motion), and the font predicate that waits for the deferred Sarasa shards (ADR 0094)
+before capture. It is automatically discovered by `pnpm test:self`; it does not launch a
 browser or certify pixels. `pnpm build && pnpm readme:screenshots` supplies the real
 Chromium evidence and regenerates the English/Chinese desktop and mobile images
 under `docs/images/readme/`. The dashboard combines light and dark captures in one

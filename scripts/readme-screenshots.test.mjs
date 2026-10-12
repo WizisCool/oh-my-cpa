@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { capture, windowDocument } from './readme-screenshots.mjs';
-import { hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
+import { hasDeferredFontShards, hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const CAPTURE_OPTIONS = {
   routePath: '/dashboard', mode: 'light', lang: 'en',
@@ -10,12 +10,18 @@ const CAPTURE_OPTIONS = {
 
 function createCaptureFixture(waitBeforeCapture) {
   let waitCount = 0;
+  let fontWaitCount = 0;
   let evaluationCount = 0;
   let hasCaptured = false;
   let hasClosed = false;
   const page = {
     goto: async () => {},
     waitForFunction: async (predicate, selector, options) => {
+      if (predicate === hasDeferredFontShards) {
+        assert.deepEqual(options, { timeout: 30_000 });
+        fontWaitCount += 1;
+        return;
+      }
       assert.equal(predicate, hasReadmeScreenshotContent);
       assert.equal(selector, '.dashboard-activity-row .heatmap-grid');
       assert.deepEqual(options, { timeout: 30_000 });
@@ -38,7 +44,7 @@ function createCaptureFixture(waitBeforeCapture) {
   };
   return {
     browser: { newContext: async () => context },
-    readState: () => ({ waitCount, hasCaptured, hasClosed }),
+    readState: () => ({ waitCount, fontWaitCount, hasCaptured, hasClosed }),
   };
 }
 
@@ -57,13 +63,13 @@ test('capture waits for late feedback to detach after fonts and chart frames set
       isWaiting,
       captured.then(() => { throw new Error('captured without waiting for late feedback'); }),
     ]);
-    assert.deepEqual(fixture.readState(), { waitCount: 2, hasCaptured: false, hasClosed: false });
+    assert.deepEqual(fixture.readState(), { waitCount: 2, fontWaitCount: 1, hasCaptured: false, hasClosed: false });
     releaseFeedback();
     assert.deepEqual(await captured, {
       dataUrl: `data:image/png;base64,${Buffer.from('fixture').toString('base64')}`,
       background: 'rgb(255, 255, 255)',
     });
-    assert.deepEqual(fixture.readState(), { waitCount: 2, hasCaptured: true, hasClosed: true });
+    assert.deepEqual(fixture.readState(), { waitCount: 2, fontWaitCount: 1, hasCaptured: true, hasClosed: true });
   } finally {
     releaseFeedback();
     await captured.catch(() => {});
@@ -74,7 +80,7 @@ test('capture propagates final readiness timeout without a screenshot and closes
   const timeout = new Error('late feedback did not detach within the readiness deadline');
   const fixture = createCaptureFixture(async () => { throw timeout; });
   await assert.rejects(capture(fixture.browser, CAPTURE_OPTIONS), error => error === timeout);
-  assert.deepEqual(fixture.readState(), { waitCount: 2, hasCaptured: false, hasClosed: true });
+  assert.deepEqual(fixture.readState(), { waitCount: 2, fontWaitCount: 1, hasCaptured: false, hasClosed: true });
 });
 
 test('feature windows render one capture and dashboard windows render both themes', () => {
