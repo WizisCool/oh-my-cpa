@@ -417,6 +417,17 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
+	// Automatic quota refresh is best effort too: a round that cannot reach CPA leaves the
+	// stored readings as they were. It reads providers through the gateway with each
+	// credential, so a demo, whose gateway is the fixture, never starts it.
+	if !a.cfg.IsDemoMode {
+		go func() {
+			if err := a.handler.RunQuotaAutoRefresh(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("automatic quota refresh loop stopped", "error", err)
+			}
+		}()
+	}
+
 	var runErr error
 	hasPipelineReturned := a.pipeline == nil
 	select {

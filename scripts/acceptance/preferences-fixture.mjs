@@ -29,10 +29,20 @@ export function createPreferenceFixture({ serverTimezone = PREFERENCE_CONTRACT.s
         catch { return respond(400, { error: 'invalid_timezone' }); }
       }
     }
+    if (key === 'omc_quota_auto_refresh' && !isQuotaAutoRefreshDocument(value)) return respond(400, { error: 'invalid_quota_auto_refresh' });
     // Credential/custom-icon reference validation remains in Go and each relevant
     // scenario. This fixture models the JSON/timezone preference wire boundary,
     // not a second repository or an assertion that every valid JSON is admissible.
     preferences[key] = value;
     return respond(200, { key, value: structuredClone(value) });
   };
+}
+
+/** The server's strict shape for the automatic quota refresh policy (`quota.ParseAutoRefreshSettings`). */
+function isQuotaAutoRefreshDocument(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'interval_minutes' || keys[1] !== 'refresh_on_reset') return false;
+  const minutes = value.interval_minutes;
+  return Number.isInteger(minutes) && (minutes === 0 || (minutes >= 5 && minutes <= 1440)) && typeof value.refresh_on_reset === 'boolean';
 }

@@ -1,0 +1,74 @@
+# ADR 0094: Quota readings refresh in the background
+
+- Status: Accepted
+- Date: 2026-10-12
+
+## Context
+
+Every quota reading was operator-initiated: a refresh button in the OAuth management
+workspace, the dashboard's Credential Quota panel, the credential Drawer, or an Agent
+call. Between clicks the stored observation aged, and the case operators wait on most
+aged worst: a credential whose window was exhausted kept reading as exhausted after its
+window had reset, until someone thought to refresh it. The stored reading already
+carried the instant that would change - each window's `reset_at_ms` - so the console
+knew when its own answer had become wrong and did nothing about it.
+
+A background read is not free. Each one is a request to the provider made with the
+credential itself, relayed by CPA's `api-call`, and a deployment can hold many
+credentials. One provider's read has a side effect: Meta's observation exchanges the
+stored DCA token for a key upstream, and that exchange is audited per attempt as an
+operator's action.
+
+## Decision
+
+**A one-minute background loop re-reads credentials that are due, under a stored
+policy with two independent triggers.** `Handler.RunQuotaAutoRefresh`
+(`internal/api/quota_auto_refresh.go`), started by `app.Run`, reads the
+`omc_quota_auto_refresh` preference on every tick, so a change takes effect without a
+restart. The rules are pure functions in `internal/quota/auto_refresh.go`.
+
+- **Reset-driven read** (`refresh_on_reset`, on by default): a credential is read once
+  a window its latest stored observation reported has passed its reset by
+  `AutoRefreshResetGrace` (one minute), and only if neither that observation nor this
+  process's last attempt is already later than that instant. It fires once per
+  boundary; a credential nobody has read has no boundary and is never read by it.
+- **Scheduled read** (`interval_minutes`, off by default, 5-1440 when on): a credential
+  is read once the newer of its observation and the last attempt is that old,
+  including a credential nobody has read.
+
+The defaults follow from cost. A reset-driven read only re-reads a credential an
+operator already read, once per boundary that reading announced; a schedule would
+start reading the whole fleet on a cadence nobody chose.
+
+**Automatic reads reuse the manual path and its persistence rule.** A due credential
+is read by `quota.Service.RefreshCredentialQuota` and stored by the same function a
+manual refresh uses, so a failed or stale read never replaces the last good
+observation. Because a failed read is not stored, the loop remembers its attempts in
+process memory, and both triggers count from the attempt as well as the observation:
+a credential that keeps failing is not re-read every minute.
+
+**Bounds.** A round reads at most sixteen credentials, four at a time; the rest stay
+due for the next tick. Disabled credentials, providers without a probe, and an
+`auth_index` two credentials claim are never read. Meta is never read automatically,
+because a timer must not mint keys an audit trail records as operator decisions.
+
+**The policy is a validated preference.** The preference API accepts this key only as
+`{"interval_minutes": int, "refresh_on_reset": bool}` within the bounds and answers
+`invalid_quota_auto_refresh` otherwise, because the server acts on it. The loop treats
+an absent or unreadable value as the defaults. `quota_auto_refresh_get` and
+`quota_auto_refresh_set` expose the same policy to the Agent and MCP.
+
+**A demonstration never starts the loop.** Its gateway is the fixture, and the
+demonstration starts no loop of its own beyond the HTTP server.
+
+## Consequences
+
+- An exhausted credential reads as recovered about a minute after its window resets,
+  with no operator action, and the console pages that poll the stored readings - the
+  dashboard panel and the OAuth management workspace, each every minute - show it.
+- A deployment upgraded to this version starts making reset-driven reads for the
+  credentials it has already read. Turning `refresh_on_reset` off restores
+  operator-only reads.
+- The attempt memory is lost on restart, so a failing credential that is due may be
+  tried once more after a restart; the round limit still bounds that.
+- No table or migration is added; the readings remain `quota_snapshots` rows.

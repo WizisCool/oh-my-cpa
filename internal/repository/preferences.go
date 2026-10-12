@@ -51,6 +51,13 @@ const (
 	// chose to stop being reminded about. It names a version rather than recording a switch, so
 	// a release newer than the dismissed one is announced again without anyone re-enabling it.
 	PreferenceUpdateDismissals = "update_dismissals"
+
+	// PreferenceQuotaAutoRefresh is the deployment-wide automatic quota refresh policy. Unlike
+	// the display settings it is read by the server: the background loop consults it on every
+	// tick, so a change takes effect without a restart. It is a preference rather than
+	// environment configuration because it is an operator's running decision about how often
+	// credentials are read, made from the console that shows the readings.
+	PreferenceQuotaAutoRefresh = "omc_quota_auto_refresh"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

@@ -19,7 +19,8 @@
     "omc_scroll_smoothing",
     "playground_session",
     "agent_target",
-    "update_dismissals"
+    "update_dismissals",
+    "omc_quota_auto_refresh"
   ],
   "cases": [
     {
@@ -159,6 +160,43 @@
       }
     },
     {
+      "id": "quota-auto-refresh-invalid",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_quota_auto_refresh",
+      "body": "{\"interval_minutes\":1,\"refresh_on_reset\":true}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_quota_auto_refresh"
+      }
+    },
+    {
+      "id": "quota-auto-refresh-partial",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_quota_auto_refresh",
+      "body": "{\"interval_minutes\":30}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_quota_auto_refresh"
+      }
+    },
+    {
+      "id": "quota-auto-refresh-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_quota_auto_refresh",
+      "body": "{\"interval_minutes\":30,\"refresh_on_reset\":false}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_quota_auto_refresh",
+        "value": {
+          "interval_minutes": 30,
+          "refresh_on_reset": false
+        }
+      }
+    },
+    {
       "id": "invalid-timezone",
       "method": "PUT",
       "path": "/omc/api/v1/preferences/omc_timezone",
@@ -214,6 +252,10 @@
               "count": 0
             }
           },
+          "omc_quota_auto_refresh": {
+            "interval_minutes": 30,
+            "refresh_on_reset": false
+          },
           "omc_timezone": "America/New_York"
         },
         "time_zone": {
@@ -256,6 +298,10 @@
             "nested": {
               "count": 0
             }
+          },
+          "omc_quota_auto_refresh": {
+            "interval_minutes": 30,
+            "refresh_on_reset": false
           },
           "omc_timezone": ""
         },

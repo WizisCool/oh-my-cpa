@@ -131,9 +131,12 @@ export const OAuthManagementPage: React.FC = () => {
     staleTime: 10_000,
     placeholderData: keepPreviousData,
   });
+  // The overview is a read of stored observations, not of providers, so polling it is local work;
+  // it is what brings a reading the background refresh stored onto a page that is already open.
   const quotaQuery = useQuery({
     queryKey: ['management-quota'],
     queryFn: api.getQuotaOverview,
+    refetchInterval: 60_000,
     staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
