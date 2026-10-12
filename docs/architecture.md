@@ -2110,6 +2110,28 @@ range therefore revise both current estimates and historical references on the n
 read. Reset detection is limited to observed/retained evidence, not a complete upstream
 lifecycle. There are no new tables, migrations or routing inputs (ADR 0058 and ADR 0059).
 
+Readings are also refreshed in the background (ADR 0094). `Handler.RunQuotaAutoRefresh`
+in `internal/api/quota_auto_refresh.go` wakes every minute, reads the
+`omc_quota_auto_refresh` preference, lists the credentials and their latest snapshots,
+and asks `quota.AutoRefreshTrigger` (`internal/quota/auto_refresh.go`) which are due: a
+reset-driven read once a stored window's `reset_at_ms` plus a one-minute grace has
+passed the observation (a failed one is retried every ten minutes during the following
+hour), and a scheduled read once the newer of the observation and the process's last
+attempt is `interval_minutes` old, less a thirty-second slack for the observation being
+stamped after its tick. Due credentials - reset-driven first,
+then oldest reading first, at most sixteen per round and four at a time - go through
+`RefreshCredentialQuota` and `persistNormalizedQuotaSnapshot`, exactly as a manual
+refresh does. Attempts are remembered in process memory because a failed read is not
+persisted, and a round failure is logged when it starts or changes rather than every
+minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`
+claims and Meta (whose observation is an audited key exchange) are skipped. The
+preference API refuses any document for this key other than
+`{"interval_minutes": 0 | 5-1440, "refresh_on_reset": bool}` with
+`invalid_quota_auto_refresh`, and `internal/operations/quota_auto_refresh.go` registers
+`quota_auto_refresh_get` and `quota_auto_refresh_set` over the same preference. The OAuth
+management workspace polls the stored overview every minute, as the dashboard's
+Credential Quota panel already does, so a background reading appears on an open page.
+
 Codex reset-credit redemption is offered in the credential Drawer's Quota tab and never
 from a list row, because it spends an irreversible entitlement; it is offered whenever the
 credential's available credit count is positive. Upstream's `applicable_available_count` is not the
@@ -2184,6 +2206,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers. `Run` returns only after every stage has stopped, and `app.Run` waits for it before the database closes, whichever loop ended first |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
+| Quota auto refresh | `app.Run` → `api.Handler.RunQuotaAutoRefresh` | Best effort; a round that cannot reach CPA leaves the stored readings as they were and the next minute tries again. Reads only what the `omc_quota_auto_refresh` policy makes due (§8, ADR 0094) |
 | Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 | Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 

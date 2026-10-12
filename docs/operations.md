@@ -425,6 +425,20 @@ absolute usage a share cannot, and a pool states no counts of its own. A pool ke
 naming no known period keeps its own name as an unclassified window rather than
 being filed under a period it does not describe (ADR 0071).
 
+## Automatic quota refresh
+
+OMC Settings → Quota holds the deployment-wide automatic quota refresh policy (the
+`omc_quota_auto_refresh` preference, ADR 0094). **Refresh after a quota resets** is on
+by default: about a minute after a window a stored reading reported has reset, that
+credential is read again once. **Scheduled quota refresh** reads every enabled credential whose reading is
+older than the interval - six hours by default, adjustable from 5 minutes to 24 hours,
+or off - including credentials nobody has read, so the first minutes after an upgrade
+read every such credential. Each automatic read is a provider request made with the credential through CPA
+(`api-call`, or the plugin's quota endpoint for a plugin credential), at most sixteen per
+minute; a failed reset-driven read is retried every ten minutes for an hour. Meta credentials are only read on a manual
+refresh, because that read exchanges a key upstream. Turning both off restores
+operator-only reads. A demonstration never runs it.
+
 ## Meta quota and live subscription tiers
 
 A Meta Muse quota refresh requires a stored credential with a valid `dca_token`.

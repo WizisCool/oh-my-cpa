@@ -417,6 +417,23 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
+	// Automatic quota refresh is best effort too: a round that cannot reach CPA leaves the
+	// stored readings as they were. It reads providers through the gateway with each
+	// credential, so a demo, whose gateway is the fixture, never starts it.
+	// It is joined before Run returns, like the pipeline, because a round in flight writes
+	// observations to the database the caller closes next.
+	quotaRefreshDone := make(chan struct{})
+	if a.cfg.IsDemoMode {
+		close(quotaRefreshDone)
+	} else {
+		go func() {
+			defer close(quotaRefreshDone)
+			if err := a.handler.RunQuotaAutoRefresh(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("automatic quota refresh loop stopped", "error", err)
+			}
+		}()
+	}
+
 	var runErr error
 	hasPipelineReturned := a.pipeline == nil
 	select {
@@ -443,6 +460,11 @@ func (a *App) Run(ctx context.Context) error {
 	a.handler.CloseBrowserRuns()
 	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
+	}
+	select {
+	case <-quotaRefreshDone:
+	case <-shutdownContext.Done():
+		a.logger.Warn("automatic quota refresh did not stop before the shutdown deadline")
 	}
 	if !hasPipelineReturned {
 		select {

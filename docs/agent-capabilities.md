@@ -505,6 +505,18 @@ Exclusion subtracts measurable first-token latency and otherwise uses total late
 inclusion always uses total latency. Tests cover both adapters, shared preference
 reads/writes, defaults, invalid values and administrator refusal.
 
+### Automatic quota refresh capabilities
+
+`quota_auto_refresh_get` is a low-risk read returning
+`{ "interval_minutes": 360, "refresh_on_reset": true }` by default; an absent or
+unreadable stored field resolves to its default. `quota_auto_refresh_set` is a low-risk write that
+requires both fields, accepts `interval_minutes` of 0 (schedule off) or 5-1440, returns
+`invalid_parameters` otherwise and returns the saved policy. Both are available to Agent
+and MCP administrators. The write shares the console's `omc_quota_auto_refresh`
+preference, which the server's background loop reads every minute (ADR 0094), and
+invalidates `preferences`; no secret or OAuth handoff is involved. Tests cover both
+adapters, defaults, invalid values and administrator refusal.
+
 ### Browser connection recovery
 
 Managed Agent execution belongs to the server, not a socket. Console refresh or network recovery

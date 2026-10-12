@@ -63,6 +63,27 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   await until(async () => await tpsRow.locator('.ant-segmented-vertical').count() === 0, { label: 'the desktop TPS picker' });
   await settleLayout(page);
 
+  // The automatic quota refresh policy is one document of two fields the server's loop reads, so
+  // each control must write the whole document and keep the other field as it was.
+  const resetSwitch = page.getByRole('switch', { name: 'Refresh after a quota resets', exact: true });
+  const intervalPicker = page.getByRole('combobox', { name: 'Scheduled quota refresh', exact: true });
+  const intervalControl = page.locator('.ant-select').filter({ has: intervalPicker });
+  await until(() => resetSwitch.isEnabled(), { label: 'the quota refresh controls after the preference read' });
+  check('quota refresh defaults to reset-driven reads and a six-hour schedule',
+    await resetSwitch.getAttribute('aria-checked') === 'true' && (await intervalControl.innerText()).includes('Every 6 h'));
+  await resetSwitch.click();
+  await until(() => preferences.omc_quota_auto_refresh?.refresh_on_reset === false, { label: 'the reset-driven refresh write' });
+  await intervalPicker.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'Every 30 min' }).click();
+  await until(() => preferences.omc_quota_auto_refresh?.interval_minutes === 30, { label: 'the scheduled refresh write' });
+  check('quota refresh writes the whole policy and keeps the other trigger',
+    writes.filter((write) => write.key === 'omc_quota_auto_refresh').map((write) => write.body).join(' ')
+      === '{"interval_minutes":360,"refresh_on_reset":false} {"interval_minutes":30,"refresh_on_reset":false}');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => resetSwitch.isEnabled(), { label: 'the quota refresh controls after reload' });
+  check('a reloaded settings page reads the saved quota refresh policy',
+    await resetSwitch.getAttribute('aria-checked') === 'false' && (await intervalControl.innerText()).includes('Every 30 min'));
+
   const timezone = page.getByRole('combobox', { name: 'Time zone', exact: true });
   const timezoneControl = page.locator('.ant-select').filter({ has: timezone });
   check('timezone defaults to the actual server zone with its UTC offset',
@@ -178,17 +199,19 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
   //
-  // Nine rows include the deployment timezone, token style, TPS mode, model icons in request list,
-  // language, scroll smoothing and appearance: the mode is the setting an operator changes often,
+  // Eleven rows include the deployment timezone, token style, TPS mode, model icons in request list,
+  // the two automatic quota refresh triggers, language, scroll smoothing and appearance: the mode is the setting an operator changes often,
   // and the two palettes are the considered choices behind it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 9
+    labels.length === 11
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
       && labels.some((label) => /TPS calculation mode|TPS 计算方式/.test(label))
       && labels.some((label) => /Model icons in request list|请求列表模型图标/.test(label))
+      && labels.some((label) => /Scheduled quota refresh|定时刷新额度/.test(label))
+      && labels.some((label) => /Refresh after a quota resets|额度重置后自动刷新/.test(label))
       && labels.some((label) => /Theme mode|主题模式/.test(label))
       && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
       && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))

@@ -213,7 +213,11 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 	if !ok {
 		return nil
 	}
+	return normalizedQuotaFromSnapshot(authIndex, snapshot)
+}
 
+// normalizedQuotaFromSnapshot rebuilds the prior reading a refresh starts from.
+func normalizedQuotaFromSnapshot(authIndex string, snapshot repository.QuotaSnapshotRecord) *quota.NormalizedQuota {
 	q := &quota.NormalizedQuota{
 		AuthIndex:    authIndex,
 		Provider:     snapshot.Provider,

@@ -405,6 +405,20 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   own status instead of as an absence, so the console never asks the operator to
   repeat the read that just came back empty; a credential nobody has read keeps the
   idle reading that does ask for one.
+- **Quota Auto Refresh**: The background re-reading of stored quota observations,
+  under the deployment-wide `omc_quota_auto_refresh` policy edited on OMC Settings
+  (ADR 0094). It has two independent triggers. A **reset-driven read** (on by default)
+  reads a credential once, about a minute after a window its latest reading reported
+  has reset, so an exhausted credential reads as recovered without anyone asking; a
+  credential nobody has read has no reset to wait for. A **scheduled read** (every six
+  hours by default; 5 minutes to 24 hours, or off) reads every credential whose reading is that
+  old, including one nobody has read. Automatic reads are the manual refresh with the
+  same persistence rule - a failed read never replaces the last good one - and are not
+  repeated every minute when they fail: a failed reset-driven read is retried every ten
+  minutes during the hour after the reset, and a failed scheduled read waits a whole
+  interval. Disabled credentials, providers with no probe,
+  an `auth_index` two credentials claim, and Meta credentials (whose read exchanges a
+  key upstream and is an audited operator action) are never read automatically.
 - **Estimated Window Capacity**: What a whole Quota Window is worth: usage this
   deployment recorded in the indicated cycle and metered model scope divided by
   the share upstream reports as used. It is capacity at 100%, not a forecast of

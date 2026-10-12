@@ -131,9 +131,12 @@ export const OAuthManagementPage: React.FC = () => {
     staleTime: 10_000,
     placeholderData: keepPreviousData,
   });
+  // The overview reads stored observations and CPA's credential list, never a provider, so polling
+  // it spends no quota; it is what brings a reading the background refresh stored onto an open page.
   const quotaQuery = useQuery({
     queryKey: ['management-quota'],
     queryFn: api.getQuotaOverview,
+    refetchInterval: 60_000,
     staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
