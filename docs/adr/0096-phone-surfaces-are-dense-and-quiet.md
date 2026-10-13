@@ -71,5 +71,7 @@ credential kind, a cache tint) land in one glance and none reads as a signal.
   unnecessary.
 - **A second, phone-only row component.** Two renderings of one record drift; the table row's
   DOM, rearranged, cannot.
-- **Three lines per record.** The provider's credential then truncates to nothing at 390px,
-  and which account answered is what an operator opens the list to learn.
+- **Keeping every table field in the stacked record.** Packing every table column into four
+  lines of small type was tried and read as noise. The adopted three-line layout keeps the
+  provider and its account together on the second line, beside the total tokens; secondary
+  fields are read in the detail drawer.

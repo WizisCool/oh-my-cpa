@@ -883,7 +883,10 @@ header checkbox sits over the rows', the canvas is drawn and redrawn when a reda
 and both formats download. `request-facet-marks` compares a provider option's mark with the mark on the rows it filters,
 using a provider with artwork of its own so a mark resolved from the wrong key is a different
 picture. `column-alignment` emulates a classic scrollbar so the header and the
-rows are compared at the width a desktop gives them.
+rows are compared at the width a desktop gives them. At 600px it asserts that the
+request-ID text is hidden and the visible copy control puts the full fixture ID on
+the clipboard without opening the detail drawer. Clipboard permissions are scoped
+to the probe origin, and completion waits on the copied value.
 
 ### Built request-record filter coverage
 

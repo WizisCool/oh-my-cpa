@@ -2,7 +2,7 @@ import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
 import { sleep } from '../probe.mjs';
-import { pastDeadline, until } from '../harness.mjs';
+import { pastDeadline, settleLayout, until } from '../harness.mjs';
 
 /**
  * Probes for the request-record console: the column geometry and truncation, the
@@ -69,7 +69,8 @@ export const alignmentFacets = {
  * model name overflows the column instead of being truncated - and asserting
  * "text-align matches" would not notice.
  */
-export async function columnAlignment({ base, page, check }) {
+export async function columnAlignment({ base, page, context, check }) {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(base).origin });
   // Headless Chromium draws no scrollbars, so a desktop's classic 14px scrollbar is emulated for
   // any code that measures one. The virtual list draws its own overlay scrollbar and loses no
   // width to a native one, so a header that pads a measured gutter drifts off the rows' tracks.
@@ -289,6 +290,12 @@ export async function columnAlignment({ base, page, check }) {
   //    right-aligned table cell inside the stacked record.
   await page.setViewportSize({ width: 600, height: 1000 });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await until(
+    async () => await page.locator('.request-row .req-col-latency').first()
+      .evaluate((node) => window.getComputedStyle(node).display) === 'contents',
+    { label: 'the request record adopts its stacked layout' },
+  );
+  await settleLayout(page);
   const stacked = await page.evaluate(() => {
     const row = document.querySelector('.request-row');
     const rowStyle = window.getComputedStyle(row);
@@ -317,26 +324,30 @@ export async function columnAlignment({ base, page, check }) {
     JSON.stringify(stacked),
   );
 
-  // 7. Narrowest supported width, the row was the tallest thing on the page: a UUID that wraps at
-  //    every hyphen turns one record into four or five lines. The id has to ellipsise here rather
-  //    than grow, which is a different failure from overflowing its cell and so is asserted again.
-  const narrowRequestId = await page.evaluate(() => {
-    const node = document.querySelector('.req-time-sub-id');
-    if (!node) return null;
-    const lineHeight = parseFloat(window.getComputedStyle(node).lineHeight) || 16;
-    const cell = node.closest('.req-col-time');
-    return {
-      height: node.getBoundingClientRect().height,
-      lineHeight,
-      overflowsCell: cell ? node.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1 : false,
-    };
-  });
+  // The compact record omits the UUID text, but copying must still take the complete ID.
+  // Measuring the hidden text's zero-sized box cannot prove that the surviving control works.
+  const narrowRow = page.locator('.request-row').first();
+  const narrowRequestId = narrowRow.locator('.req-time-sub-id');
   check(
-    'the request id still ellipsises to one line at 600px',
-    narrowRequestId !== null
-      && narrowRequestId.height < narrowRequestId.lineHeight * 1.5
-      && narrowRequestId.overflowsCell === false,
-    JSON.stringify(narrowRequestId),
+    'the request id text is hidden at 600px',
+    await narrowRequestId.count() === 1 && await narrowRequestId.isHidden(),
+  );
+  const requestIdCopy = narrowRow.locator('.req-id-quick-copy');
+  check(
+    'the request id copy control remains visible and enabled at 600px',
+    await requestIdCopy.isVisible() && await requestIdCopy.isEnabled(),
+  );
+  await page.evaluate(() => navigator.clipboard.writeText(''));
+  await requestIdCopy.click();
+  const expectedRequestId = alignmentRecords[0].request_id;
+  await until(
+    async () => await page.evaluate(() => navigator.clipboard.readText()) === expectedRequestId,
+    { label: 'the compact record copies its complete request id' },
+  );
+  check(
+    'copying the compact request id preserves its complete value without opening the drawer',
+    await page.evaluate(() => navigator.clipboard.readText()) === expectedRequestId
+      && await page.locator('.ant-drawer:visible').count() === 0,
   );
 }
 
