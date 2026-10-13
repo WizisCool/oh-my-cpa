@@ -705,9 +705,11 @@ with normally distributed daily variation, quieter weekends and a small set of i
   enable flag and one `HH:mm` daily time. Provider defaults apply to existing and future
   inheriting credentials; overrides replace the complete policy. Automation defaults
   off and the daily time defaults to `06:00` in the effective OMC Time Zone.
-- **Activation Verification** binds observed manual activation to a credential identity
-  and model before automation is admitted. An HTTP completion without observed window
-  activation is pending, then uncertain after the bounded confirmation reads.
+- **Activation Observation** records a quota-observed activation for a credential identity
+  and selected model. It describes a completed attempt, not automatic readiness. An enabled,
+  approved policy admits its first automatic attempt through current model, billing and
+  window evidence. HTTP completion without observed activation is pending, then uncertain
+  after bounded confirmation reads.
 - **Paid Fallback Evidence** is `disabled`, `enabled` or `unknown`, with its source and
   observation instant. Missing fields never mean disabled. Enabled or unknown paid
   fallback pauses every consuming warmup request; reset credits are not billing evidence.

@@ -507,8 +507,11 @@ Configure provider defaults from OAuth management's Warmup settings, or a comple
 credential override from its Quota tab. Reset mode is Off, Weekly, or Weekly and five-hour.
 Daily warmup defaults off with 06:00 as its editable time in the effective OMC timezone.
 Choose an available model; Claude's available Haiku models are listed first. Changing a
-model never silently selects a replacement. Confirm one manual Warm up now to verify
-real activation before automation starts for that credential/model.
+model never silently selects a replacement. Saving an enabled policy authorizes automatic
+attempts once current billing and window checks permit them; a first manual activation
+is not required. Warm up now remains an optional, separately confirmed consuming action.
+Previously enabled policies begin participating on the next scheduler round after upgrade,
+including credentials with no prior activation observation; defaults remain off.
 
 Paid fallback must be affirmatively disabled by a fresh usage read. Claude uses
 `extra_usage.is_enabled`; Codex uses the credits standing (published `has_credits`,
@@ -526,8 +529,12 @@ missed by more than one hour are not replayed. If starting now would overlap the
 daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
 zone changes future calendar decisions, not stored instants.
 
-The credential section always shows selected-model activation verification and paid-fallback
-evidence; an absent observation reads Unknown. Manual outcomes stay in that section
+The credential section always shows selected-model activation observations and paid-fallback
+evidence. No activation observed is a neutral historical fact, while absent billing evidence
+reads Unknown and pauses requests. Current reasons distinguish active windows, missing quota
+and billing refusals. An unsupported response pauses automatic requests for the selected
+model until a confirmed recheck succeeds or an available replacement model is explicitly
+selected. Rechecks still obey unresolved-outcome suppression. Manual outcomes stay in that section
 without a duplicate toast. Saving credential fields keeps a separate warmup draft open.
 
 A consuming request is recorded before it is sent. If pre-send revalidation refuses the

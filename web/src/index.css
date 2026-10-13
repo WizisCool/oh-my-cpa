@@ -257,9 +257,11 @@ a { color: inherit; }
 .ant-card, .ant-table-wrapper .ant-table, .ant-drawer-content, .ant-modal-content {
   background: var(--surface);
 }
-/* A sheet slides; it does not also fade. antd starts the panel at 70% opacity, and on a phone,
-   where a sheet is the width of the screen, the page it is covering stays readable through it for
-   the whole slide - two layers of text on one surface. The mask keeps its fade. */
+/* Viewport dimensions land immediately; only the sheet's position slides. */
+.ant-drawer .ant-drawer-content-wrapper {
+  transition-property: transform !important;
+}
+/* A sheet slides opaque, so the page below cannot show through its content. */
 .ant-drawer [class*='-panel-motion-'] {
   opacity: 1 !important;
 }

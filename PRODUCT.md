@@ -157,8 +157,10 @@ Conversation HTML preserves working timelines and inline figures; PNG includes g
 
 Codex and Claude OAuth credentials support opt-in reset-driven and daily window warmup,
 provider defaults, credential overrides and a confirmed manual tiny request. Models are
-selected explicitly. Automation starts only after real activation is verified for the
-credential/model, and pauses when paid fallback is enabled or cannot be confirmed disabled.
+selected explicitly. An approved enabled policy starts automation when current window and
+billing evidence permit it, including the first attempt for a credential/model. Paid fallback
+that is enabled or cannot be confirmed disabled pauses requests. Activation observations
+report outcomes, while unsupported responses pause subsequent automatic requests for that model.
 Daily starts take priority over overlapping reset requests. Reset entitlements are never
 automatically consumed. Upstream compatibility remains observable rather than promised
 by a mock; the demo offers read-only settings and state.

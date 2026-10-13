@@ -619,11 +619,13 @@ confirmation/revision rules. No arbitrary native path or URL becomes a tool argu
 ## Credential warmup capabilities
 
 `quota_warmup_settings_get` and `quota_warmup_credential_get` are bounded read projections
-of provider defaults, effective policy, model, next check, verification and pause reason.
+of provider defaults, effective policy, model, next check, activation observations and pause reason.
 `quota_warmup_settings_set`, `quota_warmup_credential_set` and `quota_warmup_run` are
 high-risk writes exposed to both Agent and MCP. Their prepare result binds confirmation
 to the provider-policy or credential revision; provider-default approval states its
-impact on current and future inheriting credentials. Manual approval authorizes a tiny
-consuming request and initial activation verification, not token access or reset-credit
-redemption. The shared implementation enforces unknown/paid billing protection and
+impact on current and future inheriting credentials. Saving an enabled policy authorizes
+its first automatic consuming attempt through the same billing and window checks, without
+requiring prior manual activation. Manual approval authorizes one optional tiny consuming
+request and post-request activation observation, not token access or reset-credit redemption.
+The shared implementation enforces unknown/paid billing protection and
 uncertainty-aware idempotency; uncertain results must never be automatically replayed.

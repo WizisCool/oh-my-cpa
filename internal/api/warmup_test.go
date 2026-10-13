@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
@@ -13,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +24,9 @@ import (
 )
 
 type warmupFixture struct {
+	onSend                                      func()
+	provider                                    string
+	isPaidUnknown, isActivationDelayed          bool
 	mu                                          sync.Mutex
 	sends, reads, credentialReads               int
 	onCredentialRead                            func(int) bool
@@ -31,6 +36,15 @@ type warmupFixture struct {
 
 func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 	t.Helper()
+	provider, model := fixture.provider, "claude-haiku-test"
+	endpoint := warmup.CLAUDE_ENDPOINT
+	if provider == "" {
+		provider = "claude"
+	}
+	if provider == "codex" {
+		model = "gpt-codex-test"
+		endpoint = warmup.CODEX_ENDPOINT
+	}
 	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
@@ -44,9 +58,9 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 				_, _ = writer.Write([]byte(`{"error":"temporary credential listing failure"}`))
 				return
 			}
-			_, _ = writer.Write([]byte(`{"files":[{"id":"claude-file","name":"claude.json","type":"claude","provider":"claude","auth_index":"exact-claude","source":"file"}]}`))
+			_, _ = fmt.Fprintf(writer, `{"files":[{"id":"%s-file","name":"%s.json","type":"%s","provider":"%s","auth_index":"exact-claude","source":"file"}]}`, provider, provider, provider, provider)
 		case "/v8/management/credentials/models":
-			_, _ = writer.Write([]byte(`{"models":[{"id":"claude-haiku-test"}]}`))
+			_, _ = fmt.Fprintf(writer, `{"models":[{"id":"%s"}]}`, model)
 		case "/v8/management/requests/api-call":
 			var payload struct {
 				AuthIndex string `json:"auth_index"`
@@ -58,12 +72,15 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 			if payload.AuthIndex != "exact-claude" {
 				t.Errorf("wrong credential: %s", payload.AuthIndex)
 			}
-			if payload.URL == warmup.CLAUDE_ENDPOINT {
+			if payload.URL == endpoint {
 				fixture.mu.Lock()
 				fixture.sends++
-				fixture.isActive = true
+				fixture.isActive = !fixture.isActivationDelayed
 				isTimedOut := fixture.isTimedOut
 				fixture.mu.Unlock()
+				if fixture.onSend != nil {
+					fixture.onSend()
+				}
 				if fixture.entered != nil {
 					close(fixture.entered)
 					select {
@@ -76,10 +93,14 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 					_, _ = writer.Write([]byte(`{"error":"request failed"}`))
 					return
 				}
+				if provider == "codex" {
+					_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": 200, "body": "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[{\"type\":\"message\"}],\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n"})
+					return
+				}
 				_, _ = writer.Write([]byte(`{"status_code":200,"body":{"type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"OK"}],"usage":{"input_tokens":5,"output_tokens":1}}}`))
 				return
 			}
-			if strings.HasPrefix(payload.URL, "https://api.anthropic.com/api/oauth/usage") {
+			if provider == "claude" && strings.HasPrefix(payload.URL, "https://api.anthropic.com/api/oauth/usage") || provider == "codex" && payload.URL == "https://chatgpt.com/backend-api/wham/usage" {
 				fixture.mu.Lock()
 				fixture.reads++
 				isActive, isPaid, isUsageFailed := fixture.isActive, fixture.isPaid, fixture.isUsageFailed
@@ -88,10 +109,27 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 					_, _ = writer.Write([]byte(`{"status_code":500,"body":{}}`))
 					return
 				}
+				if provider == "codex" {
+					var fiveReset, weeklyReset any
+					if isActive {
+						fiveReset = time.Now().Add(5 * time.Hour).Unix()
+						weeklyReset = time.Now().Add(7 * 24 * time.Hour).Unix()
+					}
+					body := map[string]any{"plan_type": "plus", "rate_limit": map[string]any{"allowed": true, "limit_reached": false, "primary_window": map[string]any{"used_percent": 0, "limit_window_seconds": 18000, "reset_at": fiveReset}, "secondary_window": map[string]any{"used_percent": 0, "limit_window_seconds": 604800, "reset_at": weeklyReset}}}
+					if !fixture.isPaidUnknown {
+						body["credits"] = map[string]any{"has_credits": isPaid, "unlimited": false, "balance": "0"}
+					}
+					_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": 200, "body": body})
+					return
+				}
 				five, week := "null", "null"
 				if isActive {
 					five = `{"utilization":0,"resets_at":"` + time.Now().Add(5*time.Hour).UTC().Format(time.RFC3339Nano) + `"}`
 					week = `{"utilization":0,"resets_at":"` + time.Now().Add(7*24*time.Hour).UTC().Format(time.RFC3339Nano) + `"}`
+				}
+				if fixture.isPaidUnknown {
+					_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": 200, "body": json.RawMessage(`{"five_hour":` + five + `,"seven_day":` + week + `}`)})
+					return
 				}
 				_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": 200, "body": json.RawMessage(`{"five_hour":` + five + `,"seven_day":` + week + `,"extra_usage":{"is_enabled":` + map[bool]string{true: "true", false: "false"}[isPaid] + `}}`)})
 				return
@@ -119,9 +157,9 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 		t.Fatal(err)
 	}
 	policy := warmup.DefaultPolicy()
-	policy.Model = "claude-haiku-test"
+	policy.Model = model
 	policy.ResetMode = "all"
-	if err = handler.repo.WriteWarmupPolicy(context.Background(), "default", "provider", "claude", &policy, now.UnixMilli()); err != nil {
+	if err = handler.repo.WriteWarmupPolicy(context.Background(), "default", "provider", provider, &policy, now.UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
 	return handler
@@ -174,7 +212,7 @@ func TestWarmupManualActivationAndReplay(t *testing.T) {
 		t.Fatalf("active duplicate %d", sends)
 	}
 }
-func TestWarmupProtectionAndUnverifiedAutomation(t *testing.T) {
+func TestWarmupProtection(t *testing.T) {
 	for _, scenario := range []struct {
 		name    string
 		fixture *warmupFixture
@@ -183,7 +221,6 @@ func TestWarmupProtectionAndUnverifiedAutomation(t *testing.T) {
 	}{
 		{"paid", &warmupFixture{isPaid: true}, true, "paid_usage_enabled"},
 		{"unread", &warmupFixture{isUsageFailed: true}, true, "quota_unknown"},
-		{"unverified", &warmupFixture{}, false, "activation_unverified"},
 		{"active", &warmupFixture{isActive: true}, true, "already_active"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -360,7 +397,7 @@ func TestWarmupOffAndModelScopedRefusals(t *testing.T) {
 	}
 }
 
-func TestWarmupIdentityReplacementRevokesVerification(t *testing.T) {
+func TestWarmupIdentityReplacementDiscardsActivationObservation(t *testing.T) {
 	handler := newWarmupHandler(t, &warmupFixture{})
 	client, _ := handler.capabilityClient(context.Background())
 	file, _ := handler.warmupFile(context.Background(), client, "exact-claude")
@@ -371,7 +408,7 @@ func TestWarmupIdentityReplacementRevokesVerification(t *testing.T) {
 	file.Account = "another-upstream-account"
 	credential, err := handler.warmupCredential(context.Background(), client, file, false)
 	if err != nil || credential.State.IsProtocolVerified {
-		t.Fatalf("replacement retained verification %+v %v", credential, err)
+		t.Fatalf("replacement retained activation observation %+v %v", credential, err)
 	}
 }
 
@@ -659,5 +696,206 @@ func TestWarmupLoopRecoversOnLaterTickWithoutRestart(t *testing.T) {
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestWarmupAutomationStartsFromApprovedPolicy(t *testing.T) {
+	for _, provider := range []string{"claude", "codex"} {
+		for _, trigger := range []string{"reset", "daily"} {
+			for _, hasFreshObservation := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/fresh=%t", provider, trigger, hasFreshObservation), func(t *testing.T) {
+					fixture := &warmupFixture{provider: provider}
+					handler := newWarmupHandler(t, fixture)
+					ctx := context.Background()
+					now := time.Now().UTC()
+					var clock atomic.Int64
+					clock.Store(now.UnixMilli())
+					handler.nowFn = func() time.Time { return time.UnixMilli(clock.Load()).UTC() }
+					fixture.onSend = func() { clock.Add(1) }
+					policy, _, err := handler.repo.ReadWarmupPolicy(ctx, "default", "provider", provider)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if trigger == "daily" {
+						policy.ResetMode = "off"
+						policy.IsDailyEnabled = true
+						policy.DailyTime = now.Format("15:04")
+					}
+					if err := handler.repo.WriteWarmupPolicy(ctx, "default", "provider", provider, &policy, now.UnixMilli()); err != nil {
+						t.Fatal(err)
+					}
+					if hasFreshObservation {
+						client, err := handler.capabilityClient(ctx)
+						if err != nil {
+							t.Fatal(err)
+						}
+						file, err := handler.warmupFile(ctx, client, "exact-claude")
+						if err != nil {
+							t.Fatal(err)
+						}
+						observation, err := handler.refreshWarmupObservation(ctx, client, file)
+						if err != nil {
+							t.Fatal(err)
+						}
+						state := warmup.State{CredentialID: handler.warmupCredentialIdentity(file), Provider: provider, Observation: observation, IsProtocolVerified: true, VerifiedModel: "previous-model"}
+						if err := handler.repo.WriteWarmupState(ctx, "default", file.AuthIndex, state, now.UnixMilli()); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if err := handler.runCredentialWarmupRound(ctx); err != nil {
+						t.Fatal(err)
+					}
+					state, err := handler.repo.ReadWarmupState(ctx, "default", "exact-claude")
+					if err != nil || state.LastResult == nil || state.LastResult.Status != "activated" || state.LastResult.Trigger != trigger {
+						t.Fatalf("approved policy did not activate: %+v %v", state, err)
+					}
+					if err := handler.runCredentialWarmupRound(ctx); err != nil {
+						t.Fatal(err)
+					}
+					fixture.mu.Lock()
+					sends := fixture.sends
+					fixture.mu.Unlock()
+					if sends != 1 {
+						t.Fatalf("expected one consuming request, got %d", sends)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestWarmupAutomationRetainsBillingProtection(t *testing.T) {
+	for _, provider := range []string{"claude", "codex"} {
+		for _, evidence := range []string{"enabled", "unknown"} {
+			t.Run(provider+"/"+evidence, func(t *testing.T) {
+				fixture := &warmupFixture{provider: provider, isPaid: evidence == "enabled", isPaidUnknown: evidence == "unknown"}
+				handler := newWarmupHandler(t, fixture)
+				if err := handler.runCredentialWarmupRound(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				ctx := context.Background()
+				client, err := handler.capabilityClient(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				file, err := handler.warmupFile(ctx, client, "exact-claude")
+				if err != nil {
+					t.Fatal(err)
+				}
+				credential, err := handler.warmupCredential(ctx, client, file, true)
+				reason := "paid_usage_enabled"
+				if evidence == "unknown" {
+					reason = "paid_usage_unknown"
+				}
+				if err != nil || credential.Reason != reason {
+					t.Fatalf("billing protection: %+v %v", credential, err)
+				}
+				fixture.mu.Lock()
+				sends := fixture.sends
+				fixture.mu.Unlock()
+				if sends != 0 {
+					t.Fatalf("billing evidence admitted %d consuming requests", sends)
+				}
+			})
+		}
+	}
+}
+
+func TestWarmupCredentialReportsCurrentWindowState(t *testing.T) {
+	fixture := &warmupFixture{isActive: true}
+	handler := newWarmupHandler(t, fixture)
+	ctx := context.Background()
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := handler.warmupFile(ctx, client, "exact-claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation, err := handler.refreshWarmupObservation(ctx, client, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := warmup.State{CredentialID: handler.warmupCredentialIdentity(file), Provider: "claude", Observation: observation}
+	if err := handler.repo.WriteWarmupState(ctx, "default", file.AuthIndex, state, handler.now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	credential, err := handler.warmupCredential(ctx, client, file, true)
+	if err != nil || credential.Reason != "already_active" || credential.State.IsProtocolVerified {
+		t.Fatalf("active window projection: %+v %v", credential, err)
+	}
+}
+
+func TestWarmupAutomaticPendingOutcomeDoesNotReplay(t *testing.T) {
+	fixture := &warmupFixture{isActivationDelayed: true}
+	handler := newWarmupHandler(t, fixture)
+	ctx := context.Background()
+	for range 4 {
+		if err := handler.runCredentialWarmupRound(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state, err := handler.repo.ReadWarmupState(ctx, "default", "exact-claude")
+	if err != nil || state.LastResult == nil || state.LastResult.Status != "uncertain" || state.LastResult.Reason != "activation_unconfirmed" {
+		t.Fatalf("bounded confirmation: %+v %v", state, err)
+	}
+	fixture.mu.Lock()
+	sends := fixture.sends
+	fixture.mu.Unlock()
+	if sends != 1 {
+		t.Fatalf("uncertain activation was replayed %d times", sends)
+	}
+}
+
+func TestWarmupSkippedManualRecheckRetainsProtocolRefusal(t *testing.T) {
+	fixture := &warmupFixture{}
+	handler := newWarmupHandler(t, fixture)
+	ctx := context.Background()
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := handler.warmupFile(ctx, client, "exact-claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := handler.warmupCredential(ctx, client, file, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation, err := handler.refreshWarmupObservation(ctx, client, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := credential.State
+	state.Observation = observation
+	state.LastResult = &warmup.Result{RequestID: "unsupported-model-run", Status: "failed", Reason: "protocol_unsupported", Model: credential.Policy.Model, Trigger: "reset", StartedAtMS: handler.now().UnixMilli()}
+	if err := handler.persistWarmupResult(ctx, file.AuthIndex, state, *state.LastResult); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	fixture.isUsageFailed = true
+	fixture.mu.Unlock()
+	result, err := handler.executeWarmup(ctx, file.AuthIndex, "manual-safe-recheck", credential.Revision, true)
+	if err != nil || result.Status != "skipped" || result.Reason != "quota_unknown" {
+		t.Fatalf("manual refusal: %+v %v", result, err)
+	}
+	state, err = handler.repo.ReadWarmupState(ctx, "default", file.AuthIndex)
+	if err != nil || state.LastResult == nil || state.LastResult.Reason != "protocol_unsupported" {
+		t.Fatalf("non-consuming refusal erased protocol evidence: %+v %v", state, err)
+	}
+	fixture.mu.Lock()
+	fixture.isUsageFailed = false
+	fixture.mu.Unlock()
+	result, err = handler.executeWarmup(ctx, file.AuthIndex, "", "", false)
+	if err != nil || result.Status != "skipped" || result.Reason != "protocol_unsupported" {
+		t.Fatalf("unsupported model resumed: %+v %v", result, err)
+	}
+	fixture.mu.Lock()
+	sends := fixture.sends
+	fixture.mu.Unlock()
+	if sends != 0 {
+		t.Fatalf("unsupported model consumed %d requests", sends)
 	}
 }

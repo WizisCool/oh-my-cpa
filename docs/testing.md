@@ -1152,10 +1152,18 @@ clock.
 `internal/warmup` tests own calendar, explicit billing evidence, sliding/fixed boundaries,
 cycle decisions and fixed adapter terminal responses. API tests exercise real CPA-facade
 requests, persistent receipts, confirmed revisions, paid protection and uncertain/concurrent
-execution. `scripts/acceptance/contracts/warmup.json` is certified by a Go handler test and
+execution. Handler regressions exercise first reset-driven and daily automatic attempts for
+both Codex and Claude, with fresh or absent prior observations, changed-model history,
+active-window projection, bounded pending confirmation and persistence of an unsupported-model
+refusal across a non-consuming manual recheck. Pure policy tests retain an
+observed unsupported-response pause without treating missing activation history as a gate.
+`scripts/acceptance/contracts/warmup.json` is certified by a Go handler test and
 consumed by the actual typed client in `web/tests/warmup.contract.test.ts`. Rendered tests
 own inheritance and draft controls; the `oauth-window-warmup` browser scenario owns
-viewport geometry and native Back discard confirmation. All are discovered by the
+viewport geometry and native Back discard confirmation. It independently checks that
+Drawer wrappers transition only transform, then retains the unchanged 320px containment
+assertion after resize; adding a delay cannot satisfy the transition-property check.
+All are discovered by the
 existing runners. Real-account activation is explicitly consented manual acceptance,
 never a hermetic test or automatic development step.
 

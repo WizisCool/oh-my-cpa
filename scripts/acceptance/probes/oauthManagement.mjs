@@ -1122,6 +1122,8 @@ export async function oauthWindowWarmup({ page, base, check }) {
     const drawer = page.locator('.ant-drawer-content-wrapper').filter({ has: page.locator('.ant-drawer-title').filter({ hasText: 'Warmup settings' }) });
     await drawer.waitFor({ state: 'visible' });
     await drawer.getByText('Time zone: UTC', { exact: true }).waitFor();
+    const transitionProperties = await drawer.evaluate(element => getComputedStyle(element).transitionProperty);
+    check('warmup drawer animates position without interpolating viewport dimensions', transitionProperties === 'transform', transitionProperties);
     for (const width of [1440, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await settleLayout(page);

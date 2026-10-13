@@ -47,6 +47,7 @@ it('reads inherited policy without writing and reports credential-local draft ow
 it('keeps provider changes disabled while its default draft is unsaved', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
   await screen.findByText('Daily time takes priority: wait if a new five-hour window would overlap the next daily start. Missed starts are only caught up within one hour.');
+  expect(screen.queryByText(/First select a model and run Warm up now/)).toBeNull();
   fireEvent.click(screen.getByRole('switch', { name: 'Daily scheduled warmup' }));
   expect(screen.getByRole('tab', { name: 'Claude' }).getAttribute('aria-disabled')).toBe('true');
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
@@ -54,19 +55,20 @@ it('keeps provider changes disabled while its default draft is unsaved', async (
   surface.unmount(); surface.client.clear();
 });
 
-it('shows protocol and billing evidence even before a pause or durable result exists', async () => {
+it('shows activation observations and billing evidence independently of automatic readiness', async () => {
   const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
-  await screen.findByText('Activation verification');
+  await screen.findByText('Activation observation');
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, reason: undefined } : previous));
-  expect(screen.getByText('Not verified')).toBeTruthy();
+  expect(screen.getByText('Not observed for this model')).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Warm up now' }) as HTMLButtonElement).disabled).toBe(false);
   expect(screen.getByText('Paid fallback')).toBeTruthy();
   expect(screen.getByText('Unknown')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, state: { ...previous.state, protocol_verified: true, verified_model: previous.policy.model, observation: { observed_at_ms: 1770000000000, paid_fallback: 'disabled' } } } : previous));
-  await screen.findByText('Verified');
+  await screen.findByText('Observed for this model');
   expect(screen.getByText('Disabled')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, policy: { ...previous.policy, model: 'a-different-model' } } : previous));
-  await screen.findByText('Not verified');
+  await screen.findByText('Not observed for this model');
   surface.unmount(); surface.client.clear();
 });
 

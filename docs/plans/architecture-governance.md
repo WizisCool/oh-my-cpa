@@ -970,8 +970,10 @@ The warmup initiative keeps quota evidence at the provider-read owner, pure sche
 and fixed requests in a leaf package, orchestration at the authenticated facade, and
 confirmed adapters in Operations. Migration 041 explicitly declares lifecycle and query
 classification. Handler-certified wire cases, rendered draft tests and the OAuth warmup
-browser scenario preserve separate claim ownership. Manual upstream activation remains
-a runtime gate instead of being inferred from mocked transport success (ADR 0097).
+browser scenario preserve separate claim ownership. Post-request quota observation, not
+mocked HTTP completion, establishes activation. An approved policy admits its first automatic
+attempt through current billing and window evidence (ADR 0098); observed unsupported
+responses still pause the selected model.
 
 #### Consented real-account acceptance — 2026-10-13
 

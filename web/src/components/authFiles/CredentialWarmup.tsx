@@ -25,7 +25,7 @@ const REASON_KEYS: Record<string, string> = {
   paid_usage_enabled: 'warmup.reason_paid_enabled', paid_usage_unknown: 'warmup.reason_paid_unknown',
   quota_exhausted: 'warmup.reason_exhausted', already_active: 'warmup.reason_active',
   waiting_daily: 'warmup.reason_waiting_daily', retry_wait: 'warmup.reason_retry',
-  activation_unverified: 'warmup.reason_unverified', credential_disabled: 'warmup.reason_disabled_credential',
+  credential_disabled: 'warmup.reason_disabled_credential',
   credential_unavailable: 'warmup.reason_unavailable_credential', cooldown: 'warmup.reason_cooldown',
   outcome_unknown: 'warmup.reason_unknown', activation_pending: 'warmup.reason_pending',
   activation_unconfirmed: 'warmup.reason_unconfirmed', protocol_unsupported: 'warmup.reason_unsupported',
@@ -105,7 +105,6 @@ export function WarmupSettingsDrawer({ open, onClose }: { open: boolean; onClose
         <PolicyEditor policy={policy} onChange={policy => { if (!draft) draftRevision.current = settingsQuery.data!.revision; setDraft(policy); }} models={settingsQuery.data.models[provider]} disabled={saveMutation.isPending || isDemoMode()} />
         <Text type="secondary">{t('warmup.timezone', { zone: settingsQuery.data.timezone })}</Text>
         <Text type="secondary">{t('warmup.daily_priority')}</Text>
-        <Notice tone="info" description={t('warmup.verification_hint')} />
       </div> : <Text>{t('common.loading')}</Text>}
   </AppDrawer>;
 }
@@ -159,7 +158,7 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
       <PolicyEditor policy={values.policy} models={credential.models} onChange={policy => setDraft({ inherit: false, policy, revision: draft?.revision ?? credential.revision })} disabled={values.inherit || saveMutation.isPending || runMutation.isPending || isDemoMode()} />
       <Text type="secondary">{t('warmup.timezone', { zone: credential.timezone })}</Text>
       <FactList emphasis="quiet" facts={[
-        { key: 'verification', label: t('warmup.verification'), value: t(credential.state.protocol_verified && credential.state.verified_model === credential.policy.model ? 'warmup.verified' : 'warmup.not_verified') },
+        { key: 'activation', label: t('warmup.activation_observation'), value: t(credential.state.protocol_verified && credential.state.verified_model === credential.policy.model ? 'warmup.observed' : 'warmup.not_observed') },
         { key: 'billing', label: t('warmup.paid_fallback'), value: t(`warmup.paid_${credential.state.observation?.paid_fallback ?? 'unknown'}`) },
       ]} />
       {credential.next_at_ms && <Text>{t('warmup.next', { time: new Intl.DateTimeFormat(undefined, { timeZone: credential.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(credential.next_at_ms) })}</Text>}

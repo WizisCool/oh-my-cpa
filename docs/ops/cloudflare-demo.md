@@ -419,5 +419,6 @@ choices remain browser-local, so a returning visitor never pushes them to the sh
 
 The dataset includes `/management/quota/warmup/settings` and representative credential
 warmup state. Policy writes and consuming manual requests are refused, and demo servers
-never start the scheduler. The OAuth toolbar and Quota tab render read-only settings;
-regenerate the dataset whenever their reads or projections change.
+never start the scheduler. The OAuth toolbar and Quota tab render read-only settings and neutral activation observations;
+missing activation history is not a manual prerequisite. Billing evidence and current-window
+pause reasons remain visible. Regenerate the dataset whenever their reads or projections change.

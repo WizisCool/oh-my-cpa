@@ -3286,7 +3286,7 @@ sandbox, its bounded response becomes an image, and the outer snapshot is script
 A missing figure retains an explicit unavailable-image note; all transcript pages must encode
 before any PNG is downloaded.
 
-## Credential window warmup (ADR 0097)
+## Credential window warmup (ADRs 0097 and 0098)
 
 `internal/warmup` owns policies, explicit billing/activation evidence, pure calendar and
 cycle decisions, and fixed tiny-request adapters. `internal/api/warmup.go` orchestrates
@@ -3305,7 +3305,7 @@ Migration 041 adds `credential_warmup_policies` (instance/scope/identity),
 `credential_warmup_state` (one instance/credential scheduling record) and
 `credential_warmup_runs` (newest 100 receipts per instance/credential). Policies require
 confirmation and a revision; credential overrides include a keyed identity fingerprint and provider
-in their storage key. CPA's opaque account field is hashed, never persisted or returned. Identity replacement discards prior verification. The three
+in their storage key. CPA's opaque account field is hashed, never persisted or returned. Identity replacement discards prior activation observations and scheduling state. The three
 secret-free tables are explicitly classified for lifecycle and read-only queries.
 
 The application starts and joins the minute warmup loop alongside quota auto-refresh.
@@ -3319,7 +3319,13 @@ uncertain; they are not resubmitted. A transient startup recovery error is diagn
 retried on the minute ticks; consuming rounds wait for successful recovery.
 Definite rate-limit refusals use one/five/fifteen-minute backoff, with at most three
 retries; a successful response is checked immediately and at most twice more without
-resending. Initial activation and a changed model require confirmed manual verification.
+resending. An approved enabled policy admits the first automatic attempt and an explicitly
+selected new model through fresh quota and billing evidence. The legacy `protocol_verified`
+and `verified_model` state fields record observed activation; they do not admit or suppress
+execution. An observed unsupported protocol response pauses automatic requests for the
+same model, while a confirmed manual action can recheck compatibility. A changed model is
+not silently substituted. Read projections preserve the current window or billing reason
+rather than replacing it with historical activation status (ADR 0098).
 
 The facade adds warmup settings, credential policy/state and manual-run routes under
 `/management/quota/warmup`. The public demo exports settings and representative

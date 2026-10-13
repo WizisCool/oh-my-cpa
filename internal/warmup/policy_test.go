@@ -244,3 +244,39 @@ func TestFableWarmupRequiresAvailableModelScopedQuota(t *testing.T) {
 		})
 	}
 }
+
+func TestWarmupProtocolRefusalPausesMatchingAutomaticModel(t *testing.T) {
+	now := time.Now().UTC()
+	policy := DefaultPolicy()
+	policy.Model = "haiku"
+	policy.ResetMode = "all"
+	observation := idleObservation(now)
+	for _, reason := range []string{"protocol_unsupported", "unexpected_tool"} {
+		t.Run(reason, func(t *testing.T) {
+			currentObservation := observation
+			state := State{Observation: &currentObservation, LastResult: &Result{Status: "failed", Reason: reason, Model: policy.Model}}
+			trigger, pause, _, _ := Decide(policy, state, now, false)
+			if trigger != "" || pause != reason {
+				t.Fatalf("unsupported model admitted: %q %q", trigger, pause)
+			}
+			trigger, pause, _, _ = Decide(policy, state, now, true)
+			if trigger != "manual" || pause != "" {
+				t.Fatalf("confirmed manual recheck refused: %q %q", trigger, pause)
+			}
+			state.LastResult.Model = "previous-model"
+			trigger, pause, _, _ = Decide(policy, state, now, false)
+			if trigger != "reset" || pause != "" {
+				t.Fatalf("new model retained old refusal: %q %q", trigger, pause)
+			}
+			state.LastResult.Model = policy.Model
+			state.Observation.FiveHour.State, state.Observation.Weekly.State = "active", "active"
+			used := float64(0)
+			state.Observation.FiveHour.UsedPercent, state.Observation.Weekly.UsedPercent = &used, &used
+			trigger, pause, _, _ = Decide(policy, state, now, false)
+			if trigger != "" || pause != "already_active" {
+				t.Fatalf("active window hidden by protocol history: %q %q", trigger, pause)
+			}
+
+		})
+	}
+}
