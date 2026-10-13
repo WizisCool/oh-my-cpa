@@ -57,18 +57,18 @@ it('keeps provider changes disabled while its default draft is unsaved', async (
 
 it('shows activation observations and billing evidence independently of automatic readiness', async () => {
   const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
-  await screen.findByText('Model check');
+  await screen.findByText('Window activation');
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, reason: undefined } : previous));
-  expect(screen.getByText('Not verified yet')).toBeTruthy();
+  expect(screen.getByText('Not confirmed')).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Warm up now' }) as HTMLButtonElement).disabled).toBe(false);
   expect(screen.getByText('Paid overage')).toBeTruthy();
   expect(screen.getByText('Unknown')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, state: { ...previous.state, protocol_verified: true, verified_model: previous.policy.model, observation: { observed_at_ms: 1770000000000, paid_fallback: 'disabled' } } } : previous));
-  await screen.findByText('Verified to start the window');
+  await screen.findByText('Confirmed');
   expect(screen.getByText('Disabled')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, policy: { ...previous.policy, model: 'a-different-model' } } : previous));
-  await screen.findByText('Not verified yet');
+  await screen.findByText('Not confirmed');
   surface.unmount(); surface.client.clear();
 });
 
@@ -78,12 +78,12 @@ it('reports a completed manual run once in the durable credential section', asyn
   fireEvent.click(runButton);
   const dialog = await screen.findByRole('dialog');
   fireEvent.click(within(dialog).getByRole('button', { name: 'Warm up now' }));
-  await screen.findByText('Window started');
-  expect(screen.getAllByText('Window started')).toHaveLength(1);
+  await screen.findByText('Quota window started');
+  expect(screen.getAllByText('Quota window started')).toHaveLength(1);
   expect(surface.requests.filter(request => request.method === 'POST')).toHaveLength(1);
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous && previous.state.last_result ? { ...previous, state: { ...previous.state, last_result: { ...previous.state.last_result, request_id: 'later-automatic-run', started_at_ms: previous.state.last_result.started_at_ms + 1, status: 'failed', reason: 'rate_limited' } } } : previous));
   await screen.findByText('Warmup failed');
-  expect(screen.queryByText('Window started')).toBeNull();
+  expect(screen.queryByText('Quota window started')).toBeNull();
   surface.unmount(); surface.client.clear();
 });
