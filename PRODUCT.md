@@ -152,3 +152,13 @@ without inference or server writes. Agent replay includes reasoning, capability 
 inline generated UI. Synthetic dashboard activity covers a year with continuous daily
 variation and occasional idle dates. A global arrival toast introduces the demonstration.
 Conversation HTML preserves working timelines and inline figures; PNG includes generated UI.
+
+### Credential window warmup
+
+Codex and Claude OAuth credentials support opt-in reset-driven and daily window warmup,
+provider defaults, credential overrides and a confirmed manual tiny request. Models are
+selected explicitly. Automation starts only after real activation is verified for the
+credential/model, and pauses when paid fallback is enabled or cannot be confirmed disabled.
+Daily starts take priority over overlapping reset requests. Reset entitlements are never
+automatically consumed. Upstream compatibility remains observable rather than promised
+by a mock; the demo offers read-only settings and state.

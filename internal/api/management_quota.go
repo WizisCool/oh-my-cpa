@@ -12,6 +12,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 // QuotaItemDTO keeps the legacy quota_exceeded/quota_reason fields alongside the
@@ -245,6 +246,12 @@ func normalizedQuotaFromSnapshot(authIndex string, snapshot repository.QuotaSnap
 			q.ResetGrants = grants
 		}
 	}
+	if snapshot.WarmupJSON != "" {
+		var observation warmup.Observation
+		if json.Unmarshal([]byte(snapshot.WarmupJSON), &observation) == nil {
+			q.WarmupEvidence = &observation
+		}
+	}
 	return q
 }
 
@@ -310,7 +317,14 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 		}
 	}
 
+	warmupJSON := ""
+	if q.WarmupEvidence != nil {
+		if raw, err := json.Marshal(q.WarmupEvidence); err == nil {
+			warmupJSON = string(raw)
+		}
+	}
 	return h.repo.SaveQuotaSnapshot(ctx, repository.QuotaSnapshotRecord{
+		WarmupJSON:       warmupJSON,
 		AuthIndex:        q.AuthIndex,
 		Provider:         q.Provider,
 		Status:           q.Status,

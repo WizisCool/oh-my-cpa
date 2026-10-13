@@ -12,17 +12,23 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 type Service struct {
-	TLSSkipVerify bool
-	Pricing       Pricing
-	Repo          *repository.Repository
-	Cipher        *appcrypto.Cipher
-	Client        func(context.Context) (*management.Client, error)
-	Acquire       func(context.Context) error
-	Release       func()
-	Notify        func()
+	WarmupSettings       func(context.Context) (warmup.Settings, error)
+	WarmupCredential     func(context.Context, string) (warmup.Credential, error)
+	SaveWarmupSettings   func(context.Context, warmup.PolicyWrite) (warmup.Settings, error)
+	SaveWarmupCredential func(context.Context, string, warmup.CredentialWrite) (warmup.Credential, error)
+	RunWarmup            func(context.Context, string, string, string) (warmup.Result, error)
+	TLSSkipVerify        bool
+	Pricing              Pricing
+	Repo                 *repository.Repository
+	Cipher               *appcrypto.Cipher
+	Client               func(context.Context) (*management.Client, error)
+	Acquire              func(context.Context) error
+	Release              func()
+	Notify               func()
 	// Existing normalized projections remain shared while HTTP adapters are narrowed.
 	SaveProvider               func(context.Context, ProviderMutation, string, string) (ProviderMutationResult, error)
 	DeleteProvider             func(context.Context, string, string) error
@@ -54,6 +60,7 @@ type invalidParameters struct{ detail string }
 func (e invalidParameters) Error() string         { return "invalid_parameters" }
 func (e invalidParameters) FailureDetail() string { return e.detail }
 
+func (s *Service) Revision(value any) string { return s.revision(value) }
 func (s *Service) revision(value any) string {
 	raw, _ := json.Marshal(value)
 	digest, _ := s.Cipher.Fingerprint("capability-revision", string(raw))
@@ -81,7 +88,7 @@ func read[I, O any](registry *capability.Registry, name, description string, han
 	return capability.Register(registry, Meta(name, description, "read", "low"), nil, func(ctx context.Context, input I, _, _ string) (O, error) { return handler(ctx, input) })
 }
 func (s *Service) Register(registry *capability.Registry) error {
-	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerQuotaAutoRefresh, s.registerCustomIcons, s.registerModelSquare}
+	registrations := []func(*capability.Registry) error{s.registerUsage, s.registerKeys, s.registerConfig, s.registerProviders, s.registerProviderMutations, s.registerOAuth, s.registerQuota, s.registerQuotaActions, s.registerSystem, s.registerPricing, s.registerDatabase, s.registerTimezone, s.registerTpsCalculation, s.registerQuotaAutoRefresh, s.registerWarmup, s.registerCustomIcons, s.registerModelSquare}
 	for _, register := range registrations {
 		if err := register(registry); err != nil {
 			return err

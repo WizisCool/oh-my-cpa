@@ -870,3 +870,13 @@ keeps the same text, standalone reasoning, working timelines and inline generate
 in reading order. Call rows retain argument summaries, outcome and duration disclosures.
 PNG captures generated interfaces at their laid-out width, including kit charts and controls;
 unavailable figures keep a visible fallback note rather than silently disappearing.
+
+## Credential window warmup
+
+The OAuth toolbar offers a Warmup settings Drawer with Codex/Claude tabs, explicit model
+selection, reset mode and one daily time. Provider defaults are off; daily time is 06:00
+in the OMC timezone. Unsaved drafts guard close, native Back and provider switching.
+The credential Quota tab shows full-policy inheritance/override, next check, last result
+and pause reason, with a confirmed Warm up now action. Tiny requests consume quota;
+unknown billing and unverified activation pause automation. Reuse the existing tokens,
+responsive Drawer and semantic feedback without introducing global design tokens.

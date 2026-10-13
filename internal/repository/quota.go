@@ -13,6 +13,7 @@ import (
 
 // QuotaSnapshotRecord represents a persisted normalized quota state for a credential.
 type QuotaSnapshotRecord struct {
+	WarmupJSON       string `json:"warmup_json,omitempty"`
 	ID               string `json:"id"`
 	AuthIndex        string `json:"auth_index"`
 	Provider         string `json:"provider"`
@@ -62,8 +63,8 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 	query := `
 		INSERT INTO quota_snapshots (
 			id, auth_index, provider, status, plan_type, plan_tier, plan_json,
-			windows_json, reset_credits_json, reset_grants_json, observed_at_ms, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			windows_json, reset_credits_json, reset_grants_json, warmup_json, observed_at_ms, created_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.SQL().ExecContext(ctx, query,
 		snapshot.ID,
@@ -76,6 +77,7 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		snapshot.WindowsJSON,
 		snapshot.ResetCreditsJSON,
 		snapshot.ResetGrantsJSON,
+		snapshot.WarmupJSON,
 		snapshot.ObservedAtMS,
 		snapshot.CreatedAtMS,
 	)
@@ -135,7 +137,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 
 	query := fmt.Sprintf(`
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, reset_grants_json, plan_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, reset_grants_json, plan_json, warmup_json, observed_at_ms, created_at_ms
 		FROM (
 			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC) as rn
 			FROM quota_snapshots
@@ -163,7 +165,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 
 func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 	var record QuotaSnapshotRecord
-	var resetCredits, resetGrants, planJSON sql.NullString
+	var resetCredits, resetGrants, planJSON, warmupJSON sql.NullString
 	if err := rows.Scan(
 		&record.ID,
 		&record.AuthIndex,
@@ -175,6 +177,7 @@ func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 		&resetCredits,
 		&resetGrants,
 		&planJSON,
+		&warmupJSON,
 		&record.ObservedAtMS,
 		&record.CreatedAtMS,
 	); err != nil {
@@ -189,6 +192,7 @@ func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
 	if planJSON.Valid {
 		record.PlanJSON = planJSON.String
 	}
+	record.WarmupJSON = warmupJSON.String
 	return record, nil
 }
 
@@ -204,7 +208,7 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 
 	query := `
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, reset_grants_json, plan_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, reset_grants_json, plan_json, warmup_json, observed_at_ms, created_at_ms
 		FROM quota_snapshots
 		WHERE auth_index = ?
 		ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC

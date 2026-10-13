@@ -500,3 +500,50 @@ failure is logged without tokens or uploaded key material.
 The public demonstration's Agent and Playground offer one browser-local recorded example
 each. Send/retry/cancel do not invoke a provider or write the Worker. Other questions are
 refused. The server-side demo security classification is unchanged; ADR 0092 documents replay.
+
+## Credential window warmup
+
+Configure provider defaults from OAuth management's Warmup settings, or a complete
+credential override from its Quota tab. Reset mode is Off, Weekly, or Weekly and five-hour.
+Daily warmup defaults off with 06:00 as its editable time in the effective OMC timezone.
+Choose an available model; Claude's available Haiku models are listed first. Changing a
+model never silently selects a replacement. Confirm one manual Warm up now to verify
+real activation before automation starts for that credential/model.
+
+Paid fallback must be affirmatively disabled by a fresh usage read. Claude uses
+`extra_usage.is_enabled`; Codex uses the credits standing (published `has_credits`,
+`unlimited` and balance). Missing evidence remains unknown. OMC does not change upstream
+billing settings or redeem a reset credit to make warmup eligible. A zero reading with
+an active fixed boundary is not an idle window. Model-scoped Sonnet, Opus and Fable
+limits can pause the selected family without blocking unrelated Haiku. Fable evidence
+accepts the legacy `iguana_necktie` or modern model-scoped `limits`; malformed modern
+evidence remains unknown rather than falling back to an apparently available legacy limit.
+
+The background loop checks once per minute, with bounded four-way rounds of 16, and
+reuses stored quota observations targeted for refresh every five minutes. Daily starts
+missed by more than one hour are not replayed. If starting now would overlap the next
+daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
+zone changes future calendar decisions, not stored instants.
+
+A consuming request is recorded before it is sent. Activated, pending, skipped, failed,
+executing and uncertain outcomes are distinct. After a pending completion only quota
+reads are repeated; transport timeouts and restart-abandoned requests are uncertain
+and are not automatically resent. Definite rate-limit refusals get at most three
+retries after one, five and fifteen minutes, each preceded by fresh eligibility checks.
+Policy and execution records are included in normal SQLite backups. The latest 100
+receipts per credential are kept alongside the durable cycle and daily suppression.
+
+API routes under the configured API prefix:
+
+- `GET/PUT /management/quota/warmup/settings`: provider policy and revision.
+- `GET/PUT /management/quota/warmup/credentials/{authIndex}`: effective policy and state.
+- `POST /management/quota/warmup/credentials/{authIndex}/run`: confirmed, revision-bound
+  manual request with caller-stable `request_id`. Reuse that id only to recover its
+  original receipt; never retry an uncertain result with a new id.
+
+These are authenticated, typed projections, not a generic request proxy. Writes require
+confirmation and the current revision; no URL, prompt, request body or secret can be
+supplied. The public demonstration refuses consuming and policy-write routes.
+
+Warmup round ordering is oldest observation first. Fleets exceeding a round's capacity
+remain queued rather than increasing concurrency or skipping protection.

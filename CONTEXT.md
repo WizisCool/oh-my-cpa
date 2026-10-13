@@ -695,3 +695,28 @@ execution. Agent replay needs no configured caller key or model; an open approva
 sending in both demo and normal mode. Agent replay state lasts for the page lifetime. No
 operation identifier in a recording authorizes a live action. The activity fixture is a deterministic synthetic year
 with normally distributed daily variation, quieter weekends and a small set of idle dates.
+
+## Credential window warmup
+
+- **Window Warmup** is an explicitly approved tiny consuming request on one exact Codex
+  or Claude OAuth credential. It starts idle subscription windows; it does not replenish
+  quota, redeem reset entitlements, clear cooldowns or guarantee a monetary charge.
+- **Warmup Policy** has a selected model, reset mode (`off`, `weekly`, `all`), a daily
+  enable flag and one `HH:mm` daily time. Provider defaults apply to existing and future
+  inheriting credentials; overrides replace the complete policy. Automation defaults
+  off and the daily time defaults to `06:00` in the effective OMC Time Zone.
+- **Activation Verification** binds observed manual activation to a credential identity
+  and model before automation is admitted. An HTTP completion without observed window
+  activation is pending, then uncertain after the bounded confirmation reads.
+- **Paid Fallback Evidence** is `disabled`, `enabled` or `unknown`, with its source and
+  observation instant. Missing fields never mean disabled. Enabled or unknown paid
+  fallback pauses every consuming warmup request; reset credits are not billing evidence.
+- Only main five-hour and overall weekly windows are activation targets. Zero usage with
+  a fixed future boundary remains active; missing or malformed evidence is unknown.
+  Explicit unused windows or repeated full-duration sliding boundaries can establish idle.
+- The daily start takes precedence when a new five-hour window would overlap it. A running
+  window skips that daily start. Missed daily starts are recovered only within one hour;
+  daylight-saving repeated hours retain one calendar task identity.
+- Early quota resets invalidate the prior cycle after observation. Redeeming a Codex reset
+  credit retains its independent success even if cooldown clearing, refresh or warmup fails.
+  Claude reset grants remain display-only.

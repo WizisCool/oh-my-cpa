@@ -66,6 +66,7 @@ interface AuthFileDetailDrawerProps {
   onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
   quotaContent?: React.ReactNode;
+ hasExternalDraft?: boolean;
   initialSection?: 'overview' | 'configuration' | 'models';
   /**
    * Whether the safe fields may be written. The write is keyed by file name, so a
@@ -155,6 +156,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onSaved,
   onDownload,
   quotaContent,
+ hasExternalDraft = false,
   initialSection = 'overview',
   canEdit = false,
 }) => {
@@ -288,7 +290,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   const handleAttemptClose = useCallback(() => {
     if (saveMutation.isPending || isPendingRef.current) return;
-    if (isDirty) {
+    if (isDirty || hasExternalDraft) {
       modal.confirm({
         title: t('af.unsaved_confirm_title'),
         icon: <ExclamationCircleOutlined />,
@@ -304,7 +306,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     } else {
       onClose();
     }
-  }, [isDirty, modal, onClose, saveMutation.isPending, t]);
+  }, [isDirty, hasExternalDraft, modal, onClose, saveMutation.isPending, t]);
 
   // Back goes through the same guard the drawer's own X does, so an edit in progress is never
   // discarded by a physical key that the reader may have pressed by accident.

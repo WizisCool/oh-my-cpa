@@ -414,3 +414,10 @@ the Agent must settle its generated interface, while the Playground must settle 
 content. Agent acceptance uses English copy and locale-independent action selectors; the
 remaining route headings use Chinese. Entry information is a global arrival toast, with contextual replay instructions on the conversation pages. Theme
 choices remain browser-local, so a returning visitor never pushes them to the shared Worker.
+
+### Warmup settings
+
+The dataset includes `/management/quota/warmup/settings` and representative credential
+warmup state. Policy writes and consuming manual requests are refused, and demo servers
+never start the scheduler. The OAuth toolbar and Quota tab render read-only settings;
+regenerate the dataset whenever their reads or projections change.

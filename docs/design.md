@@ -2863,3 +2863,19 @@ keeps the same text, standalone reasoning, working timelines and inline generate
 in reading order. Call rows retain argument summaries, outcome and duration disclosures.
 PNG captures generated interfaces at their laid-out width, including kit charts and controls;
 unavailable figures keep a visible fallback note rather than silently disappearing.
+
+### Credential window warmup
+
+The OAuth toolbar opens a viewport-bounded Warmup settings Drawer with Codex and Claude
+section tabs. A draft prevents provider switching; close and native Back require a
+discard decision. Each provider edits a model, reset mode and one optional daily start,
+showing the effective OMC timezone and daily-priority rule. Defaults are off and `06:00`.
+Saving confirms the effect on all current and future inheriting credentials.
+
+The credential Quota tab adds a Window warmup section with provider inheritance or a
+complete override, effective policy, next check, latest durable result and safe pause
+reason. Its drafts survive tab changes and participate in the parent Drawer close guard.
+Manual activation requires confirmation naming the credential and model and explaining
+quota consumption. Pending and uncertain outcomes never read as activation success.
+Protocol verification and paid-fallback protection remain visible; the public demo cannot
+save or consume. Existing type, shape, spacing and semantic-feedback tokens are reused.

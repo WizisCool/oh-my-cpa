@@ -422,6 +422,18 @@ func (a *App) Run(ctx context.Context) error {
 	// credential, so a demo, whose gateway is the fixture, never starts it.
 	// It is joined before Run returns, like the pipeline, because a round in flight writes
 	// observations to the database the caller closes next.
+	warmupDone := make(chan struct{})
+	if a.cfg.IsDemoMode {
+		close(warmupDone)
+	} else {
+		go func() {
+			defer close(warmupDone)
+			if err := a.handler.RunCredentialWarmup(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("credential window warmup loop stopped")
+			}
+		}()
+	}
+	defer func() { stop(); <-warmupDone }()
 	quotaRefreshDone := make(chan struct{})
 	if a.cfg.IsDemoMode {
 		close(quotaRefreshDone)

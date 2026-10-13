@@ -963,3 +963,52 @@ on a page's state. Shared grouping/status logic lives in leaf `answerLayout.ts` 
 `canvasCapture.ts` with the live save-image path and retains opaque sandbox permissions.
 Pure grouping/redaction tests and real-browser script-set content, exact-color PNG pixels,
 download controls and temporary-frame cleanup own the claims at their lowest valid layers.
+
+### Credential window warmup evidence
+
+The warmup initiative keeps quota evidence at the provider-read owner, pure scheduling
+and fixed requests in a leaf package, orchestration at the authenticated facade, and
+confirmed adapters in Operations. Migration 041 explicitly declares lifecycle and query
+classification. Handler-certified wire cases, rendered draft tests and the OAuth warmup
+browser scenario preserve separate claim ownership. Manual upstream activation remains
+a runtime gate instead of being inferred from mocked transport success (ADR 0097).
+
+#### Consented real-account acceptance — 2026-10-13
+
+The operator authorized one minimal live validation against the CPA already used by
+its tmux development service. That service ran the main checkout, so acceptance used
+this worktree's built Go binary on a separate loopback listener and an online SQLite
+snapshot. The original service and database were not migrated or reconfigured; the
+temporary process disabled usage ingestion to avoid a second destructive queue consumer.
+All times below use the effective OMC timezone, Asia/Kuala_Lumpur (UTC+08:00).
+
+- Claude: fresh usage explicitly reported paid fallback disabled and the five-hour
+  window idle. The overall weekly window was active at zero utilization. A manual
+  `claude-haiku-4-5-20251001` request began at 16:59:47.508 and completed with upstream
+  usage of 25 input tokens and 5 output tokens. Its immediate refresh still reported
+  idle, so the receipt correctly remained `pending`. The minute-loop observation at
+  17:00:11.790 reported an active five-hour window with reset at 21:49:59.750, updating
+  that same receipt to `activated` and verifying only this credential/model. The
+  provider-reported boundary, not a locally invented exact five-hour duration, is
+  retained. Replaying the same request ID before confirmation returned the same
+  receipt without another consuming request.
+- Codex: both inspected credentials had active five-hour and weekly windows, with
+  five-hour utilization 58% and 66% at inspection and paid fallback explicitly
+  disabled. One confirmed manual attempt selected `gpt-5.6-luna`; its fresh read
+  returned `skipped/already_active`. Receipt replay also stayed skipped. This checks
+  the live guard, not Codex Responses compatibility or window activation; neither
+  Codex credential was protocol-verified by this acceptance.
+- The isolated database retained exactly one activated and one skipped receipt, and
+  only one `warmup.run/attempt` audit event. Both temporary credential policies were
+  restored to inherited, disabled defaults; no warmup policy rows remained. No
+  automatic consuming policy or reset-entitlement redemption was enabled. The
+  temporary instance was stopped after observation.
+
+The live Claude read also exposed an exhausted model-scoped Fable quota. Haiku was
+eligible, but the warmup evidence parser did not yet cover Fable. A local regression
+first reproduced that eligibility gap, then pinned exhaustion and unknown-evidence
+protection for legacy `iguana_necktie` and modern model-scoped `limits`, including
+modern precedence over legacy data and unrelated Haiku eligibility. This correction
+needs no additional live consuming request. Hermetic verification and live acceptance
+remain separate evidence; this single-account result does not verify every model,
+account tier or future upstream protocol.

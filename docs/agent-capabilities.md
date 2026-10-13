@@ -615,3 +615,15 @@ The browser's trusted Plugin Host (ADR 0067) is not an Agent/MCP capability. It 
 secret-bearing configuration only through an authenticated console session; models and
 external agents continue to use the declared sanitized capability registry and its
 confirmation/revision rules. No arbitrary native path or URL becomes a tool argument.
+
+## Credential warmup capabilities
+
+`quota_warmup_settings_get` and `quota_warmup_credential_get` are bounded read projections
+of provider defaults, effective policy, model, next check, verification and pause reason.
+`quota_warmup_settings_set`, `quota_warmup_credential_set` and `quota_warmup_run` are
+high-risk writes exposed to both Agent and MCP. Their prepare result binds confirmation
+to the provider-policy or credential revision; provider-default approval states its
+impact on current and future inheriting credentials. Manual approval authorizes a tiny
+consuming request and initial activation verification, not token access or reset-credit
+redemption. The shared implementation enforces unknown/paid billing protection and
+uncertainty-aware idempotency; uncertain results must never be automatically replayed.

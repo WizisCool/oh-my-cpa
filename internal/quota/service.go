@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 // Official Upstream URLs
@@ -116,12 +117,22 @@ type CPAClient interface {
 
 // Service manages live upstream quota fetching, normalization, and actions.
 type Service struct {
-	client CPAClient
+	client         CPAClient
+	now            func() time.Time
+	warmupEvidence *warmup.Observation
 }
 
 // NewService creates a quota service bound to a CPA management client.
 func NewService(client CPAClient) *Service {
-	return &Service{client: client}
+	return &Service{client: client, now: time.Now}
+}
+
+func NewServiceWithClock(client CPAClient, clock func() time.Time) *Service {
+	service := NewService(client)
+	if clock != nil {
+		service.now = clock
+	}
+	return service
 }
 
 // DetectProvider maps file Type and Provider to a standard quota provider key.
@@ -270,7 +281,13 @@ func resolveCodexAccountID(file management.AuthFile) string {
 
 // RefreshCredentialQuota performs a live upstream query using full AuthFile metadata.
 func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.AuthFile, prior *NormalizedQuota) (*NormalizedQuota, error) {
-	nowMS := time.Now().UnixMilli()
+	// A service is shared by concurrent batch reads; evidence belongs to one reading.
+	s = &Service{client: s.client, now: s.now}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	nowMS := s.now().UnixMilli()
+	s.warmupEvidence = nil
 	authIndex := strings.TrimSpace(file.AuthIndex)
 	stdProvider := DetectProvider(file.Type, file.Provider)
 	caps := CapabilitiesForFile(file)
@@ -417,6 +434,9 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 		result.Status = QuotaStatusUnpublished
 	}
 
+	if fetchErr == nil {
+		result.WarmupEvidence = s.warmupEvidence
+	}
 	EvaluateStatusAndRecommendation(result, nowMS)
 	return result, nil
 }
@@ -447,6 +467,8 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 		return nil, nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 
+	observation := warmup.ParseObservation("codex", normBody, nowMS)
+	s.warmupEvidence = &observation
 	plan, windows, credits, err := ParseCodexUsage(normBody, nowMS)
 	if err != nil {
 		return nil, nil, nil, err
@@ -594,6 +616,8 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 		return plan, nil, nil, errors.New(sanitizeError(usageResp.StatusCode, normUsage))
 	}
 
+	observation := warmup.ParseObservation("claude", normUsage, nowMS)
+	s.warmupEvidence = &observation
 	windows, extraUsage, err := ParseClaudeUsage(normUsage, nowMS)
 	if err != nil {
 		return plan, nil, nil, err

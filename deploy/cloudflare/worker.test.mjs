@@ -472,3 +472,22 @@ describe('provider-wide OAuth model rules', () => {
     }
   });
 });
+
+describe('read-only credential warmup projections', () => {
+  it('routes settings and every supported demo credential to its own captured identity', () => {
+    const settings = responseNameFor(request('/api/v1/management/quota/warmup/settings'));
+    assert.equal(settings, 'warmup-settings');
+    const defaults = JSON.parse(DATASET.responses[settings].body);
+    assert.equal(defaults.providers.codex.reset_mode, 'off');
+    assert.equal(defaults.providers.claude.daily_enabled, false);
+    for (const authIndex of ['auth-codex-01', 'auth-codex-02', 'auth-claude-01']) {
+      const name = responseNameFor(request(`/api/v1/management/quota/warmup/credentials/${authIndex}`));
+      assert.ok(name, `missing warmup route for ${authIndex}`);
+      const credential = JSON.parse(DATASET.responses[name].body);
+      assert.equal(credential.auth_index, authIndex);
+      assert.equal(credential.state.protocol_verified, false);
+      assert.equal(credential.policy.model, '');
+    }
+    assert.equal(responseNameFor(request('/api/v1/management/quota/warmup/credentials/unrecognized')), undefined);
+  });
+});

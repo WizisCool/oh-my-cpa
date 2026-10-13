@@ -2006,9 +2006,9 @@ price editor in place (`web/src/components/pricing/`).
 `internal/quota` calls CPA's `/api-call` with the credential under observation to
 reach the provider's own usage endpoint. Targets are restricted to
 `AllowedURLPrefixes` — a compile-time allowlist of official HTTPS endpoints — and
-the resulting snapshot is normalized and stored in `quota_snapshots`. This is the
-only place Oh My CPA uses CPA as a request proxy, and it is server-initiated:
-there is no user-supplied URL or generic `/api-call` surface.
+the resulting snapshot is normalized and stored in `quota_snapshots`. Quota observations
+and the fixed credential warmup adapters are the only server-initiated CPA request
+proxies (ADR 0097): there is no user-supplied URL or generic `/api-call` surface.
 
 Kimi international credentials use the single allowlisted
 `https://api.kimi.ai/coding/v1/usages` endpoint rather than the domestic Kimi host.
@@ -3285,3 +3285,42 @@ script permission with same-origin permission: model markup runs only in the exi
 sandbox, its bounded response becomes an image, and the outer snapshot is script-disabled.
 A missing figure retains an explicit unavailable-image note; all transcript pages must encode
 before any PNG is downloaded.
+
+## Credential window warmup (ADR 0097)
+
+`internal/warmup` owns policies, explicit billing/activation evidence, pure calendar and
+cycle decisions, and fixed tiny-request adapters. `internal/api/warmup.go` orchestrates
+credential eligibility, audit-before-send, per-credential execution exclusion, fresh
+quota reads and completion verification. Operations exposes the same implementation to
+confirmed Agent/MCP writes. CPA retains token substitution and credential-specific
+transport; neither browser nor model can supply an upstream URL or read OAuth tokens.
+
+The quota service parses `warmup_evidence` from the same successful provider usage read.
+It carries paid fallback as a three-state value rather than collapsing omitted or false
+fields. `quota_snapshots.warmup_json` preserves that evidence through scheduled refresh,
+manual refresh and reset-credit redemption. A per-reading service copy keeps evidence
+isolated when the existing batch refresh shares a service concurrently.
+
+Migration 041 adds `credential_warmup_policies` (instance/scope/identity),
+`credential_warmup_state` (one instance/credential scheduling record) and
+`credential_warmup_runs` (newest 100 receipts per instance/credential). Policies require
+confirmation and a revision; credential overrides include a keyed identity fingerprint and provider
+in their storage key. CPA's opaque account field is hashed, never persisted or returned. Identity replacement discards prior verification. The three
+secret-free tables are explicitly classified for lifecycle and read-only queries.
+
+The application starts and joins the minute warmup loop alongside quota auto-refresh.
+Disabled policies cause no upstream usage reads. Enabled credentials are checked in
+bounded rounds of 16 with at most four concurrent contexts, targeting fresh evidence
+every five minutes and reusing newer stored quota evidence. Every consuming attempt
+performs a fresh read first. Auto and manual requests share a credential lock and durable
+receipts. Restart-abandoned executing receipts are uncertain; they are not resubmitted.
+Definite rate-limit refusals use one/five/fifteen-minute backoff, with at most three
+retries; a successful response is checked immediately and at most twice more without
+resending. Initial activation and a changed model require confirmed manual verification.
+
+The facade adds warmup settings, credential policy/state and manual-run routes under
+`/management/quota/warmup`. The public demo exports settings and representative
+credential state but refuses policy writes and consumption, and never starts the loop.
+
+Warmup round ordering is oldest observation first. Fleets exceeding a round's capacity
+remain queued rather than increasing concurrency or skipping protection.

@@ -307,6 +307,11 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPatch, "/api/v1/management/auth-files/excluded-models", demoRefuse, "changing a provider's excluded models is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/reset", demoRefuse, "resetting a credential's quota is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/clear-cooldown", demoRefuse, "changing a credential's cooldown is disabled"},
+	{http.MethodGet, "/api/v1/management/quota/warmup/settings", demoAllow, "read warmup settings"},
+	{http.MethodGet, "/api/v1/management/quota/warmup/credentials/{authIndex}", demoAllow, "read credential warmup state"},
+	{http.MethodPut, "/api/v1/management/quota/warmup/settings", demoRefuse, "automatic consuming requests require a real operator"},
+	{http.MethodPut, "/api/v1/management/quota/warmup/credentials/{authIndex}", demoRefuse, "automatic consuming requests require a real operator"},
+	{http.MethodPost, "/api/v1/management/quota/warmup/credentials/{authIndex}/run", demoRefuse, "warmup consumes real subscription entitlement"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
 }
 

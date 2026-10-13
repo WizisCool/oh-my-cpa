@@ -1,3 +1,4 @@
+import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
 import type { ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import { getAppConfig } from '../types/config';
@@ -336,6 +337,22 @@ export interface AuthSession {
 }
 
 export const api = {
+  getWarmupSettings(): Promise<WarmupSettings> {
+    return request('/management/quota/warmup/settings', { method: 'GET' });
+  },
+  saveWarmupSettings(provider: 'codex' | 'claude', policy: WarmupPolicy, revision: string): Promise<WarmupSettings> {
+    return request('/management/quota/warmup/settings', { method: 'PUT', body: JSON.stringify({ provider, policy, revision, confirmed: true }) });
+  },
+  getWarmupCredential(authIndex: string): Promise<WarmupCredential> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'GET' });
+  },
+  saveWarmupCredential(authIndex: string, inherit: boolean, policy: WarmupPolicy, revision: string): Promise<WarmupCredential> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'PUT', body: JSON.stringify({ inherit, policy, revision, confirmed: true }) });
+  },
+  runWarmup(authIndex: string, requestId: string, revision: string): Promise<WarmupResult> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}/run`, { method: 'POST', body: JSON.stringify({ request_id: requestId, revision, confirmed: true }) });
+  },
+
   async getCustomIcons(): Promise<CustomIcon[]> {
     const response = await request<{ icons: CustomIcon[] }>('/custom-icons');
     return response.icons;

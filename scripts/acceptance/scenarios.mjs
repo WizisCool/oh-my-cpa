@@ -59,7 +59,7 @@ import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/p
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { requestListTouch } from './probes/requestListTouch.mjs';
-import { oauthManagement, oauthVertexImport, oauthModelRules, oauthTokenCapacity, oauthAuthorizationOutcomes, oauthWorkspaceScale, oauthPluginConnections, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
+import { oauthWindowWarmup, oauthManagement, oauthVertexImport, oauthModelRules, oauthTokenCapacity, oauthAuthorizationOutcomes, oauthWorkspaceScale, oauthPluginConnections, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemUpdateIndicator, systemFixtures } from './probes/systemInformation.mjs';
@@ -231,6 +231,7 @@ export const SCENARIOS = [
     },
     run: oauthManagement,
   },
+  { id: 'oauth-window-warmup', name: 'OAuth window warmup settings and guarded phone editor', options: { routes: oauthManagementProbeRoutes() }, run: oauthWindowWarmup },
   { id: 'oauth-vertex-import', name: 'Vertex import file lifecycle', options: {routes: oauthManagementProbeRoutes()}, run: oauthVertexImport },
   { id: 'oauth-model-rules', name: 'OAuth model aliases and exclusions', options: {routes: oauthManagementProbeRoutes()}, run: oauthModelRules },
   { id: 'oauth-token-capacity', name: 'OAuth token capacity formatting and phone geometry', options: {routes: oauthManagementProbeRoutes()}, run: oauthTokenCapacity },

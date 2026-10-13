@@ -44,6 +44,9 @@ import (
 
 // QUERY_READABLE_TABLES maps every table an operator query may read to the columns it must not.
 var QUERY_READABLE_TABLES = map[string][]string{
+	"credential_warmup_policies":    nil,
+	"credential_warmup_state":       nil,
+	"credential_warmup_runs":        nil,
 	"audit_events":                  nil,
 	"client_key_aliases":            nil,
 	"connections":                   nil,

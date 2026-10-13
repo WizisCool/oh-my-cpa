@@ -74,6 +74,7 @@ type Handler struct {
 	trustedProxies []*net.IPNet
 	// quotaAutoRefresh is the background quota refresh's memory of its own attempts.
 	quotaAutoRefresh quotaAutoRefreshState
+	warmupRuntime    warmupRuntime
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate
@@ -293,6 +294,11 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/management/quota/clear-cooldown", h.clearCredentialCooldown)
 				v1.Post("/management/quota/refresh", h.refreshCredentialQuota)
 				v1.Post("/management/quota/redeem-credit", h.redeemCodexResetCredit)
+				v1.Get("/management/quota/warmup/settings", h.getWarmupSettings)
+				v1.Put("/management/quota/warmup/settings", h.putWarmupSettings)
+				v1.Get("/management/quota/warmup/credentials/{authIndex}", h.getWarmupCredential)
+				v1.Put("/management/quota/warmup/credentials/{authIndex}", h.putWarmupCredential)
+				v1.Post("/management/quota/warmup/credentials/{authIndex}/run", h.postWarmupRun)
 				v1.Get("/management/quota/{authIndex}", h.getCredentialQuotaDetail)
 				v1.Get("/management/system", h.getSystemInfo)
 				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
