@@ -193,6 +193,11 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/system/updates", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/system/check-updates", demoRefuse, "checking for updates is disabled: it would call the GitHub API"},
 
+	// Console updates. The read answers "disabled" because a demonstration builds no
+	// updater client; applying one would replace containers.
+	{http.MethodGet, "/api/v1/management/system/updater", demoAllow, ""},
+	{http.MethodPost, "/api/v1/management/system/updater/apply", demoRefuse, "applying updates is disabled in the demo"},
+
 	// Database maintenance. Reads are allowed so the page renders; both actions are
 	// refused because they rewrite the demonstration's database, and a visitor must not
 	// be able to change what the next visitor sees.

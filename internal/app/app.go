@@ -24,6 +24,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
 
@@ -205,6 +206,21 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 			logger.Warn("could not clear stored release validators", "error", err)
 		}
 		handler.SetRelease(releaseService)
+
+		// The console holds no Docker access of its own. Updates go through the sidecar,
+		// and a native install, which has no containers to replace, is told apart from a
+		// containerised one that simply has no sidecar yet.
+		if cfg.Updater.Enabled {
+			_, dockerErr := os.Stat("/.dockerenv")
+			handler.SetUpdater(updater.NewClient(cfg.Updater.URL, cfg.MasterKey), release.NewManifestClient(), dockerErr == nil)
+			go func() {
+				// A console update ends the process that admitted it, so its outcome is
+				// collected here, by the process that replaced it.
+				outcomeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+				defer cancel()
+				handler.RecordInterruptedUpdate(outcomeCtx)
+			}()
+		}
 
 		if db != nil {
 			maintenanceService, err = repository.NewMaintenanceService(ctx, db)

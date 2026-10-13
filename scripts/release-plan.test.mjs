@@ -58,6 +58,16 @@ test('release pipeline gates image publishing and GitHub visibility in order', (
   const persisted = structuredClone(workflow);
   persisted.jobs.release.steps[0].with['persist-credentials'] = true;
   assert.throws(() => validateReleaseWorkflow(persisted));
+  const publicationStep = candidate => candidate.jobs.release.steps.find(step => step.run?.includes('gh release create'));
+  const unsigned = structuredClone(workflow);
+  publicationStep(unsigned).run = publicationStep(unsigned).run.replace('node scripts/sign-release-manifest.mjs tmp/native-release', 'true');
+  assert.throws(() => validateReleaseWorkflow(unsigned));
+  const signedAfterUpload = structuredClone(workflow);
+  publicationStep(signedAfterUpload).run = `${publicationStep(signedAfterUpload).run.replace('node scripts/sign-release-manifest.mjs tmp/native-release', 'true')}\nnode scripts/sign-release-manifest.mjs tmp/native-release\n`;
+  assert.throws(() => validateReleaseWorkflow(signedAfterUpload));
+  const leakedKey = structuredClone(workflow);
+  leakedKey.jobs.native.steps[0].env = { RELEASE_SIGNING_KEY: '${{ secrets.RELEASE_SIGNING_KEY }}' };
+  assert.throws(() => validateReleaseWorkflow(leakedKey));
   for (const jobName of ['identity', 'release', 'promote']) {
     const unpiped = structuredClone(workflow);
     const inventory = unpiped.jobs[jobName].steps.find(step => step.run?.includes('> "$RELEASE_INDEX"'));

@@ -56,6 +56,13 @@ type Handler struct {
 	// maintenance runs the database-wide maintenance actions; nil until
 	// SetMaintenance, and nil in a deployment that does not offer them.
 	maintenance MaintenanceManager
+	// updater is the sidecar that applies updates; nil until SetUpdater, and nil in a
+	// demonstration. manifests downloads the signed manifest a console update needs.
+	updater         UpdateManager
+	manifests       ManifestSource
+	isContainerised bool
+	// updatePollInterval overrides how often a running update is re-read; tests set it.
+	updatePollInterval time.Duration
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
@@ -306,6 +313,8 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/system/repository", h.getSystemRepository)
 				v1.Get("/management/system/updates", h.getSystemUpdates)
 				v1.Post("/management/system/check-updates", h.postSystemCheckUpdates)
+				v1.Get("/management/system/updater", h.getSystemUpdater)
+				v1.Post("/management/system/updater/apply", h.postSystemUpdaterApply)
 				v1.Get("/management/system/maintenance", h.getSystemMaintenance)
 				v1.Post("/management/system/maintenance/checkpoint", h.postSystemMaintenanceCheckpoint)
 				v1.Post("/management/system/maintenance/vacuum", h.postSystemMaintenanceVacuum)
