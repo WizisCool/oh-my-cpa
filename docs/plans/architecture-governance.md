@@ -1023,3 +1023,9 @@ spelling. OAuth fixture state is provider-correct, credential-local and scenario
 The credential section makes selected-model verification and paid fallback explicit,
 keeps manual outcomes on one surface, and preserves warmup drafts across real and empty
 credential field saves. Rendered and browser regressions retain their separate ownership.
+
+The incremental review also pins the save guard to committed external-draft state.
+`AuthFileDetailDrawer` synchronizes that ref in a layout effect, so a suspended
+concurrent render cannot clear the guard read by an in-flight save callback. A held
+save and a suspended transition reproduce premature close against the prior code;
+the rendered regression preserves the committed draft without fixed waits.

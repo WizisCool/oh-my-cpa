@@ -18,6 +18,17 @@ function mountDetail(holdSave?: Promise<void>) {
   const onClose = vi.fn(); const onSaved = vi.fn();
   const writes: Record<string, unknown>[] = [];
   let updateExternalDraft: (hasDraft: boolean) => void = () => {};
+  let suspendDraftRemoval = () => {};
+  let releaseDraftRemoval!: () => void;
+  const heldRender = new Promise<void>(resolve => { releaseDraftRemoval = resolve; });
+  const suspendedRender = vi.fn();
+  function RenderGate({ shouldSuspend }: { shouldSuspend: boolean }) {
+    if (shouldSuspend) {
+      suspendedRender();
+      throw heldRender;
+    }
+    return null;
+  }
   vi.stubGlobal('fetch', async (path: string, options: RequestInit) => {
     const url = new URL(path, 'http://127.0.0.1');
     let result: unknown;
@@ -35,13 +46,17 @@ function mountDetail(holdSave?: Promise<void>) {
   function Harness() {
     const [hasDraft, setHasDraft] = React.useState(false);
     const [warmupDraft, setWarmupDraft] = React.useState('');
+    const [shouldSuspend, setShouldSuspend] = React.useState(false);
     updateExternalDraft = setHasDraft;
-    return <AuthFileDetailDrawer file={FILE} open canEdit hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
-      quotaContent={<label>Warmup draft<input aria-label="Warmup draft" value={warmupDraft} onChange={event => { setWarmupDraft(event.target.value); setHasDraft(Boolean(event.target.value)); }} /></label>} />;
+    suspendDraftRemoval = () => React.startTransition(() => { setHasDraft(false); setShouldSuspend(true); });
+    return <React.Suspense fallback={<span>Draft update pending</span>}><AuthFileDetailDrawer file={FILE} open canEdit hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
+      quotaContent={<label>Warmup draft<input aria-label="Warmup draft" value={warmupDraft} onChange={event => { setWarmupDraft(event.target.value); setHasDraft(Boolean(event.target.value)); }} /></label>} /><RenderGate shouldSuspend={shouldSuspend} /></React.Suspense>;
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const surface = render(<React.StrictMode><App><QueryClientProvider client={client}><I18nProvider><Harness /></I18nProvider></QueryClientProvider></App></React.StrictMode>);
-  return { ...surface, client, onClose, onSaved, writes, updateExternalDraft: (hasDraft: boolean) => updateExternalDraft(hasDraft) };
+  return { ...surface, client, onClose, onSaved, writes, suspendedRender,
+    updateExternalDraft: (hasDraft: boolean) => updateExternalDraft(hasDraft),
+    suspendDraftRemoval: () => suspendDraftRemoval(), releaseDraftRemoval };
 }
 async function editWarmupAndOpenConfiguration() {
   fireEvent.change(await screen.findByRole('textbox', { name: 'Warmup draft' }), { target: { value: 'Unsaved warmup policy' } });
@@ -98,5 +113,29 @@ it('rechecks the latest external draft flag when an in-flight field save complet
     expect(surface.onClose).not.toHaveBeenCalled();
   } finally {
     releaseSave(); surface.unmount(); surface.client.clear();
+  }
+});
+
+it('uses committed draft state when a concurrent draft removal suspends during a field save', async () => {
+  let releaseSave!: () => void;
+  const holdSave = new Promise<void>(resolve => { releaseSave = resolve; });
+  const surface = mountDetail(holdSave);
+  try {
+    const note = await editWarmupAndOpenConfiguration();
+    fireEvent.change(note, { target: { value: 'Saved during suspended render' } });
+    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(surface.writes).toHaveLength(1));
+    act(() => surface.suspendDraftRemoval());
+    await waitFor(() => expect(surface.suspendedRender).toHaveBeenCalled());
+    expect(screen.queryByText('Draft update pending')).toBeNull();
+    releaseSave();
+    await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
+    expect(surface.onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab', { name: 'Quota' }));
+    expect((await screen.findByRole('textbox', { name: 'Warmup draft' }) as HTMLInputElement).value).toBe('Unsaved warmup policy');
+  } finally {
+    surface.unmount(); surface.client.clear(); releaseSave(); surface.releaseDraftRemoval();
   }
 });

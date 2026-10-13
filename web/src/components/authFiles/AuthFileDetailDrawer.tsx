@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import {
   Tabs,
   Button,
@@ -186,7 +186,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const currentSessionRef = useRef<number>(0);
   const isPendingRef = useRef<boolean>(false);
   const hasExternalDraftRef = useRef(hasExternalDraft);
-  hasExternalDraftRef.current = hasExternalDraft;
+  useLayoutEffect(() => {
+    // A suspended render must not overwrite the draft state used by save completion.
+    hasExternalDraftRef.current = hasExternalDraft;
+  }, [hasExternalDraft]);
   const closeAfterSaving = useCallback(() => {
     // Saving another section must not discard a warmup draft, including one
     // created while this field save was in flight.
