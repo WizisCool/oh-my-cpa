@@ -80,12 +80,18 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const [downloading, setDownloading] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   React.useEffect(() => {
-    setTab('overview');
     setDownloadModalOpen(false);
+    // A record opens on its overview; a panel on its way out keeps the tab it was showing.
+    if (eventId != null) setTab('overview');
   }, [eventId]);
+  // The panel is still on screen while it slides out, after `eventId` has cleared. It keeps
+  // drawing the record it held, so what leaves is the record rather than an emptied sheet.
+  const [shownId, setShownId] = React.useState(eventId);
+  if (eventId != null && eventId !== shownId) setShownId(eventId);
+  const recordId = eventId ?? shownId;
   const result = useQuery({
-    queryKey: ['usage-event', eventId],
-    queryFn: () => api.getUsageEvent(eventId!),
+    queryKey: ['usage-event', recordId],
+    queryFn: () => api.getUsageEvent(recordId!),
     enabled: eventId != null,
   });
   const event = result.data?.event;
@@ -145,7 +151,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     }
   };
 
-  const currentIndex = events && eventId != null ? events.findIndex((e) => e.id === eventId) : -1;
+  const currentIndex = events && recordId != null ? events.findIndex((e) => e.id === recordId) : -1;
   const hasPrev = events != null && currentIndex > 0;
   const hasNext = events != null && currentIndex >= 0 && currentIndex < events.length - 1;
   const prevEvent = hasPrev ? events![currentIndex - 1] : null;

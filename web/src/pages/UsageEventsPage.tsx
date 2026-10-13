@@ -71,10 +71,12 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { FactList } from '../components/common/FactList';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
   const t = useT();
+  const isPhone = useIsPhoneViewport();
   const {
     signature,
     query,
@@ -543,6 +545,7 @@ export const UsageEventsPage: React.FC = () => {
               <RefreshButton
                 isRefreshing={isSyncing || result.isFetching}
                 disabled={isSyncing}
+                isIconOnly={isPhone}
                 onRefresh={handleManualRefresh}
               />
             </div>

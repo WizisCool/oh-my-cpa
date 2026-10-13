@@ -2264,7 +2264,7 @@ is what this section records.
 | --- | --- | --- |
 | `900px` | viewport | The shell changes shape: the rail becomes a sheet, page head and grid columns stack. |
 | `640px` | viewport | The device is a phone: list surfaces render labelled rows instead of a table, and controls take their touch sizes. |
-| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked row. |
+| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked record of three lines. |
 
 The third is a container query rather than a viewport breakpoint, and deliberately so: that
 list sits inside the page's content column, so the same viewport holds a different list width
@@ -2290,6 +2290,37 @@ a defect: the request list carried a viewport `@media (max-width: 920px)` block 
 its container query, and it could only ever fire where the container already had (the
 container is at most `viewport − 64px`), so it was removed rather than left as an unexplained
 second breakpoint.
+
+### A stacked request record is three lines, in the text colours
+
+Below the container threshold a record is three lines of two facts each (ADR 0096):
+
+| Line | Leading | Trailing | Tone |
+| --- | --- | --- | --- |
+| 1 | model, the substituted or routed model beside it, then the reasoning effort badge and mode marks | cost | primary: `--text-base`, weight 600 |
+| 2 | provider and account | total tokens | `--fg-2`, weight 400 |
+| 3 | time, the control that copies the request id, verdict | latency | `--muted`, `--text-sm` |
+
+A record in a list is there to be recognised; the detail drawer, one tap away, is where it is
+read. First-token time, the token breakdown, the cache rate, speed, the credential kind, the
+caller's key and the client label are therefore not drawn in a stacked record. A phone-wide
+record that repeats every table column in small type cannot be scanned, however few pixels it
+takes.
+
+It is the table row's own DOM. The cells that hold two facts (time and id, total and breakdown,
+latency and first token) dissolve with `display: contents`, and the line breaks are those cells'
+pseudo-elements. Each line has one cell with a zero flex basis that gives way first, so a line is
+cut short rather than wrapped; the record is the same height at 320px and at 390px. The checkbox
+is placed in the record's left padding, so the three lines share one left edge and the model and
+provider marks form one column.
+
+**Hue is for the exception.** In the table each mark's tint has a column to itself. Folded into
+a few lines, a success fill, an effort hue and a credential kind land in one glance and none
+reads as a signal. A stacked record is therefore drawn in the text colours, and three things
+keep a hue: the verdict's pip, a failed verdict in full, and the reasoning effort badge, which
+is drawn exactly as the table draws it because it is the one mark that explains a record's cost
+and latency at a glance. The badge is never cut short: on its line the model's name gives way.
+The table above the threshold is unchanged.
 
 ### A page never moves sideways
 
@@ -2434,15 +2465,31 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 
 ### Content-first phone tools
 
-At `640px` and below the shell header is one row: navigation, the ellipsised current page name,
-refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
+At `640px` and below the shell header is one 48px row (`--app-header-height`; 56px above):
+navigation, the ellipsised current page name, refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
 repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
 44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
 modal gives focus to that modal. The `900px` navigation-sheet breakpoint is unchanged.
 
 `PageHeader.mobileActions` explicitly chooses primary phone actions and an `ActionMenu` for secondary
-tools; desktop `actions` stay unchanged. The phone title is 18px, content has 12px horizontal padding,
-and page/header/card gaps use the existing 8/12/16px scale. Additional provider and audit filters use
+tools; desktop `actions` stay unchanged. **The top bar names the page, so the page does not repeat
+it** (ADR 0096): the `h1` stays in the document for the outline and assistive technology and is not
+drawn, a live subtitle and the actions take its row, and a head that held only the title takes no
+room. Content has 12px horizontal padding, and page/header/card gaps use the existing 8/12/16px
+scale.
+
+**Counts and tiles keep their row.** `StatTiles` stays one strip of narrower tiles, a label too
+long for its tile cut rather than wrapped. The dashboard grid keeps two columns and its wide tiles
+span both. A list row's controls share its headline's line when both fit and fall to a line of
+their own, still at the trailing edge, when the headline needs the width. An OAuth credential is
+four lines: identity, state and its switch, traffic and the record's tools, the quota reading.
+
+**The request filters are two rows.** Search and the way into the full filter panel hold the first.
+The window, the verdict, the model and provider facets, the grouping and the model view are one
+strip that swipes inside itself and bleeds to the page edge, so a control cut off by the edge says
+there is more that way. The page head is one row of state and tools: auto refresh, the ingest
+verdict (the one item that gives way), the fold toggle and refresh. The window's bounds are not
+printed beside the window control that already states them. The list runs to the screen's edges. Additional provider and audit filters use
 `FilterDisclosure`, whose summary keeps the selected state visible. Existing responsive row lists,
 request-list inertia and conversation scroll ownership remain unchanged. The shared conversation frame bounds its phone height to the usable viewport, keeping input and Send above the software keyboard.
 
@@ -2478,6 +2525,14 @@ inner menu, confirmation or conflict dialog. The entry button regains focus afte
 `useVisibleViewport` follows keyboard resize and caret panning through `visualViewport` resize/scroll,
 with layout viewport fallback and pinch-zoom left to the browser. The editor and dirty actions fit
 inside those bounds; their observers/listeners are effect-owned and cleaned under StrictMode.
+
+### A sheet slides opaque
+
+antd starts a drawer's panel at 70% opacity and fades it in over the slide. On a phone a sheet is
+the width of the screen, so the page it covers stays readable through it for the whole slide: two
+layers of text on one surface. The panel's opacity is held at 1 for every drawer, and the mask
+keeps its fade. A panel on its way out keeps drawing what it held: the request detail drawer
+remembers the record it showed, so what leaves is the record and not an emptied sheet.
 
 ### The viewport is not a fixed rectangle
 

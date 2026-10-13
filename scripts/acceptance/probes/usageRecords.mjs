@@ -283,29 +283,37 @@ export async function columnAlignment({ base, page, check }) {
   check('header and row column tracks line up', tracksAligned.ok, JSON.stringify(tracksAligned.drift));
 
   // 6. The responsive breakpoints must still win. The base rules are written with
-  //    `:where()` at zero specificity on purpose, so the mobile numeric overrides
-  //    (which restore left alignment when the layout stacks) have to beat them -
-  //    a specificity slip here would silently re-right-align the stacked cards.
+  //    `:where()` at zero specificity on purpose, so the stacked record's overrides have to beat
+  //    them: a two-fact cell gives up its box so its facts can sit on different lines, and every
+  //    line starts at the record's own left edge - a specificity slip here would leave a
+  //    right-aligned table cell inside the stacked record.
   await page.setViewportSize({ width: 600, height: 1000 });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 10_000 });
   const stacked = await page.evaluate(() => {
-    const measure = (selector) => {
-      const node = document.querySelector(selector);
-      if (!node) return null;
-      const style = window.getComputedStyle(node);
-      return { align: style.alignItems, textAlign: style.textAlign, direction: style.flexDirection };
+    const row = document.querySelector('.request-row');
+    const rowStyle = window.getComputedStyle(row);
+    const lineStart = row.getBoundingClientRect().left + Number.parseFloat(rowStyle.paddingLeft);
+    const display = (selector) => {
+      const node = row.querySelector(selector);
+      return node ? window.getComputedStyle(node).display : null;
+    };
+    const offset = (selector) => {
+      const node = row.querySelector(selector);
+      return node ? Math.round(node.getBoundingClientRect().left - lineStart) : null;
     };
     return {
-      latency: measure('.req-col-latency'),
-      tokens: measure('.req-col-tokens'),
-      cache: measure('.req-col-cache'),
+      display: { latency: display('.req-col-latency'), tokens: display('.req-col-tokens') },
+      lineOffsets: {
+        model: offset('.req-col-model'),
+        provider: offset('.req-col-provider'),
+        time: offset('.req-time-text'),
+      },
     };
   });
-  const stackedEntries = Object.entries(stacked).filter(([, value]) => value !== null);
   check(
-    'the stacked layout restores left alignment for numeric columns',
-    stackedEntries.length === 3 &&
-      stackedEntries.every(([, value]) => value.align === 'flex-start' && value.textAlign === 'left'),
+    'the stacked record releases its two-fact cells and starts every line at its left edge',
+    stacked.display.latency === 'contents' && stacked.display.tokens === 'contents' &&
+      Object.values(stacked.lineOffsets).every((value) => value === 0),
     JSON.stringify(stacked),
   );
 

@@ -76,12 +76,45 @@
 .request-toolbar-bottom .ant-select {
   min-width: 140px;
 }
-@media (max-width: 640px) {
-  .request-filters .request-search {
-    flex-basis: 100%;
-  }
-  .request-filters > .ant-select {
-    min-width: 100px;
-    max-width: none;
-  }
+/* ── phone ───────────────────────────────────────────────────────────────────
+   Two rows. The search box and the way into the full filter panel hold the first; the second is
+   one strip of single-tap choices that swipes inside itself, because five wrapped rows of
+   controls left less than half the screen to the records they filter. */
+.request-toolbar.is-phone {
+  gap: 8px;
+}
+.request-toolbar.is-phone .request-filters {
+  flex-wrap: nowrap;
+}
+.request-toolbar.is-phone .request-search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.request-filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Bled to the page's own edge, so a control cut off by it reads as "more this way". */
+  margin-inline: -12px;
+  padding-inline: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.request-filter-strip::-webkit-scrollbar {
+  display: none;
+}
+.request-filter-strip > * {
+  flex: none;
+}
+.request-filter-strip > .req-time-button {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+.request-filter-strip > .ant-select {
+  width: 132px;
+}
+.request-filter-strip > .req-facet-select {
+  width: 148px;
 }

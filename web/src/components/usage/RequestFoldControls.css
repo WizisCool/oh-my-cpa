@@ -113,15 +113,18 @@
   transform: translateY(-1.5px);
 }
 @media (max-width: 640px) {
-  /* The folded header gives back this page's own gap and leaves 8px of its top padding, so the
-     list does not sit against the top bar. */
+  /* The folded header gives back this page's own gap and its top padding: the list is edge to
+     edge on a phone, so folded it starts at the top bar's rule and needs no second one. */
   .request-collapsible-header.is-collapsed {
-    margin-top: -12px;
-    margin-bottom: -14px;
+    margin-top: -8px;
+    margin-bottom: -8px;
+  }
+  .request-collapsible-header.is-collapsed + .request-stream {
+    border-top-color: transparent;
   }
   .req-back-to-top-btn {
-    right: 14px;
-    bottom: 56px;
+    right: 12px;
+    bottom: 52px;
     height: 28px;
     padding: 0 8px;
     font-size: var(--text-xs);

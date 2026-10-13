@@ -2,8 +2,14 @@
    Colours are palette tokens and the 1px hairlines are the same rule the tables'
    rows use, so a list reads as the same surface at either width. */
 
+/* The row is a wrapping line so its controls can share the headline's line when both fit, and
+   fall to a line of their own, still at the trailing edge, when the headline needs the width. */
 .phone-row {
-  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -16,20 +22,24 @@
 .phone-row-head {
   display: flex;
   align-items: center;
+  flex: 1 1 140px;
   gap: 8px;
   min-width: 0;
 }
 
 .phone-row-summary {
-  margin-top: 8px;
+  flex: 0 0 100%;
+  order: 2;
   min-width: 0;
 }
 
 .phone-row-fields {
-  margin: 12px 0 0;
+  flex: 0 0 100%;
+  order: 3;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 /* A label column sized to its content would leave the values starting at a
@@ -59,19 +69,17 @@
   overflow-wrap: anywhere;
 }
 
-/* The controls get their own line, separated by the same rule a table uses above
-   its footer. The gap is a real one: on a phone the action cluster has a line to
-   itself, so the 4px insets the touch rules accept an overlap for are not needed
-   here. */
+/* The controls sit at the headline's trailing edge. The gap is a real one, so the 4px insets
+   the touch rules accept an overlap for are not needed here. */
 .phone-row-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 0 1 auto;
   flex-wrap: wrap;
+  order: 1;
   gap: 12px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-soft);
+  margin-inline-start: auto;
 }
 
 .phone-row-actions > * {

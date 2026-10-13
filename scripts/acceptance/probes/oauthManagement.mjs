@@ -459,7 +459,8 @@ async function verifyFullTokenCapacity({ base, page, check }) {
       await until(async () => page.getByTestId('oauth-credential-record').first().evaluate((element) => {
         const own = getComputedStyle(element).gridTemplateColumns;
         const tracks = own.startsWith('subgrid') ? getComputedStyle(element.parentElement.parentElement).gridTemplateColumns : own;
-        return tracks.split(' ').length === (window.innerWidth <= 640 ? 1 : 6);
+        // A phone record is two tracks: the facts, and the control that ends the line.
+        return tracks.split(' ').length === (window.innerWidth <= 640 ? 2 : 6);
       }), { label: 'the credential row to adopt the target viewport' });
       await settleLayout(page);
       if (width === 1440) {

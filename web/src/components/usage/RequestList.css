@@ -671,55 +671,217 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
+/* ── stacked records ─────────────────────────────────────────────────────────
+   Below the container threshold a record is four lines, not twelve labelled fields. One field per
+   line made a single record taller than a phone, so the list could be read but not scanned; a
+   record now takes about a sixth of the screen and its lines answer, in order: when and how it
+   ended and what it cost, which model and how many tokens, who served it and how long it took,
+   and the secondary measures.
+
+   The DOM is the table row's own. The cells that hold two facts (time and id, total and breakdown,
+   latency and first token) dissolve with `display: contents` so each fact can sit on its own line,
+   and the line breaks are those cells' pseudo-elements, which a dissolved box still generates. The
+   row's own `::before` is the selection marker and is left alone. A zero-height break is a flex
+   line of its own, so the visible gap between two lines is twice `row-gap`. */
 @container reqstream (max-width: 920px) {
   .request-table-header {
     display: none;
   }
-  .req-mobile-label {
-    display: block;
-  }
+  /* A stacked record is three lines, each a pair: what was asked and what it cost, who answered
+     and how much it used, when it ran and how long it took. Everything else the table shows
+     is one tap away in the detail drawer. A phone-wide list that repeats all of a table's
+     columns in small type is a table nobody can scan; the record is here to be recognised, and
+     the drawer is where it is read. */
   .request-row {
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    padding: 14px 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 6px;
+    /* The left padding is the pick's column, so the three lines share one left edge. */
+    padding: 12px 12px 12px 44px;
     width: 100%;
     min-width: 100%;
     min-height: auto;
   }
   .req-col {
-    width: 100%;
+    flex: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
   }
-  /* A stacked record has no leading track, so its checkbox sits in the card's top corner. */
+  /* A two-fact cell gives up its box, so the fact it keeps can sit on the line it belongs to. */
+  .req-col-time,
+  .req-col-tokens,
+  .req-col-latency {
+    display: contents;
+  }
+  .req-col-time::after,
+  .req-col-tokens::before {
+    content: '';
+    flex: 0 0 100%;
+    height: 0;
+  }
+  .req-col-time::after { order: 19; }
+  .req-col-tokens::before { order: 29; }
+
   .req-select {
     position: absolute;
-    top: 0;
-    right: 0;
-    width: 44px;
-    height: 44px;
+    top: 14px;
+    left: 12px;
+    width: auto;
+    height: auto;
     margin: 0;
     padding: 0;
-    z-index: 1;
   }
-  .req-col-latency,
-  .req-col-tps,
-  .req-col-tokens,
-  .req-col-cost,
-  .req-col-cache {
-    align-items: flex-start;
-    text-align: left;
+  /* The box keeps its drawn size; the label around it is what a finger lands on. */
+  .req-select::before {
+    content: '';
+    position: absolute;
+    inset: -12px -10px -12px -12px;
   }
-  .request-chevron {
+
+  /* Line 1, the only one in the primary weight: the model, how it was asked, and the cost.
+     A zero basis is what keeps a line from wrapping: the cell that may give way takes the room
+     the line has left, and is cut short where there is none, instead of pushing the figure at
+     the line's end onto a line of its own. Each line has one such cell. */
+  .req-col-model {
+    order: 10;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .req-model-primary {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .req-model-served,
+  .req-model-routed {
+    flex: 0 1 auto;
+    min-width: 48px;
+    max-width: 50%;
+    color: var(--muted);
+  }
+  /* How it was asked sits with the model it was asked of, whole: the model's name is what gives
+     way on this line, never the badge. */
+  .req-col-mode {
+    order: 11;
+  }
+  .req-mode-marks {
+    flex-wrap: nowrap;
+  }
+  /* A request made the ordinary way has no mode to state; the em dash is a table's placeholder. */
+  .req-col-mode:has(> .req-mode-none) {
     display: none;
   }
-}
-@media (max-width: 640px) {
-  .request-row {
-    padding: 14px 10px;
-    grid-template-columns: minmax(0, 1fr) 90px;
-    gap: 12px;
+  .req-col-cost {
+    order: 12;
+    margin-left: auto;
   }
+  .req-model-name,
+  .req-cost-val {
+    font-size: var(--text-base);
+  }
+
+  /* Line 2: who answered, and the tokens it used. */
+  .req-col-provider {
+    order: 20;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  /* Unframed and the model mark's size, so the two marks read as one column. */
+  .req-provider-icon-wrapper {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    background: none;
+  }
+  .req-provider-icon-wrapper > * {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .req-provider-content {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .req-provider-title-row {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .req-provider-title {
+    font-size: var(--text-md);
+    font-weight: 400;
+    color: var(--fg-2);
+  }
+  .req-provider-credential {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: var(--text-sm);
+  }
+  .req-tokens-total { order: 21; }
+  .req-tokens-total strong {
+    font-weight: 400;
+    color: var(--fg-2);
+  }
+
+  /* Line 3, the quiet one: when, the verdict, and how long it took. */
+  .req-time-text {
+    order: 30;
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .req-time-sub { order: 31; }
+  /* Cut to a few characters an id identifies nothing; the control that takes it whole stays. */
+  .req-time-sub-id {
+    display: none;
+  }
+  .req-col-result { order: 32; }
+  .req-latency-val {
+    order: 34;
+    margin-left: auto;
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--fg-2);
+  }
+
+  /* Colour is for the exception. Side by side in a table, each mark's tint has a column to
+     itself; folded into a few lines they all land in one glance and none of them reads as a
+     signal. So a stacked record is drawn in the text colours, and what keeps a hue is what an
+     operator scans a list for: the verdict's pip, a failure in full, and the reasoning effort's
+     badge, which is the one mark that explains a record's cost and latency at a glance. */
+  .req-result-pill.is-success,
+  .req-result-pill.is-failed {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--text-sm);
+  }
+  .req-result-pill.is-success {
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .req-result-pill.is-success .req-result-bullet {
+    background: var(--success);
+  }
+  .req-fast-icon {
+    border-color: var(--border);
+    background: none;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  /* The detail drawer carries these. */
+  .req-col-key,
+  .req-col-ua,
+  .req-col-cache,
+  .req-col-tps,
+  .req-ttft-val,
+  .req-tokens-breakdown,
+  .req-tokens-total small,
+  .req-badge-oauth,
   .request-chevron {
     display: none;
   }

@@ -132,6 +132,9 @@
      (`motionDurationFast`, and `motionDurationMid`/`Slow`), and `test-theme-presets` pins the pair -
      the stylesheet used to carry 100ms/150ms against the table's 50ms/100ms, so call sites written
      as `var(--motion-fast, 50ms)` were quietly paying double the budget they named. */
+  /* The top bar's height. A page that fills the content pane (the request list) subtracts it,
+     so the two cannot disagree when a phone takes the shorter bar. */
+  --app-header-height: 56px;
   --motion-fast: 50ms;
   --motion-base: 100ms;
   /* §7's `float`: a click already said "open", so a floating panel only fades. antd has no token for
@@ -253,6 +256,12 @@ a { color: inherit; }
 }
 .ant-card, .ant-table-wrapper .ant-table, .ant-drawer-content, .ant-modal-content {
   background: var(--surface);
+}
+/* A sheet slides; it does not also fade. antd starts the panel at 70% opacity, and on a phone,
+   where a sheet is the width of the screen, the page it is covering stays readable through it for
+   the whole slide - two layers of text on one surface. The mask keeps its fade. */
+.ant-drawer [class*='-panel-motion-'] {
+  opacity: 1 !important;
 }
 .ant-btn, .ant-input, .ant-select, .ant-table, .ant-tag, .ant-menu { font-family: inherit; }
 .ant-typography, h1, h2, h3, h4 { font-family: inherit; }
@@ -927,7 +936,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    to the chrome that touches an edge rather than to `.app-content`, because a scroll
    container given a bottom inset scrolls its last line out from under itself. Each inset
    is a floor beneath the design system's own padding, never a replacement for it. */
-.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 max(24px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg) !important; border-bottom: 1px solid var(--border); }
+.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--app-header-height); padding: 0 max(24px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg) !important; border-bottom: 1px solid var(--border); }
 .app-sider { padding-left: env(safe-area-inset-left); }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
@@ -1094,8 +1103,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .dashboard-tile.is-wide { grid-column: span 2; }
 }
 @media (max-width: 640px) {
-  .dashboard-tile.is-wide { grid-column: span 1; }
+  .dashboard-tile.is-wide { grid-column: span 2; }
   .dashboard-tile .ant-card-body { padding: 16px; }
+  .tile-caption { margin-top: 6px; gap: 2px 10px; font-size: var(--text-sm); }
+  .dashboard-tile .chart-slot, .dashboard-tile .chart-placeholder { margin-top: 8px; }
 }
 
 /* ── model panels: the window's token trend and usage ring ───────────────────
@@ -2216,8 +2227,27 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .action-menu-label { padding: 4px 12px; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
 
 @media (max-width: 640px) {
+  :root { --app-header-height: 48px; }
   .terminal-page { padding: 12px 12px 24px; }
   .terminal-page-head { gap: 8px 12px; margin-bottom: 12px; align-items: center; }
+  /* The top bar already names the page one line above, so the page's own title is kept for a
+     screen reader and the document outline and not drawn a second time. What it shared a row
+     with - a live subtitle, the page's actions - moves up into its place; a head that held
+     nothing else takes no room at all. */
+  .terminal-page-head .terminal-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .terminal-page-head { position: relative; }
+  .terminal-page-head > .terminal-page-actions { margin-inline-start: auto; }
+  .terminal-page-heading:not(:has(> :not(.terminal-title))) { position: absolute; }
+  .terminal-page-head .terminal-subtitle { margin-top: 0; }
+  .terminal-page-head:not(:has(.terminal-page-actions, .request-actions, .terminal-page-heading > :not(.terminal-title))) { display: contents; }
   .terminal-page-stack { gap: 12px; }
   .terminal-page-stack > .terminal-page-head { margin-bottom: 0; }
   .terminal-title, .config-toolbar-left .terminal-title { font-size: 18px; }
