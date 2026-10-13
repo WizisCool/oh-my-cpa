@@ -1,12 +1,12 @@
 import React from 'react';
 import { App } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../src/i18n';
 import { CredentialWarmup, WarmupSettingsDrawer } from '../src/components/authFiles/CredentialWarmup';
 import { createWarmupFixture } from '../../scripts/acceptance/warmup-fixture.mjs';
-import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY } from '../src/types/warmup';
+import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, type WarmupCredential } from '../src/types/warmup';
 
 beforeEach(() => { window.localStorage.setItem('omc-lang', 'en');
  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -51,5 +51,37 @@ it('keeps provider changes disabled while its default draft is unsaved', async (
   expect(screen.getByRole('tab', { name: 'Claude' }).getAttribute('aria-disabled')).toBe('true');
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
   expect(surface.requests.every(entry => entry.method === 'GET')).toBe(true);
+  surface.unmount(); surface.client.clear();
+});
+
+it('shows protocol and billing evidence even before a pause or durable result exists', async () => {
+  const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
+  await screen.findByText('Activation verification');
+  const key = ['quota-warmup-credential', 'exact-claude'];
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, reason: undefined } : previous));
+  expect(screen.getByText('Not verified')).toBeTruthy();
+  expect(screen.getByText('Paid fallback')).toBeTruthy();
+  expect(screen.getByText('Unknown')).toBeTruthy();
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, state: { ...previous.state, protocol_verified: true, verified_model: previous.policy.model, observation: { observed_at_ms: 1770000000000, paid_fallback: 'disabled' } } } : previous));
+  await screen.findByText('Verified');
+  expect(screen.getByText('Disabled')).toBeTruthy();
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, policy: { ...previous.policy, model: 'a-different-model' } } : previous));
+  await screen.findByText('Not verified');
+  surface.unmount(); surface.client.clear();
+});
+
+it('reports a completed manual run once in the durable credential section', async () => {
+  const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
+  const runButton = await screen.findByRole('button', { name: 'Warm up now' });
+  fireEvent.click(runButton);
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Warm up now' }));
+  await screen.findByText('Window activation confirmed');
+  expect(screen.getAllByText('Window activation confirmed')).toHaveLength(1);
+  expect(surface.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+  const key = ['quota-warmup-credential', 'exact-claude'];
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous && previous.state.last_result ? { ...previous, state: { ...previous.state, last_result: { ...previous.state.last_result, request_id: 'later-automatic-run', started_at_ms: previous.state.last_result.started_at_ms + 1, status: 'failed', reason: 'rate_limited' } } } : previous));
+  await screen.findByText('Warmup failed');
+  expect(screen.queryByText('Window activation confirmed')).toBeNull();
   surface.unmount(); surface.client.clear();
 });

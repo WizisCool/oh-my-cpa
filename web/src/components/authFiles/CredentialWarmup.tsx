@@ -10,9 +10,10 @@ function safeError(error: unknown, t: TFunc): string {
  return code in REASON_KEYS ? t(REASON_KEYS[code]) : t('warmup.load_failed');
 }
 import { isDemoMode } from '../../types/demoMode';
-import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, type WarmupPolicy, type WarmupResult, type WarmupSettings } from '../../types/warmup';
+import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
 import { AppDrawer } from '../common/AppDrawer';
 import { SectionHeading } from '../common/SectionHeading';
+import { FactList } from '../common/FactList';
 import { Switch } from '../common/Switch';
 import { Notice, LoadFailure, useToast } from '../feedback';
 import styles from './CredentialWarmup.module.css';
@@ -115,6 +116,10 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
 
   const credentialQuery = useQuery({ queryKey: ['quota-warmup-credential', authIndex], queryFn: () => api.getWarmupCredential(authIndex), retry: false, refetchInterval: 60_000 });
   const credential = credentialQuery.data;
+  const [manualOutcome, setManualOutcome] = React.useState<{ authIndex: string; result: WarmupResult }>();
+  const manualResult = manualOutcome?.authIndex === authIndex ? manualOutcome.result : undefined;
+  const durableResult = credential?.state.last_result;
+  const displayedResult = manualResult && (!durableResult || durableResult.request_id !== manualResult.request_id && manualResult.started_at_ms >= durableResult.started_at_ms) ? manualResult : durableResult ?? manualResult;
   const values = draft ?? { inherit: credential?.inherit ?? true, policy: credential?.policy ?? DEFAULT_WARMUP_POLICY };
   const isDirty = Boolean(draft && credential && (draft.inherit !== credential.inherit || JSON.stringify(draft.policy) !== JSON.stringify(credential.policy)));
   React.useEffect(() => { onDirtyChange?.(isDirty); return () => onDirtyChange?.(false); }, [isDirty, onDirtyChange]);
@@ -125,7 +130,12 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
   });
   const runMutation = useMutation({
     mutationFn: ({ requestId, revision }: { requestId: string; revision: string }) => api.runWarmup(authIndex, requestId, revision),
-    onSuccess: data => { if (data.status === 'activated') toast.success(t('warmup.status_activated')); else toast.warning(t(`warmup.status_${data.status}`), { detail: warmupReason(data.reason, t) }); void queryClient.invalidateQueries({ queryKey: ['quota-warmup-credential', authIndex] }); void queryClient.invalidateQueries({ queryKey: ['management-quota'] }); },
+    onSuccess: data => {
+      setManualOutcome({ authIndex, result: data });
+      queryClient.setQueryData<WarmupCredential>(['quota-warmup-credential', authIndex], previous => previous ? { ...previous, state: { ...previous.state, last_result: data } } : previous);
+      void queryClient.invalidateQueries({ queryKey: ['quota-warmup-credential', authIndex] });
+      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+    },
     onError: error => toast.error(safeError(error, t)),
   });
   const save = () => {
@@ -148,9 +158,13 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
         onChange={value => setDraft({ inherit: value === 'inherit', policy: { ...values.policy }, revision: draft?.revision ?? credential.revision })} />
       <PolicyEditor policy={values.policy} models={credential.models} onChange={policy => setDraft({ inherit: false, policy, revision: draft?.revision ?? credential.revision })} disabled={values.inherit || saveMutation.isPending || runMutation.isPending || isDemoMode()} />
       <Text type="secondary">{t('warmup.timezone', { zone: credential.timezone })}</Text>
+      <FactList emphasis="quiet" facts={[
+        { key: 'verification', label: t('warmup.verification'), value: t(credential.state.protocol_verified && credential.state.verified_model === credential.policy.model ? 'warmup.verified' : 'warmup.not_verified') },
+        { key: 'billing', label: t('warmup.paid_fallback'), value: t(`warmup.paid_${credential.state.observation?.paid_fallback ?? 'unknown'}`) },
+      ]} />
       {credential.next_at_ms && <Text>{t('warmup.next', { time: new Intl.DateTimeFormat(undefined, { timeZone: credential.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(credential.next_at_ms) })}</Text>}
       {credential.reason && <Notice tone="info" description={warmupReason(credential.reason, t)} />}
-      {credential.state.last_result && <ResultNotice result={credential.state.last_result!} />}
+      {displayedResult && <ResultNotice result={displayedResult} />}
       <div className={styles['actions']}>
         <Button onClick={() => setDraft(undefined)} disabled={!isDirty || saveMutation.isPending}>{t('common.cancel')}</Button>
         <Button type="primary" onClick={save} loading={saveMutation.isPending} disabled={!isDirty || !values.inherit && !canSaveWarmupPolicy(values.policy) || isDemoMode()}>{t('common.save')}</Button>

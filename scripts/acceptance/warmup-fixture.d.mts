@@ -6,7 +6,7 @@ export const WARMUP_CONTRACT: {
   result: WarmupResult;
   cases: { id: string; body: Record<string, unknown>; status: number; response: Record<string, unknown> }[];
 };
-export function createWarmupFixture(options?: { authIndex?: string; provider?: 'claude' | 'codex' }):
+export function createWarmupFixture(options?: { authIndex?: string; provider?: 'claude' | 'codex'; name?: string }):
   (url: URL, method: string, body: string | null) => {
     status: number;
     json: WarmupSettings | WarmupCredential | WarmupResult | Record<string, unknown>;

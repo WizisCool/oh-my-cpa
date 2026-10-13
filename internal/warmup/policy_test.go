@@ -221,6 +221,9 @@ func TestFableWarmupRequiresAvailableModelScopedQuota(t *testing.T) {
 	for _, scenario := range []struct {
 		name, modelLimits, wantReason string
 	}{
+		{"modern object", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":{}`, "quota_unknown"},
+		{"modern string", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":"invalid"`, "quota_unknown"},
+		{"modern null", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":null`, "quota_unknown"},
 		{"legacy exhausted", `"iguana_necktie":{"utilization":100,"resets_at":"2026-11-05T07:59:00Z"}`, "quota_exhausted"},
 		{"modern exhausted", `"limits":[{"percent":100,"resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable 5"}}}]`, "quota_exhausted"},
 		{"modern malformed", `"limits":[{"percent":"invalid","resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable"}}}]`, "quota_unknown"},

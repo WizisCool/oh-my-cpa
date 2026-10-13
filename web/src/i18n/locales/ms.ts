@@ -16,6 +16,13 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.capability.quota_warmup_run.description": "Selepas pengesahan, gunakan sedikit kuota dengan permintaan kecil dan sahkan pengaktifan; jangan cuba semula hasil yang tidak diketahui.",
 
   "warmup.settings": "Tetapan pemanasan",
+  "warmup.verification": "Pengesahan pengaktifan",
+  "warmup.verified": "Disahkan",
+  "warmup.not_verified": "Belum disahkan",
+  "warmup.paid_fallback": "Penggunaan berbayar sandaran",
+  "warmup.paid_disabled": "Dimatikan",
+  "warmup.paid_enabled": "Diaktifkan",
+  "warmup.paid_unknown": "Tidak diketahui",
   "warmup.title": "Pemanasan tetingkap",
   "warmup.model": "Model pemanasan",
   "warmup.select_model": "Pilih model yang tersedia untuk kelayakan",

@@ -75,7 +75,9 @@ func ParseObservation(provider string, raw []byte, nowMS int64) Observation {
 		// Modern model-scoped limits supersede the legacy Fable window, including
 		// malformed evidence: falling back could authorize an exhausted model.
 		var modelLimits []json.RawMessage
-		_ = json.Unmarshal(fields["limits"], &modelLimits)
+		if rawLimits, hasLimits := fields["limits"]; hasLimits && (json.Unmarshal(rawLimits, &modelLimits) != nil || modelLimits == nil) {
+			observation.ModelWindows["fable"] = Window{State: "unknown", PeriodMS: WEEK_MS}
+		}
 		for _, rawLimit := range modelLimits {
 			limit := readFields(rawLimit)
 			model := readFields(readFields(limit["scope"])["model"])

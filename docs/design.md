@@ -2874,8 +2874,10 @@ Saving confirms the effect on all current and future inheriting credentials.
 
 The credential Quota tab adds a Window warmup section with provider inheritance or a
 complete override, effective policy, next check, latest durable result and safe pause
-reason. Its drafts survive tab changes and participate in the parent Drawer close guard.
+reason. Two quiet facts always show selected-model activation verification and the latest
+paid-fallback evidence, including unknown evidence. Its drafts survive tab changes, remain
+open after another section saves, and participate in the parent Drawer close guard.
 Manual activation requires confirmation naming the credential and model and explaining
 quota consumption. Pending and uncertain outcomes never read as activation success.
-Protocol verification and paid-fallback protection remain visible; the public demo cannot
-save or consume. Existing type, shape, spacing and semantic-feedback tokens are reused.
+Manual execution outcomes stay in the credential section without a duplicate toast;
+background confirmation updates that same result. The public demo cannot save or consume. Existing type, shape, spacing and semantic-feedback tokens are reused.

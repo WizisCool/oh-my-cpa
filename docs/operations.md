@@ -517,7 +517,8 @@ billing settings or redeem a reset credit to make warmup eligible. A zero readin
 an active fixed boundary is not an idle window. Model-scoped Sonnet, Opus and Fable
 limits can pause the selected family without blocking unrelated Haiku. Fable evidence
 accepts the legacy `iguana_necktie` or modern model-scoped `limits`; malformed modern
-evidence remains unknown rather than falling back to an apparently available legacy limit.
+evidence, including a present non-array or null `limits` field, remains unknown rather
+than falling back to an apparently available legacy limit.
 
 The background loop checks once per minute, with bounded four-way rounds of 16, and
 reuses stored quota observations targeted for refresh every five minutes. Daily starts
@@ -525,7 +526,13 @@ missed by more than one hour are not replayed. If starting now would overlap the
 daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
 zone changes future calendar decisions, not stored instants.
 
-A consuming request is recorded before it is sent. Activated, pending, skipped, failed,
+The credential section always shows selected-model activation verification and paid-fallback
+evidence; an absent observation reads Unknown. Manual outcomes stay in that section
+without a duplicate toast. Saving credential fields keeps a separate warmup draft open.
+
+A consuming request is recorded before it is sent. If pre-send revalidation refuses the
+request, its provisional cycle and daily identities are restored. A temporary startup
+recovery failure is logged and retried on later minute checks, not left stopped until restart. Activated, pending, skipped, failed,
 executing and uncertain outcomes are distinct. After a pending completion only quota
 reads are repeated; transport timeouts and restart-abandoned requests are uncertain
 and are not automatically resent. Definite rate-limit refusals get at most three

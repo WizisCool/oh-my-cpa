@@ -877,6 +877,9 @@ The OAuth toolbar offers a Warmup settings Drawer with Codex/Claude tabs, explic
 selection, reset mode and one daily time. Provider defaults are off; daily time is 06:00
 in the OMC timezone. Unsaved drafts guard close, native Back and provider switching.
 The credential Quota tab shows full-policy inheritance/override, next check, last result
-and pause reason, with a confirmed Warm up now action. Tiny requests consume quota;
+and pause reason, with a confirmed Warm up now action. Selected-model verification and
+paid-fallback evidence are always visible as two quiet facts. Saving other credential
+fields keeps a warmup draft open. Run outcomes remain inline without a duplicate toast.
+Tiny requests consume quota;
 unknown billing and unverified activation pause automation. Reuse the existing tokens,
 responsive Drawer and semantic feedback without introducing global design tokens.

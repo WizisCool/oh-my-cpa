@@ -703,11 +703,25 @@ async function checkOAuthModelRules({ page, base, check }) {
   await page.unroute('**/management/auth-files/excluded-models');
 }
 
+function oauthWarmupFixtureRoute() {
+  const credentials = new Map();
+  const settings = createWarmupFixture();
+  return [(url) => url.pathname.includes('/management/quota/warmup/'), (url, method, body) => {
+    const match = url.pathname.match(/\/warmup\/credentials\/([^/]+)(?:\/run)?$/);
+    if (!match) return settings(url, method, body);
+    const authIndex = decodeURIComponent(match[1]);
+    const file = files.find(entry => entry.auth_index === authIndex);
+    if (!file || !['codex', 'claude'].includes(file.provider)) return { status: 404, json: { code: 'resource_not_found', error: 'resource_not_found' } };
+    if (!credentials.has(authIndex)) credentials.set(authIndex, createWarmupFixture({ authIndex, provider: file.provider, name: file.name }));
+    return credentials.get(authIndex)(url, method, body);
+  }];
+}
+
 export const oauthManagementFixtures = {
   files,
   quota,
-  routes: [
-    [(url) => url.pathname.includes('/management/quota/warmup/'), (url, method, body) => createWarmupFixture({ authIndex: decodeURIComponent(url.pathname.split('/').at(-1)) })(url, method, body)],
+  get routes() { return [
+    oauthWarmupFixtureRoute(),
     [(url, method) => method === 'GET' && url.pathname.endsWith('/management/auth-files/safe-fields'), url => {
       const file = files.find(file => file.name === url.searchParams.get('name'));
       return { name:file?.name, priority:file?.priority, weight:file?.weight, note:file?.note??'', disable_cooling:false, websockets:false, using_api:false, model_aliases:[], excluded_models:[] };
@@ -739,7 +753,7 @@ export const oauthManagementFixtures = {
       flow: 'redirect',
     })],
     [(url) => url.pathname.endsWith('/management/oauth/status'), () => ({ status: 'wait', message: 'waiting' })],
-  ],
+  ]; },
 };
 
 /**
@@ -1096,7 +1110,12 @@ export async function oauthWindowWarmup({ page, base, check }) {
     const result = fixture(new URL(request.url()), request.method(), request.postData());
     await fulfillFixture(route, { status: result.status, contentType: 'application/json', body: JSON.stringify(result.json) });
   };
+  const fieldHandler = async route => {
+    const input = route.request().postDataJSON();
+    await route.fulfill({ json: { status: 'ok', file: { ...files[1], note: input.note }, fields: { name: files[1].name, note: input.note, disable_cooling: false, websockets: false, using_api: false, excluded_models: [], model_aliases: [] } } });
+  };
   await page.route('**/management/quota/warmup/**', handler);
+  await page.route('**/management/auth-files/fields', fieldHandler);
   try {
     await page.goto(`${base}/oauth-management`);
     await page.getByTestId('oauth-warmup-settings-open').click();
@@ -1138,6 +1157,26 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await until(() => consumingRequests.length === 1, { label: 'one confirmed warmup request' });
     await warmup.getByText('Window activation confirmed', { exact: true }).waitFor();
     check('manual warmup sends a confirmed revision-bound id without arbitrary upstream fields', consumingRequests[0].confirmed === true && typeof consumingRequests[0].request_id === 'string' && Object.keys(consumingRequests[0]).sort().join(',') === 'confirmed,request_id,revision');
+    await warmup.getByRole('combobox', { name: 'Policy source' }).click();
+    await page.getByText('Credential override', { exact: true }).last().click();
+    const detail = page.locator('.ant-drawer-content-wrapper').filter({ has: warmup });
+    await detail.getByRole('tab', { name: 'Configuration' }).click();
+    const note = detail.getByRole('textbox', { name: 'Note' });
+    await note.waitFor();
+    await until(() => detail.getByRole('textbox', { name: 'Prefix' }).isEnabled(), { label: 'safe credential fields loaded' });
+    await note.fill('Keep the warmup draft');
+    const savedFields = page.waitForResponse(response => response.url().endsWith('/management/auth-files/fields') && response.request().method() === 'PATCH');
+    await detail.getByRole('button', { name: 'Save Fields', exact: true }).click();
+    await savedFields;
+    await detail.getByRole('tab', { name: 'Quota' }).click();
+    await until(() => warmup.getByRole('button', { name: 'Save', exact: true }).isEnabled(), { label: 'warmup draft remains unsaved after field save' });
+    check('credential field save leaves the warmup draft and detail drawer open', await detail.isVisible());
+    await detail.locator('.ant-drawer-close').click();
+    const discardWarmup = page.locator('.ant-modal-confirm');
+    await discardWarmup.waitFor();
+    check('preserved warmup draft still requires an explicit discard decision', (await discardWarmup.innerText()).includes('Discard unsaved changes?'));
+    await discardWarmup.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await warmup.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.setViewportSize({ width: 320, height: 900 });
     await settleLayout(page);
     await warmup.scrollIntoViewIfNeeded();
@@ -1145,5 +1184,5 @@ export async function oauthWindowWarmup({ page, base, check }) {
     check('credential warmup controls fit the phone drawer', await detailBody.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
     await page.screenshot({ path: 'tmp/warmup-proof/credential-320.png' });
 
-  } finally { await page.unroute('**/management/quota/warmup/**', handler); }
+  } finally { await page.unroute('**/management/quota/warmup/**', handler); await page.unroute('**/management/auth-files/fields', fieldHandler); }
 }

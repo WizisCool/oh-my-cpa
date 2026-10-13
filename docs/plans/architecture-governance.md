@@ -1012,3 +1012,14 @@ modern precedence over legacy data and unrelated Haiku eligibility. This correct
 needs no additional live consuming request. Hermetic verification and live acceptance
 remain separate evidence; this single-account result does not verify every model,
 account tier or future upstream protocol.
+
+#### Window warmup review hardening
+
+PR #202 review follow-up preserves the original execution boundary while fixing provisional
+admission suppression, retrying startup recovery and refusing malformed modern Fable
+collections. Handler-certified refusals and field-by-field fixtures now reject missing
+confirmation, invalid IDs and missing/stale revisions independently of example body
+spelling. OAuth fixture state is provider-correct, credential-local and scenario-local.
+The credential section makes selected-model verification and paid fallback explicit,
+keeps manual outcomes on one surface, and preserves warmup drafts across real and empty
+credential field saves. Rendered and browser regressions retain their separate ownership.

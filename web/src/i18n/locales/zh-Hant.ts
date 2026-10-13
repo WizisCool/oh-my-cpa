@@ -16,6 +16,13 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.capability.quota_warmup_run.description": "確認後傳送極小請求消耗少量訂閱額度，檢查視窗啟動；不重試未知結果。",
 
   "warmup.settings": "預熱設定",
+  "warmup.verification": "啟動驗證",
+  "warmup.verified": "已驗證",
+  "warmup.not_verified": "未驗證",
+  "warmup.paid_fallback": "付費後備用量",
+  "warmup.paid_disabled": "已關閉",
+  "warmup.paid_enabled": "已啟用",
+  "warmup.paid_unknown": "未知",
   "warmup.title": "視窗預熱",
   "warmup.model": "預熱模型",
   "warmup.select_model": "選擇憑證可用的模型",

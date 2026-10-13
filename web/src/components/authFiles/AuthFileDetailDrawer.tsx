@@ -66,7 +66,7 @@ interface AuthFileDetailDrawerProps {
   onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
   quotaContent?: React.ReactNode;
- hasExternalDraft?: boolean;
+  hasExternalDraft?: boolean;
   initialSection?: 'overview' | 'configuration' | 'models';
   /**
    * Whether the safe fields may be written. The write is keyed by file name, so a
@@ -156,7 +156,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onSaved,
   onDownload,
   quotaContent,
- hasExternalDraft = false,
+  hasExternalDraft = false,
   initialSection = 'overview',
   canEdit = false,
 }) => {
@@ -185,6 +185,13 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const sessionCounterRef = useRef(0);
   const currentSessionRef = useRef<number>(0);
   const isPendingRef = useRef<boolean>(false);
+  const hasExternalDraftRef = useRef(hasExternalDraft);
+  hasExternalDraftRef.current = hasExternalDraft;
+  const closeAfterSaving = useCallback(() => {
+    // Saving another section must not discard a warmup draft, including one
+    // created while this field save was in flight.
+    if (!hasExternalDraftRef.current) onClose();
+  }, [onClose]);
 
   useEffect(() => {
     return () => {
@@ -265,7 +272,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
         }
         toast.success(t('af.save_fields_success'));
         setIsDirty(false);
-        onClose();
+        closeAfterSaving();
       }
     },
     onError: (err: unknown) => {
@@ -395,7 +402,9 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
     if (Object.keys(patch).length === 0) {
       isPendingRef.current = false;
-      onClose();
+      form.setFieldsValue(baseline);
+      setIsDirty(false);
+      closeAfterSaving();
       return;
     }
 

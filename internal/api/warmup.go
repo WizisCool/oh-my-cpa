@@ -525,6 +525,7 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 	if err = h.auditWarmup(ctx, "warmup.run", authIndex, "attempt", map[string]any{"model": result.Model, "trigger": trigger, "request_id": result.RequestID}); err != nil {
 		return result, err
 	}
+	previousCycle, previousDailyKey, previousBasis := state.LastCycle, state.DailyKey, state.ActivationBasis
 	state.ActivationBasis = before
 	state.LastCycle = fmt.Sprintf("cycle/%d", state.Generation)
 	if trigger == "daily" {
@@ -536,11 +537,13 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 	// Revalidate identity and policy after admission, before any consuming request.
 	currentFile, err := h.warmupFile(ctx, client, authIndex)
 	if err != nil || h.warmupCredentialIdentity(currentFile) != h.warmupCredentialIdentity(file) || currentFile.Disabled || currentFile.Unavailable {
+		state.LastCycle, state.DailyKey, state.ActivationBasis = previousCycle, previousDailyKey, previousBasis
 		result.Status = "failed"
 		return finish("resource_conflict")
 	}
 	current, err := h.warmupCredential(ctx, client, currentFile, false)
 	if err != nil || current.Policy != credential.Policy {
+		state.LastCycle, state.DailyKey, state.ActivationBasis = previousCycle, previousDailyKey, previousBasis
 		result.Status = "failed"
 		return finish("resource_conflict")
 	}
@@ -593,16 +596,35 @@ func (h *Handler) RunCredentialWarmup(ctx context.Context) error {
 	if h.cfg.IsDemoMode {
 		return nil
 	}
-	if err := h.recoverWarmupExecution(ctx); err != nil {
-		return err
-	}
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	return h.runCredentialWarmupTicks(ctx, ticker.C)
+}
+
+func (h *Handler) runCredentialWarmupTicks(ctx context.Context, ticks <-chan time.Time) error {
+	// Recovery must complete before a consuming round, but transient database
+	// failures must not remove the scheduler until the process is restarted.
+	recoverExecution := func() bool {
+		if err := h.recoverWarmupExecution(ctx); err != nil {
+			if ctx.Err() == nil {
+				h.logger.Warn("credential warmup recovery unavailable", "error", err)
+			}
+			return false
+		}
+		return true
+	}
+	hasRecovered := recoverExecution()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
+		case <-ticks:
+			if !hasRecovered {
+				hasRecovered = recoverExecution()
+				if !hasRecovered {
+					continue
+				}
+			}
 			if err := h.runCredentialWarmupRound(ctx); err != nil {
 				h.logger.Warn("credential warmup round unavailable")
 			}

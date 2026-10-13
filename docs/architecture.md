@@ -3313,7 +3313,10 @@ Disabled policies cause no upstream usage reads. Enabled credentials are checked
 bounded rounds of 16 with at most four concurrent contexts, targeting fresh evidence
 every five minutes and reusing newer stored quota evidence. Every consuming attempt
 performs a fresh read first. Auto and manual requests share a credential lock and durable
-receipts. Restart-abandoned executing receipts are uncertain; they are not resubmitted.
+receipts. A pre-send revalidation refusal restores the prior cycle, daily task and activation
+basis because no consuming request occurred. Restart-abandoned executing receipts are
+uncertain; they are not resubmitted. A transient startup recovery error is diagnosed and
+retried on the minute ticks; consuming rounds wait for successful recovery.
 Definite rate-limit refusals use one/five/fifteen-minute backoff, with at most three
 retries; a successful response is checked immediately and at most twice more without
 resending. Initial activation and a changed model require confirmed manual verification.

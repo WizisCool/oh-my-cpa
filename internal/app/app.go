@@ -429,7 +429,7 @@ func (a *App) Run(ctx context.Context) error {
 		go func() {
 			defer close(warmupDone)
 			if err := a.handler.RunCredentialWarmup(runCtx); err != nil && !errors.Is(err, context.Canceled) {
-				a.logger.Warn("credential window warmup loop stopped")
+				a.logger.Warn("credential window warmup loop stopped", "error", err)
 			}
 		}()
 	}

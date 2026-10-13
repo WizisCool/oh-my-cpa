@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -21,7 +23,8 @@ import (
 
 type warmupFixture struct {
 	mu                                          sync.Mutex
-	sends, reads                                int
+	sends, reads, credentialReads               int
+	onCredentialRead                            func(int) bool
 	isActive, isPaid, isUsageFailed, isTimedOut bool
 	entered, release                            chan struct{}
 }
@@ -32,6 +35,15 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/v8/management/credentials":
+			fixture.mu.Lock()
+			fixture.credentialReads++
+			read, onRead := fixture.credentialReads, fixture.onCredentialRead
+			fixture.mu.Unlock()
+			if onRead != nil && onRead(read) {
+				writer.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = writer.Write([]byte(`{"error":"temporary credential listing failure"}`))
+				return
+			}
 			_, _ = writer.Write([]byte(`{"files":[{"id":"claude-file","name":"claude.json","type":"claude","provider":"claude","auth_index":"exact-claude","source":"file"}]}`))
 		case "/v8/management/credentials/models":
 			_, _ = writer.Write([]byte(`{"models":[{"id":"claude-haiku-test"}]}`))
@@ -509,5 +521,143 @@ func TestWarmupRestartDurablyMarksAbandonedExecutionUnknown(t *testing.T) {
 	receipt, _ := handler.repo.ReadWarmupRun(ctx, "default", "exact-claude", "abandoned-run")
 	if stored.LastResult.Status != "uncertain" || receipt.Status != "uncertain" || stored.LastCycle != "cycle/0" {
 		t.Fatal("restart did not retain uncertainty and suppression")
+	}
+}
+
+func TestWarmupRevalidationRefusalDoesNotConsumeSchedule(t *testing.T) {
+	for _, trigger := range []string{"reset", "daily"} {
+		for _, refusal := range []string{"credential_read", "policy_change"} {
+			t.Run(trigger+"/"+refusal, func(t *testing.T) {
+				fixture := &warmupFixture{}
+				handler := newWarmupHandler(t, fixture)
+				now := time.Date(2026, 10, 13, 6, 0, 0, 0, time.UTC)
+				handler.nowFn = func() time.Time { return now }
+				ctx := context.Background()
+				client, _ := handler.capabilityClient(ctx)
+				file, _ := handler.warmupFile(ctx, client, "exact-claude")
+				policy := warmup.DefaultPolicy()
+				policy.Model = "claude-haiku-test"
+				policy.ResetMode = "all"
+				policy.IsDailyEnabled = trigger == "daily"
+				if err := handler.repo.WriteWarmupPolicy(ctx, "default", "provider", "claude", &policy, now.UnixMilli()); err != nil {
+					t.Fatal(err)
+				}
+				state := warmup.State{CredentialID: handler.warmupCredentialIdentity(file), Provider: "claude", IsProtocolVerified: true, VerifiedModel: policy.Model, LastCycle: "previous-cycle", DailyKey: "previous-day"}
+				if err := handler.repo.WriteWarmupState(ctx, "default", file.AuthIndex, state, now.UnixMilli()); err != nil {
+					t.Fatal(err)
+				}
+				fixture.mu.Lock()
+				fixture.credentialReads = 0
+				fixture.onCredentialRead = func(read int) bool {
+					if read != 2 {
+						return false
+					}
+					if refusal == "credential_read" {
+						return true
+					}
+					changed := policy
+					changed.IsDailyEnabled = false
+					changed.ResetMode = "off"
+					if err := handler.repo.WriteWarmupPolicy(ctx, "default", "provider", "claude", &changed, now.UnixMilli()); err != nil {
+						t.Error(err)
+					}
+					return false
+				}
+				fixture.mu.Unlock()
+				result, err := handler.executeWarmup(ctx, file.AuthIndex, "", "", false)
+				if err != nil || result.Status != "failed" || result.Reason != "resource_conflict" {
+					t.Fatalf("refusal: %+v %v", result, err)
+				}
+				refusedState, err := handler.repo.ReadWarmupState(ctx, "default", file.AuthIndex)
+				if err != nil || refusedState.LastCycle != state.LastCycle || refusedState.DailyKey != state.DailyKey {
+					t.Fatalf("unconsumed schedule lost: %+v %v", refusedState, err)
+				}
+				fixture.mu.Lock()
+				if fixture.sends != 0 {
+					t.Errorf("refusal sent %d consuming requests", fixture.sends)
+				}
+				fixture.onCredentialRead = nil
+				fixture.mu.Unlock()
+				if err := handler.repo.WriteWarmupPolicy(ctx, "default", "provider", "claude", &policy, now.UnixMilli()); err != nil {
+					t.Fatal(err)
+				}
+				retry, err := handler.executeWarmup(ctx, file.AuthIndex, "", "", false)
+				if err != nil || retry.Status != "pending" {
+					t.Fatalf("schedule retry: %+v %v", retry, err)
+				}
+				fixture.mu.Lock()
+				defer fixture.mu.Unlock()
+				if fixture.sends != 1 {
+					t.Fatalf("retry sent %d", fixture.sends)
+				}
+			})
+		}
+	}
+}
+
+type warmupLogWriter func([]byte) (int, error)
+
+func (write warmupLogWriter) Write(payload []byte) (int, error) { return write(payload) }
+
+func TestWarmupLoopRecoversOnLaterTickWithoutRestart(t *testing.T) {
+	fixture := &warmupFixture{}
+	handler := newWarmupHandler(t, fixture)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	state := warmup.State{Provider: "claude", LastResult: &warmup.Result{RequestID: "abandoned-live-run", Status: "executing", Model: "claude-haiku-test", StartedAtMS: handler.now().UnixMilli()}}
+	if err := handler.persistWarmupResult(ctx, "exact-claude", state, *state.LastResult); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, `ALTER TABLE credential_warmup_state RENAME TO credential_warmup_state_held`); err != nil {
+		t.Fatal(err)
+	}
+	logs := make(chan string, 8)
+	handler.logger = slog.New(slog.NewJSONHandler(warmupLogWriter(func(payload []byte) (int, error) { logs <- string(payload); return len(payload), nil }), nil))
+	ticks := make(chan time.Time)
+	done := make(chan error, 1)
+	go func() { done <- handler.runCredentialWarmupTicks(ctx, ticks) }()
+	select {
+	case err := <-done:
+		t.Fatalf("transient recovery failure stopped loop: %v", err)
+	case line := <-logs:
+		var record map[string]any
+		if json.Unmarshal([]byte(line), &record) != nil || record["error"] == nil {
+			t.Fatalf("missing recovery diagnostic: %s", line)
+		}
+	case <-ctx.Done():
+		t.Fatal("no recovery failure event")
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, `ALTER TABLE credential_warmup_state_held RENAME TO credential_warmup_state`); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{}, 1)
+	fixture.mu.Lock()
+	fixture.onCredentialRead = func(int) bool {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		return false
+	}
+	fixture.mu.Unlock()
+	select {
+	case ticks <- handler.now():
+	case <-ctx.Done():
+		t.Fatal("loop did not accept recovery tick")
+	}
+	select {
+	case <-entered:
+	case <-done:
+		t.Fatal("loop stopped instead of resuming rounds")
+	case <-ctx.Done():
+		t.Fatal("no scheduled round after recovery")
+	}
+	result, err := handler.repo.ReadWarmupRun(ctx, "default", "exact-claude", state.LastResult.RequestID)
+	if err != nil || result == nil || result.Status != "uncertain" {
+		t.Fatalf("abandoned receipt not recovered: %+v %v", result, err)
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("shutdown: %v", err)
 	}
 }

@@ -21,6 +21,13 @@ const DICT: Record<string, [string, string]> = {
   'agent.capability.quota_warmup_run.description': ["确认后发送极小请求消耗少量订阅额度，检查窗口激活；不重试未知结果。", "After confirmation, consume a small amount of quota with a tiny request and verify activation; never retry an unknown outcome."],
 
   'warmup.settings': ["预热设置", "Warmup settings"],
+  'warmup.verification': ['激活验证', 'Activation verification'],
+  'warmup.verified': ['已验证', 'Verified'],
+  'warmup.not_verified': ['未验证', 'Not verified'],
+  'warmup.paid_fallback': ['付费后备用量', 'Paid fallback'],
+  'warmup.paid_disabled': ['已关闭', 'Disabled'],
+  'warmup.paid_enabled': ['已启用', 'Enabled'],
+  'warmup.paid_unknown': ['未知', 'Unknown'],
   'warmup.title': ["窗口预热", "Window warmup"],
   'warmup.model': ["预热模型", "Warmup model"],
   'warmup.select_model': ["选择凭证可用的模型", "Select a model available to the credential"],
