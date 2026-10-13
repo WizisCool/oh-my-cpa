@@ -46,7 +46,7 @@ it('reads inherited policy without writing and reports credential-local draft ow
 });
 it('keeps provider changes disabled while its default draft is unsaved', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
-  await screen.findByText("With a daily time set, the five-hour window starts at that time when possible. If it can't be sent within an hour of that time, that day is skipped.");
+  await screen.findByText("With a daily time set, the five-hour window starts at that time when possible. If it can't be sent within an hour of that time, that day's daily warmup is skipped.");
   expect(screen.queryByText(/First select a model and run Warm up now/)).toBeNull();
   fireEvent.click(screen.getByRole('switch', { name: 'Daily scheduled warmup' }));
   expect(screen.getByRole('tab', { name: 'Claude' }).getAttribute('aria-disabled')).toBe('true');

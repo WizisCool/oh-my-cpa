@@ -34,7 +34,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "warmup.daily_time": "每日時間",
   "warmup.description": "傳送極小請求以開啟對應憑證的額度視窗滾動。",
   "warmup.timezone": "時區：{zone}",
-  "warmup.daily_priority": "開啟每日定時後，五小時視窗優先從該時間開始；超過該時間一小時仍未發出則當天跳過。",
+  "warmup.daily_priority": "開啟每日定時後，五小時視窗優先從該時間開始；超過該時間一小時仍未發出，則跳過當天的每日預熱。",
   "warmup.confirm_settings": "儲存預熱設定？",
   "warmup.confirm_settings_desc": "使用預設設定的憑證（包括之後新增的）都會依此預熱，每次預熱消耗少量額度。",
   "warmup.confirm_credential_desc": "儲存後此憑證依新設定預熱，每次預熱消耗少量額度。",
