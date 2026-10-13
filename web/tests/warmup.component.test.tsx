@@ -33,10 +33,10 @@ it('uses safe defaults and requires a model before automatic activation', () => 
 });
 it('reads inherited policy without writing and reports credential-local draft ownership', async () => {
   const onDirtyChange = vi.fn(); const surface = mount(<CredentialWarmup authIndex="exact-claude" onDirtyChange={onDirtyChange} />);
-  await screen.findByText('Inherit provider default');
+  await screen.findByText('Use provider default');
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Policy source' }));
-  fireEvent.click(await screen.findByText('Credential override'));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Settings source' }));
+  fireEvent.click(await screen.findByText('Custom for this credential'));
   await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
   expect((screen.getByRole('button', { name: 'Warm up now' }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -46,7 +46,7 @@ it('reads inherited policy without writing and reports credential-local draft ow
 });
 it('keeps provider changes disabled while its default draft is unsaved', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
-  await screen.findByText('Daily time takes priority: wait if a new five-hour window would overlap the next daily start. Missed starts are only caught up within one hour.');
+  await screen.findByText("With a daily time set, the five-hour window starts at that time when possible. If it can't be sent within an hour of that time, that day is skipped.");
   expect(screen.queryByText(/First select a model and run Warm up now/)).toBeNull();
   fireEvent.click(screen.getByRole('switch', { name: 'Daily scheduled warmup' }));
   expect(screen.getByRole('tab', { name: 'Claude' }).getAttribute('aria-disabled')).toBe('true');
@@ -57,18 +57,18 @@ it('keeps provider changes disabled while its default draft is unsaved', async (
 
 it('shows activation observations and billing evidence independently of automatic readiness', async () => {
   const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
-  await screen.findByText('Activation observation');
+  await screen.findByText('Model check');
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, reason: undefined } : previous));
-  expect(screen.getByText('Not observed for this model')).toBeTruthy();
+  expect(screen.getByText('Not verified yet')).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Warm up now' }) as HTMLButtonElement).disabled).toBe(false);
-  expect(screen.getByText('Paid fallback')).toBeTruthy();
+  expect(screen.getByText('Paid overage')).toBeTruthy();
   expect(screen.getByText('Unknown')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, state: { ...previous.state, protocol_verified: true, verified_model: previous.policy.model, observation: { observed_at_ms: 1770000000000, paid_fallback: 'disabled' } } } : previous));
-  await screen.findByText('Observed for this model');
+  await screen.findByText('Verified to start the window');
   expect(screen.getByText('Disabled')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, policy: { ...previous.policy, model: 'a-different-model' } } : previous));
-  await screen.findByText('Not observed for this model');
+  await screen.findByText('Not verified yet');
   surface.unmount(); surface.client.clear();
 });
 
@@ -78,12 +78,12 @@ it('reports a completed manual run once in the durable credential section', asyn
   fireEvent.click(runButton);
   const dialog = await screen.findByRole('dialog');
   fireEvent.click(within(dialog).getByRole('button', { name: 'Warm up now' }));
-  await screen.findByText('Window activation confirmed');
-  expect(screen.getAllByText('Window activation confirmed')).toHaveLength(1);
+  await screen.findByText('Window started');
+  expect(screen.getAllByText('Window started')).toHaveLength(1);
   expect(surface.requests.filter(request => request.method === 'POST')).toHaveLength(1);
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous && previous.state.last_result ? { ...previous, state: { ...previous.state, last_result: { ...previous.state.last_result, request_id: 'later-automatic-run', started_at_ms: previous.state.last_result.started_at_ms + 1, status: 'failed', reason: 'rate_limited' } } } : previous));
   await screen.findByText('Warmup failed');
-  expect(screen.queryByText('Window activation confirmed')).toBeNull();
+  expect(screen.queryByText('Window started')).toBeNull();
   surface.unmount(); surface.client.clear();
 });

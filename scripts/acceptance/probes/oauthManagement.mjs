@@ -1167,10 +1167,10 @@ export async function oauthWindowWarmup({ page, base, check }) {
     check('manual warmup names the selected model and does not consume before confirmation', consumingRequests.length === 0 && (await manualConfirmation.innerText()).includes('claude-haiku-test'));
     await manualConfirmation.getByRole('button', { name: 'Warm up now', exact: true }).click();
     await until(() => consumingRequests.length === 1, { label: 'one confirmed warmup request' });
-    await warmup.getByText('Window activation confirmed', { exact: true }).waitFor();
+    await warmup.getByText('Window started', { exact: true }).waitFor();
     check('manual warmup sends a confirmed revision-bound id without arbitrary upstream fields', consumingRequests[0].confirmed === true && typeof consumingRequests[0].request_id === 'string' && Object.keys(consumingRequests[0]).sort().join(',') === 'confirmed,request_id,revision');
-    await warmup.getByRole('combobox', { name: 'Policy source' }).click();
-    await page.getByText('Credential override', { exact: true }).last().click();
+    await warmup.getByRole('combobox', { name: 'Settings source' }).click();
+    await page.getByText('Custom for this credential', { exact: true }).last().click();
     const detail = page.locator('.ant-drawer-content-wrapper').filter({ has: warmup });
     await detail.getByRole('tab', { name: 'Configuration' }).click();
     const note = detail.getByRole('textbox', { name: 'Note' });
