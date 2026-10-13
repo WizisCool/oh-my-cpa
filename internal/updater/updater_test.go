@@ -74,15 +74,12 @@ func newDeployment(t *testing.T, consoleImage string) deployment {
 
 func awaitJob(t *testing.T, service *Service) Job {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if job := service.LastJob(); job != nil && job.IsFinished() {
-			return *job
-		}
-		time.Sleep(time.Millisecond)
+	service.jobs.Wait()
+	job := service.LastJob()
+	if job == nil || !job.IsFinished() {
+		t.Fatalf("the job did not finish: %+v", job)
 	}
-	t.Fatalf("the job did not finish: %+v", service.LastJob())
-	return Job{}
+	return *job
 }
 
 func TestParseReferenceAndPinning(t *testing.T) {
@@ -279,14 +276,7 @@ func TestUpdateHandsTheFinishedJobToTheUpdatersSuccessor(t *testing.T) {
 	}
 	awaitJob(t, stack.service)
 
-	var successor *fakeContainer
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if successor = stack.daemon.named(SIDECAR_NAME); successor != nil && successor.ID != predecessor.ID {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	successor := stack.daemon.named(SIDECAR_NAME)
 	if successor == nil || successor.ID == predecessor.ID || successor.ImageID != "sha256:new" {
 		t.Fatalf("the updater must start a successor on the new image: %+v", successor)
 	}

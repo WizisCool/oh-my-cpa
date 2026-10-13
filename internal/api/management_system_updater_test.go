@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -284,10 +287,7 @@ func TestUpdateOutcomeIsRecordedOnceEvenAcrossARestart(t *testing.T) {
 	}
 	fixture.sidecar.finish(updater.StageRolledBack, "the replacement exited after starting")
 
-	deadline := time.Now().Add(5 * time.Second)
-	for len(fixture.audits(t, "system.update.completed")) == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
+	fixture.handler.updateWatchers.Wait()
 	outcomes := fixture.audits(t, "system.update.completed")
 	if len(outcomes) != 1 || outcomes[0].Result != "failure" || outcomes[0].Details["stage"] != updater.StageRolledBack {
 		t.Fatalf("a rolled-back job is a failure on record: %+v", outcomes)
@@ -309,5 +309,84 @@ func TestInterruptedConsoleUpdateIsRecordedByTheNextProcess(t *testing.T) {
 	outcomes := fixture.audits(t, "system.update.completed")
 	if len(outcomes) != 1 || outcomes[0].Result != "success" || outcomes[0].Details["job_id"] != "omc-7" || outcomes[0].Details["to_version"] != "v1.1.0" {
 		t.Fatalf("the process that replaced the console records the outcome: %+v", outcomes)
+	}
+}
+
+// The mock the browser probes and the typed client's contract suite answer with is
+// this corpus; certifying it here is what keeps those layers on the handler's wire.
+func TestSystemUpdaterSharedWireContract(t *testing.T) {
+	raw, err := os.ReadFile("../../scripts/acceptance/contracts/system-updater.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Version      int             `json:"version"`
+		Ready        json.RawMessage `json:"ready"`
+		NotInstalled json.RawMessage `json:"not_installed"`
+		Accepted     struct {
+			Body   json.RawMessage `json:"body"`
+			Status int             `json:"status"`
+			Job    json.RawMessage `json:"job"`
+		} `json:"accepted"`
+		Refusals []struct {
+			ID       string          `json:"id"`
+			Body     json.RawMessage `json:"body"`
+			Status   int             `json:"status"`
+			Response json.RawMessage `json:"response"`
+		} `json:"refusals"`
+	}
+	if err := json.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	if contract.Version != 1 || len(contract.Refusals) == 0 {
+		t.Fatal("unsupported or empty updater contract")
+	}
+	assertWire := func(name string, actual []byte, expected json.RawMessage) {
+		t.Helper()
+		var actualValue, expectedValue any
+		if err := json.Unmarshal(actual, &actualValue); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := json.Unmarshal(expected, &expectedValue); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !reflect.DeepEqual(actualValue, expectedValue) {
+			t.Errorf("%s wire drift:\nactual   %s\nexpected %s", name, actual, expected)
+		}
+	}
+	read := func(handler *Handler) []byte {
+		recorder := httptest.NewRecorder()
+		handler.getSystemUpdater(recorder, httptest.NewRequest(http.MethodGet, "/omc/api/v1/management/system/updater", nil))
+		return recorder.Body.Bytes()
+	}
+	post := func(handler *Handler, body json.RawMessage) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		handler.postSystemUpdaterApply(recorder, httptest.NewRequest(http.MethodPost, "/omc/api/v1/management/system/updater/apply", bytes.NewReader(body)))
+		return recorder
+	}
+
+	assertWire("ready", read(newUpdaterFixture(t).handler), contract.Ready)
+	absent := newUpdaterFixture(t)
+	absent.sidecar.statusErr = updater.ErrUnreachable
+	assertWire("not_installed", read(absent.handler), contract.NotInstalled)
+
+	accepted := post(newUpdaterFixture(t).handler, contract.Accepted.Body)
+	if accepted.Code != contract.Accepted.Status {
+		t.Fatalf("accepted status = %d, want %d", accepted.Code, contract.Accepted.Status)
+	}
+	var admitted struct {
+		Job json.RawMessage `json:"job"`
+	}
+	if err := json.Unmarshal(accepted.Body.Bytes(), &admitted); err != nil {
+		t.Fatal(err)
+	}
+	assertWire("accepted job", admitted.Job, contract.Accepted.Job)
+
+	for _, refusal := range contract.Refusals {
+		response := post(newUpdaterFixture(t).handler, refusal.Body)
+		if response.Code != refusal.Status {
+			t.Errorf("%s status = %d, want %d", refusal.ID, response.Code, refusal.Status)
+		}
+		assertWire(refusal.ID, response.Body.Bytes(), refusal.Response)
 	}
 }

@@ -161,9 +161,61 @@
   white-space: normal;
 }
 
+/* The one filled control in the row. It takes the row's hit height rather than the small
+   button's, and wraps like its neighbours when a long catalog meets a narrow screen. */
+.update-action {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-height: 32px;
+  height: auto;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: normal;
+}
+
 .version-action-pressed,
 .version-action-pressed:hover {
   color: var(--fg);
+}
+
+.update-confirm {
+  max-width: 280px;
+}
+
+/* The setup step is part of the versions card, not a card of its own: it explains why the
+   versions above carry no update action. */
+.updater-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.updater-setup-title {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.updater-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.updater-command code {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .changelog-count {

@@ -170,7 +170,12 @@ replace those tests.
 `.github/workflows/release.yml`. It needs Docker and a built native image, creates only
 isolated containers/volumes, waits on health-status events, and tests the actual image's
 non-root/read-only runtime, SQLite writes, normalized base paths, sign-in, embedded SPA
-and running-version endpoints. It is not part of `test:fast` or ordinary static gates.
+and running-version endpoints. It also runs the image as the updater: the image's own
+health probe must report that role healthy, and `updater install` must create a hardened
+updater beside a running console, leave the console in place, and let the console read
+the updater's status with no setting on either side. That check replaces a container
+named `oh-my-cpa-updater`, so it refuses to start on a host that already has one. It is
+not part of `test:fast` or ordinary static gates.
 Release identity is resolved first, then static, full built-browser/demo and three probe shards run on the exact revision in parallel. The `verify` aggregate requires every result to succeed before native packaging or container publication. The browser lanes provision and launch-probe Chromium with
 `scripts/install-chromium.mjs`; local parity is `pnpm verify:full`. Dependency installation alone does not install the browser binary.
 
@@ -1178,3 +1183,31 @@ explicit protection facts, and a
 single inline run outcome. The browser warmup scenario also saves another section, retains
 its draft and exercises the subsequent native discard decision. These extend existing
 owners; no new runner, fixed wait or live consuming test is introduced.
+
+## Console updates (ADR 0099)
+
+The updater is tested against a Docker daemon it cannot tell from a real one.
+`internal/updater/fake_daemon_test.go` is an in-memory Engine served over a real unix
+socket, so the production client, its API-version negotiation and its wire format are
+what run; `internal/updater/updater_test.go` owns replacement (including what is and is
+not inherited from the old image), rollback and tag restoration, pinned and unidentified
+targets, signature, repository and version checks, token derivation, self-replacement
+and the job hand-off, the installer, and reconciliation after an interrupted job.
+`internal/api/management_system_updater_test.go` owns the console side: each state a
+missing updater reduces to, admission recorded before the updater is asked, refusal when
+the audit write fails, and one outcome event across a restart.
+
+The wire corpus is `scripts/acceptance/contracts/system-updater.json`, certified by
+`TestSystemUpdaterSharedWireContract` and consumed by the typed client in
+`web/tests/system-updater.contract.test.ts` and by
+`scripts/acceptance/system-updater-fixture.mjs`, the mock every other layer answers
+with. `web/tests/system-update.component.test.tsx` owns what a pure function cannot
+observe: the question before the request, the card holding its state while the console
+restarts under it, a result reported once, and giving up on an updater that forgot the
+job or stopped answering. `scripts/test-system-versions.ts` owns the offer derivation.
+The `system-information-narrow` scenario owns the update action's geometry beside the
+version comparison at 320px in the longest catalog. Signing is covered by
+`scripts/sign-release-manifest.test.mjs` and the release workflow's ordering invariants
+by `scripts/release-plan.test.mjs`; `scripts/deployment.test.mjs` holds the Compose
+service to its boundary (the socket and nothing else). Real container replacement is
+exercised only by `scripts/docker-smoke.mjs`, described above.

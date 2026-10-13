@@ -581,6 +581,11 @@
       "content_type": "application/json; charset=utf-8",
       "body": "{\"stargazers_count\":null}"
     },
+    "system-updater": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"job\":null,\"products\":[],\"state\":\"disabled\"}"
+    },
     "system-updates": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",

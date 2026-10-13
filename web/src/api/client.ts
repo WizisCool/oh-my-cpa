@@ -51,6 +51,8 @@ import {
   SystemUpdatesResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
+  SystemUpdaterResponse,
+  ReleaseProduct,
 } from '../types/system';
 import type {
   PluginConfigResponse,
@@ -1088,6 +1090,18 @@ export const api = {
 
   async getSystemUpdates(): Promise<SystemUpdatesResponse> {
     return request<SystemUpdatesResponse>('/management/system/updates', { method: 'GET' });
+  },
+
+  async getSystemUpdater(): Promise<SystemUpdaterResponse> {
+    return request<SystemUpdaterResponse>('/management/system/updater', { method: 'GET' });
+  },
+
+  /** Asks the updater to replace one product; 202 means admitted, not finished. */
+  async applySystemUpdate(product: ReleaseProduct): Promise<SystemUpdaterResponse> {
+    return request<SystemUpdaterResponse>('/management/system/updater/apply', {
+      method: 'POST',
+      body: JSON.stringify({ product }),
+    });
   },
 
   async checkUpdates(): Promise<{

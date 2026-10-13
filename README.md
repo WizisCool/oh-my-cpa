@@ -135,6 +135,16 @@ services:
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -155,7 +165,7 @@ to CPA at `http://127.0.0.1:8317`.
 
 #### CLIProxyAPI is already installed
 
-Add the service under `services:` in the Compose file that runs CPA, and merge
+Add the services under `services:` in the Compose file that runs CPA, and merge
 `oh-my-cpa-data:` into the top-level `volumes:` key if one exists. `cli-proxy-api` is
 the service name in CPA's own Compose file; replace it if the service is named
 differently.
@@ -174,6 +184,16 @@ differently.
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -185,7 +205,9 @@ OMCPA_CPA_MANAGEMENT_KEY=<CPA's management key in plaintext, not the hash in con
 OMCPA_MASTER_KEY=<output of: openssl rand -hex 32>
 ```
 
-Run `docker compose up -d oh-my-cpa`, which leaves the CPA container running as it is.
+Add the `oh-my-cpa-updater` service from the snippet as well to update from the console.
+Run `docker compose up -d oh-my-cpa oh-my-cpa-updater`, which leaves the CPA container
+running as it is.
 Open **`http://127.0.0.1:8080/omc/`** and sign in with the management key.
 
 #### Standalone
@@ -212,6 +234,16 @@ services:
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -225,6 +257,25 @@ OMCPA_MASTER_KEY=<output of: openssl rand -hex 32>
 
 Run `docker compose up -d`, then open **`http://127.0.0.1:8080/omc/`** and sign in with
 the management key.
+
+### Updating
+
+With the `oh-my-cpa-updater` service in place, **System Information** in the console shows
+**Update now** beside a newer release of Oh My CPA or CLIProxyAPI. The updater pulls the
+image, replaces the container with its settings, volumes and networks unchanged, and
+restores the previous container if the new one does not start.
+
+A deployment installed before this service existed gains it with one command on the
+Docker host; the Compose file is not edited:
+
+```bash
+docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+```
+
+The command adds an `oh-my-cpa-updater` container and brings Oh My CPA up to the current
+release in the same step. `docker rm -f oh-my-cpa-updater` removes it. An image pinned to
+a version tag is never changed from the console. [Upgrading](docs/install.md#upgrading)
+describes each case and the manual alternative.
 
 ### Install a native executable
 
@@ -244,6 +295,10 @@ for configuration, permissions and upgrades.
 CPA hands each usage record to a single reader. If another usage tracker reads the same
 CPA, stop it, or add `OMCPA_USAGE_INGEST_MODE: "off"` under `environment:` to use OMC
 for management only. Other management panels do not conflict.
+
+`oh-my-cpa-updater` mounts the Docker socket, which amounts to control of Docker on that
+host. Removing the service from the Compose file turns console updates off; updates are
+then applied with `docker compose pull && docker compose up -d`.
 
 The [installation guide](docs/install.md) covers the hardened Compose files published
 with each release, remote access, HTTPS, building from source, upgrades and

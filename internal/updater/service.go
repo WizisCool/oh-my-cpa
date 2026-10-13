@@ -119,6 +119,9 @@ type Service struct {
 	mu      sync.Mutex
 	job     *Job
 	now     func() time.Time
+	// jobs counts update jobs in flight, the updater's own replacement included, so
+	// a caller can wait for one to end instead of polling for it.
+	jobs sync.WaitGroup
 }
 
 // NewService builds a Service.
@@ -430,7 +433,11 @@ func (s *Service) Start(ctx context.Context, product string, manifest []byte, si
 	s.mu.Unlock()
 
 	// The request that admitted the job ends long before the job does.
-	go s.run(context.WithoutCancel(ctx), container, reference, pullReference, product)
+	s.jobs.Add(1)
+	go func() {
+		defer s.jobs.Done()
+		s.run(context.WithoutCancel(ctx), container, reference, pullReference, product)
+	}()
 	return admitted, nil
 }
 

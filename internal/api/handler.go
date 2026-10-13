@@ -63,6 +63,8 @@ type Handler struct {
 	isContainerised bool
 	// updatePollInterval overrides how often a running update is re-read; tests set it.
 	updatePollInterval time.Duration
+	// updateWatchers counts the goroutines waiting to record an update's outcome.
+	updateWatchers sync.WaitGroup
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher

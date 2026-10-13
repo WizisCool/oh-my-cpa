@@ -37,6 +37,9 @@ for the target architecture and injects `internal/config.BuildVersion` from the 
 tag. The final Alpine image runs as uid/gid `10001:10001` with `/data` as its only
 persistent writable directory. Its own `deploy/healthcheck.sh` normalizes the prefix
 through `deploy/base-path.sh`; `degraded` is process readiness, not gateway connectivity.
+The same image is the updater when its command is `updater serve` (ADR 0099): the probe
+then asks the updater instead, so that role needs no health check of its own, and both
+release Compose files declare it as a second service that alone mounts the Docker socket.
 
 Docker Hub distributes `wiziscool/oh-my-cpa` for amd64 and arm64. The full Compose
 file pulls CPA and OMC with loopback host ports; OMC-only Compose attaches to a fresh
@@ -59,6 +62,12 @@ match CPA's Darwin/Windows/Linux/FreeBSD amd64/arm64 coverage. They build the SP
 then cross-compile CGO-free Go with the same version injection and embedded IANA zone
 data. The extracted host Linux package is smoke-tested; foreign targets are build
 coverage, not claims of target-native execution. ADR 0066 records the asset contract.
+The release job also signs `release-manifest.json` (version, image repository and the
+pushed multi-platform digest) with the Ed25519 key in its `RELEASE_SIGNING_KEY` secret,
+after the native assets are verified and before anything is uploaded; the job fails when
+the key is absent or does not match `internal/updater/release_public_key.txt`, which is
+the key compiled into the binary. `scripts/release-workflow.mjs` holds that ordering and
+the secret's confinement to the release job as workflow invariants.
 `docs/releasing.md` records the maintainer workflow
 and ADR 0056 the publication ordering and immutable version identity.
 
@@ -110,6 +119,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage/ingest` | Collector loop, decode processor, usage-fact fold and data-lifecycle maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
 | `internal/release` | Published-version observation: version comparison, the release feed client, the stored index, and the project's star count for the header link | `repository` |
+| `internal/updater` | The updater role of the binary (`oh-my-cpa updater serve\|install\|healthcheck`, ADR 0099): a Docker Engine API client over the unix socket, container replacement with rollback, signed-manifest verification, the two-request control service, the one-command installer, and the client the console uses to reach it | `release` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
 | `internal/capability` | Agent capability declarations, JSON Schema validation, permission/risk rules, pending-operation store, executor audit | `repository`, `crypto` |
 | `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system, model directory) used by both console handlers and capabilities | `capability`, `cpa/management`, `cpa/gateway`, `modelcatalog`, `pricing`, `quota`, `repository` |
@@ -2158,11 +2168,13 @@ once for both the gateway's version header and its credential count), the plugin
 provider counts, and the database, collector, record-count and admission reads - so the page
 waits for its slowest read rather than for the sum of them.
 
-The management system surface is seven routes: `GET /management/system` (the page),
+The management system surface is nine routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `GET
 /management/system/repository` (the project's star count for the header link), `GET
 /management/system/updates` (both products' stored version answers for the shell's update
-indicator), `POST
+indicator), `GET /management/system/updater` (whether this deployment can apply updates,
+per product, and the running or last update), `POST /management/system/updater/apply`
+(start one; see [Console updates](#console-updates-adr-0099)), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
 /management/system/maintenance` (the running or last job) and `POST
 /management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
@@ -2306,6 +2318,65 @@ last successful check time so the reader can judge its age. The routine
 "last checked" readout was deliberately dropped from the cards - it was the same
 timestamp on every one of them - so staleness is now something the page states when a
 check fails rather than a number a reader has to interpret.
+
+### Console updates (ADR 0099)
+
+Applying an update is a second process's job. The console container cannot replace
+itself and must not hold the Docker socket, so `internal/updater` runs as a sidecar from
+the same image and the console talks to it over the Docker network:
+
+```text
+System Information page
+  └─ POST /management/system/updater/apply {product}
+       ├─ updater status: ready? product available? (else 409 with the reason as `code`)
+       ├─ omc only: stored release answer says update_available
+       │            └─ internal/release downloads release-manifest.json + .sig (forwarded unread)
+       ├─ audit system.update.apply = admitted   (a failed audit write refuses the update)
+       └─ POST http://oh-my-cpa-updater:8090/v1/update   Authorization: Bearer HMAC(master key)
+            ├─ omc: verify signature, repository and non-regressing version; pull repo@digest; tag
+            ├─ cpa: pull the configured tag
+            ├─ stop old, rename it to <name>-omc-previous, create + start replacement, await healthy
+            │      └─ on failure: remove replacement, rename back, start old, re-point the tag
+            └─ omc only: replace the updater itself, handing the finished job to its successor
+```
+
+`GET /management/system/updater` reduces every way of not having an updater to a state
+the page can explain: `ready`, `not_installed` (a containerised console with no answer,
+which the install command fixes), `not_containerised` (a native install), `disabled`
+(`OMCPA_UPDATER_ENABLED=false`) and `rejected` (an updater that does not accept this
+console's token). The read is `200` in all of them. Products carry `action` and
+`reason`: `pinned`, `not_a_local_container`, `signature_unavailable`,
+`container_not_found`, `ambiguous_container`. Demo mode wires no updater: the read
+answers `disabled` and the apply route is refused by the demo policy.
+
+Three invariants hold the design together:
+
+- **The updater decides what it touches.** Its control surface takes a product name. The
+  console container, the gateway container and the image reference are resolved by the
+  updater from Docker's own state, never supplied by the caller.
+- **Verification happens where the authority is.** The console forwards the manifest and
+  signature as bytes; the updater, which holds the socket, checks them against the key
+  compiled into its own binary.
+- **The outcome is recorded by whoever is alive.** A gateway update finishes while the
+  admitting process still runs, and a goroutine writes `system.update.completed`. A
+  console update kills that process, so `Handler.RecordInterruptedUpdate` asks the
+  updater for its last job when the next process starts; the audit event is keyed by the
+  job ID so the two paths cannot both record it.
+
+The updater role has one loop of its own, `Service.KeepLinked`: an installed updater
+lives outside the deployment's Compose project, so it follows Docker's container-start
+events and re-attaches the console to the shared network whenever Compose recreates it.
+A Compose-declared updater shares the project network and runs no such loop.
+
+The updater keeps a job in memory only. A restart mid-replacement is finished by
+`Service.Reconcile`, which looks for a `-omc-previous` container: with a healthy
+replacement the leftover is removed, without one it is restored.
+
+On the page, `useConsoleUpdate` follows one job. While it does, a failed read or a
+`not_installed` answer is not shown, because both are what a console restart looks like
+from the browser; the last answer from a working updater stands until the job reports
+its end, the updater forgets it, or ten minutes pass without an answer. A finished
+console update reloads the page, since the scripts it holds belong to the old version.
 
 ## 11. Database maintenance and the write gate
 

@@ -234,7 +234,11 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 		refuse(http.StatusBadGateway, "failure", "updater_unreachable", "the updater did not answer")
 		return
 	}
-	go h.recordUpdateOutcome(job.ID)
+	h.updateWatchers.Add(1)
+	go func() {
+		defer h.updateWatchers.Done()
+		h.recordUpdateOutcome(job.ID)
+	}()
 	writeJSON(writer, http.StatusAccepted, SystemUpdaterDTO{State: updaterReady, Products: dto.Products, Job: updaterJobDTO(&job)})
 }
 

@@ -71,6 +71,23 @@ Docker Hub repository visibility public so an installation can pull without logg
 Enable Actions in the repository. Restrict creation/movement of release tags to trusted
 maintainers with repository rules; a version tag is a publishing authority.
 
+Console updates verify each release against a signature (ADR 0099). Generate the key
+pair once, on a trusted machine:
+
+```bash
+node scripts/sign-release-manifest.mjs --generate-key release-signing-key.txt
+gh secret set RELEASE_SIGNING_KEY --repo WizisCool/oh-my-cpa < release-signing-key.txt
+```
+
+The command writes the private key to the named file and the public key to
+`internal/updater/release_public_key.txt`. Commit the public key file, store the private
+key file somewhere offline and delete it from the working directory; it is the only copy
+besides the Actions secret, which cannot be read back. The release job fails at its
+signing step when the secret is missing or does not match the committed public key, so a
+release can never be published unsigned. Replacing the key pair means installations
+running a release built with the old public key reject newer manifests and must be
+updated by hand once.
+
 ## Version contract
 
 - Stable tags are **`vMAJOR.MINOR.PATCH`**, without leading zeros or suffixes. The tag
@@ -124,7 +141,8 @@ the [v0.2.9 release notes](releases/v0.2.9.md).
      failure, cancellation or skipped prerequisites prevent publication.
    - **publish** builds a native image and runs `scripts/docker-smoke.mjs` to verify
      the actual non-root/read-only package, SQLite permissions, canonical base paths,
-     health, login and version endpoints. It then builds/pushes the amd64/arm64 image
+     health, login and version endpoints, and that `updater install` creates a hardened
+     updater the console reaches with no setting on either side. It then builds/pushes the amd64/arm64 image
      with provenance and SBOM to Docker Hub.
    - **native** runs after verification, builds the eight archives and checksum
      manifest, smoke-tests the extracted Linux package, asserts clean generated state
@@ -133,6 +151,8 @@ the [v0.2.9 release notes](releases/v0.2.9.md).
      with no repository-write permission.
    - **release** runs only after both native packaging and a successful Docker push,
      revalidates downloaded assets against their checksums and expected matrix, then
+     signs `release-manifest.json` for the pushed digest (`release-manifest.json.sig`;
+     neither file is listed in `checksums.txt`, since the signature is their check) and
      stages new GitHub releases as drafts with generated notes, the multi-platform
      digest and all assets. Only after every attachment succeeds does it recheck
      latest policy and publish the draft. Existing releases receive verified

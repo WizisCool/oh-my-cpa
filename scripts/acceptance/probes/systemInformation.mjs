@@ -1180,9 +1180,11 @@ export async function systemInformationNarrow({ base, page, check }) {
         }
       }
     }
-    // Both products' change-log actions, plus the ignore toggle the gateway's available update adds.
+    // Both products' change-log actions, plus the update action and the ignore toggle the
+    // gateway's available update adds.
     const changelogControls = Array.from(document.querySelectorAll('[data-testid^="sys-product-"] button'));
-    const areChangelogControlsContained = changelogControls.length === 3 && changelogControls.every((control) => {
+    const hasUpdateAction = changelogControls.filter((control) => control.dataset.testid === 'sys-apply-update').length === 1;
+    const areChangelogControlsContained = changelogControls.length === 4 && hasUpdateAction && changelogControls.every((control) => {
       const versionRow = control.closest('[data-testid="sys-version-row"]');
       const comparison = versionRow?.querySelector('[data-testid="sys-version-comparison"]');
       if (!comparison || comparison.contains(control)) return false;

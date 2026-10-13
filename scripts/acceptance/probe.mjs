@@ -20,6 +20,7 @@
 import { runScenarioQueue } from './probe-scheduler.mjs';
 import { appendProbeTiming } from './probe-timings.mjs';
 import { createPreferenceFixture } from './preferences-fixture.mjs';
+import { createSystemUpdaterFixture } from './system-updater-fixture.mjs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -217,6 +218,9 @@ export function defaultRoutes() {
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/plugins', () => ({ plugins: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/repository', () => ({ stargazers_count: null })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/updates', () => ({ omc_version: uncheckedVersion('omc'), cpa_version: uncheckedVersion('cpa') })],
+    // A native install: the state in which the page draws nothing about updating, so scenarios
+    // that are not about it see the page they were written against.
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/system/updater', (url, method) => createSystemUpdaterFixture({ state: 'not_containerised' })(url, method).json],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/api-keys', () => ({ keys: [], total: 0 })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/pricing/attention', () => ({ unpriced: [] })],
     [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/dashboard/models', () => ({ window: dashboardBody().window, total_tokens: 0, models: [], partial_errors: [] })],

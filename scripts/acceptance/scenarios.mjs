@@ -63,6 +63,7 @@ import { oauthWindowWarmup, oauthManagement, oauthVertexImport, oauthModelRules,
 import { customIconLibrary, customIconProbeRoutes, iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemVersionFeedback, systemHealthAnomalies, systemUpdateIndicator, systemFixtures } from './probes/systemInformation.mjs';
+import { SYSTEM_UPDATER_CONTRACT } from './system-updater-fixture.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import { configBackups, configBackupsFixtures } from './probes/configBackups.mjs';
 import {
@@ -839,7 +840,15 @@ export const SCENARIOS = [
     id: 'system-information-narrow',
     name: 'the system page keeps its card heads and product rows from overlapping at 320px',
     options: {
-      routes: systemFixtures(),
+      // The gateway's available update gains its filled update action here, the widest control
+      // the version row ever holds.
+      routes: [
+        [(url) => url.pathname.endsWith('/management/system/updater'), () => ({
+          ...SYSTEM_UPDATER_CONTRACT.ready,
+          products: SYSTEM_UPDATER_CONTRACT.ready.products.map((product) => ({ ...product, action: 'available', reason: '' })),
+        })],
+        ...systemFixtures(),
+      ],
       viewport: { width: 320, height: 1200 },
     },
     run: systemInformationNarrow,

@@ -1,4 +1,4 @@
-import type { SystemProductVersion } from '../../types/system';
+import type { ReleaseProduct, SystemProductVersion, SystemUpdaterResponse } from '../../types/system';
 
 export function deriveVersionPresentation(version: SystemProductVersion, isChecking = false) {
   const hasChangelog = version.merge_count > 0;
@@ -45,4 +45,48 @@ export function summarizeUpdateCheck(versions: SystemProductVersion[], isCached:
     return { kind: 'checking' as const, failedProducts };
   }
   return { kind: isCached ? 'cached' as const : 'success' as const, failedProducts };
+}
+
+export type UpdateOffer =
+  | { kind: 'none' }
+  /** `isBusy` is another product's update in flight: the action exists but must wait. */
+  | { kind: 'available'; isBusy: boolean }
+  | { kind: 'running'; stageKey: string }
+  | { kind: 'blocked'; reasonKey: string; image: string };
+
+const UPDATE_STAGE_KEYS: Record<string, string> = {
+  pulling: 'sys.update_stage.pulling',
+  stopping: 'sys.update_stage.stopping',
+  starting: 'sys.update_stage.starting',
+  verifying: 'sys.update_stage.verifying',
+};
+
+const UPDATE_BLOCK_KEYS: Record<string, string> = {
+  pinned: 'sys.update_blocked.pinned',
+  not_a_local_container: 'sys.update_blocked.not_a_local_container',
+  signature_unavailable: 'sys.update_blocked.signature_unavailable',
+};
+
+/**
+ * What the version card offers for one product.
+ *
+ * An update in flight is shown whatever the comparison says, because the comparison is about to
+ * change under it. Otherwise nothing is offered unless a newer release is known: a block reason
+ * on a product that is already current would be an explanation of an action nobody asked for.
+ */
+export function deriveUpdateOffer(
+  version: SystemProductVersion,
+  updater: SystemUpdaterResponse | undefined,
+  product: ReleaseProduct,
+): UpdateOffer {
+  if (!updater || updater.state !== 'ready') return { kind: 'none' };
+  const job = updater.job && !updater.job.finished ? updater.job : null;
+  if (job?.product === product) {
+    return { kind: 'running', stageKey: UPDATE_STAGE_KEYS[job.stage] ?? UPDATE_STAGE_KEYS.pulling };
+  }
+  if (version.state !== 'update_available') return { kind: 'none' };
+  const entry = updater.products.find((candidate) => candidate.product === product);
+  if (!entry) return { kind: 'none' };
+  if (entry.action === 'available') return { kind: 'available', isBusy: job !== null };
+  return { kind: 'blocked', reasonKey: UPDATE_BLOCK_KEYS[entry.reason] ?? 'sys.update_blocked.unidentified', image: entry.image };
 }

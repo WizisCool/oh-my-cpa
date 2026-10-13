@@ -228,6 +228,48 @@ export interface SystemRepositoryResponse {
 }
 
 /**
+ * Whether this deployment can apply updates from the console.
+ *
+ * `ready` means an updater sidecar answered. Every other value is a reason there is none:
+ * `not_installed` is the one an operator can fix with the install command, `not_containerised`
+ * is a native install with no containers to replace, `disabled` is the operator's switch (and
+ * the demonstration), and `rejected` is a sidecar that belongs to another console.
+ */
+export type SystemUpdaterState = 'ready' | 'not_installed' | 'not_containerised' | 'disabled' | 'rejected';
+
+export type SystemUpdateStage =
+  | 'pulling' | 'stopping' | 'starting' | 'verifying'
+  | 'done' | 'already_current' | 'rolled_back' | 'failed';
+
+export interface SystemUpdaterProduct {
+  product: ReleaseProduct;
+  action: 'available' | 'unavailable';
+  /** Why the product cannot be updated here; empty when it can. */
+  reason: string;
+  /** The configured image reference, shown so a pinned deployment sees what it is pinned to. */
+  image: string;
+}
+
+/** The running or most recent update. */
+export interface SystemUpdateJob {
+  id: string;
+  product: ReleaseProduct;
+  stage: SystemUpdateStage;
+  finished: boolean;
+  error: string;
+  from_version: string;
+  to_version: string;
+  started_at_ms: number;
+  finished_at_ms: number;
+}
+
+export interface SystemUpdaterResponse {
+  state: SystemUpdaterState;
+  products: SystemUpdaterProduct[];
+  job: SystemUpdateJob | null;
+}
+
+/**
  * Both products' stored version answers, read by the shell for its update indicator.
  *
  * The read never checks: it reports what the background sweep or the page's own check last

@@ -72,6 +72,8 @@ a message naming the variable.
 | `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD` | `true` | The check the System Information page makes when opened |
 | `OMCPA_OMC_REPO` / `OMCPA_CPA_REPO` | `WizisCool/oh-my-cpa` / `router-for-me/CLIProxyAPI` | `owner/name` the checks read, for a fork |
 | `OMCPA_DEMO_MODE` | `false` | Serve the console from the built-in fixture; see [Demo mode](#demo-mode) |
+| `OMCPA_UPDATER_ENABLED` | `true` | `false` makes the console ignore an updater and offer no update action; see [Console updates](#console-updates) |
+| `OMCPA_UPDATER_URL` | `http://oh-my-cpa-updater:8090` | Where the console looks for the updater. The default is the service and container name every install method uses |
 
 The MCP stdio bridge (`oh-my-cpa mcp`) reads `OMCPA_SERVER_URL`,
 `OMCPA_CPA_MANAGEMENT_KEY` and the optional `OMCPA_VERSION` only; the remote MCP
@@ -171,6 +173,55 @@ making them, and the page says so when a check is refused for that reason. Relea
 are held in memory rather than stored, so after a restart the page names the versions
 and links to the source while the notes themselves are unavailable — see
 `docs/architecture.md` §10.
+
+## Console updates
+
+On a container deployment with an updater (ADR 0099), the System Information page offers
+**Update now** beside a product that has a newer release. `docs/install.md` ("Upgrading")
+is the operator's guide, including the one command that adds an updater to a deployment
+that predates it.
+
+The updater is the Oh My CPA image run as `oh-my-cpa updater serve`. It listens on
+`:8090` inside the Docker network and publishes no port. Its settings are read from its
+own environment, and an installation needs none of them:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OMCPA_UPDATER_LISTEN_ADDR` | `:8090` | Listen address inside the container |
+| `OMCPA_UPDATER_SOCKET` | `/var/run/docker.sock` | The Docker socket as mounted in the container |
+| `OMCPA_UPDATER_OMC_CONTAINER` | found by image | The console container, when more than one Oh My CPA runs on the host |
+| `OMCPA_UPDATER_CPA_CONTAINER` | found from `OMCPA_CPA_BASE_URL` | The gateway container, when it cannot be found that way |
+| `OMCPA_UPDATER_LINK_NETWORK` | empty | Set by `updater install`: the network the updater keeps the console attached to. Empty when both are services of one Compose file |
+| `OMCPA_UPDATER_PUBLIC_KEY` | built in | Base64 Ed25519 public key that replaces the built-in release key, for a fork that signs its own releases |
+
+Security boundary:
+
+- The updater holds the Docker socket, which is control of Docker on that host. The
+  console does not, and stays read-only and unprivileged. Anyone who can already run
+  `docker` on the host gains nothing; anyone who can reach the updater's port without
+  its token gets `401`.
+- The token is an HMAC of `OMCPA_MASTER_KEY`. Neither container stores it, and it is
+  not logged. Changing the master key needs no step here: the updater reads the
+  console's current value from Docker.
+- The updater accepts a product name only. It never takes an image, a container name or
+  a command from the console, updates only the two containers it identified, and
+  refuses an image pinned to a version tag or digest.
+- Oh My CPA is replaced only by the image a release's signed manifest names, and never
+  by an older version. CLIProxyAPI is an upstream image this project cannot sign: its
+  update pulls the tag the container already uses.
+- A build without the release public key reports `signature_unavailable` and offers no
+  console update for Oh My CPA.
+
+Network use: applying an Oh My CPA update makes the console download
+`release-manifest.json` and its `.sig` from the release's assets on `github.com`,
+following redirects only to GitHub's own asset hosts over HTTPS, through the same proxy
+settings as the update check. The image pull is made by the Docker daemon with its own
+registry and proxy configuration.
+
+Audit: `system.update.apply` records the admission, or the refusal with its reason,
+before the updater is asked; `system.update.completed` records how the job ended. An Oh
+My CPA update ends the process that admitted it, so the next process records the
+outcome when it starts.
 
 ## Database maintenance
 

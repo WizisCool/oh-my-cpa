@@ -45,7 +45,11 @@ import { PageLoading, SuspenseFallback } from '../components/common/PageLoading'
 import { StatusLabel } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
-import { deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
+import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
+import type { UpdateOffer } from './SystemPage/versionPresentation';
+import { useConsoleUpdate } from './SystemPage/useConsoleUpdate';
+import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
+import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
 import type { SystemUpdatesResponse } from '../types/system';
@@ -72,6 +76,10 @@ interface ProductBlockProps {
   canChangeDismissal: boolean;
   onDismiss: () => void;
   onRestore: () => void;
+  /** What the updater allows for this product; `none` draws nothing. */
+  updateOffer: UpdateOffer;
+  isSubmittingUpdate: boolean;
+  onUpdate: () => void;
 }
 
 const ProductBlock: React.FC<ProductBlockProps> = ({
@@ -83,6 +91,9 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   canChangeDismissal,
   onDismiss,
   onRestore,
+  updateOffer,
+  isSubmittingUpdate,
+  onUpdate,
 }) => {
   useTimeZone();
   const t = useT();
@@ -124,8 +135,9 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             </span>
           </div>
         </div>
-        {(canDismiss || presentation.hasChangelog) && (
+        {(canDismiss || presentation.hasChangelog || updateOffer.kind === 'available' || updateOffer.kind === 'running') && (
           <div className={styles['version-actions']}>
+            <UpdateAction version={version} productTitle={productTitle} offer={updateOffer} isSubmitting={isSubmittingUpdate} onUpdate={onUpdate} />
             {canDismiss && (
               <Button
                 type="text"
@@ -161,6 +173,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
         )}
       </div>
 
+      <UpdateStatusLine offer={updateOffer} />
       {presentation.detailKey && <div className={styles['version-detail']}>{t(presentation.detailKey)}</div>}
       {presentation.shouldShowNotesNotice && (
         <div className={styles['version-detail']}>{t('sys.notes_not_held')}</div>
@@ -195,6 +208,41 @@ export const SystemPage: React.FC = () => {
     const tag = version.latest_version;
     const { ok } = shouldDismiss ? await dismiss(version.product, tag) : await restore(version.product);
     if (ok) toast.success(t(shouldDismiss ? 'sys.update_dismissed' : 'sys.update_restored', { version: tag }));
+  };
+
+  const productLabel = (product: ReleaseProduct) => t(product === 'omc' ? 'sys.omc_version' : 'sys.cpa_version');
+  const handleUpdateFinished = (outcome: UpdateOutcome) => {
+    if (!outcome.job) {
+      // The updater restarted without the job: say so, and let the versions speak.
+      toast.warning(t('sys.update_outcome_unknown', { product: productLabel(outcome.product) }));
+    } else {
+      const { job } = outcome;
+      const product = productLabel(job.product);
+      if (job.stage === 'done') {
+        if (job.product === 'omc') {
+          // The server that answers now is the new version; the page still holds the old
+          // one's scripts, so it is replaced rather than patched.
+          window.location.reload();
+          return;
+        }
+        toast.success(t('sys.update_done', { product }));
+      } else if (job.stage === 'already_current') {
+        toast.info(t('sys.update_already_current', { product }));
+      } else {
+        toast.error(t(job.stage === 'rolled_back' ? 'sys.update_rolled_back' : 'sys.update_failed', { product, msg: job.error }));
+      }
+    }
+    void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
+    void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+  };
+  const { updater, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
+  const handleApplyUpdate = async (product: ReleaseProduct) => {
+    try {
+      await applyUpdate(product);
+      toast.info(t('sys.update_started', { product: productLabel(product) }));
+    } catch (err: unknown) {
+      toast.error(t('sys.update_failed', { product: productLabel(product), msg: describeError(err) }));
+    }
   };
 
   const [downloadingDiag, setDownloadingDiag] = useState(false);
@@ -581,6 +629,9 @@ export const SystemPage: React.FC = () => {
                 canChangeDismissal={areDismissalsLoaded}
                 onDismiss={() => void changeDismissal(sysInfo.omc_version, true)}
                 onRestore={() => void changeDismissal(sysInfo.omc_version, false)}
+                updateOffer={deriveUpdateOffer(sysInfo.omc_version, updater, 'omc')}
+                isSubmittingUpdate={submittingProduct === 'omc'}
+                onUpdate={() => void handleApplyUpdate('omc')}
               />
               <ProductBlock
                 productTitle={t('sys.cpa_version')}
@@ -591,7 +642,11 @@ export const SystemPage: React.FC = () => {
                 canChangeDismissal={areDismissalsLoaded}
                 onDismiss={() => void changeDismissal(sysInfo.cpa_version, true)}
                 onRestore={() => void changeDismissal(sysInfo.cpa_version, false)}
+                updateOffer={deriveUpdateOffer(sysInfo.cpa_version, updater, 'cpa')}
+                isSubmittingUpdate={submittingProduct === 'cpa'}
+                onUpdate={() => void handleApplyUpdate('cpa')}
               />
+              <UpdaterSetup updater={updater} />
             </>
           )}
         </Panel>

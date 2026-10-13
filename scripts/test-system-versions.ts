@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
+import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
 import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../web/src/utils/updateDismissals.ts';
-import type { SystemProductVersion } from '../web/src/types/system.ts';
+import type { SystemProductVersion, SystemUpdateJob, SystemUpdaterResponse } from '../web/src/types/system.ts';
 
 function createVersion(overrides: Partial<SystemProductVersion> = {}): SystemProductVersion {
   return {
@@ -96,4 +96,61 @@ test('stored dismissals are read defensively and edited per product', () => {
   assert.deepEqual(parseUpdateDismissals({ omc: 'v1.1.0', cpa: 7, other: 'v2' }), { omc: 'v1.1.0' });
   assert.deepEqual(withDismissal({ omc: 'v1.1.0' }, 'cpa', 'v6.0.0'), { omc: 'v1.1.0', cpa: 'v6.0.0' });
   assert.deepEqual(withDismissal({ omc: 'v1.1.0', cpa: 'v6.0.0' }, 'omc', null), { cpa: 'v6.0.0' });
+});
+
+function createUpdater(overrides: Partial<SystemUpdaterResponse> = {}): SystemUpdaterResponse {
+  return {
+    state: 'ready',
+    products: [
+      { product: 'omc', action: 'available', reason: '', image: 'wiziscool/oh-my-cpa:latest' },
+      { product: 'cpa', action: 'unavailable', reason: 'pinned', image: 'eceasy/cli-proxy-api:v8.0.1' },
+    ],
+    job: null,
+    ...overrides,
+  };
+}
+
+function createJob(overrides: Partial<SystemUpdateJob> = {}): SystemUpdateJob {
+  return {
+    id: 'job-1', product: 'omc', stage: 'starting', finished: false, error: '',
+    from_version: 'v1.0.0', to_version: '', started_at_ms: 1000, finished_at_ms: 0, ...overrides,
+  };
+}
+
+test('an update is offered only for a newer release on a deployment with a working updater', () => {
+  const version = createVersion();
+  assert.deepEqual(deriveUpdateOffer(version, createUpdater(), 'omc'), { kind: 'available', isBusy: false });
+  assert.deepEqual(deriveUpdateOffer(createVersion({ state: 'up_to_date' }), createUpdater(), 'omc'), { kind: 'none' });
+  assert.deepEqual(deriveUpdateOffer(version, undefined, 'omc'), { kind: 'none' });
+  for (const state of ['not_installed', 'not_containerised', 'disabled', 'rejected'] as const) {
+    assert.deepEqual(deriveUpdateOffer(version, createUpdater({ state }), 'omc'), { kind: 'none' }, state);
+  }
+  assert.deepEqual(deriveUpdateOffer(version, createUpdater({ products: [] }), 'omc'), { kind: 'none' });
+});
+
+test('a blocked product names its reason and image, and only when there is something to install', () => {
+  const version = createVersion({ product: 'cpa' });
+  assert.deepEqual(deriveUpdateOffer(version, createUpdater(), 'cpa'), {
+    kind: 'blocked', reasonKey: 'sys.update_blocked.pinned', image: 'eceasy/cli-proxy-api:v8.0.1',
+  });
+  assert.deepEqual(deriveUpdateOffer(createVersion({ product: 'cpa', state: 'up_to_date' }), createUpdater(), 'cpa'), { kind: 'none' });
+  const unidentified = createUpdater({ products: [{ product: 'cpa', action: 'unavailable', reason: 'ambiguous_container', image: '' }] });
+  assert.equal((deriveUpdateOffer(version, unidentified, 'cpa') as { reasonKey: string }).reasonKey, 'sys.update_blocked.unidentified');
+});
+
+test('a running update shows its stage on its own product and holds the other one back', () => {
+  const updater = createUpdater({
+    products: [
+      { product: 'omc', action: 'available', reason: '', image: 'wiziscool/oh-my-cpa:latest' },
+      { product: 'cpa', action: 'available', reason: '', image: 'eceasy/cli-proxy-api:latest' },
+    ],
+    job: createJob({ product: 'cpa', stage: 'verifying' }),
+  });
+  // The comparison is stale while the container is being replaced, so it is not consulted.
+  assert.deepEqual(deriveUpdateOffer(createVersion({ product: 'cpa', state: 'up_to_date' }), updater, 'cpa'), {
+    kind: 'running', stageKey: 'sys.update_stage.verifying',
+  });
+  assert.deepEqual(deriveUpdateOffer(createVersion(), updater, 'omc'), { kind: 'available', isBusy: true });
+  const finished = { ...updater, job: createJob({ product: 'cpa', stage: 'rolled_back', finished: true }) };
+  assert.deepEqual(deriveUpdateOffer(createVersion({ product: 'cpa' }), finished, 'cpa'), { kind: 'available', isBusy: false });
 });
