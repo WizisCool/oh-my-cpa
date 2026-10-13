@@ -280,3 +280,19 @@ func TestWarmupProtocolRefusalPausesMatchingAutomaticModel(t *testing.T) {
 		})
 	}
 }
+
+func TestWarmupPersistentProtocolPauseIsModelScoped(t *testing.T) {
+	now := time.Now().UTC()
+	observation := idleObservation(now)
+	policy := Policy{Model: "haiku", ResetMode: "all", DailyTime: "06:00"}
+	state := State{Observation: &observation, ProtocolPause: &ProtocolPause{Model: "haiku", Reason: "protocol_unsupported"}, LastResult: &Result{Model: "haiku", Status: "failed", Reason: "rate_limited"}}
+	trigger, reason, _, _ := Decide(policy, state, now, false)
+	if trigger != "" || reason != "protocol_unsupported" {
+		t.Fatalf("latest receipt erased pause: %s %s", trigger, reason)
+	}
+	policy.Model = "selected-other-model"
+	trigger, reason, _, _ = Decide(policy, state, now, false)
+	if trigger != "reset" || reason != "" {
+		t.Fatalf("pause crossed models: %s %s", trigger, reason)
+	}
+}

@@ -1449,6 +1449,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   to { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .ant-drawer .ant-drawer-content-wrapper {
+    transition: none !important;
+  }
   /* antd animates a floating panel in with a zoom (`antZoomBigIn`) and does so under reduced motion
      as well - measured, not assumed. Killing the animation alone is not enough: rc-motion sets the
      enter state inline and waits for the animation to remove it, so `animation: none` left the panel

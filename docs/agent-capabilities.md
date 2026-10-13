@@ -620,6 +620,8 @@ confirmation/revision rules. No arbitrary native path or URL becomes a tool argu
 
 `quota_warmup_settings_get` and `quota_warmup_credential_get` are bounded read projections
 of provider defaults, effective policy, model, next check, activation observations and pause reason.
+The optional `state.protocol_pause` carries bounded model/reason evidence independently of the
+latest receipt; a rate-limited recheck does not restore automatic compatibility.
 `quota_warmup_settings_set`, `quota_warmup_credential_set` and `quota_warmup_run` are
 high-risk writes exposed to both Agent and MCP. Their prepare result binds confirmation
 to the provider-policy or credential revision; provider-default approval states its

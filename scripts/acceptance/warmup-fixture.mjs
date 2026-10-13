@@ -2,13 +2,13 @@ import contract from './contracts/warmup.json' with { type: 'json' };
 export const WARMUP_CONTRACT = contract;
 
 /** A bounded projection fixture; Go certifies the wire shape and refusal cases. */
-export function createWarmupFixture({ authIndex = 'exact-claude', provider = 'claude', name = `${provider}.json` } = {}) {
+export function createWarmupFixture({ authIndex = 'exact-claude', provider = 'claude', name = `${provider}.json`, isProtocolPaused = false } = {}) {
   let revision = 'wire-revision';
   const providers = {
     codex: { ...contract.default_policy },
     claude: { ...contract.credential.policy },
   };
-  const credential = { ...structuredClone(contract.credential), auth_index: authIndex, provider, name };
+  const credential = { ...structuredClone(isProtocolPaused ? contract.paused_credential : contract.credential), auth_index: authIndex, provider, name };
   if (provider === 'codex') {
     credential.policy = { ...providers.codex };
     credential.models = ['gpt-codex-test'];
@@ -41,6 +41,7 @@ export function createWarmupFixture({ authIndex = 'exact-claude', provider = 'cl
       if (input.revision !== revision) return { status: 409, json: { code: 'resource_conflict', error: 'resource_conflict' } };
       lastResult = { ...contract.result, model: credential.policy.model, request_id: requestId };
       credential.state = { ...credential.state, protocol_verified: true, verified_model: credential.policy.model, last_result: lastResult };
+      if (credential.state.protocol_pause?.model === credential.policy.model) delete credential.state.protocol_pause;
       credential.reason = 'already_active';
       return { status: 200, json: lastResult };
     }

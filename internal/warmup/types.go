@@ -85,21 +85,39 @@ type Result struct {
 	InputTokens  *int64 `json:"input_tokens,omitempty"`
 	OutputTokens *int64 `json:"output_tokens,omitempty"`
 }
-type State struct {
-	ActivationBasis    *Observation `json:"activation_basis,omitempty"`
-	CredentialID       string       `json:"credential_id,omitempty"`
-	Provider           string       `json:"provider,omitempty"`
-	Observation        *Observation `json:"observation,omitempty"`
-	Generation         int64        `json:"generation"`
-	DailyKey           string       `json:"daily_key,omitempty"`
-	LastResult         *Result      `json:"last_result,omitempty"`
-	LastCycle          string       `json:"last_cycle,omitempty"`
-	NextAttemptMS      int64        `json:"next_attempt_ms,omitempty"`
-	Failures           int          `json:"failures,omitempty"`
-	VerificationReads  int          `json:"verification_reads,omitempty"`
-	VerifiedModel      string       `json:"verified_model,omitempty"`
-	IsProtocolVerified bool         `json:"protocol_verified"`
+type ProtocolPause struct {
+	Model  string `json:"model"`
+	Reason string `json:"reason"`
 }
+
+type State struct {
+	ProtocolPause      *ProtocolPause `json:"protocol_pause,omitempty"`
+	ActivationBasis    *Observation   `json:"activation_basis,omitempty"`
+	CredentialID       string         `json:"credential_id,omitempty"`
+	Provider           string         `json:"provider,omitempty"`
+	Observation        *Observation   `json:"observation,omitempty"`
+	Generation         int64          `json:"generation"`
+	DailyKey           string         `json:"daily_key,omitempty"`
+	LastResult         *Result        `json:"last_result,omitempty"`
+	LastCycle          string         `json:"last_cycle,omitempty"`
+	NextAttemptMS      int64          `json:"next_attempt_ms,omitempty"`
+	Failures           int            `json:"failures,omitempty"`
+	VerificationReads  int            `json:"verification_reads,omitempty"`
+	VerifiedModel      string         `json:"verified_model,omitempty"`
+	IsProtocolVerified bool           `json:"protocol_verified"`
+}
+
+// ReadProtocolPause also recognizes state saved before independent refusal evidence existed.
+func (state State) ReadProtocolPause() *ProtocolPause {
+	if state.ProtocolPause != nil {
+		return state.ProtocolPause
+	}
+	if state.LastResult != nil && (state.LastResult.Reason == "protocol_unsupported" || state.LastResult.Reason == "unexpected_tool") {
+		return &ProtocolPause{Model: state.LastResult.Model, Reason: state.LastResult.Reason}
+	}
+	return nil
+}
+
 type Credential struct {
 	AuthIndex   string   `json:"auth_index"`
 	Provider    string   `json:"provider"`

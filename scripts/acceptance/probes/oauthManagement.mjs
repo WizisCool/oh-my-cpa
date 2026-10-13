@@ -1122,18 +1122,28 @@ export async function oauthWindowWarmup({ page, base, check }) {
     const drawer = page.locator('.ant-drawer-content-wrapper').filter({ has: page.locator('.ant-drawer-title').filter({ hasText: 'Warmup settings' }) });
     await drawer.waitFor({ state: 'visible' });
     await drawer.getByText('Time zone: UTC', { exact: true }).waitFor();
-    const transitionProperties = await drawer.evaluate(element => getComputedStyle(element).transitionProperty);
-    check('warmup drawer animates position without interpolating viewport dimensions', transitionProperties === 'transform', transitionProperties);
-    for (const width of [1440, 320]) {
-      await page.setViewportSize({ width, height: 900 });
-      await settleLayout(page);
-      const geometry = await drawer.evaluate(element => {
-        const bounds = element.getBoundingClientRect(); const body = element.querySelector('.ant-drawer-body');
-        return { left: bounds.left, right: bounds.right, overflow: body.scrollWidth - body.clientWidth };
+    for (const reducedMotion of ['no-preference', 'reduce']) {
+      await page.emulateMedia({ reducedMotion });
+      const transition = await drawer.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { property: style.transitionProperty, duration: style.transitionDuration };
       });
-      check(`warmup settings ${width}px stay in the viewport`, geometry.left >= -1 && geometry.right <= width + 1 && geometry.overflow <= 1, JSON.stringify(geometry));
-      await fs.mkdir('tmp/warmup-proof', { recursive: true });
-      await page.screenshot({ path: `tmp/warmup-proof/settings-${width}.png` });
+      if (reducedMotion === 'reduce') {
+        check('warmup drawer has no transition under reduced motion', transition.property === 'none' && transition.duration === '0s', JSON.stringify(transition));
+      } else {
+        check('warmup drawer animates position without interpolating viewport dimensions', transition.property === 'transform', JSON.stringify(transition));
+      }
+      for (const width of [1440, 320]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settleLayout(page);
+        const geometry = await drawer.evaluate(element => {
+          const bounds = element.getBoundingClientRect(); const body = element.querySelector('.ant-drawer-body');
+          return { left: bounds.left, right: bounds.right, overflow: body.scrollWidth - body.clientWidth };
+        });
+        check(`warmup settings ${width}px stay in the viewport (${reducedMotion})`, geometry.left >= -1 && geometry.right <= width + 1 && geometry.overflow <= 1, JSON.stringify(geometry));
+        await fs.mkdir('tmp/warmup-proof', { recursive: true });
+        await page.screenshot({ path: `tmp/warmup-proof/settings-${width}-${reducedMotion}.png` });
+      }
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await drawer.getByRole('switch', { name: 'Daily scheduled warmup' }).click();

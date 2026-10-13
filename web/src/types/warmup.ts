@@ -35,6 +35,7 @@ export interface WarmupCredential {
   state: {
     protocol_verified: boolean;
     verified_model?: string;
+    protocol_pause?: { model: string; reason: 'protocol_unsupported' | 'unexpected_tool' };
     last_result?: WarmupResult;
     observation?: { observed_at_ms: number; paid_fallback: 'enabled' | 'disabled' | 'unknown' };
   };

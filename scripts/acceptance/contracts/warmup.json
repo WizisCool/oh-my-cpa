@@ -2,6 +2,7 @@
  "version": 1,
  "default_policy": {"reset_mode":"off","daily_enabled":false,"daily_time":"06:00","model":""},
  "credential": {"auth_index":"exact-claude","name":"claude.json","provider":"claude","inherit":true,"policy":{"reset_mode":"all","daily_enabled":false,"daily_time":"06:00","model":"claude-haiku-test"},"models":["claude-haiku-test"],"timezone":"UTC","revision":"wire-revision","reason":"quota_unknown","state":{"protocol_verified":false,"generation":0,"credential_id":"wire-credential-identity","provider":"claude"}},
+ "paused_credential": {"auth_index":"exact-claude","name":"claude.json","provider":"claude","inherit":true,"policy":{"reset_mode":"all","daily_enabled":false,"daily_time":"06:00","model":"claude-haiku-test"},"models":["claude-haiku-test"],"timezone":"UTC","revision":"wire-revision","reason":"quota_unknown","state":{"protocol_verified":false,"generation":0,"credential_id":"wire-credential-identity","provider":"claude","protocol_pause":{"model":"claude-haiku-test","reason":"protocol_unsupported"}}},
  "result": {"request_id":"manual-wire-test","status":"activated","model":"claude-haiku-test","trigger":"manual","started_at_ms":1770000000000,"finished_at_ms":1770000001000,"input_tokens":5,"output_tokens":1},
  "cases": [
   {"id":"confirmation-required","body":{"request_id":"manual-wire-test","revision":"wire-revision","confirmed":false},"status":400,"response":{"code":"invalid_parameters","error":"invalid_parameters"}},

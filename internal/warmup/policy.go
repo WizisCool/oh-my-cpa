@@ -128,10 +128,9 @@ func Decide(policy Policy, state State, now time.Time, isManual bool) (trigger, 
 	}
 	// An observed protocol refusal pauses that model; an untried model is admitted
 	// by the approved policy and current quota evidence, not historical success.
-	if (observation.FiveHour.State == "idle" || observation.Weekly.State == "idle") &&
-		state.LastResult != nil && state.LastResult.Model == policy.Model &&
-		(state.LastResult.Reason == "protocol_unsupported" || state.LastResult.Reason == "unexpected_tool") {
-		return "", state.LastResult.Reason, cycle, nil
+	if pause := state.ReadProtocolPause(); pause != nil && pause.Model == policy.Model &&
+		(observation.FiveHour.State == "idle" || observation.Weekly.State == "idle") {
+		return "", pause.Reason, cycle, nil
 	}
 	if state.NextAttemptMS > now.UnixMilli() {
 		instant := state.NextAttemptMS

@@ -1,7 +1,9 @@
 // @vitest-environment node
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { api, requestResponse } from '../src/api/client';
 import { createWarmupFixture, WARMUP_CONTRACT } from '../../scripts/acceptance/warmup-fixture.mjs';
+
+afterEach(() => vi.unstubAllGlobals());
 
 it('uses the handler-certified wire projection and strict refusals through the typed client', async () => {
   const fixture = createWarmupFixture();
@@ -25,4 +27,20 @@ it('uses the handler-certified wire projection and strict refusals through the t
   }
   await api.getWarmupCredential('index/with space');
   expect(calls.at(-1)?.path).toContain('index%2Fwith%20space');
+});
+
+it('reads independently persisted model refusal evidence through the typed client', async () => {
+  const fixture = createWarmupFixture({ isProtocolPaused: true });
+  vi.stubGlobal('window', { __OMCPA_CONFIG__: { basePath: '/omc' } });
+  vi.stubGlobal('fetch', async (path: string, options: RequestInit) => {
+    const result = fixture(new URL(path, 'http://127.0.0.1'), options.method ?? 'GET', options.body as string);
+    return new Response(JSON.stringify(result.json), { status: result.status, headers: { 'Content-Type': 'application/json' } });
+  });
+  const credential = await api.getWarmupCredential('exact-claude');
+  expect(credential).toEqual(WARMUP_CONTRACT.paused_credential);
+  expect(credential.state.protocol_pause).toEqual({ model: credential.policy.model, reason: 'protocol_unsupported' });
+  await api.runWarmup('exact-claude', 'manual-paused-recheck', credential.revision);
+  const activated = await api.getWarmupCredential('exact-claude');
+  expect(activated.state.protocol_pause).toBeUndefined();
+  expect(activated.state.last_result?.status).toBe('activated');
 });

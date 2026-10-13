@@ -3323,7 +3323,11 @@ resending. An approved enabled policy admits the first automatic attempt and an 
 selected new model through fresh quota and billing evidence. The legacy `protocol_verified`
 and `verified_model` state fields record observed activation; they do not admit or suppress
 execution. An observed unsupported protocol response pauses automatic requests for the
-same model, while a confirmed manual action can recheck compatibility. A changed model is
+same model, while a confirmed manual action can recheck compatibility. Its optional
+`protocol_pause` model/reason is persisted independently of the latest result in the existing
+state JSON; legacy latest-result refusals are carried forward before replacement. A rate-limited
+or unresolved recheck retains the pause; observed activation for that model clears it.
+A different explicitly selected model is evaluated independently. A changed model is
 not silently substituted. Read projections preserve the current window or billing reason
 rather than replacing it with historical activation status (ADR 0098).
 
