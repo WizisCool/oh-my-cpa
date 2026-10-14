@@ -122,7 +122,7 @@ const SCENARIO_PATHS = [
   // body names. A change to the page, or to the Markdown renderer it imports, moves that claim.
   {
     prefix: 'web/src/pages/SystemPage',
-    scenarios: ['system-information', 'system-version-feedback', 'system-health-anomalies', 'system-information-narrow', 'mobile-console'],
+    scenarios: ['system-information', 'system-version-feedback', 'system-health-anomalies', 'system-update-indicator', 'system-information-narrow', 'mobile-console'],
   },
   // The overlay history layer and everything it is wired into. Named as one rule because the
   // claim is about the layer plus a representative overlay of each kind: the navigation sheet

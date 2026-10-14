@@ -423,6 +423,44 @@ func TestDecodeEventBoundsFailureBody(t *testing.T) {
 	}
 }
 
+func TestDecodeEventKeepsAccessProviderAndNativeKey(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		raw          string
+		wantProvider string
+		wantNative   bool
+	}{
+		{
+			name:         "native inline path",
+			raw:          `{"request_id":"req-ap","access_provider":"config-inline","is_native_key":true}`,
+			wantProvider: "config-inline",
+			wantNative:   true,
+		},
+		{
+			name:         "oauth path",
+			raw:          `{"request_id":"req-ap-oauth","access_provider":"codex","is_native_key":false}`,
+			wantProvider: "codex",
+			wantNative:   false,
+		},
+		{
+			name:         "older gateway omits both",
+			raw:          `{"request_id":"req-ap-old"}`,
+			wantProvider: "",
+			wantNative:   false,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			event, err := DecodeEvent(testCase.raw, "default", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if event.AccessProvider != testCase.wantProvider || event.IsNativeKey != testCase.wantNative {
+				t.Fatalf("access = (%q, %v), want (%q, %v)", event.AccessProvider, event.IsNativeKey, testCase.wantProvider, testCase.wantNative)
+			}
+		})
+	}
+}
+
 func TestDecodeEventKeepsDiagnosticResponseHeadersOnly(t *testing.T) {
 	raw := `{"request_id":"req-headers","failed":true,"fail":{"status_code":502,"body":"overloaded"},"response_headers":{` +
 		`"Cf-Ray":["a4838167fd32d5c8-NRT"],"X-Request-Id":["req_upstream_1"],"Retry-After":["30"],` +

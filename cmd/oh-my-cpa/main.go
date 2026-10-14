@@ -13,6 +13,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
 )
 
 const MCP_USAGE = `Usage: oh-my-cpa mcp
@@ -52,6 +53,13 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == updater.ROLE_COMMAND {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := updater.Run(ctx, os.Args[2:], envOr("OMCPA_VERSION", config.BuildVersion), os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
 	}
 
 	// Stderr stays the durable log; the tee keeps a bounded, redacted copy the console

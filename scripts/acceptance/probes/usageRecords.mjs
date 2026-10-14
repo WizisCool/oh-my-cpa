@@ -2,7 +2,7 @@ import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
 import { sleep } from '../probe.mjs';
-import { pastDeadline, until } from '../harness.mjs';
+import { pastDeadline, settleLayout, until } from '../harness.mjs';
 
 /**
  * Probes for the request-record console: the column geometry and truncation, the
@@ -69,7 +69,8 @@ export const alignmentFacets = {
  * model name overflows the column instead of being truncated - and asserting
  * "text-align matches" would not notice.
  */
-export async function columnAlignment({ base, page, check }) {
+export async function columnAlignment({ base, page, context, check }) {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(base).origin });
   // Headless Chromium draws no scrollbars, so a desktop's classic 14px scrollbar is emulated for
   // any code that measures one. The virtual list draws its own overlay scrollbar and loses no
   // width to a native one, so a header that pads a measured gutter drifts off the rows' tracks.
@@ -283,52 +284,70 @@ export async function columnAlignment({ base, page, check }) {
   check('header and row column tracks line up', tracksAligned.ok, JSON.stringify(tracksAligned.drift));
 
   // 6. The responsive breakpoints must still win. The base rules are written with
-  //    `:where()` at zero specificity on purpose, so the mobile numeric overrides
-  //    (which restore left alignment when the layout stacks) have to beat them -
-  //    a specificity slip here would silently re-right-align the stacked cards.
+  //    `:where()` at zero specificity on purpose, so the stacked record's overrides have to beat
+  //    them: a two-fact cell gives up its box so its facts can sit on different lines, and every
+  //    line starts at the record's own left edge - a specificity slip here would leave a
+  //    right-aligned table cell inside the stacked record.
   await page.setViewportSize({ width: 600, height: 1000 });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await until(
+    async () => await page.locator('.request-row .req-col-latency').first()
+      .evaluate((node) => window.getComputedStyle(node).display) === 'contents',
+    { label: 'the request record adopts its stacked layout' },
+  );
+  await settleLayout(page);
   const stacked = await page.evaluate(() => {
-    const measure = (selector) => {
-      const node = document.querySelector(selector);
-      if (!node) return null;
-      const style = window.getComputedStyle(node);
-      return { align: style.alignItems, textAlign: style.textAlign, direction: style.flexDirection };
+    const row = document.querySelector('.request-row');
+    const rowStyle = window.getComputedStyle(row);
+    const lineStart = row.getBoundingClientRect().left + Number.parseFloat(rowStyle.paddingLeft);
+    const display = (selector) => {
+      const node = row.querySelector(selector);
+      return node ? window.getComputedStyle(node).display : null;
+    };
+    const offset = (selector) => {
+      const node = row.querySelector(selector);
+      return node ? Math.round(node.getBoundingClientRect().left - lineStart) : null;
     };
     return {
-      latency: measure('.req-col-latency'),
-      tokens: measure('.req-col-tokens'),
-      cache: measure('.req-col-cache'),
+      display: { latency: display('.req-col-latency'), tokens: display('.req-col-tokens') },
+      lineOffsets: {
+        model: offset('.req-col-model'),
+        provider: offset('.req-col-provider'),
+        time: offset('.req-time-text'),
+      },
     };
   });
-  const stackedEntries = Object.entries(stacked).filter(([, value]) => value !== null);
   check(
-    'the stacked layout restores left alignment for numeric columns',
-    stackedEntries.length === 3 &&
-      stackedEntries.every(([, value]) => value.align === 'flex-start' && value.textAlign === 'left'),
+    'the stacked record releases its two-fact cells and starts every line at its left edge',
+    stacked.display.latency === 'contents' && stacked.display.tokens === 'contents' &&
+      Object.values(stacked.lineOffsets).every((value) => value === 0),
     JSON.stringify(stacked),
   );
 
-  // 7. Narrowest supported width, the row was the tallest thing on the page: a UUID that wraps at
-  //    every hyphen turns one record into four or five lines. The id has to ellipsise here rather
-  //    than grow, which is a different failure from overflowing its cell and so is asserted again.
-  const narrowRequestId = await page.evaluate(() => {
-    const node = document.querySelector('.req-time-sub-id');
-    if (!node) return null;
-    const lineHeight = parseFloat(window.getComputedStyle(node).lineHeight) || 16;
-    const cell = node.closest('.req-col-time');
-    return {
-      height: node.getBoundingClientRect().height,
-      lineHeight,
-      overflowsCell: cell ? node.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1 : false,
-    };
-  });
+  // The compact record omits the UUID text, but copying must still take the complete ID.
+  // Measuring the hidden text's zero-sized box cannot prove that the surviving control works.
+  const narrowRow = page.locator('.request-row').first();
+  const narrowRequestId = narrowRow.locator('.req-time-sub-id');
   check(
-    'the request id still ellipsises to one line at 600px',
-    narrowRequestId !== null
-      && narrowRequestId.height < narrowRequestId.lineHeight * 1.5
-      && narrowRequestId.overflowsCell === false,
-    JSON.stringify(narrowRequestId),
+    'the request id text is hidden at 600px',
+    await narrowRequestId.count() === 1 && await narrowRequestId.isHidden(),
+  );
+  const requestIdCopy = narrowRow.locator('.req-id-quick-copy');
+  check(
+    'the request id copy control remains visible and enabled at 600px',
+    await requestIdCopy.isVisible() && await requestIdCopy.isEnabled(),
+  );
+  await page.evaluate(() => navigator.clipboard.writeText(''));
+  await requestIdCopy.click();
+  const expectedRequestId = alignmentRecords[0].request_id;
+  await until(
+    async () => await page.evaluate(() => navigator.clipboard.readText()) === expectedRequestId,
+    { label: 'the compact record copies its complete request id' },
+  );
+  check(
+    'copying the compact request id preserves its complete value without opening the drawer',
+    await page.evaluate(() => navigator.clipboard.readText()) === expectedRequestId
+      && await page.locator('.ant-drawer:visible').count() === 0,
   );
 }
 
@@ -389,6 +408,10 @@ export function interactionRecordDetail(id) {
       ...record,
       ...(record.failed ? { fail_body: INTERACTION_FAILURE_BODY } : {}),
       response_headers: INTERACTION_RESPONSE_HEADERS,
+      // The access path is diagnostic: the single-record view carries it while
+      // the list projection omits it. The values are CPA's own vocabulary.
+      access_provider: 'config-inline',
+      is_native_key: true,
     },
   };
 }
@@ -774,6 +797,10 @@ export async function requestListInteractions({ base, page, check }) {
   await rows.first().click();
   await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
   check('clicking a row opens the request detail', await page.locator('.request-detail').isVisible());
+  // The first record rode the inline access path: the routing facts name it.
+  // The value is CPA's vocabulary, so the assertion holds in every language.
+  check('the detail names the access path that served the request',
+    (await page.locator('.request-detail').innerText()).includes('config-inline'));
   await page.keyboard.press('Escape');
   await page
     .locator('.request-detail')

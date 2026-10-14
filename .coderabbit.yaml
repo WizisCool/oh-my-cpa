@@ -125,6 +125,17 @@ reviews:
         collector goroutine instead of starting a second decoder. Checkpoint
         read, high-water selection, additive rollup, and checkpoint advancement
         stay in one serialized transaction.
+    - path: 'internal/updater/**'
+      instructions: >-
+        The updater role is the only component holding the Docker socket (ADR 0099).
+        Flag any widening of its control surface: it takes a product name and
+        resolves the container and image reference from Docker's own state, so a
+        field, query or body that could name an image, container or registry is a
+        boundary violation. Console releases are verified against the public key
+        compiled into this binary, so an unverified fallback, a version that may
+        regress, or a change that touches a pinned image is a defect. A replacement
+        is removed only after its successor passes its health check; a failure
+        restores the old container and re-points its image tag.
     - path: 'web/src/**/*.{ts,tsx}'
       instructions: >-
         React console. User-visible copy is never hardcoded: new strings are

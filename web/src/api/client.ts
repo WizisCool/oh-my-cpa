@@ -1,3 +1,4 @@
+import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
 import type { ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
 import { getAppConfig } from '../types/config';
@@ -47,8 +48,11 @@ import {
   SystemInfoResponse,
   SystemReleasesResponse,
   SystemRepositoryResponse,
+  SystemUpdatesResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
+  SystemUpdaterResponse,
+  ReleaseProduct,
 } from '../types/system';
 import type {
   PluginConfigResponse,
@@ -335,6 +339,22 @@ export interface AuthSession {
 }
 
 export const api = {
+  getWarmupSettings(): Promise<WarmupSettings> {
+    return request('/management/quota/warmup/settings', { method: 'GET' });
+  },
+  saveWarmupSettings(provider: 'codex' | 'claude', policy: WarmupPolicy, revision: string): Promise<WarmupSettings> {
+    return request('/management/quota/warmup/settings', { method: 'PUT', body: JSON.stringify({ provider, policy, revision, confirmed: true }) });
+  },
+  getWarmupCredential(authIndex: string): Promise<WarmupCredential> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'GET' });
+  },
+  saveWarmupCredential(authIndex: string, inherit: boolean, policy: WarmupPolicy, revision: string): Promise<WarmupCredential> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}`, { method: 'PUT', body: JSON.stringify({ inherit, policy, revision, confirmed: true }) });
+  },
+  runWarmup(authIndex: string, requestId: string, revision: string): Promise<WarmupResult> {
+    return request(`/management/quota/warmup/credentials/${encodeURIComponent(authIndex)}/run`, { method: 'POST', body: JSON.stringify({ request_id: requestId, revision, confirmed: true }) });
+  },
+
   async getCustomIcons(): Promise<CustomIcon[]> {
     const response = await request<{ icons: CustomIcon[] }>('/custom-icons');
     return response.icons;
@@ -710,6 +730,22 @@ export const api = {
     });
   },
 
+  async probeProvider(payload: {
+    provider_id?: string;
+    family?: string;
+    base_url?: string;
+    api_key?: string;
+    proxy_url?: string;
+    model?: string;
+    headers?: Record<string, string>;
+    interactions?: boolean;
+  }): Promise<{ ok: boolean; status_code?: number; error?: string }> {
+    return request<{ ok: boolean; status_code?: number; error?: string }>('/management/providers/probe', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
     /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
   async getLogsStatus(): Promise<LogsStatus> {
     return request<LogsStatus>('/management/logs/status', { method: 'GET' });
@@ -1052,6 +1088,22 @@ export const api = {
     return request<SystemRepositoryResponse>('/management/system/repository', { method: 'GET' });
   },
 
+  async getSystemUpdates(): Promise<SystemUpdatesResponse> {
+    return request<SystemUpdatesResponse>('/management/system/updates', { method: 'GET' });
+  },
+
+  async getSystemUpdater(): Promise<SystemUpdaterResponse> {
+    return request<SystemUpdaterResponse>('/management/system/updater', { method: 'GET' });
+  },
+
+  /** Asks the updater to replace one product; 202 means admitted, not finished. */
+  async applySystemUpdate(product: ReleaseProduct): Promise<SystemUpdaterResponse> {
+    return request<SystemUpdaterResponse>('/management/system/updater/apply', {
+      method: 'POST',
+      body: JSON.stringify({ product }),
+    });
+  },
+
   async checkUpdates(): Promise<{
     omc_version: SystemProductVersion;
     cpa_version: SystemProductVersion;
@@ -1108,8 +1160,8 @@ export const api = {
     });
   },
 
-  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem }> {
-    return request<{ status: string; quota: QuotaItem }>('/management/quota/redeem-credit', {
+  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }> {
+    return request<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }>('/management/quota/redeem-credit', {
       method: 'POST',
       body: JSON.stringify({ auth_index: authIndex }),
     });

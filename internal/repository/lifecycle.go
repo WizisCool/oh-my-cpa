@@ -65,6 +65,9 @@ type TableLifecycle struct {
 // whose rows should roll declares a rule and is deleted by the same batched,
 // horizon-publishing engine as everything else; it does not write its own loop.
 var TABLE_LIFECYCLES = map[string]TableLifecycle{
+	"credential_warmup_policies": {Kind: LifecyclePermanent, Reason: "operator-approved scheduling policies, bound to instance and exact credential identity"},
+	"credential_warmup_state":    {Kind: LifecycleOwnerBounded, Reason: "one scheduling record per credential; preserved for restart deduplication"},
+	"credential_warmup_runs":     {Kind: LifecycleOwnerBounded, Reason: "newest 100 request receipts per credential, trimmed on write"},
 	"usage_events": {Kind: LifecycleRolling, Reason: "request records; their usage survives in the facts",
 		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `timestamp_ms < ?`, IsGatedByUsageFacts: true}}},
 	"error_events": {Kind: LifecycleRolling, Reason: "error detail shown beside request records",

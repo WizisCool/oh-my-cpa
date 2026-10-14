@@ -40,6 +40,7 @@ import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX, type PluginPageEntry } from '../plugins/pluginPages';
 import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
+import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 
 const { Sider, Content } = Layout;
 
@@ -159,9 +160,33 @@ function navLabel(entry: NavEntry, t: TFunc): string {
   return entry.isLiteralLabel ? entry.labelKey : t(entry.labelKey);
 }
 
-function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean): NavItem[] {
+/** The page that answers "is there a newer version", and so the entry an available update marks. */
+const UPDATE_NOTICE_ROUTE = '/system';
+
+/**
+ * The entry's icon with the update dot on its corner.
+ *
+ * The dot rides the icon rather than the label because the icon is the one part of an entry
+ * all three renderings keep: the expanded rail, the collapsed rail and the phone sheet.
+ */
+function flagIcon(icon: React.ReactNode): React.ReactNode {
+  return (
+    <span className="app-menu-flagged-icon" data-testid="nav-update-dot">
+      {icon}
+      <span className="app-menu-update-dot" aria-hidden="true" />
+    </span>
+  );
+}
+
+function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: boolean, hasPendingUpdate: boolean): NavItem[] {
+  const isFlagged = (entry: NavEntry) => hasPendingUpdate && entry.key === UPDATE_NOTICE_ROUTE;
+  const iconFor = (entry: NavEntry) => (isFlagged(entry) ? flagIcon(entry.icon) : entry.icon);
   if (isCollapsed) {
-    return navGroups.flatMap((group) => group.items).map((entry) => ({ key: entry.key, icon: entry.icon, label: navLabel(entry, t), title: navLabel(entry, t), 'data-route-path': entry.key }));
+    return navGroups.flatMap((group) => group.items).map((entry) => {
+      // The collapsed row's name is its `title`, so the notice is spoken from there.
+      const title = isFlagged(entry) ? `${navLabel(entry, t)} · ${t('nav.update_available')}` : navLabel(entry, t);
+      return { key: entry.key, icon: iconFor(entry), label: navLabel(entry, t), title, 'data-route-path': entry.key };
+    });
   }
   return navGroups.map((group) => ({
     key: `group:${group.key}`,
@@ -169,8 +194,10 @@ function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: b
     label: t(group.labelKey),
     children: group.items.map((entry): NavItem => ({
       key: entry.key,
-      icon: entry.icon,
-      label: navLabel(entry, t),
+      icon: iconFor(entry),
+      label: isFlagged(entry)
+        ? <>{navLabel(entry, t)}<span className="sr-only"> · {t('nav.update_available')}</span></>
+        : navLabel(entry, t),
       title: entry.isLiteralLabel ? entry.labelKey : undefined,
       'data-route-path': entry.key,
     })),
@@ -253,7 +280,8 @@ export const AppLayout: React.FC = () => {
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
   const currentLabel = currentEntry ? navLabel(currentEntry, t) : t('common.management');
   useDocumentTitle(currentLabel);
-  const menuItems = React.useMemo(() => buildMenuItems(navGroups, t, isCollapsed), [navGroups, t, isCollapsed]);
+  const hasPendingUpdate = usePendingUpdates().length > 0;
+  const menuItems = React.useMemo(() => buildMenuItems(navGroups, t, isCollapsed, hasPendingUpdate), [navGroups, t, isCollapsed, hasPendingUpdate]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);

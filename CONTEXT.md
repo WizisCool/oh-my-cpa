@@ -9,6 +9,11 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 
 - **Release version**: The stable `vMAJOR.MINOR.PATCH` identity shared by an official OMC build, its published container and its GitHub Release. The running release version is a claim about the shipped build, not a user-selected upgrade target. Development and fork suffixes are intentionally incomparable with the stable release line; failed or absent observations never imply that a deployment is current.
 
+- **Updater**: The Oh My CPA image run as `oh-my-cpa updater serve` in its own container, `oh-my-cpa-updater`, holding the Docker socket (ADR 0099). It is the only component that replaces containers. The console never holds the socket; it asks the Updater to update a **product** (`omc` or `cpa`) and nothing more specific. An Updater is either declared as a Compose service or added to an existing deployment by `updater install`.
+- **Console update**: One confirmed action on System Information that replaces a product's container with a newer image. It is distinct from the **update check**, which only observes that a newer release exists. A Console update is offered only when the check reports `update_available` and the Updater reports the product `available`.
+- **Pinned image**: A configured image reference that carries a version tag or a digest. The Updater never changes a Pinned image, because the deployment's own Compose file would restore the older version over a migrated database. Only a floating tag such as `latest` is updated.
+- **Release manifest**: `release-manifest.json`, published with each release beside its Ed25519 signature: the version, the image repository and the multi-platform image digest. It is the only thing that authorizes a Console update of Oh My CPA. CLIProxyAPI has none; its update follows the tag its container already uses.
+
 - **Playground**: An ephemeral text-and-image debugging workspace for models already callable through CPA. The operator chooses an existing Client Key Alias (or its mask) and a client-visible Call Point returned by CPA's live `/v1/models` directory, and the Inference Endpoint the conversation is sent to. CPA retains normal routing and protocol adaptation; choosing a model does not pin a provider or Credential. Each explicit send or retry can spend provider entitlement.
 - **Inference Endpoint**: One of the three surfaces CPA serves a client key on, named `chat` (Chat Completions, `/v1/chat/completions`), `responses` (`/v1/responses`) or `messages` (`/v1/messages`). The Playground and the Agent send the same conversation to whichever is chosen: the server writes that endpoint's body and reads its stream back into the same events, so a Turn looks the same whichever answered (ADR 0088). It is a name from a closed set, never a path or URL.
 - **Playground Turn**: One immutable request snapshot and its streamed answer, measured timings, reported usage and bounded diagnostic events. Failed or stopped partial answers remain visible but do not enter later context as completed assistant messages. A Turn carries CPA's `request_id` once CPA has picked a credential for it, and that id (within the Turn's own time window, since CPA's ids restart with CPA) is how the Turn opens its one request record; a Turn without an id has no request link. Retrying the last turn reuses its original snapshot; edited settings apply to the next new turn. The single latest session (selected key fingerprint, Call Point, Inference Endpoint, parameters, custom request body, and active conversation turns with large image payloads redacted) is persisted server-side as the `playground_session` Preference, allowing operators to resume debugging across devices. Starting a new conversation discards stored turns. No key secrets are stored, and an inline image past the storage limit (16 KiB of data URL) is replaced by a placeholder in every retained copy of the turn - the message it was attached to and the request snapshot, which also carries earlier turns' images as history. A restored conversation replays without those placeholders rather than sending a URL the gateway would reject. This does not change CPA or upstream logging policies.
@@ -102,6 +107,10 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   time, and whether it was published as a prerelease. Records are the index the console
   stores. They are replaced as a unit per product each time a feed is read, so a
   withdrawn release stops being claimed.
+- **Update Dismissal**: The operator's choice to stop being reminded about one published
+  tag of one product, stored as the `update_dismissals` Preference. It silences the
+  navigation's update indicator for exactly that tag: the version card still reports the
+  release as available, and any later release is indicated again.
 - **Release Notes**: A release's own Markdown description, held only in the running
   process's memory. They are untrusted remote text: the console never executes HTML
   from them and never loads an image they reference, so opening the page makes no
@@ -401,6 +410,20 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   own status instead of as an absence, so the console never asks the operator to
   repeat the read that just came back empty; a credential nobody has read keeps the
   idle reading that does ask for one.
+- **Quota Auto Refresh**: The background re-reading of stored quota observations,
+  under the deployment-wide `omc_quota_auto_refresh` policy edited on OMC Settings
+  (ADR 0094). It has two independent triggers. A **reset-driven read** (on by default)
+  reads a credential once, about a minute after a window its latest reading reported
+  has reset, so an exhausted credential reads as recovered without anyone asking; a
+  credential nobody has read has no reset to wait for. A **scheduled read** (every six
+  hours by default; 5 minutes to 24 hours, or off) reads every credential whose reading is that
+  old, including one nobody has read. Automatic reads are the manual refresh with the
+  same persistence rule - a failed read never replaces the last good one - and are not
+  repeated every minute when they fail: a failed reset-driven read is retried every ten
+  minutes during the hour after the reset, and a failed scheduled read waits a whole
+  interval. Disabled credentials, providers with no probe,
+  an `auth_index` two credentials claim, and Meta credentials (whose read exchanges a
+  key upstream and is an audited operator action) are never read automatically.
 - **Estimated Window Capacity**: What a whole Quota Window is worth: usage this
   deployment recorded in the indicated cycle and metered model scope divided by
   the share upstream reports as used. It is capacity at 100%, not a forecast of
@@ -510,6 +533,9 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   identifiers, quota and rate limits, routing and edge, other - by header-name
   fragments (`web/src/types/responseHeaderGroups.ts`), without interpreting any
   provider's values.
+- **Access Path / Native Key**: Which of CPA's access providers authenticated the caller, and whether the caller's key came from CPA's native configured-key provider (`access_provider` / `is_native_key` on CPA's usage record, stored on the request record (`usage_events.access_provider`,
+  `is_native_key`). Caller authentication and the upstream credential type are independent facts: a caller on a native key can still be served by an upstream OAuth credential, so these fields never answer which upstream credential executed the request. An empty `access_provider` means the publishing gateway predates both fields; with a path present, `is_native_key` is a real answer — false on an OAuth path reads as a negative, not as unknown. Only the single-record view carries them, beside the
+authentication facts.
 - **Call Model / Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' and request list's call view one
@@ -674,3 +700,33 @@ execution. Agent replay needs no configured caller key or model; an open approva
 sending in both demo and normal mode. Agent replay state lasts for the page lifetime. No
 operation identifier in a recording authorizes a live action. The activity fixture is a deterministic synthetic year
 with normally distributed daily variation, quieter weekends and a small set of idle dates.
+
+## Credential window warmup
+
+- **Window Warmup** is an explicitly approved tiny consuming request on one exact Codex
+  or Claude OAuth credential. It starts idle subscription windows; it does not replenish
+  quota, redeem reset entitlements, clear cooldowns or guarantee a monetary charge.
+- **Warmup Policy** has a selected model, reset mode (`off`, `weekly`, `all`), a daily
+  enable flag and one `HH:mm` daily time. Provider defaults apply to existing and future
+  inheriting credentials; overrides replace the complete policy. Automation defaults
+  off and the daily time defaults to `06:00` in the effective OMC Time Zone.
+- **Activation Observation** records a quota-observed activation for a credential identity
+  and selected model. It describes a completed attempt, not automatic readiness. An enabled,
+  approved policy admits its first automatic attempt through current model, billing and
+  window evidence. HTTP completion without observed activation is pending, then uncertain
+  after bounded confirmation reads.
+- **Paid Fallback Evidence** is `disabled`, `enabled` or `unknown`, with its source and
+  observation instant. Missing fields never mean disabled. Enabled or unknown paid
+  fallback pauses every consuming warmup request; reset credits are not billing evidence.
+  The console labels it "Paid overage" ("超额付费"), the Activation Observation row
+  "Window activation", and a policy "warmup settings"; console copy describes what warmup does
+  for the user (starts the credential's quota window) rather than restating its guards.
+- Only main five-hour and overall weekly windows are activation targets. Zero usage with
+  a fixed future boundary remains active; missing or malformed evidence is unknown.
+  Explicit unused windows or repeated full-duration sliding boundaries can establish idle.
+- The daily start takes precedence when a new five-hour window would overlap it. A running
+  window skips that daily start. Missed daily starts are recovered only within one hour;
+  daylight-saving repeated hours retain one calendar task identity.
+- Early quota resets invalidate the prior cycle after observation. Redeeming a Codex reset
+  credit retains its independent success even if cooldown clearing, refresh or warmup fails.
+  Claude reset grants remain display-only.

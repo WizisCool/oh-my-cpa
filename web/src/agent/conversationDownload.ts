@@ -1,5 +1,4 @@
-import regularFontURL from '../assets/fonts/sarasa-mono-sc-regular.woff2?url';
-import boldFontURL from '../assets/fonts/sarasa-mono-sc-bold.woff2?url';
+import { embeddedFontCSS } from '../theme/sarasaFont';
 import { saveBlob } from '../utils/download';
 import { loadUIIcons } from './uiIcons';
 import { uiIconReferences } from './uiAssets';
@@ -12,26 +11,6 @@ import { SNAPSHOT_IMAGE_SCALE, SNAPSHOT_IMAGE_WIDTH, snapshotImageSlices, snapsh
 
 const SNAPSHOT_LOAD_TIMEOUT_MS = 15_000;
 
-function readDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-async function embeddedFont(url: string, weight: number): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Snapshot font unavailable');
-  const dataURL = await readDataURL(new Blob([await response.arrayBuffer()], { type: 'font/woff2' }));
-  return `@font-face{font-family:"OMC Snapshot";src:url("${dataURL}") format("woff2");font-weight:${weight};font-style:normal}`;
-}
-let fontCSSPromise: Promise<string> | undefined;
-async function snapshotFontCSS(): Promise<string> {
-  if (!fontCSSPromise) fontCSSPromise = Promise.all([embeddedFont(regularFontURL, 400), embeddedFont(boldFontURL, 700)])
-    .then(fonts => fonts.join('')).catch(error => { fontCSSPromise = undefined; throw error; });
-  return fontCSSPromise;
-}
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -129,20 +108,31 @@ async function snapshotImages(html: string, canvasDocuments: readonly string[]):
   } finally { window.clearTimeout(loadTimer); frame.remove(); }
 }
 
+/** Stands in for the font in a rendered document until its text has chosen the shards. */
+const FONT_PLACEHOLDER = '/*omc-snapshot-font*/';
+
 export async function downloadConversation(options: SnapshotDocumentOptions, format: 'html' | 'image', prefix: string): Promise<void> {
-  const fontCSS = await snapshotFontCSS();
   const views = snapshotViews(options.snapshot);
   // The icon set is fetched only for a conversation whose panels name one.
   const hasIcons = views.some(view => view.blocks?.some(block => block.items?.some(item => item.icon) || block.type === 'links'));
   const icons = hasIcons ? await loadLucideIcons().catch(() => undefined) : undefined;
   const uiIcons = await loadUIIcons(views.flatMap(uiIconReferences)).catch(() => ({}));
-  const appearance = { ...options.appearance, fontCSS, icons, uiIcons };
+  const draftAppearance = { ...options.appearance, fontCSS: FONT_PLACEHOLDER, icons, uiIcons };
+  // The embedded font holds only the shards this export draws: the document's own copy and the
+  // conversation, whose canvases render separately.
+  const withFont = async (draft: string) => {
+    const fontCSS = await embeddedFontCSS(draft + JSON.stringify(options.snapshot), 'OMC Snapshot');
+    // The head's style is the placeholder's first occurrence, before any conversation text.
+    return { fontCSS, html: draft.replace(FONT_PLACEHOLDER, () => fontCSS) };
+  };
   if (format === 'html') {
-    saveBlob(new Blob([conversationHTML({ ...options, appearance })], { type: 'text/html;charset=utf-8' }), exportFileName(prefix, 'html', options.exportedAt));
+    const { html } = await withFont(conversationHTML({ ...options, appearance: draftAppearance }));
+    saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFileName(prefix, 'html', options.exportedAt));
     return;
   }
   // A picture cannot run a canvas, so the document leaves each one a slot and the capture fills it.
-  const html = conversationHTML({ ...options, appearance: { ...appearance, canvases: 'slot' } });
+  const { fontCSS, html } = await withFont(conversationHTML({ ...options, appearance: { ...draftAppearance, canvases: 'slot' } }));
+  const appearance = { ...draftAppearance, fontCSS };
   const canvasDocuments = snapshotCanvases(options.snapshot).map(view => snapshotCanvasDocument(view, appearance, options.language));
   // All pages must encode successfully before any download: a failed last page cannot look complete.
   const images = await snapshotImages(html, canvasDocuments);

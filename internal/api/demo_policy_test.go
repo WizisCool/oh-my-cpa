@@ -105,6 +105,7 @@ func TestDemoPolicyRefusesTheDangerousSurface(t *testing.T) {
 		{http.MethodPatch, "/api/v1/management/providers/status"},
 		// The two calls that would leave the process on an operator's behalf.
 		{http.MethodPost, "/api/v1/management/providers/pull-models"},
+		{http.MethodPost, "/api/v1/management/providers/probe"},
 		{http.MethodPost, "/api/v1/pricing/sync"},
 	}
 	for _, route := range refused {
@@ -282,6 +283,7 @@ func TestDemoGuardRefusesOverHTTP(t *testing.T) {
 		{http.MethodPut, "/omc/api/v1/management/config/source", `{"source":"debug: true"}`},
 		{http.MethodPost, "/omc/api/v1/management/quota/redeem-credit", `{"auth_index":"a"}`},
 		{http.MethodPost, "/omc/api/v1/management/providers/pull-models", `{}`},
+		{http.MethodPost, "/omc/api/v1/management/providers/probe", `{}`},
 		{http.MethodPost, "/omc/api/v1/pricing/sync", `{}`},
 	} {
 		request, err := http.NewRequest(call.method, server.URL+call.path, strings.NewReader(call.body))

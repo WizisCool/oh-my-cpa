@@ -1,5 +1,5 @@
 import { formatCacheRate } from '../../theme/cacheScale';
-import { effortStep } from '../../theme/effortScale';
+import { displayEffortName, effortStep } from '../../theme/effortScale';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -245,7 +245,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
           event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
             ? [
                 ...(event.reasoning_effort
-                  ? [{ kind: 'tag', text: event.reasoning_effort, tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  ? [{ kind: 'tag', text: displayEffortName(event.reasoning_effort), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
                   : []),
                 ...(isFastTierEvent(event)
                   ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]

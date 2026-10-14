@@ -13,6 +13,7 @@ import {
 import { parseDocument, type Document } from 'yaml';
 
 import { PayloadRulesEditor } from './PayloadRulesEditor';
+import { IceServersEditor } from './IceServersEditor';
 
 import type { useT } from '../../i18n';
 import { isConfigSemanticallyEqual } from './configDirty';
@@ -179,6 +180,18 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
       );
     }
 
+    if (field.type === 'ice_servers') {
+      return (
+        <IceServersEditor
+          field={field}
+          value={val}
+          disabled={disabled}
+          t={t}
+          onChange={(target, next) => updateFieldInDoc(target, next)}
+        />
+      );
+    }
+
     if (field.type === 'json_editor') {
       return (
         <Input.TextArea
@@ -234,6 +247,7 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
       field.id === 'authDir' ||
       field.id === 'logDir' ||
       field.id === 'rmSecretKey' ||
+      field.id === 'githubToken' ||
       field.id === 'corsOrigins';
 
     return (

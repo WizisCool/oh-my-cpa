@@ -130,6 +130,10 @@ export interface UsageEventDetail {
     /** The diagnostic part of the upstream's response headers, sorted by name.
      *  Empty when none were kept; absent from a server that predates the field. */
     response_headers?: UsageEventResponseHeader[];
+    /** Which access path served the request; absent from a server that predates it. */
+    access_provider?: string;
+    /** Whether a native (API-key) credential served it; unknown when the access path is. */
+    is_native_key?: boolean;
     client_ip?: string | null;
     x_forwarded_for?: string | null;
   };

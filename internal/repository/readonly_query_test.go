@@ -3,10 +3,88 @@ package repository
 import (
 	"context"
 	"errors"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
+
+func TestReadOnlyDSNPreservesAbsolutePaths(t *testing.T) {
+	for _, example := range []struct {
+		name, path, want string
+	}{
+		{"unix", "/var/lib/omc/query.db", "file:///var/lib/omc/query.db"},
+		{"windows drive", "C:/Users/runner/query.db", "file:///C:/Users/runner/query.db"},
+		{"lowercase drive", "d:/OMC data/query.db", "file:///d:/OMC%20data/query.db"},
+		{"escaped filename", "C:/OMC 数据/query #100%?.db", "file:///C:/OMC%20%E6%95%B0%E6%8D%AE/query%20%23100%25%3F.db"},
+		{"unix backslash", `/var/lib/omc/query\name.db`, "file:///var/lib/omc/query%5Cname.db"},
+	} {
+		t.Run(example.name, func(t *testing.T) {
+			dsn := formatReadOnlyDSN(example.path)
+			location, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if location.Scheme != "file" || location.Host != "" || location.Fragment != "" {
+				t.Fatalf("database path became a URI authority or fragment: %s", dsn)
+			}
+			query := location.Query()
+			location.RawQuery = ""
+			if location.String() != example.want {
+				t.Errorf("database URI = %s, want %s", location.String(), example.want)
+			}
+			if query.Get("mode") != "ro" || strings.Join(query["_pragma"], ",") != "busy_timeout(2000),query_only(1)" {
+				t.Fatalf("read-only connection settings changed: %s", dsn)
+			}
+		})
+	}
+}
+
+func TestReadOnlyPoolOpensTheSameFileAndRefusesWrites(t *testing.T) {
+	ctx := context.Background()
+	database, err := Open(ctx, filepath.Join(t.TempDir(), "query 数据 #100%.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	repo := New(database)
+	if _, err := repo.SQL().Exec(`INSERT INTO pricing_channels (channel, multiplier, note, updated_at_ms) VALUES ('path-marker', 1, '', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.ReadOnlyQuery(ctx, `SELECT channel FROM pricing_channels WHERE channel = 'path-marker'`, 0)
+	if err != nil || len(result.Rows) != 1 || result.Rows[0][0] != "path-marker" {
+		t.Fatalf("read-only pool did not read the writable database: %+v %v", result, err)
+	}
+	conn, err := repo.readOnlyConn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var isQueryOnly int
+	if err := conn.QueryRowContext(ctx, `PRAGMA query_only`).Scan(&isQueryOnly); err != nil || isQueryOnly != 1 {
+		t.Fatalf("query_only = %d, error = %v", isQueryOnly, err)
+	}
+	assertReadOnlyFailure := func(err error) {
+		t.Helper()
+		var failure *sqlite.Error
+		if !errors.As(err, &failure) || failure.Code() != sqlite3.SQLITE_READONLY {
+			t.Fatalf("write must fail with SQLITE_READONLY: %v", err)
+		}
+	}
+	_, err = conn.ExecContext(ctx, `DELETE FROM pricing_channels`)
+	assertReadOnlyFailure(err)
+	if _, err := conn.ExecContext(ctx, `PRAGMA query_only = OFF`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, `DELETE FROM pricing_channels`)
+	assertReadOnlyFailure(err)
+	if _, err := conn.ExecContext(ctx, `ATTACH DATABASE ':memory:' AS other`); err == nil || !strings.Contains(err.Error(), "too many attached databases") {
+		t.Fatalf("attachment must fail at the zero-database limit: %v", err)
+	}
+}
 
 func queryTestRepository(t *testing.T) *Repository {
 	t.Helper()

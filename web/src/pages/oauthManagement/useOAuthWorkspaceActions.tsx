@@ -568,8 +568,15 @@ export function useOAuthWorkspaceActions(
     }
     markQuotaBusy([latest.authIndex], true);
     try {
-      await api.redeemCodexResetCredit(latest.authIndex);
-      toast.success(t('quota.redeem_credit_success'));
+      const outcome = await api.redeemCodexResetCredit(latest.authIndex);
+      // The credit is already spent when the gateway cooldown cannot be
+      // cleared: warn and point at Clear cooldown instead of reporting success,
+      // so the operator does not spend a second credit on retry.
+      if (outcome && outcome.cooldown_cleared === false) {
+        toast.warning(t('quota.redeem_cooldown_warning'));
+      } else {
+        toast.success(t('quota.redeem_credit_success'));
+      }
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } catch (error) {
       toast.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));

@@ -201,21 +201,25 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 		if rawPct == nil {
 			rawPct = prod.UsagePctAlt
 		}
+		productWindow := QuotaWindow{
+			ID:            fmt.Sprintf("xai_prod_%d", i),
+			Label:         fmt.Sprintf("%s 使用率", strings.ToUpper(name)),
+			Scope:         "model",
+			Model:         name,
+			ResetAtMS:     resetAtMS,
+			ResetLabel:    resetLabel,
+			ResetAccuracy: "exact",
+		}
+		// A product without a readable share is still listed: its row draws
+		// the unknown state instead of vanishing, the way CPAMC's breakdown
+		// names it unavailable rather than hiding it.
 		if pct, ok := toFloat(rawPct); ok {
 			clampedUsed := clamp(pct, 0, 100)
 			clampedRem := clamp(100-clampedUsed, 0, 100)
-			windows = append(windows, QuotaWindow{
-				ID:               fmt.Sprintf("xai_prod_%d", i),
-				Label:            fmt.Sprintf("%s 使用率", strings.ToUpper(name)),
-				Scope:            "model",
-				Model:            name,
-				UsedPercent:      &clampedUsed,
-				RemainingPercent: &clampedRem,
-				ResetAtMS:        resetAtMS,
-				ResetLabel:       resetLabel,
-				ResetAccuracy:    "exact",
-			})
+			productWindow.UsedPercent = &clampedUsed
+			productWindow.RemainingPercent = &clampedRem
 		}
+		windows = append(windows, productWindow)
 	}
 
 	monthlyLim := cfg.MonthlyLimit

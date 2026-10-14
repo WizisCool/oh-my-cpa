@@ -53,6 +53,8 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   const creditRows = (item.reset_credits?.credits ?? [])
     .filter((credit) => credit.expires_at_ms)
     .sort((left, right) => (left.expires_at_ms ?? 0) - (right.expires_at_ms ?? 0));
+  // Grants are display-only: only ones with remaining resets are listed, and
+  // there is deliberately no claim action beside them.
   const isSnapshotBound = item.plan?.expires_source === 'credential_snapshot';
   // Upstream's applicable count is not the UI gate: it refines which credits apply right
   // now, and the consume response states the outcome. The bank of credits decides whether
@@ -70,6 +72,22 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   const hasDiagnostics = Object.keys(rawSignals).length > 0
     || Object.keys(item.model_quotas ?? {}).length > 0
     || Boolean(item.error);
+
+  // Grant scope identifiers are upstream window ids, not display text: known
+  // ones resolve to the localized window labels, anything upstream adds
+  // later still prints raw rather than vanishing.
+  const grantWindowLabel = (scope: string): string => {
+    switch (scope) {
+      case 'five_hour':
+        return t('quota.window_five_hour');
+      case 'seven_day':
+        return t('quota.window_weekly');
+      case 'seven_day_overage_included':
+        return t('quota.window_seven_day_overage');
+      default:
+        return scope;
+    }
+  };
 
   const renderWindowRows = (rows: typeof windows) => {
     const rendered: React.ReactNode[] = [];
@@ -214,6 +232,26 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {(item.reset_grants ?? []).filter((grant) => grant.resets_left > 0).length > 0 && (
+        <div className={styles.section}>
+          <SectionHeading level="label" as="div" title={t('quota.reset_grants_title_zoned', { zone: formatGmtOffsetLabel(new Date(nowMS)) })} />
+          <div className={styles['reset-list']}>
+            {(item.reset_grants ?? [])
+              .filter((grant) => grant.resets_left > 0)
+              .map((grant, index) => (
+                <div className={styles['reset-row']} key={grant.id || index}>
+                  <span className={styles['meta-label']}>{grant.label || t('quota.reset_occurrence', { n: index + 1 })}</span>
+                  <span className={styles['meta-value']}>
+                    {t('quota.reset_grant_remaining', { left: grant.resets_left, total: grant.resets_total })}
+                    {grant.ends_at_ms ? ` · ${formatTimeWithCountdown(grant.ends_at_ms, nowMS, t)}` : ''}
+                    {(grant.clears ?? []).length > 0 ? ` · ${(grant.clears ?? []).map(grantWindowLabel).join(' · ')}` : ''}
+                  </span>
+                </div>
+              ))}
           </div>
         </div>
       )}

@@ -418,6 +418,29 @@ func (h *Handler) getSystemRepository(writer http.ResponseWriter, request *http.
 	writeJSON(writer, http.StatusOK, dto)
 }
 
+// SystemUpdatesDTO is both products' stored version answers, for the shell's update
+// indicator.
+type SystemUpdatesDTO struct {
+	OMCVersion SystemProductVersionDTO `json:"omc_version"`
+	CPAVersion SystemProductVersionDTO `json:"cpa_version"`
+}
+
+// getSystemUpdates serves the stored version answers without checking.
+//
+// The shell reads this on every page to decide whether to mark the System Information
+// entry, so it never spends a feed request: the background sweep and the page's own check
+// are what refresh the index, and this only reports what they last found. For the same
+// reason it always answers `200` - without a release service both products read as not
+// checked yet, which draws no indicator.
+func (h *Handler) getSystemUpdates(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	ctx := request.Context()
+	writeJSON(writer, http.StatusOK, SystemUpdatesDTO{
+		OMCVersion: h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()),
+		CPAVersion: h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
+	})
+}
+
 // getSystemReleases serves one product's merged change log.
 func (h *Handler) getSystemReleases(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

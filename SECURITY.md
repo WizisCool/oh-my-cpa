@@ -43,6 +43,7 @@ When evaluating potential vulnerabilities, please keep the following security bo
 - **Secret Separation**: The storage encryption key (`OMCPA_MASTER_KEY`) encrypts credentials and raw usage payloads at rest via AES-GCM. Losing it permanently prevents decryption.
 - **Sanitized Projections**: Ordinary API responses use strict DTO allowlists and redact secrets (displaying only fingerprints or masks).
 - **Audited Administrative Surfaces**: Operations that intentionally access or modify secrets (such as viewing raw YAML source or revealing client API keys) require active admin sessions, CSRF / same-origin validation, and are recorded to the append-only `audit_events` log.
+- **The Updater Holds the Docker Socket, the Console Does Not**: Console updates (ADR 0099) are applied by a separate `oh-my-cpa-updater` container that mounts the Docker socket and is therefore equivalent to control of Docker on its host. It publishes no port, authenticates the console with an HMAC of `OMCPA_MASTER_KEY`, accepts only a product name (`omc` or `cpa`), replaces Oh My CPA only with the image named by an Ed25519-signed release manifest, and refuses pinned images. Reports that make it pull or run an image of the caller's choosing, or reach it without the token, are in scope; that a host administrator can remove or impersonate it is not.
 - **No Arbitrary Upstream Proxying**: Generic `/api-call` forwarding is disabled for browser traffic to prevent SSRF.
 
 ## Dependency Security Overrides

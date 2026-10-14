@@ -37,6 +37,9 @@ for the target architecture and injects `internal/config.BuildVersion` from the 
 tag. The final Alpine image runs as uid/gid `10001:10001` with `/data` as its only
 persistent writable directory. Its own `deploy/healthcheck.sh` normalizes the prefix
 through `deploy/base-path.sh`; `degraded` is process readiness, not gateway connectivity.
+The same image is the updater when its command is `updater serve` (ADR 0099): the probe
+then asks the updater instead, so that role needs no health check of its own, and both
+release Compose files declare it as a second service that alone mounts the Docker socket.
 
 Docker Hub distributes `wiziscool/oh-my-cpa` for amd64 and arm64. The full Compose
 file pulls CPA and OMC with loopback host ports; OMC-only Compose attaches to a fresh
@@ -59,6 +62,12 @@ match CPA's Darwin/Windows/Linux/FreeBSD amd64/arm64 coverage. They build the SP
 then cross-compile CGO-free Go with the same version injection and embedded IANA zone
 data. The extracted host Linux package is smoke-tested; foreign targets are build
 coverage, not claims of target-native execution. ADR 0066 records the asset contract.
+The release job also signs `release-manifest.json` (version, image repository and the
+pushed multi-platform digest) with the Ed25519 key in its `RELEASE_SIGNING_KEY` secret,
+after the native assets are verified and before anything is uploaded; the job fails when
+the key is absent or does not match `internal/updater/release_public_key.txt`, which is
+the key compiled into the binary. `scripts/release-workflow.mjs` holds that ordering and
+the secret's confinement to the release job as workflow invariants.
 `docs/releasing.md` records the maintainer workflow
 and ADR 0056 the publication ordering and immutable version identity.
 
@@ -110,6 +119,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage/ingest` | Collector loop, decode processor, usage-fact fold and data-lifecycle maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
 | `internal/release` | Published-version observation: version comparison, the release feed client, the stored index, and the project's star count for the header link | `repository` |
+| `internal/updater` | The updater role of the binary (`oh-my-cpa updater serve\|install\|healthcheck`, ADR 0099): a Docker Engine API client over the unix socket, container replacement with rollback, signed-manifest verification, the two-request control service, the one-command installer, and the client the console uses to reach it | `release` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
 | `internal/capability` | Agent capability declarations, JSON Schema validation, permission/risk rules, pending-operation store, executor audit | `repository`, `crypto` |
 | `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system, model directory) used by both console handlers and capabilities | `capability`, `cpa/management`, `cpa/gateway`, `modelcatalog`, `pricing`, `quota`, `repository` |
@@ -342,7 +352,9 @@ than to `internal/operations`.
 
 `database_schema` and `database_query` read OMC's own database through a second, read-only
 SQLite pool that `internal/repository` opens on first use (`mode=ro`, `query_only`, no attached
-databases). The repository checks each statement's compiled `EXPLAIN` program against a table and
+databases). Its escaped absolute file URI keeps Windows drive letters in the path
+(`file:///C:/...`), with reserved filename characters escaped and the connection
+settings unchanged. The repository checks each statement's compiled `EXPLAIN` program against a table and
 column classification before running it, and bounds and masks what it returns (ADR 0036,
 `docs/agent-capabilities.md`).
 
@@ -896,6 +908,15 @@ caller's own `X-Request-ID` is never the pairing key - one value sent on two req
 would pair an attempt with another request's outcome - and is recorded on the audit
 row as `client_request_id` for correlation instead.
 
+### Quota resolution and partial-success boundary
+
+Plugin quota resolution requires a matching quota identifier, plugin ID, or auth
+provider; an unmatched credential is never sent to another plugin. A successful
+Codex redemption with a failed gateway cooldown clear stays successful and
+returns `cooldown_cleared: false` plus `cooldown_error: "cooldown_clear_failed"`;
+only the HTTP status is retained in the service diagnostic, and the console
+renders localized guidance.
+
 ## 3. Frontend shape
 
 The console scroll engine distinguishes native option lists by their computed overflow, not merely the shared holder DOM structure. Library-native `auto`/`scroll` holders retain browser-owned wheel scrolling because their deferred React offset reconciliation would race frame-by-frame writes; ordinary native regions still glide through `scrollTop`, and hidden-overflow virtual holders are driven through their wheel handler. This keeps nonvirtualized Select popups scrollable without bypassing the request-list virtualizer.
@@ -1054,6 +1075,18 @@ every stylesheet and fails on a font size that the scale owns but is written as 
 number, a fractional font size, a 2–4px corner written as a number, and a
 `--text-*` or `--radius-*` reference that no stylesheet defines or that carries a
 fallback (`docs/design.md` §3 and §4).
+
+The console font ships complete (ADR 0094). `web/src/assets/fonts/sarasa/` holds Sarasa
+Mono SC cut into `unicode-range` shards by `pnpm subset-font` (`scripts/subset-font.mjs`,
+with the pure planning in `scripts/font-shards.mjs`), plus `manifest.json`, `core.css` and
+`shardUrls.ts` (one static `?url` import per shard, so built modules hold only hashed URLs).
+`index.css` imports `core.css`, which declares only shard 000 of each weight, so startup
+waits for one file per weight. At startup `main.tsx` also starts an asynchronous import of
+`web/src/theme/sarasaFont.ts`, which registers every other shard through the `FontFace`
+API; a browser fetches one only when a page draws a character it holds. Exports embed the
+shards their text draws through the same module (`shardsForText` in
+`web/src/theme/fontShards.ts`). `scripts/font-shards.test.mjs` holds the committed shards,
+manifest, core stylesheet and URL module to each other.
 
 
 ### Route error recovery
@@ -1983,9 +2016,9 @@ price editor in place (`web/src/components/pricing/`).
 `internal/quota` calls CPA's `/api-call` with the credential under observation to
 reach the provider's own usage endpoint. Targets are restricted to
 `AllowedURLPrefixes` — a compile-time allowlist of official HTTPS endpoints — and
-the resulting snapshot is normalized and stored in `quota_snapshots`. This is the
-only place Oh My CPA uses CPA as a request proxy, and it is server-initiated:
-there is no user-supplied URL or generic `/api-call` surface.
+the resulting snapshot is normalized and stored in `quota_snapshots`. Quota observations
+and the fixed credential warmup adapters are the only server-initiated CPA request
+proxies (ADR 0097): there is no user-supplied URL or generic `/api-call` surface.
 
 Kimi international credentials use the single allowlisted
 `https://api.kimi.ai/coding/v1/usages` endpoint rather than the domestic Kimi host.
@@ -2087,6 +2120,28 @@ range therefore revise both current estimates and historical references on the n
 read. Reset detection is limited to observed/retained evidence, not a complete upstream
 lifecycle. There are no new tables, migrations or routing inputs (ADR 0058 and ADR 0059).
 
+Readings are also refreshed in the background (ADR 0094). `Handler.RunQuotaAutoRefresh`
+in `internal/api/quota_auto_refresh.go` wakes every minute, reads the
+`omc_quota_auto_refresh` preference, lists the credentials and their latest snapshots,
+and asks `quota.AutoRefreshTrigger` (`internal/quota/auto_refresh.go`) which are due: a
+reset-driven read once a stored window's `reset_at_ms` plus a one-minute grace has
+passed the observation (a failed one is retried every ten minutes during the following
+hour), and a scheduled read once the newer of the observation and the process's last
+attempt is `interval_minutes` old, less a thirty-second slack for the observation being
+stamped after its tick. Due credentials - reset-driven first,
+then oldest reading first, at most sixteen per round and four at a time - go through
+`RefreshCredentialQuota` and `persistNormalizedQuotaSnapshot`, exactly as a manual
+refresh does. Attempts are remembered in process memory because a failed read is not
+persisted, and a round failure is logged when it starts or changes rather than every
+minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`
+claims and Meta (whose observation is an audited key exchange) are skipped. The
+preference API refuses any document for this key other than
+`{"interval_minutes": 0 | 5-1440, "refresh_on_reset": bool}` with
+`invalid_quota_auto_refresh`, and `internal/operations/quota_auto_refresh.go` registers
+`quota_auto_refresh_get` and `quota_auto_refresh_set` over the same preference. The OAuth
+management workspace polls the stored overview every minute, as the dashboard's
+Credential Quota panel already does, so a background reading appears on an open page.
+
 Codex reset-credit redemption is offered in the credential Drawer's Quota tab and never
 from a list row, because it spends an irreversible entitlement; it is offered whenever the
 credential's available credit count is positive. Upstream's `applicable_available_count` is not the
@@ -2099,7 +2154,7 @@ account as the reading it was decided from.
 | Table group | Tables | Notes |
 | --- | --- | --- |
 | Instances & identity | `cpa_instances`, `discovered_resources`, `resource_overrides`, `connections`, `cpa_bindings` | Encrypted management key; bindings survive upstream removal. `connections` is provisioned by migration 006 for the Connection entity but no code reads or writes it yet — treat it as reserved, not as a live table |
-| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown. Migration 037 adds `usage_events.fail_status_code` and `fail_body` (the status a failed request ended with and the upstream's redacted, bounded error body, from the `fail` block of CPA's usage record); `0` and empty mean unknown, and the list projection carries the status only. Migration 038 adds `usage_events.response_headers`, the filtered upstream header snapshot as a JSON object (`usage.FilterResponseHeaders` drops transport and credential-bearing headers and bounds the rest); only `GetUsageEvent` reads it |
+| Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_facts_15m`, `usage_facts_daily`, `usage_aggregation_checkpoints`, `data_lifecycle_state` | Milliseconds; raw payloads encrypted, and stored once: with a cipher configured `raw_message` is empty and only the ciphertext is kept. Migration 035 replaces the hourly and daily overview rollups with the permanent usage facts and adds `data_lifecycle_state` (what each rolling policy has removed, and up to which instant). Every table declares its lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`). Migration 034 adds `usage_events.response_model` (the model the upstream reported serving, empty when unknown) and `model_substituted`, decided at ingestion by `usage.IsModelSubstituted`, with a partial index for the substituted rows; earlier rows stay unknown. Migration 037 adds `usage_events.fail_status_code` and `fail_body` (the status a failed request ended with and the upstream's redacted, bounded error body, from the `fail` block of CPA's usage record); `0` and empty mean unknown, and the list projection carries the status only. Migration 038 adds `usage_events.response_headers`, the filtered upstream header snapshot as a JSON object (`usage.FilterResponseHeaders` drops transport and credential-bearing headers and bounds the rest); only `GetUsageEvent` reads it. Migration 039 adds `usage_events.access_provider` and `is_native_key` (which access provider authenticated the caller and whether the caller's key is CPA's native configured key, from CPA's usage record); an empty `access_provider` means a gateway that predates them, while `is_native_key` is meaningful whenever a path is present, and only `GetUsageEvent` reads them |
 | Custom icons | `custom_icons` | Migration 032 adds durable sanitized image BLOBs, stable IDs and content revisions; confirmed deletion atomically clears matching provider overrides and deletes the asset |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions`, `pricing_match_reviews` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29. Migration 031 added `pricing_match_reviews` (the OpenRouter model last answered for a custom or linked price); match-review reads and writes refuse to run before migration 31 |
 | Agent | `agent_documents` | Encrypted latest Agent session, capability operations and attached images (migrations 026 and 036). Sessions retain whole history until reset or explicit replacement, with no session size cap; images follow their references and are deleted only after a reset is persisted. Terminal operations are retained 7 days and purged lazily during Agent requests |
@@ -2113,9 +2168,13 @@ once for both the gateway's version header and its credential count), the plugin
 provider counts, and the database, collector, record-count and admission reads - so the page
 waits for its slowest read rather than for the sum of them.
 
-The management system surface is six routes: `GET /management/system` (the page),
+The management system surface is nine routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `GET
-/management/system/repository` (the project's star count for the header link), `POST
+/management/system/repository` (the project's star count for the header link), `GET
+/management/system/updates` (both products' stored version answers for the shell's update
+indicator), `GET /management/system/updater` (whether this deployment can apply updates,
+per product, and the running or last update), `POST /management/system/updater/apply`
+(start one; see [Console updates](#console-updates-adr-0099)), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
 /management/system/maintenance` (the running or last job) and `POST
 /management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
@@ -2123,8 +2182,22 @@ products' states and `served_from_cache`; a maintenance POST answers `202` on ad
 `409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
 `503` once the service is shutting down. Every one of them answers `503` when the handler was
 built without the corresponding service, which is how a deployment that does not offer the
-surface behaves. The repository route is the exception, because the shell reads it on every
-page: it always answers `200`, with a null `stargazers_count` whenever no count is known.
+surface behaves. The repository and updates routes are the exception, because the shell reads
+them on every page: they always answer `200`, the first with a null `stargazers_count`
+whenever no count is known and the second with both products `indeterminate` /
+`not_checked_yet` when there is no release service. The updater status route is the other
+exception: it answers `200` with `state: disabled` when no updater is wired, because a
+missing updater is a state of the deployment the page explains.
+
+The updates route never reads the feed. It reports what the sweep or the page's own check
+last stored, in the same per-product shape the page uses, so the shell can ask on every page
+without spending the shared budget; an open console re-reads it hourly
+(`UPDATE_STATUS_REFRESH_MS`). The shell marks the System Information navigation entry when
+either product is `update_available` and that release has not been dismissed. A dismissal is
+the `update_dismissals` preference, a product-to-tag map written from the page: it names one
+published tag, so a later release is marked again, and being a preference it holds across
+browsers and restarts. The comparison of the two lives in the browser
+(`web/src/utils/updateDismissals.ts`); the server stores the document and nothing else.
 
 Migrations are embedded from `migrations/` and applied in filename order inside
 one transaction each. A migration against an existing on-disk database first
@@ -2147,6 +2220,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers. `Run` returns only after every stage has stopped, and `app.Run` waits for it before the database closes, whichever loop ended first |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
+| Quota auto refresh | `app.Run` → `api.Handler.RunQuotaAutoRefresh` | Best effort; a round that cannot reach CPA leaves the stored readings as they were and the next minute tries again. Reads only what the `omc_quota_auto_refresh` policy makes due (§8, ADR 0094) |
 | Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 | Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 
@@ -2246,6 +2320,72 @@ last successful check time so the reader can judge its age. The routine
 "last checked" readout was deliberately dropped from the cards - it was the same
 timestamp on every one of them - so staleness is now something the page states when a
 check fails rather than a number a reader has to interpret.
+
+### Console updates (ADR 0099)
+
+Applying an update is a second process's job. The console container cannot replace
+itself and must not hold the Docker socket, so `internal/updater` runs as a sidecar from
+the same image and the console talks to it over the Docker network:
+
+```text
+System Information page
+  └─ POST /management/system/updater/apply {product}
+       ├─ updater status: ready? product available? (else 409 with the reason as `code`)
+       ├─ omc only: stored release answer says update_available
+       │            └─ internal/release downloads release-manifest.json + .sig (forwarded unread)
+       ├─ audit system.update.apply = admitted   (a failed audit write refuses the update)
+       └─ POST http://oh-my-cpa-updater:8090/v1/update   Authorization: Bearer HMAC(master key)
+            ├─ omc: verify signature, repository and non-regressing version; pull repo@digest; tag
+            ├─ cpa: pull the configured tag
+            ├─ stop old, rename it to <name>-omc-previous, create + start replacement, await healthy
+            │      └─ on failure: remove replacement, rename back, start old, re-point the tag
+            └─ omc only: replace the updater itself, handing the finished job to its successor
+```
+
+`GET /management/system/updater` reduces every way of not having an updater to a state
+the page can explain: `ready`, `not_installed` (a containerised console with no answer,
+which the install command fixes), `not_containerised` (a native install), `disabled`
+(`OMCPA_UPDATER_ENABLED=false`) and `rejected` (an updater that does not accept this
+console's token). The read is `200` in all of them. Products carry `action` and
+`reason`: `pinned`, `not_a_local_container`, `signature_unavailable`,
+`container_not_found`, `ambiguous_container`. Demo mode wires no updater: the read
+answers `disabled` and the apply route is refused by the demo policy.
+
+Three invariants hold the design together:
+
+- **The updater decides what it touches.** Its control surface takes a product name. The
+  console container, the gateway container and the image reference are resolved by the
+  updater from Docker's own state, never supplied by the caller.
+- **Verification happens where the authority is.** The console forwards the manifest and
+  signature as bytes; the updater, which holds the socket, checks them against the key
+  compiled into its own binary.
+- **The outcome is recorded by whoever is alive.** A gateway update finishes while the
+  admitting process still runs, and a goroutine writes `system.update.completed`. A
+  console update kills that process, so `Handler.RecordInterruptedUpdate` follows the
+  updater's last job from the moment the next process starts. That process starts while
+  the job is still verifying it, and the updater then replaces itself, so the follow
+  waits through unfinished stages and failed reads, for at most fifteen minutes. The
+  audit event is keyed by the job ID so the two paths cannot both record it. Shutdown
+  ends both waits before the database closes (`Handler.CloseUpdateWatchers`); an outcome
+  left unrecorded is picked up by the next process.
+
+The updater role has one loop of its own, `Service.KeepLinked`: an installed updater
+lives outside the deployment's Compose project, so it follows Docker's container-start
+events and re-attaches the console to the shared network whenever Compose recreates it.
+A Compose-declared updater shares the project network and runs no such loop.
+
+The updater keeps a job in memory only. A restart mid-replacement is finished by
+`Service.Reconcile`, which looks for a `-omc-previous` container: with a healthy
+replacement the leftover is removed, without one it is restored. A replacement whose
+health check has not yet passed counts as without one, since it was interrupted
+mid-verification. The updater's own pair is the exception: a successor running
+`Reconcile` is up, whatever its health check reports yet.
+
+On the page, `useConsoleUpdate` follows one job. While it does, a failed read or a
+`not_installed` answer is not shown, because both are what a console restart looks like
+from the browser; the last answer from a working updater stands until the job reports
+its end, the updater forgets it, or ten minutes pass without an answer. A finished
+console update reloads the page, since the scripts it holds belong to the old version.
 
 ## 11. Database maintenance and the write gate
 
@@ -2682,7 +2822,7 @@ Gzip estimates are not HTTP transfer measurements or execution-time guarantees.
 
 Ordinary growth is advisory. Hard anomaly ceilings allow substantial headroom:
 startup JS 3 MiB raw / 1 MiB gzip, startup CSS 256 / 96 KiB, largest JS 4 MiB raw,
-all JS 16 MiB raw, distribution 20 MiB raw and Lobe SVGs 2 MiB raw. Reports retain
+all JS 16 MiB raw, distribution 32 MiB raw (ADR 0094: the complete font) and Lobe SVGs 2 MiB raw. Reports retain
 per-file sizes, source ownership and the largest JS files for investigation.
 `scripts/bundle-baseline.mjs` compares only an exact-revision reference: an explicit
 `BUNDLE_BASELINE` file or the successful push CI artifact for `BUNDLE_BASE_SHA`.
@@ -2947,8 +3087,8 @@ with.
 (`web/src/components/workspace/useConversationExport.ts`). `conversationSnapshot.ts` projects what the
 page displays into a `ConversationSnapshot` - never the stored session - and drops execution
 identities (key fingerprints, tokens, operation and run ids) at any depth. `conversationHtml.ts` renders
-that snapshot to one HTML string: the palette's resolved tokens as custom properties, the console's
-font embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
+that snapshot to one HTML string: the palette's resolved tokens as custom properties, the font
+shards its text draws embedded as data, Markdown rendered without raw HTML, remote images demoted to links, a canvas as the same
 sandboxed frame, and a Content-Security-Policy that allows no network. Its only script is the fixed
 `conversationControls.ts` (search, side panel, copy, table sorting, print). The PNG is the same
 document laid out as an 840px share card in a sandboxed, script-free iframe. Generated interfaces are first drawn in separate opaque-origin, network-blocked frames using the shared `canvasCapture.ts` path, inserted as PNG data images, then the document is rasterized through an
@@ -3217,3 +3357,55 @@ script permission with same-origin permission: model markup runs only in the exi
 sandbox, its bounded response becomes an image, and the outer snapshot is script-disabled.
 A missing figure retains an explicit unavailable-image note; all transcript pages must encode
 before any PNG is downloaded.
+
+## Credential window warmup (ADRs 0097 and 0098)
+
+`internal/warmup` owns policies, explicit billing/activation evidence, pure calendar and
+cycle decisions, and fixed tiny-request adapters. `internal/api/warmup.go` orchestrates
+credential eligibility, audit-before-send, per-credential execution exclusion, fresh
+quota reads and completion verification. Operations exposes the same implementation to
+confirmed Agent/MCP writes. CPA retains token substitution and credential-specific
+transport; neither browser nor model can supply an upstream URL or read OAuth tokens.
+
+The quota service parses `warmup_evidence` from the same successful provider usage read.
+It carries paid fallback as a three-state value rather than collapsing omitted or false
+fields. `quota_snapshots.warmup_json` preserves that evidence through scheduled refresh,
+manual refresh and reset-credit redemption. A per-reading service copy keeps evidence
+isolated when the existing batch refresh shares a service concurrently.
+
+Migration 041 adds `credential_warmup_policies` (instance/scope/identity),
+`credential_warmup_state` (one instance/credential scheduling record) and
+`credential_warmup_runs` (newest 100 receipts per instance/credential). Policies require
+confirmation and a revision; credential overrides include a keyed identity fingerprint and provider
+in their storage key. CPA's opaque account field is hashed, never persisted or returned. Identity replacement discards prior activation observations and scheduling state. The three
+secret-free tables are explicitly classified for lifecycle and read-only queries.
+
+The application starts and joins the minute warmup loop alongside quota auto-refresh.
+Disabled policies cause no upstream usage reads. Enabled credentials are checked in
+bounded rounds of 16 with at most four concurrent contexts, targeting fresh evidence
+every five minutes and reusing newer stored quota evidence. Every consuming attempt
+performs a fresh read first. Auto and manual requests share a credential lock and durable
+receipts. A pre-send revalidation refusal restores the prior cycle, daily task and activation
+basis because no consuming request occurred. Restart-abandoned executing receipts are
+uncertain; they are not resubmitted. A transient startup recovery error is diagnosed and
+retried on the minute ticks; consuming rounds wait for successful recovery.
+Definite rate-limit refusals use one/five/fifteen-minute backoff, with at most three
+retries; a successful response is checked immediately and at most twice more without
+resending. An approved enabled policy admits the first automatic attempt and an explicitly
+selected new model through fresh quota and billing evidence. The legacy `protocol_verified`
+and `verified_model` state fields record observed activation; they do not admit or suppress
+execution. An observed unsupported protocol response pauses automatic requests for the
+same model, while a confirmed manual action can recheck compatibility. Its optional
+`protocol_pause` model/reason is persisted independently of the latest result in the existing
+state JSON; legacy latest-result refusals are carried forward before replacement. A rate-limited
+or unresolved recheck retains the pause; observed activation for that model clears it.
+A different explicitly selected model is evaluated independently. A changed model is
+not silently substituted. Read projections preserve the current window or billing reason
+rather than replacing it with historical activation status (ADR 0098).
+
+The facade adds warmup settings, credential policy/state and manual-run routes under
+`/management/quota/warmup`. The public demo exports settings and representative
+credential state but refuses policy writes and consumption, and never starts the loop.
+
+Warmup round ordering is oldest observation first. Fleets exceeding a round's capacity
+remain queued rather than increasing concurrency or skipping protection.

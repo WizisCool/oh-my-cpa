@@ -102,6 +102,16 @@ export function validateReleaseWorkflow(workflow) {
   const publication = releaseSteps[publicationIndex].run;
   assert.ok(publication.includes('native-release.mjs --verify'));
   assert.ok(publication.indexOf('native-release.mjs --verify') < publication.indexOf('gh release upload'));
+  const signingIndex = publication.indexOf('node scripts/sign-release-manifest.mjs tmp/native-release');
+  assert.ok(signingIndex > publication.indexOf('native-release.mjs --verify'), 'The release manifest is signed after the assets are verified');
+  assert.ok(signingIndex < publication.indexOf('gh release upload') && signingIndex < publication.indexOf('gh release create'),
+    'The signed manifest must exist before any attachment is uploaded');
+  assert.equal(releaseSteps[publicationIndex].env.RELEASE_SIGNING_KEY, '${{ secrets.RELEASE_SIGNING_KEY }}');
+  assert.equal(releaseSteps[publicationIndex].env.RELEASE_DIGEST, '${{ needs.publish.outputs.digest }}', 'The manifest names the digest that was pushed');
+  for (const [jobName, job] of Object.entries(workflow.jobs)) {
+    if (jobName === 'release') continue;
+    assert.ok(!JSON.stringify(job).includes('RELEASE_SIGNING_KEY'), 'Only the release job may hold the signing key');
+  }
   assert.ok(publication.includes('gh release upload "$RELEASE_TAG" tmp/native-release/* --clobber'));
   assert.ok(publication.includes('gh release create "$RELEASE_TAG" tmp/native-release/*'));
   assert.ok(publication.includes('--generate-notes --draft --latest=false'));

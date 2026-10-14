@@ -8,6 +8,7 @@ import {
   type CredentialQuotaPanelProps,
 } from '../src/components/dashboard/CredentialQuota';
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
+import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../src/types/quota';
 
@@ -191,5 +192,50 @@ describe('credential quota presentation', () => {
     render(<QuotaSurface files={[file('solo')]} />);
     expect(panelState()).toBe('ready');
     expect(screen.getByText('No quota reading')).toBeTruthy();
+  });
+});
+
+describe('claude reset grants display', () => {
+  const grantItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
+    quota('claude-grants', [], {
+      provider: 'claude',
+      reset_grants: [
+        { id: 'grant-weekly', label: 'Weekly Reset', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 3 * 24 * 60_000, clears: ['five_hour'] },
+        { id: 'grant-spent', label: 'Spent', resets_total: 1, resets_left: 0 },
+      ],
+      ...overrides,
+    });
+
+  it('lists grants with remaining resets and hides spent ones, without any claim action', () => {
+    render(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody item={grantItem()} nowMS={NOW_MS} isDemo={false} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Weekly Reset')).toBeTruthy();
+    expect(screen.getByText(/1 of 2 left/)).toBeTruthy();
+    // Upstream scope ids resolve to localized window labels, not raw ids.
+    expect(screen.getByText(/5-hour limit/)).toBeTruthy();
+    expect(screen.queryByText('five_hour')).toBeNull();
+    expect(screen.queryByText('Spent')).toBeNull();
+    // Display-only: no button offers to spend the entitlement.
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('omits the grants section when nothing remains', () => {
+    render(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={grantItem({ reset_grants: [{ id: 'grant-spent', resets_total: 1, resets_left: 0 }] })}
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText(/Claude reset grants/)).toBeNull();
   });
 });

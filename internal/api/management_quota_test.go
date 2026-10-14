@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	const managementKey = "management-secret"
 
 	var cpaResetCalledWith string
+	var shouldFailReset bool
 	var cpaApiCallCalledWith string
 	var cpaConsumeMethod string
 	var cpaConsumeHeader map[string]string
@@ -66,6 +68,11 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 			}
 			_ = json.NewDecoder(request.Body).Decode(&payload)
 			cpaResetCalledWith = payload.AuthIndex
+			if shouldFailReset {
+				writer.WriteHeader(http.StatusBadGateway)
+				_, _ = writer.Write([]byte(`{"error":"private-upstream-diagnostic"}`))
+				return
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 
 		case "/v8/management/requests/api-call":
@@ -287,6 +294,10 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	}
 
 	// 4. POST /api/v1/management/quota/redeem-credit
+	// A spent credit does not clear the gateway cooldown by itself, so redeeming
+	// also resets it; the marker is cleared first to prove the redeem step made
+	// the call rather than the clear-cooldown step above.
+	cpaResetCalledWith = ""
 	redeemResp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
 	if err != nil {
 		t.Fatalf("POST /redeem-credit failed: %v", err)
@@ -295,6 +306,19 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 
 	if redeemResp.StatusCode != http.StatusOK {
 		t.Fatalf("redeem-credit status = %d, want 200", redeemResp.StatusCode)
+	}
+	var redeemResult struct {
+		Status          string `json:"status"`
+		CooldownCleared bool   `json:"cooldown_cleared"`
+	}
+	if err := json.NewDecoder(redeemResp.Body).Decode(&redeemResult); err != nil {
+		t.Fatalf("decode redeem result failed: %v", err)
+	}
+	if redeemResult.Status != "ok" || !redeemResult.CooldownCleared {
+		t.Errorf("redeem result = %+v, want status ok with cooldown cleared", redeemResult)
+	}
+	if cpaResetCalledWith != "codex-idx-1" {
+		t.Errorf("redeem cpaResetCalledWith = %q, want codex-idx-1", cpaResetCalledWith)
 	}
 	if cpaConsumeMethod != http.MethodPost {
 		t.Errorf("consume method = %q, want POST", cpaConsumeMethod)
@@ -308,6 +332,37 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	if !strings.Contains(cpaConsumeBody, "redeem_request_id") {
 		t.Errorf("consume body = %q, want a redeem_request_id", cpaConsumeBody)
 	}
+
+	// Redemption remains successful when the separate gateway clear fails, but
+	// the ordinary response must not expose CPA's raw diagnostic body.
+	shouldFailReset = true
+	failedClearResp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
+	if err != nil {
+		t.Fatalf("POST /redeem-credit with failed cooldown clear: %v", err)
+	}
+	failedClearBody, readErr := io.ReadAll(failedClearResp.Body)
+	failedClearResp.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if failedClearResp.StatusCode != http.StatusOK {
+		t.Fatalf("failed clear status = %d, want 200", failedClearResp.StatusCode)
+	}
+	var failedClearResult struct {
+		Status          string `json:"status"`
+		CooldownCleared bool   `json:"cooldown_cleared"`
+		CooldownError   string `json:"cooldown_error"`
+	}
+	if err := json.Unmarshal(failedClearBody, &failedClearResult); err != nil {
+		t.Fatal(err)
+	}
+	if failedClearResult.Status != "ok" || failedClearResult.CooldownCleared || failedClearResult.CooldownError != "cooldown_clear_failed" {
+		t.Fatalf("failed clear result = %+v, want successful redemption with a stable cooldown error", failedClearResult)
+	}
+	if strings.Contains(string(failedClearBody), "private-upstream-diagnostic") {
+		t.Fatal("redemption response exposed the upstream diagnostic")
+	}
+	shouldFailReset = false
 
 	// 5. GET /api/v1/management/quota/{authIndex}
 	detailResp, err := client.Get(appServer.URL + "/api/v1/management/quota/codex-idx-1")
@@ -330,5 +385,105 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 
 	if len(detailResult.History) == 0 {
 		t.Errorf("expected snapshot history to be persisted")
+	}
+}
+
+func TestQuotaSnapshotRoundTripsResetGrants(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	nowMS := time.Now().UnixMilli()
+	persisted := &quota.NormalizedQuota{
+		AuthIndex:    "claude-idx-9",
+		Provider:     "claude",
+		Status:       "healthy",
+		ObservedAtMS: nowMS,
+		ResetGrants: []quota.ClaudeResetGrant{{
+			ID: "grant-1", Label: "five_hour", ResetsTotal: 2, ResetsLeft: 1,
+			EndsAtMS: func() *int64 { ends := nowMS + 3600000; return &ends }(),
+		}},
+	}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, persisted); err != nil {
+		t.Fatalf("persist snapshot: %v", err)
+	}
+	restored := handler.loadPriorNormalizedQuota(ctx, "claude-idx-9")
+	if restored == nil {
+		t.Fatal("snapshot missing after persist")
+	}
+	if len(restored.ResetGrants) != 1 || restored.ResetGrants[0].ID != "grant-1" || restored.ResetGrants[0].ResetsLeft != 1 {
+		t.Fatalf("grants after roundtrip = %+v, want the persisted grant", restored.ResetGrants)
+	}
+}
+
+func TestQuotaOverviewAdvertisesPluginRefresh(t *testing.T) {
+	const managementKey = "management-secret"
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer "+managementKey {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/v8/management/credentials" {
+			_, _ = writer.Write([]byte(`{"files": [{
+				"id": "file-plugin-1", "name": "review.json", "auth_index": "plugin-idx-1",
+				"type": "codebuddy", "provider": "codebuddy", "disabled": false,
+				"supports_quota": true, "quota_provider": "codebuddy"
+			}]}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{}`))
+	}))
+	defer cpaServer.Close()
+
+	handler := testHandler(t, "")
+	appServer := httptest.NewServer(handler.Router())
+	defer appServer.Close()
+
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := cipher.Encrypt([]byte(managementKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := handler.repo.UpsertInstance(context.Background(), domain.CPAInstance{
+		ID: "default", Name: "Default", BaseURL: cpaServer.URL,
+		UsageAddr:               strings.TrimPrefix(cpaServer.URL, "http://"),
+		ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginResp.Body.Close()
+
+	quotaResp, err := client.Get(appServer.URL + "/api/v1/management/quota")
+	if err != nil {
+		t.Fatalf("GET overview failed: %v", err)
+	}
+	defer quotaResp.Body.Close()
+	if quotaResp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", quotaResp.StatusCode)
+	}
+	var overview quota.QuotaOverviewResponse
+	if err := json.NewDecoder(quotaResp.Body).Decode(&overview); err != nil {
+		t.Fatalf("decode overview failed: %v", err)
+	}
+	if len(overview.Quotas) != 1 {
+		t.Fatalf("len(quotas) = %d, want 1", len(overview.Quotas))
+	}
+	if !overview.Quotas[0].Capabilities.RefreshSupported {
+		t.Fatalf("plugin credential capabilities = %+v, want refresh supported",
+			overview.Quotas[0].Capabilities)
 	}
 }

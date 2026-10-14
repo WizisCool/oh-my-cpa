@@ -90,3 +90,54 @@ func TestParseClaudeProfile(t *testing.T) {
 		t.Errorf("planMax = %+v", planMax)
 	}
 }
+
+func TestParseClaudeResetGrants(t *testing.T) {
+	raw := `{"cedar_ember":{"eligible":true,"at_limit":false,` +
+		`"grants":[` +
+		`{"id":"grant-1","label":"Weekly Reset","resets_total":2,"resets_left":1,` +
+		`"starts_at":"2026-10-01T00:00:00Z","ends_at":"2026-10-08T00:00:00Z",` +
+		`"clears":["five_hour","seven_day"],"paused":false,"usable_now":true,"use_requires_limit":true},` +
+		`{"id":"grant-2","resets_total":1,"resets_left":0,"ends_at":null,"clears":["future_window"]}` +
+		`]}}`
+	grants := ParseClaudeResetGrants([]byte(raw))
+	if len(grants) != 2 {
+		t.Fatalf("grants = %+v, want 2", grants)
+	}
+	first := grants[0]
+	if first.Label != "Weekly Reset" || first.ResetsTotal != 2 || first.ResetsLeft != 1 {
+		t.Errorf("first = %+v, want the weekly grant", first)
+	}
+	if first.EndsAtMS == nil {
+		t.Error("first grant missing expiry")
+	}
+	if len(first.Clears) != 2 || first.Clears[0] != "five_hour" {
+		t.Errorf("first clears = %v, want both windows", first.Clears)
+	}
+	// Unknown future windows are dropped, not rejected.
+	if len(grants[1].Clears) != 0 || grants[1].Label != "" || grants[1].EndsAtMS != nil {
+		t.Errorf("second = %+v, want empty clears/label/expiry", grants[1])
+	}
+}
+
+func TestParseClaudeResetGrantsRejectsMalformedBlock(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "missing block", raw: `{}`},
+		{name: "missing eligible", raw: `{"cedar_ember":{"grants":[]}}`},
+		{name: "bad id", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"BAD ID!","resets_total":1,"resets_left":1}]}}`},
+		{name: "left exceeds total", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1,"resets_left":2}]}}`},
+		{name: "float count", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1.5,"resets_left":1}]}}`},
+		{name: "huge count", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1e300,"resets_left":1}]}}`},
+		{name: "duplicate id", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1,"resets_left":1},{"id":"g1","resets_total":1,"resets_left":1}]}}`},
+		{name: "bad timestamp", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1,"resets_left":1,"ends_at":"yesterday"}]}}`},
+		{name: "non-boolean flag", raw: `{"cedar_ember":{"eligible":true,"grants":[{"id":"g1","resets_total":1,"resets_left":1,"paused":"no"}]}}`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if grants := ParseClaudeResetGrants([]byte(testCase.raw)); grants != nil {
+				t.Fatalf("ParseClaudeResetGrants = %+v, want nil", grants)
+			}
+		})
+	}
+}

@@ -30,7 +30,7 @@ test('component discovery is automatic, recursive and nonempty in the real tree'
 });
 
 test('component claims run for frontend, own test infrastructure and dependency changes', () => {
-  for (const file of ['web/src/hooks/usePreference.ts', 'web/tests/preferences.component.test.tsx', 'web/vitest.config.ts', 'scripts/test-components.mjs', 'web/tests/setup.ts', 'web/tests/preferences.contract.test.ts', 'scripts/acceptance/contracts/preferences.json', 'scripts/acceptance/preferences-fixture.mjs', 'pnpm-lock.yaml']) {
+  for (const file of ['web/src/hooks/usePreference.ts', 'web/tests/preferences.component.test.tsx', 'web/vitest.config.ts', 'scripts/test-components.mjs', 'web/tests/setup.ts', 'web/tests/preferences.contract.test.ts', 'scripts/acceptance/contracts/preferences.json', 'scripts/acceptance/preferences-fixture.mjs', 'scripts/acceptance/system-updater-fixture.mjs', 'scripts/acceptance/contracts/system-updater.json', 'pnpm-lock.yaml']) {
     assert.ok(planChecks([file]).includes('components'), file);
   }
   assert.ok(!planChecks(['docs/testing.md']).includes('components'));
@@ -49,7 +49,10 @@ test('static frontend gate includes component discovery alongside existing logic
 test('wire corpus changes select both independent handler and frontend consumers', () => {
   const checks = planChecks(['scripts/acceptance/contracts/preferences.json']);
   for (const owner of ['go', 'components', 'self-tests']) assert.ok(checks.includes(owner), owner);
+  for (const owner of ['go', 'components', 'self-tests']) assert.ok(planChecks(['scripts/acceptance/system-updater-fixture.mjs']).includes(owner), owner);
   assert.ok(planChecks(['scripts/acceptance/probe.mjs']).includes('self-tests'));
+  // Only a fixture module answers on the handler's behalf; the scenario catalog beside it does not.
+  assert.ok(!planChecks(['scripts/acceptance/scenarios.mjs']).includes('go'));
 });
 
 

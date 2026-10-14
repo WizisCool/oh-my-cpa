@@ -162,9 +162,13 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 		Proxy: http.ProxyFromEnvironment,
 	}
 	if proxyStr != "" {
-		if pURL, err := url.Parse(proxyStr); err == nil {
-			transport.Proxy = http.ProxyURL(pURL)
+		// A proxy the operator named must be the path taken: falling back to
+		// a direct connection on a parse failure would silently change it.
+		pURL, err := url.Parse(proxyStr)
+		if err != nil || pURL.Host == "" {
+			return nil, fmt.Errorf("%w: proxy URL is not a valid URL", errInvalidModelPullURL)
 		}
+		transport.Proxy = http.ProxyURL(pURL)
 	}
 	client := &http.Client{
 		Timeout:       15 * time.Second,

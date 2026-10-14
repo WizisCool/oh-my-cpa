@@ -12,6 +12,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
 // QuotaItemDTO keeps the legacy quota_exceeded/quota_reason fields alongside the
@@ -213,7 +214,11 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 	if !ok {
 		return nil
 	}
+	return normalizedQuotaFromSnapshot(authIndex, snapshot)
+}
 
+// normalizedQuotaFromSnapshot rebuilds the prior reading a refresh starts from.
+func normalizedQuotaFromSnapshot(authIndex string, snapshot repository.QuotaSnapshotRecord) *quota.NormalizedQuota {
 	q := &quota.NormalizedQuota{
 		AuthIndex:    authIndex,
 		Provider:     snapshot.Provider,
@@ -233,6 +238,18 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 		var credits quota.CodexResetCreditsInfo
 		if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 			q.ResetCredits = &credits
+		}
+	}
+	if snapshot.ResetGrantsJSON != "" {
+		var grants []quota.ClaudeResetGrant
+		if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
+			q.ResetGrants = grants
+		}
+	}
+	if snapshot.WarmupJSON != "" {
+		var observation warmup.Observation
+		if json.Unmarshal([]byte(snapshot.WarmupJSON), &observation) == nil {
+			q.WarmupEvidence = &observation
 		}
 	}
 	return q
@@ -283,6 +300,12 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 			creditsJSON = string(b)
 		}
 	}
+	grantsJSON := ""
+	if len(q.ResetGrants) > 0 {
+		if b, err := json.Marshal(q.ResetGrants); err == nil {
+			grantsJSON = string(b)
+		}
+	}
 	planType := ""
 	planTier := ""
 	planJSON := ""
@@ -294,7 +317,14 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 		}
 	}
 
+	warmupJSON := ""
+	if q.WarmupEvidence != nil {
+		if raw, err := json.Marshal(q.WarmupEvidence); err == nil {
+			warmupJSON = string(raw)
+		}
+	}
 	return h.repo.SaveQuotaSnapshot(ctx, repository.QuotaSnapshotRecord{
+		WarmupJSON:       warmupJSON,
 		AuthIndex:        q.AuthIndex,
 		Provider:         q.Provider,
 		Status:           q.Status,
@@ -303,6 +333,7 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 		PlanJSON:         planJSON,
 		WindowsJSON:      winJSON,
 		ResetCreditsJSON: creditsJSON,
+		ResetGrantsJSON:  grantsJSON,
 		ObservedAtMS:     q.ObservedAtMS,
 	})
 }
@@ -439,7 +470,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 
 	nowMS := h.now().UnixMilli()
 	stdProvider := quota.DetectProvider(targetFile.Type, targetFile.Provider)
-	caps := quota.CapabilitiesForProvider(stdProvider)
+	caps := quota.CapabilitiesForFile(*targetFile)
 
 	normalized := quota.NormalizedQuota{
 		AuthIndex:    authIndex,
@@ -482,6 +513,12 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 					var credits quota.CodexResetCreditsInfo
 					if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 						normalized.ResetCredits = &credits
+					}
+				}
+				if snapshot.ResetGrantsJSON != "" {
+					var grants []quota.ClaudeResetGrant
+					if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
+						normalized.ResetGrants = grants
 					}
 				}
 			}
@@ -549,7 +586,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 	for _, authIndex := range authIndexes {
 		file := fileMap[authIndex]
 		stdProvider := quota.DetectProvider(file.Type, file.Provider)
-		caps := quota.CapabilitiesForProvider(stdProvider)
+		caps := quota.CapabilitiesForFile(file)
 
 		normalized := quota.NormalizedQuota{
 			AuthIndex:    authIndex,
@@ -614,6 +651,12 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 				var credits quota.CodexResetCreditsInfo
 				if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 					normalized.ResetCredits = &credits
+				}
+			}
+			if snapshot.ResetGrantsJSON != "" {
+				var grants []quota.ClaudeResetGrant
+				if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
+					normalized.ResetGrants = grants
 				}
 			}
 		}

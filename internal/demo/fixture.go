@@ -835,6 +835,24 @@ func quotaPayloads(now time.Time) map[string]any {
 			"has_claude_max": true, "has_claude_pro": false,
 			"has_extra_usage_enabled": false, "subscription_status": "active",
 		},
+		// Listing-only, like the service's own grants read: the demo answers a
+		// grant document so the Claude card's display path is exercised, and
+		// there is no claim path anywhere to exercise.
+		claudeGrantsURL: map[string]any{
+			"cedar_ember": map[string]any{
+				"eligible": true, "at_limit": false,
+				"grants": []map[string]any{
+					{
+						"id": "demo-grant-weekly", "label": "Weekly Reset",
+						"resets_total": 2, "resets_left": 1,
+						"starts_at": now.Add(-2 * 24 * time.Hour).UTC().Format(time.RFC3339),
+						"ends_at":   weeklyReset,
+						"clears":    []string{"five_hour", "seven_day"},
+						"paused":    false, "usable_now": true, "use_requires_limit": true,
+					},
+				},
+			},
+		},
 		kimiUsageURL: map[string]any{
 			"data": map[string]any{
 				"limits": []map[string]any{{
@@ -891,7 +909,7 @@ func quotaPayloads(now time.Time) map[string]any {
 // helper so the upstream and its test agree on what is covered.
 func quotaPayloadKeys() []string {
 	return []string{
-		codexUsageURL, codexResetCreditsURL, codexSubscriptionURL, claudeUsageURL, claudeProfileURL,
+		codexUsageURL, codexResetCreditsURL, codexSubscriptionURL, claudeUsageURL, claudeGrantsURL, claudeProfileURL,
 		kimiUsageURL, xaiUsageURL, xaiCreditsURL, antigravityUsageURL, devinUsageURL,
 		xaiSubscriptionURL, xaiSettingsURL, antigravitySubscriptionURL, metaUsageURL,
 	}
@@ -909,8 +927,11 @@ const (
 	codexResetCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	codexSubscriptionURL = "https://chatgpt.com/backend-api/subscriptions"
 	claudeUsageURL       = "https://api.anthropic.com/api/oauth/usage"
-	claudeProfileURL     = "https://api.anthropic.com/api/oauth/profile"
-	kimiUsageURL         = "https://api.kimi.com/coding/v1/usages"
+	// The reset-grant listing is the same usage path with the grant program's
+	// scoping query, answered exactly like the xAI credits document below.
+	claudeGrantsURL  = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1"
+	claudeProfileURL = "https://api.anthropic.com/api/oauth/profile"
+	kimiUsageURL     = "https://api.kimi.com/coding/v1/usages"
 	// The monthly billing read is the first one the quota service tries for xAI, so
 	// it is the one that has to answer; the paid-account probe behind it is never
 	// reached once this succeeds.

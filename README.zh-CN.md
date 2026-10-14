@@ -130,6 +130,16 @@ services:
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -165,6 +175,16 @@ docker compose up -d
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -176,7 +196,8 @@ OMCPA_CPA_MANAGEMENT_KEY=<CPA 管理密钥的明文，而非 config.yaml 中的�
 OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
 ```
 
-执行 `docker compose up -d oh-my-cpa`，CPA 容器保持原样运行，不会重启。
+需要在控制台更新时，一并添加片段中的 `oh-my-cpa-updater` 服务。
+执行 `docker compose up -d oh-my-cpa oh-my-cpa-updater`，CPA 容器保持原样运行，不会重启。
 访问 **`http://127.0.0.1:8080/omc/`**，以管理密钥登录。
 
 #### 独立部署
@@ -201,6 +222,16 @@ services:
     volumes:
       - oh-my-cpa-data:/data
 
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   oh-my-cpa-data:
 ```
@@ -213,6 +244,20 @@ OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
 ```
 
 执行 `docker compose up -d`，然后访问 **`http://127.0.0.1:8080/omc/`**，以管理密钥登录。
+
+### 更新
+
+编排文件中包含 `oh-my-cpa-updater` 服务时，控制台的**系统信息**页会在 Oh My CPA 或 CLIProxyAPI
+有新版本时显示**立即更新**。更新程序拉取新镜像，按原有的配置、数据卷与网络重建容器；新容器未能正常启动时恢复原容器。
+
+在该服务出现之前安装的部署，在 Docker 主机上执行一条命令即可启用，无需修改编排文件：
+
+```bash
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+```
+
+该命令添加 `oh-my-cpa-updater` 容器，并同时把 Oh My CPA 升级到当前版本。`docker rm -f oh-my-cpa-updater`
+可将其移除。镜像固定为版本标签时，控制台不会改动它。各种情况及手动更新方式见[升级](docs/install.md#upgrading)（英文）。
 
 ### 安装原生可执行文件
 
@@ -229,6 +274,10 @@ Linux 和 FreeBSD 的 amd64、arm64 可执行文件。每个压缩包内嵌控�
 CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其他用量统计工具时，停用该工具，
 或在 `environment:` 下添加 `OMCPA_USAGE_INGEST_MODE: "off"`，仅将 OMC 用于管理。其他管理面板不冲突。
 
+`oh-my-cpa-updater` 挂载了 Docker socket，等同于拥有该主机上 Docker 的控制权。关闭控制台更新需从编排文件中删除该服务，
+并用 `docker rm -f oh-my-cpa-updater` 删除正在运行的容器（仅删除服务定义时，Compose 不会停止已运行的容器）。
+之后通过 `docker compose pull && docker compose up -d` 更新。
+
 发布版的加固编排文件、远程访问、HTTPS、源码构建、升级与排障见[安装指南](docs/install.md)（英文）。
 
 ## 功能特性
@@ -237,7 +286,7 @@ CPA 的每条用量记录只交给一个读取方。同一个 CPA 上已有其�
 <summary><b>网关与提供商</b></summary>
 
 - **AI 提供商**：Codex、Claude、Gemini、Meta Muse、xAI、Vertex AI、Gemini Interactions、DeepSeek 及 OpenAI 兼容服务，统一管理凭据、模型高级选项、运行时重试与错误规则、优先级、权重、代理，以及由网关执行的启停开关。
-- **OAuth 管理**：在控制台登录 Codex、Claude、Antigravity、xAI、Kimi（kimi.com 与 kimi.ai）、Devin 与 Meta Muse，或导入 Vertex 服务账号密钥。认证文件、手动令牌刷新、模型列表、Meta 配额、xAI／Antigravity 实时套餐及凭据专属别名按凭据管理；共享模型别名与禁用规则按提供商统一配置。Codex、Claude 与已支持的 Antigravity 模型组提供窗口额度估算，上一周期的数值作为参考并单独标注。
+- **OAuth 管理**：在控制台登录 Codex、Claude、Antigravity、xAI、Kimi（kimi.com 与 kimi.ai）、Devin 与 Meta Muse，或导入 Vertex 服务账号密钥。认证文件、手动令牌刷新、模型列表、Meta 配额、xAI／Antigravity 实时套餐及凭据专属别名按凭据管理；共享模型别名与禁用规则按提供商统一配置。Codex、Claude 与已支持的 Antigravity 模型组提供窗口额度估算，上一周期的数值作为参考并单独标注。额度窗口重置约一分钟后会自动重新读取，并默认每 6 小时定时刷新一次，可在 OMC 设置中调整。 Codex／Claude 窗口预热支持按重置或每日时间调度、凭证独立策略，以及可选的确认后极小请求。已确认的自动策略会在发送前检查订阅额度与付费后备用量，并在请求后观察窗口是否激活。
 - **客户端密钥**：创建、命名与吊销网关 API Key，名称会出现在请求记录与筛选项中。
 - **模型目录**：直接从上游提供商拉取模型列表。
 - **操练场**：用文本与图片调试任意已路由的模型，支持流式多轮对话与请求诊断。

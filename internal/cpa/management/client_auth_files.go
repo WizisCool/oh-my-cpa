@@ -153,19 +153,26 @@ type AuthFile struct {
 	// IDToken carries CPA-projected identity claims (e.g. Codex
 	// chatgpt_account_id). It is non-secret metadata used to scope
 	// upstream quota queries, never a credential.
-	IDToken        json.RawMessage           `json:"id_token,omitempty"`
-	Success        int64                     `json:"success"`
-	Failed         int64                     `json:"failed"`
-	RecentRequests []RecentRequest           `json:"recent_requests"`
-	Quota          map[string]any            `json:"quota"`
-	ModelQuotas    map[string]map[string]any `json:"model_quotas"`
-	Models         []AuthModel               `json:"models"`
-	Priority       int                       `json:"priority"`
-	Weight         int64                     `json:"weight"`
-	Note           string                    `json:"note"`
-	CreatedAt      json.RawMessage           `json:"created_at"`
-	UpdatedAt      json.RawMessage           `json:"updated_at"`
-	LastRefresh    json.RawMessage           `json:"last_refresh"`
+	IDToken        json.RawMessage `json:"id_token,omitempty"`
+	Success        int64           `json:"success"`
+	Failed         int64           `json:"failed"`
+	RecentRequests []RecentRequest `json:"recent_requests"`
+	Quota          map[string]any  `json:"quota"`
+	// SupportsQuota and QuotaProvider are CPA's quota advertisement for this
+	// credential: set when a built-in or plugin quota provider claims it.
+	// QuotaProbe carries a declarative quota_probe credential, which has no v8
+	// management route and is reported as unsupported rather than fetched.
+	SupportsQuota bool                      `json:"supports_quota,omitempty"`
+	QuotaProvider string                    `json:"quota_provider,omitempty"`
+	QuotaProbe    json.RawMessage           `json:"quota_probe,omitempty"`
+	ModelQuotas   map[string]map[string]any `json:"model_quotas"`
+	Models        []AuthModel               `json:"models"`
+	Priority      int                       `json:"priority"`
+	Weight        int64                     `json:"weight"`
+	Note          string                    `json:"note"`
+	CreatedAt     json.RawMessage           `json:"created_at"`
+	UpdatedAt     json.RawMessage           `json:"updated_at"`
+	LastRefresh   json.RawMessage           `json:"last_refresh"`
 }
 
 // CodexChatgptAccountID extracts the ChatGPT account id from CPA-projected

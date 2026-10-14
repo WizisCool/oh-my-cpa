@@ -190,7 +190,13 @@ var demoPolicy = []demoPolicyRule{
 	// property of the code rather than a promise about the environment.
 	{http.MethodGet, "/api/v1/management/system/releases", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/system/repository", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/system/updates", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/system/check-updates", demoRefuse, "checking for updates is disabled: it would call the GitHub API"},
+
+	// Console updates. The read answers "disabled" because a demonstration builds no
+	// updater client; applying one would replace containers.
+	{http.MethodGet, "/api/v1/management/system/updater", demoAllow, ""},
+	{http.MethodPost, "/api/v1/management/system/updater/apply", demoRefuse, "applying updates is disabled in the demo"},
 
 	// Database maintenance. Reads are allowed so the page renders; both actions are
 	// refused because they rewrite the demonstration's database, and a visitor must not
@@ -259,6 +265,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Anything that would reach outside this process.
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
+	{http.MethodPost, "/api/v1/management/providers/probe", demoRefuse, "probing a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call openrouter.ai"},
 	{http.MethodGet, "/api/v1/management/system/diagnostics", demoRefuse, "generating a diagnostic bundle is disabled"},
 
@@ -305,6 +312,11 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPatch, "/api/v1/management/auth-files/excluded-models", demoRefuse, "changing a provider's excluded models is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/reset", demoRefuse, "resetting a credential's quota is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/clear-cooldown", demoRefuse, "changing a credential's cooldown is disabled"},
+	{http.MethodGet, "/api/v1/management/quota/warmup/settings", demoAllow, "read warmup settings"},
+	{http.MethodGet, "/api/v1/management/quota/warmup/credentials/{authIndex}", demoAllow, "read credential warmup state"},
+	{http.MethodPut, "/api/v1/management/quota/warmup/settings", demoRefuse, "automatic consuming requests require a real operator"},
+	{http.MethodPut, "/api/v1/management/quota/warmup/credentials/{authIndex}", demoRefuse, "automatic consuming requests require a real operator"},
+	{http.MethodPost, "/api/v1/management/quota/warmup/credentials/{authIndex}/run", demoRefuse, "warmup consumes real subscription entitlement"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
 }
 

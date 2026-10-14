@@ -190,15 +190,21 @@ type UsageEventRow struct {
 	FailBody       string `json:"fail_body,omitempty"`
 	// ResponseHeaders is the stored upstream header snapshot. Only the
 	// single-record read loads it.
-	ResponseHeaders string           `json:"-"`
-	Generate        bool             `json:"generate"`
-	Stream          *bool            `json:"stream,omitempty"`
-	LatencyMS       int64            `json:"latency_ms"`
-	TTFTMS          *int64           `json:"ttft_ms,omitempty"`
-	ClientIP        *string          `json:"client_ip,omitempty"`
-	XForwardedFor   *string          `json:"x_forwarded_for,omitempty"`
-	UserAgent       *string          `json:"user_agent,omitempty"`
-	Tokens          usage.TokenStats `json:"tokens"`
+	ResponseHeaders string `json:"-"`
+	// AccessProvider names the access path that served the request, and
+	// IsNativeKey reports a native (API-key) credential. Empty and false mean
+	// the publishing gateway predates them. Only the single-record read loads
+	// them, like the other diagnostic fields.
+	AccessProvider string           `json:"access_provider,omitempty"`
+	IsNativeKey    bool             `json:"is_native_key,omitempty"`
+	Generate       bool             `json:"generate"`
+	Stream         *bool            `json:"stream,omitempty"`
+	LatencyMS      int64            `json:"latency_ms"`
+	TTFTMS         *int64           `json:"ttft_ms,omitempty"`
+	ClientIP       *string          `json:"client_ip,omitempty"`
+	XForwardedFor  *string          `json:"x_forwarded_for,omitempty"`
+	UserAgent      *string          `json:"user_agent,omitempty"`
+	Tokens         usage.TokenStats `json:"tokens"`
 	// ResourceID and ResourceName join the event back to the user-owned Oh My
 	// CPA resource record, which is what turns a raw request into something a
 	// user recognises. Both are null until the credential is triaged.
@@ -406,6 +412,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	var failed, generate int
 	var streamVal sql.NullInt64
+	var isNativeKey sql.NullInt64
 	var resourceID, resourceName sql.NullString
 	var costUSD sql.NullFloat64
 	err := r.SQL().QueryRowContext(ctx, `
@@ -418,7 +425,8 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
-		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body, e.response_headers
+		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body, e.response_headers,
+		       e.access_provider, e.is_native_key
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -437,7 +445,8 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
-		&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody, &row.ResponseHeaders)
+		&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody, &row.ResponseHeaders,
+		&row.AccessProvider, &isNativeKey)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -446,6 +455,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	row.Failed = failed == 1
 	row.Generate = generate == 1
+	row.IsNativeKey = isNativeKey.Valid && isNativeKey.Int64 != 0
 	if streamVal.Valid {
 		isStream := streamVal.Int64 == 1
 		row.Stream = &isStream

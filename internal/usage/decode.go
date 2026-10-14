@@ -104,26 +104,34 @@ type TokenStats struct {
 
 // Payload is one CPA usage record as published to the queue.
 type Payload struct {
-	Timestamp           time.Time       `json:"timestamp"`
-	LatencyMS           int64           `json:"latency_ms"`
-	TTFTMS              *int64          `json:"ttft_ms"`
-	Source              string          `json:"source"`
-	AuthIndex           string          `json:"auth_index"`
-	ClientIP            *string         `json:"client_ip"`
-	XForwardedFor       *string         `json:"x_forwarded_for"`
-	UserAgent           *string         `json:"user_agent"`
-	Tokens              TokenStats      `json:"tokens"`
-	Stream              *bool           `json:"stream"`
-	Failed              bool            `json:"failed"`
-	Fail                FailDetail      `json:"fail"`
-	Generate            *bool           `json:"generate"`
-	Provider            string          `json:"provider"`
-	ExecutorType        string          `json:"executor_type"`
-	Model               string          `json:"model"`
-	Alias               *string         `json:"alias"`
-	Endpoint            string          `json:"endpoint"`
-	AuthType            string          `json:"auth_type"`
-	APIKey              string          `json:"api_key"`
+	Timestamp     time.Time  `json:"timestamp"`
+	LatencyMS     int64      `json:"latency_ms"`
+	TTFTMS        *int64     `json:"ttft_ms"`
+	Source        string     `json:"source"`
+	AuthIndex     string     `json:"auth_index"`
+	ClientIP      *string    `json:"client_ip"`
+	XForwardedFor *string    `json:"x_forwarded_for"`
+	UserAgent     *string    `json:"user_agent"`
+	Tokens        TokenStats `json:"tokens"`
+	Stream        *bool      `json:"stream"`
+	Failed        bool       `json:"failed"`
+	Fail          FailDetail `json:"fail"`
+	Generate      *bool      `json:"generate"`
+	Provider      string     `json:"provider"`
+	ExecutorType  string     `json:"executor_type"`
+	Model         string     `json:"model"`
+	Alias         *string    `json:"alias"`
+	Endpoint      string     `json:"endpoint"`
+	AuthType      string     `json:"auth_type"`
+	APIKey        string     `json:"api_key"`
+	// AccessProvider names the CPA access provider that authenticated the
+	// caller, and IsNativeKey reports whether the caller's key came from
+	// CPA's native configured-key provider. Both describe caller
+	// authentication, never the upstream credential that executed the
+	// request. Older gateways omit both; empty and false then mean unknown,
+	// never a negative answer.
+	AccessProvider      string          `json:"access_provider,omitempty"`
+	IsNativeKey         bool            `json:"is_native_key,omitempty"`
 	RequestID           string          `json:"request_id"`
 	ReasoningEffort     string          `json:"reasoning_effort"`
 	ServiceTier         string          `json:"service_tier"`
@@ -154,11 +162,15 @@ type Event struct {
 	// APIKeyMask is the display mask of the client key CPA published. It is not
 	// an identity: grouping, filtering and credential binding all use
 	// APIGroupKey, because two different keys can share a mask.
-	APIKeyMask          string
-	Provider            string
-	Endpoint            string
-	AuthType            string
-	RequestID           string
+	APIKeyMask string
+	Provider   string
+	Endpoint   string
+	AuthType   string
+	RequestID  string
+	// AccessProvider and IsNativeKey mirror the payload fields above; empty
+	// and false mean the publishing gateway predates them.
+	AccessProvider      string
+	IsNativeKey         bool
 	ClientIP            *string
 	XForwardedFor       *string
 	UserAgent           *string
@@ -239,6 +251,8 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		Endpoint:            security.PublicEndpoint(payload.Endpoint),
 		AuthType:            normalizeAuthType(payload.AuthType),
 		RequestID:           requestID,
+		AccessProvider:      boundedSafe(payload.AccessProvider, 256),
+		IsNativeKey:         payload.IsNativeKey,
 		ClientIP:            normalizePointer(payload.ClientIP, security.NormalizeClientIP),
 		XForwardedFor:       normalizePointer(payload.XForwardedFor, security.NormalizeForwardedFor),
 		UserAgent:           security.MinimizeUserAgent(valueOf(payload.UserAgent)),

@@ -48,7 +48,9 @@ The builder validates both package versions, builds/syncs the SPA once before th
 Go targets, verifies the actual Go build metadata, packages all targets into
 `tmp/native-release`, and validates the complete checksum manifest. Archive member
 timestamps use the source commit date; tar owners are normalized and zip strips
-extra metadata. A clean output directory prevents stale assets from entering a retry.
+extra metadata. GNU tar creation uses `--force-local`, so drive-letter archive paths
+are treated as local files rather than remote hosts. A clean output directory
+prevents stale assets from entering a retry.
 The smoke check extracts the host-architecture Linux archive into a new directory
 and checks SQLite, login, `/omc`, root and nested base paths, embedded JavaScript and
 the running tag. Foreign targets are cross-compiled, not executed on Linux.
@@ -69,6 +71,23 @@ Docker Hub repository visibility public so an installation can pull without logg
 Enable Actions in the repository. Restrict creation/movement of release tags to trusted
 maintainers with repository rules; a version tag is a publishing authority.
 
+Console updates verify each release against a signature (ADR 0099). Generate the key
+pair once, on a trusted machine:
+
+```bash
+node scripts/sign-release-manifest.mjs --generate-key release-signing-key.txt
+gh secret set RELEASE_SIGNING_KEY --repo WizisCool/oh-my-cpa < release-signing-key.txt
+```
+
+The command writes the private key to the named file and the public key to
+`internal/updater/release_public_key.txt`. Commit the public key file, store the private
+key file somewhere offline and delete it from the working directory; it is the only copy
+besides the Actions secret, which cannot be read back. The release job fails at its
+signing step when the secret is missing or does not match the committed public key, so a
+release can never be published unsigned. Replacing the key pair means installations
+running a release built with the old public key reject newer manifests and must be
+updated by hand once.
+
 ## Version contract
 
 - Stable tags are **`vMAJOR.MINOR.PATCH`**, without leading zeros or suffixes. The tag
@@ -80,7 +99,7 @@ maintainers with repository rules; a version tag is a publishing authority.
   linker. The config, health endpoint, SPA runtime config, System Information and
   outbound default User-Agent all use that value. `OMCPA_VERSION` remains an operator
   override; the Compose files do not override the embedded version.
-- Docker version aliases are `v0.2.5` and `0.2.5`; `latest` advances only for the
+- Docker version aliases are `v0.2.9` and `0.2.9`; `latest` advances only for the
   numerically newest stable release. A backport never moves either Docker `latest`
   or GitHub's latest pointer backwards. Compose defaults to `latest` for both
   OMC and CPA. Operators can override
@@ -91,7 +110,7 @@ maintainers with repository rules; a version tag is a publishing authority.
 ## Prepare and publish
 
 Version-specific changes and upgrade notes are kept under `docs/releases/`; see
-the [v0.2.5 release notes](releases/v0.2.5.md).
+the [v0.2.9 release notes](releases/v0.2.9.md).
 
 1. Change both package versions together and document user-visible changes. The
    install guides download from `releases/latest/download/` and Compose defaults to
@@ -109,8 +128,8 @@ the [v0.2.5 release notes](releases/v0.2.5.md).
    git switch master
    git pull --ff-only
    test -z "$(git status --porcelain)"
-   git tag -a v0.2.5 -m "Oh My CPA v0.2.5"
-   git push origin v0.2.5
+   git tag -a v0.2.9 -m "Oh My CPA v0.2.9"
+   git push origin v0.2.9
    ```
 
 4. Follow `.github/workflows/release.yml` in Actions:
@@ -122,7 +141,8 @@ the [v0.2.5 release notes](releases/v0.2.5.md).
      failure, cancellation or skipped prerequisites prevent publication.
    - **publish** builds a native image and runs `scripts/docker-smoke.mjs` to verify
      the actual non-root/read-only package, SQLite permissions, canonical base paths,
-     health, login and version endpoints. It then builds/pushes the amd64/arm64 image
+     health, login and version endpoints, and that `updater install` creates a hardened
+     updater the console reaches with no setting on either side. It then builds/pushes the amd64/arm64 image
      with provenance and SBOM to Docker Hub.
    - **native** runs after verification, builds the eight archives and checksum
      manifest, smoke-tests the extracted Linux package, asserts clean generated state
@@ -131,6 +151,8 @@ the [v0.2.5 release notes](releases/v0.2.5.md).
      with no repository-write permission.
    - **release** runs only after both native packaging and a successful Docker push,
      revalidates downloaded assets against their checksums and expected matrix, then
+     signs `release-manifest.json` for the pushed digest (`release-manifest.json.sig`;
+     neither file is listed in `checksums.txt`, since the signature is their check) and
      stages new GitHub releases as drafts with generated notes, the multi-platform
      digest and all assets. Only after every attachment succeeds does it recheck
      latest policy and publish the draft. Existing releases receive verified
@@ -150,8 +172,8 @@ the native packaged-image smoke complements the product's built-browser acceptan
 
 ```bash
 gh run list --workflow release.yml --repo WizisCool/oh-my-cpa
-docker buildx imagetools inspect wiziscool/oh-my-cpa:v0.2.5
-gh release view v0.2.5 --repo WizisCool/oh-my-cpa
+docker buildx imagetools inspect wiziscool/oh-my-cpa:v0.2.9
+gh release view v0.2.9 --repo WizisCool/oh-my-cpa
 ```
 
 Workflows use a serialized `queue: max` concurrency group: pending releases queue

@@ -36,6 +36,7 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import { AuthFileDetailDrawer } from '../../components/authFiles/AuthFileDetailDrawer';
 import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
+import { CredentialWarmup, WarmupSettingsDrawer } from '../../components/authFiles/CredentialWarmup';
 import { OAuthModelRulesDrawer } from '../../components/authFiles/OAuthModelRulesDrawer';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
@@ -131,9 +132,12 @@ export const OAuthManagementPage: React.FC = () => {
     staleTime: 10_000,
     placeholderData: keepPreviousData,
   });
+  // The overview reads stored observations and CPA's credential list, never a provider, so polling
+  // it spends no quota; it is what brings a reading the background refresh stored onto an open page.
   const quotaQuery = useQuery({
     queryKey: ['management-quota'],
     queryFn: api.getQuotaOverview,
+    refetchInterval: 60_000,
     staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
@@ -356,7 +360,9 @@ export const OAuthManagementPage: React.FC = () => {
     if (selectedIdentity && !selectedRecord) setSelectedIdentity(undefined);
   }, [selectedIdentity, selectedRecord]);
 
-  const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
+  const [isWarmupSettingsOpen, setIsWarmupSettingsOpen] = React.useState(false);
+ const [hasWarmupDraft, setHasWarmupDraft] = React.useState(false);
+ const [isModelRulesOpen, setIsModelRulesOpen] = React.useState(false);
   const [isVertexImportOpen, setIsVertexImportOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -741,6 +747,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
           </Dropdown>
         </Space.Compact>
+      <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
       </Toolbar>
       {isFiltersOpen && (
         <div id="oauth-collection-filters" className={styles['advanced-filters']}>
@@ -936,9 +943,13 @@ export const OAuthManagementPage: React.FC = () => {
         }}
         initialSection={drawerSection}
         canEdit={Boolean(selectedRecord?.canEditFile)}
-        quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
+        hasExternalDraft={hasWarmupDraft}
+        quotaContent={selectedRecord ? <>{quotaBodyForRecord(selectedRecord, false)}
+          {selectedRecord.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider) && <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} />}
+        </> : undefined}
       />
 
+      <WarmupSettingsDrawer open={isWarmupSettingsOpen} onClose={() => setIsWarmupSettingsOpen(false)} />
       <OAuthModelRulesDrawer
         open={isModelRulesOpen}
         onClose={() => setIsModelRulesOpen(false)}

@@ -454,11 +454,15 @@ jobs:
           RELEASE_DIGEST: ${{ needs.publish.outputs.digest }}
           RELEASE_INDEX: /tmp/omc-releases.json
           RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           # The default shell ignores a failed producer in a pipe, and an inventory that failed
           # to download reads as "no releases", which would let an old tag claim latest.
           set -o pipefail
           node scripts/native-release.mjs --verify
+          # Signed after the asset matrix is verified and before anything is attached, so a
+          # release never becomes visible without the manifest console updates depend on.
+          node scripts/sign-release-manifest.mjs tmp/native-release
           # Recompute at publication: retries can run after a newer release completed.
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           printf 'Docker Hub: `%s:%s`\n\nMulti-platform digest: `%s@%s`\n\nDocker platforms: `linux/amd64`, `linux/arm64`.\n\nNative executables: Darwin, Windows, Linux and FreeBSD, each on amd64 and arm64. Archives embed the console; verify downloads with `checksums.txt`.\n\nSee [installation](https://github.com/%s/blob/%s/docs/install.md) and the [agent guide](https://github.com/%s/blob/%s/docs/install-for-agents.md).\n' \

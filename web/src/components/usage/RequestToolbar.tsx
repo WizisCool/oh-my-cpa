@@ -20,6 +20,7 @@ import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
 import { SearchInput } from '../common/SearchInput';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import './RequestToolbar.css';
 import './requestMarks.css';
 
@@ -76,6 +77,7 @@ export function RequestToolbar({
 }: RequestToolbarProps) {
   const t = useT();
   const { modelView, setModelView } = useTokenDisplayStyle();
+  const isPhone = useIsPhoneViewport();
 
   /**
    * Facet options carry the window's request count; `expandProps` was dropped
@@ -121,90 +123,135 @@ export function RequestToolbar({
     );
   };
 
-  return (
+  const searchInput = (
+    <SearchInput
+      className="request-search"
+      label={t('events.search_hint')}
+      placeholder={t('events.search_placeholder')}
+      value={search}
+      onChange={onSearchChange}
+    />
+  );
+  const timeWindow = (
+    <TimeRangeControl
+      preset={query.preset}
+      from={query.from}
+      to={query.to}
+      onChange={onTimeWindowChange}
+    />
+  );
+  const resultFilter = (
+    <Segmented
+      className="req-result-segmented"
+      aria-label={t('events.col_result')}
+      value={query.result}
+      onChange={(value) => {
+        onResultChange(value as UsageResultFilter);
+      }}
+      options={(['all', 'success', 'failed'] as const).map((value) => ({
+        value,
+        // The marker reuses the Result column's own vocabulary, so
+        // "success" and "failed" mean the same thing in the filter and
+        // in the list it filters. 'all' gets none: it is the absence of
+        // a verdict, and two bullets would read as a third outcome.
+        label: (
+          <span className="req-result-option">
+            {value !== 'all' && <ResultMarker kind={value} />}
+            {t(`events.filter_${value}`)}
+          </span>
+        ),
+      }))}
+    />
+  );
+  const moreFilters = (
+    <Button
+      className="req-more-filters"
+      aria-label={t('events.more_filters')}
+      icon={<FilterOutlined />}
+      onClick={onOpenFilters}
+    >
+      {/* Beside the search box on a phone the glyph and the count are the control; its name
+          stays in the accessible label. */}
+      {isPhone ? null : t('events.more_filters')}
+      {filterCount > 0 ? <span className="req-more-filters-count">{filterCount}</span> : null}
+    </Button>
+  );
+  const facetsNote = facetsFailed && (
+    <span className="req-facets-note" role="status">
+      {t('events.facets_error')}
+    </span>
+  );
+  const resetFilters = hasActiveFilter && (
+    <Button type="text" className="req-reset-filters" onClick={onClearFilters}>
+      {t('events.reset')}
+      <span className="req-reset-count">{activeFilterCount || 1}</span>
+    </Button>
+  );
+  const groupingSelect = (
+    <Select
+      aria-label={t('events.group_by')}
+      value={grouping}
+      onChange={(value) => onGroupingChange(value as EventGrouping)}
+      options={EVENT_GROUPING_VALUES.map((value) => ({
+        value,
+        label: t(`events.group_${value}`),
+      }))}
+    />
+  );
+  const modelViewToggle = (
+    <Segmented
+      className="req-model-view-toggle"
+      value={modelView}
+      onChange={(value) => setModelView(value as ModelChartView)}
+      options={[
+        { value: 'call', label: t('dash.models.view_call') },
+        { value: 'model', label: t('dash.models.view_model') },
+      ]}
+      aria-label={t('events.model_view_toggle')}
+    />
+  );
 
-        <section className="request-toolbar" aria-label={t('events.filters')}>
-          <div className="request-filters">
-            <SearchInput
-              className="request-search"
-              label={t('events.search_hint')}
-              placeholder={t('events.search_placeholder')}
-              value={search}
-              onChange={onSearchChange}
-            />
-            <TimeRangeControl
-              preset={query.preset}
-              from={query.from}
-              to={query.to}
-              onChange={onTimeWindowChange}
-            />
-            <Segmented
-              className="req-result-segmented"
-              aria-label={t('events.col_result')}
-              value={query.result}
-              onChange={(value) => {
-                onResultChange(value as UsageResultFilter);
-              }}
-              options={(['all', 'success', 'failed'] as const).map((value) => ({
-                value,
-                // The marker reuses the Result column's own vocabulary, so
-                // "success" and "failed" mean the same thing in the filter and
-                // in the list it filters. 'all' gets none: it is the absence of
-                // a verdict, and two bullets would read as a third outcome.
-                label: (
-                  <span className="req-result-option">
-                    {value !== 'all' && <ResultMarker kind={value} />}
-                    {t(`events.filter_${value}`)}
-                  </span>
-                ),
-              }))}
-            />
-            {facetMulti('model', 'events.col_model', facets?.models)}
-            {facetMulti('provider', 'events.provider', facets?.providers)}
-            <Button
-              className="req-more-filters"
-              aria-label={t('events.more_filters')}
-              icon={<FilterOutlined />}
-              onClick={onOpenFilters}
-            >
-              {t('events.more_filters')}
-              {filterCount > 0 ? <span className="req-more-filters-count">{filterCount}</span> : null}
-            </Button>
-          </div>
-          <div className="request-toolbar-bottom">
-            {facetsFailed && (
-              <span className="req-facets-note" role="status">
-                {t('events.facets_error')}
-              </span>
-            )}
-            <div className="request-actions">
-              {hasActiveFilter && (
-                <Button type="text" className="req-reset-filters" onClick={onClearFilters}>
-                  {t('events.reset')}
-                  <span className="req-reset-count">{activeFilterCount || 1}</span>
-                </Button>
-              )}
-              <Select
-                aria-label={t('events.group_by')}
-                value={grouping}
-                onChange={(value) => onGroupingChange(value as EventGrouping)}
-                options={EVENT_GROUPING_VALUES.map((value) => ({
-                  value,
-                  label: t(`events.group_${value}`),
-                }))}
-              />
-              <Segmented
-                className="req-model-view-toggle"
-                value={modelView}
-                onChange={(value) => setModelView(value as ModelChartView)}
-                options={[
-                  { value: 'call', label: t('dash.models.view_call') },
-                  { value: 'model', label: t('dash.models.view_model') },
-                ]}
-                aria-label={t('events.model_view_toggle')}
-              />
-            </div>
-          </div>
-        </section>
+  // A phone gets the same controls in two rows instead of five: what is typed or opened stays
+  // put, and every choice that is a single tap swipes in one strip (docs/design.md §8).
+  if (isPhone) {
+    return (
+      <section className="request-toolbar is-phone" aria-label={t('events.filters')}>
+        <div className="request-filters">
+          {searchInput}
+          {moreFilters}
+        </div>
+        <div className="request-filter-strip">
+          {timeWindow}
+          {resultFilter}
+          {facetMulti('model', 'events.col_model', facets?.models)}
+          {facetMulti('provider', 'events.provider', facets?.providers)}
+          {groupingSelect}
+          {modelViewToggle}
+          {resetFilters}
+        </div>
+        {facetsNote}
+      </section>
+    );
+  }
+
+  return (
+    <section className="request-toolbar" aria-label={t('events.filters')}>
+      <div className="request-filters">
+        {searchInput}
+        {timeWindow}
+        {resultFilter}
+        {facetMulti('model', 'events.col_model', facets?.models)}
+        {facetMulti('provider', 'events.provider', facets?.providers)}
+        {moreFilters}
+      </div>
+      <div className="request-toolbar-bottom">
+        {facetsNote}
+        <div className="request-actions">
+          {resetFilters}
+          {groupingSelect}
+          {modelViewToggle}
+        </div>
+      </div>
+    </section>
   );
 }

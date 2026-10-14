@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
+import { hasDeferredFontShards, hasReadmeScreenshotContent } from './readme-screenshot-readiness.mjs';
 
 const CONTENT_SELECTOR = '.screenshot-content';
 const TOAST_SELECTOR = '.omc-toast, .ant-message-notice';
@@ -40,5 +40,18 @@ test('README captures require visible content, completed loading and detached to
   } finally {
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
+  }
+});
+
+test('README captures wait until the console font registers more than its two core faces', () => {
+  const originalDocument = globalThis.document;
+  const faces = [{ family: '"Sarasa Mono SC"' }, { family: 'Sarasa Mono SC' }, { family: 'codicon' }];
+  globalThis.document = { fonts: faces };
+  try {
+    assert.equal(hasDeferredFontShards(), false);
+    faces.push({ family: 'Sarasa Mono SC' });
+    assert.equal(hasDeferredFontShards(), true);
+  } finally {
+    globalThis.document = originalDocument;
   }
 });

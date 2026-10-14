@@ -24,6 +24,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
 
@@ -205,6 +206,17 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 			logger.Warn("could not clear stored release validators", "error", err)
 		}
 		handler.SetRelease(releaseService)
+
+		// The console holds no Docker access of its own. Updates go through the sidecar,
+		// and a native install, which has no containers to replace, is told apart from a
+		// containerised one that simply has no sidecar yet.
+		if cfg.Updater.Enabled {
+			_, dockerErr := os.Stat("/.dockerenv")
+			handler.SetUpdater(updater.NewClient(cfg.Updater.URL, cfg.MasterKey), release.NewManifestClient(), dockerErr == nil)
+			// A console update ends the process that admitted it, so its outcome is
+			// collected here, by the process that replaced it.
+			handler.WatchInterruptedUpdate()
+		}
 
 		if db != nil {
 			maintenanceService, err = repository.NewMaintenanceService(ctx, db)
@@ -417,6 +429,35 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
+	// Automatic quota refresh is best effort too: a round that cannot reach CPA leaves the
+	// stored readings as they were. It reads providers through the gateway with each
+	// credential, so a demo, whose gateway is the fixture, never starts it.
+	// It is joined before Run returns, like the pipeline, because a round in flight writes
+	// observations to the database the caller closes next.
+	warmupDone := make(chan struct{})
+	if a.cfg.IsDemoMode {
+		close(warmupDone)
+	} else {
+		go func() {
+			defer close(warmupDone)
+			if err := a.handler.RunCredentialWarmup(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("credential window warmup loop stopped", "error", err)
+			}
+		}()
+	}
+	defer func() { stop(); <-warmupDone }()
+	quotaRefreshDone := make(chan struct{})
+	if a.cfg.IsDemoMode {
+		close(quotaRefreshDone)
+	} else {
+		go func() {
+			defer close(quotaRefreshDone)
+			if err := a.handler.RunQuotaAutoRefresh(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("automatic quota refresh loop stopped", "error", err)
+			}
+		}()
+	}
+
 	var runErr error
 	hasPipelineReturned := a.pipeline == nil
 	select {
@@ -441,8 +482,14 @@ func (a *App) Run(ctx context.Context) error {
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	a.handler.CloseBrowserRuns()
+	a.handler.CloseUpdateWatchers()
 	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
+	}
+	select {
+	case <-quotaRefreshDone:
+	case <-shutdownContext.Done():
+		a.logger.Warn("automatic quota refresh did not stop before the shutdown deadline")
 	}
 	if !hasPipelineReturned {
 		select {
@@ -459,6 +506,7 @@ func (a *App) Close() error {
 		return nil
 	}
 	a.handler.CloseBrowserRuns()
+	a.handler.CloseUpdateWatchers()
 	// The fixture listens on a loopback socket, so it has to be closed with the
 	// database it describes.
 	if a.upstream != nil {

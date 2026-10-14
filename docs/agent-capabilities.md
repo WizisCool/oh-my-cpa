@@ -313,6 +313,9 @@ a new capability must not add them:
   model-visible capability arguments or previews;
 - arbitrary URL, CPA, or HTTP proxying; SQL beyond the read-only query surface above
   (no writes, no hidden table, no redacted column); filesystem; shell; or host maintenance;
+- applying an update to Oh My CPA or CLIProxyAPI. Replacing a container is host
+  maintenance: it stays a console action with its own confirmation (ADR 0099), and the
+  system information capability only reports that a newer release exists;
 - plugin installation, execution, or configuration, including the plugin system settings;
 - raw configuration YAML writes - only the named scalar allowlist
   (`request_retry`, `max_retry_interval`, `max_retry_credentials`,
@@ -505,6 +508,18 @@ Exclusion subtracts measurable first-token latency and otherwise uses total late
 inclusion always uses total latency. Tests cover both adapters, shared preference
 reads/writes, defaults, invalid values and administrator refusal.
 
+### Automatic quota refresh capabilities
+
+`quota_auto_refresh_get` is a low-risk read returning
+`{ "interval_minutes": 360, "refresh_on_reset": true }` by default; an absent or
+unreadable stored field resolves to its default. `quota_auto_refresh_set` is a low-risk write that
+requires both fields, accepts `interval_minutes` of 0 (schedule off) or 5-1440, returns
+`invalid_parameters` otherwise and returns the saved policy. Both are available to Agent
+and MCP administrators. The write shares the console's `omc_quota_auto_refresh`
+preference, which the server's background loop reads every minute (ADR 0094), and
+invalidates `preferences`; no secret or OAuth handoff is involved. Tests cover both
+adapters, defaults, invalid values and administrator refusal.
+
 ### Browser connection recovery
 
 Managed Agent execution belongs to the server, not a socket. Console refresh or network recovery
@@ -603,3 +618,19 @@ The browser's trusted Plugin Host (ADR 0067) is not an Agent/MCP capability. It 
 secret-bearing configuration only through an authenticated console session; models and
 external agents continue to use the declared sanitized capability registry and its
 confirmation/revision rules. No arbitrary native path or URL becomes a tool argument.
+
+## Credential warmup capabilities
+
+`quota_warmup_settings_get` and `quota_warmup_credential_get` are bounded read projections
+of provider defaults, effective policy, model, next check, activation observations and pause reason.
+The optional `state.protocol_pause` carries bounded model/reason evidence independently of the
+latest receipt; a rate-limited recheck does not restore automatic compatibility.
+`quota_warmup_settings_set`, `quota_warmup_credential_set` and `quota_warmup_run` are
+high-risk writes exposed to both Agent and MCP. Their prepare result binds confirmation
+to the provider-policy or credential revision; provider-default approval states its
+impact on current and future inheriting credentials. Saving an enabled policy authorizes
+its first automatic consuming attempt through the same billing and window checks, without
+requiring prior manual activation. Manual approval authorizes one optional tiny consuming
+request and post-request activation observation, not token access or reset-credit redemption.
+The shared implementation enforces unknown/paid billing protection and
+uncertainty-aware idempotency; uncertain results must never be automatically replayed.

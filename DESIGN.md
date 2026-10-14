@@ -167,8 +167,8 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 
 ### Primary
 - **Deep Accent Blue** (`#0579bd` dark / `#004a73` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark mode.
-- **Accent Ladder** (hue 201, per mode): `#00a2fb` / `#005d8f` are the link steps for dark and light, `#0579bd` / `#004a73` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.74:1 on the dark background but only 2.71:1 on the light one, so each mode's palette uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, the trailing corner of the square brand mark (collapsed rail, Agent authorization page, favicon), and the token heatmap's ramp. The ladder is *derived*: a proportional OKLCH lightness step from the authored accent, then deepened until one of white and near-black clears 4.5:1 as the filled control's label. Measured ratios are in `docs/design.md` §2.
-- **Pressed Blue** (`#025e94` dark / `#023b5d` light): Used for button active/down states.
+- **Accent Ladder** (hue 201, per mode): `#00a2fb` / `#005d8f` are the link steps for dark and light, `#0579bd` / `#004a73` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.74:1 on the dark background but only 2.78:1 on the light one, so each mode's palette uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, an outlined button's hover and pressed ink, the brand wordmark, the trailing corner of the square brand mark (collapsed rail, Agent authorization page, favicon), and the token heatmap's ramp. The ladder is *derived*: a proportional OKLCH lightness step from the authored accent, then deepened until one of white and near-black clears 4.5:1 as the filled control's label. Measured ratios are in `docs/design.md` §2.
+- **Pressed Blue** (`#025e94` dark / `#023b5d` light): A filled button's fill under the pointer and while pressed. It is solved to sit under the `primary-on` label, so a default or dashed button does not take it as ink.
 
 ### Series (categorical)
 
@@ -179,7 +179,7 @@ family in the app, and the only exception to the semantic-only rule above; see
 
 - **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
   purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
-  `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/CodeX data visualization standards.
+  `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/Codex data visualization standards.
 - **Track** (`--series-track`, `#2c2c30` dark / `#e5e5ea` light): the trend's plot floor and the usage
   ring's unfilled track, which is each mode's border step.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
@@ -206,7 +206,7 @@ saturated at the top; see `docs/design.md` §2.
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
 - **Graphite Surface (`--surface`)** (`#1c1c1f`): Elevated containers, cards, dropdown menus, modals, and row hover states.
 - **Hairline Border (`--border`)** (`#2c2c30`): Primary 1px structural separator for cards, tables, sider borders, toolbars, and the model trend's axis rule and ticks.
-- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, subtle panel boundaries, and the model trend's grid rules.
+- **Soft Divider (`--border-soft`)** (`#212124`): Inner item dividers, table row borders, subtle panel boundaries, and the model trend's grid rules.
 - **Chalk White Text (`--fg`)** (`#f4f4f6`): Primary readable text, titles, numbers, and selected navigation items.
 - **Silver Secondary Text (`--fg-2`)** (`#a1a1aa`): Secondary descriptions, field hints, subtitle text, and the model trend's axis labels.
 - **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, legend entries, and the model trend's tooltip crosshair.
@@ -230,6 +230,8 @@ saturated at the top; see `docs/design.md` §2.
 **Display Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 **Body Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 **Label/Mono Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
+
+**Embedded font:** the complete Regular and Bold Sarasa Mono SC, cut into `unicode-range` woff2 shards: the core shard (ASCII, punctuation and the console's own copy) loads with the first frame, the rest only when a page draws one of their characters (ADR 0094). `pnpm subset-font` regenerates them.
 
 **Character:** Unified, technical, and precise. The monospaced character set across Chinese, English, Malay, and code symbols gives Oh My CPA the rhythm of an interactive terminal monitor while retaining high CJK legibility.
 
@@ -261,7 +263,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 └──────────┴──────────────────────────────────────────┘
 ```
 
-- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the navigation toggle, breadcrumb hierarchy, and five right-aligned actions: the project GitHub link, refresh, the theme mode control, the language menu, and sign out. The mode control is a **cycling button** — light → dark → follow-the-system, one icon per state (sun, moon, desktop) — because the palettes belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the console as it is picked; the language stays a **menu** over `LANGUAGES`, because four languages, one of which the reader may not read, is exactly the case a list answers. The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; it shows no tooltip — the mark names it and the unfolding count answers the hover — while its accessible name follows the reading language, and it remains available in the demonstration. At rest the link is the mark alone; pointed at or focused, it unfolds the project's star count before the mark over `base` — a star glyph and the count, exact below a thousand and truncated thousands with two decimals above (`1.23k`) — once the server has read one, and under reduced motion it still waits for the pointer or focus but appears at once, without the transition. It is the first control of a right-aligned row and the label leads, so unfolding widens it away from the others and the mark stays under the pointer; a device with no hover shows the count throughout. A hairline separates the link from the console's own actions. All five actions are one component, `web/src/components/common/HeaderAction.tsx`: 32px high, borderless at rest, the same hover and the same label treatment for the star count and the language code. Each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. CPA connection status and version are reported on the System Information page only.
+- **Top Header**: Fixed 56px height (48px at 640px and below, `--app-header-height`), full-width with 1px bottom border (`#2c2c30`). Contains the navigation toggle, breadcrumb hierarchy, and five right-aligned actions: the project GitHub link, refresh, the theme mode control, the language menu, and sign out. The mode control is a **cycling button** — light → dark → follow-the-system, one icon per state (sun, moon, desktop) — because the palettes belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the console as it is picked; the language stays a **menu** over `LANGUAGES`, because four languages, one of which the reader may not read, is exactly the case a list answers. The project GitHub link uses the existing local Octicons mark and opens `https://github.com/WizisCool/oh-my-cpa` in a new tab with `noopener noreferrer`; it shows no tooltip — the mark names it and the unfolding count answers the hover — while its accessible name follows the reading language, and it remains available in the demonstration. At rest the link is the mark alone; pointed at or focused, it unfolds the project's star count before the mark over `base` — a star glyph and the count, exact below a thousand and truncated thousands with two decimals above (`1.23k`) — once the server has read one, and under reduced motion it still waits for the pointer or focus but appears at once, without the transition. It is the first control of a right-aligned row and the label leads, so unfolding widens it away from the others and the mark stays under the pointer; a device with no hover shows the count throughout. A hairline separates the link from the console's own actions. All five actions are one component, `web/src/components/common/HeaderAction.tsx`: 32px high, borderless at rest, the same hover and the same label treatment for the star count and the language code. Each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. CPA connection status and version are reported on the System Information page only.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
 - **Navigation Sheet (phone)**: Below 900px the rail becomes a left sheet of `min(320px, 86vw)`, carrying the same two parts — brand and grouped nav. There is no bottom bar and no phone-specific menu: a phone has less room, not less to navigate, and a second navigation is a second place for the grouping to drift. The `vw` bound matters at a 320px viewport, where a fixed 320px sheet would leave no page visible behind the mask.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile), inside a 1440px content column. The widths that follow: content column 1376px (1440 − 2×32), and a list frame 1376px (every list is its own hairline frame, or the body of a card that is). Every page measures these; a page that needs a different column states why where the rule is written (the configuration workbench's 920px reading column is the one case).
@@ -310,7 +312,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 Oh My CPA is an uncompromisingly flat design system. Drop shadows (`box-shadow`) are globally suppressed across all components, panels, modals, dropdowns, and cards (`box-shadow: none`).
 
 Depth and hierarchy are conveyed exclusively through:
-1. **1px Border Contrasts**: Separating surfaces via `#2c2c30` (`--border`) and `#222226` (`--border-soft`).
+1. **1px Border Contrasts**: Separating surfaces via `#2c2c30` (`--border`) and `#212124` (`--border-soft`).
 2. **Background Luminance Shifts**: Stacking elements using `#121214` (substrate) and `#1c1c1f` (elevated panels).
 3. **Selection Insets**: Highlighting selected items with a crisp 2px left border or inset rule (`box-shadow: inset 2px 0 0 var(--fg)`).
 
@@ -340,8 +342,8 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 28×28px for row-level action icon buttons.
 - **Row Actions**: A row's secret-facing actions (reveal, copy, edit) stay in the open as square buttons. Actions that do not read the value — a drill-down into the row's traffic, and removal — group behind one overflow trigger of the same size. An action that cannot apply is disabled with its reason rather than hidden.
 - **Installed Plugin Actions**: Configuration and overflow are matching 28px row-action buttons. The enable switch is separated from the action pair by a quiet rule. Repository/homepage links and uninstall sit in the overflow menu; uninstall confirms against the same row with a danger confirmation button. Cancel and Escape return keyboard focus to the row action. Existing palette and motion tokens are reused. The credential-handling capability badge says "Auth provider", without claiming an OAuth login method. The OAuth connection picker uses plugin names without an OAuth suffix and a "Plugin-managed" method tag. Registered plugin pages take precedence through "Open plugin page"; pageless providers resolve device/redirect controls only after a successful explicit login request.
-- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
-- **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
+- **Primary**: Deep accent fill (`#0579bd` dark, `#004a73` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#025e94` dark, `#023b5d` light) with zero transition lag.
+- **Secondary / Default**: Console background fill (`#121214`), 1px border (`#2c2c30`), chalk white text. Hovered or pressed, the label and the border take the palette's `--accent` (`#00a2fb` dark / `#005d8f` light) on the same fill: the ladder's link step, 4.95:1 to 12.12:1 on `--bg` across the six registered palettes. They never take Pressed Blue, which is a fill and reads 2.70:1 there in OMC Dark. Dashed buttons follow the same rule.
 - **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.
 
 ### Cards & Setting Group Panels
@@ -378,12 +380,12 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Status Pips & Badges
 - **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] Running`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A success rate is a verdict on one published band, read by every surface that shows one: 80% or better is green, 50% up to but not including 80% is amber, below 50% is red, and a window with no traffic is gray because its rate is unknowable rather than bad. The dashboard's provider rows colour the rate's own number and the meter beside it with that same band token, and the number is what keeps the band readable at a measured 0%, where the meter's fill has no width to paint. Only a verdict gets a pip: the request console's Success / Failed filter segments carry one each, while All carries none.
 - **Latency**: never tinted by an absolute threshold. Agent requests legitimately run for minutes, so a time-based amber rule would flag healthy traffic; the detail drawer compares TTFT against total duration instead.
-- **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill with ≥ 4.5:1 text contrast. Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
+- **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill. The rule for its text is 4.5:1 against that tint, and only the dark stops meet it: OMC Dark measures 6.87:1 at the 0% stop and 6.06:1 at the 100% stop on the page, OMC Light 3.81:1 and 2.95:1 (`docs/design.md` §2). Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
 - **Credential Quota**: The dashboard panel that fills the token grid's right-hand column - the two stacking into one column under 900px - lists every enabled credential by urgency (sign-in required, cooling down, exhausted, unavailable, running low, healthy, no reading) as one row each: a row draws its plan's two shortest quota windows as remaining-share bars with the countdown to the tightest of them refilling, except in the four states with no reading to draw (sign-in required, cooling down, unavailable, no reading), which state the reason in the bars' place; an exhausted credential keeps its windows, all of them at zero, with the countdown to when it serves again. Disabled credentials are only counted, in the header beside the serving and blocked counts, and the list scrolls inside the panel, so a large fleet cannot outgrow the row it shares. A bar's hue is the remaining share (`--success` from 70%, `--warn` from 25%, `--danger` below) and never the heatmap ramp: "plenty left" and "a lot of tokens" must not be the same colour. Rows are not interactive - a touch meant to move the list must not leave the page - so the panel's one control is a header refresh glyph that asks the providers for fresh readings through the same refresh run the credential workspace uses, reporting under the same toast, and its footer links to `/oauth-management`. Its states are about freshness: a re-read that fails keeps the rows with a warning, only a credential list that was never read is unknown with a retry, and a deployment holding no credential gets an empty state that links to connecting one.
 - **Token Activity Heatmap**: The dashboard's token grid is the one sequential *quantity* encoding, so it uses a **continuous** ramp of the theme accent rather than four fixed steps or any status hue — "lots of tokens" and "credential healthy" must not be the same colour, and a stepped scale paints every day between two steps identically. Brightness is the square root of the day's volume against the window's busiest day, which keeps day-to-day differences visible across the several orders of magnitude a window spans. The shape is a contribution-graph field (one row per weekday, one column per week, a year of weeks) that shows as many of the newest weeks as fit at an 18px cell and stretches them to its panel's edge, so it never leaves a gutter; the older weeks scroll inside the panel behind a pinned weekday gutter, and a five-swatch key names the ramp's direction. The current week is a complete column: the days after today are drawn as normal unrecorded cells, because a day that has not happened is a day nothing is stored for. Every cell is interactive and lifts on hover with a compositor-only `transform` scale; clicking one opens its tooltip, so a day with nothing recorded says so rather than refusing the question. The tooltip prints the day's token volume in the console's token unit style, keeping the exact count on the value. The day's drill-down is a link inside the tooltip rather than the cell itself. The two zero states (recorded-but-empty, and nothing-stored) are solid fills ordered against the card at 1.04–1.06:1 and 1.16–1.22:1 (light to dark mode), never outlines — an outline over a year-long grid whose cells mostly predate the retention horizon renders as a wire mesh. The ramp is relative to the window rather than absolute, so the same shade means different volumes on two installs - which is why every cell carries its date and counts in text, and the shade is never the only encoding. DOM, not a chart mark.
 
 ### Shared primitives
-- **`AppDrawer`**: every side panel; widths `narrow` 420px, `medium` 600px, `wide` 760px, each capped at the viewport; named close control at the trailing end of the head; two-slot footer (`footerStart` note or reset, `footer` actions at the trailing edge) that wraps.
+- **`AppDrawer`**: every side panel; widths `narrow` 420px, `medium` 600px, `wide` 760px, each capped at the viewport; viewport dimensions land immediately while only the wrapper transform transitions, with the transition disabled under reduced motion; named close control at the trailing end of the head; two-slot footer (`footerStart` note or reset, `footer` actions at the trailing edge) that wraps.
 - **`SearchInput`**: every filter-as-you-type field; `--muted` search glyph, clear control, `label` as accessible name and default placeholder.
 - **`EmptyState`**: every empty region; a mark of three shortening 2px `--border` rules, one state line, optional second line and one action; `block` (with mark) for lists and sections, `compact` (no mark) inside panels and pickers.
 - **`SectionHeading`**: every section head at three weights - `section` (`--text-lg`/600), `group` (`--text-base`/600), `label` (`--text-xs`/600 uppercase `--muted`) - with optional count, description and trailing `extra`.
@@ -658,12 +660,25 @@ The change-log action occupies its own trailing space alongside the comparison. 
 count; its accessible name identifies both product and count. On phones it follows the
 comparison on a separate line, keeping both readings aligned and the action label intact.
 The action appears only for actual entries; the repository link stays with the product
-identity. Long comparison explanations belong below the readings rather than in the
+identity. A known newer release adds an **Ignore this version** toggle before it, in the
+same 32px text-button form with a bell icon. Its label never changes: the pressed state is
+the struck bell, `--fg` ink and `aria-pressed`, and the outcome of each press is a toast,
+so neither the row nor the card moves when it is used. It is disabled until the stored
+dismissals have been read. Long comparison explanations belong below the readings rather than in the
 status slot. A missing-notes hint belongs only to a known change-log range; an empty or
 unchecked feed does not acquire a second warning about notes. A failed check retains the
 readings and shows its reason and, when available, the last successful check time.
 The log remains a Drawer and remote images remain links, never automatically fetched media.
 These are page-level arrangements using the existing visual tokens, not new theme mappings.
+
+### Update indicator
+
+An available, undismissed release marks the System Information navigation entry with a 6px
+`--warn` dot just outside the top trailing corner of its icon. It rides the icon because
+that is the one part of an entry the expanded rail, the collapsed rail and the phone sheet
+all keep. The dot does not animate and adds no control to the rail; the entry's accessible
+name gains "Update available". This is the warning tone used as a status, not decoration:
+it says the deployment is behind a published release.
 
 ### System information status cards
 
@@ -698,10 +713,21 @@ The version card retains the compact comparison and separate change-log action a
 - Phone breakpoint: 640px; navigation sheet: 900px. One-row header: navigation, ellipsised page
   name, refresh, More. Click-open theme/language/repository/sign-out tools show selected preferences,
   use 44px rows and dismiss with Back/Escape. Demo mode retains its marker and restrictions.
-- Page titles: 18px; horizontal content padding: 12px; compact gaps/padding: existing 8/12/16px
-  scale. `PageHeader.mobileActions` chooses primary phone actions explicitly. Secondary tools use
+- The top bar names the page, so the page `h1` stays in the document and is not drawn (ADR 0096);
+  a live subtitle and the actions take its row. Horizontal content padding: 12px; compact
+  gaps/padding: existing 8/12/16px scale. `PageHeader.mobileActions` chooses primary phone actions explicitly. Secondary tools use
   `ActionMenu`; additional provider/audit filters use `FilterDisclosure` with selected-state summary.
   Desktop actions, row-list rendering and request/conversation scrolling are unchanged. The phone conversation frame follows usable viewport height so input and Send stay above the keyboard.
+- Density (ADR 0096): `StatTiles` stays one strip; the dashboard grid keeps two columns; a list
+  row's controls share its headline's line when both fit; an OAuth credential is four lines. A
+  stacked request record is three lines of two facts (model+effort badge/cost in the primary
+  weight, provider/total tokens, time+verdict/latency in the quiet tone) drawn in the text
+  colours, with hue kept for the verdict's pip, a failure and the reasoning effort badge; every other measure is in the
+  detail drawer; the table above the `920px` container threshold is unchanged. The request
+  filters are two rows: search with the filter panel's trigger, then one swipeable strip of
+  single-tap choices; the list runs edge to edge.
+- A sheet slides opaque: the drawer panel's opacity is held at 1 and only the mask fades. A panel
+  on its way out keeps drawing what it held.
 - Configuration: non-sticky status/mode/tools row, search on its own row, locally scrolling categories,
   retained group headings/descriptions. Only dirty drafts show the measured-height bottom save/discard
   bar; content reserves its space. Save validation and a single confirmation remain shared.
@@ -844,3 +870,19 @@ keeps the same text, standalone reasoning, working timelines and inline generate
 in reading order. Call rows retain argument summaries, outcome and duration disclosures.
 PNG captures generated interfaces at their laid-out width, including kit charts and controls;
 unavailable figures keep a visible fallback note rather than silently disappearing.
+
+## Credential window warmup
+
+The OAuth toolbar offers a Warmup settings Drawer with Codex/Claude tabs, explicit model
+selection, reset mode and one daily time. Provider defaults are off; daily time is 06:00
+in the OMC timezone. Unsaved drafts guard close, native Back and provider switching.
+The credential Quota tab shows full-policy inheritance/override, next check, last result
+and pause reason, with an optional confirmed Warm up now action. Selected-model activation
+observations and paid-fallback evidence are always visible as two quiet facts. An absent
+activation observation is neutral history; the pause reason describes current window or billing state. Saving other credential
+fields keeps a warmup draft open. Run outcomes remain inline without a duplicate toast.
+Tiny requests consume quota;
+an approved enabled policy admits the first automatic attempt through current window and
+billing evidence. Unknown billing pauses requests; observed unsupported responses pause
+subsequent automatic requests for the same model. Reuse the existing tokens,
+responsive Drawer and semantic feedback without introducing global design tokens.

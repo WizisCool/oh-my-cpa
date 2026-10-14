@@ -302,27 +302,40 @@ export function useProviderManagement({
     return payload;
   };
 
+  // The probe carries a real minimal inference request, not a model-list
+  // fetch: a key that lists models may still fail to serve. The model is
+  // the drawer's test choice, falling back to its first configured model.
+  const resolveTestModel = (): string => {
+    const trimmedTestModel = formTestModel.trim();
+    if (trimmedTestModel !== '' && trimmedTestModel !== 'auto') return trimmedTestModel;
+    return formModels.map((item) => item.name.trim()).find((name) => name !== '') ?? '';
+  };
+
   const testProviderKey = async (k: FormKeyItem): Promise<{ ok: boolean; error?: unknown }> => {
     const apiKey = k.apiKey?.trim() || '';
     if (!apiKey) {
       toast.warning(t('pro.test_key_empty'));
       return { ok: false };
     }
-    const baseURL = formBaseURL.trim();
-    if (!baseURL) {
-      toast.warning(t('pro.pull_requires_base_url'));
+    const model = resolveTestModel();
+    if (!model) {
+      toast.warning(t('pro.test_model_required'));
       return { ok: false };
     }
     try {
-      await api.pullProviderModels({
+      const probed = await api.probeProvider({
         provider_id: editingProvider ? editingProvider.id : undefined,
         family: formFamily,
-        base_url: baseURL,
+        base_url: formBaseURL.trim(),
         api_key: apiKey,
         proxy_url: k.proxyUrl?.trim() || '',
+        model,
         headers: headersPayload(),
+        // A vertex draft with Interactions enabled is served through that
+        // dialect; the server falls back to the stored entry for saved ones.
+        interactions: formFamily === 'vertex' ? formBehavior.interactions : undefined,
       });
-      return { ok: true };
+      return probed.ok ? { ok: true } : { ok: false, error: probed.error || t('pro.test_key_failed') };
     } catch (error) {
       return { ok: false, error };
     }
@@ -348,20 +361,30 @@ export function useProviderManagement({
       toast.warning(t('pro.test_key_empty'));
       return;
     }
-    if (!formBaseURL.trim()) {
+    // Families without a base URL fall back to their official endpoint on the
+    // server; only ones CPA would silently drop without it are gated here.
+    if (lookupProviderFamily(formFamily)?.requiresBaseURL && !formBaseURL.trim()) {
       toast.warning(t('pro.pull_requires_base_url'));
+      return;
+    }
+    // Resolve the model once up front: without one no probe can run, and
+    // per-key warnings followed by a success toast would claim tests ran.
+    if (!resolveTestModel()) {
+      toast.warning(t('pro.test_model_required'));
       return;
     }
     const hide = toast.pending(t('pro.testing_all'));
     const results = await Promise.all(keys.map((key) => testProviderKey(key)));
     hide();
-    const failed = results.filter((result) => !result.ok && result.error);
+    // Every unsuccessful probe counts, including ones that warned instead of
+    // erroring: the success toast must mean every key answered.
+    const failed = results.filter((result) => !result.ok);
     if (failed.length === 0) {
       toast.success(t('pro.test_all_ok', { count: keys.length }));
       return;
     }
     const firstError = failed[0]?.error;
-    toast.error(describeError(firstError));
+    toast.error(describeError(firstError) || t('pro.test_key_failed'));
   };
 
   const handleCloseProviderDrawer = () => {

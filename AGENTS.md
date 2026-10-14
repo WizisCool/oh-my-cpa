@@ -24,6 +24,7 @@ Not every rule weighs the same. Know which tier you are working in.
 - **DTO allowlists.** Ordinary facade responses carry only handwritten allowlists from `internal/api/` — never raw CPA payloads, unlisted fields, arbitrary target URLs, or outbound `api-call` proxies. The authenticated trusted Plugin Host is the single bounded native-response exception (ADR 0067): fixed CPA v0/v8 management trees and the model directory only, with credential separation, audited reads and writes, and configuration backup gates.
 - **Data integrity.** Migrations are forward-only: never edit an applied migration or `schema_migrations`; a fix is a new migration. Pricing versions and audit events are append-only. One replica per data directory — SQLite access is serialized, not retried.
 - **Zero-destructive CPA adoption.** Never wipe, overwrite, or mutate pre-existing CPA configuration OMC does not own. Ordinary configuration writes are revision-guarded, name only the paths the operator changed, and keep a restorable backup; refuse the write when the backup cannot be made. Reading CPA's usage queue is destructive: availability is probed with AUTH, never by popping.
+- **Update boundary.** Only the updater sidecar holds the Docker socket; the console stays read-only, unprivileged, and socket-free. An update names a product, never an image. Console releases are verified against the compiled-in public key and pulled by digest, with no unverified fallback; the gateway image, which this project cannot sign, pulls the tag its container already uses. A pinned image is never updated, and a replacement that fails its health check restores the previous container and its image tag.
 - **Offline embedding.** No CDN or externally hosted asset; the SPA embeds in the single Go binary and keeps working under the `/omc` sub-path.
 - **Repository hygiene.** No secret, key, token, or auth file in the diff, the history, the PR text, or screenshots.
 
@@ -71,15 +72,15 @@ Match verification effort to the blast radius of the change:
 | Moment | What to run |
 | --- | --- |
 | While editing | `pnpm test:fast` — only the checks the changed files need; add `pnpm check:ui` when the change touches UI interactions, layout, or browser lifecycle |
-| Feature complete / before pushing | `pnpm verify` and `pnpm check:ui` — the full static gates, the worktree secret scan, and the affected browser scenarios |
+| Feature complete / before pushing | `pnpm verify`; add `pnpm check:ui` when the change touches the UI — the full static gates, the worktree secret scan, and the affected browser scenarios |
 | Pull request | CI runs the full browser catalog, the whole probe catalog in three shards, and demo acceptance; branch protection requires its `static`, `browser`, and `probes` checks |
 | Build, embedded distribution, browser harness, or workflow changes | `pnpm verify:full` (also for reproducing a CI failure) |
 
-Do not run `verify` or `check:ui` after every file edit — a feature is complete when it is independently verifiable, not when a reply ends. Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification, or chunk boundaries.
+Do not run `verify` or `check:ui` after every file edit — a feature is complete when it is independently verifiable, not when a reply ends. Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. A documentation-only change is verified by `pnpm test:fast`, which selects the docs check; it needs no browser scenario. `pnpm test:fast --plan` shows the selection before you run it, and `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification, or chunk boundaries.
 
 Rules that keep the gates honest:
 
-- **Never add a skip switch, a retry, or a longer wait to make a run pass.** Fix the assertion, or add a planner rule with a self-test.
+- **Never add a skip switch, a retry, or a longer wait to make a run pass or go faster.** Fix the assertion, or add a planner rule with a self-test.
 - **Write the check that catches the defect, not one that asserts the absence of trouble.** A test that cannot fail against a broken implementation, or that exists to cover the author rather than the code, is removed rather than kept.
 - New tests go at the lowest layer that can fail for the right reason; no fixed waits; discovery is automatic, so do not add registration lists. `docs/testing.md` has the layer map and the current claim ownership.
 - Release and security gates — secret scans, image smoke, publication checks — are never optional.

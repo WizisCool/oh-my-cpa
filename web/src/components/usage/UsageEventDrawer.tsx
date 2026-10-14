@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { groupResponseHeaders, responseHeadersText } from '../../types/responseHeaderGroups';
 import dayjs from '../../utils/time';
 import { api, ApiError } from '../../api/client';
+import { displayEffortName } from '../../theme/effortScale';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { maskKeyText } from '../../utils/maskKey';
@@ -79,12 +80,18 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const [downloading, setDownloading] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   React.useEffect(() => {
-    setTab('overview');
     setDownloadModalOpen(false);
+    // A record opens on its overview; a panel on its way out keeps the tab it was showing.
+    if (eventId != null) setTab('overview');
   }, [eventId]);
+  // The panel is still on screen while it slides out, after `eventId` has cleared. It keeps
+  // drawing the record it held, so what leaves is the record rather than an emptied sheet.
+  const [shownId, setShownId] = React.useState(eventId);
+  if (eventId != null && eventId !== shownId) setShownId(eventId);
+  const recordId = eventId ?? shownId;
   const result = useQuery({
-    queryKey: ['usage-event', eventId],
-    queryFn: () => api.getUsageEvent(eventId!),
+    queryKey: ['usage-event', recordId],
+    queryFn: () => api.getUsageEvent(recordId!),
     enabled: eventId != null,
   });
   const event = result.data?.event;
@@ -144,7 +151,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     }
   };
 
-  const currentIndex = events && eventId != null ? events.findIndex((e) => e.id === eventId) : -1;
+  const currentIndex = events && recordId != null ? events.findIndex((e) => e.id === recordId) : -1;
   const hasPrev = events != null && currentIndex > 0;
   const hasNext = events != null && currentIndex >= 0 && currentIndex < events.length - 1;
   const prevEvent = hasPrev ? events![currentIndex - 1] : null;
@@ -368,6 +375,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         [t('events.source'), value(event.source)],
                         [t('events.auth_index'), value(event.auth_index)],
                         [t('events.auth_type'), value(event.auth_type)],
+                        [t('events.access_provider'), value(event.access_provider)],
+                        [
+                          t('events.native_key'),
+                          event.access_provider ? t(event.is_native_key ? 'events.native_key_yes' : 'events.native_key_no') : missing,
+                        ],
                         [t('events.caller'), value(requestGroupName(event))],
                         [t('events.api_group_key'), value(event.api_group_key)],
                         [t('events.group_category'), value(event.api_group_label)],
@@ -399,7 +411,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                             <span className="terminal-muted">{t('events.served_model_unknown')}</span>
                           ),
                         ],
-                        [t('events.reasoning_effort'), value(event.reasoning_effort)],
+                        [t('events.reasoning_effort'), value(displayEffortName(event.reasoning_effort))],
                         [t('events.service_tier'), value(event.service_tier)],
                         [t('events.response_tier'), value(event.response_service_tier)],
                         [

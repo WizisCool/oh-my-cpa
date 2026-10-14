@@ -214,9 +214,14 @@
 @media (max-width: 1100px) {
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* A phone keeps two columns. One tile per row spent a screen on three numbers; the small tiles
+   are a label, a figure and a sparkline, which half the width holds, and the wide ones still span
+   the row. */
 @media (max-width: 640px) {
-  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
-  .tile-value { font-size: 28px; }
+  .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile-value, .tile-value.is-small { margin-top: 4px; font-size: 24px; }
+  .tile-label { font-size: var(--text-sm); }
+  .tile-split { gap: 10px; padding-left: 10px; }
 }
 .model-trend-card { grid-column: span 2; }
 .model-usage-card {
@@ -334,7 +339,7 @@
   .model-trend-card, .model-usage-card { grid-column: span 2; }
 }
 @media (max-width: 640px) {
-  .model-trend-card, .model-usage-card { grid-column: span 1; }
+  .model-trend-card, .model-usage-card { grid-column: span 2; }
 }
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
    A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
@@ -748,6 +753,6 @@
   .provider-jump-arrow { opacity: .5; transform: none; }
 }
 @media (max-width: 640px) {
-  .dashboard-grid { gap: 12px; margin-bottom: 16px; }
+  .dashboard-grid { gap: 8px; margin-bottom: 12px; }
   .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
 }

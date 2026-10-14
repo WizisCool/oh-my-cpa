@@ -42,7 +42,8 @@ export function packageNativeArchive(target, staging, output, epoch, execute = e
     for (const member of members) fs.utimesSync(path.join(staging, member), epoch, epoch);
     execute('zip', ['-X', '-q', path.join(output, target.archive), ...members], { cwd: staging, stdio: 'inherit', env: { ...process.env, TZ: 'UTC' } });
   } else {
-    execute('tar', ['--sort=name', `--mtime=@${epoch}`, '--owner=0', '--group=0', '--numeric-owner',
+    // GNU tar otherwise interprets a Windows drive-letter colon as a remote host.
+    execute('tar', ['--force-local', '--sort=name', `--mtime=@${epoch}`, '--owner=0', '--group=0', '--numeric-owner',
       '-czf', path.join(output, target.archive), '-C', staging, ...members], { stdio: 'inherit' });
   }
 }

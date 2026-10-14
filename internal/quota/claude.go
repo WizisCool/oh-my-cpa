@@ -3,6 +3,8 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -63,6 +65,137 @@ type RawClaudeProfileOrg struct {
 type RawClaudeProfileResponse struct {
 	Account      *RawClaudeProfileAccount `json:"account"`
 	Organization *RawClaudeProfileOrg     `json:"organization"`
+}
+
+// ClaudeResetGrant is one Anthropic rate-limit reset grant, display-only. OMC
+// lists grants beside the Claude quota; claiming one spends an entitlement
+// and is deliberately not implemented.
+type ClaudeResetGrant struct {
+	ID          string   `json:"id"`
+	Label       string   `json:"label,omitempty"`
+	ResetsTotal int      `json:"resets_total"`
+	ResetsLeft  int      `json:"resets_left"`
+	EndsAtMS    *int64   `json:"ends_at_ms,omitempty"`
+	Clears      []string `json:"clears,omitempty"`
+}
+
+// claudeResetGrantWindows are the usage windows a grant can clear. Windows the
+// provider adds later are dropped, never guessed.
+var claudeResetGrantWindows = map[string]bool{
+	"five_hour": true, "seven_day": true, "seven_day_overage_included": true,
+}
+
+var claudeResetGrantIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
+
+// ParseClaudeResetGrants parses the `cedar_ember` block of the Claude usage
+// response. It returns nil for a missing or malformed block: one malformed
+// grant, a duplicate id or a bad timestamp rejects the whole block, because a
+// half-parsed entitlement display is worse than none.
+func ParseClaudeResetGrants(raw []byte) []ClaudeResetGrant {
+	var body struct {
+		CedarEmber *struct {
+			Eligible *bool             `json:"eligible"`
+			Grants   []json.RawMessage `json:"grants"`
+		} `json:"cedar_ember"`
+	}
+	if json.Unmarshal(raw, &body) != nil || body.CedarEmber == nil || body.CedarEmber.Eligible == nil {
+		return nil
+	}
+	grants := make([]ClaudeResetGrant, 0, len(body.CedarEmber.Grants))
+	seen := make(map[string]bool, len(body.CedarEmber.Grants))
+	for _, rawGrantJSON := range body.CedarEmber.Grants {
+		var rawGrant struct {
+			ID          string          `json:"id"`
+			Label       string          `json:"label"`
+			ResetsTotal json.RawMessage `json:"resets_total"`
+			ResetsLeft  json.RawMessage `json:"resets_left"`
+			EndsAt      *string         `json:"ends_at"`
+			Clears      []string        `json:"clears"`
+		}
+		var flagMaps map[string]json.RawMessage
+		if json.Unmarshal(rawGrantJSON, &rawGrant) != nil || json.Unmarshal(rawGrantJSON, &flagMaps) != nil {
+			return nil
+		}
+		if !claudeResetGrantIDPattern.MatchString(rawGrant.ID) || seen[rawGrant.ID] {
+			return nil
+		}
+		seen[rawGrant.ID] = true
+		total, okTotal := grantCount(rawGrant.ResetsTotal)
+		left, okLeft := grantCount(rawGrant.ResetsLeft)
+		if !okTotal || !okLeft || left > total {
+			return nil
+		}
+		// Usability flags default to the refusing side and must be booleans
+		// when present; the display never offers a grant for spending.
+		for _, key := range []string{"paused", "usable_now", "use_requires_limit"} {
+			if rawFlag, present := flagMaps[key]; present {
+				var flag bool
+				if json.Unmarshal(rawFlag, &flag) != nil {
+					return nil
+				}
+			}
+		}
+		var endsAtMS *int64
+		if rawGrant.EndsAt != nil {
+			parsed, ok := parseGrantInstant(*rawGrant.EndsAt)
+			if !ok {
+				return nil
+			}
+			endsAtMS = &parsed
+		}
+		clears := make([]string, 0)
+		for _, window := range rawGrant.Clears {
+			if claudeResetGrantWindows[window] {
+				clears = append(clears, window)
+			}
+		}
+		grants = append(grants, ClaudeResetGrant{
+			ID:          rawGrant.ID,
+			Label:       grantLabel(rawGrant.Label),
+			ResetsTotal: total,
+			ResetsLeft:  left,
+			EndsAtMS:    endsAtMS,
+			Clears:      clears,
+		})
+	}
+	return grants
+}
+
+// grantCount accepts an integer count of zero or more; floats, strings and
+// negatives are a malformed grant, not a zero. The upper bound keeps an
+// out-of-range float from reaching the float-to-int conversion, whose result
+// Go leaves implementation-defined.
+func grantCount(raw json.RawMessage) (int, bool) {
+	var value float64
+	if json.Unmarshal(raw, &value) != nil || value < 0 || value > 1e6 || value != math.Trunc(value) {
+		return 0, false
+	}
+	return int(value), true
+}
+
+// parseGrantInstant reads an upstream ISO timestamp as epoch milliseconds.
+func parseGrantInstant(value string) (int64, bool) {
+	for _, layout := range []string{time.RFC3339, time.RFC3339Nano} {
+		if instant, err := time.Parse(layout, value); err == nil {
+			return instant.UnixMilli(), true
+		}
+	}
+	return 0, false
+}
+
+// grantLabel keeps upstream display text free of control characters and bounded.
+func grantLabel(value string) string {
+	cleaned := strings.Map(func(runeValue rune) rune {
+		if runeValue < 0x20 || (runeValue >= 0x7f && runeValue <= 0x9f) {
+			return ' '
+		}
+		return runeValue
+	}, value)
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+	if len([]rune(cleaned)) > 120 {
+		cleaned = string([]rune(cleaned)[:120])
+	}
+	return cleaned
 }
 
 // ParseClaudeUsage parses the Claude usage JSON and builds windows and extra usage.

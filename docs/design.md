@@ -73,9 +73,9 @@ console renders what the operator asked for.
 | `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels, chart crosshair rules |
 | `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
-| `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
+| `--accent` | `#00a2fb` | `colorInfo`, `colorLink`, Button `defaultHover*` / `defaultActive*` | Links, info, active bars, selection, an outlined button's hover and pressed ink |
 | `--accent-hover` | `#0579bd` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | A filled control, hovered or pressed |
 | `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
 | `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
@@ -164,15 +164,17 @@ legible as text on a dark one:
 
 | Step | Dark | Light | Measured use |
 | --- | --- | --- | --- |
-| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.03:1** on the dark background, **6.92:1** on the light one |
-| `--accent-hover` | `#0077b8` | `#004770` | white label on a filled control: **4.85:1** and **9.83:1** |
-| `--accent-active` | `#005d8f` | `#00344f` | pressed state |
+| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.74:1** on the dark background, **7.09:1** on the light one |
+| `--accent-hover` | `#0579bd` | `#004a73` | white label on a filled control: **4.69:1** and **9.43:1** |
+| `--accent-active` | `#025e94` | `#023b5d` | pressed state: the same label reads **6.93:1** and **11.76:1** |
 | `--accent-on` | `#ffffff` | `#ffffff` | the label on a filled control — the colour both filled-control steps above are measured against |
 
-The dark theme's link step is the light theme's *filled-control* step, which is the same value doing
-two jobs in two themes. That is deliberate: it is the only step of this hue that clears 4.5:1 as text
-on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.71:1** on a light
-page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
+The two modes share the hue and no value. Each palette authors its own link step, and `derivePalette`
+computes the two filled-control steps from it: a proportional OKLCH lightness step, then both fills
+deepened together until one label ink clears 4.5:1 on the resting fill and the pressed one alike. OMC
+Light's link step is the deeper `#005d8f` because the bright `#00a2fb` reads **2.78:1** against white -
+which is both the light page and the label on a filled control - so it can only ever be the dark
+theme's text colour.
 
 Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
 the resolved palette, so a change here moves the logo with it — an operator's own accent included. See
@@ -186,7 +188,9 @@ ring is `--fg` and the corner is `--accent`. `web/public/favicon.svg` is written
 by `pnpm sync-brand` and holds the two default palettes behind `prefers-color-scheme`, because a
 browser tab has no console theme to follow; `pnpm check-brand` fails when it is stale.
 
-Success/warn/danger are identical in both modes.
+Success, warn and danger are per-mode constants rather than derived tokens (`MODE_SEMANTICS` in
+`web/src/theme/palette.ts`): `#10b981` / `#f59e0b` / `#ef4444` in dark mode, `#059669` / `#b45309` /
+`#dc2626` in light mode.
 
 ### Status pip semantics
 
@@ -362,7 +366,7 @@ failed requests, so a weakly-cached request never reads as an error.
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
 | `--cache-rate-yellow` | `#f59e0b` | `#b45309` | 0% stop |
-| `--cache-rate-green` | `#10b981` | `#047857` | 100% stop |
+| `--cache-rate-green` | `#10b981` | `#059669` | 100% stop |
 | `--cache-rate-tint` | `14%` | `20%` | badge fill = hue over `--bg` |
 | `--cache-rate-edge` | `32%` | `34%` | badge border = hue over `--bg` |
 
@@ -373,15 +377,21 @@ Rules:
    component, and OKLCH keeps the hue sweep even. The component never names a
    colour: `cacheScale.ts` returns the two stops as `var()` references plus the
    low stop's weight, and the CSS mixes them.
-2. **The stops are palette steps, not new colours.** The dark stops are the
-   semantic hues lightened until the 11px badge text clears **4.5:1** against the
-   badge's own tint; the light stops are the darker reading of the same hues
-   (the low end is ochre — a saturated yellow cannot also be legible on a light
-   page). Measured worst case across the ramp in the browser harness: **6.70:1**
-   dark, **4.69:1** light (asserted at ≥ 4.5:1 for every sampled rate, including
-   the row's hover state). The light fill is stronger than the dark one because
-   a light page needs more tint before the badge reads as a badge, which is why
-   the two values differ.
+2. **The stops are palette steps, not new colours.** `derivePalette` sets
+   `--cache-rate-yellow` to the mode's `--warn` and `--cache-rate-green` to its
+   `--success` (`scripts/test-theme-presets.ts` asserts both), so the light stops
+   are the darker reading of the same two hues (the low end is ochre — a
+   saturated yellow cannot also be legible on a light page). The rule for the
+   11px badge text is **4.5:1** against the badge's own tint, and only the dark
+   stops meet it. Measured with `contrastRatio` (`web/src/theme/colorMath.ts`),
+   each stop against its own tint composited over the ground: OMC Dark reads
+   **6.87:1** at the 0% stop and **6.06:1** at the 100% stop on the page,
+   **6.16:1** and **5.38:1** on a hovered or selected row (`--surface`); OMC
+   Light reads **3.81:1** and **2.95:1** on the page, **3.54:1** and **2.77:1**
+   on such a row. These are measurements rather than a pinned bound: no check
+   asserts them. The light fill is stronger than the dark one because a light
+   page needs more tint before the badge reads as a badge, which is why the two
+   tints differ.
 3. **The top of the scale is presentation policy.** `100%` is not shown: the
    badge stops at **99.9%** (`MAX_CACHE_RATE`; the Go dashboard aggregate caps
    identically) so the app never claims a perfect hit rate. Readings carry **one
@@ -736,6 +746,12 @@ The shared tooltip names each item by its own series key and lists measured zero
 stepped visibly on every steep section. The browser scales the bitmap down, so the geometry is unchanged
 and only its edges are averaged.
 
+**Chart canvases follow their container.** G2's `autoFit` refits a chart only on a window resize, so
+`useChartPlugins` also observes each chart's own container and refits it when that box changes size for
+any other reason - the console font arriving after the first paint and re-measuring the text beside a
+chart is the common one. A canvas left at its first size kept the model ring inscribed in a smaller
+square than its frame, with the total beside the hole.
+
 **No y-axis.** The reading is the shape of each line against its own baseline - which models rose, and
 when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
 the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the
@@ -847,12 +863,23 @@ length, so the mask never reveals the secret's length.
 Font stack   "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC",
              "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
              Menlo, Monaco, Consolas, "Liberation Mono", monospace
-Subset font  Build-time subsetted woff2 (~105KB per weight, Regular & Bold)
-             embedded in assets; local Sarasa Mono SC takes zero-latency priority.
+Font files   Complete Sarasa Mono SC, Regular & Bold, in unicode-range woff2
+             shards embedded in assets; local Sarasa Mono SC takes priority.
 Base size    14px (antd token fontSize)
 Line height  1.5
 Tabular      font-variant-numeric: tabular-nums on all numeric data
 ```
+
+**The embedded font is complete, and a page fetches only what it draws.** The woff2 files
+under `web/src/assets/fonts/sarasa/` are the whole of Sarasa Mono SC cut into shards with
+`unicode-range` (ADR 0094), so any character the font has - in the console's copy, an Agent
+answer or a model name - is drawn in it rather than in a system font. Shard 000 (ASCII,
+Latin-1, common punctuation and every character in `web/src`) is declared in render-blocking
+CSS by `core.css`; the rest are registered by `web/src/theme/sarasaFont.ts`, an
+asynchronous chunk started at startup, and fetched only when a page draws one of their
+characters, which then swaps in from the fallback. `pnpm subset-font` regenerates the
+shards, the manifest, `core.css` and `shardUrls.ts`; copy added since then still renders in
+Sarasa, from a deferred shard.
 
 **The type scale is seven variables**, defined in `web/src/index.css`:
 
@@ -1769,7 +1796,7 @@ Non-obvious decisions, keep these when editing:
 
 Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/chartTooltip.ts`: content-sized columns, 8px decorative swatches and 6px gutters keep each marker, optional name, value and optional share together. Timestamp headings do not stretch those tracks; names align on the left and numeric edges on the right across rows. Full names and exact values remain available in escaped titles. Existing palette, font and motion tokens are unchanged.
 
-- `colorPrimary: accentHover` (`#0077b8` in OMC Dark, `#004770` in OMC Light) — filled controls
+- `colorPrimary: accentHover` (`#0579bd` in OMC Dark, `#004a73` in OMC Light) — filled controls
   use the deeper step; `colorInfo/colorLink: accent` (`#00a2fb` / `#005d8f`). This is why buttons
   don't glow antd-blue while links stay recognizable.
 - Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
@@ -1788,6 +1815,20 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   would otherwise draw white on it. `createThemeConfig` takes the *resolved* palette rather than an id,
   so the antd tokens are a projection of the same object the stylesheet, the charts and the Monaco theme
   read, and an operator's own palette reaches Ant Design through the same path a registered one does.
+- Button, outlined (default and dashed): `defaultHoverColor`, `defaultHoverBorderColor`,
+  `defaultActiveColor` and `defaultActiveBorderColor` are all `accent`. Ant Design derives the four
+  from `colorPrimaryHover` and `colorPrimaryActive`, which are `accentActive` here so that a filled
+  control deepens under the pointer. That step is a *fill* - solved to carry `accentOn`, not to be
+  read against the page - and as a label on the button's own `--bg` fill it would read **2.70:1** in
+  OMC Dark and **2.69:1** in Midnight for as long as a "Refresh" or "Details" stayed hovered.
+  `accent` is the ladder's text step: on `--bg` it reads **4.95:1** (Sandstone) to **12.12:1**
+  (Forest) across the six registered palettes, and in an operator's palette it is the token whose
+  ratio the editor already reports against the page, so a hovered label is as legible as that row
+  says. It is also the ink a row action takes on hover (§5), so an outlined button and a row action
+  answer the pointer alike; a field's hover edge stays `muted`, because the accent is a field's focus
+  state. Pressed keeps the hover ink, as the filled control's pressed fill keeps its hover fill.
+  `scripts/test-theme-presets.ts` measures the hovered and pressed label against `--bg` in every
+  registered palette.
 - Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
@@ -1840,6 +1881,11 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   accessible reading matches.
 
 ## 7. Motion
+
+Drawer wrappers transition only their transform. Width and maximum width adopt the current
+viewport immediately, including during opening motion; resizing never interpolates a sheet
+past the viewport. Under reduced motion the wrapper transition is disabled entirely.
+The existing motion durations, palette and token mappings are unchanged.
 
 ```text
 hover / state colour   ≤ fast — the acknowledgement must land on the pointer's frame (rule 7)
@@ -2223,7 +2269,7 @@ is what this section records.
 | --- | --- | --- |
 | `900px` | viewport | The shell changes shape: the rail becomes a sheet, page head and grid columns stack. |
 | `640px` | viewport | The device is a phone: list surfaces render labelled rows instead of a table, and controls take their touch sizes. |
-| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked row. |
+| `920px` | container (`reqstream`) | The request list's own width no longer fits its columns, so each record becomes a stacked record of three lines. |
 
 The third is a container query rather than a viewport breakpoint, and deliberately so: that
 list sits inside the page's content column, so the same viewport holds a different list width
@@ -2249,6 +2295,37 @@ a defect: the request list carried a viewport `@media (max-width: 920px)` block 
 its container query, and it could only ever fire where the container already had (the
 container is at most `viewport − 64px`), so it was removed rather than left as an unexplained
 second breakpoint.
+
+### A stacked request record is three lines, in the text colours
+
+Below the container threshold a record is three lines of two facts each (ADR 0096):
+
+| Line | Leading | Trailing | Tone |
+| --- | --- | --- | --- |
+| 1 | model, the substituted or routed model beside it, then the reasoning effort badge and mode marks | cost | primary: `--text-base`, weight 600 |
+| 2 | provider and account | total tokens | `--fg-2`, weight 400 |
+| 3 | time, the control that copies the request id, verdict | latency | `--muted`, `--text-sm` |
+
+A record in a list is there to be recognised; the detail drawer, one tap away, is where it is
+read. First-token time, the token breakdown, the cache rate, speed, the credential kind, the
+caller's key and the client label are therefore not drawn in a stacked record. A phone-wide
+record that repeats every table column in small type cannot be scanned, however few pixels it
+takes.
+
+It is the table row's own DOM. The cells that hold two facts (time and id, total and breakdown,
+latency and first token) dissolve with `display: contents`, and the line breaks are those cells'
+pseudo-elements. Each line has one cell with a zero flex basis that gives way first, so a line is
+cut short rather than wrapped; the record is the same height at 320px and at 390px. The checkbox
+is placed in the record's left padding, so the three lines share one left edge and the model and
+provider marks form one column.
+
+**Hue is for the exception.** In the table each mark's tint has a column to itself. Folded into
+a few lines, a success fill, an effort hue and a credential kind land in one glance and none
+reads as a signal. A stacked record is therefore drawn in the text colours, and three things
+keep a hue: the verdict's pip, a failed verdict in full, and the reasoning effort badge, which
+is drawn exactly as the table draws it because it is the one mark that explains a record's cost
+and latency at a glance. The badge is never cut short: on its line the model's name gives way.
+The table above the threshold is unchanged.
 
 ### A page never moves sideways
 
@@ -2393,15 +2470,31 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 
 ### Content-first phone tools
 
-At `640px` and below the shell header is one row: navigation, the ellipsised current page name,
-refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
+At `640px` and below the shell header is one 48px row (`--app-header-height`; 56px above):
+navigation, the ellipsised current page name, refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
 repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
 44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
 modal gives focus to that modal. The `900px` navigation-sheet breakpoint is unchanged.
 
 `PageHeader.mobileActions` explicitly chooses primary phone actions and an `ActionMenu` for secondary
-tools; desktop `actions` stay unchanged. The phone title is 18px, content has 12px horizontal padding,
-and page/header/card gaps use the existing 8/12/16px scale. Additional provider and audit filters use
+tools; desktop `actions` stay unchanged. **The top bar names the page, so the page does not repeat
+it** (ADR 0096): the `h1` stays in the document for the outline and assistive technology and is not
+drawn, a live subtitle and the actions take its row, and a head that held only the title takes no
+room. Content has 12px horizontal padding, and page/header/card gaps use the existing 8/12/16px
+scale.
+
+**Counts and tiles keep their row.** `StatTiles` stays one strip of narrower tiles, a label too
+long for its tile cut rather than wrapped. The dashboard grid keeps two columns and its wide tiles
+span both. A list row's controls share its headline's line when both fit and fall to a line of
+their own, still at the trailing edge, when the headline needs the width. An OAuth credential is
+four lines: identity, state and its switch, traffic and the record's tools, the quota reading.
+
+**The request filters are two rows.** Search and the way into the full filter panel hold the first.
+The window, the verdict, the model and provider facets, the grouping and the model view are one
+strip that swipes inside itself and bleeds to the page edge, so a control cut off by the edge says
+there is more that way. The page head is one row of state and tools: auto refresh, the ingest
+verdict (the one item that gives way), the fold toggle and refresh. The window's bounds are not
+printed beside the window control that already states them. The list runs to the screen's edges. Additional provider and audit filters use
 `FilterDisclosure`, whose summary keeps the selected state visible. Existing responsive row lists,
 request-list inertia and conversation scroll ownership remain unchanged. The shared conversation frame bounds its phone height to the usable viewport, keeping input and Send above the software keyboard.
 
@@ -2437,6 +2530,15 @@ inner menu, confirmation or conflict dialog. The entry button regains focus afte
 `useVisibleViewport` follows keyboard resize and caret panning through `visualViewport` resize/scroll,
 with layout viewport fallback and pinch-zoom left to the browser. The editor and dirty actions fit
 inside those bounds; their observers/listeners are effect-owned and cleaned under StrictMode.
+
+### A sheet slides opaque
+
+antd starts a drawer's panel at 70% opacity and fades it in over the slide. On a phone a sheet is
+the width of the screen, so the page it covers stays readable through it for the whole slide: two
+layers of text on one surface. Drawer wrapper dimensions update immediately; only transform
+transitions normally, and reduced motion disables the wrapper transition entirely. The panel's opacity is held at 1 for every drawer, and the mask
+keeps its fade. A panel on its way out keeps drawing what it held: the request detail drawer
+remembers the record it showed, so what leaves is the record and not an emptied sheet.
 
 ### The viewport is not a fixed rectangle
 
@@ -2597,12 +2699,25 @@ The change-log action occupies its own trailing space alongside the comparison. 
 count; its accessible name identifies both product and count. On phones it follows the
 comparison on a separate line, keeping both readings aligned and the action label intact.
 The action appears only for actual entries; the repository link stays with the product
-identity. Long comparison explanations belong below the readings rather than in the
+identity. A known newer release adds an **Ignore this version** toggle before it, in the
+same 32px text-button form with a bell icon. Its label never changes: the pressed state is
+the struck bell, `--fg` ink and `aria-pressed`, and the outcome of each press is a toast,
+so neither the row nor the card moves when it is used. It is disabled until the stored
+dismissals have been read. Long comparison explanations belong below the readings rather than in the
 status slot. A missing-notes hint belongs only to a known change-log range; an empty or
 unchecked feed does not acquire a second warning about notes. A failed check retains the
 readings and shows its reason and, when available, the last successful check time.
 The log remains a Drawer and remote images remain links, never automatically fetched media.
 These are page-level arrangements using the existing visual tokens, not new theme mappings.
+
+### Update indicator
+
+An available, undismissed release marks the System Information navigation entry with a 6px
+`--warn` dot just outside the top trailing corner of its icon. It rides the icon because
+that is the one part of an entry the expanded rail, the collapsed rail and the phone sheet
+all keep. The dot does not animate and adds no control to the rail; the entry's accessible
+name gains "Update available". This is the warning tone used as a status, not decoration:
+it says the deployment is behind a published release.
 
 ### System information status cards
 
@@ -2754,3 +2869,24 @@ keeps the same text, standalone reasoning, working timelines and inline generate
 in reading order. Call rows retain argument summaries, outcome and duration disclosures.
 PNG captures generated interfaces at their laid-out width, including kit charts and controls;
 unavailable figures keep a visible fallback note rather than silently disappearing.
+
+### Credential window warmup
+
+The OAuth toolbar opens a viewport-bounded Warmup settings Drawer with Codex and Claude
+section tabs. A draft prevents provider switching; close and native Back require a
+discard decision. Each provider edits a model, reset mode and one optional daily start,
+showing the effective OMC timezone and daily-priority rule. Defaults are off and `06:00`.
+Saving confirms the effect on all current and future inheriting credentials.
+
+The credential Quota tab adds a Window warmup section with provider inheritance or a
+complete override, effective policy, next check, latest durable result and safe pause
+reason. Two quiet facts always show selected-model activation observations and the latest
+paid-fallback evidence, including unknown evidence. An absent activation observation is neutral
+history, not an instruction or readiness gate. The reason explains current window or billing
+state. Saving an enabled policy authorizes eligible automatic requests; manual activation
+remains optional. Its drafts survive tab changes, remain
+open after another section saves, and participate in the parent Drawer close guard.
+Manual activation requires confirmation naming the credential and model and explaining
+quota consumption. Pending and uncertain outcomes never read as activation success.
+Manual execution outcomes stay in the credential section without a duplicate toast;
+background confirmation updates that same result. The public demo cannot save or consume. Existing type, shape, spacing and semantic-feedback tokens are reused.

@@ -138,3 +138,32 @@ func TestParseCentValAcceptsWrappedAmounts(t *testing.T) {
 		}
 	}
 }
+
+func TestParseXaiBillingKeepsProductsWithoutAShare(t *testing.T) {
+	raw := []byte(`{"config": {"product_usage": [
+		{"product": "grok-4", "usage_percent": 31.2},
+		{"product": "grok-4-fast"},
+		{"product": "grok-3", "usage_percent": "not-a-number"}
+	]}}`)
+	nowMS := time.Date(2026, 9, 20, 3, 0, 0, 0, time.UTC).UnixMilli()
+	_, windows, err := ParseXaiBilling(raw, nowMS)
+	if err != nil {
+		t.Fatalf("ParseXaiBilling failed: %v", err)
+	}
+	if len(windows) != 3 {
+		t.Fatalf("len(windows) = %d, want all three products listed", len(windows))
+	}
+	if windows[0].Model != "grok-4" || windows[0].UsedPercent == nil {
+		t.Errorf("windows[0] = %+v, want the metered product", windows[0])
+	}
+	// A product without a readable share keeps its row with no percentages: the
+	// card draws the unknown state instead of hiding the product.
+	for _, index := range []int{1, 2} {
+		if windows[index].UsedPercent != nil || windows[index].RemainingPercent != nil {
+			t.Errorf("windows[%d] = %+v, want no percentages", index, windows[index])
+		}
+	}
+	if windows[1].Model != "grok-4-fast" || windows[2].Model != "grok-3" {
+		t.Errorf("models = %q, %q, want both unknown products kept", windows[1].Model, windows[2].Model)
+	}
+}

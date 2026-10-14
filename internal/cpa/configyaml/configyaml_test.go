@@ -130,6 +130,43 @@ tls:
 	}
 }
 
+func TestSanitizeSafeYAMLRedactsServerGithubToken(t *testing.T) {
+	original := `server:
+  host: 127.0.0.1
+  port: 8317
+  github-token: "ghp-server-token-1234"
+`
+
+	safe, err := SanitizeSafeYAML(original)
+	if err != nil {
+		t.Fatalf("SanitizeSafeYAML failed: %v", err)
+	}
+	if strings.Contains(safe, "ghp-server-token-1234") {
+		t.Fatalf("safe YAML leaked server github-token: %s", safe)
+	}
+	if !strings.Contains(safe, UnchangedSentinel) {
+		t.Fatalf("safe YAML missing sentinel %q: %s", UnchangedSentinel, safe)
+	}
+
+	// An untouched sentinel restores the stored token on save.
+	restored, err := RestoreSentinels(safe, original)
+	if err != nil {
+		t.Fatalf("RestoreSentinels failed: %v", err)
+	}
+	if !strings.Contains(restored, "ghp-server-token-1234") {
+		t.Fatalf("restored YAML failed to restore server github-token: %s", restored)
+	}
+
+	// An explicitly replaced token is kept as written.
+	replaced, err := RestoreSentinels(strings.Replace(safe, UnchangedSentinel, "ghp-new-token", 1), original)
+	if err != nil {
+		t.Fatalf("RestoreSentinels failed: %v", err)
+	}
+	if !strings.Contains(replaced, "ghp-new-token") {
+		t.Fatalf("restored YAML did not keep the new github-token: %s", replaced)
+	}
+}
+
 func TestSanitizeSafeYAMLRedactsSchemelessAndNestedProxyCredentials(t *testing.T) {
 	original := `proxy-url: user:pass@proxy.example.test:8080?token=secret
 servers:
@@ -414,5 +451,55 @@ func TestRestoreSentinelsRefusesReorderedEntriesWithNestedProxyURLs(t *testing.T
 		if !strings.Contains(restoredInOrder, want) {
 			t.Fatalf("unchanged list lost %q: %s", want, restoredInOrder)
 		}
+	}
+}
+
+func TestSanitizeSafeYAMLRedactsICEServerSecrets(t *testing.T) {
+	original := `oauth:
+  providers:
+    codex:
+      live-media-relay:
+        enabled: true
+        ice-servers:
+          - urls: ["turn:turn.example.com:3478"]
+            username: "relay-user"
+            credential: "relay-secret"
+          - urls: ["stun:stun.example.com:3478"]
+`
+	safe, err := SanitizeSafeYAML(original)
+	if err != nil {
+		t.Fatalf("SanitizeSafeYAML failed: %v", err)
+	}
+	if strings.Contains(safe, "relay-user") || strings.Contains(safe, "relay-secret") {
+		t.Fatalf("safe YAML leaked ICE secrets: %s", safe)
+	}
+	if !strings.Contains(safe, "turn:turn.example.com:3478") || !strings.Contains(safe, "stun:stun.example.com:3478") {
+		t.Fatalf("safe YAML must keep server URLs readable: %s", safe)
+	}
+
+	// Untouched sentinels restore the stored secrets positionally.
+	restored, err := RestoreSentinels(safe, original)
+	if err != nil {
+		t.Fatalf("RestoreSentinels failed: %v", err)
+	}
+	if !strings.Contains(restored, "relay-secret") {
+		t.Fatalf("restored YAML lost the TURN credential: %s", restored)
+	}
+
+	// Reordering servers with kept secrets is refused instead of pairing a
+	// secret with another server's URLs.
+	reordered := `oauth:
+  providers:
+    codex:
+      live-media-relay:
+        enabled: true
+        ice-servers:
+          - urls: ["stun:stun.example.com:3478"]
+          - urls: ["turn:turn.example.com:3478"]
+            username: "__OMCPA_UNCHANGED__"
+            credential: "__OMCPA_UNCHANGED__"
+`
+	if _, err := RestoreSentinels(reordered, original); err == nil {
+		t.Fatal("RestoreSentinels accepted a reordered server list with kept secrets")
 	}
 }

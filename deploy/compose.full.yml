@@ -71,6 +71,28 @@ services:
     ports:
       - ${OMCPA_BIND:-127.0.0.1:8080}:8080
 
+  # Applies the updates the console's System Information page offers. It holds the Docker
+  # socket, which is control of this host's Docker. To update by hand instead, delete
+  # this service and run `docker rm -f oh-my-cpa-updater`: Compose leaves the container
+  # of a deleted service running (docs/install.md, "Upgrading").
+  oh-my-cpa-updater:
+    image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}
+    container_name: ${OMCPA_UPDATER_CONTAINER_NAME:-oh-my-cpa-updater}
+    command: ["updater", "serve"]
+    # The socket belongs to root on the host; with every capability dropped this is root
+    # that can open the socket and nothing else.
+    user: "0:0"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - oh-my-cpa
+
 networks:
   oh-my-cpa:
     name: ${OMCPA_NETWORK_NAME:-oh-my-cpa}

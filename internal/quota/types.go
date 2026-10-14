@@ -1,5 +1,7 @@
 package quota
 
+import "github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
+
 // QuotaWindow represents a normalized quota usage window (e.g. 5-hour rolling, weekly, model-specific).
 type QuotaWindow struct {
 	ID               string   `json:"id"`
@@ -139,6 +141,7 @@ const (
 
 // NormalizedQuota is the unified DTO representing all quota dimensions for a credential.
 type NormalizedQuota struct {
+	WarmupEvidence *warmup.Observation    `json:"warmup_evidence,omitempty"`
 	AuthIndex      string                 `json:"auth_index"`
 	Name           string                 `json:"name"`
 	Type           string                 `json:"type"`
@@ -149,11 +152,14 @@ type NormalizedQuota struct {
 	Plan           *QuotaPlan             `json:"plan,omitempty"`
 	Windows        []QuotaWindow          `json:"windows"`
 	ResetCredits   *CodexResetCreditsInfo `json:"reset_credits,omitempty"`
-	ActiveCooldown *ActiveCooldown        `json:"active_cooldown,omitempty"`
-	Recommendation QuotaRecommendation    `json:"recommendation"`
-	Capabilities   QuotaCapabilities      `json:"capabilities"`
-	RawSignals     map[string]string      `json:"raw_signals,omitempty"`
-	Error          string                 `json:"error,omitempty"`
+	// ResetGrants lists Anthropic rate-limit reset grants beside the Claude
+	// quota, display-only: claiming one spends an entitlement and is out of scope.
+	ResetGrants    []ClaudeResetGrant  `json:"reset_grants,omitempty"`
+	ActiveCooldown *ActiveCooldown     `json:"active_cooldown,omitempty"`
+	Recommendation QuotaRecommendation `json:"recommendation"`
+	Capabilities   QuotaCapabilities   `json:"capabilities"`
+	RawSignals     map[string]string   `json:"raw_signals,omitempty"`
+	Error          string              `json:"error,omitempty"`
 }
 
 // QuotaOverviewSummary provides fleet-wide counts and stats.

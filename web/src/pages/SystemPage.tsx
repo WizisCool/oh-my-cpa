@@ -21,6 +21,8 @@ import {
   ClearOutlined,
   WarningOutlined,
   CloseOutlined,
+  BellOutlined,
+  BellOffOutlined,
 } from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -43,7 +45,14 @@ import { PageLoading, SuspenseFallback } from '../components/common/PageLoading'
 import { StatusLabel } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
-import { deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
+import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from './SystemPage/versionPresentation';
+import type { UpdateOffer } from './SystemPage/versionPresentation';
+import { useConsoleUpdate } from './SystemPage/useConsoleUpdate';
+import type { UpdateOutcome } from './SystemPage/useConsoleUpdate';
+import { UpdateAction, UpdateStatusLine, UpdaterSetup } from './SystemPage/UpdateControls';
+import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
+import { isUpdateDismissed } from '../utils/updateDismissals';
+import type { SystemUpdatesResponse } from '../types/system';
 import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
@@ -61,6 +70,16 @@ interface ProductBlockProps {
   version: SystemProductVersion;
   onOpenChangelog: () => void;
   isChecking: boolean;
+  /** True when the operator dismissed the newer release this product reports. */
+  isDismissed: boolean;
+  /** False until the stored dismissals are known, when a press would write over them. */
+  canChangeDismissal: boolean;
+  onDismiss: () => void;
+  onRestore: () => void;
+  /** What the updater allows for this product; `none` draws nothing. */
+  updateOffer: UpdateOffer;
+  isSubmittingUpdate: boolean;
+  onUpdate: () => void;
 }
 
 const ProductBlock: React.FC<ProductBlockProps> = ({
@@ -68,11 +87,21 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   version,
   onOpenChangelog,
   isChecking,
+  isDismissed,
+  canChangeDismissal,
+  onDismiss,
+  onRestore,
+  updateOffer,
+  isSubmittingUpdate,
+  onUpdate,
 }) => {
   useTimeZone();
   const t = useT();
 
   const presentation = deriveVersionPresentation(version, isChecking);
+  // Offered for a known newer release only: there is nothing to dismiss about a build that
+  // is current, ahead, or not comparable.
+  const canDismiss = version.state === 'update_available' && version.latest_version !== '';
 
   return (
     <section className={styles['product-block']} aria-label={productTitle} data-testid={`sys-product-${version.product}`}>
@@ -106,21 +135,45 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             </span>
           </div>
         </div>
-        {presentation.hasChangelog && (
-          <Button
-            type="text"
-            size="small"
-            className={styles['changelog-trigger']}
-            icon={<FileTextOutlined />}
-            aria-label={t('sys.open_changelog', { product: productTitle, count: version.merge_count })}
-            onClick={onOpenChangelog}
-          >
-            <span>{t('sys.changelog_action')}</span>
-            <span className={styles['changelog-count']} aria-hidden="true">{version.merge_count}</span>
-          </Button>
+        {(canDismiss || presentation.hasChangelog || updateOffer.kind === 'available' || updateOffer.kind === 'running') && (
+          <div className={styles['version-actions']}>
+            <UpdateAction version={version} productTitle={productTitle} offer={updateOffer} isSubmitting={isSubmittingUpdate} onUpdate={onUpdate} />
+            {canDismiss && (
+              <Button
+                type="text"
+                size="small"
+                // A pressed toggle rather than a label that swaps: the wording, and so the
+                // button's width and everything beside it, stays put, and the outcome of each
+                // press is said in a toast instead of in a line that would push the card down.
+                className={`${styles['version-action']} ${isDismissed ? styles['version-action-pressed'] : ''}`}
+                icon={isDismissed ? <BellOffOutlined /> : <BellOutlined />}
+                aria-pressed={isDismissed}
+                disabled={!canChangeDismissal}
+                aria-label={t('sys.dismiss_update_named', { product: productTitle, version: version.latest_version })}
+                data-testid="sys-dismiss-update"
+                onClick={isDismissed ? onRestore : onDismiss}
+              >
+                {t('sys.dismiss_update')}
+              </Button>
+            )}
+            {presentation.hasChangelog && (
+              <Button
+                type="text"
+                size="small"
+                className={styles['version-action']}
+                icon={<FileTextOutlined />}
+                aria-label={t('sys.open_changelog', { product: productTitle, count: version.merge_count })}
+                onClick={onOpenChangelog}
+              >
+                <span>{t('sys.changelog_action')}</span>
+                <span className={styles['changelog-count']} aria-hidden="true">{version.merge_count}</span>
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
+      <UpdateStatusLine offer={updateOffer} />
       {presentation.detailKey && <div className={styles['version-detail']}>{t(presentation.detailKey)}</div>}
       {presentation.shouldShowNotesNotice && (
         <div className={styles['version-detail']}>{t('sys.notes_not_held')}</div>
@@ -148,6 +201,49 @@ export const SystemPage: React.FC = () => {
   const isDemo = isDemoMode();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { dismissals, isLoaded: areDismissalsLoaded, dismiss, restore } = useUpdateDismissals();
+  // The write's own failure is reported by the preference hook; this speaks only for a
+  // dismissal that was actually stored.
+  const changeDismissal = async (version: SystemProductVersion, shouldDismiss: boolean) => {
+    const tag = version.latest_version;
+    const { ok } = shouldDismiss ? await dismiss(version.product, tag) : await restore(version.product);
+    if (ok) toast.success(t(shouldDismiss ? 'sys.update_dismissed' : 'sys.update_restored', { version: tag }));
+  };
+
+  const productLabel = (product: ReleaseProduct) => t(product === 'omc' ? 'sys.omc_version' : 'sys.cpa_version');
+  const handleUpdateFinished = (outcome: UpdateOutcome) => {
+    if (!outcome.job) {
+      // The updater restarted without the job: say so, and let the versions speak.
+      toast.warning(t('sys.update_outcome_unknown', { product: productLabel(outcome.product) }));
+    } else {
+      const { job } = outcome;
+      const product = productLabel(job.product);
+      if (job.stage === 'done') {
+        if (job.product === 'omc') {
+          // The server that answers now is the new version; the page still holds the old
+          // one's scripts, so it is replaced rather than patched.
+          window.location.reload();
+          return;
+        }
+        toast.success(t('sys.update_done', { product }));
+      } else if (job.stage === 'already_current') {
+        toast.info(t('sys.update_already_current', { product }));
+      } else {
+        toast.error(t(job.stage === 'rolled_back' ? 'sys.update_rolled_back' : 'sys.update_failed', { product, msg: job.error }));
+      }
+    }
+    void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
+    void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+  };
+  const { updater, submittingProduct, apply: applyUpdate } = useConsoleUpdate({ onFinished: handleUpdateFinished });
+  const handleApplyUpdate = async (product: ReleaseProduct) => {
+    try {
+      await applyUpdate(product);
+      toast.info(t('sys.update_started', { product: productLabel(product) }));
+    } catch (err: unknown) {
+      toast.error(t('sys.update_failed', { product: productLabel(product), msg: describeError(err) }));
+    }
+  };
 
   const [downloadingDiag, setDownloadingDiag] = useState(false);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
@@ -344,6 +440,11 @@ export const SystemPage: React.FC = () => {
       queryClient.setQueryData<SystemInfoResponse>(['management-system-info'], (previous) => previous ? {
         ...previous, omc_version: outcome.omc_version, cpa_version: outcome.cpa_version,
       } : previous);
+      // The shell's indicator reads the same answers on its own, slower cadence; handing it
+      // this result keeps the navigation from contradicting the card it sits beside.
+      queryClient.setQueryData<SystemUpdatesResponse>(UPDATE_STATUS_QUERY_KEY, {
+        omc_version: outcome.omc_version, cpa_version: outcome.cpa_version,
+      });
       if (shouldNotify) {
         const summary = summarizeUpdateCheck([outcome.omc_version, outcome.cpa_version], outcome.served_from_cache);
         if (summary.kind === 'failed' || summary.kind === 'partial') {
@@ -524,13 +625,28 @@ export const SystemPage: React.FC = () => {
                 version={sysInfo.omc_version}
                 isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('omc')}
+                isDismissed={isUpdateDismissed(sysInfo.omc_version, dismissals)}
+                canChangeDismissal={areDismissalsLoaded}
+                onDismiss={() => void changeDismissal(sysInfo.omc_version, true)}
+                onRestore={() => void changeDismissal(sysInfo.omc_version, false)}
+                updateOffer={deriveUpdateOffer(sysInfo.omc_version, updater, 'omc')}
+                isSubmittingUpdate={submittingProduct === 'omc'}
+                onUpdate={() => void handleApplyUpdate('omc')}
               />
               <ProductBlock
                 productTitle={t('sys.cpa_version')}
                 version={sysInfo.cpa_version}
                 isChecking={isCheckingUpdates}
                 onOpenChangelog={() => setExpandedProduct('cpa')}
+                isDismissed={isUpdateDismissed(sysInfo.cpa_version, dismissals)}
+                canChangeDismissal={areDismissalsLoaded}
+                onDismiss={() => void changeDismissal(sysInfo.cpa_version, true)}
+                onRestore={() => void changeDismissal(sysInfo.cpa_version, false)}
+                updateOffer={deriveUpdateOffer(sysInfo.cpa_version, updater, 'cpa')}
+                isSubmittingUpdate={submittingProduct === 'cpa'}
+                onUpdate={() => void handleApplyUpdate('cpa')}
               />
+              <UpdaterSetup updater={updater} />
             </>
           )}
         </Panel>

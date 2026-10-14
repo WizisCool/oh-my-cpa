@@ -87,3 +87,32 @@ test('empty queues admit no work; invalid concurrency is refused before admissio
   for (const concurrency of [0, 3, -1, NaN, '2']) await assert.rejects(runScenarioQueue([1], run, { concurrency }), /one or two/);
   assert.equal(calls, 0);
 });
+
+test('a scenario that runs alone waits for the shared queue and has no sibling', async () => {
+  const alone = { id: 'alone', shouldRunAlone: true };
+  const seen = [];
+  let active = 0;
+  let activeBesideAlone = 0;
+  await runScenarioQueue([1, alone, 2, 3], async scenario => {
+    active++;
+    seen.push(scenario === alone ? 'alone' : scenario);
+    if (scenario === alone) activeBesideAlone = active - 1;
+    await Promise.resolve();
+    active--;
+  }, { concurrency: 2 });
+  assert.equal(seen.at(-1), 'alone');
+  assert.equal(activeBesideAlone, 0);
+  assert.deepEqual(seen.slice(0, 3).sort(), [1, 2, 3]);
+});
+
+test('a shared failure still runs the scenarios that run alone, and both errors are reported', async () => {
+  const alone = { id: 'alone', shouldRunAlone: true };
+  const seen = [];
+  const run = runScenarioQueue([1, alone], async scenario => {
+    seen.push(scenario === alone ? 'alone' : scenario);
+    throw new Error(scenario === alone ? 'alone failed' : 'shared failed');
+  }, { concurrency: 2 });
+  await assert.rejects(run, error => error instanceof AggregateError
+    && error.errors.map(cause => cause.message).join() === 'shared failed,alone failed');
+  assert.deepEqual(seen, [1, 'alone']);
+});

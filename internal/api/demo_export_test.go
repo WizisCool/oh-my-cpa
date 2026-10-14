@@ -114,6 +114,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "system", Path: "/api/v1/management/system"},
 		{Name: "system-releases", Path: "/api/v1/management/system/releases"},
 		{Name: "system-repository", Path: "/api/v1/management/system/repository"},
+		{Name: "system-updates", Path: "/api/v1/management/system/updates"},
+		{Name: "system-updater", Path: "/api/v1/management/system/updater"},
 		{Name: "system-maintenance", Path: "/api/v1/management/system/maintenance"},
 		{Name: "config", Path: "/api/v1/management/config"},
 		{Name: "config-source", Path: "/api/v1/management/config/source"},
@@ -161,6 +163,10 @@ func demoExportCases() []demoExportCase {
 		// answer the page renders between flows, so the exported response is the one
 		// for a state the fixture can describe.
 		{Name: "oauth-status", Path: "/api/v1/management/oauth/status?state=demo-idle"},
+		{Name: "warmup-settings", Path: "/api/v1/management/quota/warmup/settings"},
+		{Name: "warmup-codex", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
+		{Name: "warmup-codex-secondary", Path: "/api/v1/management/quota/warmup/credentials/auth-codex-02", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
+		{Name: "warmup-claude", Path: "/api/v1/management/quota/warmup/credentials/auth-claude-01", Route: "/api/v1/management/quota/warmup/credentials/{authIndex}"},
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},

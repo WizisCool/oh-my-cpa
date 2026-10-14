@@ -56,6 +56,18 @@ type Handler struct {
 	// maintenance runs the database-wide maintenance actions; nil until
 	// SetMaintenance, and nil in a deployment that does not offer them.
 	maintenance MaintenanceManager
+	// updater is the sidecar that applies updates; nil until SetUpdater, and nil in a
+	// demonstration. manifests downloads the signed manifest a console update needs.
+	updater         UpdateManager
+	manifests       ManifestSource
+	isContainerised bool
+	// updatePollInterval overrides how often a running update is re-read; tests set it.
+	updatePollInterval time.Duration
+	// updateWatchers counts the goroutines waiting to record an update's outcome;
+	// stopUpdateWatchers ends their wait at shutdown, so none writes to a closed database.
+	updateWatchers     sync.WaitGroup
+	updateWatchContext context.Context
+	stopUpdateWatchers context.CancelFunc
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
@@ -72,6 +84,9 @@ type Handler struct {
 	startTime      time.Time
 	limiter        *loginLimiter
 	trustedProxies []*net.IPNet
+	// quotaAutoRefresh is the background quota refresh's memory of its own attempts.
+	quotaAutoRefresh quotaAutoRefreshState
+	warmupRuntime    warmupRuntime
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate
@@ -277,6 +292,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/providers", h.listManagementProviders)
 				v1.Post("/management/providers", h.createManagementProvider)
 				v1.Post("/management/providers/pull-models", h.pullProviderModels)
+				v1.Post("/management/providers/probe", h.probeProvider)
 				v1.Put("/management/providers/{id}", h.updateManagementProvider)
 				v1.Delete("/management/providers/{id}", h.deleteManagementProvider)
 				v1.Patch("/management/providers/status", h.patchManagementProviderStatus)
@@ -290,12 +306,20 @@ func (h *Handler) routes() chi.Router {
 				v1.Post("/management/quota/clear-cooldown", h.clearCredentialCooldown)
 				v1.Post("/management/quota/refresh", h.refreshCredentialQuota)
 				v1.Post("/management/quota/redeem-credit", h.redeemCodexResetCredit)
+				v1.Get("/management/quota/warmup/settings", h.getWarmupSettings)
+				v1.Put("/management/quota/warmup/settings", h.putWarmupSettings)
+				v1.Get("/management/quota/warmup/credentials/{authIndex}", h.getWarmupCredential)
+				v1.Put("/management/quota/warmup/credentials/{authIndex}", h.putWarmupCredential)
+				v1.Post("/management/quota/warmup/credentials/{authIndex}/run", h.postWarmupRun)
 				v1.Get("/management/quota/{authIndex}", h.getCredentialQuotaDetail)
 				v1.Get("/management/system", h.getSystemInfo)
 				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
 				v1.Get("/management/system/releases", h.getSystemReleases)
 				v1.Get("/management/system/repository", h.getSystemRepository)
+				v1.Get("/management/system/updates", h.getSystemUpdates)
 				v1.Post("/management/system/check-updates", h.postSystemCheckUpdates)
+				v1.Get("/management/system/updater", h.getSystemUpdater)
+				v1.Post("/management/system/updater/apply", h.postSystemUpdaterApply)
 				v1.Get("/management/system/maintenance", h.getSystemMaintenance)
 				v1.Post("/management/system/maintenance/checkpoint", h.postSystemMaintenanceCheckpoint)
 				v1.Post("/management/system/maintenance/vacuum", h.postSystemMaintenanceVacuum)

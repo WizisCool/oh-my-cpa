@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "ready": {
+    "state": "ready",
+    "products": [
+      { "product": "omc", "action": "available", "reason": "", "image": "wiziscool/oh-my-cpa:latest" },
+      { "product": "cpa", "action": "unavailable", "reason": "pinned", "image": "eceasy/cli-proxy-api:8.0.1" }
+    ],
+    "job": null
+  },
+  "not_installed": { "state": "not_installed", "products": [], "job": null },
+  "accepted": {
+    "body": { "product": "omc" },
+    "status": 202,
+    "job": {
+      "id": "omc-1",
+      "product": "omc",
+      "stage": "pulling",
+      "finished": false,
+      "error": "",
+      "from_version": "",
+      "to_version": "",
+      "started_at_ms": 0,
+      "finished_at_ms": 0
+    }
+  },
+  "refusals": [
+    {
+      "id": "pinned-product",
+      "body": { "product": "cpa" },
+      "status": 409,
+      "response": { "error": "this product cannot be updated from the console", "code": "pinned" }
+    },
+    {
+      "id": "unknown-product",
+      "body": { "product": "oh-my-cpa" },
+      "status": 400,
+      "response": { "error": "unknown release product" }
+    }
+  ]
+}

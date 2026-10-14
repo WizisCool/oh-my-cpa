@@ -19,7 +19,8 @@ The work is: look at what is already there, pick a path, install, verify.
 3. **Never replace an existing `OMCPA_MASTER_KEY`.** If an OMC data directory already
    exists, reuse its key. If the key is lost, stop and say so.
 4. **Ask before** using `sudo`, installing Docker or a toolchain, opening a port beyond
-   `127.0.0.1`, or sending a model request that costs money.
+   `127.0.0.1`, giving a container the Docker socket, or sending a model request that
+   costs money.
 
 ## 1. Look first
 
@@ -61,6 +62,12 @@ Paths A and B2 use the Compose files each release publishes. They are the harden
 equivalents of the minimal files in `docs/install.md` (read-only root filesystem,
 dropped capabilities, every setting in `deploy/.env`).
 
+Every container path below includes an `oh-my-cpa-updater` service. It lets the user
+update OMC and CPA from the console, and it mounts the Docker socket, which amounts to
+control of Docker on the host. Say so before starting it (rule 4). If the user declines,
+delete the `oh-my-cpa-updater` service block from the Compose file before running
+`docker compose up`; nothing else depends on it.
+
 ### A. CPA and OMC together
 
 Use a new directory. If any target file already exists, stop and ask.
@@ -87,7 +94,7 @@ If port 8080 or 8317 is taken, add `OMCPA_BIND=127.0.0.1:<port>` or
 
 Find CPA's Compose file (`docker inspect <cpa container>` shows it in the
 `com.docker.compose.project.config_files` label). Show the user the change, then add
-this under `services:` and leave every existing line as it is:
+these under `services:` and leave every existing line as it is:
 
 ```yaml
   oh-my-cpa:
@@ -102,6 +109,16 @@ this under `services:` and leave every existing line as it is:
       OMCPA_DATA_DIR: /data
     volumes:
       - oh-my-cpa-data:/data
+
+  oh-my-cpa-updater:
+    image: wiziscool/oh-my-cpa:latest
+    restart: unless-stopped
+    command: ["updater", "serve"]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   oh-my-cpa-data:
@@ -120,13 +137,13 @@ chmod 600 .env
 ```
 
 Have the user fill in the management key, apply the time-zone and usage-collection
-points from B2 (as `environment:` entries here), and start OMC alone:
+points from B2 (as `environment:` entries here), and start the new services alone:
 
 ```bash
-docker compose up -d oh-my-cpa
+docker compose up -d oh-my-cpa oh-my-cpa-updater
 ```
 
-Name the service. A bare `docker compose up -d` would also recreate CPA if its
+Name the services. A bare `docker compose up -d` would also recreate CPA if its
 definition or image had drifted. Check afterwards that CPA's container ID and start
 time are unchanged. The data lives in a Docker volume, so no `chown` is needed.
 
@@ -231,6 +248,16 @@ the actual reason. Common ones:
 | `degraded`, `cpa_connected: false` | Wrong URL or key, or CPA refuses remote management |
 | `cpa_management_api: unsupported` | CPA is older than v8.0.0; the user must upgrade it |
 
+On a container path with the updater, also check that it is running and that the console
+has not lost it:
+
+```bash
+docker inspect -f '{{.State.Health.Status}}' oh-my-cpa-updater
+```
+
+`healthy` is the expected answer. With the updater in CPA's own Compose file (B1) the
+container is named `<project>-oh-my-cpa-updater-1`; `docker compose ps` lists it.
+
 ## 5. Upgrading an existing OMC
 
 Do not reinstall. For a native installation, stop only OMC, back up its `.env` and
@@ -239,8 +266,33 @@ executable. Preserve its service account, working directory, data path and maste
 key, restart and verify as in step 4. Restore the corresponding data backup to return
 to an older executable; migrations are forward-only.
 
-For a container installation, find the existing Compose file, data directory and `.env`, back up
-the data directory and `.env`, then:
+For a container installation, find the existing Compose file, data directory and
+`.env`, and back up the data directory and `.env`. Then check for the updater:
+
+```bash
+docker ps --filter name=oh-my-cpa-updater --format '{{.Names}} {{.Status}}'
+```
+
+**The updater is running.** The user can update from the console's System Information
+page, and nothing needs to be run. To upgrade for them now, use the Compose commands
+below and include `oh-my-cpa-updater` in both.
+
+**No updater, and OMC's image is not pinned to a version.** One command adds the updater
+and brings OMC to the current release, without editing the Compose file. It mounts the
+Docker socket into a container, so explain that and get the user's agreement first
+(rule 4):
+
+```bash
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+```
+
+Keep `--pull always`: without it Docker runs the older `latest` the host already has,
+which has no updater. It prints the console container it found and what it did. If it reports more than one
+Oh My CPA container, rerun it with `--container <name>`. It does not touch CPA (rule 2).
+Afterwards `docker inspect -f '{{.State.Health.Status}}' oh-my-cpa-updater` must print
+`healthy`. `docker rm -f oh-my-cpa-updater` undoes it.
+
+**The user declines, or the image is pinned.** Upgrade through Compose:
 
 ```bash
 docker compose -f deploy/compose.omc.yml pull oh-my-cpa
@@ -249,9 +301,11 @@ docker compose -f deploy/compose.omc.yml up -d --no-deps oh-my-cpa
 
 Use `compose.full.yml` if that is the file in place. When OMC is a service in CPA's
 Compose file, run `docker compose pull oh-my-cpa` and `docker compose up -d oh-my-cpa`
-in that directory. Database migrations only go
-forward, so the way back to an older version is to restore the backup. Verify as in
-step 4.
+in that directory. For a pinned image, change the pin to the wanted release first; do
+not unpin it without asking.
+
+Database migrations only go forward, so the way back to an older version is to restore
+the backup. Verify as in step 4.
 
 ## 6. Tell the user
 
@@ -263,6 +317,9 @@ step 4.
 - To back up the `.env` file and OMC's data (the `oh-my-cpa-data` directory or volume). Without `OMCPA_MASTER_KEY` the data
   cannot be read.
 - Whether OMC is collecting usage, and why not if it is off.
+- Whether the updater is installed. If it is: later releases of OMC and CPA can be
+  installed from the console's System Information page, and the `oh-my-cpa-updater`
+  container holds the Docker socket. If it is not: the command that adds it.
 - Anything changed outside the new `oh-my-cpa` directory.
 
 OMC redirects the bare `/omc` to `/omc/`. If a reverse proxy sits in front of it,
