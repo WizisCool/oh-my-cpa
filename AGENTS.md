@@ -48,6 +48,8 @@ You are authorized — and expected — to:
 - move, rewrite, or delete tests that freeze implementation instead of protecting behavior;
 - reorganize documentation.
 
+Prefer making a bad state unrepresentable over a guard that silently absorbs it: do not add fallbacks, swallowed errors, or compatibility shims for a contract that does not exist.
+
 Two conditions. Behavior in Tier 1 or Tier 2 is verified before and after the change. And coverage moves rather than disappears: if you delete a test, say where its claim now lives, or why the claim itself is obsolete.
 
 ---
@@ -78,6 +80,7 @@ Do not run `verify` or `check:ui` after every file edit — a feature is complet
 Rules that keep the gates honest:
 
 - **Never add a skip switch, a retry, or a longer wait to make a run pass.** Fix the assertion, or add a planner rule with a self-test.
+- **Write the check that catches the defect, not one that asserts the absence of trouble.** A test that cannot fail against a broken implementation, or that exists to cover the author rather than the code, is removed rather than kept.
 - New tests go at the lowest layer that can fail for the right reason; no fixed waits; discovery is automatic, so do not add registration lists. `docs/testing.md` has the layer map and the current claim ownership.
 - Release and security gates — secret scans, image smoke, publication checks — are never optional.
 
@@ -170,9 +173,15 @@ The complete script list is in `package.json`; these are the ones agents use mos
 
 ---
 
-## 9. Delivery surfaces
+## 9. Delivery surfaces: ship the result, not the conversation
 
-Write for a reader who was not in the session. Describe the adopted state, not the path taken: rejected alternatives, intermediate attempts, and phrasing experiments are control information and stay out of titles, filenames, PR bodies, commit messages, and handoff notes. Keep genuine baseline changes, real deletions, API names, and security facts; omit only what the reader does not need. Re-read the published title and body after creating or editing a pull request.
+Write for a reader who was not in the session. Rejected alternatives, intermediate attempts, and wording corrections are control information: they must not become the naming or narrative centre of a title, filename, comment, UI string, commit message, PR body, or handoff note.
+
+- **Regenerate from the adopted state; do not patch rejected text.** If a title, label, or opening grew out of a discarded option, write it fresh from the positive goal. "Do not mention X" does not mean writing "no X" — drop the contrast instead of leaving a disclaimer.
+- **Ask three questions per surface.** Does a reader without this session need it? Would omitting it cause inaccuracy, unsafety, misleading copy, or a compatibility gap? Is it a genuine change from the baseline that this surface must explain? If none apply, omit it — merely having appeared or been rejected is not a reason to keep something.
+- **Keep what is real**: baseline changes, performed external actions, removed public APIs, migrations, security facts, and requested comparisons or decision records.
+- **Do not fold unrelated changes into the commit, PR, or notes**, and do not claim pre-existing user edits as this task's output.
+- Re-read the published surface — title, filename, metadata — after editing it, rather than asserting that it is clean.
 
 ---
 
