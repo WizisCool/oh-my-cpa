@@ -28,6 +28,15 @@ type RefusedError struct {
 
 func (e *RefusedError) Error() string { return "the updater refused: " + e.Message }
 
+// Status is read while the System Information page waits, so an absent updater must
+// read as absent rather than as a slow page. Admitting an update resolves the deployment
+// from the daemon several times before it answers, and a job keeps running if the
+// console stops waiting, so a short limit there would report an admitted job as failed.
+const (
+	statusTimeout = 5 * time.Second
+	updateTimeout = 60 * time.Second
+)
+
 // Client is the console's side of the control interface.
 type Client struct {
 	baseURL    string
@@ -39,15 +48,15 @@ type Client struct {
 // derived from the console's master key.
 func NewClient(baseURL, masterKey string) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		token:   ControlToken(masterKey),
-		// Short on purpose: the System Information page waits on this, and an absent
-		// updater must read as absent rather than as a slow page.
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		token:      ControlToken(masterKey),
+		httpClient: &http.Client{},
 	}
 }
 
-func (c *Client) call(ctx context.Context, method, path string, body, into any) error {
+func (c *Client) call(parent context.Context, timeout time.Duration, method, path string, body, into any) error {
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -66,8 +75,10 @@ func (c *Client) call(ctx context.Context, method, path string, body, into any) 
 	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
+		// The caller's own cancellation is reported as such; running out of this call's
+		// time means the updater did not answer.
+		if parent.Err() != nil {
+			return parent.Err()
 		}
 		return fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
@@ -95,13 +106,13 @@ func (c *Client) call(ctx context.Context, method, path string, body, into any) 
 // Status reads the updater's view of the deployment and its most recent job.
 func (c *Client) Status(ctx context.Context) (StatusResponse, error) {
 	var status StatusResponse
-	err := c.call(ctx, http.MethodGet, "/v1/status", nil, &status)
+	err := c.call(ctx, statusTimeout, http.MethodGet, "/v1/status", nil, &status)
 	return status, err
 }
 
 // Update asks for one product to be replaced and returns the admitted job.
 func (c *Client) Update(ctx context.Context, request UpdateRequest) (Job, error) {
 	var job Job
-	err := c.call(ctx, http.MethodPost, "/v1/update", request, &job)
+	err := c.call(ctx, updateTimeout, http.MethodPost, "/v1/update", request, &job)
 	return job, err
 }

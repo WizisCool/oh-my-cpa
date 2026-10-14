@@ -219,7 +219,8 @@ settings as the update check. The image pull is made by the Docker daemon with i
 registry and proxy configuration.
 
 Audit: `system.update.apply` records the admission, or the refusal with its reason,
-before the updater is asked; `system.update.completed` records how the job ended. An Oh
+before the updater is asked; `system.update.completed` records how that admission ended:
+the job's outcome, or the updater's refusal or silence when no job started. An Oh
 My CPA update ends the process that admitted it, so the next process follows the job
 from start-up and records the outcome once the updater reports it finished.
 

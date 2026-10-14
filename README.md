@@ -297,8 +297,10 @@ CPA, stop it, or add `OMCPA_USAGE_INGEST_MODE: "off"` under `environment:` to us
 for management only. Other management panels do not conflict.
 
 `oh-my-cpa-updater` mounts the Docker socket, which amounts to control of Docker on that
-host. Removing the service from the Compose file turns console updates off; updates are
-then applied with `docker compose pull && docker compose up -d`.
+host. Console updates are turned off by deleting the service from the Compose file and
+removing its running container with `docker rm -f oh-my-cpa-updater`; Compose leaves a
+container whose service was deleted running. Updates are then applied with
+`docker compose pull && docker compose up -d`.
 
 The [installation guide](docs/install.md) covers the hardened Compose files published
 with each release, remote access, HTTPS, building from source, upgrades and

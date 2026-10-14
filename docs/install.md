@@ -112,7 +112,8 @@ What the directory holds afterwards:
 - `.env` holds both keys.
 - `oh-my-cpa-updater` applies the updates the console offers; see
   [Upgrading](#upgrading). It mounts the Docker socket. Leave the service out to update
-  by hand instead.
+  by hand instead; on a deployment already running, also remove its container with
+  `docker rm -f oh-my-cpa-updater`, since Compose leaves it running.
 
 ## Add to the existing Compose file
 

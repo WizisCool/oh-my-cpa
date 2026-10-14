@@ -31,8 +31,9 @@ services:
       - host.docker.internal:host-gateway
 
   # Applies the updates the console's System Information page offers. It holds the Docker
-  # socket, which is control of this host's Docker; delete this service to update by hand
-  # instead (docs/install.md, "Upgrading").
+  # socket, which is control of this host's Docker. To update by hand instead, delete
+  # this service and run `docker rm -f oh-my-cpa-updater`: Compose leaves the container
+  # of a deleted service running (docs/install.md, "Upgrading").
   oh-my-cpa-updater:
     image: ${OMCPA_IMAGE:-wiziscool/oh-my-cpa:latest}
     container_name: ${OMCPA_UPDATER_CONTAINER_NAME:-oh-my-cpa-updater}

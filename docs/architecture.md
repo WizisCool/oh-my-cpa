@@ -2185,7 +2185,9 @@ built without the corresponding service, which is how a deployment that does not
 surface behaves. The repository and updates routes are the exception, because the shell reads
 them on every page: they always answer `200`, the first with a null `stargazers_count`
 whenever no count is known and the second with both products `indeterminate` /
-`not_checked_yet` when there is no release service.
+`not_checked_yet` when there is no release service. The updater status route is the other
+exception: it answers `200` with `state: disabled` when no updater is wired, because a
+missing updater is a state of the deployment the page explains.
 
 The updates route never reads the feed. It reports what the sweep or the page's own check
 last stored, in the same per-product shape the page uses, so the shell can ask on every page

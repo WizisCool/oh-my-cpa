@@ -247,16 +247,23 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 	}
 	job, err := h.updater.Update(ctx, update)
 	if err != nil {
+		// The admission is already on record, so what the updater did with it is that
+		// admission's outcome rather than a second apply: one attempt stays one row under
+		// system.update.apply, as it does when the job runs.
+		end := func(status int, result, code, message string) {
+			_ = h.recordAudit(request, "system.update.completed", "deployment", body.Product, result, map[string]any{"reason": code})
+			writeJSON(writer, status, map[string]string{"error": message, "code": code})
+		}
 		var refused *updater.RefusedError
 		if errors.As(err, &refused) {
 			status := http.StatusConflict
 			if refused.Status == http.StatusForbidden {
 				status = http.StatusForbidden
 			}
-			refuse(status, "rejected", refused.Code, security.RedactText(refused.Message))
+			end(status, "rejected", refused.Code, security.RedactText(refused.Message))
 			return
 		}
-		refuse(http.StatusBadGateway, "failure", "updater_unreachable", "the updater did not answer")
+		end(http.StatusBadGateway, "failure", "updater_unreachable", "the updater did not answer")
 		return
 	}
 	h.updateWatchers.Add(1)
@@ -351,16 +358,22 @@ func (h *Handler) RecordInterruptedUpdate(ctx context.Context) {
 // isUpdateOutcomeRecorded reports whether a job's outcome is on record. An unreadable
 // trail counts as recorded: a missing outcome row is better than a doubled one.
 func (h *Handler) isUpdateOutcomeRecorded(ctx context.Context, jobID string) bool {
-	page, err := h.repo.QueryAuditEvents(ctx, repository.AuditQuery{Search: "system.update.completed", Limit: repository.AuditPageMax})
-	if err != nil {
-		return true
-	}
-	for _, event := range page.Events {
-		if event.Action == "system.update.completed" && event.Details["job_id"] == jobID {
+	query := repository.AuditQuery{Search: "system.update.completed", Limit: repository.AuditPageMax}
+	for {
+		page, err := h.repo.QueryAuditEvents(ctx, query)
+		if err != nil {
 			return true
 		}
+		for _, event := range page.Events {
+			if event.Action == "system.update.completed" && event.Details["job_id"] == jobID {
+				return true
+			}
+		}
+		if page.Next == nil {
+			return false
+		}
+		query.Before = *page.Next
 	}
-	return false
 }
 
 func (h *Handler) auditUpdateOutcome(job updater.Job) {

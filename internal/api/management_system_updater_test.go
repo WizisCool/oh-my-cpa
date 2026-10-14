@@ -129,6 +129,8 @@ func (f updaterFixture) apply(t *testing.T, product string) (int, map[string]any
 	t.Helper()
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/omc/api/v1/management/system/updater/apply", strings.NewReader(`{"product":"`+product+`"}`))
+	// The middleware gives each request one ID; every row it writes carries it.
+	request = request.WithContext(context.WithValue(request.Context(), requestIDKey{}, "apply-request"))
 	f.handler.postSystemUpdaterApply(recorder, request)
 	body := map[string]any{}
 	_ = json.Unmarshal(recorder.Body.Bytes(), &body)
@@ -346,6 +348,53 @@ func TestInterruptedConsoleUpdateIsRecordedByTheNextProcess(t *testing.T) {
 	outcomes := fixture.audits(t, "system.update.completed")
 	if len(outcomes) != 1 || outcomes[0].Result != "success" || outcomes[0].Details["job_id"] != "omc-7" || outcomes[0].Details["to_version"] != "v1.1.0" {
 		t.Fatalf("the process that replaced the console records the outcome: %+v", outcomes)
+	}
+}
+
+func TestARefusalAfterAdmissionIsThatAdmissionsOutcome(t *testing.T) {
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantResult string
+		wantReason string
+	}{
+		{"refused", &updater.RefusedError{Status: http.StatusConflict, Code: "busy", Message: "an update is already running"}, http.StatusConflict, "rejected", "busy"},
+		{"unreachable", updater.ErrUnreachable, http.StatusBadGateway, "failure", "updater_unreachable"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newUpdaterFixture(t)
+			fixture.sidecar.updateErr = testCase.err
+			if status, body := fixture.apply(t, updater.ProductOMC); status != testCase.wantStatus {
+				t.Fatalf("status = %d %v", status, body)
+			}
+			// One attempt is one apply row; what the updater did with it is its outcome.
+			applies := fixture.audits(t, "system.update.apply")
+			if len(applies) != 1 || applies[0].Result != "admitted" {
+				t.Fatalf("one attempt, one admission: %+v", applies)
+			}
+			outcomes := fixture.audits(t, "system.update.completed")
+			if len(outcomes) != 1 || outcomes[0].Result != testCase.wantResult || outcomes[0].Details["reason"] != testCase.wantReason || outcomes[0].RequestID != applies[0].RequestID {
+				t.Fatalf("the refusal is the admission's outcome, on the same request: %+v", outcomes)
+			}
+		})
+	}
+}
+
+func TestAnOutcomeOlderThanOneAuditPageIsStillFound(t *testing.T) {
+	fixture := newUpdaterFixture(t)
+	job := updater.Job{ID: "omc-7", Product: updater.ProductOMC, Stage: updater.StageDone}
+	fixture.handler.auditUpdateOutcome(job)
+	for i := 0; i < repository.AuditPageMax; i++ {
+		fixture.handler.auditUpdateOutcome(updater.Job{ID: fmt.Sprintf("cpa-%d", i), Product: updater.ProductCPA, Stage: updater.StageDone})
+	}
+
+	if !fixture.handler.isUpdateOutcomeRecorded(context.Background(), job.ID) {
+		t.Fatal("an outcome a full page back is on record and must not be written again")
+	}
+	if fixture.handler.isUpdateOutcomeRecorded(context.Background(), "omc-unknown") {
+		t.Fatal("a job with no outcome row is not on record")
 	}
 }
 
