@@ -8,8 +8,14 @@ behind the verification moments.
 
 The goal is short feedback with the same or stronger failure detection. A new test that
 is slow, sleeps, or duplicates a claim another layer already makes is a cost every later
-change pays. Keep to the rules below instead of inventing a new runner, a new gate or a
-new registration list.
+change pays. Prefer the existing layers and runners; adding a new one is a deliberate
+decision with a reason, not a default.
+
+**How to use this document.** Sections 1–4 are the rules: where a test belongs, how it
+is registered, what to run when, and what to do when CI fails. The sections after §4 are
+a map, not a mandate — they record which layer owns which claim today and why it was
+placed there. When a better owner exists, move the claim and update the map in the same
+change; keep the claim's strength, not its address. Nothing in the map is frozen.
 
 ## 1. Where a new test belongs
 
@@ -49,8 +55,8 @@ Rules that keep the suite fast and honest:
   Composer model-popup wheel checks wait for search focus from the completed-open
   callback, then require the list centre to win hit-testing before sending input.
   An option count and two animation frames alone do not establish popup alignment,
-  especially when a destroyed popup is reopened. Keep the exact wheel-distance
-  assertions after that readiness boundary.
+  especially when a destroyed popup is reopened. Wheel-distance assertions belong
+  after that readiness boundary, not before it.
 - **Make time injectable in Go.** A duration a test has to wait out belongs in the
   component's config with a production default, as `ingest.Config.ReadinessGrace` is,
   so the test can set it to milliseconds.
@@ -784,9 +790,10 @@ For changes here, run affected self-tests, `pnpm verify`, `pnpm check:ui` and
   `pricing-book` also checks the translated synchronization group title in phone tools.
   Existing list/touch assertions remain; `config-backups` also exercises the phone menu-owned
   dialog, local table scrolling and Back closure.
-- Automated visible-viewport simulation does not certify iPhone keyboard/selection behaviour. Manual
-  Safari acceptance must additionally exercise address-bar collapse, software keyboard, long-press
-  selection and caret movement in normal and focused editing; record that evidence separately.
+- Automated visible-viewport simulation does not certify iPhone keyboard/selection behaviour. When a
+  change touches these paths and a real device is at hand, exercise address-bar collapse, the software
+  keyboard, long-press selection and caret movement in normal and focused editing, and say what was
+  checked; no automated run can stand in for it.
 
 
 ### Quota reading coverage
@@ -1042,7 +1049,8 @@ graph guard in `scripts/conversation-boundaries.test.mjs` forbids shared workspa
 modules from importing page internals, with eager/lazy negative and erased-type cases
 and nonempty real consumers. The existing Agent/Playground probes use `scripts/acceptance/probes/conversation-export.mjs` to
 own actual downloads, standalone HTML/image rendering, controls, privacy, browser
-encoding and responsive behavior. None of these browser claims move to Node.
+encoding and responsive behavior. These claims live in the browser today; moving one to
+a cheaper layer requires a replacement of equal strength (ADR 0089).
 
 
 ### Bounded probe scheduling
@@ -1077,7 +1085,8 @@ The existing heatmap probe owns newest-edge mobile scrolling and resize behavior
 The existing `agent-stream` probe exports a generated component as standalone HTML and PNG:
 it requires script-set content in the opaque sandbox and an exact fixture color in PNG
 pixels, then checks temporary-frame cleanup. The common conversation-export helper retains
-real download/controls/mobile checks. These browser claims are not replaced by DOM tests.
+real download/controls/mobile checks. These claims stay in the browser until a
+replacement of equal strength exists.
 
 ### README screenshot readiness
 

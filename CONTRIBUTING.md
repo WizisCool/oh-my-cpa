@@ -10,7 +10,7 @@ Bug reports and feature requests go through the issue forms under [`.github/ISSU
 
 - **Zero Secret Exposure**: Never submit real API keys, tokens, auth files, or sensitive production data in pull requests, issues, or commit history.
 - **Explain Why, Not What**: Code comments must be written in **English** and focus on design rationale, non-obvious constraints, and edge cases.
-- **Synchronize Docs with Code**: Documentation and code are co-deliverables. If your change alters an endpoint, configuration, UI token, or architectural boundary, you must update the corresponding context documents in the same pull request (see [`AGENTS.md`](AGENTS.md)).
+- **Keep Docs Accurate**: If your change alters an endpoint, configuration, UI token, or architectural boundary, update the documents it makes wrong in the same pull request (see [`AGENTS.md`](AGENTS.md) §7).
 
 ---
 
@@ -46,29 +46,23 @@ Bug reports and feature requests go through the issue forms under [`.github/ISSU
 
 ---
 
-## Verification Gates (Three Verification Moments)
+## Verification Gates
 
-To keep feedback fast and reliable, verification in Oh My CPA is structured into three stages (detailed in [`AGENTS.md`](AGENTS.md)). Before writing a test, read [`docs/testing.md`](docs/testing.md): it says which layer a claim belongs in and how a new test is registered.
+Verification is structured around three moments — while editing, when a feature is
+complete, and on the pull request. [`AGENTS.md`](AGENTS.md) §5 has the moments table and
+the rules that keep the gates honest; [`docs/testing.md`](docs/testing.md) says which
+layer a claim belongs in and how a new test is registered. In short:
 
-| Stage | Command | When to Run |
-| --- | --- | --- |
-| **Development iteration** | `pnpm test:fast` | Run frequently after editing code. It runs only the checks affected by your current working tree changes. Use `--plan` to inspect scope and `--base <ref>` to include committed changes. |
-| **UI fast-path** | `pnpm check:ui` | Run when modifying frontend components, layout, or browser lifecycles (runs against dev server + mock APIs without full build). |
-| **Feature completion and before pushing** | `pnpm verify` and `pnpm check:ui` | Toolchain verification, Go vet/tests, fresh frontend type checking, pure logic suites, antd lint, i18n validation and secret scanning, plus the browser scenarios your change can reach. |
-| **Pull request (CI)** | automatic | Production build and budgets, full cross-stack acceptance, the whole dev-server probe catalog in three shards, and demo acceptance. |
-| **Full local gate** | `pnpm verify:full` | Everything CI runs, locally. Use it for changes to the build, the embedded distribution, the browser harness or the workflow, and to reproduce a CI failure. |
+```bash
+pnpm test:fast    # while editing: only the checks the changed files need
+pnpm verify       # feature complete, and before pushing
+pnpm check:ui     # the browser scenarios the change can reach
+```
 
 Do not rerun a gate after each edit. When a check fails, rerun that check first. Both
 UI probe commands use the dev server; production-artifact coverage comes from browser
-and demo acceptance.
-Per-check and per-scenario durations are observations, not fixed runtime promises.
-
-Additional targeted checks:
-- `pnpm test:self`: Runs repository and Worker Node tests with concurrency two, plus demo freshness.
-- `pnpm check:bundle`: Checks every chunk and aggregate budget against the existing build.
-- `pnpm check-docs`: Validates that all backticked repository paths in documentation resolve and no retired references exist.
-- `pnpm check-i18n`: Identifies missing source keys and incomplete or stale locale catalogs.
-- `pnpm check-css-modules`: Ensures CSS module class references match their definition files.
+and demo acceptance. The full command list is in [`AGENTS.md`](AGENTS.md) §8 and
+[`package.json`](package.json).
 
 ---
 

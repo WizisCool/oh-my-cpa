@@ -2438,20 +2438,12 @@ explicit development coverage; it is not how the harness currently runs.
 
 ### 12.0.1 Three verification moments
 
-Verification is organised by *when it runs*, because what a developer pays is
-waiting, and a gate that costs minutes gets routed around:
-
-| Moment | Runs | Cost guidance |
-| --- | --- | --- |
-| Development iteration | `pnpm test:fast`, plus `pnpm check:ui` when the change touches interaction, layout or a browser lifecycle | Scope-dependent; use printed check and scenario timings |
-| Feature complete, and before declaring done or pushing | `pnpm verify` and `pnpm check:ui` | Tens of seconds of static gates plus the scenarios the change reaches |
-| Pull request | CI: static gates, full built acceptance, the full probe catalog in shards, demo | Runs beside the author; its checks gate the merge |
-
-`pnpm verify:full` runs everything CI runs, locally. It is for changes to the build,
-the embedded distribution, the browser harness or the workflow, and for reproducing a
-CI failure. ADR 0032 records why the full catalog moved from a local pre-push duty to
-a required CI check: it used to be enforced only by local discipline and by master CI
-after merge, while every developer paid for it serially before each push.
+Verification is organised by *when it runs*, because what a developer pays is waiting
+and a gate that costs minutes gets routed around. The moments table and the rules that
+keep the gates honest live in `AGENTS.md` §5; `docs/testing.md` is the working guide.
+ADR 0032 records why the full catalog moved from a local pre-push duty to a required CI
+check: it used to be enforced only by local discipline and by master CI after merge,
+while every developer paid for it serially before each push.
 
 The rule that keeps this honest is that a *narrow* plan must never be **silent**.
 `scripts/affected-checks.mjs` and `scripts/acceptance/check-ui-plan.mjs` both widen
