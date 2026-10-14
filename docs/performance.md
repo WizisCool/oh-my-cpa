@@ -1,5 +1,8 @@
 # Console responsiveness audit
 
+> **Status: historical measurement record.** Measured on the baseline commit named below;
+> the numbers describe that revision on that machine, not a current guarantee.
+
 ## Scope and method
 
 This audit was measured on October 1, 2026, starting from commit `6b2d7e1` on

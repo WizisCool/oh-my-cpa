@@ -1,5 +1,10 @@
 # CI, testing and release optimization review
 
+> **Status: historical audit record.** The decisions this review produced live in
+> ADR 0032, ADR 0066 and ADR 0068, `docs/testing.md` and `AGENTS.md`; the sections below
+> preserve the measurements and delivery evidence behind them. It is not a standing
+> rulebook.
+
 - Review date: October 7, 2026.
 - Source baseline: `dc2002c0bec2968a99c0361526734fd0742d09df` (`master`, version 0.1.3).
 - Status: adopted implementation and full local verification completed. Sections 1–3 and 7 record the source-baseline audit; section 9 records delivery evidence, remaining advisory findings and hosted rollout measurements.

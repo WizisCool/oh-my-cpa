@@ -111,13 +111,14 @@ test('retired deployment templates fail documentation checks, while direct deplo
 test('new maintained documents are automatically gated; only frozen directories are archival', t => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-doc-discovery-'));
   t.after(() => fs.rmSync(projectRoot, {recursive:true, force:true}));
-  for (const file of ['README.md', 'docs/testing.md', 'docs/plans/new-plan.md', 'docs/adr/0067-decision.md', 'docs/releases/v0.1.3.md']) {
+  for (const file of ['README.md', 'docs/testing.md', 'docs/plans/new-plan.md', 'docs/plans/architecture-governance.md', 'docs/adr/0067-decision.md', 'docs/releases/v0.1.3.md']) {
     fs.mkdirSync(path.dirname(path.join(projectRoot, file)), {recursive:true});
     fs.writeFileSync(path.join(projectRoot, file), '# document');
   }
   const docs = discoverDocuments(projectRoot);
-  assert.equal(docs.length,5);
+  assert.equal(docs.length,6);
   assert.ok(!docs.find(document => document.file === 'docs/plans/new-plan.md').archival);
+  assert.ok(docs.find(document => document.file === 'docs/plans/architecture-governance.md').archival);
   assert.ok(docs.find(document => document.file === 'docs/adr/0067-decision.md').archival);
 });
 

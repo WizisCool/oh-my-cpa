@@ -6,7 +6,7 @@
  * Documentation drift in this repository has one dominant shape: prose keeps
  * referencing a file, page, endpoint or identifier that a later change removed
  * or renamed. Reviewers cannot catch that reliably by reading a diff, and the
- * per-file grep discipline in AGENTS.md only works if someone remembers to run
+ * maintenance discipline in AGENTS.md only works if someone remembers to run
  * it. This script makes the mechanical half of that discipline cheap:
  *
  *   1. every backticked repo path in a context document must resolve;
@@ -24,6 +24,15 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/** Completed audits and measurement records: frozen evidence that may cite
+ * plan-time figures and cite paths that existed at their baseline. Everything
+ * else under docs/ is maintained and must resolve against the current tree. */
+export const ARCHIVAL_DOCUMENTS = new Set([
+  'docs/plans/architecture-governance.md',
+  'docs/plans/ci-testing-optimization.md',
+  'docs/performance.md',
+]);
+
 /** Context documents under maintenance. `archival` documents are frozen
  * records: they may cite line numbers and plan-time figures. */
 export function discoverDocuments(projectRoot = DEFAULT_ROOT) {
@@ -38,7 +47,12 @@ export function discoverDocuments(projectRoot = DEFAULT_ROOT) {
     }
   };
   visit('docs');
-  return files.sort().map(file => ({file, ...(file.startsWith('docs/adr/') || file.startsWith('docs/releases/') ? {archival:true} : {})}));
+  return files.sort().map(file => ({
+    file,
+    ...(file.startsWith('docs/adr/') || file.startsWith('docs/releases/') || ARCHIVAL_DOCUMENTS.has(file)
+      ? {archival:true}
+      : {}),
+  }));
 }
 export const DOCUMENTS = discoverDocuments();
 
@@ -224,7 +238,7 @@ export function checkDocument({ file, archival = false }, { projectRoot = DEFAUL
       findings.push({
         kind: 'line-reference',
         file,
-        detail: `${span} — cite the file or symbol instead; line numbers go stale (AGENTS.md §2)`,
+        detail: `${span} — cite the file or symbol instead; line numbers go stale (AGENTS.md §7)`,
       });
     }
   }

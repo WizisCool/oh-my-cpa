@@ -1,5 +1,11 @@
 # Behavior-preserving architecture and verification governance
 
+> **Status: historical audit record.** This document preserves the evidence, measurements
+> and migration ledger of the architecture- and verification-governance refactor. It is
+> not a standing rulebook: its prohibitions describe the scope of that refactor, and
+> later ADRs (0089, 0090, 0091) supersede any that conflict with current practice. Read
+> it for context; do not treat it as a constraint list.
+
 ## Scope and baseline
 
 Baseline: `02b29672f0dde5a6aa91d88f940afbd425cdd33a` (2026-10-09).
