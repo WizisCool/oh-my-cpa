@@ -10,7 +10,7 @@
  * or type gate notices. Design tokens live in `web/src/index.css`, but layout
  * lives here, so a silent miss shows up as a broken page rather than an error.
  *
- * Class names are kebab-case (AGENTS.md §5); CSS Modules are consumed through
+ * Class names are kebab-case (AGENTS.md §6); CSS Modules are consumed through
  * `styles['kebab-case']`.
  */
 import fs from 'node:fs';

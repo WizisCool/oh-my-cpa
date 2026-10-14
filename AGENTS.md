@@ -1,242 +1,184 @@
-# AGENTS.md — Oh My CPA Project-Level Agent Contract
+# AGENTS.md — Oh My CPA Agent Contract
 
-> This file is automatically loaded by coding agents (such as Pi, Claude Code, etc.) at the start of a session (a local `AGENTS.override.md` supersedes it). The root `CLAUDE.md` is a symlink to this file, so every agent reads one contract; edit `AGENTS.md`, never the link.
+> Coding agents load this file at the start of a session (a local `AGENTS.override.md` supersedes it). The root `CLAUDE.md` is a symlink to this file, so every agent reads one contract; edit `AGENTS.md`, never the link.
 >
-> **First Principle: Keep context documentation synchronized with code.** Do not defer documentation updates to "the next cleanup task"—documentation drift is a defect in the current change and must be resolved within the same change.
+> **First principle: protect invariants, not implementations.** The rules below name what must stay true — security boundaries, data integrity, external contracts, user-visible behavior. How the code achieves that is yours to change. Act as a senior engineer with independent technical judgment, not as a caretaker of historical choices.
 
 ---
 
-## 1. One-Sentence Project Summary
+## 1. The project
 
-CLIProxyAPI (CPA) handles protocol adaptation, credential execution, and proxying requests; Oh My CPA provides **user-owned identity, naming, organization, a management facade, and usage observability** above it. Both are co-deployed in the same stack. Oh My CPA is a single-replica Go modular monolith + embedded React SPA + SQLite WAL, operating completely offline with zero CDN dependencies.
+CLIProxyAPI (CPA) handles protocol adaptation, credential execution, and proxying requests; Oh My CPA (OMC) provides **user-owned identity, naming, organization, a management facade, and usage observability** above it. Both are co-deployed in the same stack. OMC is a single-replica Go modular monolith + embedded React SPA + SQLite WAL, operating completely offline with zero CDN dependencies.
 
-Read these three documents before doing substantive work, and `docs/testing.md` before writing or changing any test:
-
-1. `CONTEXT.md` — Domain vocabulary and rules (time windows, i18n, authentication model, price semantics).
-2. `docs/architecture.md` — Module map, data flows, and architectural invariants.
-3. `docs/design.md` — Source of truth for the visual system and design tokens.
+Read documentation when a task needs it, not up front. Useful starting points: `CONTEXT.md` (domain vocabulary and rules), `docs/architecture.md` (module map, data flows, invariants), `docs/design.md` (visual system), `docs/testing.md` (test placement and the verification detail). Read or grep the part you need instead of loading whole documents.
 
 ---
 
-## 2. Context Documentation Map: What Changes, and Where to Update Synchronously
+## 2. Rule tiers
 
-Treat the table below as a hard constraint. Whenever a change touches a "Trigger condition", you must update the corresponding document in the same change and state in your commit message or response which document was updated.
+Not every rule weighs the same. Know which tier you are working in.
 
-| Document | Purpose | Trigger Condition Requiring an Update |
-| --- | --- | --- |
-| `CONTEXT.md` | Domain terminology, domain rules | Adding, renaming, or deprecating domain concepts; changes to time windows, i18n, auth, pricing, provider disablement; discovering terminology discrepancies with the implementation |
-| `docs/architecture.md` | Module map, data flows, invariants, schema, background loops | Adding or removing `internal/*` packages; router or middleware changes; data flow stage adjustments; new background loops; database schema or migration gate changes |
-| `docs/design.md` | Source of truth for visual system and the derived palette; `DESIGN.md` is its design-tool summary | Changes to palettes or their derivation, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/palette.ts`, `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
-| `DESIGN.md` | Brand design system summary (for design tooling) | Same as `docs/design.md`; both must stay strictly synchronized |
-| `PRODUCT.md` | Product positioning, capability matrix, constraints | Capability additions or removals, constraint shifts, target audience or positioning adjustments |
-| `README.md` / `README.zh-CN.md` | Landing page (English and Simplified Chinese): what the product is, how to install it, where the documentation lives. Kept short on purpose; operational detail belongs in `docs/operations.md` | Capability additions or removals a newcomer should see, install steps, the essential-settings table, the demo address, or the documentation index |
-| `docs/install.md` / `docs/install-for-agents.md` | Installation for a person, and the same steps as a runbook a coding agent follows | Compose files, `Dockerfile`, required environment variables, build commands, health endpoint or toolchain version changes; keep the two in step |
-| `docs/releasing.md` | Docker Hub distribution, tag publishing and version identity | Image naming/tag policy, release workflow, publication gates, release credentials or build-version injection changes |
-| `docs/operations.md` | Settings reference, deployment constraints and operational notes | Environment variable, default value, endpoint, deployment topology, or security boundary changes |
-| `docs/images/readme/` | The screenshots both READMEs embed, generated from demo mode | A pictured page changes how it looks: regenerate with `pnpm build && pnpm readme:screenshots` and commit the images |
-| `docs/adr/NNNN-*.md` | Important and irreversible architectural decisions | When a decision involves real trade-offs, **add a new** ADR; do not rewrite accepted ADRs (supersede them with a new ADR) |
-| `docs/cpamc-parity.md` | Parity matrix against CPAMC | Changing an item from "planned/in-progress" to "covered"; interface capability or page wiring changes; newly identified gaps |
-| `docs/ops/sqlite-operations.md` | Backup, restore, master key governance, migration gates | Migration or backup strategy, retention period, backup count, related environment variable default changes |
-| `docs/ops/cloudflare-demo.md` | Deployment runbook for the public online demo (Cloudflare Worker + generated dataset) | Changes to the demo's deployment, its platform configuration, its dataset's shape, or the console steps it needs |
-| `deploy/cloudflare/data/` | The dataset the public demonstration is served from | **Any** change to a console page's data, a route's response shape, or a read the console makes: regenerate with `pnpm demo:generate`, read the diff, and commit the data in the same change. `pnpm check:demo` fails until you do |
-| `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations | Pricing match chain, sync rules, pricing schema changes |
-| `docs/testing.md` | Where a new test belongs, how it is registered, what to run when, and how the UI planner selects scenarios | Adding or changing a test layer, runner, gate, planner rule, CI job, registration step or verification moment |
-| `docs/agent-capabilities.md` | Agent capability contract: declaration fields, permission and confirmation rules, secret/OAuth handoff, adapters, testing | Adding, changing or removing an agent capability; changing permission, risk or confirmation policy; changing the MCP bridge. When a new OMC feature is suitable for agent use, register it in the same change instead of adapting it later |
+### Tier 1 — invariants. Never violate; if a task appears to require it, stop and say so.
 
-### Documentation Maintenance Checklist (Execute Before Declaring Complete)
+- **Secrets.** Never write the CPA management key, upstream API keys, OAuth tokens, or TLS private keys into ordinary responses, logs, preferences, frontend storage, or documentation. Caller keys appear only as display masks plus keyed-HMAC fingerprints. A sensitive operation whose audit record cannot be written must not proceed.
+- **DTO allowlists.** Ordinary facade responses carry only handwritten allowlists from `internal/api/` — never raw CPA payloads, unlisted fields, arbitrary target URLs, or outbound `api-call` proxies. The authenticated trusted Plugin Host is the single bounded native-response exception (ADR 0067): fixed CPA v0/v8 management trees and the model directory only, with credential separation, audited reads and writes, and configuration backup gates.
+- **Data integrity.** Migrations are forward-only: never edit an applied migration or `schema_migrations`; a fix is a new migration. Pricing versions and audit events are append-only. One replica per data directory — SQLite access is serialized, not retried.
+- **Zero-destructive CPA adoption.** Never wipe, overwrite, or mutate pre-existing CPA configuration OMC does not own. Ordinary configuration writes are revision-guarded, name only the paths the operator changed, and keep a restorable backup; refuse the write when the backup cannot be made. Reading CPA's usage queue is destructive: availability is probed with AUTH, never by popping.
+- **Offline embedding.** No CDN or externally hosted asset; the SPA embeds in the single Go binary and keeps working under the `/omc` sub-path.
+- **Repository hygiene.** No secret, key, token, or auth file in the diff, the history, the PR text, or screenshots.
 
-1. **Run mechanical validation**: `pnpm check-docs` verifies that all backticked repository paths resolve, no retired artifacts are referenced, and non-archival documents contain no absolute line numbers.
-2. **Search**: Grep all `*.md` files for identifiers, endpoints, environment variables, table names, and page names affected by the current change.
-3. **Verify**: Cross-check statements line by line against the current code and runtime behavior; never rely on memory.
-4. **Update**: Correct inaccuracies (divergence from implementation) → update deprecations (obsolete APIs/configs/dependencies) → supplement omissions (new modules, data flows, decisions).
-5. **Check facts**: Ensure paths, endpoints, environment variables, default values, and table names mentioned in the documentation actually exist and match reality.
-6. **Scan for residue**: Search for `prototype`, deleted files, removed pages/endpoints, and renamed identifiers—these references are historically the most frequent documentation defects in this repository.
-7. **Language rule**: All context and technical documentation must be written in English (the user-facing `README.zh-CN.md` provides a localized Chinese entrypoint alongside `README.md`). Keep code comments strictly in English (see §4).
+### Tier 2 — contracts. Change deliberately, verify before and after, and say what changed.
 
-`pnpm check-docs` only proves that paths exist; it cannot verify whether the surrounding prose is factually accurate. Steps 2–5 still require careful human (or agent) review. When adding a retired artifact rule, add the entry and reason to `RETIRED_REFERENCES` in `scripts/check-docs.mjs`, and run `pnpm test:docs`.
+- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (`[zh, en]` pairs in `web/src/i18n/index.tsx` plus every catalog under `web/src/i18n/locales/`).
+- Release and publication integrity: version identity, image tags and aliases, release gates, pinned workflow actions.
 
-**Do not write fragile absolute line numbers.** Reference `internal/api/handler.go` rather than `handler.go:53-128`; reference symbol names instead of line offsets. Line numbers are only permitted in frozen archival records (such as ADRs or historical audits) and must state their baseline commit.
+### Tier 3 — engineering preferences. Change freely.
+
+- Module and package layout, internal abstractions and their names, naming and comment conventions (§6), test placement and organization, library choices, file and document structure.
+- These conventions exist to keep the codebase coherent, not to freeze it. Deviate when you have a better reason, and prefer deleting an abstraction over preserving it. One design principle worth keeping: a shared component or module must not acquire a runtime dependency on a page's state just to obtain a general utility; put shared logic in a leaf module.
 
 ---
 
-## 3. Definition of Done (DoD)
+## 3. Your autonomy
 
-Before declaring any change complete, all of the following requirements must be satisfied:
+You are authorized — and expected — to:
 
-- The development loop prioritizes `pnpm test:fast`, which runs only the checks affected by the current worktree changes;
-- When a logical feature is complete, and again before declaring a task complete or pushing, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan) and `pnpm check:ui` (the browser scenarios the change can reach). CI then runs the full browser catalog before merge (ADR 0032, refined by ADR 0068); `pnpm verify:full` runs all of it locally and is for build, harness or workflow changes and for reproducing CI;
-- New tests follow `docs/testing.md`: lowest layer that can fail for the right reason, no fixed waits, automatic discovery instead of new registration lists;
-- All context documents triggered by the change per §2 have been updated;
-- Before creating or editing a pull request, read `CONTRIBUTING.md`, `.github/pull_request_template.md` and the title requirements in `.coderabbit.yaml`. Populate the template from actual verification evidence, then read back the published title/body and Draft status;
-- No obsolete comments, dead references, or unlocalized user-visible strings remain.
+- refactor when it makes the code better; replace outdated abstractions; delete redundant implementations, dead code, and compatibility layers that serve no current contract;
+- challenge historical decisions, including accepted ADRs (§4);
+- move, rewrite, or delete tests that freeze implementation instead of protecting behavior;
+- reorganize documentation.
 
-### Three Verification Moments (Do Not Run the Full Suite Every Turn)
-
-The real cost developers pay during development is **waiting**. Verification is structured across three distinct moments. Cramming the full test gate into every single iteration adds minutes to each turn—causing developers to bypass checks altogether, and a bypassed gate is no gate at all.
-
-| Moment | What to Run | Cost Guidance |
-| --- | --- | --- |
-| **Development iteration** (after editing files to confirm nothing broke) | `pnpm test:fast`; add `pnpm check:ui` if the change touches UI interactions, layout, or browser lifecycle | Scope-dependent; inspect per-check/scenario timings |
-| **Logical feature complete / before declaring done or pushing** | `pnpm verify` and `pnpm check:ui` | Tens of seconds for static gates; browser time scales with the change |
-| **Pull request** | CI: static gates, full built acceptance, the whole probe catalog in three shards, demo | Runs beside you; branch protection requires its `static`, `browser` and `probes` checks (ADR 0032) |
-
-Rules:
-
-- **Do not run `verify` or `check:ui` after every individual response or single file edit.** "Logical feature complete" refers to an independently verifiable feature or fix, not a single reply or file edit.
-- **Use `pnpm check:ui` for rapid UI feedback.** It requires no `pnpm build`, no Go binary, and no fake CPA (it runs against Vite dev server + mocked endpoints), running only scenarios affected by the changes; `--list` / `--plan` can inspect the scope and rationale without launching a browser. Both this command and the full `verify:probes` catalog run on the **dev server** and can catch `React.StrictMode` double-invocation issues. Built-artifact coverage comes from cross-stack acceptance and the demo check, not from the probe catalog.
-- **Probe scheduling is bounded, not coverage selection.** Catalog entrypoints run at most two independent scenario contexts per batch; `--workers 1` keeps identical coverage serially, and `verify:full:serial` selects it explicitly. Budgets, fault ledgers and late-fault teardown remain mandatory; do not increase concurrency or waits to make a run pass.
-- **`check:ui` does not replace built-artifact acceptance.** It tests against the dev server with mock endpoints, so it cannot observe path resolution, minification, or chunk boundary defects that only appear in production artifacts. CI's browser job covers those on every pull request; run `pnpm verify:full` locally when the change touches the build, `vite.config.ts`, the embedded distribution, the browser harness or the workflow.
-- **Never add a skip switch, retry or longer wait to make a run pass or go faster.** Fix the assertion, or add a planner rule with a self-test (`docs/testing.md` §3).
-- **Do not rerun immediately if already run.** If the same unchanged code already passed a gate, reuse that result.
-- **When a check fails, rerun only the failed check first**, rather than rerunning the entire suite after each fix.
-- **Inspect the fast plan before broad work.** `pnpm test:fast --plan` shows the files and selected checks without running them. After committing, use `pnpm test:fast --base <ref>` (optionally with `--plan`) to include committed differences; the default base is `HEAD`. Selection unions the checks required by each file, so adding documentation cannot hide a migration or configuration change. Dependency changes widen both static and UI plans.
-- Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` with `scripts/acceptance/ui-impact.mjs` and `scripts/acceptance/probe-impact.mjs` (for UI scenarios); all are pinned by tests asserting they never silently select nothing, and each narrowing rule has a negative case.
-
-CI (`.github/workflows/ci.yml`) runs three verification lanes in parallel: static gates; the browser job (PRs and `master` run the full `verify:browser`, the browser-harness fault checks and `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs `check:bundle` after building to enforce loading boundaries and broad anomaly ceilings, reports raw/gzip sizes and exact-base growth, and checks generated-state cleanliness before browser execution. A captured bundle failure still permits production browser/demo evidence, then a mandatory final verdict fails the job; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard). Structured probe timings are retained for 30 days. Weekly/manual maintenance runs focused race instrumentation, bounded fuzzing, advisory audits and macOS/Windows host-native smoke (ADR 0068); publication caches remain isolated (ADR 0066).
+Two conditions. Behavior in Tier 1 or Tier 2 is verified before and after the change. And coverage moves rather than disappears: if you delete a test, say where its claim now lives, or why the claim itself is obsolete.
 
 ---
 
-## 4. Code Comments Convention
+## 4. ADRs
 
-**Core principle: Explain Why, not What.** The code already states what is happening; comments explain why it was designed that way—design intent, decision context, trade-offs, boundary conditions, and non-obvious constraints.
+An ADR (`docs/adr/`) records a consequential decision and its context at a point in time. It is evidence, not a standing rule.
 
-- **Language**: Comments must be written in **English** only. Mixing languages is forbidden. When referencing UI concepts or states, use standard English terminology (such as "Live" or "open-ended").
-- **Conciseness**: Annotate only core logic, potential edge cases, and complex algorithms. Do not restate function names or the obvious code flow (delete redundant comments like `// increment counter` or `// loop over items`).
-- **Synchronization**: Logic changes must update corresponding comments. Outdated or misleading comments are treated as defects.
-- **No historical residue**: Do not reference deleted files, retired pages, renamed identifiers, or deprecated external contracts.
+- Write a new ADR only when a decision is hard to reverse, involves real trade-offs, and affects architecture, an external contract, or a safety boundary. Routine refactors, UI polish, test strategy, dependency upgrades, and naming choices do not need one.
+- You may amend, supersede, or deprecate any ADR, including accepted ones. Prefer editing an ADR whose facts or context are wrong over stacking a new one on top. When you reverse an accepted decision, note the reversal in the old ADR's status line and explain it in the new one.
+- Read the corpus for context when working in an area it covers. If an ADR conflicts with current best judgment, propose the better design — it is a record of past reasoning, not a constraint list.
 
-Good example (from `internal/usage/ingest/runner.go`):
+---
+
+## 5. Verification
+
+Match verification effort to the blast radius of the change:
+
+| Moment | What to run |
+| --- | --- |
+| While editing | `pnpm test:fast` — only the checks the changed files need; add `pnpm check:ui` when the change touches UI interactions, layout, or browser lifecycle |
+| Feature complete / before pushing | `pnpm verify` and `pnpm check:ui` — the full static gates, the worktree secret scan, and the affected browser scenarios |
+| Pull request | CI runs the full browser catalog, the whole probe catalog in three shards, and demo acceptance; branch protection requires its `static`, `browser`, and `probes` checks |
+| Build, embedded distribution, browser harness, or workflow changes | `pnpm verify:full` (also for reproducing a CI failure) |
+
+Do not run `verify` or `check:ui` after every file edit — a feature is complete when it is independently verifiable, not when a reply ends. Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification, or chunk boundaries.
+
+Rules that keep the gates honest:
+
+- **Never add a skip switch, a retry, or a longer wait to make a run pass.** Fix the assertion, or add a planner rule with a self-test.
+- New tests go at the lowest layer that can fail for the right reason; no fixed waits; discovery is automatic, so do not add registration lists. `docs/testing.md` has the layer map and the current claim ownership.
+- Release and security gates — secret scans, image smoke, publication checks — are never optional.
+
+---
+
+## 6. Conventions
+
+**Comments explain why, not what.** The code already says what happens; a comment carries design intent, decision context, trade-offs, and non-obvious constraints. English only. Delete comments that restate the code, and update a comment when the logic under it changes.
 
 ```go
 // Auto. Availability is probed with AUTH, never by popping: CPA's queue is
 // destructive, so a probe that consumed a record would silently lose it.
 ```
 
-Counter-example:
-
-```go
-// Get the config.
-func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
-```
-
----
-
-## 5. Naming Conventions
-
-| Style | Applies To |
+| Style | Applies to |
 | --- | --- |
-| `lowerCamelCase` | Go/TS local variables, functions and methods, class/struct properties, parameters |
+| `lowerCamelCase` | Go/TS local variables, functions and methods, properties, parameters |
 | `UpperCamelCase` | Classes, interfaces, structs, React components, exported types |
-| `SCREAMING_SNAKE_CASE` | Module-level constants (`MAX_LOG_BUFFER_LINES`, `RENDER_CHUNK`), global static read-only configurations |
-| `snake_case` | Database table and column names, SQL columns, JSON wire fields |
-| `kebab-case` | URL paths, CSS class names (including `*.module.css`), Git branches |
+| `SCREAMING_SNAKE_CASE` | Module-level constants, global static read-only configuration |
+| `snake_case` | Database tables and columns, SQL columns, JSON wire fields |
+| `kebab-case` | URL paths, CSS class names, Git branches |
 
-Semantic requirements:
-
-- Meaningless abbreviations are prohibited (`temp`, `tmp`, `a`, `b`, `obj`, `el`, `val`, `res`, `idx`); only pure loop counters may use `i`, `j`. Note that `idx` is particularly dangerous: in quota/credential loops it often represents a string Auth Index, not a numeric index.
-- Booleans must carry a state prefix: `isActive`, `hasPermission`, `canEdit`, `shouldRetry`. React `useState` booleans follow the same rule (`isVisible`, `isSubmitting`).
-- Functions/methods must use verb-noun phrases: `calculateTotal()`, `validateInput()`, `nextDelay()`, `formatRequestTick()`.
-- User-visible copy must not be hardcoded in backend responses or frontend components; new copy must be added to `web/src/i18n/index.tsx` as `[zh, en]` pairs and to every complete catalog under `web/src/i18n/locales/`.
-
-**Boundaries (Do not alter these purely for style)**:
-
-- **Wire contract names preserve external casing**. `json:"disabled"` corresponding Go fields, CPA native fields, DB column names, and query parameters belong to external contracts; renaming Go/TS identifiers would widen diffs without improving readability. Naming conventions apply to our own identifiers.
-- **Third-party component prop names follow the library API**. In `<Sider collapsed={isCollapsed}>` or `<Modal open={isOpen}>`, the left side is antd's interface and only the right side is our state variable. Similarly, `className="..."` strings are CSS classes (kebab-case) and must not be inadvertently mangled during identifier renames.
-- Standard library structs in Go with exported boolean fields (such as `sql.NullString.Valid`) follow Go conventions and are not forced into `IsValid`. Exported Go identifiers use `UpperCamelCase`, while package-internal variables and unexported fields use `lowerCamelCase`.
-- **CSS Modules class names are kebab-case and accessed via `styles['kebab-case']`**. Never use `styles.camelCase`. Because `tsc` cannot catch this (`vite/client` types `*.module.css` as `Record<string, string>`), `pnpm check-css-modules` enforces this check; run it after adding or renaming classes.
+- Booleans carry a state prefix (`isActive`, `hasPermission`, `canEdit`, `shouldRetry`); functions are verb-noun phrases.
+- External contract names keep their required spelling: `json:` tags, CPA native fields, DB columns, query parameters, and third-party component props. CSS-module classes are read as `styles['kebab-case']` (`pnpm check-css-modules` enforces that).
+- User-visible copy is never hardcoded: add `[zh, en]` pairs to `web/src/i18n/index.tsx` and to every catalog under `web/src/i18n/locales/` (`pnpm check-i18n` finds gaps).
 
 ---
 
-## 6. Common Commands
+## 7. Documentation
 
-Test layering criteria and "what belongs in the browser" are detailed in [`docs/architecture.md`](docs/architecture.md) §12:
-**Pay the browser testing cost only when Chromium is genuinely needed.** `pnpm test:fast` never builds or launches the product Vite HTTP listener / Chromium / fake CPA; selection logic lives in `scripts/affected-checks.mjs` and its tests assert this property.
+Update the documents your change makes wrong, in the same change. That is the whole requirement — accuracy, not ceremony. `pnpm check-docs` catches the mechanical half: backticked paths must resolve, retired references are rejected, and non-archival documents carry no absolute line numbers (cite a file or symbol instead).
+
+Where things live, when you need to check or update them:
+
+| Document | Covers |
+| --- | --- |
+| `CONTEXT.md` | Domain vocabulary and rules: time windows, i18n, auth model, pricing semantics |
+| `docs/architecture.md` | Module map, data flows, invariants, schema, background loops |
+| `docs/design.md` | Visual system and design tokens (source of truth); `DESIGN.md` is its design-tooling summary and follows it |
+| `PRODUCT.md` | Product positioning, capability matrix, constraints |
+| `README.md` / `README.zh-CN.md` | Landing pages: capability or install changes a newcomer should see |
+| `docs/install.md` / `docs/install-for-agents.md` | Installation for a person, and the same steps as an agent runbook |
+| `docs/operations.md` | Settings reference, deployment constraints, operational notes |
+| `docs/ops/sqlite-operations.md` | Backup, restore, master-key governance, migration gates |
+| `docs/ops/cloudflare-demo.md` | Deployment runbook for the public demonstration |
+| `docs/releasing.md` | Distribution, tag publishing, version identity |
+| `docs/testing.md` | Test placement, the layer map, current claim ownership |
+| `docs/agent-capabilities.md` | Agent capability contract and the MCP bridge |
+| `docs/cpa-v8-compat.md` / `docs/cpamc-parity.md` | CPA v8 baseline and relocation; CPAMC parity matrix |
+| `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations |
+| `docs/adr/` | Decision records (§4) |
+| `docs/images/readme/` | README screenshots: regenerate with `pnpm build && pnpm readme:screenshots` when a pictured page changes how it looks |
+| `deploy/cloudflare/data/` | The demo dataset: regenerate with `pnpm demo:generate` and commit the diff when a console read or response shape changes (`pnpm check:demo` fails otherwise) |
+
+All context and technical documentation is written in English; `README.zh-CN.md` and localized UI copy are the intentional exceptions.
+
+---
+
+## 8. Common commands
+
+The complete script list is in `package.json`; these are the ones agents use most.
 
 | Command | Purpose |
 | --- | --- |
 | `pnpm dev` | Air + Vite dev entrypoint (`http://127.0.0.1:5173/omc/`) |
-| `pnpm dev:api` / `pnpm dev:web` | Run Go/Air only, or Vite only |
+| `pnpm dev:api` / `pnpm dev:web` | Go/Air only, or Vite only |
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
-| `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
-| `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check and conservative affected logic suites); `--base <ref>` includes committed changes, `--plan` prints without running |
-| `pnpm test:components` | Automatically discovered frontend integration: rendered React under jsdom and typed API contracts under Node; no product HTTP listener or Chromium |
-| `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
-| `pnpm check:bundle` | Check production loading boundaries and anomaly ceilings; report raw/gzip sizes and exact-base growth |
-| `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
-| `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
-| `pnpm verify:full` | Everything CI runs, locally: for build, harness or workflow changes and for reproducing CI |
-| `pnpm verify:demo` | Browser acceptance for the public demonstration: every console route renders, no API errors, no console errors; `OMCPA_DEMO_URL` checks a deployment instead of a local server |
-| `pnpm verify:demo:go` | The same check against the Go binary's own demonstration mode (still supported; it generates the dataset) |
-| `pnpm demo:generate` | Regenerate the demonstration's dataset from the real handlers; `--check` fails when the committed copy is stale |
-| `pnpm icons:generate` | Regenerate `web/src/generated/lucideIcons.json`, the icon data Agent displays draw from, after the Lucide package changes; a self-test pins it to the installed package |
-| `pnpm check:demo` | The demonstration's maintenance contract: coverage, freshness digest and privacy. Part of `test:self` |
-| `pnpm test:demo` | Unit tests for the demonstration's Worker, routing and timestamp re-basing |
-| `pnpm dev:demo` | Serve the demonstration locally with Wrangler (requires `pnpm build:demo` first) |
-| `pnpm build:demo` | Stage the built console for the demonstration: inject the runtime configuration, make asset URLs root-relative |
-| `pnpm verify:full:serial` | Serial final gate, including one probe worker, for resource-constrained reproduction and diagnosing orchestration discrepancies |
-| `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
-| `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; the full CI run contains it |
-| `pnpm verify:browser:harness` | Real-browser fault-injection checks for runtime errors, strict fixtures and outbound isolation; outside the fast/static lanes |
-| `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Bounded maintenance lanes; weekly and manual CI, separate from hermetic PR gates |
-| `pnpm verify:workflow:lint` | Independent pinned actionlint validation; install the version named in `scripts/lint-workflows.mjs` first |
-| `pnpm benchmark:native` | Opt-in serial/two-worker native compilation experiment; reports metadata and timings without changing publication inputs |
-| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does; `--port PORT` selects an explicit isolated listener; `--workers 1` keeps the complete selected catalog serial |
-| `pnpm verify:e2e` | Build and check loading boundaries/anomaly ceilings, then run browser acceptance and browser probes |
-| `pnpm verify:secrets` | Scan worktree for secrets |
-| `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
-| `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |
-| `pnpm check-css-modules` | Validate every `styles[...]` reference matches a defined class in `*.module.css` (`pnpm test:css-modules` self-test) |
-| `pnpm check:motion` | Enforce §7's motion budget: every duration is a `--motion-*` token, no transition animates a layout property, every keyframe honours `prefers-reduced-motion`, and hovers stay within `fast` (`pnpm test:motion` self-test) |
-| `pnpm check:style-tokens` | Enforce the type and radius scales (`docs/design.md` §3, §4): a font size on the scale and a 2–4px corner are written as `--text-*` / `--radius-*` tokens, no fractional font sizes, and every such reference resolves without a fallback (self-test `scripts/check-style-tokens.test.mjs`, discovered by `pnpm test:self`) |
-| `pnpm check:feedback` | Enforce the feedback surfaces (ADR 0045): antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs are used only inside `web/src/components/feedback/`, and the antd components a shared primitive replaces are refused: `Switch` (use `web/src/components/common/Switch.tsx`), `Empty` (use `web/src/components/common/EmptyState.tsx`), `Tag` (use `web/src/components/common/Tag.tsx`), `Descriptions` (use `web/src/components/common/FactList.tsx`), `Drawer` outside `web/src/components/common/AppDrawer.tsx` and the two sheets that are not side panels, `Popconfirm` outside `web/src/components/common/ConfirmAction.tsx`, `Card` outside `web/src/components/common/Panel.tsx`, `Pagination` outside `web/src/components/common/Pager.tsx` and `Progress` (use `web/src/components/common/Meter.tsx`) (`pnpm test:feedback` self-test) |
-| `pnpm lint:antd` | Check antd usage and accessibility rules |
-| `pnpm readme:screenshots` | Regenerate the README screenshots under `docs/images/readme/` from demo mode (requires `pnpm build` first; outside every gate) |
+| `pnpm build` | Build the frontend and sync it to `internal/web/dist` |
+| `pnpm test:fast` | Affected checks for the worktree diff (`--base <ref>` includes committed changes, `--plan` prints the selection) |
+| `pnpm test:logic` / `pnpm test:components` / `pnpm test:self` | Pure-logic suites / rendered React and typed API contracts / repository and Worker Node self-tests |
+| `pnpm check:ui` | Affected browser scenarios on the dev server with mocked API (`--list` / `--plan` inspect without launching a browser) |
+| `pnpm verify` | Toolchain check, full static gates, worktree secret scan |
+| `pnpm verify:probes` | The whole dev-server probe catalog (`--shard i/n`, `--port PORT`, `--workers 1`) |
+| `pnpm verify:browser` | Built-SPA browser acceptance against the fake CPA (also `:smoke`, `:p0`, `:harness`) |
+| `pnpm verify:demo` | Browser acceptance for the public demonstration; `OMCPA_DEMO_URL` checks a deployment |
+| `pnpm verify:full` | Everything CI runs, locally (`:serial` for resource-constrained hosts) |
+| `pnpm verify:e2e` | Build and loading boundaries, then browser acceptance and probes |
+| `pnpm verify:secrets` | Scan the worktree for secrets (`:history` scans history) |
+| `pnpm check:bundle` | Production loading boundaries and anomaly ceilings, with size reports |
+| `pnpm demo:generate` | Regenerate the demonstration dataset from the real handlers (`--check` fails when stale) |
+| `pnpm check:demo` | The demonstration's coverage, freshness and privacy contract |
+| `pnpm icons:generate` | Regenerate the Lucide icon data after the package changes |
+| `pnpm check-docs` | Documentation path, retired-reference and line-number gate |
+| `pnpm check-i18n` | Translation keys referenced in code but missing from the dictionary |
+| `pnpm check-css-modules` | `styles[...]` references versus defined CSS-module classes |
+| `pnpm check:motion` / `pnpm check:style-tokens` / `pnpm check:feedback` | Motion budget / type and radius scales / feedback-surface and shared-primitive gates |
+| `pnpm lint:antd` | antd usage and accessibility rules |
+| `pnpm readme:screenshots` | Regenerate README screenshots from demo mode (outside every gate) |
+| `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Weekly maintenance lanes, separate from the PR gates |
 
 ---
 
-## 7. Delivery Surface Cleanup: Describe Only Adopted State
+## 9. Delivery surfaces
 
-Rejected options, intermediate attempts, and phrasing corrections in a session are **control information**, not the identity of the final artifact. When writing delivery materials, assume the reader has not seen the session.
-
-Evaluate every delivery surface independently: titles, filenames, body prose, comments, labels, commit messages, PR descriptions, and handoff notes.
-
-- **Generate from the positive goal, do not edit rejected text word by word.** If prominent titles, openings, tags, or filenames came from discarded alternatives, rewrite them rather than substituting synonyms or adding explanatory parentheticals.
-- **Criteria for omission**: Does a reader who was not in this session need this information? Would omitting it make the product unsafe, inaccurate, misleading, incompatible, or non-compliant? Is it a genuine change from the baseline state that the current delivery surface must explain? If none of these apply, omit it completely.
-- **"Do not mention X" does not mean writing "No X".** Remove unnecessary contrasts entirely instead of leaving a compliance disclaimer.
-- **Must retain**: Genuine baseline changes, executed external actions, and necessary technical names, diagnostics, tests, snapshots, and audit facts. Do not erase real deletions, API names, or security facts just to avoid a particular word. Pre-existing user modifications from before the task started do not count as rejected content; do not absorb them into the current commit or PR narrative.
-- **Write against diffs and re-read state**, avoiding absorbing unrelated changes into the narrative. After modifying artifacts, read through all user-visible content and packaging (including filenames and metadata); do not add disclaimers such as "cleaned up" or "no residue".
+Write for a reader who was not in the session. Describe the adopted state, not the path taken: rejected alternatives, intermediate attempts, and phrasing experiments are control information and stay out of titles, filenames, PR bodies, commit messages, and handoff notes. Keep genuine baseline changes, real deletions, API names, and security facts; omit only what the reader does not need. Re-read the published title and body after creating or editing a pull request.
 
 ---
 
-## Architecture and verification maintenance
+## 10. Things not to do
 
-- Put rendered async hook/cache/provider claims in automatically discovered component tests when a pure-function test cannot observe them. Use held responses and explicit cleanup; simulated DOM never replaces Chromium geometry, focus, scrolling, navigation or real image handling.
-- For API mocks, add handler-certified wire cases before claiming parity. Reuse the actual typed client in a Node contract suite; keep repository/auth and real browser lifecycle assertions at their owners. Corpus/fixture changes must select every consumer layer, not just the mock self-test.
-- Prefer leaf modules for shared logic: a shared component or another page must not
-  acquire a runtime dependency on a page's state solely to obtain a general utility.
-  Keep domain orchestration at its owner; do not create generic wrappers without
-  independently testable behavior or measured reuse.
-- A new route/loading boundary must update impact-analysis evidence in the same
-  change. Test the real import graph, independently assert App-to-registry reachability
-  and nonempty registry-page discovery, and pair every narrowing case with an
-  eager/shared/unknown case that still widens. Page-directory rules are not evidence
-  of route-page identity. Full CI catalog coverage is independent of the local planner.
-- For internal refactors, record the existing behavior and claim owners before edits,
-  preserve browser-only coverage, and measure the affected feedback path. UI-touching
-  changes need representative browser and screenshot/artifact evidence in addition to
-  test passes. Observable bug fixes are separate scope, not incidental refactoring.
-- Use `docs/plans/architecture-governance.md` for this audit's evidence and migration
-  ledger rather than introducing another overlapping engineering rules document.
-
----
-
-## 8. Things NOT to Do
-
-- Ordinary facade responses must retain `internal/api` DTO allowlists. The authenticated trusted Plugin Host is the bounded native-response exception in ADR 0067: fixed CPA v0/v8 management trees and GET model directory only, with credential separation, audited reads/writes and config backup/write gates. Never introduce arbitrary target URLs or outbound `api-call` proxies.
-- Do not write CPA management keys or any upstream secrets into ordinary responses, logs, preferences, frontend storage, or documentation.
-- Do not modify historical database schema without a new migration; rollbacks must be forward-only (new migration fixes), never manually edit `schema_migrations`.
-- Do not introduce frontend resources requiring a CDN; the frontend must be embeddable into a single Go binary for offline operation.
-- Do not hardcode the root path; the `/omc` sub-path must continue to work natively.
-- Do not write fragile absolute line references such as `path.go:123-456` (`pnpm check-docs` fails immediately on non-archival documents); reference filenames or symbol names.
-- Do not fake feature completion simply because an endpoint can be probed; placeholder pages must be explicitly marked as placeholders.
-- Do not rewrite accepted ADRs; when new trade-offs emerge, author a new ADR to supersede the previous one.
+- Do not fake feature completion because an endpoint can be probed; placeholder pages are marked as placeholders.
+- Do not reference deleted files, retired pages, renamed identifiers, or deprecated external contracts in prose or comments.
+- Do not introduce frontend resources requiring a CDN, and do not hardcode the root path.
+- Do not treat a passing run as coverage: an assertion may move to a cheaper layer, but it must not disappear without a replacement that makes the same claim.
