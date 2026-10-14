@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -30,9 +31,21 @@ type fakeUpdater struct {
 	updateErr    error
 	updates      []updater.UpdateRequest
 	beforeUpdate func()
+	// answers, when set, scripts the status reads: each read takes the next answer the
+	// test hands over, so a test steps through a job without waiting for a fixed time.
+	answers chan statusAnswer
+}
+
+type statusAnswer struct {
+	status updater.StatusResponse
+	err    error
 }
 
 func (f *fakeUpdater) Status(context.Context) (updater.StatusResponse, error) {
+	if f.answers != nil {
+		answer := <-f.answers
+		return answer.status, answer.err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.status, f.statusErr
@@ -303,9 +316,33 @@ func TestUpdateOutcomeIsRecordedOnceEvenAcrossARestart(t *testing.T) {
 
 func TestInterruptedConsoleUpdateIsRecordedByTheNextProcess(t *testing.T) {
 	fixture := newUpdaterFixture(t)
-	fixture.sidecar.status.Job = &updater.Job{ID: "omc-7", Product: updater.ProductOMC, Stage: updater.StageDone, FromVersion: "v1.0.0", ToVersion: "v1.1.0"}
+	fixture.sidecar.answers = make(chan statusAnswer)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		fixture.handler.RecordInterruptedUpdate(context.Background())
+	}()
+	answer := func(stage string, err error) {
+		t.Helper()
+		job := updater.Job{ID: "omc-7", Product: updater.ProductOMC, Stage: stage, FromVersion: "v1.0.0", ToVersion: "v1.1.0"}
+		select {
+		case fixture.sidecar.answers <- statusAnswer{status: updater.StatusResponse{Job: &job}, err: err}:
+		case <-finished:
+			t.Fatal("the outcome must be waited for until the job finishes")
+		}
+	}
 
-	fixture.handler.RecordInterruptedUpdate(context.Background())
+	// The process that replaced the console starts while the update is still verifying
+	// it, and the sidecar then replaces itself, so it is briefly unreachable.
+	answer(updater.StageVerifying, nil)
+	answer("", errors.New("dial tcp: lookup oh-my-cpa-updater: no such host"))
+	answer(updater.StageVerifying, nil)
+	if recorded := fixture.audits(t, "system.update.completed"); len(recorded) != 0 {
+		t.Fatalf("an unfinished job has no outcome yet: %+v", recorded)
+	}
+	answer(updater.StageDone, nil)
+	<-finished
+
 	outcomes := fixture.audits(t, "system.update.completed")
 	if len(outcomes) != 1 || outcomes[0].Result != "success" || outcomes[0].Details["job_id"] != "omc-7" || outcomes[0].Details["to_version"] != "v1.1.0" {
 		t.Fatalf("the process that replaced the console records the outcome: %+v", outcomes)

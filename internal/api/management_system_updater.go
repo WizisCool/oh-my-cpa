@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
 )
@@ -282,26 +283,60 @@ func (h *Handler) updateJobPollInterval() time.Duration {
 }
 
 // RecordInterruptedUpdate records the outcome of an update whose admitting process did
-// not live to see it: the console's own. It runs once at start-up and writes nothing
-// when the sidecar's last job already has its outcome on record.
+// not live to see it: the console's own. It runs at start-up, which for a console update
+// is while that update is still verifying this very process, so it waits for the job to
+// finish. A failed read is not the end of the wait: after a console update the sidecar
+// replaces itself too. Only the job first seen is followed, because a later one has a
+// watcher of its own, and nothing is written when its outcome is already on record.
 func (h *Handler) RecordInterruptedUpdate(ctx context.Context) {
 	if h.updater == nil || h.repo == nil || !h.cfg.Updater.Enabled || !h.isContainerised {
 		return
 	}
-	status, err := h.updater.Status(ctx)
-	if err != nil || status.Job == nil || !status.Job.IsFinished() {
-		return
-	}
-	events, err := h.repo.ListAuditEvents(ctx, 200)
-	if err != nil {
-		return
-	}
-	for _, event := range events {
-		if event.Action == "system.update.completed" && event.Details["job_id"] == status.Job.ID {
+	ctx, cancel := context.WithTimeout(ctx, updateJobWatchLimit)
+	defer cancel()
+	ticker := time.NewTicker(h.updateJobPollInterval())
+	defer ticker.Stop()
+	followedID := ""
+	for {
+		status, err := h.updater.Status(ctx)
+		var refused *updater.RefusedError
+		switch {
+		case errors.As(err, &refused):
 			return
+		case err != nil:
+		case status.Job == nil:
+			return
+		case followedID != "" && status.Job.ID != followedID:
+			return
+		case status.Job.IsFinished():
+			if !h.isUpdateOutcomeRecorded(ctx, status.Job.ID) {
+				h.auditUpdateOutcome(*status.Job)
+			}
+			return
+		default:
+			followedID = status.Job.ID
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
-	h.auditUpdateOutcome(*status.Job)
+}
+
+// isUpdateOutcomeRecorded reports whether a job's outcome is on record. An unreadable
+// trail counts as recorded: a missing outcome row is better than a doubled one.
+func (h *Handler) isUpdateOutcomeRecorded(ctx context.Context, jobID string) bool {
+	page, err := h.repo.QueryAuditEvents(ctx, repository.AuditQuery{Search: "system.update.completed", Limit: repository.AuditPageMax})
+	if err != nil {
+		return true
+	}
+	for _, event := range page.Events {
+		if event.Action == "system.update.completed" && event.Details["job_id"] == jobID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) auditUpdateOutcome(job updater.Job) {

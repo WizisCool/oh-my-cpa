@@ -23,7 +23,8 @@ It needs the Docker socket, which the console itself never has.
 Commands:
   serve        run the updater; the console reaches it at http://oh-my-cpa-updater:8090
   install      add the updater to a deployment that is already running:
-                 docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock \
+                 docker run --rm --pull always -u 0 \
+                   -v /var/run/docker.sock:/var/run/docker.sock \
                    wiziscool/oh-my-cpa:latest updater install
                --container <name>      the console container, when it cannot be told apart
                --cpa-container <name>  the CLIProxyAPI container, when it is not found

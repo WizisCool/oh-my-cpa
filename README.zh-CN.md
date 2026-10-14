@@ -253,7 +253,7 @@ OMCPA_MASTER_KEY=<openssl rand -hex 32 的输出>
 在该服务出现之前安装的部署，在 Docker 主机上执行一条命令即可启用，无需修改编排文件：
 
 ```bash
-docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
 ```
 
 该命令添加 `oh-my-cpa-updater` 容器，并同时把 Oh My CPA 升级到当前版本。`docker rm -f oh-my-cpa-updater`

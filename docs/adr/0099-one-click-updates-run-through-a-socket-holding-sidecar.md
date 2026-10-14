@@ -65,8 +65,8 @@ not fall back to an unverified one.
 console computes it from its own setting and the updater computes it from the console
 container's environment, which it can read through the socket it already holds.
 
-**Existing deployments migrate with one command.** `docker run --rm -u 0 -v
-/var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install`
+**Existing deployments migrate with one command.** `docker run --rm --pull always -u 0
+-v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install`
 creates the updater as a container of its own on a network of its own, attaches the
 console to that network, and upgrades the console to the installer's release. It is
 placed outside the deployment's Compose project on purpose: a container Compose does not

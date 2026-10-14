@@ -292,13 +292,18 @@ func TestUpdateHandsTheFinishedJobToTheUpdatersSuccessor(t *testing.T) {
 		t.Fatalf("the successor must report the job its predecessor finished: %q", inherited)
 	}
 
-	// The successor's start-up removes the predecessor it replaced.
+	// The successor's start-up removes the predecessor it replaced, before its own health
+	// check has passed.
+	successor.Health = "starting"
 	successorService := NewService(Options{Engine: stack.service.options.Engine, SelfID: successor.ID})
 	if err := successorService.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if stack.daemon.named(SIDECAR_NAME+PREVIOUS_SUFFIX) != nil {
 		t.Errorf("the predecessor must be removed")
+	}
+	if kept := stack.daemon.named(SIDECAR_NAME); kept == nil || kept.ID != successor.ID {
+		t.Errorf("the successor must keep the name: %+v", kept)
 	}
 }
 
@@ -438,6 +443,42 @@ func TestReconcileRestoresAnInterruptedReplacement(t *testing.T) {
 	restored := daemon.named("gateway")
 	if restored == nil || restored.ID != interrupted.ID || !restored.IsRunning {
 		t.Fatalf("a container whose replacement never came up must be put back and started: %+v", restored)
+	}
+}
+
+func TestReconcileKeepsTheRollbackTargetWhileTheReplacementIsUnverified(t *testing.T) {
+	for _, health := range []string{"starting", "unhealthy"} {
+		t.Run(health, func(t *testing.T) {
+			daemon, engine := newFakeDaemon(t)
+			daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+			previous := daemon.addContainer(containerSpec{name: "gateway" + PREVIOUS_SUFFIX, image: "app:latest"})
+			previous.IsRunning = false
+			daemon.addContainer(containerSpec{name: "gateway", image: "app:latest"}).Health = health
+
+			if err := NewService(Options{Engine: engine}).Reconcile(context.Background()); err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			restored := daemon.named("gateway")
+			if restored == nil || restored.ID != previous.ID || !restored.IsRunning {
+				t.Fatalf("an unverified replacement must give way to the previous container: %+v", restored)
+			}
+		})
+	}
+}
+
+func TestReconcileRemovesThePreviousContainerOnceTheReplacementIsHealthy(t *testing.T) {
+	daemon, engine := newFakeDaemon(t)
+	daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+	previous := daemon.addContainer(containerSpec{name: "gateway" + PREVIOUS_SUFFIX, image: "app:latest"})
+	previous.IsRunning = false
+	replacement := daemon.addContainer(containerSpec{name: "gateway", image: "app:latest"})
+	replacement.Health = "healthy"
+
+	if err := NewService(Options{Engine: engine}).Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if daemon.named("gateway"+PREVIOUS_SUFFIX) != nil || daemon.named("gateway").ID != replacement.ID {
+		t.Fatalf("a healthy replacement keeps its name and the previous container goes")
 	}
 }
 

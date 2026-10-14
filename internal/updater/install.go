@@ -58,7 +58,7 @@ func Install(ctx context.Context, options InstallOptions) error {
 	say := func(format string, arguments ...any) { fmt.Fprintf(options.Out, format+"\n", arguments...) }
 
 	if options.SelfID == "" {
-		return errors.New("the installer must run as a container: docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock <image> updater install")
+		return errors.New("the installer must run as a container: docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock <image> updater install")
 	}
 	self, err := engine.InspectContainer(ctx, options.SelfID)
 	if err != nil {

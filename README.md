@@ -269,7 +269,7 @@ A deployment installed before this service existed gains it with one command on 
 Docker host; the Compose file is not edited:
 
 ```bash
-docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
 ```
 
 The command adds an `oh-my-cpa-updater` container and brings Oh My CPA up to the current

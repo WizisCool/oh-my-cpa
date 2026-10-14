@@ -283,10 +283,11 @@ Docker socket into a container, so explain that and get the user's agreement fir
 (rule 4):
 
 ```bash
-docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
 ```
 
-It prints the console container it found and what it did. If it reports more than one
+Keep `--pull always`: without it Docker runs the older `latest` the host already has,
+which has no updater. It prints the console container it found and what it did. If it reports more than one
 Oh My CPA container, rerun it with `--container <name>`. It does not touch CPA (rule 2).
 Afterwards `docker inspect -f '{{.State.Health.Status}}' oh-my-cpa-updater` must print
 `healthy`. `docker rm -f oh-my-cpa-updater` undoes it.

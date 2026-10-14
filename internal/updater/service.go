@@ -578,7 +578,14 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			name := strings.TrimSuffix(previousName, PREVIOUS_SUFFIX)
 			replacement, replacementErr := engine.InspectContainer(ctx, name)
 			hasReplacement := replacementErr == nil && replacement.State.Running
-			isSelf := s.options.SelfID != "" && strings.HasPrefix(summary.ID, s.options.SelfID)
+			isSelf := s.isSelf(summary.ID)
+			if hasReplacement && !isSelf && !s.isSelf(replacement.ID) {
+				// The previous container is the only rollback target, so it goes only once
+				// its replacement passed the check awaitStarted applies. One still starting
+				// was cut off mid-verification. The updater's own pair is exempt: a
+				// successor running this code is up, whatever its health check says yet.
+				hasReplacement = replacement.State.Health == nil || replacement.State.Health.Status == "healthy"
+			}
 			switch {
 			case isSelf && hasReplacement:
 				// A successor holds the name and will remove this container.
@@ -596,6 +603,10 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func (s *Service) isSelf(containerID string) bool {
+	return s.options.SelfID != "" && strings.HasPrefix(containerID, s.options.SelfID)
 }
 
 // EnsureLinked attaches the console container to the link network when it is not on

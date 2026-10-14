@@ -213,13 +213,9 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		if cfg.Updater.Enabled {
 			_, dockerErr := os.Stat("/.dockerenv")
 			handler.SetUpdater(updater.NewClient(cfg.Updater.URL, cfg.MasterKey), release.NewManifestClient(), dockerErr == nil)
-			go func() {
-				// A console update ends the process that admitted it, so its outcome is
-				// collected here, by the process that replaced it.
-				outcomeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-				defer cancel()
-				handler.RecordInterruptedUpdate(outcomeCtx)
-			}()
+			// A console update ends the process that admitted it, so its outcome is
+			// collected here, by the process that replaced it.
+			go handler.RecordInterruptedUpdate(ctx)
 		}
 
 		if db != nil {

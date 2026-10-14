@@ -2359,9 +2359,11 @@ Three invariants hold the design together:
   compiled into its own binary.
 - **The outcome is recorded by whoever is alive.** A gateway update finishes while the
   admitting process still runs, and a goroutine writes `system.update.completed`. A
-  console update kills that process, so `Handler.RecordInterruptedUpdate` asks the
-  updater for its last job when the next process starts; the audit event is keyed by the
-  job ID so the two paths cannot both record it.
+  console update kills that process, so `Handler.RecordInterruptedUpdate` follows the
+  updater's last job from the moment the next process starts. That process starts while
+  the job is still verifying it, and the updater then replaces itself, so the follow
+  waits through unfinished stages and failed reads, for at most fifteen minutes. The
+  audit event is keyed by the job ID so the two paths cannot both record it.
 
 The updater role has one loop of its own, `Service.KeepLinked`: an installed updater
 lives outside the deployment's Compose project, so it follows Docker's container-start
@@ -2370,7 +2372,10 @@ A Compose-declared updater shares the project network and runs no such loop.
 
 The updater keeps a job in memory only. A restart mid-replacement is finished by
 `Service.Reconcile`, which looks for a `-omc-previous` container: with a healthy
-replacement the leftover is removed, without one it is restored.
+replacement the leftover is removed, without one it is restored. A replacement whose
+health check has not yet passed counts as without one, since it was interrupted
+mid-verification. The updater's own pair is the exception: a successor running
+`Reconcile` is up, whatever its health check reports yet.
 
 On the page, `useConsoleUpdate` follows one job. While it does, a failed read or a
 `not_installed` answer is not shown, because both are what a console restart looks like

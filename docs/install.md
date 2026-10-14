@@ -587,7 +587,7 @@ A deployment whose Compose file has no `oh-my-cpa-updater` service gains one wit
 single command on the Docker host. The Compose file is not edited:
 
 ```bash
-docker run --rm -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
+docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install
 ```
 
 The command:
@@ -601,7 +601,9 @@ The command:
 - replaces the console with the current release when it is older, with the rollback
   described above. A pinned console is left as it is.
 
-`-u 0` is needed because the Docker socket belongs to root. Running the command again
+`--pull always` fetches the current image: the host already holds an older
+`wiziscool/oh-my-cpa:latest`, which has no updater. `-u 0` is needed because the Docker
+socket belongs to root. Running the command again
 repairs or refreshes the installation. `docker rm -f oh-my-cpa-updater` removes it, and
 the console then shows the command again in place of the update action.
 

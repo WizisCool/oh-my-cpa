@@ -220,8 +220,8 @@ registry and proxy configuration.
 
 Audit: `system.update.apply` records the admission, or the refusal with its reason,
 before the updater is asked; `system.update.completed` records how the job ended. An Oh
-My CPA update ends the process that admitted it, so the next process records the
-outcome when it starts.
+My CPA update ends the process that admitted it, so the next process follows the job
+from start-up and records the outcome once the updater reports it finished.
 
 ## Database maintenance
 

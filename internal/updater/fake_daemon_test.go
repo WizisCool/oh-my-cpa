@@ -43,6 +43,8 @@ type fakeContainer struct {
 	Networks   map[string]map[string]any
 	Mounts     []map[string]any
 	IsRunning  bool
+	// Health is the health check status the daemon reports; empty means no check.
+	Health string
 }
 
 func newFakeDaemon(t *testing.T) (*fakeDaemon, *Engine) {
@@ -190,6 +192,9 @@ func (d *fakeDaemon) named(name string) *fakeContainer {
 
 func (d *fakeDaemon) inspection(container *fakeContainer) map[string]any {
 	state := map[string]any{"Running": container.IsRunning}
+	if container.Health != "" {
+		state["Health"] = map[string]any{"Status": container.Health}
+	}
 	return map[string]any{
 		"Id":              container.ID,
 		"Name":            "/" + container.Name,
