@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { buildNativeRelease, createNativePlan, packageNativeArchive, validateEmbeddedConsole, writeReleaseChecksums, verifyReleaseAssets } from './native-release.mjs';
+import { buildNativeRelease, createNativePlan, packageNativeArchive, runRequiredTool, validateEmbeddedConsole, writeReleaseChecksums, verifyReleaseAssets } from './native-release.mjs';
 
 const ARCHIVE_DOCUMENTS = ['LICENSE', 'README.md', 'README.zh-CN.md', 'docs/install.md',
   'docs/install-for-agents.md', 'docs/operations.md', 'docs/ops/sqlite-operations.md'];
@@ -102,7 +102,7 @@ test('tar and zip archives extract the exact payload with executable permission 
       (command, args, options) => execFileSync(command, args, { ...options, cwd: options.cwd ?? directory }));
     const extracted = path.join(directory, `${goos}-extracted`);
     fs.mkdirSync(extracted);
-    if (goos === 'windows') execFileSync('unzip', ['-q', path.join(directory, target.archive), '-d', extracted]);
+    if (goos === 'windows') runRequiredTool('unzip', () => execFileSync('unzip', ['-q', path.join(directory, target.archive), '-d', extracted]));
     else execFileSync('tar', ['--force-local', '-xzf', hasDriveLetterFixture ? target.archive : path.join(directory, target.archive),
       '-C', extracted], { cwd: directory });
     assert.deepEqual(fs.readdirSync(extracted, { recursive: true }).sort(), fs.readdirSync(staging, { recursive: true }).sort());

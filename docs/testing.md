@@ -183,8 +183,9 @@ Native release planning, archive payloads, manifest integrity and workflow order
 are repository self-tests in `scripts/native-release.test.mjs` and
 `scripts/release-plan.test.mjs`, discovered automatically. They do not build Go or
 launch browsers. Archive payload self-tests use GNU tar, zip and unzip, matching
-the Linux packaging runner. The builder and archive payload self-tests force local
-GNU tar paths, so a Windows drive-letter colon never requests a remote shell;
+the Linux packaging runner, and fail by name when a required tool is absent. The
+builder and archive payload self-tests force local GNU tar paths, so a Windows
+drive-letter colon never requests a remote shell;
 injected-command regressions retain the deterministic archive settings. Extracted executable permission
 checks run on Unix hosts, which can represent those permission bits; payload and checksum
 assertions run on every host. The tag workflow's **native** job runs `scripts/native-release.mjs`
