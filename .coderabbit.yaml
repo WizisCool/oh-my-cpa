@@ -51,19 +51,18 @@ reviews:
     docstrings:
       enabled: false
     # Unit-test generation stays on. The recipe below is the finishing touch this
-    # repository actually needs: its first principle is that context documents
-    # ship with the change that triggers them.
+    # repository actually needs: documentation the change invalidates is
+    # updated in the same change.
     custom:
-      - name: sync context documents
+      - name: stale context documents
         instructions: >-
-          Read the documentation map in AGENTS.md and update exactly the
-          documents this change triggers, in the same change: domain terms,
-          module map, data flow, background loops, schema, visual tokens,
-          commands, endpoints, environment variables, and defaults must match
-          the code on this branch rather than the intent of the change. Ignore
-          alternatives that were considered and rejected during the session.
-          Do not invent line numbers and do not reference files that no longer
-          exist. Technical prose stays in English, except README.zh-CN.md and
+          Flag documentation this change makes wrong and did not update: a
+          statement about an endpoint, environment variable, default value,
+          table name, page name, command or file path that moved while the
+          prose did not. Describe the adopted state rather than alternatives
+          that were considered and rejected during the session. Do not invent
+          line numbers and do not reference files that no longer exist.
+          Technical prose stays in English, except README.zh-CN.md and
           localized UI copy.
   pre_merge_checks:
     # A coverage percentage is not a meaningful target for a codebase whose
@@ -91,22 +90,17 @@ reviews:
         `errors.Is`; handlers return explicit status codes with a JSON `error`
         field (plus a stable machine-readable `code`, or `details`, where a
         refusal must be distinguished programmatically). Comments explain why in
-        English and never restate the
-        code. Unexported identifiers are lowerCamelCase; exported identifiers
-        are UpperCamelCase; JSON tags, DB columns, CPA fields and other external
-        contract names keep their required spelling. Booleans carry an
-        `is`/`has`/`can`/`should` prefix. Finally, check the change against the
-        documentation map in AGENTS.md and flag a missing update in this same
-        change.
+        English and never restate the code. JSON tags, DB columns, CPA fields
+        and other external contract names keep their required spelling.
     - path: 'internal/api/**'
       instructions: >-
         Console endpoints. Every response field must be explicitly allowlisted,
         so name any field that bypasses the allowlist. A new user-visible
         string is an i18n key rather than hardcoded copy; a shared frontend
         concept belongs in `web/src/types/` rather than in page-local helpers.
-        New routes, middleware, or data-flow stages belong in
-        `docs/architecture.md`, and stable machine-readable codes such as
-        capability denials and refused writes are part of that contract.
+        Flag a new route, middleware or data-flow stage whose documentation
+        was not updated, and stable machine-readable codes such as capability
+        denials and refused writes are part of that contract.
         Behavior changes need Go tests in the same package that fail when the
         behavior regresses, asserting the wire representation (status code, JSON
         fields, exact totals) rather than an internal approximation.
@@ -160,8 +154,8 @@ reviews:
         `prefers-reduced-motion`.
     - path: '**/*.md'
       instructions: >-
-        Context documents are co-deliverables of the change that triggers them.
-        Flag any statement the change invalidates: an endpoint, environment
+        Flag documentation this change makes wrong: any statement it
+        invalidates — an endpoint, environment
         variable, default value, table name, page name, command, or file path
         that moved while the prose did not. Verify each flagship claim against
         the implementation rather than against the intent of the change, and
@@ -172,10 +166,11 @@ reviews:
         intended exceptions.
     - path: 'docs/adr/**'
       instructions: >-
-        Accepted ADRs are frozen records: a decision that reverses an accepted
-        one is a new ADR that supersedes it, never an edit. Flag an edit that
-        rewrites an accepted decision, and flag a decision with real trade-offs
-        that the change makes without recording one.
+        Decision records. An ADR documents a consequential, hard-to-reverse
+        decision and its context; it is evidence, not a standing rule, and it
+        may be amended, superseded or deprecated. Flag a new ADR for a routine
+        choice that needs none, and flag an edit that reverses an accepted
+        decision without noting the reversal in its status.
     - path: 'migrations/**'
       instructions: >-
         Forward-only migrations, applied in filename order and one transaction
@@ -216,9 +211,9 @@ reviews:
         data directory, because SQLite access is serialized rather than retried.
 knowledge_base:
   code_guidelines:
-    # Read as review criteria: AGENTS.md states the agent contract and the
-    # documentation map, and the other three hold the invariants that the path
-    # instructions above refer to.
+    # Read as review criteria: AGENTS.md states the agent contract and the rule
+    # tiers, and the other three hold the invariants that the path instructions
+    # above refer to.
     filePatterns:
       - '**/AGENTS.md'
       - 'CONTEXT.md'

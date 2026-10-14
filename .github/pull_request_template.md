@@ -9,7 +9,7 @@ Leave the PR number out; the squash merge appends it.
 
 ## Documentation
 
-<!-- Name each context document updated per the map in AGENTS.md §2, or state why none is triggered. -->
+<!-- Name the documents this change made wrong and updated (AGENTS.md §7), or state that none is. -->
 
 ## Validation
 
@@ -25,5 +25,5 @@ Leave the PR number out; the squash merge appends it.
 
 - [ ] No API key, token, auth file or production data in the diff, the description or the screenshots.
 - [ ] New user-visible copy is in `web/src/i18n/index.tsx` and every catalog under `web/src/i18n/locales/`.
-- [ ] Schema changes arrive as a new migration; an architectural trade-off arrives as a new ADR.
+- [ ] Schema changes arrive as a new migration; a consequential, hard-to-reverse decision arrives as an ADR (AGENTS.md §4).
 - [ ] New API responses go through the `internal/api` DTO allowlists.

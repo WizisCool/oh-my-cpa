@@ -23,7 +23,7 @@ The second point has a constraint the first does not. A plugin publishes its log
 (CodeBuddy's plugin ships `https://cdn.jsdelivr.net/…/workbuddy/default.svg`), and this console cannot
 load that in the browser:
 
-- AGENTS.md §8 forbids a frontend resource that requires a CDN, and `README.md` promises no runtime CDN
+- AGENTS.md forbids a frontend resource that requires a CDN, and `README.md` promises no runtime CDN
   request; the SPA is embedded in the Go binary precisely so a deployment has no static-file
   dependency.
 - The console already serves itself under `Content-Security-Policy-Report-Only: … img-src 'self' data:
