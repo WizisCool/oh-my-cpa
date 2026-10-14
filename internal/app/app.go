@@ -215,7 +215,7 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 			handler.SetUpdater(updater.NewClient(cfg.Updater.URL, cfg.MasterKey), release.NewManifestClient(), dockerErr == nil)
 			// A console update ends the process that admitted it, so its outcome is
 			// collected here, by the process that replaced it.
-			go handler.RecordInterruptedUpdate(ctx)
+			handler.WatchInterruptedUpdate()
 		}
 
 		if db != nil {
@@ -482,6 +482,7 @@ func (a *App) Run(ctx context.Context) error {
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	a.handler.CloseBrowserRuns()
+	a.handler.CloseUpdateWatchers()
 	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
 	}
@@ -505,6 +506,7 @@ func (a *App) Close() error {
 		return nil
 	}
 	a.handler.CloseBrowserRuns()
+	a.handler.CloseUpdateWatchers()
 	// The fixture listens on a loopback socket, so it has to be closed with the
 	// database it describes.
 	if a.upstream != nil {

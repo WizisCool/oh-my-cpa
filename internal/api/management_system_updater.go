@@ -87,6 +87,30 @@ func (h *Handler) SetUpdater(manager UpdateManager, manifests ManifestSource, is
 	h.updater = manager
 	h.manifests = manifests
 	h.isContainerised = isContainerised
+	h.updateWatchContext, h.stopUpdateWatchers = context.WithCancel(context.Background())
+}
+
+// WatchInterruptedUpdate starts RecordInterruptedUpdate as a watcher CloseUpdateWatchers
+// waits for.
+func (h *Handler) WatchInterruptedUpdate() {
+	if h.updater == nil {
+		return
+	}
+	h.updateWatchers.Add(1)
+	go func() {
+		defer h.updateWatchers.Done()
+		h.RecordInterruptedUpdate(h.updateWatchContext)
+	}()
+}
+
+// CloseUpdateWatchers stops waiting for update outcomes and returns once no watcher can
+// still write. An outcome left unrecorded is picked up by the next process.
+func (h *Handler) CloseUpdateWatchers() {
+	if h == nil || h.stopUpdateWatchers == nil {
+		return
+	}
+	h.stopUpdateWatchers()
+	h.updateWatchers.Wait()
 }
 
 func updaterJobDTO(job *updater.Job) *SystemUpdaterJobDTO {
@@ -256,7 +280,7 @@ func (h *Handler) releaseStatus(ctx context.Context, product, runningVersion str
 // replaces this process first, so RecordInterruptedUpdate picks the outcome up in the
 // process that replaces it.
 func (h *Handler) recordUpdateOutcome(jobID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), updateJobWatchLimit)
+	ctx, cancel := context.WithTimeout(h.updateWatchContext, updateJobWatchLimit)
 	defer cancel()
 	ticker := time.NewTicker(h.updateJobPollInterval())
 	defer ticker.Stop()

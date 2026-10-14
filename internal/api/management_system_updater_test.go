@@ -349,6 +349,21 @@ func TestInterruptedConsoleUpdateIsRecordedByTheNextProcess(t *testing.T) {
 	}
 }
 
+func TestShutdownEndsTheWaitForAnUpdateOutcome(t *testing.T) {
+	fixture := newUpdaterFixture(t)
+	if status, body := fixture.apply(t, updater.ProductOMC); status != http.StatusAccepted {
+		t.Fatalf("status = %d %v", status, body)
+	}
+	fixture.handler.WatchInterruptedUpdate()
+
+	// The job never finishes; closing must still return, so the database can close
+	// after it with no watcher left to write.
+	fixture.handler.CloseUpdateWatchers()
+	if outcomes := fixture.audits(t, "system.update.completed"); len(outcomes) != 0 {
+		t.Fatalf("an unfinished job has no outcome to record: %+v", outcomes)
+	}
+}
+
 // The mock the browser probes and the typed client's contract suite answer with is
 // this corpus; certifying it here is what keeps those layers on the handler's wire.
 func TestSystemUpdaterSharedWireContract(t *testing.T) {

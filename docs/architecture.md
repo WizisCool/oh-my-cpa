@@ -2363,7 +2363,9 @@ Three invariants hold the design together:
   updater's last job from the moment the next process starts. That process starts while
   the job is still verifying it, and the updater then replaces itself, so the follow
   waits through unfinished stages and failed reads, for at most fifteen minutes. The
-  audit event is keyed by the job ID so the two paths cannot both record it.
+  audit event is keyed by the job ID so the two paths cannot both record it. Shutdown
+  ends both waits before the database closes (`Handler.CloseUpdateWatchers`); an outcome
+  left unrecorded is picked up by the next process.
 
 The updater role has one loop of its own, `Service.KeepLinked`: an installed updater
 lives outside the deployment's Compose project, so it follows Docker's container-start
