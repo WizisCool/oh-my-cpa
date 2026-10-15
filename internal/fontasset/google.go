@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Installing from Google Fonts is a download made by this process, never by the
@@ -102,15 +104,19 @@ func (g *GoogleInstaller) isAllowedHost(target *url.URL) bool {
 	case "fonts.gstatic.com", "fonts.gstatic.cn", "fonts.googleapis.com", "fonts.googleapis.cn":
 		return true
 	}
-	return host == strings.ToLower(g.base.Hostname()) || siteOf(host) == siteOf(strings.ToLower(g.base.Hostname()))
-}
-
-func siteOf(host string) string {
-	labels := strings.Split(host, ".")
-	if len(labels) <= 2 {
-		return host
+	baseHost := strings.ToLower(g.base.Hostname())
+	if host == baseHost {
+		return true
 	}
-	return strings.Join(labels[len(labels)-2:], ".")
+	// Private suffixes separate tenants just like ICANN suffixes separate sites.
+	// Unlisted local suffixes have no shared-site boundary; only the exact host is trusted.
+	suffix, isICANN := publicsuffix.PublicSuffix(baseHost)
+	if !isICANN && !strings.Contains(suffix, ".") {
+		return false
+	}
+	baseSite, baseErr := publicsuffix.EffectiveTLDPlusOne(baseHost)
+	targetSite, targetErr := publicsuffix.EffectiveTLDPlusOne(host)
+	return baseErr == nil && targetErr == nil && baseSite == targetSite
 }
 
 // Install downloads one family's regular and bold faces.

@@ -348,7 +348,7 @@ troubleshooting.
 - **Automatic config backups**: an encrypted copy of `config.yaml` before every change, restorable from the console.
 - **Encryption at rest**: stored credentials and raw usage messages are AES-GCM encrypted.
 - **Audited sensitive actions**: revealing keys, downloading auth files and exporting logs are written to the audit log, and refused if that write fails.
-- **Offline operation**: every asset is embedded in the binary; no CDN is contacted.
+- **Offline operation**: bundled assets are embedded in the binary; installed and uploaded fonts are stored and served by the deployment. The browser contacts no CDN.
 - **Personalization**: four interface languages, light and dark themes with custom palettes, interface and monospace fonts from a font library (bundled, uploaded or installed from Google Fonts and served by the console itself), a deployment time zone, and K/M/B or 万/亿 number units.
 
 </details>

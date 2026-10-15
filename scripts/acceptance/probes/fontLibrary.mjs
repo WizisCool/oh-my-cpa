@@ -85,6 +85,8 @@ export async function fontLibrary({ base, page, check }) {
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'System sans-serif' }).click();
   await until(() => preferences.omc_fonts?.ui === 'builtin:system-sans', { label: 'the interface font write' });
   check('the role is stored without the default it leaves alone', JSON.stringify(writes.at(-1)?.value) === '{"ui":"builtin:system-sans"}');
+  // The fixture receiving the write does not mean React has committed the font effect yet.
+  await until(async () => (await rootFont('--font-ui')).startsWith('system-ui'), { label: 'the interface font to repaint' });
   const painted = await page.evaluate(() => ({
     body: getComputedStyle(document.body).fontFamily,
     button: getComputedStyle(document.querySelector('.ant-btn')).fontFamily,

@@ -39,8 +39,10 @@ arrives in one of two ways:
   identity, which yields woff2 files cut into `unicode-range` slices, and downloads every
   file it names. Only regular and bold are installed, the two weights the console's type
   scale uses. Downloads are confined to Google's font hosts or the configured mirror's
-  site (`OMCPA_GOOGLE_FONTS_URL`), so a stylesheet cannot point the server at another
-  address.
+  registrable domain (`OMCPA_GOOGLE_FONTS_URL`), with public suffixes and private tenant
+  boundaries respected. Same-site subdomains are allowed; IP and local mirror hosts
+  require an exact hostname match. The same restriction applies to redirects, so a
+  stylesheet cannot point the server outside this boundary.
 
 Both are stored in SQLite (`fonts`, `font_faces`, migration 042) and served from
 `/fonts/{id}/faces/{faceId}`, immutable under their ids. The browser declares each face

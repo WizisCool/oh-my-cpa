@@ -153,11 +153,11 @@ components:
 
 Oh My CPA is a dedicated developer control plane for AI resources and proxy telemetry. Built upon an OpenCode-inspired minimalist console philosophy, the system delivers dense, honest, and high-frequency operational visibility without aesthetic clutter. It repudiates decorative gradients, glassmorphism, heavy shadows, and flying entrances in favor of strict terminal discipline.
 
-Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (`#121214` base and `#1c1c1f` elevated surface). Typography is universally monospaced across Latin, Cyrillic, and CJK characters, anchoring every token count, timestamp, and latency reading on stable tabular columns. The interface follows the doctrine of "Quiet chrome, loud data"—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.
+Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (`#121214` base and `#1c1c1f` elevated surface). Typography defaults to Sarasa Mono SC across Latin, Cyrillic, and CJK characters. Operators choose the interface and monospace roles separately; code and aligned data use the mono role with tabular numerals. The interface follows the doctrine of "Quiet chrome, loud data"—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.
 
 **Key Characteristics:**
 - **Terminal-Flat Structure**: Zero drop shadows (`box-shadow: none`), no rounded bubble aesthetics, crisp 1px borders.
-- **Monospace Everywhere**: Sarasa Mono SC, Berkeley Mono, and IBM Plex Mono stacks across labels, titles, inputs, and tabular numbers.
+- **Configurable Typography Roles**: Sarasa Mono SC is the default, with Berkeley Mono and IBM Plex Mono fallbacks. Interface text and code or aligned data use independently chosen UI and mono stacks.
 - **Quiet Chrome, Loud Data**: Dark charcoal scaffolding ensures that green, amber, red, and blue badges instantly telegraph system health.
 - **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them, and a JavaScript-only 160ms `scroll` token for wheel notches and scrolling keys gliding to where they would have jumped; hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
 

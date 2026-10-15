@@ -31,7 +31,7 @@ breathable spacing.
 | Principle | Meaning |
 | --- | --- |
 | Flat | `box-shadow: none` globally; borders carry all structure |
-| Monospace | All text uses the mono stack; tabular numerals for data |
+| Typography roles | Interface text uses the UI stack; code and aligned data use the mono stack, with tabular numerals |
 | Quiet chrome, loud data | UI scaffolding stays muted; status color is reserved for real state |
 | Semantic color only | Green/red/amber mean enabled/error/warning — never decoration |
 
@@ -776,9 +776,9 @@ four, because those are the two a reader places the window with. The label forma
 `HH:mm` within a day, `MM-DD` beyond it - which is the only place the window's extent is stated, and
 keeps the outermost label narrow enough to sit inside the card's gutter.
 
-**The legend is app-owned DOM.** G2's legend is built from its own type scale, so it would be the one
-place in the console not set in the mono stack. It also has to be the same colour assignment the usage
-list uses, which is only guaranteed if one ranked list produces both.
+**The legend is app-owned DOM.** It follows the console's type scale and chosen interface font.
+It also has to be the same colour assignment the usage list uses, which is only guaranteed if one
+ranked list produces both.
 
 **The ring's centre is DOM**, and it is the window's own total rather than the KPI tile's. The two read
 on different cadences, so borrowing the tile's number would let the centre disagree with the slices

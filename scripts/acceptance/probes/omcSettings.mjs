@@ -198,25 +198,28 @@ export async function omcSettings({ base, page, check, context, expectProblem })
 
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
-  //
-  // Eleven rows include the deployment timezone, token style, TPS mode, model icons in request list,
-  // the two automatic quota refresh triggers, language, scroll smoothing and appearance: the mode is the setting an operator changes often,
-  // and the two palettes are the considered choices behind it. A single "theme" row could only be one of those.
+  const expectedLabels = [
+    'Time zone',
+    'Token unit style',
+    'TPS calculation mode',
+    'Model icons in request list',
+    'Scheduled quota refresh',
+    'Refresh after a quota resets',
+    'Theme mode',
+    'Light-mode palette',
+    'Dark-mode palette',
+    'Interface font',
+    'Monospace font',
+    'Font library',
+    'Language',
+    'Smooth scrolling',
+  ];
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 11
+    labels.length === expectedLabels.length
       && new Set(labels).size === labels.length
-      && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
-      && labels.some((label) => /TPS calculation mode|TPS 计算方式/.test(label))
-      && labels.some((label) => /Model icons in request list|请求列表模型图标/.test(label))
-      && labels.some((label) => /Scheduled quota refresh|定时刷新额度/.test(label))
-      && labels.some((label) => /Refresh after a quota resets|额度重置后自动刷新/.test(label))
-      && labels.some((label) => /Theme mode|主题模式/.test(label))
-      && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
-      && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))
-      && labels.some((label) => /Language|界面语言/.test(label))
-      && labels.some((label) => /Smooth scrolling|平滑滚动/.test(label)),
+      && expectedLabels.every((label) => labels.includes(label)),
     `labels=${labels.join(' | ')}`,
   );
   // The chart grouping belongs to the panels that plot it, not here: a second control on a settings
