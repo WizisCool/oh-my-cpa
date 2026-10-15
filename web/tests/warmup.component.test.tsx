@@ -12,11 +12,12 @@ beforeEach(() => { window.localStorage.setItem('omc-lang', 'en');
  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
 });
-function mount(children: React.ReactNode) {
+function mount(children: React.ReactNode, { isSettingsFailing = false } = {}) {
   const requests: { method: string; path: string; body: Record<string, unknown> }[] = [];
   const fixture = createWarmupFixture();
   vi.stubGlobal('fetch', async (path: string, options: RequestInit) => {
     requests.push({ method: options.method ?? 'GET', path, body: options.body ? JSON.parse(options.body as string) : {} });
+    if (isSettingsFailing && path.endsWith('/warmup/settings')) return new Response(JSON.stringify({ code: 'warmup_unavailable', error: 'warmup_unavailable' }), { status: 500 });
     const result = fixture(new URL(path, 'http://127.0.0.1'), options.method ?? 'GET', options.body as string);
     return new Response(JSON.stringify('json' in result ? result.json : result), { status: 'status' in result ? result.status : 200 });
   });
@@ -86,5 +87,27 @@ it('reports a manual run as a toast and keeps the durable last result in the sta
   await within(last).findByText('Warmup failed');
   expect(within(last).getByText('The provider refused the request because of rate or quota limits.')).toBeTruthy();
   expect(within(last).queryByText('Quota window started')).toBeNull();
+  surface.unmount(); surface.client.clear();
+});
+
+it('refuses to save a switch to the default it could not read', async () => {
+  const surface = mount(<CredentialWarmup authIndex="exact-claude" />, { isSettingsFailing: true });
+  await screen.findByTestId('warmup-status');
+  const key = ['quota-warmup-credential', 'exact-claude'];
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, inherit: false, policy: { ...previous.policy, daily_enabled: true } } : previous));
+  await screen.findByRole('switch', { name: 'Warm up daily at a set time' });
+  fireEvent.click(screen.getByText('Default'));
+  expect((await screen.findAllByText('Could not read warmup settings')).length).toBeGreaterThan(0);
+  expect(screen.getByRole('button', { name: /Retry/ })).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  surface.unmount(); surface.client.clear();
+});
+
+it('names the time zone of an inherited daily rule', async () => {
+  const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
+  await screen.findByTestId('warmup-status');
+  const key = ['quota-warmup-credential', 'exact-claude'];
+  act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, timezone: 'Asia/Kuala_Lumpur', policy: { ...previous.policy, daily_enabled: true } } : previous));
+  await screen.findByText('Daily at 06:00 (Asia/Kuala_Lumpur)');
   surface.unmount(); surface.client.clear();
 });

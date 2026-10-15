@@ -1,10 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"sync/atomic"
+	"encoding/json"
+	"net/http"
 	"testing"
-	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
@@ -52,21 +53,36 @@ func TestWarmupActivationTellsSlidingFromFrozenCodexWindow(t *testing.T) {
 func TestWarmupSecondClickLeavesPendingRunConfirming(t *testing.T) {
 	fixture := &warmupFixture{isActivationDelayed: true}
 	handler := newWarmupHandler(t, fixture)
-	ctx := context.Background()
-	revision := credentialWarmupRevision(t, handler)
-	var clock atomic.Int64
-	clock.Store(handler.now().UnixMilli())
-	handler.nowFn = func() time.Time { return time.UnixMilli(clock.Load()) }
-	first, err := handler.executeWarmup(ctx, "exact-claude", "manual-first-click", revision, true)
-	if err != nil || first.Status != "pending" {
-		t.Fatalf("first: %+v %v", first, err)
+	caller, baseURL := warmupHTTPClient(t, handler)
+	route := baseURL + "/api/v1/management/quota/warmup/credentials/exact-claude"
+	response, err := caller.Get(route)
+	if err != nil {
+		t.Fatal(err)
 	}
-	clock.Add(1)
-	second, err := handler.executeWarmup(ctx, "exact-claude", "manual-second-click", revision, true)
-	if err != nil || second.Status != "skipped" || second.Reason != "activation_pending" {
-		t.Fatalf("second: %+v %v", second, err)
+	var credential struct {
+		Revision string `json:"revision"`
 	}
-	state, err := handler.repo.ReadWarmupState(ctx, "default", "exact-claude")
+	_ = json.NewDecoder(response.Body).Decode(&credential)
+	_ = response.Body.Close()
+	run := func(requestID string) (int, warmup.Result) {
+		t.Helper()
+		body, _ := json.Marshal(map[string]any{"request_id": requestID, "revision": credential.Revision, "confirmed": true})
+		response, err := caller.Post(route+"/run", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		var result warmup.Result
+		_ = json.NewDecoder(response.Body).Decode(&result)
+		return response.StatusCode, result
+	}
+	if status, first := run("manual-first-click"); status != http.StatusOK || first.Status != "pending" || first.Reason != "activation_pending" {
+		t.Fatalf("first: %d %+v", status, first)
+	}
+	if status, second := run("manual-second-click"); status != http.StatusOK || second.Status != "skipped" || second.Reason != "activation_pending" {
+		t.Fatalf("second: %d %+v", status, second)
+	}
+	state, err := handler.repo.ReadWarmupState(context.Background(), "default", "exact-claude")
 	if err != nil || state.LastResult == nil || state.LastResult.Status != "pending" || state.LastResult.RequestID != "manual-first-click" {
 		t.Fatalf("pending run was rewritten: %+v %v", state.LastResult, err)
 	}

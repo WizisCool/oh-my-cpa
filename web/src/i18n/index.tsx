@@ -43,7 +43,7 @@ const DICT: Record<string, [string, string]> = {
   'warmup.reset_all': ["五小时与每周", "Five-hour and weekly"],
   'warmup.reset_weekly': ["仅每周", "Weekly only"],
   'warmup.model_hint': ["只用于发送这一条请求，选最轻量的模型即可。", "Only used for this one request; the lightest model is enough."],
-  'warmup.summary_daily': ["每天 {time} 预热", "Daily at {time}"],
+  'warmup.summary_daily': ["每天 {time} 预热（{zone}）", "Daily at {time} ({zone})"],
   'warmup.summary_reset_all': ["任一窗口重置后立即预热", "As soon as either window resets"],
   'warmup.summary_reset_weekly': ["每周窗口重置后立即预热", "As soon as the weekly window resets"],
   'warmup.summary_none': ["不自动预热", "No automatic warmup"],

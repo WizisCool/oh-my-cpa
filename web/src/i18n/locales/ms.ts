@@ -38,7 +38,7 @@ export const MS: Readonly<Record<string, string>> = {
   "warmup.reset_all": "Lima jam dan mingguan",
   "warmup.reset_weekly": "Mingguan sahaja",
   "warmup.model_hint": "Hanya digunakan untuk permintaan ini; model paling ringan sudah memadai.",
-  "warmup.summary_daily": "Setiap hari pada {time}",
+  "warmup.summary_daily": "Setiap hari pada {time} ({zone})",
   "warmup.summary_reset_all": "Sebaik sahaja mana-mana tetingkap ditetapkan semula",
   "warmup.summary_reset_weekly": "Sebaik sahaja tetingkap mingguan ditetapkan semula",
   "warmup.summary_none": "Tiada pemanasan automatik",

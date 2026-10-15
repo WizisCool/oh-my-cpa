@@ -38,7 +38,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "warmup.reset_all": "五小時與每週",
   "warmup.reset_weekly": "僅每週",
   "warmup.model_hint": "只用於傳送這一則請求，選最輕量的模型即可。",
-  "warmup.summary_daily": "每天 {time} 預熱",
+  "warmup.summary_daily": "每天 {time} 預熱（{zone}）",
   "warmup.summary_reset_all": "任一視窗重設後立即預熱",
   "warmup.summary_reset_weekly": "每週視窗重設後立即預熱",
   "warmup.summary_none": "不自動預熱",

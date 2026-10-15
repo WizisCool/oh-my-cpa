@@ -2,7 +2,8 @@ import React from 'react';
 import { App, Button, Input, Segmented, Select, Space, Tabs, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { useT, type TFunc } from '../../i18n';
+import { useI18n, useT, type TFunc } from '../../i18n';
+import { languageLocale } from '../../i18n/language';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, isWarmupPolicyEnabled, type WarmupPolicy, type WarmupResult, type WarmupSettings, type WarmupCredential } from '../../types/warmup';
@@ -39,8 +40,8 @@ function safeError(error: unknown, t: TFunc): string {
   const code = error instanceof ApiError ? error.message : '';
   return code in REASON_KEYS ? t(REASON_KEYS[code]) : t('warmup.load_failed');
 }
-function formatInstant(ms: number, timeZone: string): string {
-  return new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
+function formatInstant(ms: number, timeZone: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { timeZone, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
 }
 function addHours(clock: string, hours: number): string {
   const [hour, minute] = clock.split(':').map(Number);
@@ -48,9 +49,9 @@ function addHours(clock: string, hours: number): string {
 }
 
 /** The rules a policy runs, each as one plain sentence; empty when nothing is automatic. */
-function describePolicy(policy: WarmupPolicy, t: TFunc): string[] {
+function describePolicy(policy: WarmupPolicy, timezone: string, t: TFunc): string[] {
   const rules: string[] = [];
-  if (policy.daily_enabled) rules.push(t('warmup.summary_daily', { time: policy.daily_time }));
+  if (policy.daily_enabled) rules.push(t('warmup.summary_daily', { time: policy.daily_time, zone: timezone }));
   if (policy.reset_mode !== 'off') rules.push(t(`warmup.summary_reset_${policy.reset_mode}`));
   return rules;
 }
@@ -99,9 +100,9 @@ function RuleEditor({ policy, onChange, models, timezone, disabled }: {
 }
 
 /** An inherited policy reads as what it does, not as a form the operator cannot touch. */
-function RuleSummary({ policy, provider }: { policy: WarmupPolicy; provider: string }) {
+function RuleSummary({ policy, provider, timezone }: { policy: WarmupPolicy; provider: string; timezone: string }) {
   const t = useT();
-  const rules = describePolicy(policy, t);
+  const rules = describePolicy(policy, timezone, t);
   return <div className={styles['summary']}>
     <ul className={styles['summary-rules']}>
       {rules.length ? rules.map(rule => <li key={rule}>{rule}</li>) : <li>{t('warmup.summary_none')}</li>}
@@ -112,7 +113,7 @@ function RuleSummary({ policy, provider }: { policy: WarmupPolicy; provider: str
 }
 
 function StatusCard({ credential, result }: { credential: WarmupCredential; result?: WarmupResult }) {
-  const t = useT();
+  const t = useT(); const locale = languageLocale(useI18n().lang);
   const isOn = isWarmupPolicyEnabled(credential.policy);
   const isConfirming = result?.status === 'pending' || result?.status === 'executing';
   const isPaused = isOn && Boolean(credential.reason && PAUSING_REASONS.has(credential.reason));
@@ -127,13 +128,13 @@ function StatusCard({ credential, result }: { credential: WarmupCredential; resu
       {detail && <Text type="secondary" className={styles['status-detail']}>{detail}</Text>}
     </div>
     <dl className={styles['status-facts']}>
-      {isOn && credential.next_at_ms && <div><dt>{t('warmup.row_next')}</dt><dd>{formatInstant(credential.next_at_ms, credential.timezone)}</dd></div>}
+      {isOn && credential.next_at_ms && <div><dt>{t('warmup.row_next')}</dt><dd>{formatInstant(credential.next_at_ms, credential.timezone, locale)}</dd></div>}
       {result && !isConfirming && <div data-testid="warmup-last-result">
         <dt>{t('warmup.row_last')}</dt>
         <dd>
           <span className={styles['last-line']}>
             <StatusLabel tone={lastTone}>{t(`warmup.status_${result.status}`)}</StatusLabel>
-            <span className={styles['last-meta']}>{formatInstant(result.finished_at_ms ?? result.started_at_ms, credential.timezone)} · {t(`warmup.trigger_${result.trigger}`)}</span>
+            <span className={styles['last-meta']}>{formatInstant(result.finished_at_ms ?? result.started_at_ms, credential.timezone, locale)} · {t(`warmup.trigger_${result.trigger}`)}</span>
           </span>
           {result.status !== 'activated' && result.reason && <span className={styles['last-reason']}>{warmupReason(result.reason, t)}</span>}
         </dd>
@@ -239,13 +240,15 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
           <Segmented size="small" aria-label={t('warmup.policy_source')} value={values.inherit ? 'inherit' : 'override'} disabled={isBusy}
             options={[{ value: 'inherit', label: t('warmup.inherit') }, { value: 'override', label: t('warmup.override') }]}
             onChange={value => setDraft({ inherit: value === 'inherit', policy: { ...values.policy }, revision: draft?.revision ?? credential.revision })} />} />
-        {values.inherit ? (isInheritDraft && !defaultsQuery.data ? <Text type="secondary">{t('common.loading')}</Text>
-          : <RuleSummary policy={isInheritDraft ? defaultsQuery.data!.providers[credential.provider] : credential.policy} provider={credential.provider} />) :
+        {values.inherit ? (isInheritDraft && !defaultsQuery.data ? (defaultsQuery.isError
+          ? <LoadFailure title={t('warmup.load_failed')} error={safeError(defaultsQuery.error, t)} onRetry={() => void defaultsQuery.refetch()} />
+          : <Text type="secondary">{t('common.loading')}</Text>)
+          : <RuleSummary policy={isInheritDraft ? defaultsQuery.data!.providers[credential.provider] : credential.policy} provider={credential.provider} timezone={credential.timezone} />) :
           <RuleEditor policy={values.policy} models={credential.models} timezone={credential.timezone} disabled={isBusy}
             onChange={policy => setDraft({ inherit: false, policy, revision: draft?.revision ?? credential.revision })} />}
         {isDirty && <div className={styles['actions']}>
           <Button size="small" onClick={() => setDraft(undefined)} disabled={saveMutation.isPending}>{t('common.cancel')}</Button>
-          <Button size="small" type="primary" onClick={save} loading={saveMutation.isPending} disabled={!values.inherit && !canSaveWarmupPolicy(values.policy) || isDemoMode()}>{t('common.save')}</Button>
+          <Button size="small" type="primary" onClick={save} loading={saveMutation.isPending} disabled={!values.inherit && !canSaveWarmupPolicy(values.policy) || isInheritDraft && !defaultsQuery.data || isDemoMode()}>{t('common.save')}</Button>
         </div>}
       </div>
     </> : <Text>{t('common.loading')}</Text>}
