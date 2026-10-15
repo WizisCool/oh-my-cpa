@@ -15,6 +15,7 @@ func TestFontLibraryStoresFacesAndKeepsRoleReferencesResolvable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { database.Close() })
 	repo := New(database)
 	font, err := repo.CreateFont(ctx, " Inter ", FontSourceGoogle, []fontasset.Face{
 		{WeightMin: 400, WeightMax: 700, UnicodeRange: "U+0-FF", Format: fontasset.FormatWOFF2, Content: []byte("wOF2-latin")},
