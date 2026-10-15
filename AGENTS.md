@@ -112,7 +112,7 @@ Rules that keep the gates honest:
 
 ## 7. Documentation
 
-Update the documents your change makes wrong, in the same change. That is the whole requirement — accuracy, not ceremony. `pnpm check-docs` catches the mechanical half: backticked paths must resolve, retired references are rejected, and non-archival documents carry no absolute line numbers (cite a file or symbol instead).
+Update the documents your change makes wrong, in the same change. That is the whole requirement — accuracy, not ceremony. `pnpm check-docs` catches the mechanical half: maintained documents must not cite unallowlisted missing paths or retired references, archival documents may retain explicitly listed historical paths, and non-archival documents carry no absolute line numbers (cite a file or symbol instead).
 
 Where things live, when you need to check or update them:
 
