@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -56,7 +57,16 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, *Engine) {
 		networks:   map[string]bool{},
 		crashing:   map[string]bool{},
 	}
-	socketPath := filepath.Join(t.TempDir(), "docker.sock")
+	// A unix-socket path is capped at 107 characters on Windows and bind fails past the cap,
+	// while t.TempDir() nests the test name under the OS temp root - long enough to overrun it
+	// on a machine whose TEMP is deep. A short directory of our own keeps the fake daemon
+	// listening everywhere, rather than only where TEMP happens to be short.
+	socketDir, err := os.MkdirTemp("", "omc-updater-test-")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
+	socketPath := filepath.Join(socketDir, "docker.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
