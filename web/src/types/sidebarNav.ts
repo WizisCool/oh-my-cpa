@@ -69,7 +69,11 @@ export function parseHiddenNavKeys(raw: unknown): string[] | undefined {
   return [...keys];
 }
 
-/** The hidden set as a lookup, sorted so two documents that name the same keys compare equal. */
+/**
+ * The hidden set as the lookup a filter wants. The stored document is what `hideNavKey` keeps
+ * sorted, so that two documents naming the same keys compare equal; this is only the shape the
+ * rail's filter reads.
+ */
 export function hiddenNavSet(keys: readonly string[]): ReadonlySet<string> {
   return new Set(keys);
 }

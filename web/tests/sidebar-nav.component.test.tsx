@@ -146,4 +146,17 @@ describe('sidebar visibility panel', () => {
     expect(writes[0]).toEqual({ key: 'omc_nav_hidden', value: [] });
     expect(agent.getAttribute('aria-checked')).toBe('true');
   });
+
+  it('does not report an entry the rail no longer draws as hidden', async () => {
+    // The stored document is input, not state: a key whose destination is gone - a plugin page
+    // whose plugin stopped - is not an entry out of the rail, so the row says as much and the
+    // reset stays inert rather than offering to put back something that was never taken away.
+    stored.omc_nav_hidden = ['/plugin-pages/gone/0'];
+    const { container } = mount();
+    expect(container.querySelector('[data-testid="sidebar-nav-settings"] .settings-toggle-desc')?.textContent)
+      .toBe('Every entry is shown');
+    await openPanel();
+    expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('switch', { name: 'Agent' }).getAttribute('aria-checked')).toBe('true');
+  });
 });

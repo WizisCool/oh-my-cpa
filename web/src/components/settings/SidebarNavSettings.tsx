@@ -60,6 +60,14 @@ export const SidebarNavSettings: React.FC = () => {
     staleTime: 60_000,
   });
   const navGroups = React.useMemo(() => buildNavGroups(collectPluginPages(pluginList?.plugins)), [pluginList]);
+  // The stored document can name a key the current model does not draw - a plugin page whose
+  // plugin stopped, for one - and such a key is not an entry the operator took out of the rail.
+  // The row and the panel's reset both count what the rail would draw, so neither reports a
+  // hidden entry that is not there, and the two cannot disagree about whether anything is hidden.
+  const hiddenCount = React.useMemo(() => {
+    const drawn = new Set(navGroups.flatMap((group) => group.items.map((entry) => entry.key)));
+    return hidden.filter((key) => drawn.has(key)).length;
+  }, [hidden, navGroups]);
 
   const canWrite = ready;
   return (
@@ -67,7 +75,7 @@ export const SidebarNavSettings: React.FC = () => {
       <SectionHeading className="settings-group-head" title={t('omc.section_sidebar')} />
       <SettingRow
         label={t('omc.sidebar_entries')}
-        description={hidden.length > 0 ? t('omc.sidebar_hidden_count', { n: hidden.length }) : t('omc.sidebar_all_shown')}
+        description={hiddenCount > 0 ? t('omc.sidebar_hidden_count', { n: hiddenCount }) : t('omc.sidebar_all_shown')}
         control={<Button onClick={() => setIsPanelOpen(true)}>{t('omc.sidebar_manage')}</Button>}
       />
       <SidebarNavPanel
@@ -75,7 +83,7 @@ export const SidebarNavSettings: React.FC = () => {
         groups={navGroups}
         isHidden={isHidden}
         canWrite={canWrite}
-        hasHidden={hidden.length > 0}
+        hasHidden={hiddenCount > 0}
         toggle={toggle}
         showAll={showAll}
         onClose={() => setIsPanelOpen(false)}

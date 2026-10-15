@@ -17,7 +17,6 @@ export interface NavVisibility {
   isHidden: (key: string) => boolean;
   /** True once the stored set has been read, so a caller can hold a write until it has. */
   ready: boolean;
-  /** Hide one entry, showing every path to the change. */
   toggle: (key: string, visible: boolean) => void;
   /** Put every entry back. */
   showAll: () => void;
