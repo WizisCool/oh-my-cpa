@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -36,6 +36,31 @@ async function runCheck() {
 }
 
 /**
+ * Writes a file, riding out a transient filesystem failure, and reads the bytes back.
+ *
+ * Windows reports a path another process holds open as an unnamed error (`UNKNOWN`, errno
+ * -4094). The gate met it once in the restore below: a deliberately broken dataset stayed in
+ * the worktree, and every later command reported a defect the harness had created. Retrying
+ * and reading the bytes back costs a moment of scaffolding, and turns that silence into
+ * either a landed write or a failure that names itself.
+ */
+const TRANSIENT_WRITE_CODES = new Set(['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES']);
+const WRITE_ATTEMPTS = 10;
+
+async function writeFileResilient(path, content) {
+  for (let attempt = 1; attempt <= WRITE_ATTEMPTS; attempt += 1) {
+    try {
+      await writeFile(path, content);
+      if ((await readFile(path, 'utf8')) === content) return;
+    } catch (error) {
+      if (!TRANSIENT_WRITE_CODES.has(error.code)) throw error;
+    }
+    await new Promise((settle) => setTimeout(settle, 25 * attempt));
+  }
+  throw new Error(`could not write ${relative(root, path)} after ${WRITE_ATTEMPTS} attempts; the worktree may hold a modified file`);
+}
+
+/**
  * Runs the check against a modified copy of one file, restoring it whatever happens.
  *
  * The restore is in a finally block rather than after the assertions: a failing
@@ -46,10 +71,10 @@ async function runCheck() {
 async function withModifiedFile(path, mutate, assertion) {
   const original = await readFile(path, 'utf8');
   try {
-    await writeFile(path, await mutate(original));
+    await writeFileResilient(path, await mutate(original));
     await assertion(await runCheck());
   } finally {
-    await writeFile(path, original);
+    await writeFileResilient(path, original);
   }
 }
 
