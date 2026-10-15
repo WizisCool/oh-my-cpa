@@ -557,7 +557,7 @@ refused. The server-side demo security classification is unchanged; ADR 0092 doc
 ## Credential window warmup
 
 Configure provider defaults from OAuth management's Warmup settings, or a complete
-credential override from its Quota tab. Reset mode is Off, Weekly, or Weekly and five-hour.
+credential override from its Window warmup tab. Reset mode is Off, Weekly, or Weekly and five-hour.
 Daily warmup defaults off with 06:00 as its editable time in the effective OMC timezone.
 Choose an available model; Claude's available Haiku models are listed first. Changing a
 model never silently selects a replacement. Saving an enabled policy authorizes automatic
@@ -587,8 +587,10 @@ evidence. No activation observed is a neutral historical fact, while absent bill
 reads Unknown and pauses requests. Current reasons distinguish active windows, missing quota
 and billing refusals. An unsupported response pauses automatic requests for the selected
 model until a confirmed recheck succeeds or an available replacement model is explicitly
-selected. Rechecks still obey unresolved-outcome suppression. Manual outcomes stay in that section
-without a duplicate toast. Saving credential fields keeps a separate warmup draft open.
+selected. Rechecks still obey unresolved-outcome suppression. Manual actions report an outcome
+through a toast; sent requests also update the durable last result in the Window warmup tab.
+Warm up now opens its confirmation on both HTTP and HTTPS deployments. Switching tabs or
+saving credential fields keeps a separate warmup draft open.
 
 A consuming request is recorded before it is sent. If pre-send revalidation refuses the
 request, its provisional cycle and daily identities are restored. A temporary startup

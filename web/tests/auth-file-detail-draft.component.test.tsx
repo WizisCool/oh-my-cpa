@@ -49,8 +49,8 @@ function mountDetail(holdSave?: Promise<void>) {
     const [shouldSuspend, setShouldSuspend] = React.useState(false);
     updateExternalDraft = setHasDraft;
     suspendDraftRemoval = () => React.startTransition(() => { setHasDraft(false); setShouldSuspend(true); });
-    return <React.Suspense fallback={<span>Draft update pending</span>}><AuthFileDetailDrawer file={FILE} open canEdit hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
-      quotaContent={<label>Warmup draft<input aria-label="Warmup draft" value={warmupDraft} onChange={event => { setWarmupDraft(event.target.value); setHasDraft(Boolean(event.target.value)); }} /></label>} /><RenderGate shouldSuspend={shouldSuspend} /></React.Suspense>;
+    return <React.Suspense fallback={<span>Draft update pending</span>}><AuthFileDetailDrawer file={FILE} open canEdit initialSection="warmup" hasExternalDraft={hasDraft} onClose={onClose} onSaved={onSaved} onDownload={() => {}}
+      warmupContent={<label>Warmup draft<input aria-label="Warmup draft" value={warmupDraft} onChange={event => { setWarmupDraft(event.target.value); setHasDraft(Boolean(event.target.value)); }} /></label>} /><RenderGate shouldSuspend={shouldSuspend} /></React.Suspense>;
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const surface = render(<React.StrictMode><App><QueryClientProvider client={client}><I18nProvider><Harness /></I18nProvider></QueryClientProvider></App></React.StrictMode>);
@@ -59,10 +59,10 @@ function mountDetail(holdSave?: Promise<void>) {
     suspendDraftRemoval: () => suspendDraftRemoval(), releaseDraftRemoval };
 }
 async function editWarmupAndOpenConfiguration() {
-  fireEvent.change(await screen.findByRole('textbox', { name: 'Warmup draft' }), { target: { value: 'Unsaved warmup policy' } });
+  fireEvent.change(await screen.findByLabelText('Warmup draft'), { target: { value: 'Unsaved warmup policy' } });
   fireEvent.click(screen.getByRole('tab', { name: 'Configuration' }));
-  const note = await screen.findByRole('textbox', { name: 'Note' });
-  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Prefix' }) as HTMLInputElement).disabled).toBe(false));
+  const note = await screen.findByLabelText('Note');
+  await waitFor(() => expect((screen.getByLabelText('Prefix') as HTMLInputElement).disabled).toBe(false));
   await waitFor(() => expect((note as HTMLTextAreaElement).value).toBe(FILE.note));
   return note;
 }
@@ -77,14 +77,13 @@ it('keeps a warmup draft when saving actual credential field changes', async () 
   await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
   expect(surface.onClose).not.toHaveBeenCalled();
   expect(surface.writes).toHaveLength(1);
-  fireEvent.click(screen.getByRole('tab', { name: 'Quota' }));
-  expect((await screen.findByRole('textbox', { name: 'Warmup draft' }) as HTMLInputElement).value).toBe('Unsaved warmup policy');
+  expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
   surface.unmount(); surface.client.clear();
 });
 it('keeps a warmup draft when normalized field edits produce an empty patch', async () => {
   const surface = mountDetail();
   await editWarmupAndOpenConfiguration();
-  const excludedModels = screen.getByRole('textbox', { name: 'Excluded Models' });
+  const excludedModels = screen.getByLabelText('Excluded Models');
   fireEvent.change(excludedModels, { target: { value: '  \n  ' } });
   const button = screen.getByRole('button', { name: 'Save Fields' });
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
@@ -101,8 +100,8 @@ it('rechecks the latest external draft flag when an in-flight field save complet
   const surface = mountDetail(holdSave);
   try {
     fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
-    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Prefix' }) as HTMLInputElement).disabled).toBe(false));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Note' }), { target: { value: 'Saved concurrently' } });
+    await waitFor(() => expect((screen.getByLabelText('Prefix') as HTMLInputElement).disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Saved concurrently' } });
     const saveButton = screen.getByRole('button', { name: 'Save Fields' });
     await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(saveButton);
@@ -133,8 +132,7 @@ it('uses committed draft state when a concurrent draft removal suspends during a
     releaseSave();
     await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
     expect(surface.onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('tab', { name: 'Quota' }));
-    expect((await screen.findByRole('textbox', { name: 'Warmup draft' }) as HTMLInputElement).value).toBe('Unsaved warmup policy');
+    expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
   } finally {
     surface.unmount(); surface.client.clear(); releaseSave(); surface.releaseDraftRemoval();
   }

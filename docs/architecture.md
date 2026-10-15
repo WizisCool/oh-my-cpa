@@ -830,8 +830,10 @@ global OAuth exclusions share a separate Model Rules Drawer, with independent
 section drafts; switching provider or closing cannot discard an unsaved section
 without a guard. Its names and brand marks match the provider filter tabs. `CredentialQuotaBody` is the single quota renderer used by the
 workspace and its detail panel. The list always renders a compact quota summary;
-the Quota tab always renders the full quota body. Configuration and Models are
-separate tabs with query eligibility bound to the selected tab. The configuration
+the Quota tab always renders the full quota body. Codex and Claude credentials expose
+a separate Window warmup tab for rules, status and confirmed manual runs. Warmup drafts
+survive tab switches. Configuration and Models are separate tabs with query eligibility
+bound to the selected tab. The configuration
 form remains mounted so drafts survive tab switches; its dirty-close guard applies
 to the entire Drawer. Credential identity includes the auth index when resetting
 form sessions and caching models. Historical density URL values and preference

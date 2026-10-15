@@ -33,7 +33,7 @@ export const MS: Readonly<Record<string, string>> = {
   "warmup.rule_daily": "Panaskan setiap hari pada masa ditetapkan",
   "warmup.daily_hint": "Tetingkap lima jam berjalan {start}–{end} ({zone})",
   "warmup.rule_reset": "Panaskan sebaik sahaja tetingkap ditetapkan semula",
-  "warmup.reset_hint": "Tetingkap seterusnya bermula sebaik sahaja yang terakhir tamat, tanpa jurang terbiar.",
+  "warmup.reset_hint": "Selepas kuota ditetapkan semula, hantar satu permintaan pemanasan secara automatik untuk memulakan tetingkap baharu tanpa menunggu penggunaan anda yang seterusnya.",
   "warmup.reset_scope": "Tetingkap",
   "warmup.reset_all": "Lima jam dan mingguan",
   "warmup.reset_weekly": "Mingguan sahaja",

@@ -72,16 +72,26 @@ it('leads with what the automation is doing and why it is paused', async () => {
   surface.unmount(); surface.client.clear();
 });
 
-it('reports a manual run as a toast and keeps the durable last result in the status', async () => {
+it.each(['secure', 'http', 'without-crypto'])('confirms a manual run on %s and keeps its durable result', async origin => {
+  if (origin === 'http') vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  if (origin === 'without-crypto') vi.stubGlobal('crypto', undefined);
   const surface = mount(<CredentialWarmup authIndex="exact-claude" />);
   const runButton = await screen.findByRole('button', { name: 'Warm up now' });
   fireEvent.click(runButton);
   const dialog = await screen.findByRole('dialog');
+  expect(surface.requests.filter(request => request.method === 'POST')).toHaveLength(0);
+  expect(within(dialog).getByText(/claude-haiku-test/)).toBeTruthy();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Warm up now' }));
+  const notification = await screen.findByRole('status');
+  expect(within(notification).getByText('Quota window started')).toBeTruthy();
+  expect(screen.getAllByRole('status')).toHaveLength(1);
   const last = await screen.findByTestId('warmup-last-result');
   expect(within(last).getByText('Quota window started')).toBeTruthy();
   expect(within(last).getByText(/Manual/)).toBeTruthy();
-  expect(surface.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+  const runs = surface.requests.filter(request => request.method === 'POST');
+  expect(runs).toHaveLength(1);
+  expect(runs[0].body).toEqual({ confirmed: true, request_id: expect.any(String), revision: 'wire-revision' });
+  expect((runs[0].body.request_id as string).length).toBeGreaterThanOrEqual(8);
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous && previous.state.last_result ? { ...previous, state: { ...previous.state, last_result: { ...previous.state.last_result, request_id: 'later-automatic-run', trigger: 'reset', status: 'failed', reason: 'rate_limited' } } } : previous));
   await within(last).findByText('Warmup failed');

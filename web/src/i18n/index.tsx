@@ -38,7 +38,7 @@ const DICT: Record<string, [string, string]> = {
   'warmup.rule_daily': ["每天定时预热", "Warm up daily at a set time"],
   'warmup.daily_hint': ["五小时窗口 {start} 开始，{end} 重置（{zone}）", "The five-hour window runs {start}–{end} ({zone})"],
   'warmup.rule_reset': ["窗口重置后立即预热", "Warm up as soon as a window resets"],
-  'warmup.reset_hint': ["上一轮一结束就开始下一轮计时，中间不留空档。", "The next window starts the moment the last one ends, with no idle gap."],
+  'warmup.reset_hint': ["额度重置后自动发送一次预热请求，让新窗口开始计时；无需等到下次使用。", "After quota resets, automatically send one warmup request to start the new window without waiting for your next use."],
   'warmup.reset_scope': ["适用窗口", "Windows"],
   'warmup.reset_all': ["五小时与每周", "Five-hour and weekly"],
   'warmup.reset_weekly': ["仅每周", "Weekly only"],

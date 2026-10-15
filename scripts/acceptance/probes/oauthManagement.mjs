@@ -1116,6 +1116,19 @@ export async function oauthWindowWarmup({ page, base, check }) {
   };
   await page.route('**/management/quota/warmup/**', handler);
   await page.route('**/management/auth-files/fields', fieldHandler);
+  const checkRuleAlignment = async (surface, label) => {
+    const geometry = await surface.getByRole('switch').evaluateAll(switches => switches.map(control => {
+      const switchBox = control.getBoundingClientRect();
+      const labelBox = document.querySelector(`label[for="${CSS.escape(control.id)}"]`).getBoundingClientRect();
+      const bodyBox = control.parentElement.nextElementSibling.getBoundingClientRect();
+      return { switchLeft: switchBox.left, labelLeft: labelBox.left, bodyLeft: bodyBox.left,
+        centreOffset: Math.abs(switchBox.y + switchBox.height / 2 - labelBox.y - labelBox.height / 2) };
+    }));
+    check(`${label} aligns switches, labels and supporting controls`, geometry.length === 2
+      && geometry.every(row => row.centreOffset <= 1 && Math.abs(row.labelLeft - row.bodyLeft) <= 1)
+      && Math.abs(geometry[0].switchLeft - geometry[1].switchLeft) <= 1
+      && Math.abs(geometry[0].labelLeft - geometry[1].labelLeft) <= 1, JSON.stringify(geometry));
+  };
   try {
     await page.goto(`${base}/oauth-management`);
     await page.getByTestId('oauth-warmup-settings-open').click();
@@ -1140,12 +1153,17 @@ export async function oauthWindowWarmup({ page, base, check }) {
           const bounds = element.getBoundingClientRect(); const body = element.querySelector('.ant-drawer-body');
           return { left: bounds.left, right: bounds.right, overflow: body.scrollWidth - body.clientWidth };
         });
+        await checkRuleAlignment(drawer, `settings ${width}px (${reducedMotion})`);
         check(`warmup settings ${width}px stay in the viewport (${reducedMotion})`, geometry.left >= -1 && geometry.right <= width + 1 && geometry.overflow <= 1, JSON.stringify(geometry));
         await fs.mkdir('tmp/warmup-proof', { recursive: true });
         await page.screenshot({ path: `tmp/warmup-proof/settings-${width}-${reducedMotion}.png` });
       }
     }
+    await drawer.getByRole('tab', { name: 'Claude', exact: true }).click();
+    await checkRuleAlignment(drawer, 'Claude settings phone');
     await page.setViewportSize({ width: 1440, height: 900 });
+    await settleLayout(page);
+    await checkRuleAlignment(drawer, 'Claude settings desktop');
     await drawer.getByRole('switch', { name: 'Warm up daily at a set time' }).click();
     await page.goBack();
     const confirmation = page.getByRole('dialog').filter({ hasText: 'Unsaved' });
@@ -1160,11 +1178,19 @@ export async function oauthWindowWarmup({ page, base, check }) {
     const record = page.getByTestId('oauth-credential-record').filter({ hasText: 'credential-02.json' });
     await record.getByRole('button', { name: /^Details:/ }).click();
     const warmup = page.getByTestId('credential-warmup');
+    check('quota tab does not mix in warmup controls', await warmup.count() === 0);
+    await page.getByRole('tab', { name: 'Window warmup', exact: true }).click();
     await warmup.getByRole('button', { name: 'Warm up now', exact: true }).waitFor();
+    await page.evaluate(() => Object.defineProperty(window.crypto, 'randomUUID', { configurable: true, value: undefined }));
     await warmup.getByRole('button', { name: 'Warm up now', exact: true }).click();
     const manualConfirmation = page.locator('.ant-modal-confirm');
     await manualConfirmation.waitFor();
     check('manual warmup names the selected model and does not consume before confirmation', consumingRequests.length === 0 && (await manualConfirmation.innerText()).includes('claude-haiku-test'));
+    await manualConfirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await manualConfirmation.waitFor({ state: 'hidden' });
+    check('cancelling manual warmup sends no consuming request', consumingRequests.length === 0);
+    await warmup.getByRole('button', { name: 'Warm up now', exact: true }).click();
+    await manualConfirmation.waitFor();
     await manualConfirmation.getByRole('button', { name: 'Warm up now', exact: true }).click();
     await until(() => consumingRequests.length === 1, { label: 'one confirmed warmup request' });
     await warmup.getByTestId('warmup-last-result').getByText('Quota window started', { exact: true }).waitFor();
@@ -1180,7 +1206,7 @@ export async function oauthWindowWarmup({ page, base, check }) {
     const savedFields = page.waitForResponse(response => response.url().endsWith('/management/auth-files/fields') && response.request().method() === 'PATCH');
     await detail.getByRole('button', { name: 'Save Fields', exact: true }).click();
     await savedFields;
-    await detail.getByRole('tab', { name: 'Quota' }).click();
+    await detail.getByRole('tab', { name: /Window warmup/ }).click();
     await until(() => warmup.getByRole('button', { name: 'Save', exact: true }).isEnabled(), { label: 'warmup draft remains unsaved after field save' });
     check('credential field save leaves the warmup draft and detail drawer open', await detail.isVisible());
     await detail.locator('.ant-drawer-close').click();
@@ -1189,10 +1215,14 @@ export async function oauthWindowWarmup({ page, base, check }) {
     check('preserved warmup draft still requires an explicit discard decision', (await discardWarmup.innerText()).includes('Discard unsaved changes?'));
     await discardWarmup.getByRole('button', { name: 'Cancel', exact: true }).click();
     await warmup.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await warmup.getByText('Custom', { exact: true }).click();
+    await checkRuleAlignment(warmup, 'credential desktop');
+    await page.screenshot({ path: 'tmp/warmup-proof/credential-1440.png' });
     await page.setViewportSize({ width: 320, height: 900 });
     await settleLayout(page);
     await warmup.scrollIntoViewIfNeeded();
     const detailBody = page.locator('.ant-drawer-body').filter({ has: warmup });
+    await checkRuleAlignment(warmup, 'credential phone');
     check('credential warmup controls fit the phone drawer', await detailBody.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
     await page.screenshot({ path: 'tmp/warmup-proof/credential-320.png' });
 

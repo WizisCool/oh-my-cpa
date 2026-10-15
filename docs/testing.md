@@ -1176,8 +1176,11 @@ that clears the pause. A refused new request cannot overwrite the observed prior
 observed unsupported-response pause without treating missing activation history as a gate.
 `scripts/acceptance/contracts/warmup.json` is certified by a Go handler test and
 consumed by the actual typed client in `web/tests/warmup.contract.test.ts`. Rendered tests
-own inheritance and draft controls; the `oauth-window-warmup` browser scenario owns
-viewport geometry and native Back discard confirmation. It independently checks that
+own inheritance, draft controls and confirmed manual runs with secure-context UUIDs,
+HTTP-compatible random bytes and absent browser crypto. The `oauth-window-warmup` browser
+scenario owns the dedicated warmup tab, switch/label alignment in both rule editors,
+viewport geometry, manual confirmation without `randomUUID`, and native Back discard
+confirmation. It independently checks that
 Drawer wrappers transition only transform normally and have no transition under reduced
 motion, retaining the unchanged 320px containment assertion after resize in both preferences; adding a delay cannot satisfy the transition-property check.
 All are discovered by the
@@ -1189,8 +1192,8 @@ refusal bodies), the typed client's emitted confirmation/revision, and credentia
 fixture isolation. API tests inject pre-send credential/policy refusals and an observable
 startup database failure with manually delivered ticks. Rendered tests cover both field-save
 close paths with an externally owned draft, a draft flag changing during an in-flight save,
-explicit protection facts, and a
-single inline run outcome. The browser warmup scenario also saves another section, retains
+explicit protection facts, a single toast for each manual outcome and a durable last result
+for sent requests. The browser warmup scenario also saves another section, retains
 its draft and exercises the subsequent native discard decision. These extend existing
 owners; no new runner, fixed wait or live consuming test is introduced.
 

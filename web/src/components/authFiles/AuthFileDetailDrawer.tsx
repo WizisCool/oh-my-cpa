@@ -66,8 +66,9 @@ interface AuthFileDetailDrawerProps {
   onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
   quotaContent?: React.ReactNode;
+  warmupContent?: React.ReactNode;
   hasExternalDraft?: boolean;
-  initialSection?: 'overview' | 'configuration' | 'models';
+  initialSection?: 'overview' | 'warmup' | 'configuration' | 'models';
   /**
    * Whether the safe fields may be written. The write is keyed by file name, so a
    * credential whose name does not identify one entry cannot be edited safely: the
@@ -156,6 +157,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onSaved,
   onDownload,
   quotaContent,
+  warmupContent,
   hasExternalDraft = false,
   initialSection = 'overview',
   canEdit = false,
@@ -174,7 +176,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const [policyBaseline, setPolicyBaseline] = useState<CredentialPolicyDraft>(EMPTY_CREDENTIAL_POLICY_DRAFT);
   const [isPolicyChecked, setIsPolicyChecked] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
-  const [activeSection, setActiveSection] = useState<'overview' | 'configuration' | 'models'>(initialSection);
+  const [activeSection, setActiveSection] = useState<'overview' | 'warmup' | 'configuration' | 'models'>(initialSection);
 
   const resetPolicy = useCallback((next: CredentialPolicyDraft) => {
     setPolicy(next);
@@ -601,6 +603,12 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                   </div>
                 ),
               },
+              ...(warmupContent ? [{
+                key: 'warmup',
+                label: <span className={styles['tab-label']}>{t('warmup.title')}{hasExternalDraft && <Tag tone="warn">{t('cfg.dirty_bar_unsaved')}</Tag>}</span>,
+                disabled: saveMutation.isPending,
+                children: warmupContent,
+              }] : []),
               {
                 key: 'configuration',
                 forceRender: true,

@@ -3,6 +3,7 @@ import { App, Button, Input, Segmented, Select, Space, Tabs, Typography } from '
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useI18n, useT, type TFunc } from '../../i18n';
+import { createID } from '../../utils/ids';
 import { languageLocale } from '../../i18n/language';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
@@ -60,31 +61,35 @@ function RuleEditor({ policy, onChange, models, timezone, disabled }: {
   policy: WarmupPolicy; onChange: (policy: WarmupPolicy) => void; models: string[]; timezone: string; disabled?: boolean;
 }) {
   const t = useT();
+  const dailyId = React.useId();
+  const resetId = React.useId();
   const modelOptions = [...new Set([...models, ...(policy.model ? [policy.model] : [])])].sort((first, second) =>
     Number(!/haiku|mini/i.test(first)) - Number(!/haiku|mini/i.test(second)) || first.localeCompare(second));
   const isResetOn = policy.reset_mode !== 'off';
   return <div className={styles['rules']}>
     <div className={styles['rule']}>
-      <Switch aria-label={t('warmup.rule_daily')} checked={policy.daily_enabled} disabled={disabled}
-        onChange={daily_enabled => onChange({ ...policy, daily_enabled })} />
+      <div className={styles['rule-head']}>
+        <Switch id={dailyId} aria-label={t('warmup.rule_daily')} checked={policy.daily_enabled} disabled={disabled}
+          onChange={daily_enabled => onChange({ ...policy, daily_enabled })} />
+        <label htmlFor={dailyId}>{t('warmup.rule_daily')}</label>
+        <Input type="time" aria-label={t('warmup.daily_time')} value={policy.daily_time} disabled={disabled || !policy.daily_enabled}
+          className={styles['rule-time']} onChange={event => onChange({ ...policy, daily_time: event.target.value })} />
+      </div>
       <div className={styles['rule-body']}>
-        <div className={styles['rule-head']}>
-          <Text>{t('warmup.rule_daily')}</Text>
-          <Input type="time" aria-label={t('warmup.daily_time')} value={policy.daily_time} disabled={disabled || !policy.daily_enabled}
-            className={styles['rule-time']} onChange={event => onChange({ ...policy, daily_time: event.target.value })} />
-        </div>
         <Text type="secondary" className={styles['rule-hint']}>
           {t('warmup.daily_hint', { start: policy.daily_time, end: addHours(policy.daily_time, 5), zone: timezone })}
         </Text>
       </div>
     </div>
     <div className={styles['rule']}>
-      <Switch aria-label={t('warmup.rule_reset')} checked={isResetOn} disabled={disabled}
-        onChange={isOn => onChange({ ...policy, reset_mode: isOn ? 'all' : 'off' })} />
+      <div className={styles['rule-head']}>
+        <Switch id={resetId} aria-label={t('warmup.rule_reset')} checked={isResetOn} disabled={disabled}
+          onChange={isOn => onChange({ ...policy, reset_mode: isOn ? 'all' : 'off' })} />
+        <label htmlFor={resetId}>{t('warmup.rule_reset')}</label>
+      </div>
       <div className={styles['rule-body']}>
-        <Text>{t('warmup.rule_reset')}</Text>
         <Text type="secondary" className={styles['rule-hint']}>{t('warmup.reset_hint')}</Text>
-        {isResetOn && <Segmented size="small" aria-label={t('warmup.reset_scope')} value={policy.reset_mode} disabled={disabled}
+        {isResetOn && <Segmented className={styles['reset-scope']} size="small" aria-label={t('warmup.reset_scope')} value={policy.reset_mode} disabled={disabled}
           options={[{ value: 'all', label: t('warmup.reset_all') }, { value: 'weekly', label: t('warmup.reset_weekly') }]}
           onChange={reset_mode => onChange({ ...policy, reset_mode: reset_mode as WarmupPolicy['reset_mode'] })} />}
       </div>
@@ -225,14 +230,14 @@ export function CredentialWarmup({ authIndex, onDirtyChange }: { authIndex: stri
   };
   const run = () => {
     if (!credential) return;
-    const requestId = crypto.randomUUID(); const revision = credential.revision;
+    const requestId = createID('warmup'); const revision = credential.revision;
     modal.confirm({ title: t('warmup.run'), content: t('warmup.confirm_run', { name: credential.name, model: credential.policy.model }), okText: t('warmup.run'), cancelText: t('common.cancel'),
       onOk: () => runMutation.mutateAsync({ requestId, revision }) });
   };
   const runButton = credential && <Button size="small" onClick={run} loading={runMutation.isPending}
     disabled={isDirty || saveMutation.isPending || !credential.policy.model || isDemoMode()}>{t('warmup.run')}</Button>;
   return <section className={styles['warmup-section']} data-testid="credential-warmup">
-    <SectionHeading title={t('warmup.title')} description={t('warmup.description')} extra={runButton} />
+    <SectionHeading className={styles['warmup-heading']} title={t('warmup.title')} description={t('warmup.description')} extra={runButton} />
     {credentialQuery.isError ? <LoadFailure title={t('warmup.load_failed')} error={safeError(credentialQuery.error, t)} onRetry={() => void credentialQuery.refetch()} /> : credential ? <>
       <StatusCard credential={credential} result={credential.state.last_result} />
       <div className={styles['rules-block']}>

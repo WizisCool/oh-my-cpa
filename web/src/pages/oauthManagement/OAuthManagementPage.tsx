@@ -944,9 +944,9 @@ export const OAuthManagementPage: React.FC = () => {
         initialSection={drawerSection}
         canEdit={Boolean(selectedRecord?.canEditFile)}
         hasExternalDraft={hasWarmupDraft}
-        quotaContent={selectedRecord ? <>{quotaBodyForRecord(selectedRecord, false)}
-          {selectedRecord.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider) && <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} />}
-        </> : undefined}
+        quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
+        warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
+          ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}
       />
 
       <WarmupSettingsDrawer open={isWarmupSettingsOpen} onClose={() => setIsWarmupSettingsOpen(false)} />
