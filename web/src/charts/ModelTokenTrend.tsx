@@ -10,7 +10,7 @@ import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
 import { useChartPlugins } from './chartRender';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
-import { MONO_FONT_STACK } from '../theme/themeConfig';
+import { currentFontStack } from '../theme/fontLibrary';
 import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
@@ -141,8 +141,9 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, folde
       labelAutoRotate: false,
       // A canvas inherits no font and G2's themes declare no family, so without this the tick labels
       // were painted in the browser's default sans-serif - the one piece of text on the page not set in
-      // the console's mono stack.
-      labelFontFamily: MONO_FONT_STACK,
+      // the console's mono stack. Read from the document because the operator may have chosen
+      // another monospace typeface, and a canvas cannot resolve the custom property itself.
+      labelFontFamily: currentFontStack('mono'),
       labelFontSize: 10,
       // `fg2` rather than `muted`: these labels are data - the instants the window covers - and the
       // secondary text step is the one that carries them: 6.63:1 on the dark card and 7.43:1 on the

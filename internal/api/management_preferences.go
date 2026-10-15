@@ -35,6 +35,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceRequestModelIcons:   true,
 	repository.PreferenceTheme:               true,
 	repository.PreferenceScrollSmoothing:     true,
+	repository.PreferenceFonts:               true,
 	repository.PreferencePlaygroundSession:   true,
 	repository.PreferenceAgentTarget:         true,
 	repository.PreferenceUpdateDismissals:    true,
@@ -111,6 +112,10 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	if err := h.repo.PutPreference(request.Context(), key, string(body)); err != nil {
 		if errors.Is(err, repository.ErrCustomIconMissing) || errors.Is(err, repository.ErrCustomIconName) {
 			writeCustomIconError(writer, err)
+			return
+		}
+		if errors.Is(err, repository.ErrFontMissing) || errors.Is(err, repository.ErrFontReference) {
+			writeFontError(writer, err)
 			return
 		}
 		if errors.Is(err, timezone.ErrInvalid) {

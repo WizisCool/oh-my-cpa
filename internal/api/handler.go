@@ -28,6 +28,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/fontasset"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/web"
@@ -71,6 +72,11 @@ type Handler struct {
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
+	// fontInstaller downloads Google Fonts families for the font library. It is built on
+	// first use from the configured stylesheet URL; tests set it to a local fixture.
+	fontInstaller     *fontasset.GoogleInstaller
+	fontInstallerErr  error
+	fontInstallerOnce sync.Once
 	// pluginIdentities remembers the name and logo each installed plugin is listed under
 	// in the store, for a plugin CPA has not loaded and so reports by id alone.
 	pluginIdentities *pluginIdentityCache
@@ -233,6 +239,12 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/custom-icons/{id}", h.deleteCustomIcon)
 				v1.Get("/custom-icons/{id}/content", h.customIconContent)
 				v1.Head("/custom-icons/{id}/content", h.customIconContent)
+				v1.Get("/fonts", h.listFonts)
+				v1.Post("/fonts/google", h.installGoogleFont)
+				v1.Post("/fonts/upload", h.uploadFont)
+				v1.Delete("/fonts/{id}", h.deleteFont)
+				v1.Get("/fonts/{id}/faces/{faceId}", h.fontFaceContent)
+				v1.Head("/fonts/{id}/faces/{faceId}", h.fontFaceContent)
 				v1.Get("/preferences", h.listPreferences)
 				v1.Put("/preferences/{key}", h.putPreference)
 				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)

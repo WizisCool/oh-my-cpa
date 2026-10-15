@@ -36,6 +36,12 @@ const (
 	PreferenceTheme              = "omc_theme"
 	PreferenceScrollSmoothing    = "omc_scroll_smoothing"
 
+	// PreferenceFonts maps a typographic role - `ui` for the interface, `mono` for code
+	// and figures - to a built-in typeface or an installed family (`font:<id>`). A role
+	// left out uses the console's default. References to installed families are checked
+	// on write, and deleting a family clears the roles that used it.
+	PreferenceFonts = "omc_fonts"
+
 	// PreferencePlaygroundSession persists the single latest playground session:
 	// the target key's usage fingerprint and call point, the generation parameters
 	// and the latest conversation's bounded turns. It never stores the key secret,
@@ -162,6 +168,11 @@ func (r *Repository) putPreferences(ctx context.Context, values map[string]strin
 	for key, value := range values {
 		if key == PreferenceProviderIcons {
 			if err := validateCustomIconReferences(ctx, tx, value); err != nil {
+				return err
+			}
+		}
+		if key == PreferenceFonts {
+			if err := validateFontReferences(ctx, tx, value); err != nil {
 				return err
 			}
 		}

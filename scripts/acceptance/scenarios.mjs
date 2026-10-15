@@ -45,6 +45,7 @@ import {
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
+import { fontLibrary } from './probes/fontLibrary.mjs';
 import { auditTrail, auditTrailNarrow, logsFixtures, logsSources } from './probes/logsPage.mjs';
 import {
   providerRateMarks,
@@ -207,6 +208,11 @@ export const SCENARIOS = [
       ],
     },
     run: omcSettings,
+  },
+  {
+    id: 'font-library',
+    name: 'typeface roles repaint the console, library families load from this origin, and the choice paints the first frame',
+    run: fontLibrary,
   },
   {
     id: 'column-alignment',

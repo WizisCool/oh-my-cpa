@@ -3,7 +3,10 @@
 @import "./assets/fonts/sarasa/core.css";
 
 :root {
-  font-family: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  /* The two typographic roles. Both default to the bundled typeface; an operator's choice
+     (OMC Settings → Appearance) is written over them on the root element by `theme/fontLibrary.ts`. */
+  --font-ui: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-ui);
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;

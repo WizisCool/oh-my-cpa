@@ -57,6 +57,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/resources', 'resources'],
   ['/api/v1/preferences', 'preferences'],
   ['/api/v1/custom-icons', 'custom-icons'],
+  ['/api/v1/fonts', 'fonts'],
   ['/api/v1/custom-icons/00000000000000000000000000000001/content', 'custom-icon-content'],
   ['/api/v1/pricing', 'pricing'],
   ['/api/v1/pricing/attention', 'pricing-attention'],

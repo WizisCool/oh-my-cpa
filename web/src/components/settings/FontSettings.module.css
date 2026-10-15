@@ -1,0 +1,108 @@
+.picker {
+  width: 240px;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+}
+
+.install-row {
+  display: flex;
+  gap: 8px;
+}
+
+.install-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.note {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.browse {
+  font-size: var(--text-sm);
+}
+
+.suggestion {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* `--border` rather than `--border-soft`: the soft step is the divider between rows inside a
+   surface, and on the light palettes it is too close to the page to read as a frame. */
+.library {
+  margin: 0;
+  padding: 0;
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.family {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+
+@media (max-width: 899px) {
+  .picker {
+    width: 100%;
+  }
+}

@@ -328,7 +328,26 @@ const SCENARIO_PATHS = [
   // dashboard's model panels and the OMC page move together.
   {
     prefix: 'web/src/pages/OmcSettingsPage',
-    scenarios: ['omc-settings', 'scroll-smoothing', 'mobile-console'],
+    scenarios: ['omc-settings', 'font-library', 'scroll-smoothing', 'mobile-console'],
+  },
+  // The typeface roles: the settings controls, the document-level applier and the role rules.
+  // They repaint every page, but what can break is reached from the settings page the scenario
+  // drives, plus the phone console that renders the same page narrow.
+  {
+    prefix: 'web/src/components/settings/FontSettings',
+    scenarios: ['font-library', 'omc-settings', 'mobile-console'],
+  },
+  {
+    prefix: 'web/src/theme/fontLibrary',
+    scenarios: ['font-library', 'omc-settings'],
+  },
+  {
+    prefix: 'web/src/types/fonts',
+    scenarios: ['font-library'],
+  },
+  {
+    prefix: 'web/src/hooks/useFonts',
+    scenarios: ['font-library', 'omc-settings'],
   },
   {
     prefix: 'web/src/types/tokenDisplay',
@@ -355,7 +374,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/hooks/usePreference',
-    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing', 'mobile-console'],
+    scenarios: ['omc-settings', 'font-library', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing', 'mobile-console'],
   },
   // The console-wide wheel and keyboard glide. It intercepts every wheel and scrolling key, so the
   // scenarios that drive the wheel or the keyboard on a scroller are reached as well as its own.

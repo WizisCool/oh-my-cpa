@@ -25,7 +25,8 @@ registered one; see `docs/adr/0011-theme-modes-and-derived-palettes.md`.
 
 Terminal-flat console. Depth comes from **1px borders + background shifts**,
 never shadows or gradients. Sarasa Mono SC first (Berkeley Mono, then IBM Plex
-Mono as fallbacks), 4px radii, dense but breathable spacing.
+Mono as fallbacks) unless the operator chooses another typeface, 4px radii, dense but
+breathable spacing.
 
 | Principle | Meaning |
 | --- | --- |
@@ -880,6 +881,16 @@ asynchronous chunk started at startup, and fetched only when a page draws one of
 characters, which then swaps in from the fallback. `pnpm subset-font` regenerates the
 shards, the manifest, `core.css` and `shardUrls.ts`; copy added since then still renders in
 Sarasa, from a deferred shard.
+
+**The typeface is two roles, and Sarasa is their default.** `--font-ui` (the root
+`font-family` and Ant Design's `fontFamily` token) and `--font-mono` (code, keys and
+aligned figures, and Ant Design's `fontFamilyCode`) are custom properties that
+`web/src/theme/fontLibrary.ts` overwrites on the root element from the `omc_fonts`
+preference. Components never name a family: they inherit, or read `var(--font-mono)`, so
+an operator's choice reaches every surface. The two that cannot use the cascade - the
+Monaco editor and canvas chart labels - read the resolved role with `currentFontStack`.
+Every role ends in the Sarasa stack, which draws any character a chosen family lacks
+(ADR 0100).
 
 **The type scale is seven variables**, defined in `web/src/index.css`:
 

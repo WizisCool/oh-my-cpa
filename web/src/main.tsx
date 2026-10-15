@@ -2,6 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
+import { applyStoredFonts } from './theme/fontLibrary';
+
+// Before the first render, so the first frame is painted in the typeface this browser last
+// saw chosen rather than switching once the preference arrives.
+applyStoredFonts();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

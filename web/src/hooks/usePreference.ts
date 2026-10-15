@@ -86,7 +86,8 @@ export function usePreference<T>(
         ok = false;
         const code = apiErrorCode(err) || describeError(err);
         const iconErrorKey = code === 'custom_icon_not_found' ? 'icons.error_missing' : code === 'custom_icon_invalid_name' ? 'icons.error_name' : undefined;
-        const settingErrorKey = code === 'invalid_timezone' ? 'omc.timezone_invalid' : code === 'invalid_quota_auto_refresh' ? 'omc.quota_auto_refresh_invalid' : iconErrorKey;
+        const fontErrorKey = code === 'font_not_found' || code === 'font_invalid_reference' ? 'omc.font_error_missing' : undefined;
+        const settingErrorKey = code === 'invalid_timezone' ? 'omc.timezone_invalid' : code === 'invalid_quota_auto_refresh' ? 'omc.quota_auto_refresh_invalid' : iconErrorKey ?? fontErrorKey;
         toast.error(settingErrorKey ? t(settingErrorKey) : describeError(err));
         // Put the control back where it was. Without this the optimistic value
         // stays in the cache while the server still holds the old one, and

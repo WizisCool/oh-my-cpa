@@ -95,6 +95,8 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"discovered_resources":          {Kind: LifecyclePermanent, Reason: "one row per upstream resource ever seen"},
 	"resource_overrides":            {Kind: LifecyclePermanent, Reason: "operator-owned naming"},
 	"custom_icons":                  {Kind: LifecyclePermanent, Reason: "operator uploads, removed only by the operator"},
+	"fonts":                         {Kind: LifecyclePermanent, Reason: "the operator's font library, removed only by the operator"},
+	"font_faces":                    {Kind: LifecyclePermanent, Reason: "the files of a library family, deleted with it"},
 	"model_prices":                  {Kind: LifecyclePermanent, Reason: "the price book"},
 	"pricing_channels":              {Kind: LifecyclePermanent, Reason: "the channel multipliers"},
 	"pricing_model_links":           {Kind: LifecyclePermanent, Reason: "operator-owned price links"},

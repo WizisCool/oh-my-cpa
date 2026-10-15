@@ -33,6 +33,10 @@ type Config struct {
 	TLSSkipVerify  bool
 	Release        ReleaseConfig
 	Updater        UpdaterConfig
+	// GoogleFontsURL is the stylesheet API the font library installs Google Fonts
+	// families from (OMCPA_GOOGLE_FONTS_URL); a compatible mirror serves a deployment
+	// that cannot reach Google. Validated when the installer is built.
+	GoogleFontsURL string
 	// TrustedProxyCIDRs are the direct peer networks whose forwarding headers
 	// may be used for per-client login throttling. Empty means trust none.
 	TrustedProxyCIDRs []string
@@ -304,6 +308,7 @@ func Load() (Config, error) {
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 		Release:           releaseConfig,
 		Updater:           updaterConfig,
+		GoogleFontsURL:    strings.TrimSpace(os.Getenv("OMCPA_GOOGLE_FONTS_URL")),
 		CPA:               cpa,
 		IsDemoMode:        demoMode,
 	}, nil

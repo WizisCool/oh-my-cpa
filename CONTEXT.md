@@ -458,8 +458,16 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   and column layout, and the console's own display settings — the token unit
   style (`omc_token_style`), TPS calculation mode (`omc_tps_calculation_mode`),
   the model display view (`omc_models_view`), request list model brand icons
-  (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`) and scroll smoothing
-  (`omc_scroll_smoothing`).
+  (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), scroll smoothing
+  (`omc_scroll_smoothing`) and the typeface roles (`omc_fonts`).
+- **Font Library**: The deployment's installed typefaces, from which the two
+  **Font Roles** are chosen: `ui` (the interface) and `mono` (code, identifiers and
+  aligned figures), stored as `omc_fonts` (`builtin:<id>` or `font:<library id>`; a
+  role left out uses the bundled Sarasa Mono SC). A family arrives by upload or by
+  installing from Google Fonts, which the *server* downloads; either way its files are
+  stored in the database and served from the console's own origin, so the browser never
+  loads a font from another host and an installed family needs no network. Deleting a
+  family returns the roles that used it to the default (ADR 0100).
 - **Scroll Smoothing**: Whether a wheel notch or a scrolling key glides to its
   destination instead of jumping — `on` (default), `system` (glide unless the
   system reports reduced motion) or `off`, stored as `omc_scroll_smoothing`.

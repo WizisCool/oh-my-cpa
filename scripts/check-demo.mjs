@@ -80,7 +80,7 @@ const ROUTE_READS = {
   '/usage/events': ['usage-events', 'usage-facets', 'usage-event-detail', 'usage-ingest-status'],
   '/pricing': ['pricing', 'pricing-attention', 'pricing-catalog', 'pricing-model-claude-opus-5.5'],
   '/config': ['config', 'config-source'],
-  '/omc-settings': ['preferences', 'system'],
+  '/omc-settings': ['preferences', 'system', 'fonts'],
   '/plugins': ['plugins', 'plugin-store', 'plugins-settings', 'plugin-config-usage-exporter'],
   '/system': ['system', 'system-releases', 'system-maintenance'],
 };

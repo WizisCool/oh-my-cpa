@@ -1,6 +1,7 @@
 import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
 import type { ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
+import type { InstalledFont } from '../types/fonts';
 import { getAppConfig } from '../types/config';
 import { isDemoMode } from '../types/demoMode';
 import {
@@ -370,6 +371,23 @@ export const api = {
   },
   async deleteCustomIcon(id: string): Promise<void> {
     return request(`/custom-icons/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  async getFonts(): Promise<InstalledFont[]> {
+    const response = await request<{ fonts: InstalledFont[] }>('/fonts');
+    return response.fonts;
+  },
+  /** The server downloads the family and stores it; the browser never contacts Google. */
+  async installGoogleFont(family: string, signal?: AbortSignal): Promise<InstalledFont> {
+    return request('/fonts/google', { method: 'POST', body: JSON.stringify({ family }), signal });
+  },
+  async uploadFont(files: File[], family?: string): Promise<InstalledFont> {
+    const formData = new FormData();
+    if (family) formData.append('family', family);
+    files.forEach((file) => formData.append('file', file, file.name));
+    return request('/fonts/upload', { method: 'POST', body: formData });
+  },
+  async deleteFont(id: string): Promise<void> {
+    return request(`/fonts/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   customIconURL(id: string, revision: number): string {
     return `${getAppConfig().apiBaseUrl}/custom-icons/${encodeURIComponent(id)}/content?revision=${revision}`;

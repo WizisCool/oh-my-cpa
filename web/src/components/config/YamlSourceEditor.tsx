@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { currentFontStack } from '../../theme/fontLibrary';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
@@ -383,8 +384,9 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
           </div>
         }
         options={{
-          fontFamily:
-            '"Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", monospace',
+          // Monaco measures glyphs on a canvas, so it takes the family as a string rather than
+          // through the cascade; this is the operator's monospace role as the document paints it.
+          fontFamily: currentFontStack('mono'),
           /* A phone is not a smaller desktop for a source editor. At 13px the code is below the
              16px floor iOS zooms on, `wordWrap: 'off'` forces horizontal scrolling on a surface
              with no keyboard to escape it, and the minimap is decoration standing in a column that

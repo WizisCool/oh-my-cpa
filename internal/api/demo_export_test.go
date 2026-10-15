@@ -109,6 +109,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "resources", Path: "/api/v1/resources"},
 		{Name: "preferences", Path: "/api/v1/preferences"},
 		{Name: "custom-icons", Path: "/api/v1/custom-icons"},
+		{Name: "fonts", Path: "/api/v1/fonts"},
 		{Name: "custom-icon-content", Path: "/api/v1/custom-icons/00000000000000000000000000000001/content", Route: "/api/v1/custom-icons/{id}/content"},
 		{Name: "overview", Path: "/api/v1/management/overview"},
 		{Name: "system", Path: "/api/v1/management/system"},
@@ -258,6 +259,7 @@ func demoExportCases() []demoExportCase {
 // the console already renders for a refused operation.
 var demoExportRouteGaps = map[string]string{
 	"/api/v1/management/auth-files/safe-fields": "the fixture refuses the download the projection reads, by design and under test",
+	"/api/v1/fonts/{id}/faces/{faceId}":         "the demonstration's font library is empty, so no face is ever declared to the browser",
 }
 
 // demoExportFirstEventPath builds the detail path for the first event the list carried.

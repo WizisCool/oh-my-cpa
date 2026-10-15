@@ -12,32 +12,6 @@ import { THREAD_FILL_SHARES, THREAD_RADII, type ResolvedPalette, type ThemePalet
  * in CSS; shared component tokens keep their desktop sizes.
  */
 
-const monoFont = [
-  '"Sarasa Mono SC"',
-  '"Sarasa UI SC"',
-  '"Sarasa Term SC"',
-  '"更纱黑体 SC"',
-  '"Berkeley Mono"',
-  '"IBM Plex Mono"',
-  'ui-monospace',
-  'SFMono-Regular',
-  'Menlo',
-  'Monaco',
-  'Consolas',
-  '"Liberation Mono"',
-  'monospace',
-].join(', ');
-
-/**
- * The app's mono stack, exported for the chart runtime.
- *
- * A canvas cannot inherit a font: the axis and tooltip text a chart draws is measured and painted by
- * the library, so it needs the family as a string rather than through the cascade. Sharing this constant
- * is what keeps chart text in the same type scale as everything around it instead of falling back to
- * the library's own sans-serif default.
- */
-export const MONO_FONT_STACK = monoFont;
-
 /**
  * A named motion token, in the shape both consumers read it: WAAPI takes an `EffectTiming` (which is
  * this with every field optional) and the chart library takes `duration?: number` with an easing
@@ -100,7 +74,11 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
   return {
     algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
     token: {
-      fontFamily: monoFont,
+      // The custom properties rather than a family list: the operator's typeface choice is
+      // written to them on the root element, so Ant Design's components follow it like the
+      // stylesheet does without the theme being rebuilt.
+      fontFamily: 'var(--font-ui)',
+      fontFamilyCode: 'var(--font-mono)',
       fontSize: 14,
       fontSizeSM: 13,
       fontSizeLG: 16,

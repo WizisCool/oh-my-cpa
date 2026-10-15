@@ -349,7 +349,7 @@ troubleshooting.
 - **Encryption at rest**: stored credentials and raw usage messages are AES-GCM encrypted.
 - **Audited sensitive actions**: revealing keys, downloading auth files and exporting logs are written to the audit log, and refused if that write fails.
 - **Offline operation**: every asset is embedded in the binary; no CDN is contacted.
-- **Personalization**: four interface languages, light and dark themes with custom palettes, a deployment time zone, and K/M/B or 万/亿 number units.
+- **Personalization**: four interface languages, light and dark themes with custom palettes, interface and monospace fonts from a font library (bundled, uploaded or installed from Google Fonts and served by the console itself), a deployment time zone, and K/M/B or 万/亿 number units.
 
 </details>
 
