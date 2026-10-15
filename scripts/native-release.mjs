@@ -36,15 +36,26 @@ export function validateEmbeddedConsole(directory) {
   }
 }
 
+// A missing archive tool must fail by name: spawnSync reports it only as ENOENT on
+// the syscall, which does not tell the operator what to install.
+export function runRequiredTool(tool, run) {
+  try {
+    return run();
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error(`Required tool '${tool}' was not found on PATH`, { cause: error });
+    throw error;
+  }
+}
+
 export function packageNativeArchive(target, staging, output, epoch, execute = execFileSync) {
   const members = [target.binary, ...ARCHIVE_FILES];
   if (target.goos === 'windows') {
     for (const member of members) fs.utimesSync(path.join(staging, member), epoch, epoch);
-    execute('zip', ['-X', '-q', path.join(output, target.archive), ...members], { cwd: staging, stdio: 'inherit', env: { ...process.env, TZ: 'UTC' } });
+    runRequiredTool('zip', () => execute('zip', ['-X', '-q', path.join(output, target.archive), ...members], { cwd: staging, stdio: 'inherit', env: { ...process.env, TZ: 'UTC' } }));
   } else {
     // GNU tar otherwise interprets a Windows drive-letter colon as a remote host.
-    execute('tar', ['--force-local', '--sort=name', `--mtime=@${epoch}`, '--owner=0', '--group=0', '--numeric-owner',
-      '-czf', path.join(output, target.archive), '-C', staging, ...members], { stdio: 'inherit' });
+    runRequiredTool('tar', () => execute('tar', ['--force-local', '--sort=name', `--mtime=@${epoch}`, '--owner=0', '--group=0', '--numeric-owner',
+      '-czf', path.join(output, target.archive), '-C', staging, ...members], { stdio: 'inherit' }));
   }
 }
 
