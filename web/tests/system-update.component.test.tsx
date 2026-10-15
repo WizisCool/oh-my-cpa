@@ -80,6 +80,19 @@ it('asks before updating and sends nothing until the question is answered', asyn
   surface.close();
 });
 
+it('draws a running update as the four steps the updater reports', async () => {
+  const surface = mount();
+  await startUpdate();
+  const reached = () => Array.from(screen.getByTestId('sys-update-steps').children).map((step) => step.getAttribute('data-reached'));
+  expect(reached()).toEqual(['true', 'false', 'false', 'false']);
+
+  surface.fixture.advance('verifying');
+  await surface.reread();
+  await screen.findByText('Checking that the new container is healthy…');
+  expect(reached()).toEqual(['true', 'true', 'true', 'true']);
+  surface.close();
+});
+
 it('keeps showing the update while the console restarts under it, then reports the result once', async () => {
   const surface = mount();
   await startUpdate();

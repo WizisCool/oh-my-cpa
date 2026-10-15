@@ -1020,11 +1020,13 @@ export async function systemInformationPage({ base, page, check }) {
     check('a rebuild control is offered when admission allows it', false, 'no enabled VACUUM button');
   }
 
-  // ── 2x2 grid layout and equal height within rows on desktop ───────────────
-  // The four cards form a 2x2 grid where siblings in the same row share equal height.
-  // Row 1: Versions & Updates (left) | Maintenance & Diagnostics (right)
-  // Row 2: SQLite Storage (left) | Component Topology & Health (right)
-  // The rows pair cards of similar height, so neither card in a row is mostly empty space.
+  // ── the versions card owns the full width; the operational cards share one row ──
+  // The versions card is the page's subject and the only card whose content wants the whole
+  // column: a product row is identity, comparison, status and actions at once, and a half-width
+  // cell wrapped every one of them. The three cards under it - maintenance, storage, component
+  // health - are peers, so they share one row at equal height and width. Source order is the
+  // reading order, so a keyboard, a screen reader and a phone meet them in the order the grid
+  // draws them.
   const gridGeometry = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
     if (cards.length !== 4) return { error: `expected 4 cards, found ${cards.length}` };
@@ -1035,59 +1037,37 @@ export async function systemInformationPage({ base, page, check }) {
       return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height), title };
     });
 
-    const [c1, c2, c3, c4] = boxes;
-    // Row 1 cards (c1, c2) should share top and bottom edge (equal height within row).
-    const row1TopDiff = Math.abs(c1.top - c2.top);
-    const row1BottomDiff = Math.abs(c1.bottom - c2.bottom);
-    const row1HeightDiff = Math.abs(c1.height - c2.height);
+    const [versions, ...detail] = boxes;
+    const spread = (values) => Math.max(...values) - Math.min(...values);
+    // The versions card sits above the others and spans the column they share.
+    const isVersionsFirst = detail.every((box) => box.top >= versions.bottom - 2);
+    const spansTheColumn = Math.abs(versions.left - detail[0].left) <= 2
+      && Math.abs(versions.right - detail[detail.length - 1].right) <= 2
+      && versions.width >= detail[0].width * 2;
+    // The operational cards are one row: same top and bottom edge, same width.
+    const sameRow = spread(detail.map((box) => box.top)) <= 2 && spread(detail.map((box) => box.bottom)) <= 2;
+    const equalWidths = spread(detail.map((box) => box.width)) <= 2;
+    const isMaintenanceFirst = /Maintenance|Penyelenggaraan|维护|維護/i.test(detail[0].title);
+    const isStorageSecond = /Storage|Storan|存储|儲存/i.test(detail[1].title);
+    const isHealthLast = /Health|Kesihatan|健康/i.test(detail[2].title);
 
-    // Row 2 cards (c3, c4) should share top and bottom edge (equal height within row).
-    const row2TopDiff = Math.abs(c3.top - c4.top);
-    const row2BottomDiff = Math.abs(c3.bottom - c4.bottom);
-    const row2HeightDiff = Math.abs(c3.height - c4.height);
-
-    // Column alignment: c1 and c3 on left column, c2 and c4 on right column.
-    const colLeftDiff = Math.abs(c1.left - c3.left);
-    const colRightDiff = Math.abs(c2.left - c4.left);
-    const widthDiff = Math.abs(c1.width - c2.width);
-
-    // Maintenance sits beside versions in the first row.
-    const isMaintenanceSecond = /Maintenance|Penyelenggaraan|维护|維護/i.test(c2.title);
-
-    return {
-      row1TopDiff,
-      row1BottomDiff,
-      row1HeightDiff,
-      row2TopDiff,
-      row2BottomDiff,
-      row2HeightDiff,
-      colLeftDiff,
-      colRightDiff,
-      widthDiff,
-      isMaintenanceSecond,
-      boxes,
-    };
+    return { isVersionsFirst, spansTheColumn, sameRow, equalWidths, isMaintenanceFirst, isStorageSecond, isHealthLast, boxes, error: null };
   });
 
   check(
-    'desktop cards in row 1 are equal height and aligned',
-    gridGeometry.row1TopDiff <= 2 && gridGeometry.row1BottomDiff <= 2,
-    `row1: topDiff=${gridGeometry.row1TopDiff}px, bottomDiff=${gridGeometry.row1BottomDiff}px`,
+    'the versions card is the full-width first row',
+    !gridGeometry.error && gridGeometry.isVersionsFirst && gridGeometry.spansTheColumn,
+    gridGeometry.error ?? `versions=${gridGeometry.boxes?.[0]?.width}px detail=${gridGeometry.boxes?.[1]?.width}px`,
   );
   check(
-    'desktop cards in row 2 are equal height and aligned',
-    gridGeometry.row2TopDiff <= 2 && gridGeometry.row2BottomDiff <= 2,
-    `row2: topDiff=${gridGeometry.row2TopDiff}px, bottomDiff=${gridGeometry.row2BottomDiff}px`,
+    'the operational cards share one row at equal height and width',
+    !gridGeometry.error && gridGeometry.sameRow && gridGeometry.equalWidths,
+    gridGeometry.error ?? `tops=${gridGeometry.boxes?.map((box) => box.top).join(',')} widths=${gridGeometry.boxes?.map((box) => box.width).join(',')}`,
   );
   check(
-    'desktop columns have equal widths and matching left edges',
-    gridGeometry.colLeftDiff <= 2 && gridGeometry.colRightDiff <= 2 && gridGeometry.widthDiff <= 2,
-    `colLeftDiff=${gridGeometry.colLeftDiff}px, colRightDiff=${gridGeometry.colRightDiff}px, widthDiff=${gridGeometry.widthDiff}px`,
-  );
-  check(
-    'maintenance card sits in the top-right cell, beside the versions card',
-    gridGeometry.isMaintenanceSecond,
-    `second card title: ${gridGeometry.boxes?.[1]?.title}`,
+    'the operational row reads maintenance, storage, then health',
+    !gridGeometry.error && gridGeometry.isMaintenanceFirst && gridGeometry.isStorageSecond && gridGeometry.isHealthLast,
+    gridGeometry.error ?? `titles: ${gridGeometry.boxes?.map((box) => box.title).join(' | ')}`,
   );
 
 }

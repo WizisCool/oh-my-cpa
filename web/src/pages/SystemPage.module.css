@@ -4,9 +4,19 @@
   padding-bottom: 32px;
 }
 
-.system-grid {
+/* The versions card is the page's subject and takes a row of its own: a product row is identity,
+   comparison, status and actions at once, and a half-width cell made every one of them wrap. The
+   three operational cards below it are peers, so they share one row and wrap to fewer columns
+   before their own readings would be squeezed. */
+.system-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -138,7 +148,8 @@
 }
 
 /* The row's trailing actions share one group, so the comparison keeps its alignment whether
-   a release offers one action, both or neither. */
+   a release offers one action, both or neither. The primary action is drawn last so it sits at
+   the row's right edge, the same edge the page's own primary action takes. */
 .version-actions {
   display: flex;
   flex: 0 0 auto;
@@ -182,20 +193,61 @@
   max-width: 280px;
 }
 
+/* A replacement in flight: the updater's four steps, then the sentence naming the one it is on.
+   The bar carries the step count, not a measured percentage - the stages are known and ordered,
+   their durations are not. A step that has been reached stays filled, so the bar reads as
+   progress through a known sequence rather than as a moving indicator. */
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.update-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  max-width: 320px;
+}
+
+.update-step {
+  height: 3px;
+  border-radius: var(--radius-xs);
+  background: var(--border);
+}
+
+.update-step-reached {
+  background: var(--accent);
+}
+
+/* Why a product is not updated from the page. A quiet mark beside a sentence: a pinned image or
+   a container that runs elsewhere is an operator's decision, not a fault. */
+.update-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.update-blocked-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-top: 3px;
+  color: var(--meta);
+  font-size: var(--text-sm);
+}
+
 /* The setup step is part of the versions card, not a card of its own: it explains why the
    versions above carry no update action. */
 .updater-setup {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding-top: 20px;
   border-top: 1px solid var(--border-soft);
-}
-
-.updater-setup-title {
-  color: var(--fg);
-  font-size: var(--text-sm);
-  font-weight: 600;
 }
 
 .updater-command {
@@ -581,7 +633,7 @@
 }
 
 @media (max-width: 900px) {
-  .system-grid {
+  .detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

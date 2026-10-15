@@ -1,11 +1,14 @@
 import React from 'react';
 import { Button } from 'antd';
-import { CloudDownloadOutlined, LinkOutlined } from '../../components/icons';
+import clsx from 'clsx';
+import { CloudDownloadOutlined, InfoCircleOutlined, LinkOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { CopyButton } from '../../components/common/CopyButton';
+import { SectionHeading } from '../../components/common/SectionHeading';
 import { Notice } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { SystemProductVersion, SystemUpdaterResponse } from '../../types/system';
+import { UPDATE_STAGE_ORDER } from './versionPresentation';
 import type { UpdateOffer } from './versionPresentation';
 import styles from '../SystemPage.module.css';
 
@@ -56,14 +59,41 @@ export const UpdateAction: React.FC<UpdateActionProps> = ({ version, productTitl
   );
 };
 
-/** The stage of a running update, or why this product is not updated from the page. */
+/**
+ * Where a running replacement has got to, or why this product is not updated from the page.
+ *
+ * The step bar carries the updater's own four stages, not a measured percentage: the stages are
+ * known and ordered, their durations are not. The sentence beside it is that stage in words, so
+ * the reading never rests on the bar alone.
+ */
 export const UpdateStatusLine: React.FC<{ offer: UpdateOffer }> = ({ offer }) => {
   const t = useT();
   if (offer.kind === 'running') {
-    return <div className={styles['version-detail']} role="status" data-testid="sys-update-stage">{t(offer.stageKey)}</div>;
+    const reached = UPDATE_STAGE_ORDER.indexOf(offer.stage);
+    return (
+      <div className={styles['update-progress']}>
+        <span className={styles['update-steps']} data-testid="sys-update-steps" aria-hidden="true">
+          {UPDATE_STAGE_ORDER.map((stage, index) => (
+            <span
+              key={stage}
+              className={clsx(styles['update-step'], index <= reached && styles['update-step-reached'])}
+              data-reached={index <= reached}
+            />
+          ))}
+        </span>
+        <div className={styles['version-detail']} role="status" data-testid="sys-update-stage">{t(offer.stageKey)}</div>
+      </div>
+    );
   }
   if (offer.kind === 'blocked') {
-    return <div className={styles['version-detail']} data-testid="sys-update-blocked">{t(offer.reasonKey, { image: offer.image })}</div>;
+    // A quiet mark rather than a warning: a pinned image or a container that lives elsewhere is
+    // an operator's decision, not a fault, and the sentence says which one it is.
+    return (
+      <div className={styles['update-blocked']} data-testid="sys-update-blocked">
+        <span className={styles['update-blocked-icon']} aria-hidden="true"><InfoCircleOutlined /></span>
+        <span>{t(offer.reasonKey, { image: offer.image })}</span>
+      </div>
+    );
   }
   return null;
 };
@@ -81,13 +111,18 @@ export const UpdaterSetup: React.FC<{ updater: SystemUpdaterResponse | undefined
   if (updater?.state !== 'not_installed') return null;
   return (
     <section className={styles['updater-setup']} aria-label={t('sys.updater_install_title')} data-testid="sys-updater-setup">
-      <div className={styles['updater-setup-title']}>{t('sys.updater_install_title')}</div>
-      <div className={styles['version-detail']}>
-        {t('sys.updater_install_desc')}{' '}
-        <a href={UPDATER_GUIDE_URL} target="_blank" rel="noopener noreferrer" className={styles['repo-link']}>
-          {t('sys.updater_install_guide')} <LinkOutlined />
-        </a>
-      </div>
+      <SectionHeading
+        level="group"
+        title={t('sys.updater_install_title')}
+        description={(
+          <>
+            {t('sys.updater_install_desc')}{' '}
+            <a href={UPDATER_GUIDE_URL} target="_blank" rel="noopener noreferrer" className={styles['repo-link']}>
+              {t('sys.updater_install_guide')} <LinkOutlined />
+            </a>
+          </>
+        )}
+      />
       <div className={styles['updater-command']}>
         <code>{UPDATER_INSTALL_COMMAND}</code>
         <CopyButton text={UPDATER_INSTALL_COMMAND} label={t('sys.updater_install_copy')} />

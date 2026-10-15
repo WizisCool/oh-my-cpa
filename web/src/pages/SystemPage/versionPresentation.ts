@@ -47,14 +47,19 @@ export function summarizeUpdateCheck(versions: SystemProductVersion[], isCached:
   return { kind: isCached ? 'cached' as const : 'success' as const, failedProducts };
 }
 
+/** The stages a replacement passes through, in the order the updater reports them. */
+export const UPDATE_STAGE_ORDER = ['pulling', 'stopping', 'starting', 'verifying'] as const;
+export type UpdateStage = (typeof UPDATE_STAGE_ORDER)[number];
+
 export type UpdateOffer =
   | { kind: 'none' }
   /** `isBusy` is another product's update in flight: the action exists but must wait. */
   | { kind: 'available'; isBusy: boolean }
-  | { kind: 'running'; stageKey: string }
+  /** `stage` is the step reached, for the step bar; `stageKey` is that step in words. */
+  | { kind: 'running'; stage: UpdateStage; stageKey: string }
   | { kind: 'blocked'; reasonKey: string; image: string };
 
-const UPDATE_STAGE_KEYS: Record<string, string> = {
+const UPDATE_STAGE_KEYS: Record<UpdateStage, string> = {
   pulling: 'sys.update_stage.pulling',
   stopping: 'sys.update_stage.stopping',
   starting: 'sys.update_stage.starting',
@@ -82,7 +87,12 @@ export function deriveUpdateOffer(
   if (!updater || updater.state !== 'ready') return { kind: 'none' };
   const job = updater.job && !updater.job.finished ? updater.job : null;
   if (job?.product === product) {
-    return { kind: 'running', stageKey: UPDATE_STAGE_KEYS[job.stage] ?? UPDATE_STAGE_KEYS.pulling };
+    // A stage this build does not know is drawn as the first step rather than as no progress:
+    // the job is running, and the sentence beside the bar still reports what the updater said.
+    const stage: UpdateStage = (UPDATE_STAGE_ORDER as readonly string[]).includes(job.stage)
+      ? (job.stage as UpdateStage)
+      : 'pulling';
+    return { kind: 'running', stage, stageKey: UPDATE_STAGE_KEYS[stage] };
   }
   if (version.state !== 'update_available') return { kind: 'none' };
   const entry = updater.products.find((candidate) => candidate.product === product);

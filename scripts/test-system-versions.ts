@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
+import { UPDATE_STAGE_ORDER, deriveUpdateOffer, deriveVersionPresentation, summarizeUpdateCheck } from '../web/src/pages/SystemPage/versionPresentation.ts';
 import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../web/src/utils/updateDismissals.ts';
 import type { SystemProductVersion, SystemUpdateJob, SystemUpdaterResponse } from '../web/src/types/system.ts';
 
@@ -148,9 +148,23 @@ test('a running update shows its stage on its own product and holds the other on
   });
   // The comparison is stale while the container is being replaced, so it is not consulted.
   assert.deepEqual(deriveUpdateOffer(createVersion({ product: 'cpa', state: 'up_to_date' }), updater, 'cpa'), {
-    kind: 'running', stageKey: 'sys.update_stage.verifying',
+    kind: 'running', stage: 'verifying', stageKey: 'sys.update_stage.verifying',
   });
   assert.deepEqual(deriveUpdateOffer(createVersion(), updater, 'omc'), { kind: 'available', isBusy: true });
   const finished = { ...updater, job: createJob({ product: 'cpa', stage: 'rolled_back', finished: true }) };
   assert.deepEqual(deriveUpdateOffer(createVersion({ product: 'cpa' }), finished, 'cpa'), { kind: 'available', isBusy: false });
+});
+
+test('a running update reports the step it has reached, in the order the updater reports', () => {
+  const updater = createUpdater({ job: createJob({ product: 'omc', stage: 'stopping' }) });
+  assert.deepEqual(deriveUpdateOffer(createVersion(), updater, 'omc'), {
+    kind: 'running', stage: 'stopping', stageKey: 'sys.update_stage.stopping',
+  });
+  // A stage this build does not know is drawn as the first step rather than as no progress: the
+  // job is running, and the sentence beside the bar still reports what the updater said.
+  const unknown = createUpdater({ job: createJob({ product: 'omc', stage: 'draining' as unknown as SystemUpdateJob['stage'] }) });
+  assert.deepEqual(deriveUpdateOffer(createVersion(), unknown, 'omc'), {
+    kind: 'running', stage: 'pulling', stageKey: 'sys.update_stage.pulling',
+  });
+  assert.deepEqual([...UPDATE_STAGE_ORDER], ['pulling', 'stopping', 'starting', 'verifying']);
 });
