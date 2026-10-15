@@ -48,6 +48,40 @@ type fakeContainer struct {
 	Health string
 }
 
+// unixSocketPathLimit is the cap Windows puts on an AF_UNIX path: 107 characters bind and 108
+// does not (measured). Every name chosen below leaves a wide margin under it.
+const unixSocketPathLimit = 107
+
+// shortSocketPath makes a directory whose docker.sock stays under the cap, and returns the
+// socket path inside it.
+//
+// The OS temp root is tried first and a directory at the root of the system drive second,
+// because a deep TEMP is the one thing this test cannot work under: it would then fail on the
+// length of a path nobody in the test chose. A machine where neither root is short enough skips
+// the test, which states the limit rather than reporting a bind failure as a defect.
+func shortSocketPath(t *testing.T) string {
+	t.Helper()
+	bases := []string{os.TempDir()}
+	if drive := os.Getenv("SystemDrive"); drive != "" {
+		bases = append(bases, drive+"\\")
+	}
+	for _, base := range bases {
+		dir, err := os.MkdirTemp(base, "omc-")
+		if err != nil {
+			continue
+		}
+		path := filepath.Join(dir, "docker.sock")
+		if len(path) > unixSocketPathLimit {
+			_ = os.RemoveAll(dir)
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return path
+	}
+	t.Skipf("no temp root short enough for a unix socket (the limit is %d characters)", unixSocketPathLimit)
+	return ""
+}
+
 func newFakeDaemon(t *testing.T) (*fakeDaemon, *Engine) {
 	t.Helper()
 	daemon := &fakeDaemon{
@@ -57,16 +91,11 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, *Engine) {
 		networks:   map[string]bool{},
 		crashing:   map[string]bool{},
 	}
-	// A unix-socket path is capped at 107 characters on Windows and bind fails past the cap,
-	// while t.TempDir() nests the test name under the OS temp root - long enough to overrun it
-	// on a machine whose TEMP is deep. A short directory of our own keeps the fake daemon
-	// listening everywhere, rather than only where TEMP happens to be short.
-	socketDir, err := os.MkdirTemp("", "omc-updater-test-")
-	if err != nil {
-		t.Fatalf("temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "docker.sock")
+	// A unix-socket path is capped at 107 characters on Windows, and t.TempDir() nests the test
+	// name under the OS temp root, which on a machine with a deep TEMP overruns the cap on its
+	// own. A directory of our own, chosen by the length of the path it yields, keeps the fake
+	// daemon listening everywhere.
+	socketPath := shortSocketPath(t)
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
