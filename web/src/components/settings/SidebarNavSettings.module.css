@@ -1,9 +1,16 @@
 /* The panel's body: a list that fills the dialog the way the settings page fills a group.
    The modal supplies its own padding, so the rows drop the page's inline padding and keep only
-   their separators - the head line, the subheads and the row titles one left edge. */
+   their separators - the head line, the subheads and the row titles one left edge.
+   The rail is sixteen entries before any plugin registers a page, so the list is taller than a
+   dialog should ever be: it scrolls inside itself, the way the font library's list does, and the
+   dialog stays a shape the operator can see the whole of. The right padding is the room the
+   scrollbar would otherwise take from the switch at the trailing edge. */
 .dialog {
   display: flex;
   flex-direction: column;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .dialog :global(.settings-toggle-row) {
