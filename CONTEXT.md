@@ -718,9 +718,11 @@ with normally distributed daily variation, quieter weekends and a small set of i
 - **Paid Fallback Evidence** is `disabled`, `enabled` or `unknown`, with its source and
   observation instant. Missing fields never mean disabled. Enabled or unknown paid
   fallback pauses every consuming warmup request; reset credits are not billing evidence.
-  The console labels it "Paid overage" ("超额付费"), the Activation Observation row
-  "Window activation", and a policy "warmup settings"; console copy describes what warmup does
-  for the user (starts the credential's quota window) rather than restating its guards.
+  The console labels it "Paid overage" ("超额付费") and a policy "warmup settings"; console
+  copy describes what warmup does for the user (starts the credential's quota window) rather
+  than restating its guards. A credential's warmup leads with a status (on, off or paused and
+  why; next run; last run; charges), shows an inherited policy as plain rules, and reports a
+  manual run's outcome as a toast.
 - Only main five-hour and overall weekly windows are activation targets. Zero usage with
   a fixed future boundary remains active; missing or malformed evidence is unknown.
   Explicit unused windows or repeated full-duration sliding boundaries can establish idle.

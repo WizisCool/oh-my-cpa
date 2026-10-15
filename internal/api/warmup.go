@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -387,8 +386,14 @@ func isWarmupActivated(before, after *warmup.Observation) bool {
 		return false
 	}
 	for _, pair := range [][2]warmup.Window{{before.FiveHour, after.FiveHour}, {before.Weekly, after.Weekly}} {
+		// An idle Codex window slides: its reset tracks each read, so between reads
+		// it moves by the elapsed time. A window the warmup started is frozen at
+		// send time and moved only by the delay between the first read and the
+		// send. Requiring that delay to be under a second rejected real starts.
 		if pair[0].State == "idle" && pair[0].ResetAtMS != nil && pair[1].ResetAtMS != nil && pair[1].UsedPercent != nil && *pair[1].UsedPercent == 0 {
-			if after.ObservedAtMS-before.ObservedAtMS < 30000 || math.Abs(float64(*pair[1].ResetAtMS-*pair[0].ResetAtMS)) > 1000 {
+			elapsed := after.ObservedAtMS - before.ObservedAtMS
+			drift := *pair[1].ResetAtMS - *pair[0].ResetAtMS
+			if elapsed < 30000 || drift < -1000 || drift > elapsed-5000 {
 				return false
 			}
 		}
@@ -497,7 +502,9 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 			previous.Reason = ""
 			state.IsProtocolVerified = true
 		}
-		if previous.Status == "pending" || previous.Status == "executing" {
+		// A pending run keeps confirming in the scheduler; a second click must
+		// neither send again nor cut that confirmation short.
+		if previous.Status == "executing" {
 			previous.Status = "uncertain"
 			previous.Reason = "outcome_unknown"
 		}
@@ -506,6 +513,12 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 		}
 		// This receipt refuses the new request without overwriting the observed prior run.
 		result.Reason = "outcome_unknown"
+		switch previous.Status {
+		case "pending":
+			result.Reason = "activation_pending"
+		case "activated":
+			result.Reason = "already_active"
+		}
 		result.FinishedAtMS = h.now().UnixMilli()
 		if result.RequestID == "" {
 			return result, nil

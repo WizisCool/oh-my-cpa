@@ -1121,7 +1121,7 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await page.getByTestId('oauth-warmup-settings-open').click();
     const drawer = page.locator('.ant-drawer-content-wrapper').filter({ has: page.locator('.ant-drawer-title').filter({ hasText: 'Warmup settings' }) });
     await drawer.waitFor({ state: 'visible' });
-    await drawer.getByText('Time zone: UTC', { exact: true }).waitFor();
+    await drawer.getByText('The five-hour window runs 06:00–11:00 (UTC)', { exact: true }).waitFor();
     for (const reducedMotion of ['no-preference', 'reduce']) {
       await page.emulateMedia({ reducedMotion });
       const transition = await drawer.evaluate(element => {
@@ -1146,7 +1146,7 @@ export async function oauthWindowWarmup({ page, base, check }) {
       }
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    await drawer.getByRole('switch', { name: 'Daily scheduled warmup' }).click();
+    await drawer.getByRole('switch', { name: 'Warm up daily at a set time' }).click();
     await page.goBack();
     const confirmation = page.getByRole('dialog').filter({ hasText: 'Unsaved' });
     await confirmation.waitFor({ state: 'visible' });
@@ -1167,10 +1167,10 @@ export async function oauthWindowWarmup({ page, base, check }) {
     check('manual warmup names the selected model and does not consume before confirmation', consumingRequests.length === 0 && (await manualConfirmation.innerText()).includes('claude-haiku-test'));
     await manualConfirmation.getByRole('button', { name: 'Warm up now', exact: true }).click();
     await until(() => consumingRequests.length === 1, { label: 'one confirmed warmup request' });
-    await warmup.getByText('Quota window started', { exact: true }).waitFor();
+    await warmup.getByTestId('warmup-last-result').getByText('Quota window started', { exact: true }).waitFor();
     check('manual warmup sends a confirmed revision-bound id without arbitrary upstream fields', consumingRequests[0].confirmed === true && typeof consumingRequests[0].request_id === 'string' && Object.keys(consumingRequests[0]).sort().join(',') === 'confirmed,request_id,revision');
-    await warmup.getByRole('combobox', { name: 'Settings source' }).click();
-    await page.getByText('Custom for this credential', { exact: true }).last().click();
+    await warmup.getByText('Custom', { exact: true }).click();
+    await warmup.getByRole('switch', { name: 'Warm up as soon as a window resets' }).waitFor();
     const detail = page.locator('.ant-drawer-content-wrapper').filter({ has: warmup });
     await detail.getByRole('tab', { name: 'Configuration' }).click();
     const note = detail.getByRole('textbox', { name: 'Note' });

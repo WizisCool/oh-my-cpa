@@ -101,16 +101,25 @@ func parseClaudeCompletion(raw []byte) Outcome {
 	}
 	return Outcome{Status: "pending", Reason: "activation_pending", InputTokens: message.Usage.InputTokens, OutputTokens: message.Usage.OutputTokens}
 }
+
+// The Codex backend streams each output item in response.output_item.done and
+// routinely leaves response.completed.output empty (CPA backfills it for the
+// same reason), so completion is judged from both. A completed response proves
+// the request was accepted and metered; only window evidence proves activation.
 func parseCodexCompletion(raw []byte) Outcome {
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	scanner.Buffer(make([]byte, 4096), MAX_RESPONSE_BYTES)
+	itemTypes := []string{}
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
 		var event struct {
-			Type     string `json:"type"`
+			Type string `json:"type"`
+			Item struct {
+				Type string `json:"type"`
+			} `json:"item"`
 			Response struct {
 				Status string `json:"status"`
 				Output []struct {
@@ -125,17 +134,22 @@ func parseCodexCompletion(raw []byte) Outcome {
 		if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event) != nil {
 			continue
 		}
-		if event.Type == "response.failed" || event.Type == "error" {
+		switch event.Type {
+		case "response.failed", "error":
 			return Outcome{Status: "uncertain", Reason: "outcome_unknown"}
-		}
-		if event.Type == "response.completed" && event.Response.Status == "completed" {
+		case "response.output_item.done":
+			itemTypes = append(itemTypes, event.Item.Type)
+		case "response.completed":
+			if event.Response.Status != "completed" {
+				continue
+			}
 			for _, output := range event.Response.Output {
-				if output.Type != "message" && output.Type != "reasoning" {
+				itemTypes = append(itemTypes, output.Type)
+			}
+			for _, itemType := range itemTypes {
+				if itemType != "message" && itemType != "reasoning" {
 					return Outcome{Status: "uncertain", Reason: "unexpected_tool"}
 				}
-			}
-			if len(event.Response.Output) == 0 {
-				return Outcome{Status: "uncertain", Reason: "outcome_unknown"}
 			}
 			return Outcome{Status: "pending", Reason: "activation_pending", InputTokens: event.Response.Usage.InputTokens, OutputTokens: event.Response.Usage.OutputTokens}
 		}

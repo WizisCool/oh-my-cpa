@@ -3391,7 +3391,12 @@ uncertain; they are not resubmitted. A transient startup recovery error is diagn
 retried on the minute ticks; consuming rounds wait for successful recovery.
 Definite rate-limit refusals use one/five/fifteen-minute backoff, with at most three
 retries; a successful response is checked immediately and at most twice more without
-resending. An approved enabled policy admits the first automatic attempt and an explicitly
+resending. A manual run while that check is still pending is refused (`activation_pending`)
+without sending and without cutting the pending check short. The Codex backend streams
+each output item in `response.output_item.done` and usually leaves `response.completed`'s
+output empty, so the adapter judges completion from both. An idle Codex window reports a
+reset that slides with every read; activation is a reset that stopped sliding, moved only
+by the delay between the first read and the send, observed at least 30 seconds later. An approved enabled policy admits the first automatic attempt and an explicitly
 selected new model through fresh quota and billing evidence. The legacy `protocol_verified`
 and `verified_model` state fields record observed activation; they do not admit or suppress
 execution. An observed unsupported protocol response pauses automatic requests for the

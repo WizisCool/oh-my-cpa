@@ -72,3 +72,25 @@ func TestHTTPAndTerminalFailuresDoNotClaimActivation(t *testing.T) {
 		})
 	}
 }
+
+// The Codex backend leaves response.completed.output empty and streams each
+// item separately; a metered completion must not read as an unknown outcome.
+func TestCodexCompletionReadsStreamedOutputItems(t *testing.T) {
+	for _, scenario := range []struct {
+		name, stream, status, reason string
+	}{
+		{"streamed-items", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"reasoning\"}}\n\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}}\n\n", "pending", "activation_pending"},
+		{"streamed-tool", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n", "uncertain", "unexpected_tool"},
+		{"failed", "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\n", "uncertain", "outcome_unknown"},
+		{"truncated", "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\n", "uncertain", "outcome_unknown"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			encoded, _ := json.Marshal(scenario.stream)
+			caller := &recordingCaller{response: management.ApiCallResponse{StatusCode: 200, Body: encoded}}
+			outcome := Send(context.Background(), caller, management.AuthFile{AuthIndex: "target"}, "codex", "model")
+			if outcome.Status != scenario.status || outcome.Reason != scenario.reason {
+				t.Fatalf("%+v", outcome)
+			}
+		})
+	}
+}

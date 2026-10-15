@@ -47,3 +47,6 @@ export function canSaveWarmupPolicy(policy: WarmupPolicy): boolean {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(policy.daily_time)
     && (policy.reset_mode === 'off' && !policy.daily_enabled || Boolean(policy.model));
 }
+export function isWarmupPolicyEnabled(policy: WarmupPolicy): boolean {
+  return policy.reset_mode !== 'off' || policy.daily_enabled;
+}
