@@ -902,6 +902,11 @@ const DICT: Record<string, [string, string]> = {
   'omc.quota_auto_refresh_invalid': ['刷新间隔需为 5 分钟到 24 小时之间', 'The refresh interval must be between 5 minutes and 24 hours'],
   'omc.section_display': ['数据显示', 'Data display'],
   'omc.section_appearance': ['界面外观', 'Appearance'],
+  'omc.section_sidebar': ['侧边栏', 'Sidebar'],
+  // The rail's own rows. "Show all" puts every entry back; the OMC settings entry cannot be
+  // hidden, and its row states why rather than only looking switched off and inert.
+  'omc.sidebar_show_all': ['全部显示', 'Show all'],
+  'omc.sidebar_locked': ['该入口用于管理侧边栏，始终显示。', 'This entry manages the sidebar, so it always shows.'],
   'omc.token_style': ['Token 计量单位', 'Token unit style'],
   // States the guarantee rather than restating the control: the choice is how the
   // numbers read, not how precise they are.

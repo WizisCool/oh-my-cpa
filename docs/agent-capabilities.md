@@ -331,6 +331,9 @@ a new capability must not add them:
   stay console-only because either can carry credential material into a preview;
 - approval, secret submission, or OAuth completion for an operation an external agent
   prepared.
+- which entries this console's rail shows: it is console state stored in the preferences
+  document rather than a deployment capability, no capability reads or writes it, and the pages
+  it hides stay reachable by URL.
 
 A capability that cannot be implemented safely must be omitted here and recorded in
 the pull request with the reason, rather than added with a weaker check.

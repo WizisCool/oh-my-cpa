@@ -1,24 +1,8 @@
 import React from 'react';
 import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
 import {
-  PuzzleOutlined,
-  ShopOutlined,
-  AuditOutlined,
-  CloudServerOutlined,
-  CodeSandboxOutlined,
-  ControlOutlined,
-  DashboardOutlined,
-  DollarOutlined,
-  HistoryOutlined,
-  InfoCircleOutlined,
-  KeyOutlined,
-  LoginOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ProfileOutlined,
-  RobotOutlined,
-  SettingOutlined,
-  BlockOutlined,
 } from '../icons';
 import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -38,30 +22,16 @@ import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
-import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX, type PluginPageEntry } from '../plugins/pluginPages';
-import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
+import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
+import { buildNavGroups } from './navigation';
+import { navEntryLabel, retainVisibleGroups, type NavEntry, type NavGroup } from '../../types/sidebarNav';
+import { useNavVisibility } from '../../hooks/useNavVisibility';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 
 const { Sider, Content } = Layout;
 
 type NavItem = Required<MenuProps>['items'][number];
 
-interface NavEntry {
-  key: string;
-  /** A translation key, or for a plugin's own page the label the plugin registered. */
-  labelKey: string;
-  isLiteralLabel?: boolean;
-  icon: React.ReactNode;
-}
-
-interface NavGroup {
-  key: string;
-  labelKey: string;
-  items: NavEntry[];
-}
-
-// Groups mirror the navigation model: Operate / Gateway / Observe / Control,
-// plus the Oh My CPA layer.
 /**
  * Routes that own their scroll columns rather than scrolling the content area.
  *
@@ -83,81 +53,6 @@ function isWorkspaceRoute(pathname: string): boolean {
  */
 function routeViewKey(pathname: string): string {
   return pathname === '/plugins' || pathname.startsWith('/plugins/') ? '/plugins' : pathname;
-}
-
-const staticNavGroups: NavGroup[] = [
-  {
-    key: 'operate',
-    labelKey: 'nav.group.operate',
-    items: [
-      { key: '/dashboard', labelKey: 'nav.dashboard', icon: <DashboardOutlined /> },
-      { key: '/agent', labelKey: 'nav.agent', icon: <RobotOutlined /> },
-      { key: '/playground', labelKey: 'nav.playground', icon: <CodeSandboxOutlined /> },
-      { key: '/model-square', labelKey: 'nav.model_square', icon: <BlockOutlined /> },
-    ],
-  },
-  {
-    key: 'gateway',
-    labelKey: 'nav.group.gateway',
-    items: [
-      // Upstream credentials first (provider keys, then OAuth accounts), then the keys
-      // clients use to reach this gateway: the group reads in the direction a request
-      // is authorised, rather than interleaving the two sides.
-      { key: '/ai-providers', labelKey: 'nav.providers', icon: <CloudServerOutlined /> },
-      // Authentication, credential management and quota are one credential-centred workspace.
-      { key: '/oauth-management', labelKey: 'nav.auth_files', icon: <LoginOutlined /> },
-      { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
-    ],
-  },
-  {
-    key: 'observe',
-    labelKey: 'nav.group.observe',
-    items: [
-      { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
-      { key: '/pricing', labelKey: 'nav.pricing', icon: <DollarOutlined /> },
-      { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },
-      { key: '/audit', labelKey: 'nav.audit', icon: <AuditOutlined /> },
-    ],
-  },
-  {
-    key: 'control',
-    labelKey: 'nav.group.control',
-    items: [
-      { key: '/config', labelKey: 'nav.config', icon: <ControlOutlined /> },
-      { key: '/omc-settings', labelKey: 'nav.omc_settings', icon: <SettingOutlined /> },
-      { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
-    ],
-  },
-];
-
-/**
- * Plugins are a group of their own: what is installed, the store, and then every page a
- * running plugin registered. A plugin's page is a destination in its own right, so it sits
- * in the navigation beside the console's pages rather than behind the plugin's row.
- */
-function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGroup[] {
-  const pluginGroup: NavGroup = {
-    key: 'plugins',
-    labelKey: 'nav.group.plugins',
-    items: [
-      { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
-      { key: '/plugins/store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
-      ...pluginPages.map((page): NavEntry => ({
-        key: page.route,
-        labelKey: page.navLabel,
-        isLiteralLabel: true,
-        icon: isRenderableLogoURL(page.logo)
-          ? <img className="app-menu-plugin-logo" src={page.logo} alt="" />
-          : <PuzzleOutlined />,
-      })),
-    ],
-  };
-  const controlIndex = staticNavGroups.findIndex((group) => group.key === 'control');
-  return [...staticNavGroups.slice(0, controlIndex), pluginGroup, ...staticNavGroups.slice(controlIndex)];
-}
-
-function navLabel(entry: NavEntry, t: TFunc): string {
-  return entry.isLiteralLabel ? entry.labelKey : t(entry.labelKey);
 }
 
 /** The page that answers "is there a newer version", and so the entry an available update marks. */
@@ -184,8 +79,8 @@ function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: b
   if (isCollapsed) {
     return navGroups.flatMap((group) => group.items).map((entry) => {
       // The collapsed row's name is its `title`, so the notice is spoken from there.
-      const title = isFlagged(entry) ? `${navLabel(entry, t)} · ${t('nav.update_available')}` : navLabel(entry, t);
-      return { key: entry.key, icon: iconFor(entry), label: navLabel(entry, t), title, 'data-route-path': entry.key };
+      const title = isFlagged(entry) ? `${navEntryLabel(entry, t)} · ${t('nav.update_available')}` : navEntryLabel(entry, t);
+      return { key: entry.key, icon: iconFor(entry), label: navEntryLabel(entry, t), title, 'data-route-path': entry.key };
     });
   }
   return navGroups.map((group) => ({
@@ -196,8 +91,8 @@ function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: b
       key: entry.key,
       icon: iconFor(entry),
       label: isFlagged(entry)
-        ? <>{navLabel(entry, t)}<span className="sr-only"> · {t('nav.update_available')}</span></>
-        : navLabel(entry, t),
+        ? <>{navEntryLabel(entry, t)}<span className="sr-only"> · {t('nav.update_available')}</span></>
+        : navEntryLabel(entry, t),
       title: entry.isLiteralLabel ? entry.labelKey : undefined,
       'data-route-path': entry.key,
     })),
@@ -272,16 +167,21 @@ export const AppLayout: React.FC = () => {
   });
   const navGroups = React.useMemo(() => buildNavGroups(collectPluginPages(pluginList?.plugins)), [pluginList]);
   const navEntries = React.useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
+  // The rail draws the entries the operator has not hidden. Everything else on this shell reads the
+  // full model, so a page reached by a URL - or by a link into it - still names itself in the
+  // breadcrumb, the document title and the group it belongs to.
+  const { hiddenSet } = useNavVisibility();
+  const visibleNavGroups = React.useMemo(() => retainVisibleGroups(navGroups, hiddenSet), [navGroups, hiddenSet]);
 
   const currentEntry = navEntries
     .filter((entry) => location.pathname === entry.key || location.pathname.startsWith(`${entry.key}/`))
     .sort((a, b) => b.key.length - a.key.length)[0];
   const selectedKey = currentEntry?.key ?? '/dashboard';
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
-  const currentLabel = currentEntry ? navLabel(currentEntry, t) : t('common.management');
+  const currentLabel = currentEntry ? navEntryLabel(currentEntry, t) : t('common.management');
   useDocumentTitle(currentLabel);
   const hasPendingUpdate = usePendingUpdates().length > 0;
-  const menuItems = React.useMemo(() => buildMenuItems(navGroups, t, isCollapsed, hasPendingUpdate), [navGroups, t, isCollapsed, hasPendingUpdate]);
+  const menuItems = React.useMemo(() => buildMenuItems(visibleNavGroups, t, isCollapsed, hasPendingUpdate), [visibleNavGroups, t, isCollapsed, hasPendingUpdate]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);

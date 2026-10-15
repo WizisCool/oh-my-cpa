@@ -32,6 +32,7 @@ import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '..
 import { SectionHeading } from '../components/common/SectionHeading';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
+import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
 import {
   DEFAULT_QUOTA_AUTO_REFRESH,
@@ -76,6 +77,10 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
  * beside the dashboard's own readouts. Each control writes the same underlying setting its shortcut
  * writes, so the two cannot disagree, and an operator configuring a fresh deployment has one place
  * to look instead of discovering each control where it happens to surface.
+ *
+ * **The sidebar group comes last** because it is the setting here an operator touches once: it lists
+ * the rail's own destinations, so taking an entry out of the rail is done by reading the entries the
+ * rail has rather than by recalling what the console contains.
  *
  * **The appearance group is a mode and two palettes, not a list of palettes.** The header's control
  * answers "light or dark" and nothing else; which palette each of those two modes uses is a
@@ -271,6 +276,8 @@ export const OmcSettingsPage: React.FC = () => {
           }
         />
       </div>
+
+      <SidebarNavSettings />
     </div>
   );
 };

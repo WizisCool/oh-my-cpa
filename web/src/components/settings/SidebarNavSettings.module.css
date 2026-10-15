@@ -1,0 +1,31 @@
+/* The nav-group name inside the panel. `.settings-toggle-row` owns the row metrics, so the
+   subhead takes the same inline padding to keep every left edge on one line. */
+.subhead {
+  padding: 16px 20px 4px;
+}
+
+/* The entry's own glyph, then its name: the rail identifies an entry by its icon at 58px, so the
+   row that hides it is recognized the same way. The icon is decorative here - the row's text
+   already names the entry - and inherits the row title's size. */
+.row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-label > :first-child {
+  color: var(--muted);
+  flex: none;
+}
+
+/* The toggle is the whole control; the wrapper is what the browser probe addresses a row by. */
+.control {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .subhead {
+    padding: 14px 16px 4px;
+  }
+}

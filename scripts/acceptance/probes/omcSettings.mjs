@@ -213,6 +213,25 @@ export async function omcSettings({ base, page, check, context, expectProblem })
     'Font library',
     'Language',
     'Smooth scrolling',
+    // The sidebar group lists the rail's own destinations, so every entry the rail can draw is a
+    // row here too: hiding an entry is a setting on this page like any other, and a rail that grew
+    // an entry without the page listing it would be the two disagreeing about what exists.
+    'Dashboard',
+    'Agent',
+    'Playground',
+    'Model Square',
+    'AI providers',
+    'OAuth management',
+    'Key management',
+    'Request Events',
+    'Cost & Usage',
+    'Logs',
+    'Audit trail',
+    'Config',
+    'OMC Settings',
+    'System Information',
+    'Plugin management',
+    'Plugin store',
   ];
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(

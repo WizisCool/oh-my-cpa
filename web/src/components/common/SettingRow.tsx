@@ -8,7 +8,7 @@ import React from 'react';
  * `docs/design.md` §3 rules out. A description survives only where it states a fact the
  * label cannot: what a unit style changes, or what an abbreviated number is rounded from.
  */
-export const SettingRow: React.FC<{ label: string; description?: string; control: React.ReactNode }> = ({
+export const SettingRow: React.FC<{ label: React.ReactNode; description?: string; control: React.ReactNode }> = ({
   label,
   description,
   control,

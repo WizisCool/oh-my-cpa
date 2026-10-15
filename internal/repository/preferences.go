@@ -36,6 +36,11 @@ const (
 	PreferenceTheme              = "omc_theme"
 	PreferenceScrollSmoothing    = "omc_scroll_smoothing"
 
+	// PreferenceNavHidden is the console rail entries the operator has hidden, as an
+	// array of route keys. Storing the hidden set rather than the visible one is what
+	// makes a destination a later release adds appear without anyone re-enabling it.
+	PreferenceNavHidden = "omc_nav_hidden"
+
 	// PreferenceFonts maps a typographic role - `ui` for the interface, `mono` for code
 	// and figures - to a built-in typeface or an installed family (`font:<id>`). A role
 	// left out uses the console's default. References to installed families are checked

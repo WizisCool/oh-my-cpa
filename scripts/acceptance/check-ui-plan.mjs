@@ -328,7 +328,7 @@ const SCENARIO_PATHS = [
   // dashboard's model panels and the OMC page move together.
   {
     prefix: 'web/src/pages/OmcSettingsPage',
-    scenarios: ['omc-settings', 'font-library', 'scroll-smoothing', 'mobile-console'],
+    scenarios: ['omc-settings', 'sidebar-customization', 'font-library', 'scroll-smoothing', 'mobile-console'],
   },
   // The typeface roles: the settings controls, the document-level applier and the role rules.
   // They repaint every page, but what can break is reached from the settings page the scenario
@@ -336,6 +336,22 @@ const SCENARIO_PATHS = [
   {
     prefix: 'web/src/components/settings/FontSettings',
     scenarios: ['font-library', 'omc-settings', 'mobile-console'],
+  },
+  // The rail's visibility panel, the model it lists and the hook it writes through. The panel is
+  // what the scenario drives and the rail it redraws is the shell's, which is why the scenario is
+  // its own rather than folded into the settings page's: the claim spans the page and the
+  // navigation that page governs, and the phone console renders the same page narrow.
+  {
+    prefix: 'web/src/components/settings/SidebarNavSettings',
+    scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
+  },
+  {
+    prefix: 'web/src/types/sidebarNav',
+    scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
+  },
+  {
+    prefix: 'web/src/hooks/useNavVisibility',
+    scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
   },
   {
     prefix: 'web/src/theme/fontLibrary',
@@ -374,7 +390,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/hooks/usePreference',
-    scenarios: ['omc-settings', 'font-library', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing', 'mobile-console'],
+    scenarios: ['omc-settings', 'sidebar-customization', 'font-library', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions', 'scroll-smoothing', 'mobile-console'],
   },
   // The console-wide wheel and keyboard glide. It intercepts every wheel and scrolling key, so the
   // scenarios that drive the wheel or the keyboard on a scroller are reached as well as its own.
