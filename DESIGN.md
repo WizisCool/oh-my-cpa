@@ -647,29 +647,42 @@ rough-progress bar and waiting activity run along the page's top edge. See `docs
 
 ### System version comparison
 
-The Versions & Updates card keeps two product rows separated by a single rule. Each row
-places product identity and its repository beside a concise semantic status. Below it,
-the running and latest published versions form a compact comparison, bounded to 320px
-with a quiet vertical divider. The release tag appears in the comparison, not again in
-the status. Existing `--fg` and `--fg-2` tokens carry versions and labels; only a known
-update target uses `--accent`. On narrow screens the comparison becomes two label/value
-rows, with long build tags wrapping within their own column.
+The Versions & Updates card is the page's first row and spans its full width. A product row is
+identity, comparison, status and actions at once, and a half-width cell wrapped every one of
+them; the full column is what lets each product sit on two calm lines instead of four crowded
+ones. The card keeps two product rows separated by a single rule.
 
-The change-log action occupies its own trailing space alongside the comparison. It is a
-32px-high text button with a document icon, a localized label and a muted actual release
-count; its accessible name identifies both product and count. On phones it follows the
-comparison on a separate line, keeping both readings aligned and the action label intact.
-The action appears only for actual entries; the repository link stays with the product
-identity. A known newer release adds an **Ignore this version** toggle before it, in the
-same 32px text-button form with a bell icon. Its label never changes: the pressed state is
-the struck bell, `--fg` ink and `aria-pressed`, and the outcome of each press is a toast,
-so neither the row nor the card moves when it is used. It is disabled until the stored
-dismissals have been read. Long comparison explanations belong below the readings rather than in the
-status slot. A missing-notes hint belongs only to a known change-log range; an empty or
-unchecked feed does not acquire a second warning about notes. A failed check retains the
-readings and shows its reason and, when available, the last successful check time.
-The log remains a Drawer and remote images remain links, never automatically fetched media.
-These are page-level arrangements using the existing visual tokens, not new theme mappings.
+Each row opens with product identity and its repository beside a concise semantic status. Below
+it, the running and latest published versions form a compact comparison, bounded to 320px with a
+quiet vertical divider. The release tag appears in the comparison, not again in the status.
+Existing `--fg` and `--fg-2` tokens carry versions and labels; only a known update target uses
+`--accent`. On narrow screens the comparison becomes two label/value rows, with long build tags
+wrapping within their own column.
+
+The row's trailing actions are one group at the row's right edge: the change-log action in its
+32px text-button form with a document icon, a localized label and a muted actual release count;
+an **Ignore this version** toggle before it when a known newer release exists, in the same 32px
+text-button form with a bell icon; and, last, the row's one filled control - the update action -
+so the primary action sits at the same right edge the page's own primary action takes. The
+ignore toggle's label never changes: the pressed state is the struck bell, `--fg` ink and
+`aria-pressed`, and the outcome of each press is a toast, so neither the row nor the card moves
+when it is used. It is disabled until the stored dismissals have been read.
+
+A replacement in flight draws the updater's four stages - pulling, stopping, starting,
+verifying - as a four-segment bar under the readings, with the stage's sentence beside it. The
+bar carries the step count, not a measured percentage: the stages are known and ordered, their
+durations are not. A product the updater will not replace from the page states its reason in a
+quiet line under the readings, marked with an information glyph rather than a warning tone,
+because a pinned image or a container that runs elsewhere is an operator's decision and not a
+fault. Long comparison explanations belong below the readings rather than in the status slot.
+
+A missing-notes hint belongs only to a known change-log range; an empty or unchecked feed does
+not acquire a second warning about notes. A failed check retains the readings and shows its
+reason and, when available, the last successful check time. The log remains a Drawer and remote
+images remain links, never automatically fetched media. The setup step that enables one-click
+updates stays inside this card, under the rows it explains, and takes its head from
+`SectionHeading`. These are page-level arrangements using the existing visual tokens, not new
+theme mappings.
 
 ### Update indicator
 
@@ -682,31 +695,31 @@ it says the deployment is behind a published release.
 
 ### System information status cards
 
-Maintenance, storage and component health present their selected readings immediately.
-Card titles wrap on narrow screens, and these arrangements use the existing theme tokens
-and system response without additional API requests.
+Under the versions card, maintenance, storage and component health sit in one row - three peer
+cards that share the column, wrap to fewer columns before their own readings would be squeezed,
+and stack into a single column below the 900px breakpoint. They present their selected readings
+immediately. Card titles wrap on narrow screens, and these arrangements use the existing theme
+tokens and system response without additional API requests.
 
-Maintenance pairs three short action names with one-sentence explanations and the
-console's standard outlined antd buttons. Button dimensions, typography, border,
-background and interaction states inherit the shared configuration. Admission refusals
-replace the ordinary explanation; running, failed and partial outcomes remain explicit.
-VACUUM requires confirmation of the exclusive write gate and measured disk requirements.
-Completed outcomes are independently dismissible; running work is not.
+Maintenance pairs three short action names with one-sentence explanations and the console's
+standard outlined antd buttons. Button dimensions, typography, border, background and
+interaction states inherit the shared configuration. Admission refusals replace the ordinary
+explanation; running, failed and partial outcomes remain explicit. VACUUM requires confirmation
+of the exclusive write gate and measured disk requirements. Completed outcomes are independently
+dismissible; running work is not.
 
-Storage prioritizes the total physical footprint above one shared label/value list.
-The three measured file sizes, journal mode and schema generation share identical label
-and right-aligned value columns at every viewport. Missing files read "not present"
-rather than zero. Physical footprint is not
-repeated as allocated pages or record counts; internal geometry, reusable pages and
-connection settings belong in the sanitized diagnostics bundle.
+Storage prioritizes the total physical footprint above one shared label/value list. The three
+measured file sizes, journal mode and schema generation share identical label and right-aligned
+value columns at every viewport. Missing files read "not present" rather than zero. Physical
+footprint is not repeated as allocated pages or record counts; internal geometry, reusable pages
+and connection settings belong in the sanitized diagnostics bundle.
 
-Component health has four divided rows, each with a component name, semantic status and
-one short inline operational summary. The gateway shows its credential count, Oh My CPA
-its start age and memory, SQLite its request count, and the collector the latest usage
-age. Each summary uses at most two paired facts, with labels beside values rather than
-separate metric grids. Positive ingestion backlog and collection gaps appear as warning
-readings; healthy zero values do not consume space. Missing observations remain explicit.
-The version card retains the compact comparison and separate change-log action above.
+Component health has four divided rows, each with a component name, semantic status and one
+short inline operational summary. The gateway shows its credential count, Oh My CPA its start
+age and memory, SQLite its request count, and the collector the latest usage age. Each summary
+uses at most two paired facts, with labels beside values rather than separate metric grids.
+Positive ingestion backlog and collection gaps appear as warning readings; healthy zero values
+do not consume space. Missing observations remain explicit.
 
 ## Content-first phone console (ADR 0055)
 

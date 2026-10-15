@@ -161,7 +161,7 @@ test('a running update reports the step it has reached, in the order the updater
     kind: 'running', stage: 'stopping', stageKey: 'sys.update_stage.stopping',
   });
   // A stage this build does not know is drawn as the first step rather than as no progress: the
-  // job is running, and the sentence beside the bar still reports what the updater said.
+  // job is running, and the bar and the sentence beside it both fall back to the opening stage.
   const unknown = createUpdater({ job: createJob({ product: 'omc', stage: 'draining' as unknown as SystemUpdateJob['stage'] }) });
   assert.deepEqual(deriveUpdateOffer(createVersion(), unknown, 'omc'), {
     kind: 'running', stage: 'pulling', stageKey: 'sys.update_stage.pulling',

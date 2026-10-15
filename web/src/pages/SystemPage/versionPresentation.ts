@@ -88,7 +88,8 @@ export function deriveUpdateOffer(
   const job = updater.job && !updater.job.finished ? updater.job : null;
   if (job?.product === product) {
     // A stage this build does not know is drawn as the first step rather than as no progress:
-    // the job is running, and the sentence beside the bar still reports what the updater said.
+    // the job is running, and both the bar and the sentence beside it fall back to the opening
+    // stage, since this build has no later stage to name or place.
     const stage: UpdateStage = (UPDATE_STAGE_ORDER as readonly string[]).includes(job.stage)
       ? (job.stage as UpdateStage)
       : 'pulling';
