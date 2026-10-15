@@ -33,7 +33,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "warmup.rule_daily": "每天定時預熱",
   "warmup.daily_hint": "五小時視窗 {start} 開始，{end} 重設（{zone}）",
   "warmup.rule_reset": "視窗重設後立即預熱",
-  "warmup.reset_hint": "額度重置後自動傳送一次預熱請求，讓新視窗開始計時；無需等到下次使用。",
+  "warmup.reset_hint": "額度重置後自動傳送一次預熱請求，啟動新視窗。同時開啟每日定時預熱時，若新視窗會跨過設定時間，就等到該時間再預熱。",
   "warmup.reset_scope": "適用視窗",
   "warmup.reset_all": "五小時與每週",
   "warmup.reset_weekly": "僅每週",
