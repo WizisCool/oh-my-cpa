@@ -5,24 +5,26 @@ import { until } from '../harness.mjs';
  * page stays reachable.
  *
  * The console ships one fixed rail, and a deployment that never opens the Agent, the Playground or
- * the audit trail still sees all of them. Turning them off is a setting on the OMC settings page,
- * and what makes it worth a browser is that four separate things have to agree about it: the panel
- * that lists the entries, the rail that draws them, the group headings that must not be left empty,
- * and the shell reading of the route the operator is on. None of those is reachable from a
- * per-component test, because three of them are the shell the panel lives inside.
+ * the audit trail still sees all of them. Turning them off is a setting on the OMC settings page -
+ * one row there, and the panel that row opens lists the rail - and what makes it worth a browser is
+ * that four separate things have to agree about it: the panel the settings row opens, the rail that
+ * draws them, the group headings that must not be left empty, and the shell reading of the route the
+ * operator is on. None of those is reachable from a per-component test, because three of them are
+ * the shell the panel lives inside.
  *
- * The claims asserted here: the rail answers on the same frame as the switch, the choice is stored
- * as the set of hidden routes, a group whose every entry is hidden goes with them, the groups that
- * still have entries keep their headings, a hidden page names itself in the document title when it
- * is opened directly, a reload keeps the choice, the entry that owns the setting cannot be hidden
- * or clicked away, Show all puts everything back, and the phone sheet - at that width the rail's
- * only rendering - draws the same set.
+ * The claims asserted here: the row on the settings page states what is hidden without the panel
+ * being opened, the rail answers on the same frame as the switch, the choice is stored as the set of
+ * hidden routes, a group whose every entry is hidden goes with them, the groups that still have
+ * entries keep their headings, a hidden page names itself in the document title when it is opened
+ * directly, a reload keeps the choice, the entry that owns the setting cannot be hidden or clicked
+ * away, Show all puts everything back, and the phone sheet - at that width the rail's only
+ * rendering - draws the same set.
  *
  * Two readings this probe has to get right rather than assume. The rail uppercases its group
  * headings through the stylesheet, so the rendered text is `OPERATE` while the copy says `Operate`;
- * the comparisons normalise case and say so. And the phone half comes last, because reaching the
- * settings page there means dismissing the sheet - a scenario that leaves an overlay for the next
- * step to close is measuring the overlay instead of the rail.
+ * the comparisons normalise case and say so. And the phone half comes last, and closes the panel
+ * before it narrows the viewport, because reaching the rail there means opening a sheet - a scenario
+ * that leaves an overlay for the next step to close is measuring the overlay instead of the rail.
  */
 export async function sidebarNavCustomization({ base, page, check }) {
   const preferences = {};
@@ -41,9 +43,23 @@ export async function sidebarNavCustomization({ base, page, check }) {
     return route.fallback();
   });
 
+  // Every row lives in the panel, so each journey to a row opens the panel first and closes it
+  // before doing anything the overlay would sit in front of. What the page itself carries is one row
+  // whose description says how many entries are out of the rail.
+  const panel = () => page.locator('[data-testid="sidebar-nav-dialog"]');
+  const rowSummary = () => page.locator('[data-testid="sidebar-nav-settings"] .settings-toggle-desc');
+  const openPanel = async () => {
+    await page.getByRole('button', { name: 'Manage entries' }).click();
+    await panel().waitFor({ timeout: 20_000 });
+  };
+  const closePanel = async () => {
+    await page.keyboard.press('Escape');
+    await panel().waitFor({ state: 'hidden', timeout: 20_000 });
+  };
   const settingsPage = async () => {
     await page.goto(base + '/omc-settings', { waitUntil: 'domcontentloaded' });
     await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+    await openPanel();
   };
   await settingsPage();
 
@@ -68,6 +84,8 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('the rail starts with every entry',
     await railEntry('/agent').count() === 1 && await railEntry('/audit').count() === 1,
     (await railGroups()).join(' | '));
+  check('the settings row says nothing is out of the rail yet',
+    (await rowSummary().innerText()).includes('Every entry is shown'), await rowSummary().innerText());
   check('the panel lists an entry per rail destination, the locked one among them',
     await rowToggle('/agent').count() === 1 && await rowToggle('/omc-settings').count() === 1);
   check('a fresh console hides nothing, so the reset has nothing to put back', await showAll().isDisabled());
@@ -98,7 +116,9 @@ export async function sidebarNavCustomization({ base, page, check }) {
     hasGroup(groupsAfterHiding, 'Operate'), groupsAfterHiding.join(' | '));
 
   // A hidden entry is a rail preference, not a deleted page: the shell reads the full model, so a
-  // page opened by URL still names itself.
+  // page opened by URL still names itself. The panel closes first, because this step is about the
+  // page the URL names and not about the overlay it would otherwise leave in front of it.
+  await closePanel();
   await page.goto(base + '/logs', { waitUntil: 'domcontentloaded' });
   await until(async () => (await page.title()).includes('Logs'), { label: 'the document title of a hidden page' });
   check('a hidden page is still reachable by URL and still names itself', (await page.title()).includes('Logs'), await page.title());
@@ -108,6 +128,9 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('a reloaded console keeps the hidden set',
     await railEntry('/agent').count() === 0 && hasGroup(await railGroups(), 'Observe') === false,
     (await railGroups()).join(' | '));
+  // The setting reads without the panel being opened: the row states what the panel holds.
+  check('the settings row states how many entries are out of the rail',
+    (await rowSummary().innerText()).includes('5 hidden'), await rowSummary().innerText());
 
   // The page that owns the setting is not hideable: a preference that could remove its own surface
   // would leave the operator unable to undo it from the console.
@@ -138,9 +161,11 @@ export async function sidebarNavCustomization({ base, page, check }) {
     bodyOf(hiddenWrites()[hiddenWrites().length - 1]) === '[]', bodyOf(hiddenWrites()[hiddenWrites().length - 1]));
 
   // At a phone width the rail exists only in the sheet, so what the sheet draws is what the
-  // operator has. The choice is made on the settings page, which is still the page on screen.
-  await page.setViewportSize({ width: 390, height: 844 });
+  // operator has. The choice is made while the panel is still laid out for the width it was opened
+  // at; the panel then closes, and the sheet is opened on the page underneath.
   await hideObserve();
+  await closePanel();
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('.app-header-left button').first().click();
   await page.locator('.mobile-nav-drawer:visible').waitFor({ timeout: 10_000 });
   await until(async () => (await railEntry('/dashboard').count()) === 1, { label: 'the phone sheet to draw the rail' });

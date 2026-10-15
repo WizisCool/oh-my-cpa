@@ -1008,8 +1008,11 @@ and halo. Ringing the inner field too drew a second rectangle inside the control
   never a filled background block. Hover uses `--surface` for immediate feedback.
 - The rail is the operator's: which of its entries a deployment shows is a stored preference
   (`omc_nav_hidden`, holding the *hidden* routes, so an entry a later release adds arrives
-  already visible), set on the OMC settings page and applied to the expanded rail, the collapsed
-  rail and the phone sheet from one filtered model. A group whose every entry is hidden goes with
+  already visible), set from the OMC settings page - one row that opens the rail's own panel,
+  rather than sixteen rows grown onto a page of one-line settings - and applied to the expanded
+  rail, the collapsed rail and the phone sheet from one filtered model. The panel lists the model
+  the rail draws, including the pages a running plugin registered, so the two cannot disagree
+  about which destinations exist. A group whose every entry is hidden goes with
   them, the OMC settings entry itself is shown switched on and inert - a preference that could
   hide its own surface would leave the console unable to undo it - and everything else on the
   shell reads the unfiltered model, so a page opened by URL still names itself in the breadcrumb

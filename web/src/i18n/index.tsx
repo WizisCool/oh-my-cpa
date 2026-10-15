@@ -907,6 +907,13 @@ const DICT: Record<string, [string, string]> = {
   // hidden, and its row states why rather than only looking switched off and inert.
   'omc.sidebar_show_all': ['全部显示', 'Show all'],
   'omc.sidebar_locked': ['该入口用于管理侧边栏，始终显示。', 'This entry manages the sidebar, so it always shows.'],
+  // The one row the settings page carries. The list itself is a dialog, so the row states what
+  // the dialog holds - how many entries are out of the rail - rather than repeating the section
+  // name, and the button says what it manages.
+  'omc.sidebar_entries': ['侧边栏入口', 'Sidebar entries'],
+  'omc.sidebar_manage': ['管理入口', 'Manage entries'],
+  'omc.sidebar_hidden_count': ['已隐藏 {n} 项', '{n} hidden'],
+  'omc.sidebar_all_shown': ['全部入口都显示', 'Every entry is shown'],
   'omc.token_style': ['Token 计量单位', 'Token unit style'],
   // States the guarantee rather than restating the control: the choice is how the
   // numbers read, not how precise they are.

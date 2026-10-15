@@ -41,6 +41,18 @@ function mount() {
   );
 }
 
+/**
+ * Opens the panel. The list is a dialog rather than rows on the settings page, so every assertion
+ * about a row opens it first: what the page itself carries is one row that states what the panel
+ * holds.
+ */
+async function openPanel() {
+  fireEvent.click(screen.getByRole('button', { name: 'Manage entries' }));
+  const dialog = await screen.findByTestId('sidebar-nav-dialog');
+  await screen.findByRole('switch', { name: 'Dashboard' });
+  return dialog;
+}
+
 /** The switches hold until the stored set has been read, so a click cannot clobber one. */
 async function readySwitch(accessibilityName: string) {
   const control = await screen.findByRole('switch', { name: accessibilityName });
@@ -75,8 +87,13 @@ afterEach(() => {
 describe('sidebar visibility panel', () => {
   it('lists every rail entry once, in the rail\'s own order, with the entry that owns the rail inert', async () => {
     const { container } = mount();
-    await screen.findByRole('switch', { name: 'Dashboard' });
-    const titles = [...container.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent);
+    const page = container.querySelector('[data-testid="sidebar-nav-settings"]')!;
+    expect([...page.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent))
+      .toEqual(['Sidebar entries']);
+    expect(page.querySelector('.settings-toggle-desc')?.textContent).toBe('Every entry is shown');
+
+    const dialog = await openPanel();
+    const titles = [...dialog.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent);
     // The console's groups, then the plugins group before Control, because that is where the rail
     // puts them.
     expect(titles).toEqual([
@@ -89,13 +106,14 @@ describe('sidebar visibility panel', () => {
     const settingsToggle = screen.getByRole('switch', { name: 'OMC Settings' });
     expect(settingsToggle.hasAttribute('disabled')).toBe(true);
     expect(settingsToggle.getAttribute('aria-checked')).toBe('true');
-    expect(container.querySelector('.settings-toggle-desc')?.textContent).toBe('This entry manages the sidebar, so it always shows.');
+    expect(dialog.querySelector('.settings-toggle-desc')?.textContent).toBe('This entry manages the sidebar, so it always shows.');
     // Nothing is hidden on a fresh deployment, so the reset has nothing to put back.
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides an entry by writing the hidden set, and that set is what the rail filters by', async () => {
-    mount();
+    const { container } = mount();
+    await openPanel();
     const agent = await readySwitch('Agent');
     expect(agent.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(agent);
@@ -107,12 +125,15 @@ describe('sidebar visibility panel', () => {
       .flatMap((group) => group.items.map((item) => item.key));
     expect(railKeys).not.toContain('/agent');
     expect(railKeys).toContain('/playground');
+    // The page reads without opening the panel: the row states how many entries are out of the rail.
+    expect(container.querySelector('[data-testid="sidebar-nav-settings"] .settings-toggle-desc')?.textContent).toBe('1 hidden');
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('reads a stored hidden set back, dropping anything the store should never have accepted', async () => {
     stored.omc_nav_hidden = ['/agent', '/omc-settings', 'not-a-route', 42];
     mount();
+    await openPanel();
     const agent = await readySwitch('Agent');
     expect(agent.getAttribute('aria-checked')).toBe('false');
     const settingsToggle = screen.getByRole('switch', { name: 'OMC Settings' });

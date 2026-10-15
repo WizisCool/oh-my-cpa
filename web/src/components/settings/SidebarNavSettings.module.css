@@ -1,7 +1,19 @@
-/* The nav-group name inside the panel. `.settings-toggle-row` owns the row metrics, so the
-   subhead takes the same inline padding to keep every left edge on one line. */
+/* The panel's body: a list that fills the dialog the way the settings page fills a group.
+   The modal supplies its own padding, so the rows drop the page's inline padding and keep only
+   their separators - the head line, the subheads and the row titles one left edge. */
+.dialog {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog :global(.settings-toggle-row) {
+  padding-inline: 0;
+}
+
+/* The nav-group name inside the panel. The row owns its own vertical metrics, so the subhead adds
+   only the space that separates one group from the one before it. */
 .subhead {
-  padding: 16px 20px 4px;
+  padding: 16px 0 4px;
 }
 
 /* The entry's own glyph, then its name: the rail identifies an entry by its icon at 58px, so the
@@ -26,6 +38,6 @@
 
 @media (max-width: 900px) {
   .subhead {
-    padding: 14px 16px 4px;
+    padding: 14px 0 4px;
   }
 }
