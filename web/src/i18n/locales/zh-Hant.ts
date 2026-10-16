@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "pricing.scope.channel": "渠道價",
+  "pricing.editor.channel_scope": "正在設定 {channel} 的專屬價格",
+  "pricing.editor.channel_hint": "僅影響此渠道的該模型；渠道倍率仍會生效。未設定專屬價格時沿用通用價格。",
+  "pricing.editor.restore_shared": "恢復通用價格",
+  "pricing.editor.restore_confirm": "移除 {model} 在此渠道的專屬價格，恢復通用價格？",
   "agent.capability.quota_warmup_settings_get": "讀取視窗預熱預設策略",
   "agent.capability.quota_warmup_settings_get.description": "讀取各供應商的預設預熱設定。",
   "agent.capability.quota_warmup_settings_set": "設定視窗預熱預設策略",

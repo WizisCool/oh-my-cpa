@@ -26,7 +26,7 @@ type queryer interface {
 }
 
 const priceVersionSelect = `SELECT id, available, effective_from_ms, model, prompt_price_per_1m, completion_price_per_1m,
- cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id
+ cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id, channel
  FROM model_price_versions`
 
 // PriceVersion is one immutable price snapshot. Price carries only what a version
@@ -57,7 +57,7 @@ func scanPriceVersion(row *sql.Row) (PriceVersion, error) {
 	var tiers string
 	p := &version.Price
 	if err := row.Scan(&version.ID, &version.Available, &version.EffectiveFromMS, &p.Model, &p.PromptPricePer1M, &p.CompletionPer1M,
-		&p.CacheReadPer1M, &p.CacheWritePer1M, &p.PriceMultiplier, &p.Source, &tiers, &p.UpstreamID); err != nil {
+		&p.CacheReadPer1M, &p.CacheWritePer1M, &p.PriceMultiplier, &p.Source, &tiers, &p.UpstreamID, &p.Channel); err != nil {
 		return version, err
 	}
 	var err error
@@ -90,7 +90,12 @@ const channelVersionSelect = `SELECT id, channel, available, effective_from_ms, 
 // removed price from leaking forward; a missing or tombstoned channel is 1x.
 func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedPrice, error) {
 	version, err := scanPriceVersion(tx.QueryRowContext(ctx, priceVersionSelect+`
- WHERE model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Model, event.TimestampMS))
+ WHERE channel = ? AND model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Provider, event.Model, event.TimestampMS))
+	// A channel tombstone restores the shared price effective at the request time.
+	if event.Provider != "" && (errors.Is(err, sql.ErrNoRows) || err == nil && !version.Available) {
+		version, err = scanPriceVersion(tx.QueryRowContext(ctx, priceVersionSelect+`
+ WHERE channel = '' AND model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Model, event.TimestampMS))
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedPrice{status: "unpriced"}, nil
 	}
@@ -213,14 +218,18 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 
 // ListModelPriceVersions returns a model's price history, newest first,
 // tombstones included.
-func (r *Repository) ListModelPriceVersions(ctx context.Context, model string, limit int) ([]PriceVersion, error) {
+func (r *Repository) ListModelPriceVersions(ctx context.Context, model string, limit int, channels ...string) ([]PriceVersion, error) {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return nil, err
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := r.SQL().QueryContext(ctx, priceVersionSelect+` WHERE model = ? ORDER BY effective_from_ms DESC, id DESC LIMIT ?`, model, limit)
+	channel := ""
+	if len(channels) > 0 {
+		channel = channels[0]
+	}
+	rows, err := r.SQL().QueryContext(ctx, priceVersionSelect+` WHERE channel = ? AND model = ? ORDER BY effective_from_ms DESC, id DESC LIMIT ?`, channel, model, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list price versions: %w", err)
 	}
@@ -231,7 +240,7 @@ func (r *Repository) ListModelPriceVersions(ctx context.Context, model string, l
 		var tiers string
 		p := &version.Price
 		if err := rows.Scan(&version.ID, &version.Available, &version.EffectiveFromMS, &p.Model, &p.PromptPricePer1M, &p.CompletionPer1M,
-			&p.CacheReadPer1M, &p.CacheWritePer1M, &p.PriceMultiplier, &p.Source, &tiers, &p.UpstreamID); err != nil {
+			&p.CacheReadPer1M, &p.CacheWritePer1M, &p.PriceMultiplier, &p.Source, &tiers, &p.UpstreamID, &p.Channel); err != nil {
 			return nil, fmt.Errorf("scan price version: %w", err)
 		}
 		if p.Tiers, err = pricing.DecodeTiers(tiers); err != nil {

@@ -1,6 +1,6 @@
 # ADR 0031: Provider membership travels with the pricing catalog
 
-- Status: Accepted
+- Status: Accepted; ADR 0101 proposes channel-specific custom price overrides.
 - Date: 2026-09-28
 
 ## Context

@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "pricing.scope.channel": "Harga saluran",
+  "pricing.editor.channel_scope": "Harga tersuai untuk {channel}",
+  "pricing.editor.channel_hint": "Hanya untuk model ini pada saluran ini; pengganda saluran masih digunakan. Tanpa harga tersuai, harga bersama digunakan.",
+  "pricing.editor.restore_shared": "Guna harga bersama",
+  "pricing.editor.restore_confirm": "Alih keluar harga tersuai saluran ini untuk {model} dan guna harga bersama?",
   "agent.capability.quota_warmup_settings_get": "Baca lalai pemanasan tetingkap",
   "agent.capability.quota_warmup_settings_get.description": "Baca tetapan pemanasan lalai setiap penyedia.",
   "agent.capability.quota_warmup_settings_set": "Tetapkan lalai pemanasan tetingkap",

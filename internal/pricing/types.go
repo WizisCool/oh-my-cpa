@@ -22,6 +22,7 @@ import (
 // OpenRouter model, auto otherwise) and is never stored.
 type ModelPrice struct {
 	Model            string      `json:"model"`
+	Channel          string      `json:"channel,omitempty"`
 	PromptPricePer1M float64     `json:"prompt_price_per_1m"`
 	CompletionPer1M  float64     `json:"completion_price_per_1m"`
 	CacheReadPer1M   float64     `json:"cache_read_price_per_1m"`

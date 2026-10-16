@@ -31,11 +31,16 @@ const priced = (model, prompt, completion, usage30d) => ({
   model, prompt_price_per_1m: prompt, completion_price_per_1m: completion, cache_read_price_per_1m: prompt / 10, cache_write_price_per_1m: prompt * 1.25,
   price_multiplier: 1, tiers: [], source: 'manual', upstream_id: '', match_kind: '', mode: 'custom', synced_at_ms: 0, updated_at_ms: 0, usage_30d: usage30d,
 });
-// Two names are priced; every other advertised name is unpriced, whether the book lists it or not.
+// Price membership uses upstream identities; request counts keep the advertised call names.
 const PRICE_BOOK = {
-  source: 'openrouter', providers: [], channels: [], upstream_count: 0, sync: { known: false, running: false, state: null },
-  models: [priced('gpt-5', 1.25, 10, usage(120, 14.2)), priced('reasoner', 0.55, 2.19, usage(8, 0.4))],
-  unpriced: [{ model: 'team/fast', usage_30d: usage(12, null), suggestions: [] }],
+  source: 'openrouter',
+  providers: DIRECTORY.providers.map(provider => ({ ...provider,
+    channel: provider.is_oauth ? 'codex' : 'openai-compatible-relay', priority: 0,
+    models: [...new Set(ROUTES.filter(route => route.provider_id === provider.id).map(route => route.upstream_model))],
+  })),
+  channels: [], upstream_count: 0, sync: { known: false, running: false, state: null },
+  models: [priced('gpt-5', 1.25, 10, usage(120, 14.2)), priced('deepseek-r1', 0.55, 2.19, usage(8, 0.4))],
+  unpriced: [...new Set(ROUTES.map(route => route.upstream_model))].filter(model => model && !['gpt-5', 'deepseek-r1'].includes(model)).map(model => ({ model, usage_30d: usage(0, null), suggestions: [] })),
 };
 const RECENT_REQUESTS = {
   window: { from: 0, to: 0, bucket_ms: 0 },

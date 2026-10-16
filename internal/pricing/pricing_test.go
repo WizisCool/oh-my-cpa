@@ -14,19 +14,21 @@ import (
 // fakeStore mirrors the repository's write guards: an automatic write never
 // replaces a custom row, and never replaces a row pinned to another model.
 type fakeStore struct {
-	mu         sync.Mutex
-	prices     []ModelPrice
-	upserted   []ModelPrice
-	applied    []ModelPrice
-	deleted    []string
-	saved      []SyncState
-	models     map[string]string
-	links      map[string]string
-	upstream   []UpstreamModel
-	channels   map[string]ChannelMultiplier
-	state      SyncState
-	stateKnown bool
-	reviews    map[string]string
+	mu            sync.Mutex
+	prices        []ModelPrice
+	channelPrices []ModelPrice
+	providers     []CatalogProvider
+	upserted      []ModelPrice
+	applied       []ModelPrice
+	deleted       []string
+	saved         []SyncState
+	models        map[string]string
+	links         map[string]string
+	upstream      []UpstreamModel
+	channels      map[string]ChannelMultiplier
+	state         SyncState
+	stateKnown    bool
+	reviews       map[string]string
 }
 
 func newFakeStore(models ...string) *fakeStore {
@@ -41,6 +43,25 @@ func (s *fakeStore) ListModelPrices(context.Context) ([]ModelPrice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]ModelPrice(nil), s.prices...), nil
+}
+
+func (s *fakeStore) ListPricingProviders(context.Context) ([]CatalogProvider, error) {
+	return s.providers, nil
+}
+
+func (s *fakeStore) UpsertChannelModelPrice(_ context.Context, price ModelPrice) error {
+	s.channelPrices = append(s.channelPrices, price)
+	return nil
+}
+
+func (s *fakeStore) DeleteChannelModelPrice(_ context.Context, channel, model string) (bool, error) {
+	for index, price := range s.channelPrices {
+		if price.Channel == channel && price.Model == model {
+			s.channelPrices = append(s.channelPrices[:index], s.channelPrices[index+1:]...)
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *fakeStore) UpsertModelPrices(_ context.Context, rows []ModelPrice) error {

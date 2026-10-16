@@ -38,6 +38,8 @@ import { ConfirmAction } from '../common/ConfirmAction';
 
 export interface PriceEditorDrawerProps {
   model: string;
+  channel?: string;
+  channelLabel?: string;
   initialMode?: PricingMode;
   initialUpstream?: UpstreamModel;
   isOpen: boolean;
@@ -88,7 +90,7 @@ export function modeTone(mode: PricingMode | null): StatusTone {
  * says so once, beside the Save button, and shows what a typical recent request would cost before
  * and after so the change is read in money rather than in per-million rates.
  */
-export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, initialMode, initialUpstream, isOpen, onClose }) => {
+export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, channel, channelLabel, initialMode, initialUpstream, isOpen, onClose }) => {
   useTimeZone();
   const t = useT();
   const toast = useToast();
@@ -97,8 +99,8 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   useOverlayHistory({ isOpen, onClose });
 
   const detail = useQuery({
-    queryKey: PRICING_QUERY_KEYS.model(model),
-    queryFn: () => api.getPricingModel(model),
+    queryKey: PRICING_QUERY_KEYS.model(model, channel),
+    queryFn: () => api.getPricingModel(model, channel),
     enabled: isOpen,
     staleTime: 10_000,
   });
@@ -108,7 +110,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   const suggestions = React.useMemo(() => detail.data?.suggestions ?? [], [detail.data]);
   const candidate = detail.data?.candidate ?? null;
 
-  const [mode, setMode] = React.useState<PricingMode | null>(initialMode ?? null);
+  const [mode, setMode] = React.useState<PricingMode | null>(channel ? null : initialMode ?? null);
   const [linked, setLinked] = React.useState<UpstreamModel | null>(initialUpstream ?? null);
   const [rates, setRates] = React.useState<CustomRatesDraft>(EMPTY_RATES);
   const [tierDrafts, setTierDrafts] = React.useState<TierDraft[]>([]);
@@ -121,12 +123,12 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   React.useEffect(() => {
     if (!detail.data || isSeeded) return;
     const price = detail.data.price;
-    const startMode = initialMode
+    const startMode = (channel ? 'custom' : initialMode)
       ?? (price ? modeOf(price) : detail.data.automatic ? 'auto' : detail.data.suggestions.length > 0 ? 'linked' : 'custom');
     setMode(startMode);
     if (price) {
       setMultiplier(price.price_multiplier || 1);
-      if (modeOf(price) === 'custom') {
+      if (channel || modeOf(price) === 'custom') {
         setRates(ratesDraftFrom(price));
         setTierDrafts(tierDraftsFrom(price.tiers, price));
       }
@@ -136,7 +138,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
       setLinked(detail.data.suggestions.find((item) => item.id === pinned) ?? detail.data.suggestions[0] ?? null);
     }
     setIsSeeded(true);
-  }, [detail.data, initialMode, initialUpstream, isSeeded]);
+  }, [detail.data, channel, initialMode, initialUpstream, isSeeded]);
 
   const catalog = useQuery({
     queryKey: PRICING_QUERY_KEYS.catalog,
@@ -201,7 +203,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
         payload.cache_write_price_per_1m = draftPrice.cache_write_price_per_1m;
         payload.tiers = draftPrice.tiers;
       }
-      return api.updatePricingModel(model, payload);
+      return api.updatePricingModel(model, payload, channel);
     },
     onSuccess: () => {
       toast.success(t('pricing.saved', { model }));
@@ -212,7 +214,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
   });
 
   const remove = useMutation({
-    mutationFn: () => api.deletePricingModel(model),
+    mutationFn: () => api.deletePricingModel(model, channel),
     onSuccess: () => {
       toast.success(t('pricing.removed', { model }));
       invalidate();
@@ -258,14 +260,14 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
 
   const footer = (
     <>
-        {current && (
+        {current && !detail.data?.is_inherited && (
           <ConfirmAction
-            title={t('pricing.delete_confirm', { model })}
-            confirmLabel={t('pricing.editor.remove')}
+            title={t(channel ? 'pricing.editor.restore_confirm' : 'pricing.delete_confirm', { model })}
+            confirmLabel={t(channel ? 'pricing.editor.restore_shared' : 'pricing.editor.remove')}
             isDanger
             onConfirm={() => remove.mutate()}
           >
-            <Button danger type="text" loading={remove.isPending}>{t('pricing.editor.remove')}</Button>
+            <Button danger type="text" loading={remove.isPending}>{t(channel ? 'pricing.editor.restore_shared' : 'pricing.editor.remove')}</Button>
           </ConfirmAction>
         )}
         <Button onClick={onClose}>{t('common.cancel')}</Button>
@@ -294,6 +296,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
         )
       ) : (
         <div className={styles['drawer-body']}>
+          {channel && <Notice tone="info" title={t('pricing.editor.channel_scope', { channel: channelLabel || channel })} description={t('pricing.editor.channel_hint')} />}
           {candidate && !isCandidateAdopted && (
             <Notice
               tone="info"
@@ -320,7 +323,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
               )}
             />
           )}
-          <section className={styles.section}>
+          {!channel && <section className={styles.section}>
             <Segmented<PricingMode>
               block
               value={mode}
@@ -345,7 +348,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
               }))}
             />
             <p className={styles['mode-hint']}>{t(`pricing.mode.${mode}_hint`)}</p>
-          </section>
+          </section>}
 
           {mode === 'auto' && (
             <section className={styles.section}>

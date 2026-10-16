@@ -20,7 +20,7 @@ import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { formatRatePer1M } from '../types/pricingDisplay';
 import { isUsageFacetsResponse } from '../types/usageEvents';
-import { MODEL_REQUEST_FACET_QUERY, buildModelLedger, modelRequestsLink, type ModelLedgerEntry } from '../types/modelSquareLedger';
+import { MODEL_REQUEST_FACET_QUERY, buildModelLedger, modelRequestsLink, type ModelLedgerEntry, type ModelPricingTarget } from '../types/modelSquareLedger';
 import {
   buildModelReferenceLinks,
   buildModelSquareEntries,
@@ -150,7 +150,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
     <span className={styles['model-meta']}>
       <span className={styles['model-price']} title={t('models.price_head')}>
         {price.status === 'priced' && <>{formatRatePer1M(price.price.prompt_price_per_1m)} / {formatRatePer1M(price.price.completion_price_per_1m)}</>}
-        {price.status === 'unpriced' && (onSetPrice
+        {price.status === 'unpriced' && (onSetPrice && ledger.pricingTargets.length > 0
           ? <button type="button" className={styles['set-price']} onClick={() => onSetPrice(entry.identity)}><StatusLabel tone="warn">{t('pricing.set_price')}</StatusLabel></button>
           : <StatusLabel tone="warn">{t('models.unpriced')}</StatusLabel>)}
       </span>
@@ -247,7 +247,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
 interface ModelCostProps {
   identity: string;
   ledger: ModelLedgerEntry;
-  onSetPrice?: (identity: string) => void;
+  onSetPrice?: (target: ModelPricingTarget) => void;
 }
 
 /**
@@ -270,9 +270,9 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
       <div><dt>{t('models.requests_24h')}</dt><dd>{recentRequests === undefined ? unknown : recentRequests.toLocaleString()}</dd></div>
     </dl>
     <div className={styles['cost-actions']}>
-      {onSetPrice && price.status !== 'unknown' && <Button type={price.status === 'unpriced' ? 'primary' : 'default'} onClick={() => onSetPrice(identity)}>
-        {t(price.status === 'unpriced' ? 'pricing.set_price' : 'pricing.edit')}
-      </Button>}
+      {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} type={target.price ? 'default' : 'primary'} onClick={() => onSetPrice(target)}>
+        {t(target.price ? 'pricing.edit' : 'pricing.set_price')}{ledger.pricingTargets.length > 1 ? ` · ${target.channelLabel || target.channel || target.model} · ${target.model}` : ''}
+      </Button>)}
       <Link className={styles['reference-link']} to={modelRequestsLink(identity)}>{t('models.view_requests')}<RightOutlined /></Link>
     </div>
   </section>;
@@ -312,8 +312,13 @@ export const ModelSquarePage: React.FC = () => {
     staleTime: 30_000,
     retry: false,
   });
-  const ledger = React.useMemo(() => buildModelLedger(allEntries.map(entry => entry.identity), pricing.data, requests.data), [allEntries, pricing.data, requests.data]);
-  const openPriceEditor = useOpenPriceEditor() ?? undefined;
+  const ledger = React.useMemo(() => buildModelLedger(allEntries.map(entry => entry.identity), pricing.data, requests.data, directory.data?.routes), [allEntries, pricing.data, requests.data, directory.data?.routes]);
+  const openEditor = useOpenPriceEditor();
+  const openPriceEditor = openEditor ? (identity: string) => {
+    const targets = ledger.entryFor(identity).pricingTargets;
+    if (targets.length === 1) openEditor(targets[0].model, targets[0]);
+    else if (targets.length > 1) setSelectedIdentity(identity);
+  } : undefined;
   const refresh = () => { void directory.refetch(); void pricing.refetch(); void requests.refetch(); };
 
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
@@ -407,7 +412,7 @@ export const ModelSquarePage: React.FC = () => {
       footer={selected && selectedIndex >= 0 && entries.length > 1 && <span className={styles['details-position']}>{selectedIndex + 1} / {entries.length}</span>}
     >
       {selected && <div ref={detailsRef}>
-        <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={openPriceEditor} />
+        <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={openEditor ? target => openEditor(target.model, target) : undefined} />
         {selectedRoutes.length > 0 && <div className={styles['served-by']}>
           <h3>{t('models.served_by')}</h3>
           <ul>

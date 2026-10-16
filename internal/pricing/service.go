@@ -46,6 +46,7 @@ type SyncState struct {
 // the rates for ModeCustom; UpstreamID names the pinned model for ModeLinked.
 type ModeChange struct {
 	Model      string
+	Channel    string
 	Mode       string
 	UpstreamID string
 	Price      ModelPrice
@@ -54,6 +55,9 @@ type ModeChange struct {
 
 // Store is the persistence boundary; repository implements it.
 type Store interface {
+	ListPricingProviders(context.Context) ([]CatalogProvider, error)
+	UpsertChannelModelPrice(context.Context, ModelPrice) error
+	DeleteChannelModelPrice(context.Context, string, string) (bool, error)
 	ListModelPrices(context.Context) ([]ModelPrice, error)
 	UpsertModelPrices(context.Context, []ModelPrice) error
 	DeleteModelPrice(context.Context, string) (bool, error)
@@ -706,6 +710,7 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 		return ModelPrice{}, errors.New("pricing service is not initialized")
 	}
 	change.Model = strings.TrimSpace(change.Model)
+	change.Channel = strings.TrimSpace(change.Channel)
 	change.UpstreamID = strings.TrimSpace(change.UpstreamID)
 	s.priceWrites.Lock()
 	defer s.priceWrites.Unlock()
@@ -722,6 +727,13 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 	if err != nil {
 		return ModelPrice{}, err
 	}
+	if change.Channel != "" {
+		if err := s.store.UpsertChannelModelPrice(ctx, row); err != nil {
+			return ModelPrice{}, err
+		}
+		row.Mode = ModeCustom
+		return row, nil
+	}
 	if err := s.store.ApplyModelPrice(ctx, row, link); err != nil {
 		return ModelPrice{}, err
 	}
@@ -737,6 +749,7 @@ func (s *Service) PreviewModeChange(ctx context.Context, change ModeChange) (Mod
 		return ModelPrice{}, errors.New("pricing service is not initialized")
 	}
 	change.Model = strings.TrimSpace(change.Model)
+	change.Channel = strings.TrimSpace(change.Channel)
 	change.UpstreamID = strings.TrimSpace(change.UpstreamID)
 	row, _, _, err := s.resolveModeChange(ctx, change)
 	row.Mode = change.Mode
@@ -746,6 +759,14 @@ func (s *Service) PreviewModeChange(ctx context.Context, change ModeChange) (Mod
 // resolveModeChange turns a decision into the row to store, the pin to keep
 // beside it and the catalog target the model resolves to.
 func (s *Service) resolveModeChange(ctx context.Context, change ModeChange) (ModelPrice, string, string, error) {
+	if change.Channel != "" {
+		if change.Mode != ModeCustom {
+			return ModelPrice{}, "", "", ErrInvalidMode
+		}
+		if err := s.validateChannelModel(ctx, change.Channel, change.Model); err != nil {
+			return ModelPrice{}, "", "", err
+		}
+	}
 	models, err := s.store.ListPricingModels(ctx)
 	if err != nil {
 		return ModelPrice{}, "", "", err
@@ -764,6 +785,7 @@ func (s *Service) resolveModeChange(ctx context.Context, change ModeChange) (Mod
 	case ModeCustom:
 		row = change.Price
 		row.Model = change.Model
+		row.Channel = change.Channel
 		row.Source = SourceManual
 		row.SyncedAtMS = 0
 		row.UpstreamID = strings.TrimSpace(row.UpstreamID)

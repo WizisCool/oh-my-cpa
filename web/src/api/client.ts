@@ -1213,12 +1213,14 @@ export const api = {
     return request<{ models: UpstreamModel[] }>('/pricing/catalog', { method: 'GET' });
   },
 
-  async getPricingModel(model: string): Promise<PricingModelDetail> {
-    return request<PricingModelDetail>(`/pricing/models/${encodeURIComponent(model)}`, { method: 'GET' });
+  async getPricingModel(model: string, channel?: string): Promise<PricingModelDetail> {
+    const scope = channel ? `?${new URLSearchParams({ channel })}` : '';
+    return request<PricingModelDetail>(`/pricing/models/${encodeURIComponent(model)}${scope}`, { method: 'GET' });
   },
 
-  async updatePricingModel(model: string, payload: PricingModelUpdate): Promise<{ price: ModelPrice }> {
-    return request<{ price: ModelPrice }>(`/pricing/models/${encodeURIComponent(model)}`, {
+  async updatePricingModel(model: string, payload: PricingModelUpdate, channel?: string): Promise<{ price: ModelPrice }> {
+    const scope = channel ? `?${new URLSearchParams({ channel })}` : '';
+    return request<{ price: ModelPrice }>(`/pricing/models/${encodeURIComponent(model)}${scope}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
@@ -1231,8 +1233,9 @@ export const api = {
     });
   },
 
-  async deletePricingModel(model: string): Promise<{ deleted: boolean }> {
-    return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}`, {
+  async deletePricingModel(model: string, channel?: string): Promise<{ deleted: boolean }> {
+    const scope = channel ? `?${new URLSearchParams({ channel })}` : '';
+    return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}${scope}`, {
       method: 'DELETE',
     });
   },

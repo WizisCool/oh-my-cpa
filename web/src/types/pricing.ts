@@ -35,6 +35,7 @@ export interface PriceTier {
 
 export interface ModelPrice {
   model: string;
+  channel?: string;
   prompt_price_per_1m: number;
   completion_price_per_1m: number;
   cache_read_price_per_1m: number;
@@ -127,6 +128,7 @@ export interface PricingProvider {
 }
 
 export interface PricingResponse {
+  channel_models?: ModelPrice[];
   providers?: PricingProvider[];
   source: string;
   models: PricedModel[];
@@ -168,6 +170,8 @@ export interface TokenProfile {
 
 export interface PricingModelDetail {
   model: string;
+  channel?: string;
+  is_inherited?: boolean;
   price: ModelPrice | null;
   /** What auto mode would price the model at; null when nothing matches automatically. */
   automatic: { model: UpstreamModel; match_kind: PricingMatchKind } | null;

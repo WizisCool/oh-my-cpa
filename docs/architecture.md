@@ -2011,6 +2011,7 @@ openrouter.ai/api/v1/models ──▶ pricing_upstream_catalog (last complete do
                     pricing_model_links;
                     custom rows win)
 operator ──▶ pricing_channels ──triggers──▶ pricing_channel_versions (immutable)
+operator ──▶ channel_model_prices ──triggers──▶ model_price_versions (channel-scoped)
 ```
 
 `usage_events` stores, in the event's own insert transaction and by the request
@@ -2022,6 +2023,13 @@ with pricing status `unpriced` (`legacy_unpriced` for rows that predate migratio
 019), cost absent, and is never backfilled. The request detail recomputes a
 breakdown from the locked versions for display; the stored amount stays
 authoritative.
+
+Migration 043 adds optional custom prices keyed by the recorded CPA channel and
+upstream model (ADR 0101). Request locking first resolves that scope's history;
+an absent or tombstoned override selects the shared model history. The existing
+channel multiplier still applies. Shared histories use an empty channel, so old
+version ids and locked amounts remain unchanged. The editor carries the channel
+separately from the model and validates writes against provider membership.
 
 A sync downloads outside the write lock, then re-reads prices and pins under it,
 so an operator's pin set during the download is honoured. Catalog reconciliation
@@ -3327,9 +3335,10 @@ The directory also shows each model's price and recent requests, and hands off t
 price editor and the request list. It owns none of that data. The coupling is confined to
 one pure module, `web/src/types/modelSquareLedger.ts`, and rests on one contract:
 
-- **Join key.** The client call name CPA advertises in `/v1/models` is the same string as
-  the price book's `model` and the request records' `model_alias`. Nothing else is joined,
-  and no name is normalised on the way.
+- **Join keys.** Request counts use the client call name as `model_alias`. Price reads and
+  edits follow the directory's explicit route to its upstream model and the provider's
+  recorded channel. No prefix is stripped heuristically. Several route targets remain
+  separate choices, and a single-price summary stays unknown when those targets differ.
 - **Reads.** `GET /pricing` under the shared `PRICING_QUERY_KEYS.book` cache key
   (`web/src/components/pricing/pricingQueries.ts`), so a price saved in the editor reaches
   the rows without a read of their own; and `GET /usage/facets?preset=24h`, whose

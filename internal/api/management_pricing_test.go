@@ -101,6 +101,11 @@ func (f *fakePricing) PreviewModeChange(_ context.Context, change pricing.ModeCh
 func (f *fakePricing) DeletePrice(ctx context.Context, model string) (bool, error) {
 	return f.DeletePriceChecked(ctx, model, nil)
 }
+
+func (f *fakePricing) DeleteChannelPrice(_ context.Context, channel, model string) (bool, error) {
+	f.deleted = append(f.deleted, channel+"/"+model)
+	return true, nil
+}
 func (f *fakePricing) DeletePriceChecked(_ context.Context, model string, check func([]pricing.ModelPrice) error) (bool, error) {
 	if check != nil {
 		if err := check(f.listRows); err != nil {

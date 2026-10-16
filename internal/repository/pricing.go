@@ -239,10 +239,10 @@ func (r *Repository) SeedModelPriceHistoryBackfill(ctx context.Context, rows []M
 		if _, errExec := tx.ExecContext(ctx, `
 			INSERT INTO model_price_versions (
 				model, effective_from_ms, available, prompt_price_per_1m, completion_price_per_1m,
-				cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id
-			) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id, channel
+			) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			row.Model, effectiveFromMS, row.PromptPricePer1M, row.CompletionPer1M,
-			row.CacheReadPer1M, row.CacheWritePer1M, row.PriceMultiplier, row.Source, tiers, row.UpstreamID); errExec != nil {
+			row.CacheReadPer1M, row.CacheWritePer1M, row.PriceMultiplier, row.Source, tiers, row.UpstreamID, row.Channel); errExec != nil {
 			return fmt.Errorf("backfill model price version %q: %w", row.Model, errExec)
 		}
 	}

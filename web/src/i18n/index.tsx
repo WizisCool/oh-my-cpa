@@ -9,6 +9,11 @@ export type { Lang } from './language';
  * found fall through to the key itself so misses are visible in dev.
  */
 const DICT: Record<string, [string, string]> = {
+  'pricing.scope.channel': ['渠道价', 'Channel price'],
+  'pricing.editor.channel_scope': ['正在设置 {channel} 的专属价格', 'Custom price for {channel}'],
+  'pricing.editor.channel_hint': ['仅影响此渠道的该模型；渠道倍率仍会生效。未设置专属价格时沿用通用价格。', 'Applies only to this model on this channel; the channel multiplier still applies. Without an override, the shared price is used.'],
+  'pricing.editor.restore_shared': ['恢复通用价格', 'Use shared price'],
+  'pricing.editor.restore_confirm': ['移除 {model} 在此渠道的专属价格，恢复通用价格？', 'Remove this channel’s custom price for {model} and use the shared price?'],
   'agent.capability.quota_warmup_settings_get': ["读取窗口预热默认策略", "Read window warmup defaults"],
   'agent.capability.quota_warmup_settings_get.description': ['读取各供应商的默认预热设置。', 'Read each provider\'s default warmup settings.'],
   'agent.capability.quota_warmup_settings_set': ["设置窗口预热默认策略", "Set window warmup defaults"],

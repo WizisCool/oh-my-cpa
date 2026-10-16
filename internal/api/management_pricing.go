@@ -31,6 +31,7 @@ type PricingManager interface {
 	SetModelMode(ctx context.Context, change pricing.ModeChange) (pricing.ModelPrice, error)
 	SetModelModeChecked(context.Context, pricing.ModeChange, func([]pricing.ModelPrice) error) (pricing.ModelPrice, error)
 	DeletePrice(ctx context.Context, model string) (bool, error)
+	DeleteChannelPrice(context.Context, string, string) (bool, error)
 	DeletePriceChecked(context.Context, string, func([]pricing.ModelPrice) error) (bool, error)
 	ListChannels(ctx context.Context) ([]pricing.ChannelMultiplier, error)
 	SetChannel(ctx context.Context, channel pricing.ChannelMultiplier) (pricing.ChannelMultiplier, error)
@@ -240,6 +241,16 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 			"state":   state,
 		},
 	}
+	if h.repo != nil {
+		overrides, err := h.repo.ListChannelModelPrices(ctx)
+		if err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		if len(overrides) > 0 {
+			response["channel_models"] = overrides
+		}
+	}
 	if len(partial) > 0 {
 		response["partial"] = partial
 	}
@@ -329,6 +340,21 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 			break
 		}
 	}
+	channel := strings.TrimSpace(request.URL.Query().Get("channel"))
+	isInherited := channel != ""
+	if channel != "" && h.repo != nil {
+		overrides, err := h.repo.ListChannelModelPrices(ctx)
+		if err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		for index := range overrides {
+			if overrides[index].Channel == channel && overrides[index].Model == model {
+				current, isInherited = &overrides[index], false
+				break
+			}
+		}
+	}
 	suggestions, err := h.pricing.Suggestions(ctx, model, pricingSuggestionLimit)
 	if err != nil {
 		slog.Warn("pricing suggestions unavailable", "model", model, "error", err)
@@ -346,7 +372,7 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 		automatic = map[string]any{"model": match.Model, "match_kind": match.Kind}
 	}
 	var candidate any
-	if current != nil {
+	if current != nil && channel == "" {
 		if found, err := h.pricing.Candidates(ctx, []pricing.ModelPrice{*current}); err != nil {
 			slog.Warn("pricing candidate unavailable", "model", model, "error", err)
 		} else if value, ok := found[model]; ok {
@@ -355,8 +381,11 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	}
 	response := map[string]any{"model": model, "price": current, "suggestions": suggestions, "automatic": automatic,
 		"candidate": candidate, "versions": []repository.PriceVersion{}, "profile": repository.TokenProfile{}}
+	if channel != "" {
+		response["channel"], response["is_inherited"] = channel, isInherited
+	}
 	if h.repo != nil {
-		if versions, err := h.repo.ListModelPriceVersions(ctx, model, 50); err == nil && versions != nil {
+		if versions, err := h.repo.ListModelPriceVersions(ctx, model, 50, channel); err == nil && versions != nil {
 			response["versions"] = versions
 		}
 		if profile, err := h.repo.QueryModelTokenProfile(ctx, model, h.now().Add(-pricingProfileWindow).UnixMilli()); err == nil {
@@ -426,6 +455,7 @@ func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.R
 		return
 	}
 	change := body.ModeChange(model)
+	change.Channel = strings.TrimSpace(request.URL.Query().Get("channel"))
 	if change.Mode == pricing.ModeCustom {
 		candidate := change.Price
 		candidate.PriceMultiplier = change.Multiplier
@@ -447,7 +477,7 @@ func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.R
 		return
 	}
 	if err := h.recordAudit(request, "pricing.model.update", "pricing", model, "success", map[string]any{
-		"mode": change.Mode, "upstream_id": row.UpstreamID,
+		"mode": change.Mode, "upstream_id": row.UpstreamID, "channel": change.Channel,
 	}); err != nil {
 		writeInternalError(writer, err)
 		return
@@ -497,13 +527,20 @@ func (h *Handler) deletePricingModel(writer http.ResponseWriter, request *http.R
 		writeError(writer, http.StatusBadRequest, "model path parameter is required")
 		return
 	}
-	deleted, err := h.pricing.DeletePrice(request.Context(), model)
+	channel := strings.TrimSpace(request.URL.Query().Get("channel"))
+	var deleted bool
+	var err error
+	if channel == "" {
+		deleted, err = h.pricing.DeletePrice(request.Context(), model)
+	} else {
+		deleted, err = h.pricing.DeleteChannelPrice(request.Context(), channel, model)
+	}
 	if err != nil {
 		writeInternalError(writer, err)
 		return
 	}
 	if err := h.recordAudit(request, "pricing.model.delete", "pricing", model, "success", map[string]any{
-		"deleted": deleted,
+		"deleted": deleted, "channel": channel,
 	}); err != nil {
 		writeInternalError(writer, err)
 		return

@@ -338,6 +338,7 @@ troubleshooting.
 - **OpenRouter price book**: every served model priced from OpenRouter's public list, including long-context and time-of-day tiers.
 - **Linked and custom prices**: pin a model to an OpenRouter entry or set custom rates, with tier presets and a calculator.
 - **Channel multipliers**: scale everything one provider answers, for example a relay billed at 30% of list.
+- **Channel model prices**: give the same model different custom rates and time tiers on different channels, with shared prices as the default.
 
 </details>
 

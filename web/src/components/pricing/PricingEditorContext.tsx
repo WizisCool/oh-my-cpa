@@ -10,6 +10,9 @@ import type { PricingMode, UpstreamModel } from '../../types/pricing';
  * open it are the ones whose first paint the bundle budget guards most closely.
  */
 export interface OpenPriceEditorOptions {
+  /** The provider label recorded on requests; absent edits the shared price. */
+  channel?: string;
+  channelLabel?: string;
   /** Start in this mode instead of the model's current one. */
   mode?: PricingMode;
   /** Preselect this OpenRouter model for a link, e.g. a suggestion the operator clicked. */
@@ -48,6 +51,8 @@ export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({
           <LazyPriceEditorDrawer
             key={target.session}
             model={target.model}
+            channel={target.options.channel}
+            channelLabel={target.options.channelLabel}
             initialMode={target.options.mode}
             initialUpstream={target.options.upstream}
             isOpen={isOpen}

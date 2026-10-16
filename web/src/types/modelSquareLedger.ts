@@ -1,14 +1,13 @@
 import type { ModelPrice, PricingResponse } from './pricing';
+import type { ModelSquareRoute } from './modelSquare';
 import type { UsageFacetsResponse } from './usageEvents';
 import { EVENT_PRESETS } from './usageEventQuery';
 
 /**
  * The one place Model Square meets the price book and the request records.
  *
- * All three surfaces name a model by the same string: the client-visible call name CPA
- * advertises, which is the price book's `model` and the request records' `model_alias`. That
- * shared key is the whole contract. It is joined here, once, so the page renders a result and a
- * change to either neighbour has one module - and one test file - to answer to.
+ * Requests are counted by the client-visible call name. Prices belong to the routed upstream
+ * and channel. Keeping both identities here prevents a prefix or alias becoming a price key.
  *
  * The directory stays authoritative: both neighbours are optional inputs, and a read that failed
  * or has not arrived is `unknown`, never a price of nothing or a count of zero.
@@ -30,6 +29,7 @@ export type ModelPriceState =
 
 export interface ModelLedgerEntry {
   price: ModelPriceState;
+  pricingTargets: ModelPricingTarget[];
   /** Requests in the recent window; `undefined` when the count is not known. */
   recentRequests?: number;
 }
@@ -38,9 +38,35 @@ export interface ModelLedger {
   entryFor: (identity: string) => ModelLedgerEntry;
 }
 
-const UNKNOWN_ENTRY: ModelLedgerEntry = { price: { status: 'unknown' } };
+export interface ModelPricingTarget {
+  model: string;
+  channel?: string;
+  channelLabel?: string;
+  price?: ModelPrice;
+}
 
-export function buildModelLedger(identities: readonly string[], pricing?: PricingResponse, facets?: UsageFacetsResponse): ModelLedger {
+const UNKNOWN_ENTRY: ModelLedgerEntry = { price: { status: 'unknown' }, pricingTargets: [] };
+
+export function modelPricingTargets(identity: string, pricing: PricingResponse, routes: readonly ModelSquareRoute[]): ModelPricingTarget[] {
+  const targets = new Map<string, ModelPricingTarget>();
+  const matching = routes.filter(route => route.call_point === identity);
+  for (const route of matching) {
+    const provider = pricing.providers?.find(provider => provider.id === route.provider_id);
+    if (!provider?.channel || !route.upstream_model || !provider.models.includes(route.upstream_model)) continue;
+    const model = route.upstream_model;
+    const channel = provider.channel;
+    const price = pricing.channel_models?.find(price => price.channel === channel && price.model === model)
+      ?? pricing.models.find(price => price.model === model);
+    targets.set(JSON.stringify([channel, model]), { model, channel, channelLabel: provider.name, price });
+  }
+  // A directory entry without route provenance can still edit an exact shared catalog identity.
+  if (targets.size === 0 && matching.length === 0 && [...pricing.models, ...pricing.unpriced].some(row => row.model === identity)) {
+    targets.set(identity, { model: identity, price: pricing.models.find(price => price.model === identity) });
+  }
+  return [...targets.values()];
+}
+
+export function buildModelLedger(identities: readonly string[], pricing?: PricingResponse, facets?: UsageFacetsResponse, routes: readonly ModelSquareRoute[] = []): ModelLedger {
   const priced = new Map((pricing?.models ?? []).map(model => [model.model, model]));
   const aliases = facets?.facets.model_aliases;
   const requests = new Map((aliases ?? []).map(facet => [facet.value, facet.requests]));
@@ -48,11 +74,13 @@ export function buildModelLedger(identities: readonly string[], pricing?: Pricin
 
   const entries = new Map<string, ModelLedgerEntry>();
   for (const identity of identities) {
-    const price = priced.get(identity);
-    const entry: ModelLedgerEntry = { price: { status: 'unknown' } };
+    const pricingTargets = pricing ? modelPricingTargets(identity, pricing, routes) : [];
+    const price = pricingTargets.length === 1 ? pricingTargets[0].price : priced.get(identity);
+    const entry: ModelLedgerEntry = { price: { status: 'unknown' }, pricingTargets };
     if (pricing) {
       // A name the book does not list has no price row, which is exactly what unpriced means.
       entry.price = price ? { status: 'priced', price } : { status: 'unpriced' };
+      if (pricingTargets.length > 1) entry.price = { status: 'unknown' };
     }
     entry.recentRequests = requests.get(identity) ?? (isRequestListComplete ? 0 : undefined);
     entries.set(identity, entry);
