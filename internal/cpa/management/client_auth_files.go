@@ -160,10 +160,14 @@ type AuthFile struct {
 	Quota          map[string]any  `json:"quota"`
 	// SupportsQuota and QuotaProvider are CPA's quota advertisement for this
 	// credential: set when a built-in or plugin quota provider claims it.
+	// QuotaPluginID names the plugin CPA itself selected to serve that quota
+	// (CPA v8.0.25+); it already skips fused plugins in favour of a healthy one.
 	// QuotaProbe carries a declarative quota_probe credential, which has no v8
-	// management route and is reported as unsupported rather than fetched.
+	// management route and is reported as unsupported rather than fetched;
+	// CPA v8.0.25+ no longer advertises it on v8 lists.
 	SupportsQuota bool                      `json:"supports_quota,omitempty"`
 	QuotaProvider string                    `json:"quota_provider,omitempty"`
+	QuotaPluginID string                    `json:"quota_plugin_id,omitempty"`
 	QuotaProbe    json.RawMessage           `json:"quota_probe,omitempty"`
 	ModelQuotas   map[string]map[string]any `json:"model_quotas"`
 	Models        []AuthModel               `json:"models"`

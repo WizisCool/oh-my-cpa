@@ -93,6 +93,26 @@ func TestPluginQuotaTargetRefusesDeclarativeProbe(t *testing.T) {
 	}
 }
 
+// CPA's quota_plugin_id is the plugin it actually routes quota to. A name match
+// would pick fixture-limiter here, which CPA may have fused; the target follows
+// CPA without listing plugins at all.
+func TestPluginQuotaTargetPrefersCPASelection(t *testing.T) {
+	svc := NewService(&mockCPAClient{pluginsFunc: func(context.Context) ([]management.PluginItem, error) {
+		t.Fatal("plugins listed although CPA named the quota plugin")
+		return nil, nil
+	}})
+	got, err := svc.pluginQuotaTarget(context.Background(), management.AuthFile{
+		AuthIndex:     "auth-selected",
+		Type:          "codebuddy",
+		SupportsQuota: true,
+		QuotaProvider: "codebuddy",
+		QuotaPluginID: "fixture-healthy",
+	})
+	if err != nil || got != "fixture-healthy" {
+		t.Fatalf("pluginQuotaTarget = %q, %v; want fixture-healthy", got, err)
+	}
+}
+
 const pluginQuotaFixture = `{
 	"groups": [{
 		"displayName": "Code models",
