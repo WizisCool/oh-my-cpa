@@ -577,8 +577,14 @@ flows and the contents of usage records were not exercised against a real binary
   The save's answer re-reads CPA, so the editor shows what CPA holds.
 - **A family is written whole.** CPA has no path for one key of a group, so a provider
   write sends the family's groups back. The provider write gate serialises OMC's own
-  writes; a concurrent writer outside OMC editing the same family between the read and
-  the write is overwritten, as with the v0 list writes before.
+  writes. Against CPA v8.0.31 or later, every write also carries `If-Match` with CPA's
+  entity tag for the file OMC read and backed up just before (the SHA-256 of its exact
+  bytes), and each later request of a change set names the tag CPA reported for its
+  previous save. A writer outside OMC that saves in between makes CPA answer `412`,
+  which the console reports as `config_conflict` (nothing written) or
+  `config_partially_applied` (an earlier request of the set had landed). Older
+  gateways ignore the header, so there a concurrent writer editing the same family
+  between the read and the write is still overwritten.
 - **Probe cache.** An upgrade from v7 is noticed within `API_UNSUPPORTED_TTL` (fifteen
   seconds); a rollback to v7 is noticed on the first v8 route that answers "missing".
 
