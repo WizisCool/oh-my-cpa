@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/url"
 	"regexp"
 	"strings"
@@ -42,11 +44,16 @@ const (
 var githubRepositorySlug = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$`)
 
 type PluginConfigFieldDTO struct {
-	Name        string   `json:"name"`
-	Type        string   `json:"type"`
-	EnumValues  []string `json:"enum_values,omitempty"`
-	Description string   `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Type        string          `json:"type"`
+	EnumValues  []string        `json:"enum_values,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Default     json.RawMessage `json:"default,omitempty"`
 }
+
+// pluginDefaultLimit bounds a declared default. The editor only shows it as the
+// value an unset key falls back to, so an oversized one is dropped, not cut.
+const pluginDefaultLimit = 2048
 
 type PluginMetadataDTO struct {
 	Name    string `json:"name,omitempty"`
@@ -223,6 +230,7 @@ func projectPluginConfigFields(fields []management.PluginConfigField) []PluginCo
 			Type:        strings.ToLower(boundedText(field.Type, 32)),
 			EnumValues:  boundedPluginList(field.EnumValues),
 			Description: boundedText(field.Description, pluginTextLimit),
+			Default:     projectPluginDefault(field.Default),
 		})
 	}
 	return result
@@ -353,4 +361,18 @@ func boundedPluginList(values []string) []string {
 		}
 	}
 	return result
+}
+
+// projectPluginDefault passes a declared default through only as one compact,
+// valid JSON value; null states no default.
+func projectPluginDefault(raw json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || !json.Valid(trimmed) {
+		return nil
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, trimmed) != nil || compact.Len() > pluginDefaultLimit {
+		return nil
+	}
+	return compact.Bytes()
 }

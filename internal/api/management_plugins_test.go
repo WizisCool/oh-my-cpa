@@ -145,7 +145,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			state.routeCalls = append(state.routeCalls, pluginRouteCall{method: request.Method, path: path})
 			_, _ = writer.Write([]byte(`{"secret":"raw-core-document"}`))
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
-			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
+			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level","default":"info"},{"name":"level","type":"string"}],"menus":[{"path":"/v0/resource/plugins/logger/console","menu":"Logger Console","description":"Live log view"},{"path":"/v0/resource/plugins/other/console","menu":"Foreign"},{"path":"/v0/management/config.yaml","menu":"Core"},{"path":"https://elsewhere.example/page","menu":"Elsewhere"}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
 			if state.hasBareInstall {
 				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
 			}
@@ -328,8 +328,8 @@ func TestPluginsLifecycle(t *testing.T) {
 	if len(fields) != 1 {
 		t.Fatalf("config_fields = %#v, want one entry per declared name", plugin["config_fields"])
 	}
-	if field, _ := fields[0].(map[string]any); field["type"] != "enum" || len(field["enum_values"].([]any)) != 2 {
-		t.Fatalf("config field = %#v, want the enum with its values", fields[0])
+	if field, _ := fields[0].(map[string]any); field["type"] != "enum" || len(field["enum_values"].([]any)) != 2 || field["default"] != "info" {
+		t.Fatalf("config field = %#v, want the enum with its values and default", fields[0])
 	}
 
 	// The response shape is this console's own, not the facade model's: every field is
@@ -653,5 +653,21 @@ func TestPluginConfigOfAnInstalledPluginWithoutSettingsIsEmpty(t *testing.T) {
 	}
 	if response.StatusCode != http.StatusOK || payload["id"] != "installed" || fmt.Sprint(payload["config"]) != "map[]" {
 		t.Fatalf("config = %d %s, want an empty document", response.StatusCode, body)
+	}
+}
+
+// A declared default reaches the editor only as one bounded JSON value; null or
+// an oversized document states nothing.
+func TestProjectPluginDefaultKeepsOneBoundedValue(t *testing.T) {
+	for _, scenario := range []struct{ raw, want string }{
+		{`{ "a" : [1, 2] }`, `{"a":[1,2]}`},
+		{`false`, `false`},
+		{`null`, ``},
+		{``, ``},
+		{`"` + strings.Repeat("x", pluginDefaultLimit) + `"`, ``},
+	} {
+		if got := string(projectPluginDefault(json.RawMessage(scenario.raw))); got != scenario.want {
+			t.Errorf("projectPluginDefault(%.20q) = %q, want %q", scenario.raw, got, scenario.want)
+		}
 	}
 }

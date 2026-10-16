@@ -18,6 +18,8 @@ type PluginConfigField struct {
 	Type        string   `json:"type"`
 	EnumValues  []string `json:"enum_values,omitempty"`
 	Description string   `json:"description,omitempty"`
+	// Default is the value the plugin uses while the key is unset (CPA v8.0.27+).
+	Default json.RawMessage `json:"default,omitempty"`
 }
 
 type PluginMetadata struct {

@@ -3131,6 +3131,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "plugin.config_empty": "空物件",
   "plugin.field_unset": "未設定 · 使用外掛預設值",
   "plugin.field_default_placeholder": "留空則使用外掛預設值",
+  "plugin.field_default_value": "留空則使用預設值：{value}",
   "plugin.field_unset_action": "清除，使用外掛預設值",
   "plugin.field_reset": "還原為已儲存的值",
   "plugin.field_list_placeholder": "輸入後按 Enter 新增",

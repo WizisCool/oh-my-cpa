@@ -392,6 +392,9 @@ func TestProbeEndpointMatchesCPAPrefixSemantics(t *testing.T) {
 		{"vertex", "", "https://aiplatform.googleapis.com/v1/publishers/google/models/m:generateContent"},
 		{"vertex", "https://vertex.example.test/custom", "https://vertex.example.test/custom/v1/publishers/google/models/m:generateContent"},
 		{"vertex", "https://aiplatform.googleapis.com/v1/publishers/google/models/m:generateContent", "https://aiplatform.googleapis.com/v1/publishers/google/models/m:generateContent"},
+		{"vertex", "https://vertex.example.test/v1beta1", "https://vertex.example.test/v1beta1/publishers/google/models/m:generateContent"},
+		{"vertex", "https://vertex.example.test/v1/projects/p/locations/l/publishers/google/models", "https://vertex.example.test/v1/projects/p/locations/l/publishers/google/models/m:generateContent"},
+		{"vertex", "https://vertex.example.test/version", "https://vertex.example.test/version/v1/publishers/google/models/m:generateContent"},
 	} {
 		t.Run(testCase.family+"/"+testCase.base, func(t *testing.T) {
 			spec, err := probeEndpointForFamily(testCase.family, testCase.base, "m")

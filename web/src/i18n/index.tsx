@@ -3286,6 +3286,7 @@ const DICT: Record<string, [string, string]> = {
   'plugin.config_empty': ['空对象', 'Empty object'],
   'plugin.field_unset': ['未设置 · 使用插件默认值', 'Not set · the plugin\'s default applies'],
   'plugin.field_default_placeholder': ['留空则使用插件默认值', 'Empty uses the plugin\'s default'],
+  'plugin.field_default_value': ['留空则使用默认值：{value}', 'Empty uses the default: {value}'],
   'plugin.field_unset_action': ['清除，使用插件默认值', 'Clear and use the plugin\'s default'],
   'plugin.field_reset': ['恢复为已保存的值', 'Restore the saved value'],
   'plugin.field_list_placeholder': ['输入后按回车添加', 'Type and press Enter to add'],

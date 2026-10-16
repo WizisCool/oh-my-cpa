@@ -572,7 +572,8 @@ Paid fallback must be affirmatively disabled by a fresh usage read. Claude uses
 billing settings or redeem a reset credit to make warmup eligible. A zero reading with
 an active fixed boundary is not an idle window. Model-scoped Sonnet, Opus and Fable
 limits can pause the selected family without blocking unrelated Haiku. Fable evidence
-accepts the legacy `iguana_necktie` or modern model-scoped `limits`; malformed modern
+accepts the legacy `iguana_necktie` (unless it carries dollar amounts, which make it the
+cloud session credit pool) or modern model-scoped `limits`; malformed modern
 evidence, including a present non-array or null `limits` field, remains unknown rather
 than falling back to an apparently available legacy limit.
 

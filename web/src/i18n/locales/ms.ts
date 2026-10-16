@@ -3131,6 +3131,7 @@ export const MS: Readonly<Record<string, string>> = {
   "plugin.config_empty": "Objek kosong",
   "plugin.field_unset": "Tidak ditetapkan · lalai pemalam digunakan",
   "plugin.field_default_placeholder": "Kosong menggunakan lalai pemalam",
+  "plugin.field_default_value": "Kosong menggunakan lalai: {value}",
   "plugin.field_unset_action": "Kosongkan dan guna lalai pemalam",
   "plugin.field_reset": "Pulihkan nilai yang disimpan",
   "plugin.field_list_placeholder": "Taip dan tekan Enter untuk menambah",

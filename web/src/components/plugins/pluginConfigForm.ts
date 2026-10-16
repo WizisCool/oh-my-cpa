@@ -124,6 +124,13 @@ function stringifyValue(value: unknown): string {
   }
 }
 
+/** The declared default as one line of text, or undefined when the manifest names none. */
+export function pluginFieldDefaultText(field: PluginConfigField): string | undefined {
+  if (field.default === undefined || field.default === null) return undefined;
+  const text = typeof field.default === 'string' ? field.default : JSON.stringify(field.default);
+  return text.length > 80 ? `${text.slice(0, 79)}…` : text;
+}
+
 export function pluginFieldDraftFromValue(field: PluginConfigField, value: unknown, isSet: boolean): PluginFieldDraft {
   const kind = pluginFieldKind(field);
   const draft: PluginFieldDraft = { isSet, text: '', checked: false, isList: false, list: [] };
