@@ -90,6 +90,10 @@ func ParseXaiBillingDocuments(creditsRaw, monthlyRaw []byte, nowMS int64) (*Quot
 	if monthlyPlan != nil && monthlyPlan.ExtraUsage != nil {
 		plan.ExtraUsage = monthlyPlan.ExtraUsage
 	}
+	// The breakdown follows the windows: it splits the usage the chosen window meters.
+	if len(creditsWindows) == 0 && monthlyPlan != nil {
+		plan.UsageBreakdown = monthlyPlan.UsageBreakdown
+	}
 
 	return plan, windows, nil
 }
@@ -188,38 +192,30 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 		})
 	}
 
+	// product_usage splits the shared credit usage by product: each share is a
+	// part of the total, not a limit, so reading it as a window would turn a
+	// product carrying most of the traffic into a falsely exhausted credential.
 	products := cfg.ProductUsage
 	if len(products) == 0 {
 		products = cfg.ProductUsageAlt
 	}
+	var breakdown []QuotaUsageShare
 	for i, prod := range products {
-		name := prod.Product
+		name := strings.TrimSpace(prod.Product)
 		if name == "" {
-			name = fmt.Sprintf("模型 %d", i+1)
+			name = fmt.Sprintf("#%d", i+1)
 		}
 		rawPct := prod.UsagePercent
 		if rawPct == nil {
 			rawPct = prod.UsagePctAlt
 		}
-		productWindow := QuotaWindow{
-			ID:            fmt.Sprintf("xai_prod_%d", i),
-			Label:         fmt.Sprintf("%s 使用率", strings.ToUpper(name)),
-			Scope:         "model",
-			Model:         name,
-			ResetAtMS:     resetAtMS,
-			ResetLabel:    resetLabel,
-			ResetAccuracy: "exact",
-		}
-		// A product without a readable share is still listed: its row draws
-		// the unknown state instead of vanishing, the way CPAMC's breakdown
-		// names it unavailable rather than hiding it.
+		// A product without a readable share is still listed, as unavailable.
+		share := QuotaUsageShare{Name: grantLabel(name)}
 		if pct, ok := toFloat(rawPct); ok {
-			clampedUsed := clamp(pct, 0, 100)
-			clampedRem := clamp(100-clampedUsed, 0, 100)
-			productWindow.UsedPercent = &clampedUsed
-			productWindow.RemainingPercent = &clampedRem
+			clamped := clamp(pct, 0, 100)
+			share.SharePercent = &clamped
 		}
-		windows = append(windows, productWindow)
+		breakdown = append(breakdown, share)
 	}
 
 	monthlyLim := cfg.MonthlyLimit
@@ -229,6 +225,8 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 	limitCents := parseCentVal(monthlyLim)
 	usedCents := parseCentVal(cfg.Used)
 
+	// A stated zero cap means pay-as-you-go is off. A document that states no
+	// cap at all (the credits document) says nothing about it either way.
 	var extraUsage *QuotaExtraUsage
 	if limitCents > 0 {
 		pct := clamp(float64(usedCents)/float64(limitCents)*100, 0, 100)
@@ -238,13 +236,16 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 			UsedCreditsCents:   usedCents,
 			UtilizationPercent: &pct,
 		}
+	} else if monthlyLim != nil {
+		extraUsage = &QuotaExtraUsage{UsedCreditsCents: usedCents}
 	}
 
 	plan := &QuotaPlan{
-		PlanType:   "paid",
-		PlanLabel:  "xAI Paid / API",
-		Tier:       "standard",
-		ExtraUsage: extraUsage,
+		PlanType:       "paid",
+		PlanLabel:      "xAI Paid / API",
+		Tier:           "standard",
+		ExtraUsage:     extraUsage,
+		UsageBreakdown: breakdown,
 	}
 
 	return plan, windows, nil

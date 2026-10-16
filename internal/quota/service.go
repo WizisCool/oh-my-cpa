@@ -626,6 +626,9 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	if err != nil {
 		return plan, nil, nil, err
 	}
+	if plan != nil {
+		plan.Balances = ParseClaudeBalances(normUsage)
+	}
 	return plan, windows, extraUsage, nil
 }
 

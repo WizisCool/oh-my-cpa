@@ -5,13 +5,29 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
 
 type RawClaudeWindow struct {
-	Utilization any    `json:"utilization"`
-	ResetsAt    string `json:"resets_at"`
+	Utilization      any    `json:"utilization"`
+	ResetsAt         string `json:"resets_at"`
+	LimitDollars     any    `json:"limit_dollars"`
+	UsedDollars      any    `json:"used_dollars"`
+	RemainingDollars any    `json:"remaining_dollars"`
+}
+
+// isDollarDenominated reports a window that meters a dollar allowance rather
+// than a share of the plan. Claude reuses the iguana_necktie key for its cloud
+// session credits, which would otherwise read as the legacy Fable window.
+func (w *RawClaudeWindow) isDollarDenominated() bool {
+	for _, value := range []any{w.LimitDollars, w.UsedDollars, w.RemainingDollars} {
+		if _, ok := toFloat(value); ok {
+			return true
+		}
+	}
+	return false
 }
 
 type RawClaudeModelScope struct {
@@ -33,10 +49,14 @@ type RawClaudeUsageLimit struct {
 }
 
 type RawClaudeExtraUsage struct {
-	IsEnabled    bool `json:"is_enabled"`
-	MonthlyLimit any  `json:"monthly_limit"`
-	UsedCredits  any  `json:"used_credits"`
-	Utilization  any  `json:"utilization"`
+	IsEnabled         *bool  `json:"is_enabled"`
+	MonthlyLimit      any    `json:"monthly_limit"`
+	UsedCredits       any    `json:"used_credits"`
+	Utilization       any    `json:"utilization"`
+	Currency          string `json:"currency"`
+	DisabledReason    string `json:"disabled_reason"`
+	UserDisabled      *bool  `json:"user_disabled"`
+	SpendLimitReached *bool  `json:"spend_limit_reached"`
 }
 
 type RawClaudeUsagePayload struct {
@@ -299,12 +319,14 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 			}
 		}
 	}
-	if !foundFable && payload.IguanaNecktie != nil {
+	if !foundFable && payload.IguanaNecktie != nil && !payload.IguanaNecktie.isDollarDenominated() {
 		addWindow(payload.IguanaNecktie, "seven_day_fable", "Fable 每周用量", "model", "fable", 168)
 	}
 
+	// A disabled block is still reported: it says the credential cannot overflow
+	// into paid usage. Only a block whose state is unreadable is dropped.
 	var extraUsage *QuotaExtraUsage
-	if eu := payload.ExtraUsage; eu != nil && eu.IsEnabled {
+	if eu := payload.ExtraUsage; eu != nil && eu.IsEnabled != nil {
 		monLim, _ := toInt64(eu.MonthlyLimit)
 		usedCreds, _ := toInt64(eu.UsedCredits)
 		var utilPct *float64
@@ -316,14 +338,94 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 			utilPct = &calc
 		}
 		extraUsage = &QuotaExtraUsage{
-			IsEnabled:          eu.IsEnabled,
-			MonthlyLimitCents:  monLim,
-			UsedCreditsCents:   usedCreds,
-			UtilizationPercent: utilPct,
+			IsEnabled:           *eu.IsEnabled,
+			MonthlyLimitCents:   monLim,
+			UsedCreditsCents:    usedCreds,
+			UtilizationPercent:  utilPct,
+			Currency:            claudeCurrency(eu.Currency),
+			DisabledReason:      grantLabel(eu.DisabledReason),
+			IsUserDisabled:      eu.UserDisabled != nil && *eu.UserDisabled,
+			IsSpendLimitReached: eu.SpendLimitReached != nil && *eu.SpendLimitReached,
 		}
 	}
 
 	return windows, extraUsage, nil
+}
+
+var claudeCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+
+// claudeCurrency keeps only an ISO 4217 code, which the console hands to the
+// number formatter; anything else is left to the USD default.
+func claudeCurrency(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if claudeCurrencyPattern.MatchString(value) {
+		return value
+	}
+	return ""
+}
+
+// claudeBalanceFields are what make an arbitrary usage key a dollar balance.
+// Requiring all of them keeps a new percentage window, or any other object
+// upstream adds, from being read as money.
+var claudeBalanceFields = []string{"limit_dollars", "used_dollars", "remaining_dollars", "utilization", "resets_at"}
+
+// ParseClaudeBalances reads the dollar allowances in the Claude usage response.
+// iguana_necktie counts as soon as it carries a dollar amount, since that is
+// what separates the cloud session credit pool from the legacy Fable window.
+// Balances are ordered by key so a refresh does not reshuffle them.
+func ParseClaudeBalances(raw []byte) []QuotaBalance {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var balances []QuotaBalance
+	for _, key := range keys {
+		if key == "five_hour" || key == "seven_day" || key == "extra_usage" {
+			continue
+		}
+		var members map[string]json.RawMessage
+		var window RawClaudeWindow
+		if json.Unmarshal(fields[key], &members) != nil || members == nil || json.Unmarshal(fields[key], &window) != nil {
+			continue
+		}
+		isBalance := key == "iguana_necktie" && window.isDollarDenominated()
+		if !isBalance {
+			isBalance = true
+			for _, field := range claudeBalanceFields {
+				if _, ok := members[field]; !ok {
+					isBalance = false
+					break
+				}
+			}
+		}
+		if !isBalance || len(balances) >= 16 {
+			continue
+		}
+		balance := QuotaBalance{ID: key}
+		for _, amount := range []struct {
+			value  any
+			target **float64
+		}{{window.LimitDollars, &balance.LimitUSD}, {window.UsedDollars, &balance.UsedUSD}, {window.RemainingDollars, &balance.RemainingUSD}} {
+			if value, ok := toFloat(amount.value); ok && !math.IsNaN(value) && !math.IsInf(value, 0) {
+				*amount.target = &value
+			}
+		}
+		if utilization, ok := toFloat(window.Utilization); ok && !math.IsNaN(utilization) && !math.IsInf(utilization, 0) {
+			clamped := clamp(utilization, 0, 100)
+			balance.UtilizationPercent = &clamped
+		}
+		if instant, err := time.Parse(time.RFC3339Nano, window.ResetsAt); err == nil {
+			resetAtMS := instant.UnixMilli()
+			balance.ResetAtMS = &resetAtMS
+		}
+		balances = append(balances, balance)
+	}
+	return balances
 }
 
 // ParseClaudeProfile derives the subscription plan from the /api/oauth/profile

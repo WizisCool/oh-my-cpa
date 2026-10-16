@@ -4,7 +4,7 @@ import { Button } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { formatGmtOffsetLabel, formatObservedAgo, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey } from './quotaFormat';
+import { formatGmtOffsetLabel, formatObservedAgo, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey } from './quotaFormat';
 import { QuotaProgressBar } from './QuotaProgressBar';
 import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
@@ -50,6 +50,9 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
     ? t('quota.credits_unlimited')
     : item.plan?.credits?.balance;
   const applicableCredits = item.reset_credits?.applicable_available_count ?? 0;
+  const extraUsage = item.plan?.extra_usage;
+  const balances = item.plan?.balances ?? [];
+  const usageBreakdown = item.plan?.usage_breakdown ?? [];
   const creditRows = (item.reset_credits?.credits ?? [])
     .filter((credit) => credit.expires_at_ms)
     .sort((left, right) => (left.expires_at_ms ?? 0) - (right.expires_at_ms ?? 0));
@@ -142,7 +145,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         />
       )}
 
-      {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || item.reset_credits) && (
+      {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || item.reset_credits || extraUsage) && (
         <div className={styles['meta-row']}>
           {item.plan?.plan_label && (
             <span className={styles['meta-item']}>
@@ -179,6 +182,28 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             <span className={styles['meta-item']} data-credit-balance="true">
               <span className={styles['meta-label']}>{t('quota.col_credit_balance')}</span>
               <span className={styles['meta-value']}>{creditBalanceText}</span>
+            </span>
+          )}
+          {extraUsage && (
+            <span className={styles['meta-item']} data-extra-usage={extraUsage.is_enabled ? 'on' : 'off'}>
+              <span className={styles['meta-label']}>{t('quota.col_extra_usage')}</span>
+              <span className={styles['meta-value']}>
+                {extraUsage.is_enabled
+                  ? t('quota.extra_usage_spent', {
+                    used: formatQuotaMoney(extraUsage.used_credits_cents / 100, extraUsage.currency),
+                    limit: formatQuotaMoney(extraUsage.monthly_limit_cents / 100, extraUsage.currency),
+                  })
+                  : t('quota.extra_usage_off')}
+              </span>
+              {extraUsage.spend_limit_reached && (
+                <span className={styles['meta-tag']}>{t('quota.extra_usage_limit_reached')}</span>
+              )}
+              {extraUsage.user_disabled && (
+                <span className={styles['meta-tag']}>{t('quota.extra_usage_user_disabled')}</span>
+              )}
+              {extraUsage.disabled_reason && (
+                <span className={styles['meta-tag']} title={t('quota.extra_usage_reason')}>{extraUsage.disabled_reason}</span>
+              )}
             </span>
           )}
           {item.reset_credits && (
@@ -256,6 +281,26 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         </div>
       )}
 
+      {balances.length > 0 && (
+        <div className={styles.section} data-quota-balances="true">
+          <SectionHeading level="label" as="div" title={t('quota.balances_title')} />
+          <div className={styles['reset-list']}>
+            {balances.map((balance) => (
+              <div className={styles['reset-row']} key={balance.id}>
+                <span className={styles['meta-label']} title={balance.id}>
+                  {balance.id === 'iguana_necktie' ? t('quota.balance_cloud_session_credits') : balance.id}
+                </span>
+                <span className={styles['meta-value']}>
+                  {t('quota.balance_remaining', { amount: formatQuotaMoney(balance.remaining_usd) })}
+                  {` · ${t('quota.balance_spent', { used: formatQuotaMoney(balance.used_usd), limit: formatQuotaMoney(balance.limit_usd) })}`}
+                  {balance.reset_at_ms ? ` · ${formatTimeWithCountdown(balance.reset_at_ms, nowMS, t)}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={styles.section}>
         <SectionHeading level="label" as="div" title={t('quota.windows_title')} />
         <div className={styles['windows-list']}>
@@ -271,6 +316,22 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           <div className={styles['capacity-hint']} data-quota-capacity-hint="true">{t('quota.capacity_hint')}</div>
         )}
       </div>
+
+      {usageBreakdown.length > 0 && (
+        <div className={styles.section} data-quota-usage-breakdown="true">
+          <SectionHeading level="label" as="div" title={t('quota.usage_breakdown_title')} />
+          <div className={styles['reset-list']}>
+            {usageBreakdown.map((share, index) => (
+              <div className={styles['reset-row']} key={`${share.name}-${index}`}>
+                <span className={styles['meta-label']}>{share.name}</span>
+                <span className={styles['meta-value']}>
+                  {share.share_percent == null ? t('quota.usage_share_unavailable') : `${Math.round(share.share_percent * 10) / 10}%`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {hasDiagnostics && (
         <details className={styles['quota-diagnostics']}>

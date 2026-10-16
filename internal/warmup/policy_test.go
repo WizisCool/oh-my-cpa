@@ -225,6 +225,7 @@ func TestFableWarmupRequiresAvailableModelScopedQuota(t *testing.T) {
 		{"modern string", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":"invalid"`, "quota_unknown"},
 		{"modern null", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":null`, "quota_unknown"},
 		{"legacy exhausted", `"iguana_necktie":{"utilization":100,"resets_at":"2026-11-05T07:59:00Z"}`, "quota_exhausted"},
+		{"credit pool is not Fable", `"iguana_necktie":{"utilization":100,"limit_dollars":50,"used_dollars":50,"remaining_dollars":0,"resets_at":"2026-11-05T07:59:00Z"}`, ""},
 		{"modern exhausted", `"limits":[{"percent":100,"resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable 5"}}}]`, "quota_exhausted"},
 		{"modern malformed", `"limits":[{"percent":"invalid","resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable"}}}]`, "quota_unknown"},
 		{"modern overrides legacy", `"iguana_necktie":{"utilization":0,"resets_at":null},"limits":[{"percent":100,"resets_at":"2026-11-05T07:59:00Z","scope":{"model":{"display_name":"Fable"}}}]`, "quota_exhausted"},

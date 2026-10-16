@@ -119,3 +119,15 @@ func TestMetaQuotaUsesOnlyPersistedDcaAndRedactsFailures(t *testing.T) {
 		})
 	}
 }
+
+// A window the console cannot name by period keeps its length in the label,
+// in whole hours when it is one.
+func TestParseMetaQuotaNamesTheWindowLength(t *testing.T) {
+	for minutes, want := range map[string]string{"120": "2-hour window", "90": "90-minute window"} {
+		raw := []byte(`{"subs_usage":{"window":{"used_percent":10,"window_duration_mins":` + minutes + `}}}`)
+		_, windows, err := ParseMetaUsage(raw, 0)
+		if err != nil || windows[0].Label != want {
+			t.Errorf("%s minutes: label = %q, %v; want %q", minutes, windows[0].Label, err, want)
+		}
+	}
+}
