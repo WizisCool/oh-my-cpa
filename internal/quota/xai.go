@@ -113,18 +113,20 @@ func parseXaiBillingDocument(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow
 }
 
 func parseCentVal(value any) int64 {
+	cents, _ := readCentVal(value)
+	return cents
+}
+
+// readCentVal reports whether the amount was readable, so an unreadable cap is
+// not mistaken for a stated zero.
+func readCentVal(value any) (int64, bool) {
 	if value == nil {
-		return 0
+		return 0, false
 	}
 	if m, ok := value.(map[string]any); ok {
-		if v, ok := toInt64(m["val"]); ok {
-			return v
-		}
+		return toInt64(m["val"])
 	}
-	if v, ok := toInt64(value); ok {
-		return v
-	}
-	return 0
+	return toInt64(value)
 }
 
 // ParseXaiBilling parses xAI billing payload into windows and plan details.
@@ -222,11 +224,11 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 	if monthlyLim == nil {
 		monthlyLim = cfg.MonthlyLimitAlt
 	}
-	limitCents := parseCentVal(monthlyLim)
+	limitCents, isLimitReadable := readCentVal(monthlyLim)
 	usedCents := parseCentVal(cfg.Used)
 
 	// A stated zero cap means pay-as-you-go is off. A document that states no
-	// cap at all (the credits document) says nothing about it either way.
+	// readable cap (the credits document states none) says nothing about it.
 	var extraUsage *QuotaExtraUsage
 	if limitCents > 0 {
 		pct := clamp(float64(usedCents)/float64(limitCents)*100, 0, 100)
@@ -236,7 +238,7 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 			UsedCreditsCents:   usedCents,
 			UtilizationPercent: &pct,
 		}
-	} else if monthlyLim != nil {
+	} else if isLimitReadable && limitCents == 0 {
 		extraUsage = &QuotaExtraUsage{UsedCreditsCents: usedCents}
 	}
 

@@ -626,8 +626,14 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	if err != nil {
 		return plan, nil, nil, err
 	}
+	// Balances and extra usage come from the usage read, so a failed profile
+	// read must not drop them: they ride on a plan whose type stays unknown.
+	balances := ParseClaudeBalances(normUsage)
+	if plan == nil && (len(balances) > 0 || extraUsage != nil) {
+		plan = &QuotaPlan{Tier: "unknown"}
+	}
 	if plan != nil {
-		plan.Balances = ParseClaudeBalances(normUsage)
+		plan.Balances = balances
 	}
 	return plan, windows, extraUsage, nil
 }

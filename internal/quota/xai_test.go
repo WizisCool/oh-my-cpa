@@ -181,8 +181,10 @@ func TestParseXaiBillingReportsPayAsYouGoOff(t *testing.T) {
 	if err != nil || plan.ExtraUsage == nil || plan.ExtraUsage.IsEnabled {
 		t.Fatalf("zero cap: plan = %+v, %v; want extra usage reported off", plan, err)
 	}
-	plan, _, err = ParseXaiBilling([]byte(`{"config": {"credit_usage_percent": 5}}`), nowMS)
-	if err != nil || plan.ExtraUsage != nil {
-		t.Fatalf("no cap: plan = %+v, %v; want no extra usage claim", plan, err)
+	for _, document := range []string{`{"config": {"credit_usage_percent": 5}}`, `{"config": {"monthly_limit": {"value": 0}}}`, `{"config": {"monthly_limit": "unlimited"}}`} {
+		plan, _, err = ParseXaiBilling([]byte(document), nowMS)
+		if err != nil || plan.ExtraUsage != nil {
+			t.Fatalf("%s: plan = %+v, %v; want no extra usage claim from an absent or unreadable cap", document, plan, err)
+		}
 	}
 }

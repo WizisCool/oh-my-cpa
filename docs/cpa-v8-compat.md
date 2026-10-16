@@ -597,7 +597,9 @@ flows and the contents of usage records were not exercised against a real binary
   writes. Against CPA v8.0.31 or later, every write also carries `If-Match` with CPA's
   entity tag for the file OMC read and backed up just before (the SHA-256 of its exact
   bytes), and each later request of a change set names the tag CPA reported for its
-  previous save. A writer outside OMC that saves in between makes CPA answer `412`,
+  previous save. When a save's answer carries no tag (CPA could not read the file
+  back), the requests after it in that change set are unconditional. A writer outside
+  OMC that saves in between makes CPA answer `412`,
   which the console reports as `config_conflict` (nothing written) or
   `config_partially_applied` (an earlier request of the set had landed). Older
   gateways ignore the header, so there a concurrent writer editing the same family

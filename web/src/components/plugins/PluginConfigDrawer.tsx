@@ -419,7 +419,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           open={false}
           suffixIcon={null}
           tokenSeparators={[',', '\n']}
-          placeholder={t('plugin.field_list_placeholder')}
+          placeholder={defaultText === undefined ? t('plugin.field_list_placeholder') : defaultPlaceholder}
           onChange={(values: string[]) => onChange({ list: values, isSet: values.length > 0 })}
           aria-label={field.name}
         />
@@ -434,7 +434,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           spellCheck={false}
           className={styles['config-json']}
           status={error ? 'error' : undefined}
-          placeholder={defaultText ?? (kind === 'array' ? '[ ]' : '{ }')}
+          placeholder={defaultText === undefined ? (kind === 'array' ? '[ ]' : '{ }') : defaultPlaceholder}
           onChange={(event) => changeText(event.target.value)}
           aria-label={field.name}
         />
