@@ -239,3 +239,49 @@ describe('claude reset grants display', () => {
     expect(screen.queryByText(/Claude reset grants/)).toBeNull();
   });
 });
+
+describe('paid usage, balances and usage breakdown', () => {
+  const renderBody = (item: QuotaItem) => render(
+    <MemoryRouter>
+      <I18nProvider>
+        <CredentialQuotaBody item={item} nowMS={NOW_MS} isDemo={false} />
+      </I18nProvider>
+    </MemoryRouter>,
+  );
+
+  it('names a known credit pool, shows dollars left and states that extra usage is off', () => {
+    renderBody(quota('claude-balances', [], {
+      provider: 'claude',
+      plan: {
+        plan_type: 'max', plan_label: 'Claude Max', tier: 'elite',
+        extra_usage: { is_enabled: false, monthly_limit_cents: 0, used_credits_cents: 0, user_disabled: true },
+        balances: [
+          { id: 'iguana_necktie', limit_usd: 50, used_usd: 15, remaining_usd: 35, reset_at_ms: NOW_MS + 24 * HOUR_MS },
+          { id: 'future_pool', limit_usd: 10, used_usd: 0, remaining_usd: 10 },
+        ],
+      },
+    }));
+    expect(screen.getByText('Cloud session credits')).toBeTruthy();
+    expect(screen.queryByText('iguana_necktie')).toBeNull();
+    // A pool the console does not know keeps its upstream key rather than vanishing.
+    expect(screen.getByText('future_pool')).toBeTruthy();
+    expect(screen.getByText(/\$35\.00 left/)).toBeTruthy();
+    expect(screen.getByText('Off')).toBeTruthy();
+    expect(screen.getByText('Turned off by the user')).toBeTruthy();
+  });
+
+  it('shows enabled extra usage in its own currency and lists product shares as a breakdown', () => {
+    renderBody(quota('xai-breakdown', [], {
+      provider: 'xai',
+      plan: {
+        plan_type: 'paid', plan_label: 'SuperGrok', tier: 'standard',
+        extra_usage: { is_enabled: true, monthly_limit_cents: 20000, used_credits_cents: 5700, currency: 'EUR' },
+        usage_breakdown: [{ name: 'grok-4', share_percent: 96 }, { name: 'grok-3' }],
+      },
+    }));
+    expect(screen.getByText('€57.00 of €200.00')).toBeTruthy();
+    const breakdown = document.querySelector('[data-quota-usage-breakdown]') as HTMLElement;
+    expect(within(breakdown).getByText('96%')).toBeTruthy();
+    expect(within(breakdown).getByText('Unavailable')).toBeTruthy();
+  });
+});
