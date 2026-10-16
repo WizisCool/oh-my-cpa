@@ -40,13 +40,17 @@ const (
 )
 
 // Official upstream headers, plus the model id the xAI paid-account health probe
-// sends. The user-agent strings impersonate each vendor's official CLI because
-// the quota endpoints reject anything else.
+// sends. The user-agent strings impersonate each vendor's official client because
+// the quota endpoints reject anything else, and both vendors also refuse clients
+// below a version floor: Cloud Code withholds newer models from Antigravity Hub
+// builds older than 2.23.0, and Grok rejects CLI versions older than 1.0.13. The
+// versions follow the stable fallbacks CPA itself sends when it cannot reach the
+// vendors' update channels, so they move with each CPA baseline.
 const (
 	CodexUserAgent       = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
-	AntigravityUserAgent = "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)"
-	XaiGrokClientVersion = "0.2.91"
-	XaiGrokUserAgent     = "grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)"
+	AntigravityUserAgent = "antigravity/hub/2.23.0 darwin/arm64"
+	XaiGrokClientVersion = "1.0.46"
+	XaiGrokUserAgent     = "grok-pager/" + XaiGrokClientVersion + " grok-shell/" + XaiGrokClientVersion + " (macos; aarch64)"
 	XaiPaidHealthModel   = "grok-4.5"
 )
 
@@ -621,6 +625,15 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	windows, extraUsage, err := ParseClaudeUsage(normUsage, nowMS)
 	if err != nil {
 		return plan, nil, nil, err
+	}
+	// Balances and extra usage come from the usage read, so a failed profile
+	// read must not drop them: they ride on a plan whose type stays unknown.
+	balances := ParseClaudeBalances(normUsage)
+	if plan == nil && (len(balances) > 0 || extraUsage != nil) {
+		plan = &QuotaPlan{Tier: "unknown"}
+	}
+	if plan != nil {
+		plan.Balances = balances
 	}
 	return plan, windows, extraUsage, nil
 }

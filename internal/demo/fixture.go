@@ -827,7 +827,10 @@ func quotaPayloads(now time.Time) map[string]any {
 			"seven_day_opus":   map[string]any{"utilization": 22.9, "resets_at": weeklyReset},
 			"seven_day_sonnet": map[string]any{"utilization": 64.7, "resets_at": weeklyReset},
 			"extra_usage":      map[string]any{"is_enabled": false, "monthly_limit": 0, "used_credits": 0},
-			"limits":           []map[string]any{{"kind": "session", "group": "five_hour", "percent": 36.4, "resets_at": resetAt, "is_active": true}},
+			// The cloud session credit pool shares the legacy Fable key; its dollar
+			// amounts make it a balance rather than a window.
+			"iguana_necktie": map[string]any{"utilization": 30, "limit_dollars": 50, "used_dollars": 15, "remaining_dollars": 35, "resets_at": weeklyReset},
+			"limits":         []map[string]any{{"kind": "session", "group": "five_hour", "percent": 36.4, "resets_at": resetAt, "is_active": true}},
 		},
 		claudeProfileURL: map[string]any{
 			"account":        map[string]any{"email": "ops@acme-labs.example"},

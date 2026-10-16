@@ -855,3 +855,21 @@ func TestRefreshMarksAReadThatPublishedNoWindow(t *testing.T) {
 		t.Fatalf("result = %+v, want an empty reading without an error", result)
 	}
 }
+
+// Balances and extra usage come from the usage read: a failed profile read must
+// not drop them along with the plan label it would have supplied.
+func TestRefreshClaudeKeepsBalancesWithoutAProfile(t *testing.T) {
+	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		if strings.Contains(req.URL, "oauth/usage") && !strings.Contains(req.URL, "cedar_ember") {
+			return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"five_hour":{"utilization":30},"iguana_necktie":{"utilization":10,"limit_dollars":50,"used_dollars":5,"remaining_dollars":45,"resets_at":null},"extra_usage":{"is_enabled":false}}`)}, nil
+		}
+		return management.ApiCallResponse{StatusCode: 500}, nil
+	}}
+	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{AuthIndex: "cl-2", Name: "claude.json", Type: "claude", Provider: "claude"}, nil)
+	if err != nil {
+		t.Fatalf("RefreshCredentialQuota error: %v", err)
+	}
+	if result.Plan == nil || result.Plan.PlanLabel != "" || len(result.Plan.Balances) != 1 || result.Plan.ExtraUsage == nil {
+		t.Fatalf("plan = %+v, want an unlabelled plan carrying the balance and extra usage", result.Plan)
+	}
+}

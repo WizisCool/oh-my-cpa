@@ -17,6 +17,7 @@ import {
   composePluginConfig,
   isPluginFieldChanged,
   isSecretPluginField,
+  pluginFieldDefaultText,
   pluginFieldDraftFromValue,
   pluginFieldKind,
   readPluginInstallRecord,
@@ -378,12 +379,17 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
   // An emptied text control means "not set": the key is left out and the plugin's default
   // applies. There is no separate step to start editing a field.
   const changeText = (text: string) => onChange({ text, isSet: text.trim() !== '' });
+  // An unset key falls back to the declared default, so the empty control names it.
+  const defaultText = pluginFieldDefaultText(field);
+  const defaultPlaceholder = defaultText === undefined
+    ? t('plugin.field_default_placeholder')
+    : t('plugin.field_default_value', { value: defaultText });
 
   const control = (() => {
     if (kind === 'boolean') {
       return (
         <Switch
-          checked={draft.isSet && draft.checked}
+          checked={draft.isSet ? draft.checked : field.default === true}
           disabled={isReadOnly}
           onChange={(checked) => onChange({ checked, isSet: true })}
           aria-label={field.name}
@@ -397,7 +403,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           value={draft.isSet ? draft.text || undefined : undefined}
           disabled={isReadOnly}
           status={error ? 'error' : undefined}
-          placeholder={t('plugin.field_default_placeholder')}
+          placeholder={defaultPlaceholder}
           options={(field.enum_values ?? []).map((value) => ({ value, label: value }))}
           onChange={(value: string | undefined) => changeText(value ?? '')}
           aria-label={field.name}
@@ -413,7 +419,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           open={false}
           suffixIcon={null}
           tokenSeparators={[',', '\n']}
-          placeholder={t('plugin.field_list_placeholder')}
+          placeholder={defaultText === undefined ? t('plugin.field_list_placeholder') : defaultPlaceholder}
           onChange={(values: string[]) => onChange({ list: values, isSet: values.length > 0 })}
           aria-label={field.name}
         />
@@ -428,7 +434,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
           spellCheck={false}
           className={styles['config-json']}
           status={error ? 'error' : undefined}
-          placeholder={kind === 'array' ? '[ ]' : '{ }'}
+          placeholder={defaultText === undefined ? (kind === 'array' ? '[ ]' : '{ }') : defaultPlaceholder}
           onChange={(event) => changeText(event.target.value)}
           aria-label={field.name}
         />
@@ -452,7 +458,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
         disabled={isReadOnly}
         inputMode={kind === 'integer' || kind === 'number' ? 'decimal' : undefined}
         status={error ? 'error' : undefined}
-        placeholder={t('plugin.field_default_placeholder')}
+        placeholder={defaultPlaceholder}
         onChange={(event) => changeText(event.target.value)}
         aria-label={field.name}
       />

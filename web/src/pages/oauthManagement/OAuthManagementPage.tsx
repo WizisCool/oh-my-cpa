@@ -722,6 +722,7 @@ export const OAuthManagementPage: React.FC = () => {
         >
           {t('events.more_filters')}
         </Button>
+        <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
         {/* The main segment refreshes the filtered set, which is what the list is showing; the
             caret offers the other scopes. */}
         <Space.Compact>
@@ -747,7 +748,6 @@ export const OAuthManagementPage: React.FC = () => {
             <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
           </Dropdown>
         </Space.Compact>
-      <Button onClick={() => setIsWarmupSettingsOpen(true)} data-testid="oauth-warmup-settings-open">{t('warmup.settings')}</Button>
       </Toolbar>
       {isFiltersOpen && (
         <div id="oauth-collection-filters" className={styles['advanced-filters']}>

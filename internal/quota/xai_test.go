@@ -31,8 +31,8 @@ func TestParseXaiBilling(t *testing.T) {
 		t.Errorf("plan = %+v", plan)
 	}
 
-	if len(windows) != 2 {
-		t.Fatalf("len(windows) = %d, want 2", len(windows))
+	if len(windows) != 1 {
+		t.Fatalf("len(windows) = %d, want only the credit window", len(windows))
 	}
 
 	w0 := windows[0]
@@ -40,9 +40,8 @@ func TestParseXaiBilling(t *testing.T) {
 		t.Errorf("w0 = %+v", w0)
 	}
 
-	w1 := windows[1]
-	if w1.Model != "grok-2" || *w1.UsedPercent != 20.0 {
-		t.Errorf("w1 = %+v", w1)
+	if len(plan.UsageBreakdown) != 1 || plan.UsageBreakdown[0].Name != "grok-2" || *plan.UsageBreakdown[0].SharePercent != 20.0 {
+		t.Errorf("breakdown = %+v", plan.UsageBreakdown)
 	}
 }
 
@@ -68,8 +67,11 @@ func TestParseXaiBillingDocumentsCombinesTheCreditsAndLedgerDocuments(t *testing
 	if err != nil {
 		t.Fatalf("ParseXaiBillingDocuments failed: %v", err)
 	}
-	if len(windows) != 2 {
-		t.Fatalf("len(windows) = %d, want the credits document's two", len(windows))
+	if len(windows) != 1 {
+		t.Fatalf("len(windows) = %d, want the credits document's window", len(windows))
+	}
+	if len(plan.UsageBreakdown) != 1 || plan.UsageBreakdown[0].Name != "grok-4" {
+		t.Errorf("breakdown = %+v, want the credits document's product", plan.UsageBreakdown)
 	}
 
 	credit := windows[0]
@@ -139,31 +141,50 @@ func TestParseCentValAcceptsWrappedAmounts(t *testing.T) {
 	}
 }
 
-func TestParseXaiBillingKeepsProductsWithoutAShare(t *testing.T) {
-	raw := []byte(`{"config": {"product_usage": [
-		{"product": "grok-4", "usage_percent": 31.2},
+// A product's share is a part of the credit usage, not a limit of its own. As a
+// window, a product carrying 96% of the traffic would read as nearly exhausted
+// and push the credential's recommendation to a warning it does not deserve.
+func TestParseXaiBillingReadsProductsAsAShareOfUsage(t *testing.T) {
+	raw := []byte(`{"config": {"credit_usage_percent": 10, "product_usage": [
+		{"product": "grok-4", "usage_percent": 96},
 		{"product": "grok-4-fast"},
 		{"product": "grok-3", "usage_percent": "not-a-number"}
 	]}}`)
 	nowMS := time.Date(2026, 9, 20, 3, 0, 0, 0, time.UTC).UnixMilli()
-	_, windows, err := ParseXaiBilling(raw, nowMS)
+	plan, windows, err := ParseXaiBilling(raw, nowMS)
 	if err != nil {
 		t.Fatalf("ParseXaiBilling failed: %v", err)
 	}
-	if len(windows) != 3 {
-		t.Fatalf("len(windows) = %d, want all three products listed", len(windows))
+	if len(windows) != 1 || windows[0].ID != "xai_credit_usage" {
+		t.Fatalf("windows = %+v, want only the credit window", windows)
 	}
-	if windows[0].Model != "grok-4" || windows[0].UsedPercent == nil {
-		t.Errorf("windows[0] = %+v, want the metered product", windows[0])
+	reading := &NormalizedQuota{Plan: plan, Windows: windows}
+	EvaluateStatusAndRecommendation(reading, nowMS)
+	if reading.Status != "healthy" {
+		t.Errorf("status = %q, want healthy at 10%% used", reading.Status)
 	}
-	// A product without a readable share keeps its row with no percentages: the
-	// card draws the unknown state instead of hiding the product.
-	for _, index := range []int{1, 2} {
-		if windows[index].UsedPercent != nil || windows[index].RemainingPercent != nil {
-			t.Errorf("windows[%d] = %+v, want no percentages", index, windows[index])
+	breakdown := plan.UsageBreakdown
+	if len(breakdown) != 3 || breakdown[0].Name != "grok-4" || breakdown[0].SharePercent == nil || *breakdown[0].SharePercent != 96 {
+		t.Fatalf("breakdown = %+v, want all three products with grok-4 at 96%%", breakdown)
+	}
+	// A product without a readable share is listed as unavailable, not hidden.
+	if breakdown[1].SharePercent != nil || breakdown[2].SharePercent != nil {
+		t.Errorf("breakdown = %+v, want no share for the unreadable products", breakdown)
+	}
+}
+
+// A ledger stating a zero cap says pay-as-you-go is off; a document stating no
+// cap says nothing about it.
+func TestParseXaiBillingReportsPayAsYouGoOff(t *testing.T) {
+	nowMS := time.Date(2026, 9, 20, 3, 0, 0, 0, time.UTC).UnixMilli()
+	plan, _, err := ParseXaiBilling([]byte(`{"config": {"monthly_limit": {"val": 0}, "used": {"val": 0}}}`), nowMS)
+	if err != nil || plan.ExtraUsage == nil || plan.ExtraUsage.IsEnabled {
+		t.Fatalf("zero cap: plan = %+v, %v; want extra usage reported off", plan, err)
+	}
+	for _, document := range []string{`{"config": {"credit_usage_percent": 5}}`, `{"config": {"monthly_limit": {"value": 0}}}`, `{"config": {"monthly_limit": "unlimited"}}`} {
+		plan, _, err = ParseXaiBilling([]byte(document), nowMS)
+		if err != nil || plan.ExtraUsage != nil {
+			t.Fatalf("%s: plan = %+v, %v; want no extra usage claim from an absent or unreadable cap", document, plan, err)
 		}
-	}
-	if windows[1].Model != "grok-4-fast" || windows[2].Model != "grok-3" {
-		t.Errorf("models = %q, %q, want both unknown products kept", windows[1].Model, windows[2].Model)
 	}
 }

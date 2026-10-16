@@ -105,6 +105,8 @@ export interface ProviderBehavior {
   alpha_search?: boolean;
   codex_cloaking?: ProviderOverride;
   rebuild_mid_system_message?: boolean;
+  /** Claude-only: trust the key's custom base URL with Anthropic native tool search. */
+  native_tool_search?: boolean;
   support_prompt_cache_key?: boolean;
   /** Vertex-only: native Vertex Interactions API routing for the key. */
   interactions?: boolean;

@@ -196,7 +196,7 @@ resolved below.
 | `streaming.*` (low confidence) | `requests.streaming.*` | Confirmed |
 | `commercial-mode` (low confidence) | `server.commercial-mode` | Confirmed |
 | `disable-cooling` (low confidence) | `routing.cooldown.disable-cooling` | Confirmed |
-| `quota-exceeded.switch-project`, `switch-preview-model` | Not relocated | They stay under `quota-exceeded` in both layouts. CPA leaves them out of its v8 template as compatibility-only, but `quota-exceeded` is an accepted v8 root, a v8 `PATCH` writes them and the runtime applies them |
+| `quota-exceeded.switch-project`, `switch-preview-model` | Not relocated | They stay under `quota-exceeded` in both layouts. CPA leaves them out of its v8 template as compatibility-only: a v8 `PATCH` still writes them, but as of v8.0.31 nothing in CPA's request path reads them, so the settings page no longer offers them (the source editor keeps them) |
 
 Relocations the brief did not list include `nonstream-keepalive-interval` →
 `requests.nonstream-keepalive-interval`, `ws-auth` → `oauth.providers.aistudio.ws-auth`,
@@ -310,7 +310,7 @@ page field that edits it.
 | `oauth` | `oauth-excluded-models` | `oauth.excluded-models` | — |
 | `oauth` | `oauth-model-alias` | `oauth.model-alias` | — |
 | `oauth` | `ws-auth` | `oauth.providers.aistudio.ws-auth` | `wsAuth` |
-| `oauth` | `quota-exceeded.antigravity-credits` | `oauth.providers.antigravity.antigravity-credits` | `quotaAntigravityCredits` |
+| `oauth` | `quota-exceeded.antigravity-credits` | `oauth.providers.antigravity.antigravity-credits` | `antigravityCredits` |
 | `oauth` | `antigravity.connection-pool.enabled` | `oauth.providers.antigravity.connection-pool.enabled` | `antigravityPoolEnabled` |
 | `oauth` | `antigravity.connection-pool.idle-conn-timeout` | `oauth.providers.antigravity.connection-pool.idle-conn-timeout` | `antigravityPoolIdleConnTimeout` |
 | `oauth` | `antigravity.connection-pool.max-idle-conns-per-host` | `oauth.providers.antigravity.connection-pool.max-idle-conns-per-host` | `antigravityPoolMaxIdleConnsPerHost` |
@@ -411,10 +411,27 @@ list and writes the family back as groups, keeping the operator's grouping (ADR 
 
 `routing.strategy`, `routing.session-affinity`, `routing.session-affinity-ttl`,
 `routing.session-affinity-subagents`, `plugins.*`, `quota-exceeded.switch-project` and
-`quota-exceeded.switch-preview-model` (the last two are absent from CPA's v8 template but
-are written and applied at the same path). All four `routing.*` entries here are edited by
+`quota-exceeded.switch-preview-model` (the last two are absent from CPA's v8 template and
+have no runtime reader, see above). All four `routing.*` entries here are edited by
 the settings page (`routingStrategy`, `routingSessionAffinity`,
 `routingSessionAffinityTTL`, `routingSessionAffinitySubagents`).
+
+### Added after v8.0.16
+
+Settings CPA introduced between v8.0.16 and v8.0.31, all at their v8 path only and all
+edited by the settings page. A gateway older than the release that introduced a setting
+refuses a write to it (`config_rejected`); an untouched setting is never written.
+
+| v8 path | Since | Setting |
+| --- | --- | --- |
+| `server.max-request-body-bytes` | v8.0.26 | `maxRequestBodyBytes`; caps management routes too, which the console reports as `cpa_request_too_large` |
+| `routing.session-affinity-rebind-on` | v8.0.25 | `routingSessionAffinityRebindOn` (`any` or `quota`) |
+| `requests.streaming.send-keepalive-before-ft` | v8.0.27 | `streamingSendKeepaliveBeforeFt` |
+| `requests.tls-handshake-timeout-seconds` | v8.0.29 | `tlsHandshakeTimeoutSeconds` |
+| `upstream.claude.tool-search` | v8.0.24 | `claudeToolSearch` |
+| `upstream.claude.header-defaults.anthropic-beta-strip`, `anthropic-beta-append`, `inject-diagnostics`, `client-request-id` | v8.0.30 | `claudeHeaderAnthropicBetaStrip`, `claudeHeaderAnthropicBetaAppend`, `claudeHeaderInjectDiagnostics`, `claudeHeaderClientRequestId` |
+| `oauth.providers.codex.signin-with-chatgpt-identifier` | v8.0.25 | `codexSigninWithChatgptIdentifier` |
+| `api-keys.claude[].keys[].native-tool-search` | v8.0.24 | The provider editor's per-key "Native tool search" switch |
 
 ## 4. OMC's configuration write path
 
@@ -577,8 +594,16 @@ flows and the contents of usage records were not exercised against a real binary
   The save's answer re-reads CPA, so the editor shows what CPA holds.
 - **A family is written whole.** CPA has no path for one key of a group, so a provider
   write sends the family's groups back. The provider write gate serialises OMC's own
-  writes; a concurrent writer outside OMC editing the same family between the read and
-  the write is overwritten, as with the v0 list writes before.
+  writes. Against CPA v8.0.31 or later, every write also carries `If-Match` with CPA's
+  entity tag for the file OMC read and backed up just before (the SHA-256 of its exact
+  bytes), and each later request of a change set names the tag CPA reported for its
+  previous save. When a save's answer carries no tag (CPA could not read the file
+  back), the requests after it in that change set are unconditional. A writer outside
+  OMC that saves in between makes CPA answer `412`,
+  which the console reports as `config_conflict` (nothing written) or
+  `config_partially_applied` (an earlier request of the set had landed). Older
+  gateways ignore the header, so there a concurrent writer editing the same family
+  between the read and the write is still overwritten.
 - **Probe cache.** An upgrade from v7 is noticed within `API_UNSUPPORTED_TTL` (fifteen
   seconds); a rollback to v7 is noticed on the first v8 route that answers "missing".
 

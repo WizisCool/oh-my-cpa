@@ -72,6 +72,67 @@ func TestParseClaudeUsageAndFable(t *testing.T) {
 	}
 }
 
+// Claude reuses iguana_necktie for its cloud session credit pool. Once it
+// carries dollars it is a balance: read as the Fable window, a spent-down pool
+// would mark the credential exhausted while its plan still has room.
+func TestParseClaudeUsageReadsDollarPoolsAsBalances(t *testing.T) {
+	raw := []byte(`{
+		"five_hour": {"utilization": 10, "resets_at": "2026-10-16T12:00:00Z"},
+		"iguana_necktie": {"utilization": 100, "limit_dollars": 50, "used_dollars": 50, "remaining_dollars": 0, "resets_at": "2026-11-01T00:00:00Z"},
+		"code_review_credits": {"utilization": 25, "limit_dollars": 20, "used_dollars": 5, "remaining_dollars": 15, "resets_at": null},
+		"seven_day_cowork": {"utilization": 5, "resets_at": "2026-10-20T00:00:00Z"},
+		"extra_usage": {"is_enabled": false, "monthly_limit": 0, "used_credits": 0, "utilization": null, "currency": "eur", "disabled_reason": "org_policy", "user_disabled": true, "spend_limit_reached": false}
+	}`)
+	nowMS := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC).UnixMilli()
+	windows, extraUsage, err := ParseClaudeUsage(raw, nowMS)
+	if err != nil {
+		t.Fatalf("ParseClaudeUsage failed: %v", err)
+	}
+	for _, window := range windows {
+		if window.ID == "seven_day_fable" {
+			t.Fatalf("windows = %+v, want no Fable window from a dollar pool", windows)
+		}
+	}
+	reading := &NormalizedQuota{Windows: windows}
+	EvaluateStatusAndRecommendation(reading, nowMS)
+	if reading.Status != "healthy" {
+		t.Errorf("status = %q, want healthy: an empty credit pool does not exhaust the plan", reading.Status)
+	}
+
+	balances := ParseClaudeBalances(raw)
+	if len(balances) != 2 || balances[0].ID != "code_review_credits" || balances[1].ID != "iguana_necktie" {
+		t.Fatalf("balances = %+v, want both dollar pools in key order", balances)
+	}
+	pool := balances[1]
+	if pool.LimitUSD == nil || *pool.LimitUSD != 50 || pool.RemainingUSD == nil || *pool.RemainingUSD != 0 || pool.ResetAtMS == nil {
+		t.Errorf("pool = %+v, want $50 limit, $0 left and a reset", pool)
+	}
+	if balances[0].ResetAtMS != nil || balances[0].RemainingUSD == nil || *balances[0].RemainingUSD != 15 {
+		t.Errorf("credits = %+v, want $15 left and no reset", balances[0])
+	}
+
+	// A disabled block is still a reading: the credential cannot overflow.
+	if extraUsage == nil || extraUsage.IsEnabled || extraUsage.Currency != "EUR" || extraUsage.DisabledReason != "org_policy" || !extraUsage.IsUserDisabled || extraUsage.IsSpendLimitReached {
+		t.Errorf("extra usage = %+v, want the disabled state with its reason", extraUsage)
+	}
+}
+
+// A percentage-only iguana_necktie is still the legacy Fable window, and a
+// block whose state is unreadable is no extra-usage claim at all.
+func TestParseClaudeUsageKeepsLegacyFableWindow(t *testing.T) {
+	raw := []byte(`{"iguana_necktie": {"utilization": 40, "resets_at": "2026-10-20T00:00:00Z"}, "extra_usage": {"monthly_limit": 100}}`)
+	windows, extraUsage, err := ParseClaudeUsage(raw, time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC).UnixMilli())
+	if err != nil || len(windows) != 1 || windows[0].ID != "seven_day_fable" {
+		t.Fatalf("windows = %+v, %v; want the Fable window", windows, err)
+	}
+	if extraUsage != nil {
+		t.Errorf("extra usage = %+v, want none without a readable state", extraUsage)
+	}
+	if balances := ParseClaudeBalances(raw); len(balances) != 0 {
+		t.Errorf("balances = %+v, want none", balances)
+	}
+}
+
 func TestParseClaudeProfile(t *testing.T) {
 	rawPro := []byte(`{
 		"account": { "has_claude_pro": true, "has_claude_max": false },

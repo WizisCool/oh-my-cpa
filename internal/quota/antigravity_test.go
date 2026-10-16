@@ -134,3 +134,18 @@ func TestAntigravityPeriodsRequireCompleteFixedDuration(t *testing.T) {
 		}
 	}
 }
+
+// Upstream renamed buckets to "<period> Limit Remaining"; the suffix is not
+// part of the name, and a name that says nothing falls back to the window.
+func TestAntigravityBucketLabelsFollowRenamedBuckets(t *testing.T) {
+	for _, scenario := range []struct{ name, window, want string }{
+		{"Five Hour Limit Remaining", "5h", "Gemini Models · 5小时限制 (5-Hour)"},
+		{"Weekly Limit - Remaining", "weekly", "Gemini Models · 每周限制 (Weekly)"},
+		{"Quota", "5h", "Gemini Models · 5小时限制 (5-Hour)"},
+		{"Burst Remaining", "unreported", "Gemini Models · Burst"},
+	} {
+		if got := translateAntigravityBucketLabel("Gemini Models", scenario.name, scenario.window); got != scenario.want {
+			t.Errorf("label(%q, %q) = %q, want %q", scenario.name, scenario.window, got, scenario.want)
+		}
+	}
+}

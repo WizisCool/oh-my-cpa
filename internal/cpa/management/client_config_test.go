@@ -342,3 +342,133 @@ func TestIsConfigRejectedReadsCPAsExplanation(t *testing.T) {
 		}
 	}
 }
+
+// taggedGateway stands in for CPA v8.0.31+: it tags the stored file with the
+// SHA-256 of its bytes, refuses a write whose If-Match names another version,
+// and reports the saved file's tag. Each accepted write changes the file.
+type taggedGateway struct {
+	mu       sync.Mutex
+	stored   string
+	ifMatch  []string
+	onStored func(g *taggedGateway)
+}
+
+func (g *taggedGateway) handler() http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if request.Method == http.MethodGet && request.URL.Path == "/v0/management/config.yaml" {
+			_, _ = writer.Write([]byte(g.stored))
+			if g.onStored != nil {
+				g.onStored(g)
+			}
+			return
+		}
+		tag := request.Header.Get("If-Match")
+		g.ifMatch = append(g.ifMatch, tag)
+		if tag != "" && tag != storedConfigVersion(g.stored) {
+			writer.Header().Set("ETag", storedConfigVersion(g.stored))
+			writer.WriteHeader(http.StatusPreconditionFailed)
+			_, _ = writer.Write([]byte(`{"error":"precondition_failed"}`))
+			return
+		}
+		g.stored += "# " + request.Method + " " + request.URL.Path + "\n"
+		writer.Header().Set("ETag", storedConfigVersion(g.stored))
+		_, _ = writer.Write([]byte(`{"status":"ok","config-version":8}`))
+	})
+}
+
+func newTaggedClient(t *testing.T, gateway *taggedGateway) *Client {
+	t.Helper()
+	server := newV8Server(gateway.handler())
+	t.Cleanup(server.Close)
+	client, err := NewClient(server.URL, "management-secret", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
+}
+
+// Every request of a change set names the version it replaces: the first the
+// file that was read for its backup, each later one the file CPA reported
+// saving, so a writer slipping in between any two is refused.
+func TestConfigWritesNameTheVersionTheyReplace(t *testing.T) {
+	gateway := &taggedGateway{stored: "config-version: 8\n"}
+	client := newTaggedClient(t, gateway)
+	err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"observability", "logs", "debug"}, Value: true},
+		{Path: []string{"plugins", "configs", "demo"}, Value: map[string]any{"level": "info"}},
+		{Path: []string{"requests", "proxy-url"}, Remove: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gateway.ifMatch) != 3 {
+		t.Fatalf("If-Match headers = %v, want one per write", gateway.ifMatch)
+	}
+	if gateway.ifMatch[0] != storedConfigVersion("config-version: 8\n") {
+		t.Fatalf("first If-Match = %q, want the tag of the file read before writing", gateway.ifMatch[0])
+	}
+	for index, tag := range gateway.ifMatch {
+		if tag == "" {
+			t.Fatalf("write %d sent no If-Match", index)
+		}
+	}
+	if err := client.UpdateConfigYAML(context.Background(), "config-version: 8\n"); err != nil {
+		t.Fatal(err)
+	}
+	if last := gateway.ifMatch[len(gateway.ifMatch)-1]; last == "" {
+		t.Fatal("the source save sent no If-Match")
+	}
+}
+
+// A writer that saves after the file was read and backed up makes CPA refuse
+// the first request: nothing landed, so it is a conflict, not a partial write,
+// and the other writer's file is left as it saved it.
+func TestConfigWriteAfterAnotherWriterIsRefused(t *testing.T) {
+	gateway := &taggedGateway{stored: "config-version: 8\n"}
+	gateway.onStored = func(g *taggedGateway) { g.stored += "# another writer\n" }
+	client := newTaggedClient(t, gateway)
+	err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"observability", "logs", "debug"}, Value: true},
+	})
+	if !errors.Is(err, ErrConfigChanged) || errors.Is(err, ErrConfigPartiallyApplied) {
+		t.Fatalf("err = %v, want ErrConfigChanged alone", err)
+	}
+	if gateway.stored != "config-version: 8\n# another writer\n" {
+		t.Fatalf("stored = %q, want the other writer's file untouched", gateway.stored)
+	}
+	err = client.UpdateConfigYAML(context.Background(), "config-version: 8\n")
+	if !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("source save err = %v, want ErrConfigChanged", err)
+	}
+}
+
+// A gateway that reports no tag (older than v8.0.31) leaves later requests
+// unconditional; the first still carries the tag, which such a gateway ignores.
+func TestConfigWritesWithoutReportedTagsStayUnconditional(t *testing.T) {
+	var tags []string
+	gateway := &configGateway{stored: "config-version: 8\n"}
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			tags = append(tags, request.Header.Get("If-Match"))
+		}
+		gateway.handler().ServeHTTP(writer, request)
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClient(server.URL, "management-secret", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"observability", "logs", "debug"}, Value: true},
+		{Path: []string{"plugins", "configs", "demo"}, Value: map[string]any{"level": "info"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 2 || tags[0] == "" || tags[1] != "" {
+		t.Fatalf("If-Match headers = %q, want a tag first and none after an untagged answer", tags)
+	}
+}

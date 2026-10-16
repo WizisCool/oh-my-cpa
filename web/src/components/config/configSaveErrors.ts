@@ -22,6 +22,8 @@ export function describeConfigSaveError(
     }
     case 'config_backup_failed':
       return t('cfg.save_backup_failed');
+    case 'cpa_request_too_large':
+      return t('cfg.save_too_large');
     case 'config_partially_applied':
       // Part of the change set landed, so the editor's baseline is stale and its
       // next save meets the revision conflict dialog, which reloads onto it.

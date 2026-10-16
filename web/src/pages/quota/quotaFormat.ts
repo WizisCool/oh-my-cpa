@@ -1,6 +1,7 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
+import { formatUsd } from '../../types/pricingDisplay';
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -152,4 +153,15 @@ export function quotaResetText(
   const approximate = resetAccuracyMarker(window.reset_accuracy);
   if (window.reset_at_ms) return `${approximate}${formatTimeWithCountdown(window.reset_at_ms, nowMS, t)}`;
   return window.reset_label ? `${approximate}${window.reset_label}` : '';
+}
+
+/** A quota amount in its own currency; USD keeps the console's magnitude-aware format. */
+export function formatQuotaMoney(amount: number | undefined, currency?: string): string {
+  if (amount == null || !Number.isFinite(amount)) return '—';
+  if (!currency || currency === 'USD') return formatUsd(amount);
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
 }

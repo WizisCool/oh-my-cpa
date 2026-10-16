@@ -147,9 +147,10 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 			},
 		}, nil
 	case string(management.ConfigFamilyVertex):
-		// Vertex-compatible entries are served from a publishers resource:
-		// CPA appends "/v1/publishers/google/models/{model}:action" to the
-		// configured base, defaulting to the Vertex API base URL.
+		// The target follows CPA's vertexAPIKeyModelsURL: a base naming a
+		// publishers resource only gains "/{model}:action"; any other base gains
+		// "/v1" unless it already ends in a version segment such as "/v1beta1",
+		// then "/publishers/google/models/{model}:action".
 		if trimmed == "" {
 			trimmed = "https://aiplatform.googleapis.com"
 		}
@@ -161,18 +162,13 @@ func probeEndpointForFamily(family, baseURL, model string) (probeSpec, error) {
 		if len(vertexModel) > len("models/") && strings.EqualFold(vertexModel[:len("models/")], "models/") {
 			vertexModel = vertexModel[len("models/"):]
 		}
-		lower := strings.ToLower(trimmed)
 		target := trimmed
 		switch {
-		case strings.HasSuffix(lower, ":generatecontent"):
-		case strings.HasSuffix(lower, "/v1"):
+		case strings.HasSuffix(strings.ToLower(trimmed), ":generatecontent"):
+		case strings.Contains(trimmed, "/publishers/"):
+			target = trimmed + "/" + vertexModel + ":generateContent"
+		case hasVertexAPIVersionSuffix(trimmed):
 			target = trimmed + "/publishers/google/models/" + vertexModel + ":generateContent"
-		case strings.Contains(lower, "/publishers/"):
-			root := strings.TrimRight(trimmed, "/")
-			if strings.HasSuffix(strings.ToLower(root), "/models") {
-				root = root[:len(root)-len("/models")]
-			}
-			target = root + "/models/" + vertexModel + ":generateContent"
 		default:
 			target = trimmed + "/v1/publishers/google/models/" + vertexModel + ":generateContent"
 		}
@@ -533,4 +529,25 @@ func probeTransportError(err error) string {
 		return fmt.Sprintf("probe timed out after %d seconds", int(probeTimeout.Seconds()))
 	}
 	return err.Error()
+}
+
+// hasVertexAPIVersionSuffix mirrors CPA's vertexAPIVersionSuffix: the last path
+// segment is "v" followed by lowercase letters, digits, "-" or "_", with at
+// least one digit ("/v1", "/v1beta1").
+func hasVertexAPIVersionSuffix(base string) bool {
+	segment := base[strings.LastIndexByte(base, '/')+1:]
+	if len(segment) < 2 || segment[0] != 'v' {
+		return false
+	}
+	hasDigit := false
+	for _, character := range segment[1:] {
+		switch {
+		case character >= '0' && character <= '9':
+			hasDigit = true
+		case character == '_' || character == '-' || (character >= 'a' && character <= 'z'):
+		default:
+			return false
+		}
+	}
+	return hasDigit
 }

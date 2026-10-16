@@ -3,9 +3,12 @@ package management
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -171,10 +174,56 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 	if len(rawYAML) > CONFIG_YAML_LIMIT {
 		return errors.New("configuration YAML exceeds 2MB limit")
 	}
-	if _, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigSource)); err != nil {
+	stored, err := c.keepStoredConfig(WithBackupReason(ctx, BackupReasonConfigSource))
+	if err != nil {
 		return err
 	}
-	return c.doBody(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", nil)
+	version := storedConfigVersion(stored)
+	return c.writeConfigAt(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", &version)
+}
+
+// ErrConfigChanged reports a write CPA refused because the stored file is no
+// longer the version OMC read (and backed up) before writing: another writer
+// saved in between. Nothing of that request was written.
+var ErrConfigChanged = errors.New("the CPA configuration changed after it was read")
+
+// storedConfigVersion is CPA's entity tag for a stored file: the SHA-256 of its
+// exact bytes, which is what CPA v8.0.31+ compares If-Match against. The
+// stored file is read before every write for its backup, so sending its tag
+// makes CPA replace exactly the version that was backed up, or refuse.
+func storedConfigVersion(stored string) string {
+	sum := sha256.Sum256([]byte(stored))
+	return `"` + hex.EncodeToString(sum[:]) + `"`
+}
+
+// writeConfigAt sends one configuration write guarded by version, then
+// advances version to the tag CPA reports for the file it saved, so the next
+// request of a change set is guarded against writers in between too. An empty
+// version sends the write unconditionally: a gateway older than v8.0.31
+// reports no tag, and CPA omits it when it cannot read its save back. Older
+// gateways ignore If-Match, so the guard costs them nothing.
+func (c *Client) writeConfigAt(ctx context.Context, method, endpoint string, data []byte, contentType string, version *string) error {
+	var body io.Reader
+	if data != nil {
+		body = bytes.NewReader(data)
+	}
+	request, err := c.newRequest(ctx, method, endpoint, body, contentType)
+	if err != nil {
+		return err
+	}
+	if *version != "" {
+		request.Header.Set("If-Match", *version)
+	}
+	meta, err := c.do(request, nil)
+	if err != nil {
+		var httpErr *HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusPreconditionFailed {
+			return fmt.Errorf("%w: %w", ErrConfigChanged, err)
+		}
+		return err
+	}
+	*version = meta.Header.Get("ETag")
+	return nil
 }
 
 // ConfigChange is one entry of a sparse configuration write: a value for a v8
@@ -216,6 +265,7 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	if err != nil {
 		return err
 	}
+	version := storedConfigVersion(stored)
 
 	merge := map[string]any{}
 	var replacements, removals []ConfigChange
@@ -237,26 +287,28 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 		}
 		return err
 	}
+	writeJSON := func(method, endpoint string, value any) error {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("encode CPA request: %w", err)
+		}
+		return c.writeConfigAt(ctx, method, endpoint, data, "application/json", &version)
+	}
 	if len(merge) > 0 {
-		if err := c.doJSONBody(ctx, http.MethodPatch, "/config", merge, nil); err != nil {
+		if err := writeJSON(http.MethodPatch, "/config", merge); err != nil {
 			return failed(err)
 		}
 		hasLanded = true
 	}
 	for _, change := range replacements {
-		if err := c.doJSONBody(ctx, http.MethodPut, configPathEndpoint(change.Path), change.Value, nil); err != nil {
+		if err := writeJSON(http.MethodPut, configPathEndpoint(change.Path), change.Value); err != nil {
 			return failed(err)
 		}
 		hasLanded = true
 	}
 	for _, change := range removals {
-		request, err := c.newRequest(ctx, http.MethodDelete, configPathEndpoint(change.Path), nil, "")
-		if err != nil {
-			return failed(err)
-		}
-		if _, err := c.do(request, nil); err != nil {
-			var httpErr *HTTPError
-			if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound && strings.Contains(httpErr.Body, "not_found") {
+		if err := c.writeConfigAt(ctx, http.MethodDelete, configPathEndpoint(change.Path), nil, "", &version); err != nil {
+			if isConfigPathMissing(err) {
 				continue
 			}
 			return failed(err)

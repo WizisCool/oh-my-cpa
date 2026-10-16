@@ -62,11 +62,34 @@ export type QuotaCapacityUnavailableReason =
   | 'history_unavailable'
   | 'usage_unavailable';
 
+/** Paid usage beyond the plan; reported when it is off too. Amounts are in minor units. */
 export interface QuotaExtraUsage {
   is_enabled: boolean;
   monthly_limit_cents: number;
   used_credits_cents: number;
   utilization_percent?: number;
+  /** ISO 4217 code; absent means USD. */
+  currency?: string;
+  disabled_reason?: string;
+  user_disabled?: boolean;
+  spend_limit_reached?: boolean;
+}
+
+/** A dollar allowance beside the plan's windows; spending it does not exhaust the plan. */
+export interface QuotaBalance {
+  /** Upstream key; known ones have a localized name. */
+  id: string;
+  limit_usd?: number;
+  used_usd?: number;
+  remaining_usd?: number;
+  utilization_percent?: number;
+  reset_at_ms?: number;
+}
+
+/** One product's share of a usage total the provider meters as a whole. */
+export interface QuotaUsageShare {
+  name: string;
+  share_percent?: number;
 }
 
 export interface QuotaPlan {
@@ -84,6 +107,8 @@ export interface QuotaPlan {
   extra_usage?: QuotaExtraUsage;
   /** Prepaid credit standing; absent when the provider reports none. */
   credits?: QuotaCredits;
+  balances?: QuotaBalance[];
+  usage_breakdown?: QuotaUsageShare[];
 }
 
 export interface QuotaCredits {

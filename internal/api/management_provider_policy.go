@@ -53,6 +53,7 @@ type ProviderBehaviorDTO struct {
 	AlphaSearch             *bool  `json:"alpha_search,omitempty"`
 	CodexCloaking           string `json:"codex_cloaking,omitempty"`
 	RebuildMidSystemMessage *bool  `json:"rebuild_mid_system_message,omitempty"`
+	NativeToolSearch        *bool  `json:"native_tool_search,omitempty"`
 	SupportPromptCacheKey   *bool  `json:"support_prompt_cache_key,omitempty"`
 	// Interactions is vertex-only: native Vertex Interactions API routing.
 	Interactions *bool `json:"interactions,omitempty"`
@@ -66,6 +67,7 @@ type providerPolicyCapabilities struct {
 	hasAlphaSearch             bool
 	hasCodexCloaking           bool
 	hasRebuildMidSystemMessage bool
+	hasNativeToolSearch        bool
 	hasPromptCacheKey          bool
 	hasVertexInteractions      bool
 }
@@ -75,7 +77,7 @@ func providerPolicyCapabilitiesFor(family string) providerPolicyCapabilities {
 	case management.ConfigFamilyCodex:
 		return providerPolicyCapabilities{hasErrorRules: true, hasAlphaSearch: true, hasCodexCloaking: true}
 	case management.ConfigFamilyClaude:
-		return providerPolicyCapabilities{hasErrorRules: true, hasRebuildMidSystemMessage: true}
+		return providerPolicyCapabilities{hasErrorRules: true, hasRebuildMidSystemMessage: true, hasNativeToolSearch: true}
 	case management.ConfigFamilyVertex:
 		return providerPolicyCapabilities{hasVertexInteractions: true}
 	}
@@ -146,6 +148,10 @@ func configKeyBehaviorDTO(entry management.ConfigAPIKey, capabilities providerPo
 		isEnabled := entry.RebuildMidSystemMessage
 		behavior.RebuildMidSystemMessage = &isEnabled
 	}
+	if capabilities.hasNativeToolSearch {
+		isEnabled := entry.NativeToolSearch
+		behavior.NativeToolSearch = &isEnabled
+	}
 	if capabilities.hasVertexInteractions {
 		isEnabled := entry.Interactions
 		behavior.Interactions = &isEnabled
@@ -192,6 +198,7 @@ func resolveProviderPolicyEdit(family string, req SaveProviderRequest) (provider
 		case behavior.AlphaSearch != nil && !capabilities.hasAlphaSearch,
 			behavior.CodexCloaking != "" && !capabilities.hasCodexCloaking,
 			behavior.RebuildMidSystemMessage != nil && !capabilities.hasRebuildMidSystemMessage,
+			behavior.NativeToolSearch != nil && !capabilities.hasNativeToolSearch,
 			behavior.SupportPromptCacheKey != nil && !capabilities.hasPromptCacheKey,
 			behavior.Interactions != nil && !capabilities.hasVertexInteractions:
 			return refuse("behavior names a setting this provider family does not have")
@@ -309,6 +316,9 @@ func (e providerPolicyEdit) applyToConfigKey(entry *management.ConfigAPIKey, isL
 		}
 		if behavior.RebuildMidSystemMessage != nil {
 			entry.RebuildMidSystemMessage = *behavior.RebuildMidSystemMessage
+		}
+		if behavior.NativeToolSearch != nil {
+			entry.NativeToolSearch = *behavior.NativeToolSearch
 		}
 		if behavior.Interactions != nil {
 			entry.Interactions = *behavior.Interactions

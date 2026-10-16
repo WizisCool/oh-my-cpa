@@ -2,7 +2,6 @@ export type ConfigSectionId =
   | 'connectivity'
   | 'network'
   | 'logging'
-  | 'quota'
   | 'streaming'
   | 'providers'
   | 'advanced'
@@ -55,7 +54,6 @@ export const CONFIG_SECTIONS: { id: ConfigSectionId; labelKey: string; icon: str
   { id: 'connectivity', labelKey: 'cfg.sec_connectivity', icon: 'KeyOutlined', descKey: 'cfg.sec_connectivity_desc' },
   { id: 'network', labelKey: 'cfg.sec_network', icon: 'GlobalOutlined', descKey: 'cfg.sec_network_desc' },
   { id: 'logging', labelKey: 'cfg.sec_logging', icon: 'ProfileOutlined', descKey: 'cfg.sec_logging_desc' },
-  { id: 'quota', labelKey: 'cfg.sec_quota', icon: 'FieldTimeOutlined', descKey: 'cfg.sec_quota_desc' },
   { id: 'streaming', labelKey: 'cfg.sec_streaming', icon: 'NodeIndexOutlined', descKey: 'cfg.sec_streaming_desc' },
   { id: 'providers', labelKey: 'cfg.sec_providers', icon: 'ApiOutlined', descKey: 'cfg.sec_providers_desc' },
   { id: 'advanced', labelKey: 'cfg.sec_advanced', icon: 'ExperimentOutlined', descKey: 'cfg.sec_advanced_desc' },
@@ -79,7 +77,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_service',
     descKey: 'cfg.grp_service_desc',
     variant: 'form-grid',
-    fieldIds: ['host', 'port', 'authDir', 'trustedProxies', 'githubToken'],
+    fieldIds: ['host', 'port', 'authDir', 'trustedProxies', 'maxRequestBodyBytes', 'githubToken'],
   },
   {
     id: 'grp_apikeys',
@@ -113,7 +111,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_proxy_retry',
     descKey: 'cfg.grp_proxy_retry_desc',
     variant: 'form-grid',
-    fieldIds: ['proxyUrl', 'requestRetry', 'maxRetryCredentials', 'maxRetryInterval', 'transientErrorCooldownSeconds', 'authAutoRefreshWorkers'],
+    fieldIds: ['proxyUrl', 'tlsHandshakeTimeoutSeconds', 'requestRetry', 'maxRetryCredentials', 'maxRetryInterval', 'transientErrorCooldownSeconds', 'authAutoRefreshWorkers'],
   },
   {
     id: 'grp_routing_affinity',
@@ -121,7 +119,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_routing_affinity',
     descKey: 'cfg.grp_routing_affinity_desc',
     variant: 'form-grid',
-    fieldIds: ['routingStrategy', 'routingSessionAffinityTTL', 'routingSessionAffinity', 'routingSessionAffinitySubagents'],
+    fieldIds: ['routingStrategy', 'routingSessionAffinityTTL', 'routingSessionAffinity', 'routingSessionAffinitySubagents', 'routingSessionAffinityRebindOn'],
   },
   {
     id: 'grp_network_flags',
@@ -150,27 +148,17 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['logsMaxTotalSizeMb', 'errorLogsMaxFiles', 'redisUsageQueueRetentionSeconds'],
   },
 
-  // ── 4. Quota fallback ──────────────────────────────────────────────────
-  {
-    id: 'grp_quota_strategy',
-    sectionId: 'quota',
-    labelKey: 'cfg.grp_quota_strategy',
-    descKey: 'cfg.grp_quota_strategy_desc',
-    variant: 'settings-list',
-    fieldIds: ['quotaSwitchProject', 'quotaSwitchPreviewModel', 'quotaAntigravityCredits'],
-  },
-
-  // ── 5. Streaming ──────────────────────────────────────────────
+  // ── 4. Streaming ──────────────────────────────────────────────
   {
     id: 'grp_streaming_transport',
     sectionId: 'streaming',
     labelKey: 'cfg.grp_streaming_transport',
     descKey: 'cfg.grp_streaming_transport_desc',
     variant: 'form-grid',
-    fieldIds: ['streamingKeepaliveSeconds', 'streamingBootstrapRetries', 'streamingNonstreamKeepalive'],
+    fieldIds: ['streamingKeepaliveSeconds', 'streamingBootstrapRetries', 'streamingNonstreamKeepalive', 'streamingSendKeepaliveBeforeFt'],
   },
 
-  // ── 6. OAuth provider behaviour ──────────────────────────────────────────
+  // ── 5. OAuth provider behaviour ──────────────────────────────────────────
   //
   // `oauth.providers.<provider>` applies to OAuth/file-backed credentials only; an
   // API-key provider carries its own options in its `api-keys` group.
@@ -206,7 +194,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_codex_headers',
     descKey: 'cfg.grp_codex_headers_desc',
     variant: 'form-grid',
-    fieldIds: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures'],
+    fieldIds: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures', 'codexSigninWithChatgptIdentifier'],
   },
   {
     id: 'grp_claude_behavior',
@@ -214,7 +202,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_behavior',
     descKey: 'cfg.grp_claude_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['claudeModelLevelCooling', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
+    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
   },
   {
     id: 'grp_claude_headers',
@@ -222,7 +210,20 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_headers',
     descKey: 'cfg.grp_claude_headers_desc',
     variant: 'form-grid',
-    fieldIds: ['claudeHeaderUserAgent', 'claudeHeaderPackageVersion', 'claudeHeaderRuntimeVersion', 'claudeHeaderOs', 'claudeHeaderArch', 'claudeHeaderTimeout', 'claudeHeaderTimezone', 'claudeHeaderStabilizeDeviceProfile'],
+    fieldIds: [
+      'claudeHeaderUserAgent',
+      'claudeHeaderPackageVersion',
+      'claudeHeaderRuntimeVersion',
+      'claudeHeaderOs',
+      'claudeHeaderArch',
+      'claudeHeaderTimeout',
+      'claudeHeaderTimezone',
+      'claudeHeaderStabilizeDeviceProfile',
+      'claudeHeaderAnthropicBetaStrip',
+      'claudeHeaderAnthropicBetaAppend',
+      'claudeHeaderInjectDiagnostics',
+      'claudeHeaderClientRequestId',
+    ],
   },
   {
     id: 'grp_signature_cache',
@@ -238,7 +239,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_antigravity_behavior',
     descKey: 'cfg.grp_antigravity_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords'],
+    fieldIds: ['antigravityCredits', 'antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords'],
   },
   {
     id: 'grp_other_providers',
@@ -249,7 +250,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords'],
   },
 
-  // ── 7. Advanced & experimental ────────────────────────────────────────────
+  // ── 6. Advanced & experimental ────────────────────────────────────────────
   {
     id: 'grp_discovery',
     sectionId: 'advanced',
@@ -267,7 +268,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['pprofEnable', 'pprofAddr'],
   },
 
-  // ── 8. Payload rules ────────────────────────────────────────────
+  // ── 7. Payload rules ────────────────────────────────────────────
   {
     id: 'grp_payload_rules',
     sectionId: 'payload',
@@ -429,6 +430,20 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['proxy', 'trusted', 'forwarded', 'cidr', 'x-forwarded-for'],
   },
   {
+    id: 'maxRequestBodyBytes',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_max_request_body',
+    descKey: 'cfg.f_max_request_body_desc',
+    // Management routes are capped too, so a limit below a configuration
+    // file's size refuses the next source save with 413.
+    yamlPath: ['server', 'max-request-body-bytes'],
+    type: 'number',
+    min: 0,
+    unitKey: 'cfg.unit_bytes',
+    defaultValue: 0,
+    keywords: ['body', 'size', 'limit', '413', 'request'],
+  },
+  {
     id: 'githubToken',
     sectionId: 'connectivity',
     labelKey: 'cfg.f_github_token',
@@ -459,6 +474,18 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     scalarEndpointKey: 'proxy_url',
     placeholderKey: 'cfg.proxy_url_placeholder',
     keywords: ['proxy', 'socks5', 'http'],
+  },
+  {
+    id: 'tlsHandshakeTimeoutSeconds',
+    sectionId: 'network',
+    labelKey: 'cfg.f_tls_handshake_timeout',
+    descKey: 'cfg.f_tls_handshake_timeout_desc',
+    yamlPath: ['requests', 'tls-handshake-timeout-seconds'],
+    type: 'number',
+    min: 0,
+    unitKey: 'cfg.unit_seconds',
+    defaultValue: 0,
+    keywords: ['tls', 'handshake', 'timeout', 'utls'],
   },
   {
     id: 'requestRetry',
@@ -639,6 +666,20 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['affinity', 'subagent', 'session'],
   },
   {
+    id: 'routingSessionAffinityRebindOn',
+    sectionId: 'network',
+    labelKey: 'cfg.f_affinity_rebind_on',
+    descKey: 'cfg.f_affinity_rebind_on_desc',
+    yamlPath: ['routing', 'session-affinity-rebind-on'],
+    type: 'select',
+    defaultValue: 'any',
+    options: [
+      { value: 'any', labelKey: 'cfg.affinity_rebind_any' },
+      { value: 'quota', labelKey: 'cfg.affinity_rebind_quota' },
+    ],
+    keywords: ['affinity', 'session', 'rebind', 'failover'],
+  },
+  {
     id: 'videoResultAuthCacheTTL',
     sectionId: 'network',
     labelKey: 'cfg.f_video_ttl',
@@ -754,39 +795,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['usage', 'stats', 'token'],
   },
 
-  // ── 4. Quota fallback ──────────────────────────────────────────────────
-  {
-    id: 'quotaSwitchProject',
-    sectionId: 'quota',
-    labelKey: 'cfg.f_switch_project',
-    descKey: 'cfg.f_switch_project_desc',
-    yamlPath: ['quota-exceeded', 'switch-project'],
-    type: 'switch',
-    defaultValue: false,
-    keywords: ['quota', 'project', 'switch'],
-  },
-  {
-    id: 'quotaSwitchPreviewModel',
-    sectionId: 'quota',
-    labelKey: 'cfg.f_switch_preview_model',
-    descKey: 'cfg.f_switch_preview_model_desc',
-    yamlPath: ['quota-exceeded', 'switch-preview-model'],
-    type: 'switch',
-    defaultValue: false,
-    keywords: ['quota', 'preview', 'model'],
-  },
-  {
-    id: 'quotaAntigravityCredits',
-    sectionId: 'quota',
-    labelKey: 'cfg.f_antigravity_credits',
-    descKey: 'cfg.f_antigravity_credits_desc',
-    yamlPath: ['oauth', 'providers', 'antigravity', 'antigravity-credits'],
-    type: 'switch',
-    defaultValue: false,
-    keywords: ['antigravity', 'credits'],
-  },
-
-  // ── 5. Streaming ──────────────────────────────────────────
+  // ── 4. Streaming ──────────────────────────────────────────
   {
     id: 'streamingKeepaliveSeconds',
     sectionId: 'streaming',
@@ -825,8 +834,28 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     defaultValue: 0,
     keywords: ['stream', 'nonstream', 'keepalive'],
   },
+  {
+    id: 'streamingSendKeepaliveBeforeFt',
+    sectionId: 'streaming',
+    labelKey: 'cfg.f_keepalive_before_ft',
+    descKey: 'cfg.f_keepalive_before_ft_desc',
+    yamlPath: ['requests', 'streaming', 'send-keepalive-before-ft'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['stream', 'keepalive', 'heartbeat', 'first token', 'sse'],
+  },
 
-  // ── 6. OAuth provider behaviour ──────────────────────────────────────────
+  // ── 5. OAuth provider behaviour ──────────────────────────────────────────
+  {
+    id: 'antigravityCredits',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_antigravity_credits',
+    descKey: 'cfg.f_antigravity_credits_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'antigravity-credits'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['antigravity', 'credits', 'quota'],
+  },
   {
     id: 'antigravitySignatureCacheEnabled',
     sectionId: 'providers',
@@ -936,6 +965,16 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['oauth', 'providers', 'codex', 'header-defaults', 'beta-features'],
     type: 'string',
     keywords: ['codex', 'beta'],
+  },
+  {
+    id: 'codexSigninWithChatgptIdentifier',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_siwc_identifier',
+    descKey: 'cfg.f_codex_siwc_identifier_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'signin-with-chatgpt-identifier'],
+    type: 'string',
+    placeholderKey: 'CLIProxyAPI',
+    keywords: ['codex', 'chatgpt', 'sign in', 'siwc', 'user-agent'],
   },
   {
     id: 'codexResponseSteering',
@@ -1114,6 +1153,16 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['codex', 'live', 'udp', 'port'],
   },
   {
+    id: 'claudeToolSearch',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_tool_search',
+    descKey: 'cfg.f_claude_tool_search_desc',
+    yamlPath: ['upstream', 'claude', 'tool-search'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'codex', 'tool_search', 'tool search', 'defer_loading'],
+  },
+  {
     id: 'claudeModelLevelCooling',
     sectionId: 'providers',
     labelKey: 'cfg.f_claude_model_cooling',
@@ -1156,6 +1205,51 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'string',
     placeholderKey: 'Asia/Singapore',
     keywords: ['claude', 'timezone', 'currentDate'],
+  },
+  // Operator overrides added in CPA v8.0.30. They exist only under the
+  // canonical path, so they declare no historical spelling.
+  {
+    id: 'claudeHeaderAnthropicBetaStrip',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_beta_strip',
+    descKey: 'cfg.f_claude_beta_strip_desc',
+    yamlPath: ['upstream', 'claude', 'header-defaults', 'anthropic-beta-strip'],
+    type: 'string_list',
+    keywords: ['claude', 'anthropic-beta', 'beta', 'strip', 'header'],
+  },
+  {
+    id: 'claudeHeaderAnthropicBetaAppend',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_beta_append',
+    descKey: 'cfg.f_claude_beta_append_desc',
+    yamlPath: ['upstream', 'claude', 'header-defaults', 'anthropic-beta-append'],
+    type: 'string_list',
+    keywords: ['claude', 'anthropic-beta', 'beta', 'append', 'header'],
+  },
+  {
+    id: 'claudeHeaderInjectDiagnostics',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_inject_diagnostics',
+    descKey: 'cfg.f_claude_inject_diagnostics_desc',
+    yamlPath: ['upstream', 'claude', 'header-defaults', 'inject-diagnostics'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['claude', 'diagnostics', 'cache', 'cloak'],
+  },
+  {
+    id: 'claudeHeaderClientRequestId',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_client_request_id',
+    descKey: 'cfg.f_claude_client_request_id_desc',
+    yamlPath: ['upstream', 'claude', 'header-defaults', 'client-request-id'],
+    type: 'select',
+    defaultValue: 'on',
+    options: [
+      { value: 'on', labelKey: 'cfg.client_request_id_on' },
+      { value: 'passthrough', labelKey: 'cfg.client_request_id_passthrough' },
+      { value: 'off', labelKey: 'cfg.client_request_id_off' },
+    ],
+    keywords: ['claude', 'x-client-request-id', 'request id', 'header'],
   },
   {
     id: 'antigravityPoolEnabled',
@@ -1220,7 +1314,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['devin', 'sensitive', 'words', 'obfuscate'],
   },
 
-  // ── 7. Advanced & experimental ────────────────────────────────────────────
+  // ── 6. Advanced & experimental ────────────────────────────────────────────
   {
     id: 'discoveryEnabled',
     sectionId: 'advanced',
@@ -1283,7 +1377,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['pprof', 'address', 'listen'],
   },
 
-  // ── 8. Payload rules ────────────────────────────────────────────
+  // ── 7. Payload rules ────────────────────────────────────────────
   {
     id: 'payloadDefaultRules',
     sectionId: 'payload',

@@ -40,6 +40,7 @@ export const EMPTY_BEHAVIOR_DRAFT: BehaviorDraft = {
   alpha_search: false,
   codex_cloaking: 'inherit',
   rebuild_mid_system_message: false,
+  native_tool_search: false,
   support_prompt_cache_key: false,
   interactions: false,
 };

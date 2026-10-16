@@ -48,6 +48,13 @@ func ParseMetaUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error) 
 	if minutes, ok := toFloat(payload.Usage.Window.DurationMinutes); ok && minutes > 0 && !math.IsInf(minutes, 0) && !math.IsNaN(minutes) {
 		hours := minutes / 60
 		primary.PeriodHours = &hours
+		// A period the console cannot name still states its length, in whole
+		// hours when it is one.
+		if math.Mod(minutes, 60) == 0 {
+			primary.Label = fmt.Sprintf("%g-hour window", hours)
+		} else {
+			primary.Label = fmt.Sprintf("%g-minute window", minutes)
+		}
 	}
 	weekly := buildMetaWindow("meta_weekly", "Weekly", "weekly", payload.Usage.Weekly, nowMS)
 	weeklyHours := 168.0

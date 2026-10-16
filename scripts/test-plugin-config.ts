@@ -4,6 +4,7 @@ import {
   buildPluginConfigDraft,
   composePluginConfig,
   isPluginFieldChanged,
+  pluginFieldDefaultText,
   pluginFieldKind,
   undeclaredPluginKeys,
 } from '../web/src/components/plugins/pluginConfigForm.ts';
@@ -192,5 +193,12 @@ assert.deepEqual(
     }],
   },
 );
+
+// The declared default is what an unset key falls back to; the empty control names it as text.
+assert.equal(pluginFieldDefaultText({ name: 'mode', type: 'enum', default: 'safe' }), 'safe');
+assert.equal(pluginFieldDefaultText({ name: 'retries', type: 'integer', default: 3 }), '3');
+assert.equal(pluginFieldDefaultText({ name: 'hosts', type: 'array', default: ['a', 'b'] }), '["a","b"]');
+assert.equal(pluginFieldDefaultText({ name: 'mode', type: 'string' }), undefined);
+assert.equal(pluginFieldDefaultText({ name: 'blob', type: 'string', default: 'x'.repeat(200) })?.length, 80);
 
 console.log('plugin settings form, store filters and plugin system settings passed.');

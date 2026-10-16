@@ -3,6 +3,7 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -50,17 +51,33 @@ func parseAntigravityWindowHours(window string) float64 {
 	}
 }
 
-func translateAntigravityBucketLabel(groupName, bucketName string) string {
-	b := strings.ToLower(strings.TrimSpace(bucketName))
-	windowLabel := bucketName
-	if strings.Contains(b, "5") && strings.Contains(b, "hour") {
+var antigravityRemainingSuffix = regexp.MustCompile(`(?i)\s*[-:]?\s*remaining$`)
+
+// translateAntigravityBucketLabel names a bucket by its period. Upstream's
+// display names drift ("Five Hour Limit Remaining"), so the name is matched
+// after dropping the "Remaining" suffix, and the structured window field
+// decides when the name matches nothing.
+func translateAntigravityBucketLabel(groupName, bucketName, window string) string {
+	b := strings.ToLower(strings.TrimSpace(antigravityRemainingSuffix.ReplaceAllString(bucketName, "")))
+	windowLabel := strings.TrimSpace(antigravityRemainingSuffix.ReplaceAllString(bucketName, ""))
+	switch {
+	case (strings.Contains(b, "5") || strings.Contains(b, "five")) && strings.Contains(b, "hour"):
 		windowLabel = "5小时限制 (5-Hour)"
-	} else if strings.Contains(b, "daily") || strings.Contains(b, "day") {
+	case strings.Contains(b, "daily") || strings.Contains(b, "day"):
 		windowLabel = "每日限制 (Daily)"
-	} else if strings.Contains(b, "week") {
+	case strings.Contains(b, "week"):
 		windowLabel = "每周限制 (Weekly)"
-	} else if strings.Contains(b, "month") {
+	case strings.Contains(b, "month"):
 		windowLabel = "每月限制 (Monthly)"
+	default:
+		switch parseAntigravityWindowHours(window) {
+		case 5:
+			windowLabel = "5小时限制 (5-Hour)"
+		case 24:
+			windowLabel = "每日限制 (Daily)"
+		case 168:
+			windowLabel = "每周限制 (Weekly)"
+		}
 	}
 
 	if groupName != "" {
@@ -125,7 +142,7 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 				bName = bucketID
 			}
 
-			fullLabel := translateAntigravityBucketLabel(gName, bName)
+			fullLabel := translateAntigravityBucketLabel(gName, bName, bucket.Window)
 
 			rawFrac := bucket.RemainingFraction
 			if rawFrac == nil {

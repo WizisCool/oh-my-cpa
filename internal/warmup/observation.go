@@ -69,7 +69,10 @@ func ParseObservation(provider string, raw []byte, nowMS int64) Observation {
 				observation.ModelWindows[family] = parseClaudeWindow(raw, WEEK_MS, nowMS)
 			}
 		}
-		if raw, ok := fields["iguana_necktie"]; ok {
+		// A dollar-denominated iguana_necktie is the cloud session credit pool,
+		// not the legacy Fable window; reading it as Fable would gate the model
+		// on unrelated spend.
+		if raw, ok := fields["iguana_necktie"]; ok && !isDollarDenominated(raw) {
 			observation.ModelWindows["fable"] = parseClaudeWindow(raw, WEEK_MS, nowMS)
 		}
 		// Modern model-scoped limits supersede the legacy Fable window, including
@@ -138,6 +141,15 @@ func ParseObservation(provider string, raw []byte, nowMS int64) Observation {
 		}
 	}
 	return observation
+}
+func isDollarDenominated(raw json.RawMessage) bool {
+	fields := readFields(raw)
+	for _, name := range []string{"limit_dollars", "used_dollars", "remaining_dollars"} {
+		if readNumber(fields[name]) != nil {
+			return true
+		}
+	}
+	return false
 }
 func parseClaudeWindow(raw json.RawMessage, periodMS, nowMS int64) Window {
 	window := Window{State: "unknown", PeriodMS: periodMS}

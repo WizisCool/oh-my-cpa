@@ -5,6 +5,8 @@ export interface PluginConfigField {
   type: string;
   enum_values?: string[];
   description?: string;
+  /** The value the plugin uses while the key is unset; absent when the manifest declares none. */
+  default?: unknown;
 }
 
 export interface PluginMetadata {

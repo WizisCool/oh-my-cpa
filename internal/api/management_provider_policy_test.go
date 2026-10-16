@@ -142,6 +142,7 @@ func TestProviderPolicyRefusesWhatCPAWouldSkipOrReject(t *testing.T) {
 		{"empty match", "codex-0", codex(`"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match":[""],"action":"stop"}]}`), "must not be empty"},
 		{"uncompilable regex", "codex-0", codex(`"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match_regex":["("],"action":"stop"}]}`), "invalid regular expression"},
 		{"switch of another family", "codex-0", codex(`"behavior":{"rebuild_mid_system_message":true}`), "does not have"},
+		{"native tool search outside Claude", "codex-0", codex(`"behavior":{"native_tool_search":true}`), "does not have"},
 		{"rules on a family without them", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match":["x"],"action":"stop"}]}}`, "does not support"},
 	}
 	for _, tc := range cases {
@@ -195,5 +196,31 @@ func TestProviderVertexInteractionsRoundTrip(t *testing.T) {
 		"behavior":{"interactions":true}}`
 	if resp, _ := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", body); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("codex update = %d, want a refusal for a switch its family lacks", resp.StatusCode)
+	}
+}
+
+// native-tool-search is a Claude key's own setting: the console lists it as a
+// Claude switch and stores it under CPA's wire name on that key.
+func TestClaudeKeyStoresNativeToolSearch(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	fixture.state.mu.Lock()
+	*fixture.state.providerList("claude") = []map[string]any{{"api-key": "sk-claude-1", "auth-index": "cl-1", "base-url": "https://claude.test"}}
+	fixture.state.mu.Unlock()
+
+	if listed := listedProvider(t, fixture, "claude-0"); listed.Behavior == nil || listed.Behavior.NativeToolSearch == nil || *listed.Behavior.NativeToolSearch {
+		t.Fatalf("listed behaviour = %+v, want native tool search reported off", listed.Behavior)
+	}
+	body := `{"family":"claude","name":"Claude","base_url":"https://claude.test","keys":[{"api_key":""}],"behavior":{"native_tool_search":true}}`
+	if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/claude-0", body); resp.StatusCode != http.StatusOK {
+		t.Fatalf("update = %d %s", resp.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	stored := (*fixture.state.providerList("claude"))[0]
+	fixture.state.mu.Unlock()
+	if stored["native-tool-search"] != true {
+		t.Fatalf("stored = %#v, want native-tool-search set", stored)
+	}
+	if listed := listedProvider(t, fixture, "claude-0"); listed.Behavior == nil || listed.Behavior.NativeToolSearch == nil || !*listed.Behavior.NativeToolSearch {
+		t.Fatalf("listed behaviour = %+v, want native tool search on", listed.Behavior)
 	}
 }

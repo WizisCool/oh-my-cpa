@@ -98,7 +98,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     iconId: 'Anthropic',
     protocolMatchers: ['claude', 'anthropic', 'messages'],
     supportsErrorRules: true,
-    behaviorSwitches: ['rebuild_mid_system_message'],
+    behaviorSwitches: ['rebuild_mid_system_message', 'native_tool_search'],
   },
   {
     id: 'gemini',

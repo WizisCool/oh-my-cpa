@@ -4,7 +4,6 @@ import {
   ApiOutlined,
   CodeOutlined,
   ExperimentOutlined,
-  FieldTimeOutlined,
   GlobalOutlined,
   KeyOutlined,
   NodeIndexOutlined,
@@ -62,8 +61,6 @@ export function sectionIcon(view: ConfigSectionContext, id: ConfigSectionId) {
         return <GlobalOutlined />;
       case 'logging':
         return <ProfileOutlined />;
-      case 'quota':
-        return <FieldTimeOutlined />;
       case 'streaming':
         return <NodeIndexOutlined />;
       case 'providers':

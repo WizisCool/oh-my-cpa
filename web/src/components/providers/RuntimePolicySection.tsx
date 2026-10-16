@@ -20,6 +20,7 @@ interface RuntimePolicySectionProps {
 const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking'>; labelKey: string; descKey: string }[] = [
   { name: 'alpha_search', labelKey: 'policy.alpha_search', descKey: 'policy.alpha_search_desc' },
   { name: 'rebuild_mid_system_message', labelKey: 'policy.rebuild_mid_system', descKey: 'policy.rebuild_mid_system_desc' },
+  { name: 'native_tool_search', labelKey: 'policy.native_tool_search', descKey: 'policy.native_tool_search_desc' },
   { name: 'support_prompt_cache_key', labelKey: 'policy.prompt_cache_key', descKey: 'policy.prompt_cache_key_desc' },
   { name: 'interactions', labelKey: 'policy.interactions', descKey: 'policy.interactions_desc' },
 ];

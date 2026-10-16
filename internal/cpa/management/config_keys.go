@@ -83,6 +83,10 @@ type ConfigAPIKey struct {
 	// inherits it.
 	DisableCodexCloaking    *bool `json:"disable-codex-cloaking,omitempty"`
 	RebuildMidSystemMessage bool  `json:"rebuild-mid-system-message,omitempty"`
+	// NativeToolSearch trusts a Claude key's custom base URL with Anthropic
+	// native tool search for Codex tool_search (CPA v8.0.24+); it takes effect
+	// only while upstream.claude.tool-search is on.
+	NativeToolSearch bool `json:"native-tool-search,omitempty"`
 
 	extra wireExtras
 	// origin is the v8 group this entry was read from, set only by

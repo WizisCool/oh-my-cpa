@@ -85,9 +85,15 @@ func resolvePluginQuotaID(plugins []management.PluginItem, provider string) (str
 }
 
 // pluginQuotaTarget resolves the plugin id serving a plugin-quota credential.
+// CPA's own selection wins when the gateway reports it: matching names here
+// cannot see which plugin CPA has fused, so it could pick one CPA bypasses.
+// Gateways older than v8.0.25 report no selection and fall back to the match.
 // Declarative quota_probe credentials have no v8 management route and report an
 // explicit unsupported message instead of failing a fetch.
 func (s *Service) pluginQuotaTarget(ctx context.Context, file management.AuthFile) (string, error) {
+	if pluginID := strings.TrimSpace(file.QuotaPluginID); pluginID != "" {
+		return pluginID, nil
+	}
 	if s.client == nil {
 		return "", errors.New("CPA client is not configured")
 	}
