@@ -10,6 +10,22 @@ import (
 	"time"
 )
 
+func TestPluginHostRefusesUnparseableScriptOverHTTP(t *testing.T) {
+	client, baseURL, _, _ := startPluginTestServer(t)
+
+	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/plugin-host/v0/resource/plugins/logger/broken.js", "")
+	if response.StatusCode != http.StatusBadGateway || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("script adaptation refusal: status=%d type=%q body=%s", response.StatusCode, response.Header.Get("Content-Type"), body)
+	}
+	var refusal map[string]any
+	if err := json.Unmarshal(body, &refusal); err != nil {
+		t.Fatal(err)
+	}
+	if len(refusal) != 2 || refusal["code"] != "plugin_adaptation_refused" || refusal["error"] != "plugin page could not be adapted" {
+		t.Fatalf("script adaptation refusal body: %s", body)
+	}
+}
+
 func TestPluginHostServesThePluginPageRebasedOntoTheConsole(t *testing.T) {
 	client, baseURL, _, state := startPluginTestServer(t)
 

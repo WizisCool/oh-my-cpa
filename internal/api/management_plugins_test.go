@@ -120,6 +120,9 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			writer.Header().Set("Set-Cookie", "plugin=1; Path=/")
 			_, _ = writer.Write([]byte(`<!doctype html><html><head><meta name="api" content="/v0/management/logger"><link rel="stylesheet" href="/v0/resource/plugins/logger/app.css"></head><body><script>const API='/v0/management/logger';const other="https://cpa.example/v0/management/logger";</script></body></html>`))
+		case path == "/v0/resource/plugins/logger/broken.js":
+			writer.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			_, _ = writer.Write([]byte(`const path = location.pathname; function { /* private plugin source */`))
 		case path == "/v0/resource/plugins/logger/app.css":
 			writer.Header().Set("Content-Type", "text/css")
 			_, _ = writer.Write([]byte(`body{background:url(/v0/resource/plugins/logger/bg.png)}`))

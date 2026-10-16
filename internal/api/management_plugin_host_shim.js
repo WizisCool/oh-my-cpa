@@ -13,18 +13,18 @@
     }
   }
 
-  // Scripts see CPA's resource pathname without moving the document outside the
-  // console mount. The server rewrites direct Location.pathname access to this view.
-  Object.defineProperty(window, '__omcPluginHostLocation', { value: {
-    get pathname() {
+  // An equal-width property alias keeps adapted scripts' source-map coordinates
+  // intact while leaving the browser's real pathname inside the console mount.
+  Object.defineProperty(location, '_omcPath', {
+    get() {
       return location.pathname.startsWith(P + '/') ? location.pathname.slice(P.length) : location.pathname;
     },
-    set pathname(value) {
+    set(value) {
       const url = new URL(location.href);
       url.pathname = value;
       location.pathname = new URL(hostURL(url.href) || url.href).pathname;
     },
-  }});
+  });
 
   // Pages also feed pathname back into history when removing a query-string key.
   // Keep those same-document URLs inside the host so reloads still reach OMC.

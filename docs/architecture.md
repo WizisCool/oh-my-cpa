@@ -217,7 +217,10 @@ URLs; external origins and unrelated paths keep their original credential mode.
 `management_plugin_host_shim.js` is embedded in the Go binary and tested directly in Node.
 Executable inline and external JavaScript is parsed with `tdewolff/parse`: direct
 `location.pathname` access (also through global `window`, `self`, `globalThis` or `document`)
-uses a live CPA-native resource-path view. The actual frame URL stays under the console
+uses a live CPA-native resource-path view. The pathname adapter replaces only the
+matched property token with the equal-width `_omcPath` accessor on the native Location;
+all other script bytes, comments and source-map coordinates are preserved by that step.
+The actual frame URL stays under the console
 mount; native resource URLs passed to history push/replace are rebased too, so removing
 a query-string key keeps relative assets, reloads and scoped session cookies working. Locally bound
 objects, string/regex literals and non-executable script data are not pathname-rewritten.

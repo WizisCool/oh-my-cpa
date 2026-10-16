@@ -13,9 +13,9 @@ import (
 
 var errPluginHostAdaptation = errors.New("plugin page could not be adapted")
 
-// The browser's Location is non-configurable. Adapt executable member accesses
-// instead of moving the frame outside the console's cookie and reverse-proxy path.
-// Parsing keeps examples, regexes, template text and locally bound objects intact.
+// Keep the browser's native pathname and the frame inside the console mount.
+// Scope-aware token replacement preserves comments, formatting and source-map
+// coordinates while leaving examples, regexes and locally bound objects intact.
 func hostPluginScript(body []byte) ([]byte, error) {
 	if !bytes.Contains(body, []byte("location")) || !bytes.Contains(body, []byte("pathname")) {
 		return body, nil
@@ -27,17 +27,30 @@ func hostPluginScript(body []byte) ([]byte, error) {
 		// Parser errors can quote source containing secrets; never surface their text.
 		return nil, errPluginHostAdaptation
 	}
-	visitor := &pluginPathnameVisitor{}
+	visitor := &pluginPathnameVisitor{pathnames: make(map[*byte]struct{})}
 	js.Walk(visitor, tree)
-	if !visitor.hasChanged {
+	if len(visitor.pathnames) == 0 {
 		return body, nil
 	}
-	var output bytes.Buffer
-	tree.JS(&output)
-	return output.Bytes(), nil
+	// Literal token slices borrow the parser's input. Match their addresses back
+	// to that buffer without reprinting the AST or changing source-map positions.
+	source := input.Bytes()
+	output := bytes.Clone(source)
+	remaining := len(visitor.pathnames)
+	for offset := range source {
+		if _, hasPathname := visitor.pathnames[&source[offset]]; !hasPathname {
+			continue
+		}
+		copy(output[offset:], "_omcPath")
+		remaining--
+		if remaining == 0 {
+			return output, nil
+		}
+	}
+	return nil, errPluginHostAdaptation
 }
 
-type pluginPathnameVisitor struct{ hasChanged bool }
+type pluginPathnameVisitor struct{ pathnames map[*byte]struct{} }
 
 func (v *pluginPathnameVisitor) Enter(node js.INode) js.IVisitor {
 	if _, isWith := node.(*js.WithStmt); isWith {
@@ -47,13 +60,11 @@ func (v *pluginPathnameVisitor) Enter(node js.INode) js.IVisitor {
 	switch member := node.(type) {
 	case *js.DotExpr:
 		if pluginMemberName(member.Y) == "pathname" && isPluginPageLocation(member.X) {
-			member.X = &js.Var{Data: []byte("__omcPluginHostLocation")}
-			v.hasChanged = true
+			v.recordPathname(member.Y)
 		}
 	case *js.IndexExpr:
 		if pluginMemberName(member.Y) == "pathname" && isPluginPageLocation(member.X) {
-			member.X = &js.Var{Data: []byte("__omcPluginHostLocation")}
-			v.hasChanged = true
+			v.recordPathname(member.Y)
 		}
 	}
 	return v
@@ -61,14 +72,28 @@ func (v *pluginPathnameVisitor) Enter(node js.INode) js.IVisitor {
 
 func (v *pluginPathnameVisitor) Exit(js.INode) {}
 
-func pluginMemberName(expression js.IExpr) string {
-	var literal js.LiteralExpr
+func (v *pluginPathnameVisitor) recordPathname(expression js.IExpr) {
+	literal, _ := pluginMemberLiteral(expression)
+	data := literal.Data
+	if literal.TokenType == js.StringToken {
+		data = data[1 : len(data)-1]
+	}
+	v.pathnames[&data[0]] = struct{}{}
+}
+
+func pluginMemberLiteral(expression js.IExpr) (js.LiteralExpr, bool) {
 	switch value := expression.(type) {
 	case js.LiteralExpr:
-		literal = value
+		return value, true
 	case *js.LiteralExpr:
-		literal = *value
-	default:
+		return *value, true
+	}
+	return js.LiteralExpr{}, false
+}
+
+func pluginMemberName(expression js.IExpr) string {
+	literal, isLiteral := pluginMemberLiteral(expression)
+	if !isLiteral {
 		return ""
 	}
 	if literal.TokenType == js.StringToken {

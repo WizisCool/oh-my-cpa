@@ -12,21 +12,39 @@ import (
 
 func TestPluginHostScriptPathname(t *testing.T) {
 	for _, pair := range []struct{ input, expected string }{
-		{`const provider = location.pathname.split('/')[4];`, `const provider = __omcPluginHostLocation.pathname.split('/')[4];`},
-		{`const provider = window.location.pathname.split('/')[4];`, `const provider = __omcPluginHostLocation.pathname.split('/')[4];`},
-		{`const provider = document.location.pathname.split('/')[4];`, `const provider = __omcPluginHostLocation.pathname.split('/')[4];`},
-		{`const provider = self.location.pathname.split('/')[4];`, `const provider = __omcPluginHostLocation.pathname.split('/')[4];`},
-		{`const provider = globalThis.location.pathname.split('/')[4];`, `const provider = __omcPluginHostLocation.pathname.split('/')[4];`},
-		{`const provider = window['location']['pathname'].split('/')[4];`, `const provider = __omcPluginHostLocation['pathname'].split('/')[4];`},
-		{"const provider = `${window.location.pathname}`;", "const provider = `${__omcPluginHostLocation.pathname}`;"},
-		{`location.pathname = '/v0/resource/plugins/example/other';`, `__omcPluginHostLocation.pathname = '/v0/resource/plugins/example/other';`},
+		{`const provider = location.pathname.split('/')[4];`, `const provider = location._omcPath.split('/')[4];`},
+		{`const provider = window.location.pathname.split('/')[4];`, `const provider = window.location._omcPath.split('/')[4];`},
+		{`const provider = document.location.pathname.split('/')[4];`, `const provider = document.location._omcPath.split('/')[4];`},
+		{`const provider = self.location.pathname.split('/')[4];`, `const provider = self.location._omcPath.split('/')[4];`},
+		{`const provider = globalThis.location.pathname.split('/')[4];`, `const provider = globalThis.location._omcPath.split('/')[4];`},
+		{`const provider = window['location']['pathname'].split('/')[4];`, `const provider = window['location']['_omcPath'].split('/')[4];`},
+		{"const provider = `${window.location.pathname}`;", "const provider = `${window.location._omcPath}`;"},
+		{`location.pathname = '/v0/resource/plugins/example/other';`, `location._omcPath = '/v0/resource/plugins/example/other';`},
+		{`const a=location.pathname;const b=location.pathname;`, `const a=location._omcPath;const b=location._omcPath;`},
+		{`window /* global */ . location /* path */ . pathname`, `window /* global */ . location /* path */ . _omcPath`},
+		{`window?.location?.pathname`, `window?.location?._omcPath`},
 	} {
 		output, err := hostPluginScript([]byte(pair.input))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(output) != pair.expected {
+		if string(output) != pair.expected || len(output) != len(pair.input) {
 			t.Errorf("adapted %s: got %s, want %s", pair.input, output, pair.expected)
+		}
+	}
+}
+
+func TestPluginHostScriptPreservesSourceMaps(t *testing.T) {
+	for _, sourceMap := range []string{
+		"//# sourceMappingURL=panel.js.map",
+		"/*# sourceMappingURL=panel.js.map */",
+		"//# sourceMappingURL=data:application/json;base64,e30=",
+	} {
+		input := "\"use strict\";\r\n// plugin entry: 中文\r\nconst sample='location.pathname'; /* keep this comment */\r\nconst before=1;const route=window.location.pathname;const after=2;\r\n" + sourceMap
+		expected := strings.Replace(input, "window.location.pathname", "window.location._omcPath", 1)
+		output, err := hostPluginScript([]byte(input))
+		if err != nil || string(output) != expected || len(output) != len(input) {
+			t.Fatalf("source mapping or surrounding code changed: got %q, want %q, err=%v", output, expected, err)
 		}
 	}
 }
@@ -64,7 +82,7 @@ func TestPluginHostDocumentAdaptsOnlyExecutableScripts(t *testing.T) {
 	if !strings.Contains(string(output), `<script type="application/json">{"code":"location.pathname"}</script>`) {
 		t.Fatalf("JSON script changed: %s", output)
 	}
-	if strings.Count(string(output), "= __omcPluginHostLocation.pathname") != 2 {
+	if !strings.Contains(string(output), "const inline = window.location._omcPath;") || !strings.Contains(string(output), "export const modulePath = location._omcPath;") {
 		t.Fatalf("inline/module pathname not adapted: %s", output)
 	}
 	if !strings.Contains(string(output), `src="/omc/api/v1/plugin-host/v0/resource/plugins/example/app.js"`) {
@@ -100,7 +118,7 @@ func TestPluginHostScriptTypes(t *testing.T) {
 	for _, scriptType := range []string{"text/ecmascript", "application/ecmascript", "text/jscript", "text/javascript1.5", " TEXT/JAVASCRIPT "} {
 		input := []byte(`<script type="` + scriptType + `">const path = location.pathname;</script>`)
 		output, err := hostPluginInlineScripts(input)
-		if err != nil || !strings.Contains(string(output), "__omcPluginHostLocation") {
+		if err != nil || !strings.Contains(string(output), "location._omcPath") {
 			t.Fatalf("executable %q was not adapted: %s, %v", scriptType, output, err)
 		}
 	}
@@ -131,7 +149,7 @@ func TestPluginHostAdaptationRefusal(t *testing.T) {
 func TestPluginHostLegacyScriptLanguage(t *testing.T) {
 	for _, attribute := range []string{`language="JavaScript"`, `language="ecmascript"`, `type="module"`, `type=""`} {
 		output, err := hostPluginInlineScripts([]byte(`<script ` + attribute + `>const path = location.pathname;</script>`))
-		if err != nil || !strings.Contains(string(output), "__omcPluginHostLocation") {
+		if err != nil || !strings.Contains(string(output), "location._omcPath") {
 			t.Fatalf("executable %s was not adapted: %s, %v", attribute, output, err)
 		}
 	}

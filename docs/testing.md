@@ -1009,7 +1009,8 @@ redirects, body bounds and native backup classification.
 credentials that must cost the upstream no failed authentication, native config/group/model startup, namespaced state/sync, audit failure gates,
 backup failures, native-write serialization and rebasing across base paths.
 `internal/api/management_plugin_host_script_test.go` owns executable pathname adaptation,
-lexical binding preservation, script-data exclusion and sanitized parse refusal.
+lexical binding preservation, source-map comments and byte positions, script-data exclusion
+and sanitized parse refusal.
 `scripts/plugin-host-shim.test.mjs` exercises the embedded runtime shim across root and nested
 base paths: omitted credentials on native/already-hosted URLs, isolation of unrelated and
 external requests, Request body/header/signal overrides, live native path reads/writes and

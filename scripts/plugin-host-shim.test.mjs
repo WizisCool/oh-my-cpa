@@ -82,7 +82,7 @@ for (const prefix of ['/api/v1/plugin-host', '/omc/api/v1/plugin-host', '/consol
     const { window, location } = host(prefix);
     for (const method of ['pushState', 'replaceState']) {
       location.pathname = `${prefix}/v0/resource/plugins/example/panel`;
-      window.history[method](null, '', window.__omcPluginHostLocation.pathname + '?updated=1#panel');
+      window.history[method](null, '', location._omcPath + '?updated=1#panel');
       assert.equal(location.href, `http://console.example${prefix}/v0/resource/plugins/example/panel?updated=1#panel`);
       window.history[method](null, '', 'settings?updated=2');
       assert.equal(location.href, `http://console.example${prefix}/v0/resource/plugins/example/settings?updated=2`);
@@ -91,11 +91,11 @@ for (const prefix of ['/api/v1/plugin-host', '/omc/api/v1/plugin-host', '/consol
 
   test(`native resource pathname follows same-document navigation: ${prefix}`, () => {
     const { window, location } = host(prefix);
-    assert.equal(window.__omcPluginHostLocation.pathname, '/v0/resource/plugins/example/panel');
+    assert.equal(location._omcPath, '/v0/resource/plugins/example/panel');
     assert.equal(location.pathname, `${prefix}/v0/resource/plugins/example/panel`);
     location.pathname = `${prefix}/v0/resource/plugins/other/settings`;
-    assert.equal(window.__omcPluginHostLocation.pathname, '/v0/resource/plugins/other/settings');
-    window.__omcPluginHostLocation.pathname = '/v0/resource/plugins/other/panel';
+    assert.equal(location._omcPath, '/v0/resource/plugins/other/settings');
+    location._omcPath = '/v0/resource/plugins/other/panel';
     assert.equal(location.pathname, `${prefix}/v0/resource/plugins/other/panel`);
     assert.equal(location.search, '?variant=a');
   });
