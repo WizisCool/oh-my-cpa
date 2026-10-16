@@ -353,6 +353,18 @@ export async function pluginManagement({ base, page, check, writes }) {
   await page.goto(`${base}/plugin-pages/quota-notifier/0`, { waitUntil: 'domcontentloaded' });
   check('a page of a plugin that is not running is reported as unavailable', await isTrue(async () => page.locator('[data-plugin-page-unavailable]').isVisible(), 'the unavailable notice'));
 
+  // ── the plugin page in the rail-visibility panel ────────────────────────────
+  // The panel draws the same nav-model element the rail does, outside the rail. The fixture logo
+  // is an SVG with no intrinsic size, which an unconstrained <img> lays out at 300x150.
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: /管理入口|Manage entries/ }).click();
+  const panelLogo = page.locator('[data-testid="sidebar-nav-dialog"] img.app-menu-plugin-logo');
+  const panelLogoShown = await isTrue(async () => panelLogo.isVisible(), 'the plugin logo in the sidebar panel');
+  const panelLogoBox = panelLogoShown ? await panelLogo.boundingBox() : null;
+  check('the plugin page\'s logo in the sidebar panel is drawn at the rail glyph size',
+    Boolean(panelLogoBox) && panelLogoBox.width <= 16 && panelLogoBox.height <= 16, JSON.stringify(panelLogoBox));
+  await page.keyboard.press('Escape');
+
   // ── plugin system settings ──────────────────────────────────────────────────
   await page.goto(`${base}/plugins/settings`, { waitUntil: 'domcontentloaded' });
   const settings = page.locator('[data-plugin-panel="settings"]');
