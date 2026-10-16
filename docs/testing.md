@@ -1007,11 +1007,19 @@ credential separation, local refusal of wrong page credentials with no upstream 
 redirects, body bounds and native backup classification.
 `internal/api/management_plugin_host_test.go` covers session/CSRF protection, invalid explicit
 credentials that must cost the upstream no failed authentication, native config/group/model startup, namespaced state/sync, audit failure gates,
-backup failures, native-write serialization and rebasing across base paths. The fixture uses
+backup failures, native-write serialization and rebasing across base paths.
+`internal/api/management_plugin_host_script_test.go` owns executable pathname adaptation,
+lexical binding preservation, script-data exclusion and sanitized parse refusal.
+`scripts/plugin-host-shim.test.mjs` exercises the embedded runtime shim across root and nested
+base paths: omitted credentials on native/already-hosted URLs, isolation of unrelated and
+external requests, Request body/header/signal overrides, live native path reads/writes and
+history updates that keep the resource URL inside the console mount.
+The fixture uses
 an independent upstream server so version probing cannot hide caller authentication defects.
 The existing built acceptance in `scripts/acceptance/configuration-plugins.mjs` exercises the
 same generic startup chain via fetch, Request, XHR and EventSource, valid/invalid credentials,
-Request POST body preservation on HTTP/1, bounded finite EventSource completion,
+Request POST body preservation on HTTP/1, omitted-credential startup, inline/external
+provider self-identification from the resource pathname, bounded finite EventSource completion,
 no duplicate rebasing and no host-provided key
 in storage. The hosted-page check is shared with the full configuration acceptance flow
 for focused regression diagnosis. The response observer separates only exact same-origin

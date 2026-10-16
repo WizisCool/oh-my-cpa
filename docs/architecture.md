@@ -210,7 +210,19 @@ HTML/CSS/JavaScript references and runtime fetch, Request, XMLHttpRequest and Ev
 requests are rebased for the same surfaces. Rebased Request bodies are buffered before
 fetching so reconstructing a Request does not turn a JSON body into an HTTP/1-incompatible
 streaming upload; method, headers, overrides and cancellation signal are retained.
-External origins and already-hosted URLs remain unchanged. The same-origin frame operates with the signed-in operator's authority; installation
+Same-origin requests to these host surfaces carry the console session even when a plugin
+uses `credentials: 'omit'`; explicit management and client Authorization headers retain
+their existing, separate validation rules. This includes statically rebased and already-hosted
+URLs; external origins and unrelated paths keep their original credential mode.
+`management_plugin_host_shim.js` is embedded in the Go binary and tested directly in Node.
+Executable inline and external JavaScript is parsed with `tdewolff/parse`: direct
+`location.pathname` access (also through global `window`, `self`, `globalThis` or `document`)
+uses a live CPA-native resource-path view. The actual frame URL stays under the console
+mount; native resource URLs passed to history push/replace are rebased too, so removing
+a query-string key keeps relative assets, reloads and scoped session cookies working. Locally bound
+objects, string/regex literals and non-executable script data are not pathname-rewritten.
+Scripts needing adaptation must parse successfully; refusal returns `502` with
+`code: plugin_adaptation_refused` and does not expose parser source snippets. The same-origin frame operates with the signed-in operator's authority; installation
 is the trust decision. Demo refuses the entire host. No model inference or arbitrary-target
 bridge is provided by this route tree.
 

@@ -375,6 +375,12 @@ routes and the fixed model directory, including configuration containing client 
 secrets. Install only plugins you trust: the page is same-origin with the console and acts
 with the signed-in operator's authority, while the plugin already runs inside CPA.
 
+The host adapts same-origin native API and resource fetches to carry the OMC session,
+including pages that set `credentials: 'omit'`. This does not grant access without a
+console session or change credentials on external requests. Plugin scripts that identify
+their provider through direct `location.pathname` access receive the CPA-native resource
+path, while the frame itself remains under the configured OMC base path.
+
 A plugin page may ask for a management key of its own. The host compares a page's explicit
 Authorization or X-Management-Key with the stored CPA management key and answers a wrong one
 `401` itself; the wrong key is never sent to CPA, so it cannot count toward CPA's

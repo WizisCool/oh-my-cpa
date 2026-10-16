@@ -260,10 +260,13 @@ export async function runPluginHostedPageAcceptance({ appURL, page, check }) {
   const pluginStatus = pluginDocument.locator('#plugin-status');
   const statusSettled = await pluginStatus.filter({ hasText: 'logger running' }).waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
   check('the plugin page reaches its own management route through the console', statusSettled, await pluginStatus.innerText().catch(() => ''));
+  check('inline plugin startup identifies its provider from the CPA resource pathname', await pluginDocument.locator('#plugin-provider').innerText() === 'fixture-logger');
   const nativeStartup = pluginDocument.locator('#plugin-contract');
   await nativeStartup.filter({ hasText: /models [1-9]\d*; groups [1-9]\d*; native startup ready/ }).waitFor({ timeout: 10000 });
   check('the built plugin starts through native v0/v8 config, model and namespaced routes', /native startup ready/.test(await nativeStartup.innerText()));
   const pluginFrame = page.frames().find(frame => frame.url().endsWith('/v0/resource/plugins/fixture-logger/console'));
+  check('provider identification keeps the frame on the hosted resource URL', pluginFrame?.url() === `${appURL}/api/v1/plugin-host/v0/resource/plugins/fixture-logger/console`);
+  if (!pluginFrame) throw new Error('hosted plugin frame is missing');
   await pluginFrame.evaluate(() => window.runPluginContract('invalid-plugin-management-key'));
   check('an explicit wrong plugin credential remains unauthorized', await pluginDocument.locator('#plugin-credential-status').innerText() === '401');
   await pluginFrame.evaluate(credential => window.runPluginContract(credential), FAKE_CPA_MANAGEMENT_KEY);
@@ -296,11 +299,11 @@ export async function runPluginHostedPageAcceptance({ appURL, page, check }) {
   check('rebased Request uploads preserve fetch body/header overrides on HTTP/1', overriddenRequestStatus === 200);
   const hostedConfigURL = `${appURL}/api/v1/plugin-host/v8/management/config/api-keys`;
   const hostedConfigStatus = await pluginFrame.evaluate(async url => {
-    const reply = await fetch(url);
+    const reply = await fetch(url, {credentials: 'omit'});
     await reply.json();
     return reply.status;
   }, hostedConfigURL);
-  check('already hosted URLs are not rebased twice', hostedConfigStatus === 200);
+  check('already hosted URLs retain session access with omitted credentials', hostedConfigStatus === 200);
   const storedPluginData = await pluginFrame.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
   check('the host does not write a management credential to browser storage', !storedPluginData.includes(FAKE_CPA_MANAGEMENT_KEY));
   const frameTheme = await pluginDocument.locator('#plugin-theme').innerText();

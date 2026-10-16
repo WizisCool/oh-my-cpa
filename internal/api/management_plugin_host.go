@@ -1,6 +1,7 @@
 package api
 
 import (
+	_ "embed"
 	"errors"
 	"io"
 	"mime"
@@ -69,22 +70,20 @@ func rebasePluginReferences(body []byte, hostPrefix string) []byte {
 	return pluginHostModelsReference.ReplaceAll(body, []byte("${1}"+hostPrefix+"${2}${3}"))
 }
 
-// pluginHostShim re-bases the requests a page builds at run time, which no rewrite of
-// its text can see. It runs before the page's own scripts. Rebased Request bodies
-// are buffered: passing Request.body as init creates a streaming upload that
-// Chromium refuses over HTTP/1, even when the original body was a JSON string.
+//go:embed management_plugin_host_shim.js
+var pluginHostShimSource string
+
 func pluginHostShim(hostPrefix string) []byte {
-	return []byte(`<script>(function(){var P=` + mustJSON(hostPrefix) + `,R=/^(?:\/v0\/resource\/plugins\/|\/v[08]\/management\/|\/v1\/models$)/;` +
-		`function m(u){try{var x=new URL(u,location.href);if(x.origin===location.origin&&R.test(x.pathname)){x.pathname=P+x.pathname;return x.href}}catch(e){}return u}` +
-		`var f=window.fetch;if(f)window.fetch=function(i,o){if(typeof i==="string"||i instanceof URL)i=m(String(i));else if(i&&i.url){var n=m(i.url);if(n!==i.url){var q=new Request(i,o),s=this,c={};["method","headers","mode","credentials","cache","redirect","referrer","referrerPolicy","integrity","keepalive","signal"].forEach(function(k){c[k]=q[k]});if(q.body)return q.arrayBuffer().then(function(b){c.body=b;return f.call(s,n,c)});return f.call(this,n,c)}}return f.call(this,i,o)};` +
-		`var X=window.XMLHttpRequest;if(X){var p=X.prototype.open;X.prototype.open=function(){if(arguments.length>1)arguments[1]=m(String(arguments[1]));return p.apply(this,arguments)}}` +
-		`var E=window.EventSource;if(E){window.EventSource=function(u,c){return new E(m(String(u)),c)};window.EventSource.prototype=E.prototype}` +
-		`})();</script>`)
+	return []byte("<script>" + strings.Replace(pluginHostShimSource, `"__OMC_PLUGIN_HOST_PREFIX__"`, mustJSON(hostPrefix), 1) + "</script>")
 }
 
 // hostPluginDocument re-bases an HTML document and installs the run-time shim as the
 // first thing in it that can run.
-func hostPluginDocument(body []byte, hostPrefix string) []byte {
+func hostPluginDocument(body []byte, hostPrefix string) ([]byte, error) {
+	body, err := hostPluginInlineScripts(body)
+	if err != nil {
+		return nil, err
+	}
 	body = rebasePluginReferences(body, hostPrefix)
 	shim := pluginHostShim(hostPrefix)
 	for _, anchor := range []*regexp.Regexp{htmlHeadOpen, htmlRootOpen, htmlDoctypeOpen} {
@@ -92,10 +91,10 @@ func hostPluginDocument(body []byte, hostPrefix string) []byte {
 			result := make([]byte, 0, len(body)+len(shim))
 			result = append(result, body[:location[1]]...)
 			result = append(result, shim...)
-			return append(result, body[location[1]:]...)
+			return append(result, body[location[1]:]...), nil
 		}
 	}
-	return append(shim, body...)
+	return append(shim, body...), nil
 }
 
 func pluginHostMediaType(header http.Header) string {
@@ -107,11 +106,7 @@ func pluginHostMediaType(header http.Header) string {
 }
 
 func isRebasedPluginText(mediaType string) bool {
-	switch mediaType {
-	case "text/css", "text/javascript", "application/javascript", "application/x-javascript":
-		return true
-	}
-	return false
+	return mediaType == "text/css" || isPluginJavaScriptType(mediaType)
 }
 
 func (h *Handler) writePluginHostResponse(writer http.ResponseWriter, response management.PluginHostResponse, body []byte) {
@@ -131,6 +126,13 @@ func (h *Handler) writePluginHostResponse(writer http.ResponseWriter, response m
 }
 
 func writePluginHostError(writer http.ResponseWriter, err error) {
+	if errors.Is(err, errPluginHostAdaptation) {
+		writeJSON(writer, http.StatusBadGateway, map[string]string{
+			"error": "plugin page could not be adapted",
+			"code":  "plugin_adaptation_refused",
+		})
+		return
+	}
 	if errors.Is(err, management.ErrPluginHostPath) {
 		writeError(writer, http.StatusNotFound, "not a plugin resource or plugin route")
 		return
@@ -158,9 +160,18 @@ func (h *Handler) servePluginResource(writer http.ResponseWriter, request *http.
 	body := response.Body
 	switch mediaType := pluginHostMediaType(response.Header); {
 	case mediaType == "text/html":
-		body = hostPluginDocument(body, h.pluginHostPrefix())
+		body, err = hostPluginDocument(body, h.pluginHostPrefix())
 	case isRebasedPluginText(mediaType):
-		body = rebasePluginReferences(body, h.pluginHostPrefix())
+		if mediaType != "text/css" {
+			body, err = hostPluginScript(body)
+		}
+		if err == nil {
+			body = rebasePluginReferences(body, h.pluginHostPrefix())
+		}
+	}
+	if err != nil {
+		writePluginHostError(writer, err)
+		return
 	}
 	h.writePluginHostResponse(writer, response, body)
 }
