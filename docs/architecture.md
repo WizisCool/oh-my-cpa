@@ -2473,8 +2473,11 @@ mid-verification. The updater's own pair is the exception: a successor running
 On the page, `useConsoleUpdate` follows one job. While it does, a failed read or a
 `not_installed` answer is not shown, because both are what a console restart looks like
 from the browser; the last answer from a working updater stands until the job reports
-its end, the updater forgets it, or ten minutes pass without an answer. A finished
-console update reloads the page, since the scripts it holds belong to the old version.
+its end, the updater forgets it, or ten minutes pass without an answer. One update reports
+one end, keyed by its job id: neither the answer still held while the console gives up nor
+an updater that comes back naming the job it had lost can make the page end the same update
+twice, or follow it again. A finished console update reloads the page, since the scripts it
+holds belong to the old version.
 
 ## 11. Database maintenance and the write gate
 

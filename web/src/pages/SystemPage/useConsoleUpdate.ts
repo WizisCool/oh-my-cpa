@@ -34,6 +34,13 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
   const [submittingProduct, setSubmittingProduct] = React.useState<ReleaseProduct | null>(null);
   const lastReadyRef = React.useRef<SystemUpdaterResponse>();
   const lastAnsweredAtRef = React.useRef(0);
+  /**
+   * The jobs this page has already reported an end for. One update has one end: an answer that
+   * names a job already reported - the stale one still held while the console gives up, or an
+   * updater that comes back still naming the job it had lost - is history, not a new update.
+   * A later update carries an id of its own and is followed and reported normally.
+   */
+  const reportedJobsRef = React.useRef(new Set<string>());
   const onFinishedRef = React.useRef(onFinished);
   onFinishedRef.current = onFinished;
 
@@ -48,24 +55,30 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
   const updater = watched && data?.state !== 'ready' ? lastReadyRef.current ?? data : data;
 
   React.useEffect(() => {
+    const reportEnd = (jobId: string, outcome: UpdateOutcome) => {
+      if (reportedJobsRef.current.has(jobId)) return;
+      reportedJobsRef.current.add(jobId);
+      onFinishedRef.current(outcome);
+    };
     if (data?.state === 'ready') {
       // A failed read leaves the previous answer in place, so the time of the answer, not of
       // this pass, is what the limit below is measured from.
       lastAnsweredAtRef.current = dataUpdatedAt;
       const job = data.job;
       if (!watched) {
-        // An update started elsewhere, or before this page was reloaded, is followed too.
-        if (job && !job.finished) setWatched({ id: job.id, product: job.product });
+        // An update started elsewhere, or before this page was reloaded, is followed too. A job
+        // this page already ended stays ended, so it is not followed a second time.
+        if (job && !job.finished && !reportedJobsRef.current.has(job.id)) setWatched({ id: job.id, product: job.product });
         return;
       }
       if (job?.id !== watched.id) {
         setWatched(null);
-        onFinishedRef.current({ job: null, product: watched.product });
+        reportEnd(watched.id, { job: null, product: watched.product });
         return;
       }
       if (job.finished) {
         setWatched(null);
-        onFinishedRef.current({ job });
+        reportEnd(watched.id, { job });
         return;
       }
     }
@@ -75,7 +88,7 @@ export function useConsoleUpdate({ onFinished }: ConsoleUpdateOptions) {
       // taken for an update in progress and followed again.
       lastReadyRef.current = undefined;
       void queryClient.resetQueries({ queryKey: UPDATER_QUERY_KEY });
-      onFinishedRef.current({ job: null, product: watched.product });
+      reportEnd(watched.id, { job: null, product: watched.product });
     }
   }, [data, dataUpdatedAt, errorUpdatedAt, watched, queryClient]);
 

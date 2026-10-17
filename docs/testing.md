@@ -1225,8 +1225,9 @@ The wire corpus is `scripts/acceptance/contracts/system-updater.json`, certified
 `scripts/acceptance/system-updater-fixture.mjs`, the mock every other layer answers
 with. `web/tests/system-update.component.test.tsx` owns what a pure function cannot
 observe: the question before the request, the card holding its state while the console
-restarts under it, a result reported once, and giving up on an updater that forgot the
-job or stopped answering. `scripts/test-system-versions.ts` owns the offer derivation.
+restarts under it, a result reported once - including a job the page has already given up
+on and the updater names again - and giving up on an updater that forgot the job or
+stopped answering. `scripts/test-system-versions.ts` owns the offer derivation.
 The `system-information-narrow` scenario owns the update action's geometry beside the
 version comparison at 320px in the longest catalog. Signing is covered by
 `scripts/sign-release-manifest.test.mjs` and the release workflow's ordering invariants

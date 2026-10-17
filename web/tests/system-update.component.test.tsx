@@ -155,6 +155,33 @@ it('gives up on an update whose updater forgot it or stopped answering', async (
   silent.close();
 });
 
+it('reports one end for the job it gave up on, even when the updater answers again', async () => {
+  const surface = mount();
+  await startUpdate();
+
+  // The updater stops answering, and the console gives up on the running job once.
+  surface.reach.isLost = true;
+  await surface.reread();
+  const readClock = Date.now.bind(Date);
+  let clockShift = UPDATE_WATCH_LIMIT_MS;
+  vi.spyOn(Date, 'now').mockImplementation(() => readClock() + clockShift);
+  await surface.reread();
+  await waitFor(() => expect(surface.onFinished).toHaveBeenCalledTimes(1));
+
+  // The updater comes back and still names the job it lost. That answer is the update the page
+  // has already ended: following it again would report a second end for one update, so the
+  // console keeps the one report it made and waits for a different job.
+  surface.reach.isLost = false;
+  await surface.reread();
+  surface.reach.isLost = true;
+  await surface.reread();
+  clockShift = 3 * UPDATE_WATCH_LIMIT_MS;
+  await surface.reread();
+  expect(surface.onFinished).toHaveBeenCalledTimes(1);
+  expect(surface.onFinished).toHaveBeenCalledWith({ job: null, product: 'omc' });
+  surface.close();
+});
+
 it('follows an update that was already running when the page opened', async () => {
   const fixture = createSystemUpdaterFixture();
   fixture(new URL('http://127.0.0.1/api/v1/management/system/updater/apply'), 'POST', JSON.stringify(SYSTEM_UPDATER_CONTRACT.accepted.body));
