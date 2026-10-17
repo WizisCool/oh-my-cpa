@@ -19,11 +19,13 @@
  *      including the layout ones. §7 rule 1's list; the exceptions are disclosures and the bar whose
  *      width positions its own label. An exception is keyed by file, selector and property, and it
  *      must carry a reason - an unexplained exception is how a budget disappears.
- *   3. **Every keyframe animation has a reduced-motion counterpart.** §7's override is a promise, and
- *      a keyframe cannot be reached by a media query written after the fact: the counterpart has to
- *      exist next to the motion. Scope note: transitions are not checked here, because the console
- *      kills them per-rule where the motion is intrusive (the heatmap mark scales, so its colour fade
- *      would smear) and a blanket requirement would flag every 50ms hover.
+ *   3. **Every keyframe animation has a reduced-motion counterpart**, unless the selector carries a
+ *      `reduced` exception with the reason it is exempt. §7's override is a promise, and a keyframe
+ *      cannot be reached by a media query written after the fact: the counterpart has to exist next
+ *      to the motion. The exception exists for the live routing map, whose travelling request is the
+ *      reading itself rather than decoration (ADR 0102). Scope note: transitions are not checked
+ *      here, because the console kills them per-rule where the motion is intrusive (the heatmap mark
+ *      scales, so its colour fade would smear) and a blanket requirement would flag every 50ms hover.
  *   4. **A hover may transition colour only within the fast token.** §7 rule 7 was written as a ban
  *      after Ant Design's 0.3s drag; the console's own hovers are 50ms, which is three frames, and
  *      banning them would rewrite hover behaviour on every page for no measurable gain. See ADR 0009.
@@ -72,7 +74,8 @@ const LAYOUT_PROPERTIES = [
  * The exceptions, each with the reason it is one.
  *
  * `duration` waives rule 1 (an indeterminate bar's period is not a state transition); `layout` waives
- * rule 2 (a disclosure cannot be composited). Both are asserted to be *used*, so the table cannot rot
+ * rule 2 (a disclosure cannot be composited); `reduced` waives rule 3 for one selector that carries
+ * information rather than decoration. All three are asserted to be *used*, so the table cannot rot
  * into a list of things nobody remembers reading.
  */
 const EXCEPTIONS = [
@@ -123,7 +126,14 @@ const EXCEPTIONS = [
     file: 'components/dashboard/routing/RoutingPanel.module.css',
     selector: '.edge-flow-on',
     property: 'animation',
-    why: 'A routing lane flows for as long as a request travels it or waits at its end; 540ms is one dash period of the flow, not a transition between two states, and reduced motion removes it (docs/design.md §7 rule 9).',
+    why: 'A routing lane flows for as long as a request travels it or waits at its end; 540ms is one dash period of the flow, not a transition between two states (docs/design.md §7 rule 9).',
+  },
+  {
+    kind: 'reduced',
+    file: 'components/dashboard/routing/RoutingPanel.module.css',
+    selector: '.edge-flow-on',
+    property: 'animation',
+    why: 'The live routing map carries its reading in the travelling request, and Windows reports its "Animation effects" switch as reduced motion. The trip therefore plays in full for every reader; ADR 0102 records the scoped exception and the trade-off.',
   },
   {
     kind: 'layout',
@@ -450,7 +460,7 @@ for (const { absolute, file, text } of sources) {
         (declaration) => declaration && !/^none\b/.test(declaration.value),
       );
       const killed = selectorList(rule.selector).every((entry) => reducedKills.has(entry));
-      if (animates && !killed) {
+      if (animates && !killed && !used('reduced', file, rule.selector, 'animation')) {
         record('animates with no `prefers-reduced-motion` counterpart', file, rule.selector, 'animation');
       }
     }
@@ -490,10 +500,10 @@ for (const violation of violations) {
 if (violations.length === 0) {
   output.log(`Sources checked: ${filesScanned} (stylesheets and inline transition strings)`);
   output.log(`Motion exceptions in use: ${usedExceptions.size} of ${exceptions.length}`);
-  output.log('Every duration is a token, no transition animates layout, and every keyframe honours reduced motion.');
+  output.log('Every duration is a token, no transition animates layout, and every keyframe animation is either reduced-motion safe or explicitly exempt.');
 } else {
   output.error(`\n${violations.length} motion violation(s) across ${filesScanned} files.`);
-  output.error('Every duration must be a --motion-* token, and every layout exception must be listed in EXCEPTIONS with a reason.');
+  output.error('Every duration must be a --motion-* token, and every exception must be listed in EXCEPTIONS with a reason.');
 }
 
 return { filesScanned, violations };

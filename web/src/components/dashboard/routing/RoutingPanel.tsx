@@ -10,7 +10,6 @@ import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { usePluginOAuthLogos } from '../../../hooks/usePluginOAuthLogos';
 import { usePreference } from '../../../hooks/usePreference';
-import { usePrefersReducedMotion } from '../../../hooks/usePrefersReducedMotion';
 import { useT } from '../../../i18n';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../../types/providerIcons';
 import type { ConfigScalarsResponse } from '../../../types/configManagement';
@@ -32,7 +31,7 @@ import {
   type UsageRoutingResponse,
 } from '../../../types/usageRouting';
 import { RoutingMap, type RoutingArrivals } from './RoutingMap';
-import { seriesColor, type IdentitySources } from './routingIdentity';
+import { routeColor, type IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
 
 const STRATEGY_LABEL_KEYS: Record<string, string> = {
@@ -101,7 +100,6 @@ function useServerNow(skewMs: number): number {
  */
 export function RoutingPanel() {
   const t = useT();
-  const isReducedMotion = usePrefersReducedMotion();
 
   const isFetchingRef = React.useRef(false);
   const afterRef = React.useRef<number | undefined>(undefined);
@@ -175,7 +173,7 @@ export function RoutingPanel() {
   }, [model]);
   const colorOf = React.useCallback((modelId: string) => {
     const slot = slots.get(modelId);
-    return slot === undefined ? 'var(--accent)' : seriesColor(slot);
+    return slot === undefined ? 'var(--accent)' : routeColor(slot);
   }, [slots]);
 
   const authFiles = useQuery({
@@ -245,7 +243,6 @@ export function RoutingPanel() {
           strategy={strategy}
           sources={sources}
           arrivals={arrivals}
-          isReducedMotion={isReducedMotion}
         />
       )}
     </Panel>

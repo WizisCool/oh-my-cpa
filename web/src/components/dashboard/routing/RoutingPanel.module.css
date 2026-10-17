@@ -87,7 +87,9 @@
 }
 
 /* A lane at rest is a faint line; routingPackets.ts brightens it behind a request that
-   crossed it and lets it settle back here. */
+   crossed it and lets it settle back here. Its hue is the row's identity - a model's palette
+   slot, or the credential column's neutral - and never a verdict: green, amber and red stay on
+   the node surfaces, where a wash or a ring says what happened. */
 .edge {
   fill: none;
   stroke-linecap: round;
@@ -96,6 +98,12 @@
 
 .edge-failing {
   stroke-dasharray: 2 5;
+}
+
+/* A resting credential's lane says so with a dash rather than a hue, so the line cannot be read
+   as a warning about the connection itself. */
+.edge-resting {
+  stroke-dasharray: 4 4;
 }
 
 .edge-ghost {
@@ -436,8 +444,10 @@
 }
 
 /* Where a lane joins the row, in the lane's colour, cut out of the row's edge by a
-   ring of the panel's own fill. The ring inside it is the ripple routingPackets.ts
-   sends out when a packet lands; only its transform and opacity animate. */
+   ring of the panel's own fill. A credential lane is neutral, so its port sets
+   `--port-color` separately from the row's own accent. The ring inside it is the
+   ripple routingPackets.ts sends out when a packet lands; only its transform and
+   opacity animate. */
 .port {
   position: absolute;
   top: 50%;
@@ -447,7 +457,7 @@
   margin-top: -5.5px;
   border: 2px solid var(--surface);
   border-radius: 50%;
-  background: var(--route-color, var(--accent));
+  background: var(--port-color, var(--route-color, var(--accent)));
 }
 
 .port-in {
@@ -562,12 +572,6 @@
     grid-column: 2 / -1;
     align-items: center;
     gap: 2px 8px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .edge-flow-on {
-    animation: none;
   }
 }
 

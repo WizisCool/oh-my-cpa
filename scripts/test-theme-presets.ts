@@ -88,6 +88,7 @@ for (const definition of BUILT_IN_PALETTES) {
   const where = `${definition.id}:`;
 
   assert.equal(palette.series.length, 6, `${where} defines exactly six series slots`);
+  assert.equal(palette.route.length, 6, `${where} defines exactly six routing slots`);
   assert.equal(palette.tooltipBg, definition.mode === 'light' ? palette.fg : palette.surface,
     `${where} a tooltip sits on the surface it floats over`);
   assert.equal(palette.heatmapQuiet, palette.borderSoft, `${where} the ramp's floor is the border-soft step`);

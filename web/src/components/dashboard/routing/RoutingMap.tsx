@@ -67,9 +67,9 @@ function useRegistry<T extends Element>() {
 }
 
 /** A lane's motion: it fades in once its row has begun to arrive, and out as the row leaves. */
-function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: PresencePhase, delayMs: number, isReducedMotion: boolean) {
+function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: PresencePhase, delayMs: number) {
   React.useLayoutEffect(() => {
-    if (phase !== 'entering' || isReducedMotion) return;
+    if (phase !== 'entering') return;
     ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: MOTION_ROUTE_PRESENCE.duration, easing: MOTION_ROUTE_PRESENCE.easing,
       delay: delayMs + MOTION_ROUTE_ENTER.duration / 3, fill: 'backwards',
@@ -77,13 +77,13 @@ function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: Presence
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   React.useLayoutEffect(() => {
-    if (phase !== 'exiting' || isReducedMotion) return;
+    if (phase !== 'exiting') return;
     const animation = ref.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
       duration: MOTION_ROUTE_EXIT.duration, easing: MOTION_ROUTE_EXIT.easing, fill: 'forwards',
     });
     return () => animation?.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isReducedMotion]);
+  }, [phase]);
 }
 
 export interface RoutingArrivals {
@@ -99,7 +99,6 @@ export interface RoutingMapProps {
   strategy?: string;
   sources: IdentitySources;
   arrivals: RoutingArrivals;
-  isReducedMotion: boolean;
 }
 
 const modelKey = (row: RoutingModelRow) => row.id;
@@ -120,7 +119,7 @@ const ghostKey = (key: string) => key;
  * it joins. The drawing is written to the DOM directly rather than through
  * React state, which would re-render the whole map sixty times a second.
  */
-export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals, isReducedMotion }: RoutingMapProps) {
+export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals }: RoutingMapProps) {
   const t = useT();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const layerRef = React.useRef<HTMLDivElement>(null);
@@ -132,13 +131,12 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
   const rings = useRegistry<HTMLElement>();
 
   const isEmpty = model.models.length === 0;
-  const exitMs = isReducedMotion ? 0 : MOTION_ROUTE_EXIT.duration;
-  const models = usePresence(model.models, modelKey, exitMs);
-  const targets = usePresence(model.targets, targetKey, exitMs);
+  const models = usePresence(model.models, modelKey, MOTION_ROUTE_EXIT.duration);
+  const targets = usePresence(model.targets, targetKey, MOTION_ROUTE_EXIT.duration);
   // An empty minute keeps the map's shape with a placeholder row on each side, which
   // leaves as the first request's rows arrive rather than being swapped out.
   const ghostItems = React.useMemo(() => (isEmpty ? [GHOST] : []), [isEmpty]);
-  const ghosts = usePresence(ghostItems, ghostKey, exitMs);
+  const ghosts = usePresence(ghostItems, ghostKey, MOTION_ROUTE_EXIT.duration);
 
   // A leaving row keeps the colour it had; the panel may already have given its slot away.
   const colorsRef = React.useRef(new Map<string, string>());
@@ -199,7 +197,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
     .map((list) => list.map((entry) => `${entry.key}:${entry.phase}`).join(','))
     .join('|');
   React.useLayoutEffect(() => {
-    if (isReducedMotion) return;
     const until = performance.now() + TRACKING_MS;
     let frame = 0;
     const tick = () => {
@@ -208,7 +205,7 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [presenceSignature, draw, isReducedMotion]);
+  }, [presenceSignature, draw]);
   React.useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
@@ -250,9 +247,9 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
     };
   }, [paths, flows, washes, halos, rings]);
   React.useEffect(() => {
-    if (isReducedMotion || arrivals.routes.length === 0) return;
+    if (arrivals.routes.length === 0) return;
     playerRef.current?.play(arrivals.routes);
-  }, [arrivals, isReducedMotion]);
+  }, [arrivals]);
 
   const maxModel = Math.max(1, ...model.models.map((row) => row.requests));
   const maxTarget = Math.max(1, ...model.targets.map((target) => target.attempts));
@@ -271,8 +268,8 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
       <svg className={styles['map-edges']} aria-hidden="true">
         {ghosts.map(({ key, phase }) => (
           <React.Fragment key={key}>
-            <GhostLane phase={phase} isReducedMotion={isReducedMotion} modelId={GHOST} />
-            <GhostLane phase={phase} isReducedMotion={isReducedMotion} targetId={GHOST} />
+            <GhostLane phase={phase} modelId={GHOST} />
+            <GhostLane phase={phase} targetId={GHOST} />
           </React.Fragment>
         ))}
         {models.map(({ key, item, phase }, index) => (
@@ -280,7 +277,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
             key={`in:${key}`}
             phase={phase}
             delayMs={enterDelay(index)}
-            isReducedMotion={isReducedMotion}
             modelId={key}
             color={colorFor(key)}
             width={strokeFor(item.requests / maxModel)}
@@ -294,11 +290,11 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
             key={`out:${key}`}
             phase={phase}
             delayMs={enterDelay(index)}
-            isReducedMotion={isReducedMotion}
             targetId={key}
-            color={item.cooldown ? 'var(--warn)' : item.failures === item.attempts ? 'var(--danger)' : 'var(--fg-2)'}
+            color="var(--fg-2)"
             width={strokeFor(item.attempts / maxTarget)}
             isFailing={item.failures === item.attempts}
+            isResting={Boolean(item.cooldown)}
             pathRef={paths.ref(edgeKey(key))}
             flowRef={flows.ref(edgeKey(key))}
           />
@@ -306,9 +302,9 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
       </svg>
 
       <div className={styles['map-column']} role="list" aria-label={t('routing.models')}>
-        <ColumnHead label={t('routing.models')} count={model.models.length} containerRef={containerRef} isReducedMotion={isReducedMotion} />
+        <ColumnHead label={t('routing.models')} count={model.models.length} containerRef={containerRef} />
         {ghosts.map(({ key, phase }) => (
-          <GhostNode key={key} side={-1} phase={phase} containerRef={containerRef} isReducedMotion={isReducedMotion}
+          <GhostNode key={key} side={-1} phase={phase} containerRef={containerRef}
             title={t('routing.empty')} hint={t('routing.empty_hint')} testId="routing-empty" />
         ))}
         {models.map(({ key, item, phase }, index) => (
@@ -319,7 +315,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
             delayMs={enterDelay(index)}
             containerRef={containerRef}
             color={colorFor(key)}
-            isReducedMotion={isReducedMotion}
             washRef={washes.ref(key)}
             haloRef={halos.ref(key)}
             ringRef={rings.ref(key)}
@@ -350,9 +345,9 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
       </div>
 
       <div className={styles['map-column']} role="list" aria-label={t('routing.credentials')}>
-        <ColumnHead label={t('routing.credentials')} count={model.targets.length} containerRef={containerRef} isReducedMotion={isReducedMotion} />
+        <ColumnHead label={t('routing.credentials')} count={model.targets.length} containerRef={containerRef} />
         {ghosts.map(({ key, phase }) => (
-          <GhostNode key={key} side={1} phase={phase} containerRef={containerRef} isReducedMotion={isReducedMotion}
+          <GhostNode key={key} side={1} phase={phase} containerRef={containerRef}
             title={t('routing.empty_credentials')} hint={t('routing.empty_credentials_hint')} />
         ))}
         {targets.map(({ key, item, phase }, index) => (
@@ -364,7 +359,6 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals,
             containerRef={containerRef}
             nowMs={nowMs}
             isLatest={key === latestTargetId}
-            isReducedMotion={isReducedMotion}
             sources={sources}
             washRef={washes.ref(key)}
             haloRef={halos.ref(key)}
@@ -385,13 +379,12 @@ interface ColumnHeadProps {
   label: string;
   count: number;
   containerRef: React.RefObject<HTMLElement | null>;
-  isReducedMotion: boolean;
 }
 
 /** A column's heading slides with its rows when the column re-centres. */
-function ColumnHead({ label, count, containerRef, isReducedMotion }: ColumnHeadProps) {
+function ColumnHead({ label, count, containerRef }: ColumnHeadProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  useFlip(ref, containerRef, isReducedMotion);
+  useFlip(ref, containerRef);
   return (
     <div ref={ref} className={styles['column-head']}>
       <span>{label}</span>
@@ -402,7 +395,6 @@ function ColumnHead({ label, count, containerRef, isReducedMotion }: ColumnHeadP
 
 interface LaneProps {
   phase: PresencePhase;
-  isReducedMotion: boolean;
   delayMs: number;
   /** A model's lane into the gateway, or a credential's lane out of it. */
   modelId?: string;
@@ -410,21 +402,23 @@ interface LaneProps {
   color: string;
   width: number;
   isFailing: boolean;
+  /** A credential inside its cooldown: the lane rests, and says so with a dash rather than a hue. */
+  isResting?: boolean;
   pathRef: (element: SVGPathElement | null) => void;
   flowRef: (element: SVGPathElement | null) => void;
 }
 
 /** One lane: its resting stroke, and the dashes that flow over it while a request travels it. */
-function Lane({ phase, isReducedMotion, delayMs, modelId, targetId, color, width, isFailing, pathRef, flowRef }: LaneProps) {
+function Lane({ phase, delayMs, modelId, targetId, color, width, isFailing, isResting = false, pathRef, flowRef }: LaneProps) {
   const groupRef = React.useRef<SVGGElement>(null);
-  useLaneMotion(groupRef, phase, delayMs, isReducedMotion);
+  useLaneMotion(groupRef, phase, delayMs);
   return (
     <g ref={groupRef} data-testid="routing-lane">
       <path
         ref={pathRef}
         data-model={modelId}
         data-target={targetId}
-        className={clsx(styles['edge'], isFailing && styles['edge-failing'])}
+        className={clsx(styles['edge'], isFailing && styles['edge-failing'], isResting && styles['edge-resting'])}
         style={{ stroke: color, strokeWidth: width }}
       />
       <path ref={flowRef} data-model={modelId} data-target={targetId} className={styles['edge-flow']} style={{ strokeWidth: width + 1.5 }} />
@@ -433,9 +427,9 @@ function Lane({ phase, isReducedMotion, delayMs, modelId, targetId, color, width
 }
 
 /** The dashed lane an empty minute draws between a placeholder row and the gateway. */
-function GhostLane({ phase, isReducedMotion, modelId, targetId }: { phase: PresencePhase; isReducedMotion: boolean; modelId?: string; targetId?: string }) {
+function GhostLane({ phase, modelId, targetId }: { phase: PresencePhase; modelId?: string; targetId?: string }) {
   const groupRef = React.useRef<SVGGElement>(null);
-  useLaneMotion(groupRef, phase, 0, isReducedMotion);
+  useLaneMotion(groupRef, phase, 0);
   return (
     <g ref={groupRef}>
       <path data-model={modelId} data-target={targetId} className={clsx(styles['edge'], styles['edge-ghost'])} style={{ strokeWidth: 1.25 }} />
@@ -447,16 +441,15 @@ interface GhostNodeProps {
   side: 1 | -1;
   phase: PresencePhase;
   containerRef: React.RefObject<HTMLElement | null>;
-  isReducedMotion: boolean;
   title: string;
   hint: string;
   testId?: string;
 }
 
 /** A placeholder row: where the models or the credentials of the minute will be. */
-function GhostNode({ side, phase, containerRef, isReducedMotion, title, hint, testId }: GhostNodeProps) {
+function GhostNode({ side, phase, containerRef, title, hint, testId }: GhostNodeProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  useRowMotion(ref, containerRef, { phase, away: awayFrom(side), delayMs: 0, isReducedMotion });
+  useRowMotion(ref, containerRef, { phase, away: awayFrom(side), delayMs: 0 });
   return (
     <div
       ref={ref}
@@ -480,16 +473,15 @@ interface ModelNodeProps {
   delayMs: number;
   containerRef: React.RefObject<HTMLElement | null>;
   color: string;
-  isReducedMotion: boolean;
   washRef: (element: HTMLElement | null) => void;
   haloRef: (element: HTMLElement | null) => void;
   ringRef: (element: HTMLElement | null) => void;
 }
 
-function ModelNode({ row, phase, delayMs, containerRef, color, isReducedMotion, washRef, haloRef, ringRef }: ModelNodeProps) {
+function ModelNode({ row, phase, delayMs, containerRef, color, washRef, haloRef, ringRef }: ModelNodeProps) {
   const t = useT();
   const ref = React.useRef<HTMLDivElement>(null);
-  useRowMotion(ref, containerRef, { phase, away: awayFrom(-1), delayMs, isReducedMotion });
+  useRowMotion(ref, containerRef, { phase, away: awayFrom(-1), delayMs });
   return (
     <div
       ref={ref}
@@ -524,17 +516,16 @@ interface TargetNodeProps {
   containerRef: React.RefObject<HTMLElement | null>;
   nowMs: number;
   isLatest: boolean;
-  isReducedMotion: boolean;
   sources: IdentitySources;
   washRef: (element: HTMLElement | null) => void;
   haloRef: (element: HTMLElement | null) => void;
   ringRef: (element: HTMLElement | null) => void;
 }
 
-function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, isReducedMotion, sources, washRef, haloRef, ringRef }: TargetNodeProps) {
+function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, sources, washRef, haloRef, ringRef }: TargetNodeProps) {
   const t = useT();
   const ref = React.useRef<HTMLDivElement>(null);
-  useRowMotion(ref, containerRef, { phase, away: awayFrom(1), delayMs, isReducedMotion });
+  useRowMotion(ref, containerRef, { phase, away: awayFrom(1), delayMs });
   const identity = targetIdentity(target.sample, sources);
   return (
     <div
@@ -544,7 +535,7 @@ function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, isR
       data-route-target={target.id}
       data-testid="routing-target"
       data-phase={phase}
-      style={{ '--route-color': target.cooldown ? 'var(--warn)' : 'var(--accent)' } as React.CSSProperties}
+      style={{ '--route-color': 'var(--accent)', '--port-color': 'var(--fg-2)' } as React.CSSProperties}
     >
       <span ref={haloRef} className={styles['halo']} aria-hidden="true" />
       <span ref={washRef} className={clsx(styles['wash'], styles['wash-left'])} aria-hidden="true" />

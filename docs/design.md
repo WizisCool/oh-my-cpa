@@ -643,8 +643,8 @@ Rules:
 ### Categorical series palette
 
 The dashboard's model panels colour a **category**, not a state. A model is whatever upstream name the
-deployment happens to serve, so there is no good/bad axis for a hue to mean - which makes this the one
-place in the app where colour is decoration, and the reason §1's semantic-only rule carries an explicit
+deployment happens to serve, so there is no good/bad axis for a hue to mean - which makes this one of the
+places in the app where colour is decoration, and the reason §1's semantic-only rule carries an explicit
 exception rather than being quietly stretched. See `docs/adr/0006-categorical-series-palette.md`.
 
 The exception is scoped by **role**, not by hue: these six tokens belong to categorical marks. The
@@ -709,6 +709,36 @@ panels print every group's name and the list prints every group's numbers.
    identical or unreadable colours, and do not establish how the palette reads to a person with a
    colour-vision deficiency. See ADR 0006 for why that claim is not made.
 
+### Routing lane palette
+
+The live routing map has a second categorical use of hue, and a stricter one. Each drawn model's lane
+into the gateway carries a `--route-*` slot, and unlike a chart legend there is no swatch key between
+the line and the eye: the lane begins at the row it belongs to and its name sits there. A green, amber
+or red line would therefore read as a verdict on the connection rather than as the model's identity -
+the ambiguity that made the lanes status-coloured in the first place. Every slot stays on the cool side
+of the wheel, and the status hues remain on the node surfaces, where a wash or a ring is unmistakably
+about the request rather than about the line.
+
+| Slot | Dark | Light | Family |
+| --- | --- | --- | --- |
+| `--route-1` | `#3b82f6` | `#2563eb` | blue |
+| `--route-2` | `#8b5cf6` | `#7c3aed` | violet |
+| `--route-3` | `#06b6d4` | `#0891b2` | cyan |
+| `--route-4` | `#ec4899` | `#db2777` | pink |
+| `--route-5` | `#d946ef` | `#c026d3` | fuchsia |
+| `--route-6` | `#94a3b8` | `#475569` | slate |
+
+`scripts/test-chart-marks.ts` asserts for every registered palette that all six routing slots are
+distinct, clear 3:1 against the card, are not one of that palette's `success`/`warn`/`danger` values,
+and stay at least ΔE 25 from their neighbours. They are per-mode constants for the same reason the
+series slots are, and `web/src/index.css` carries the OMC Dark/OMC Light pair as the pre-hydration
+fallback.
+
+A credential's lane is not an identity: it is always the neutral `--fg-2`, and a lane whose credential
+is resting is dashed. Neither a lane nor the dot travelling on it ever takes a status hue; the verdict
+is drawn on the endpoint's surface (a tone-coloured wash and the port's ring) and stated in the row's
+text.
+
 ### Dashboard arrangement
 
 The dashboard is one four-column board of widgets - the six KPI tiles, the two model panels, live
@@ -760,15 +790,15 @@ along its top edge, lifted by an accent glow on the dark page and by a neutral c
 faint accent bloom on the light one, where an accent glow alone turns muddy), on the rows (`--elevated` with a low shadow, and a glowing edge only while lit) and on
 the travelling dot (a glow in its own colour), over a faint dot grid fading to the panel's edges; no
 shadow is ever animated - each glow is an overlay whose opacity alone changes; and colour still
-means something - the models' series colours on their lanes, marks and ports, the accent on the
-gateway, and status colour where something is exceptional.
+means something - the models' routing colours on their lanes, marks and ports, the neutral credential
+lanes, the accent on the gateway, and status colour on a node surface where something is exceptional.
 
 - **The left column is only the model called** - the alias the caller named, else the model - with its
   maker's mark, request count and mean latency. Volume is read from those counts and from the lanes'
   width; the row prints no percentage and draws no share bar. No caller, client or key is drawn: the panel is about
-  where requests go. Each drawn model takes a categorical `--series-*` colour that it keeps for as long
+  where requests go. Each drawn model takes a categorical `--route-*` colour that it keeps for as long
   as it stays on the panel; its port and its lane into the gateway carry it, and the name is always in
-  text beside it.
+  text beside it. The cool routing palette exists so a lane can never be read as a verdict (§2).
 - **The right column is the credential or provider that answered**, named as the request list names
   it, through the same resolver: provider mark, provider, and the masked key or the OAuth account. The
   state column says the one thing that is exceptional - `Rate limited`, `Quota exceeded` or `Cooling
@@ -781,8 +811,10 @@ gateway, and status colour where something is exceptional.
 - **One lane per row.** A model has one lane into the gateway and a credential one lane out of it, the
   lanes meeting the gateway side by side in their rows' order. Lanes per model and credential pair
   tangled into a knot past a handful of each; which model went to which credential is what the
-  travelling requests show, in the model's colour. A credential's lane is neutral, `--warn` and dashed
-  while it rests, `--danger` when every attempt on it failed.
+  travelling requests show, in the model's colour. A credential's lane is always the neutral `--fg-2`,
+  and dashed while that credential rests; a lane never turns `--warn` or `--danger`, because a colour on
+  a line reads as a statement about the connection itself. The row's text and the node's wash carry the
+  verdict.
 - **Rows are ordered by name, never by volume**, so a count overtaking another does not reorder the
   map under the reader. Volume decides only which seven models and seven credentials are drawn; the
   rest are counted in a line below the column, and a resting credential is always drawn. Past four
@@ -798,7 +830,7 @@ gateway, and status colour where something is exceptional.
 - **Light moves with the request, never ahead of it.** A row lights only when the travelling dot
   docks in it, not when its record is read, and settles back over the glow beat; a lane brightens
   behind the dot that crossed it and settles the same way (§7 rule 9). A row that has not been reached
-  by a dot - every row of the first read, and every row under reduced motion - stays at rest.
+  by a dot - every row of the first read - stays at rest.
 - **An empty minute keeps the map's shape**: a dashed placeholder row on each side, joined to the
   gateway by dashed lanes, says where models and credentials will appear, and leaves as the first
   request's rows arrive.
@@ -2047,12 +2079,15 @@ applied and is how a wrong value hid for months), a transition on a layout prope
 keyframe animation with no `prefers-reduced-motion` counterpart, and a hover transitioning colour
 outside `fast`. The exceptions are listed in the checker's `EXCEPTIONS` table with the reason each is
 one, and an exception that stops matching a rule is itself a failure — the list cannot rot into
-things that were once true. Two kinds exist. A `layout` exception waives rule 1 for a disclosure,
+things that were once true. Three kinds exist. A `layout` exception waives rule 1 for a disclosure,
 where a reflow is the point and the alternative is an accordion that snaps open. A `duration`
 exception waives the token requirement for a loop whose period is how long one cycle takes rather
 than a transition between two states: the heatmap's re-read bar, the icon spinner, the generation
 loader, the streaming caret, the loading bar's waiting activity and the first-load placeholders'
 breath. §7 handles those by freezing or removing them under reduced motion rather than by shortening them.
+A `reduced` exception waives the reduced-motion counterpart for one selector whose motion is the
+reading rather than decoration: the live routing map's lane flow is the only one, and ADR 0102 records
+why the whole trip plays under the preference.
 `scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
@@ -2145,10 +2180,12 @@ Hard rules:
    the dot that crossed it and settles the same way. A node lit again while it still glows rises from
    the light it has, so a second request never blinks it dark first. The request waits in the
    credential for a beat scaled from the attempt's real latency (120-480ms); then a wash in the
-   answer's tone spreads across the credential from its port and the dot emerges `--success` and flies
-   back through the gateway home to the model, or `--danger`, back to the gateway and on to the next
-   credential CPA tried. While a dot is on a lane or waits at its end, the lane's dashes flow in the
-   direction it travels, and while any dot is on the map the gateway's glow and rails brighten.
+   answer's tone spreads across the credential from its port, and the dot - still in the model's
+   colour - flies back through the gateway home to the model, or, on a refusal, back to the gateway and
+   on to the next credential CPA tried. A lane and the flow on it never take `--success`, `--warn` or
+   `--danger`: the verdict is a surface on the node, not a property of the connection (see §2's routing
+   lane palette). While a dot is on a lane or waits at its end, the lane's dashes flow in the direction
+   it travels, and while any dot is on the map the gateway's glow and rails brighten.
    Rows arrive drifting a few pixels in from their own edge of the map as they fade in
    (`MOTION_ROUTE_ENTER`), the rows of the first paint one after another; they leave the same way,
    quicker and accelerating (`MOTION_ROUTE_EXIT`), and only then do the rows around them close the gap,
@@ -2165,9 +2202,12 @@ Hard rules:
    finished while the page was hidden - the live stream is closed then, so the read on return carries
    them, and they are counted on the rows instead. Hiding the page ends every trip on the map: a
    hidden page runs no animation frames, so a trip left running would complete every missed hop in a
-   frame each on return and replay the time away at speed. Under reduced motion the readings
-   update, rows appear and leave without travel, and no dot, flow or glow is drawn. Counts never
-   animate.
+   frame each on return and replay the time away at speed. The trip is the one motion the console starts
+   on its own that plays in full under `prefers-reduced-motion`: a lane's flow, a dot's travel and a
+   row's entrance are the reading itself, and Windows' "Animation effects" switch - which many readers
+   turn off for speed rather than for vestibular reasons - is reported by Chromium as that query. The
+   map therefore keeps its animation for every reader; ADR 0102 records the scoped exception and the
+   trade-off. Counts never animate.
 
    The map learns of a request when CPA stores its record, which is when it finished: CPA reports
    nothing about a request while it runs. The trip therefore starts as soon as the record is read and

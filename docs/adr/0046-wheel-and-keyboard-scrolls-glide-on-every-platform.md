@@ -1,6 +1,7 @@
 # ADR 0046: Wheel and keyboard scrolls glide on every platform
 
-- Status: Accepted
+- Status: Accepted; ADR 0102 makes the live routing map's trip a second scoped exception to
+  `prefers-reduced-motion`.
 - Date: 2026-10-01
 
 ## Context

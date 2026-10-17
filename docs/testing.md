@@ -737,7 +737,9 @@ sign-in bar's actual opacity fade. Assertions observe state or animation frames,
 Existing page scenarios retain their coverage of silent polls and placeholder geometry.
 
 The motion checker self-test pins the local waiting-activity duration exception in both
-directions, including its reduced-motion requirement and rejection of unrelated raw durations.
+directions, including its reduced-motion requirement and rejection of unrelated raw durations. It also
+pins the routing map's `reduced` waiver: the named selector passes without a counterpart, another
+animation in the same file still fails, and an unused waiver fails.
 Placeholder breathing's existing exception remains independently pinned.
 
 ## Production loading boundaries and bundle reports

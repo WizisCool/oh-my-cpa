@@ -62,7 +62,8 @@ assert.equal(lightAccent, '#005d8f', 'the light theme uses the legible step');
 
 // ── categorical series palette ─────────────────────────────────────────────
 //
-// The model panels colour a *category*, which is the one decorative use of hue in the app, so the two
+// The model panels colour a *category*, and so does the live routing map's lane palette; these are the
+// app's decorative uses of hue, so the two
 // things worth pinning are that the families are distinct enough to tell apart and that they cannot be
 // mistaken for a verdict. Both are measured, and both are asserted against the palette rather than
 // against literals so a token change that breaks either fails here.
@@ -136,6 +137,46 @@ for (const preset of RESOLVED_PALETTES) {
   }
 }
 
+// ── routing lane palette ───────────────────────────────────────────────────
+//
+// The live routing map draws a lane per model in a categorical hue, but unlike the chart legend there
+// is no legend between the line and the eye: the row's name is its only label. A green, amber or red
+// lane therefore reads as a verdict on the connection, which is exactly the ambiguity the palette
+// exists to remove. The rule is asserted, not just documented, so a future palette edit cannot quietly
+// reintroduce a status hue.
+
+const STATUS_TOKENS = ['success', 'warn', 'danger'] as const;
+
+for (const preset of RESOLVED_PALETTES) {
+  const { palette: resolved } = preset;
+  assert.equal(resolved.route.length, 6, `${preset.id} defines exactly six routing slots`);
+  assert.equal(new Set(resolved.route).size, resolved.route.length, `${preset.id}: every routing slot is its own colour`);
+  const card = resolved.surface;
+
+  for (const [index, colour] of resolved.route.entries()) {
+    assert.ok(
+      contrast(colour, card) >= 3,
+      `${preset.id}: routing ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
+    );
+    // The status hues are semantic in every palette; a lane may not be drawn in one.
+    for (const tone of STATUS_TOKENS) {
+      assert.notEqual(
+        colour.toLowerCase(),
+        resolved[tone].toLowerCase(),
+        `${preset.id}: routing ${index} must not be the ${tone} hue`,
+      );
+    }
+  }
+
+  for (let index = 0; index < resolved.route.length - 1; index += 1) {
+    const distance = labDistance(resolved.route[index], resolved.route[index + 1]);
+    assert.ok(
+      distance >= 25,
+      `${preset.id}: routing ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart`,
+    );
+  }
+}
+
 // ── CSS and TypeScript token synchronization ──────────────────────────────
 //
 // The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, seventeen derived) and
@@ -163,6 +204,24 @@ for (let index = 0; index < SERIES_SLOTS; index += 1) {
     lightMatch[1].toLowerCase(),
     palette.light.series[index].toLowerCase(),
     `light ${tokenName} in index.css (${lightMatch[1]}) matches themeConfig (${palette.light.series[index]})`,
+  );
+}
+
+for (let index = 0; index < palette.dark.route.length; index += 1) {
+  const tokenName = `--route-${index + 1}`;
+  const darkMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(darkRootBlock);
+  const lightMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(lightRootBlock);
+  assert.ok(darkMatch, `web/src/index.css defines ${tokenName} in dark mode`);
+  assert.ok(lightMatch, `web/src/index.css defines ${tokenName} in light mode`);
+  assert.equal(
+    darkMatch[1].toLowerCase(),
+    palette.dark.route[index].toLowerCase(),
+    `dark ${tokenName} in index.css (${darkMatch[1]}) matches the palette (${palette.dark.route[index]})`,
+  );
+  assert.equal(
+    lightMatch[1].toLowerCase(),
+    palette.light.route[index].toLowerCase(),
+    `light ${tokenName} in index.css (${lightMatch[1]}) matches the palette (${palette.light.route[index]})`,
   );
 }
 
@@ -206,6 +265,10 @@ for (const preset of RESOLVED_PALETTES) {
   for (let index = 0; index < SERIES_SLOTS; index += 1) {
     assert.equal(typeof css[`--series-${index + 1}`], 'string', `${preset.id} exports series ${index + 1}`);
     assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);
+  }
+  for (let index = 0; index < preset.palette.route.length; index += 1) {
+    assert.equal(typeof css[`--route-${index + 1}`], 'string', `${preset.id} exports route ${index + 1}`);
+    assert.equal(css[`--route-${index + 1}`], preset.palette.route[index]);
   }
 }
 

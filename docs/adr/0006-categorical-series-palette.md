@@ -7,6 +7,11 @@
   `derivePalette`. **Every reference to
   `themeConfig.ts` in the Decision and Consequences below is historical** - that file is now only the Ant
   Design projection. The decision itself is unchanged and this ADR is still the record of it.
+- Companion palette (2026-10-17): the live routing map's lanes are a second categorical use of hue.
+  They take their own cool-only `--route-*` slots rather than the series slots, because a lane has no
+  legend beside it and a status-coloured line would read as a verdict on the connection. The role
+  separation in this ADR still holds: `success`/`warn`/`danger` remain operational, and the node
+  surfaces - not the lines - carry a request's outcome. See `docs/design.md` §2 and ADR 0102.
 
 ## Context
 
