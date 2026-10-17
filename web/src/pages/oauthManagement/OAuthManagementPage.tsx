@@ -372,13 +372,15 @@ export const OAuthManagementPage: React.FC = () => {
   }, []);
   const actions = useOAuthWorkspaceActions(records, selectedKeys, setSelectedKeys, onTargetGone);
 
+  // The two polled reads are invalidated rather than refetched: a refetch of a polled query is
+  // indistinguishable from its poll, so it would not raise the loading bar the reader asked for.
   const reloadWorkspace = React.useCallback(() => {
     void Promise.all([
-      filesQuery.refetch(),
-      quotaQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['management-auth-files'], exact: true }),
+      queryClient.invalidateQueries({ queryKey: ['management-quota'], exact: true }),
       pluginsQuery.refetch(),
     ]);
-  }, [filesQuery, pluginsQuery, quotaQuery]);
+  }, [pluginsQuery, queryClient]);
 
   const totalCount = records.length;
   const disabledCount = records.filter((record) => isAuthFileDisabled(record.file)).length;

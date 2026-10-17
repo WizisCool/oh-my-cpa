@@ -129,22 +129,37 @@ test('many settled tasks cannot fill the bar while the final task is pending', (
   assert.equal(finished, 1);
 });
 
-function fetchingQuery(queryHash: string, state: Partial<ProgressQuery['state']>, meta?: ProgressQuery['meta']): ProgressQuery {
-  return { queryHash, meta, state: { status: 'pending', fetchStatus: 'fetching', data: undefined, isInvalidated: false, ...state } };
+function fetchingQuery(
+  queryHash: string,
+  state: Partial<ProgressQuery['state']>,
+  { meta, refetchInterval }: { meta?: ProgressQuery['meta']; refetchInterval?: ProgressQuery['observers'][number]['options']['refetchInterval'] } = {},
+): ProgressQuery {
+  return {
+    queryHash,
+    meta,
+    state: { status: 'pending', fetchStatus: 'fetching', data: undefined, isInvalidated: false, ...state },
+    observers: [{ options: { refetchInterval } }],
+  };
 }
 
-test('the query source counts reads with nothing on screen and invalidated reads, never a background re-read', () => {
+test('the query source counts reads the reader waits on, never a poll re-reading what it shows', () => {
+  const shown = { status: 'success', data: { ok: true } } as const;
   const queries = [
-    fetchingQuery('first-load', {}),
-    fetchingQuery('invalidated', { status: 'success', data: { rows: [] }, isInvalidated: true }),
-    fetchingQuery('retry-with-nothing-shown', { status: 'error', isInvalidated: true }),
-    // An interval poll, reconnect or stale remount of data already shown: no opt-in needed.
-    fetchingQuery('poll', { status: 'success', data: { ok: true } }),
+    fetchingQuery('first-load', {}, { refetchInterval: 15_000 }),
+    fetchingQuery('retry-with-nothing-shown', { status: 'error', isInvalidated: true }, { refetchInterval: 15_000 }),
+    fetchingQuery('invalidated-poll', { ...shown, isInvalidated: true }, { refetchInterval: 15_000 }),
+    // A refresh button's refetch() of a query nobody polls.
+    fetchingQuery('manual-refetch', shown),
+    fetchingQuery('poll', shown, { refetchInterval: 15_000 }),
+    fetchingQuery('function-poll', shown, { refetchInterval: () => 2_500 }),
     // A failed poll marks its query invalidated; the poll after it is still background.
-    fetchingQuery('poll-after-failure', { status: 'error', data: { ok: true }, isInvalidated: true }),
-    fetchingQuery('silent-new-key', {}, { silent: true }),
+    fetchingQuery('poll-after-failure', { status: 'error', data: { ok: true }, isInvalidated: true }, { refetchInterval: 15_000 }),
+    fetchingQuery('silent-new-key', {}, { meta: { silent: true } }),
     fetchingQuery('idle', { fetchStatus: 'idle' }),
   ];
   const source = queryProgressSource({ getAll: () => queries, subscribe: () => () => {} });
-  assert.deepEqual([...source.read()].sort(), ['query:first-load', 'query:invalidated', 'query:retry-with-nothing-shown']);
+  assert.deepEqual(
+    [...source.read()].sort(),
+    ['query:first-load', 'query:invalidated-poll', 'query:manual-refetch', 'query:retry-with-nothing-shown'],
+  );
 });
