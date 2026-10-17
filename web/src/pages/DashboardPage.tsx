@@ -555,7 +555,14 @@ export const DashboardPage: React.FC = () => {
       // The window the tiles describe, read at model granularity - inside the window picker's reach,
       // unlike the activity grid, which owns a fixed fifty-three weeks.
       case 'model_trend':
-        return <ModelTrendPanel query={query} range={range} enabled={rangeReady} />;
+        return (
+          <ModelTrendPanel
+            query={query}
+            range={range}
+            enabled={rangeReady}
+            hasViewToggle={layout.some((item) => item.id === 'model_usage' && item.hidden)}
+          />
+        );
       case 'model_usage':
         return <ModelUsagePanel query={query} range={range} enabled={rangeReady} />;
       case 'token_activity':

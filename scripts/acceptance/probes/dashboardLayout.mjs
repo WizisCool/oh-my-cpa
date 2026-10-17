@@ -68,6 +68,17 @@ export async function dashboardLayout({ base, page, check }) {
   check('a hidden widget leaves the board and waits in the tray',
     await page.locator('[data-widget-restore="cost"]').count() === 1);
 
+  // The usage card carries the model grouping toggle; hiding it moves the toggle to the trend card,
+  // so the trend's grouping stays reachable.
+  const trendToggles = () => cell('model_trend').locator('.model-view-toggle').count();
+  const togglesWithUsage = await trendToggles();
+  await page.locator('[data-widget-hide="model_usage"]').click();
+  await until(async () => (await cell('model_usage').count()) === 0, { label: 'the usage card to leave the board' });
+  await until(async () => (await trendToggles()) === 1, { label: 'the grouping toggle on the trend card' });
+  check('the trend card takes the grouping toggle only while the usage card is hidden', togglesWithUsage === 0);
+  await page.locator('[data-widget-restore="model_usage"]').click();
+  await until(async () => (await trendToggles()) === 0, { label: 'the grouping toggle back on the usage card' });
+
   const quarter = await widthOf('tpm');
   await cell('rpm').locator('.ant-segmented-item', { hasText: '1/2' }).click();
   await until(async () => (await cell('rpm').getAttribute('data-span')) === '2', { label: 'the RPM tile to widen' });

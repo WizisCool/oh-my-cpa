@@ -120,7 +120,36 @@ const ModelPanelBody: React.FC<{ models: ReturnType<typeof useDashboardModels>; 
   );
 };
 
-export const ModelTrendPanel: React.FC<ModelUsagePanelsProps> = (props) => {
+/**
+ * The grouping toggle. It governs both cards and normally sits on the usage card, where the
+ * difference between a call point and an upstream model is read; the trend card carries it instead
+ * when the usage card is hidden, so the trend's grouping never becomes unreachable. Both copies write
+ * the one stored preference, so they cannot disagree.
+ */
+const ModelViewToggle: React.FC = () => {
+  const t = useT();
+  const { modelView, setModelView } = useTokenDisplayStyle();
+  return (
+    <Segmented
+      className="model-view-toggle"
+      size="small"
+      value={modelView}
+      options={[
+        { value: 'call', label: t('dash.models.view_call') },
+        { value: 'model', label: t('dash.models.view_model') },
+      ]}
+      onChange={(next) => setModelView(next as 'call' | 'model')}
+      aria-label={t('dash.models.view_toggle_label')}
+    />
+  );
+};
+
+export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
+  /** True when the usage card, which normally carries the grouping toggle, is not on the board. */
+  hasViewToggle?: boolean;
+}
+
+export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle = false, ...props }) => {
   const t = useT();
   const { theme } = useTheme();
   const models = useDashboardModels(props);
@@ -132,6 +161,7 @@ export const ModelTrendPanel: React.FC<ModelUsagePanelsProps> = (props) => {
     <Panel
       className="dashboard-tile model-trend-card"
       title={<span className="tile-label">{t('dash.models.trend_title')}</span>}
+      extra={hasViewToggle ? <ModelViewToggle /> : undefined}
     >
       <ModelPanelBody models={models}>
         <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} />
@@ -150,7 +180,7 @@ export const ModelTrendPanel: React.FC<ModelUsagePanelsProps> = (props) => {
 export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const t = useT();
   const { theme } = useTheme();
-  const { modelView, setModelView, style: tokenStyle } = useTokenDisplayStyle();
+  const { modelView, style: tokenStyle } = useTokenDisplayStyle();
   const openPriceEditor = useOpenPriceEditor();
   const models = useDashboardModels(props);
   const foldedLabel = t('dash.models.folded');
@@ -158,27 +188,11 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const groups = models.data?.models ?? [];
   const total = models.data?.total_tokens ?? 0;
 
-  // The grouping toggle governs both cards, and lives on this one because the ranked list is where
-  // the difference between a call point and an upstream model is read.
-  const viewToggle = (
-    <Segmented
-      className="model-view-toggle"
-      size="small"
-      value={modelView}
-      options={[
-        { value: 'call', label: t('dash.models.view_call') },
-        { value: 'model', label: t('dash.models.view_model') },
-      ]}
-      onChange={(next) => setModelView(next as 'call' | 'model')}
-      aria-label={t('dash.models.view_toggle_label')}
-    />
-  );
-
   return (
     <Panel
       className="dashboard-tile model-usage-card"
       title={<span className="tile-label">{t('dash.models.usage_title')}</span>}
-      extra={viewToggle}
+      extra={<ModelViewToggle />}
     >
       <ModelPanelBody models={models}>
         {groups.length === 0 ? (
