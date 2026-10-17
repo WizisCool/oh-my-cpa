@@ -69,8 +69,10 @@ export async function sidebarNavCustomization({ base, page, check }) {
   const railGroups = () => page.locator('.app-menu .ant-menu-item-group-title').allInnerTexts();
   const hasGroup = (headings, name) => headings.some((heading) => heading.trim().toUpperCase() === name.toUpperCase());
   // The panel addresses each switch by the route it governs, so a row cannot be confused with the
-  // rail entry it changes.
+  // rail entry it changes; the row around a locked switch is what an operator presses, because the
+  // switch itself refuses the click.
   const rowToggle = (route) => page.locator('[data-nav-toggle=' + JSON.stringify(route) + '] button');
+  const rowOf = (route) => panel().locator('.settings-toggle-row').filter({ has: rowToggle(route) });
   const showAll = () => page.getByRole('button', { name: 'Show all' });
   const observeRoutes = ['/usage/events', '/pricing', '/logs', '/audit'];
   const hideObserve = async () => {
@@ -137,11 +139,17 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('the entry that owns the rail is shown switched on and inert',
     await rowToggle('/omc-settings').isDisabled()
       && (await rowToggle('/omc-settings').getAttribute('aria-checked')) === 'true');
+  // A disabled switch is inert in the browser rather than through a handler, so the press happens on
+  // the row around it. It is a plain click on purpose: a forced one skips the stability wait and can
+  // dispatch at a point the dialog's opening animation has already moved past, landing on the mask
+  // behind it - which closes the panel and takes every claim after this one with it.
   const writesBeforeLockedClick = writes.length;
-  await rowToggle('/omc-settings').click({ force: true });
+  await rowOf('/omc-settings').locator('.settings-toggle-title').click();
+  await until(async () => (await panel().isVisible()), { label: 'the panel to stay open' });
   await until(async () => (await railEntry('/omc-settings').count()) === 1, { label: 'the settings entry to stay in the rail' });
-  check('clicking the locked row leaves the rail and the stored set unchanged',
-    await railEntry('/omc-settings').count() === 1
+  check('clicking the locked row leaves the rail, the panel and the stored set unchanged',
+    await panel().isVisible()
+      && await railEntry('/omc-settings').count() === 1
       && writes.slice(writesBeforeLockedClick).filter((write) => String(write.body).includes('/omc-settings')).length === 0,
     writes.slice(writesBeforeLockedClick).map((write) => write.body).join(' '));
 
