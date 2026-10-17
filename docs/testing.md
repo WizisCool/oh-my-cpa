@@ -669,7 +669,8 @@ backup and secret restoration remain covered by their existing Go tests.
 The same suite owns the one setting whose absence is a default and whose zero is a
 setting: `upstream.claude.session-date-pin-days` reads CPA's 7 days when omitted, so
 an untouched gateway is never written, while an explicit `0` is saved at its own
-path and read back as `0` rather than as the default. The field arrived after the
+path and read back as `0` rather than as the default, and clearing the number box
+restores the omitted key instead of storing a zero. The field arrived after the
 Claude section's relocation, so the suite also pins that the pre-relocation
 spelling is never written. The cross-stack acceptance saves that `0` and reloads,
 which is the only check that catches a readback falling back to the default.

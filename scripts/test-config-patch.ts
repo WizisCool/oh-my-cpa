@@ -341,3 +341,25 @@ test('a gateway with no Claude settings at all gets the canonical upstream path,
   ]);
   assert.equal(draft.hasIn(['oauth']), false, 'the pre-relocation spelling is never written');
 });
+
+test('clearing the Claude session date pin restores the omitted key instead of storing a zero', () => {
+  const pinDays = field('claudeSessionDatePinDays');
+  const server = parseDocument(CLAUDE_SESSION_YAML);
+  const draft = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(draft, server, pinDays, null);
+  assert.equal(draft.toString(), server.toString(), 'a cleared box leaves the key absent');
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+
+  // An explicit 0 is a setting, so clearing it removes the override the only way a number
+  // can state its default: CPA drops a written 7 as its known default on the way to disk.
+  const configuredYaml = CLAUDE_SESSION_YAML.replace(
+    'tool-search: false # unrelated',
+    "tool-search: false\n        session-date-pin-days: 0",
+  );
+  const configured = parseDocument(configuredYaml);
+  const cleared = parseDocument(configuredYaml);
+  updateFieldWithBaseline(cleared, configured, pinDays, null);
+  assert.deepEqual(computeConfigChanges(configured, cleared), [
+    { path: ['upstream', 'claude', 'session-date-pin-days'], value: 7 },
+  ]);
+});

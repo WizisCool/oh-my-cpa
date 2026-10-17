@@ -120,7 +120,10 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
             max={field.max}
             disabled={disabled}
             value={typeof val === 'number' ? val : Number(val) || 0}
-            onChange={(num) => updateFieldInDoc(field, num ?? 0)}
+            // A cleared box arrives as null. The draft layer reads that as the field's
+            // default, so an omitted key stays omitted; coercing it to 0 here would store
+            // a setting wherever 0 means something.
+            onChange={(num) => updateFieldInDoc(field, num)}
           />
           {field.unitKey && (
             <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
