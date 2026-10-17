@@ -180,6 +180,7 @@ export function useUsageEventSync({
     facetWindow,
     facetRevision,
     refresh: refresh + liveRevision,
+    liveRevision,
     liveState,
     notifySettled,
     handleManualRefresh,

@@ -127,6 +127,7 @@ export const UsageEventsPage: React.FC = () => {
     facetWindow,
     facetRevision,
     refresh,
+    liveRevision,
     liveState,
     notifySettled,
     handleManualRefresh,
@@ -218,6 +219,19 @@ export const UsageEventsPage: React.FC = () => {
     cursor,
     since: liveEdge.heldBoundaryID,
   });
+  // A live signal moves the list to a new key, so its read has no data yet and would count as a
+  // load. Only the read the signal alone caused is silent: the same key change that also carries a
+  // new filter, page or manual sync is one the operator asked for.
+  const readCauseRef = React.useRef({ queryString, refresh, liveRevision, isLiveRead: false });
+  if (readCauseRef.current.queryString !== queryString || readCauseRef.current.refresh !== refresh) {
+    const previous = readCauseRef.current;
+    readCauseRef.current = {
+      queryString,
+      refresh,
+      liveRevision,
+      isLiveRead: previous.queryString === queryString && refresh - previous.refresh === liveRevision - previous.liveRevision,
+    };
+  }
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
     queryFn: () => api.getUsageEvents(queryString),
@@ -228,6 +242,7 @@ export const UsageEventsPage: React.FC = () => {
     // keeping it would hold a page per signal for the default five minutes.
     // keepPreviousData works from the observer's last result, not the old entry.
     gcTime: 0,
+    meta: { silent: readCauseRef.current.isLiveRead },
   });
   // Assigned after the read it describes, so the poll's interval always observes
   // the latest value without naming it in its dependency list.

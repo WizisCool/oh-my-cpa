@@ -13,7 +13,7 @@ import {
 } from '../web/src/utils/loadProgress.ts';
 import { beginProgressTask, progressTasks, type ProgressSource } from '../web/src/utils/progressTasks.ts';
 
-import { mergeProgressSources } from '../web/src/utils/progressSources.ts';
+import { mergeProgressSources, queryProgressSource, type ProgressQuery } from '../web/src/utils/progressSources.ts';
 
 const ids = (...values: string[]) => new Set(values);
 
@@ -127,4 +127,24 @@ test('many settled tasks cannot fill the bar while the final task is pending', (
   const complete = reconcileProgressBatch(pending, ids(), 10001)!;
   const finished = advanceDrawnProgress(drawn, estimateProgress(complete, 10001), 10000);
   assert.equal(finished, 1);
+});
+
+function fetchingQuery(queryHash: string, state: Partial<ProgressQuery['state']>, meta?: ProgressQuery['meta']): ProgressQuery {
+  return { queryHash, meta, state: { status: 'pending', fetchStatus: 'fetching', data: undefined, isInvalidated: false, ...state } };
+}
+
+test('the query source counts reads with nothing on screen and invalidated reads, never a background re-read', () => {
+  const queries = [
+    fetchingQuery('first-load', {}),
+    fetchingQuery('invalidated', { status: 'success', data: { rows: [] }, isInvalidated: true }),
+    fetchingQuery('retry-with-nothing-shown', { status: 'error', isInvalidated: true }),
+    // An interval poll, reconnect or stale remount of data already shown: no opt-in needed.
+    fetchingQuery('poll', { status: 'success', data: { ok: true } }),
+    // A failed poll marks its query invalidated; the poll after it is still background.
+    fetchingQuery('poll-after-failure', { status: 'error', data: { ok: true }, isInvalidated: true }),
+    fetchingQuery('silent-new-key', {}, { silent: true }),
+    fetchingQuery('idle', { fetchStatus: 'idle' }),
+  ];
+  const source = queryProgressSource({ getAll: () => queries, subscribe: () => () => {} });
+  assert.deepEqual([...source.read()].sort(), ['query:first-load', 'query:invalidated', 'query:retry-with-nothing-shown']);
 });
