@@ -298,6 +298,17 @@ export function arrivedRoutes(routes: readonly RoutingRoute[], seenId: number | 
   return routes.filter((route) => route.lastId > seenId).sort((left, right) => left.lastId - right.lastId);
 }
 
+/**
+ * The routes whose last attempt finished at or after `sinceMs` (server clock).
+ *
+ * A request that finished while the reader could not see the page is not "now", however late the
+ * read that brings it lands: the live stream is closed while the tab is hidden, so the read on return
+ * carries everything that ran in the meantime, and replaying it would play the time away at speed.
+ */
+export function routesFinishedSince(routes: readonly RoutingRoute[], sinceMs: number): RoutingRoute[] {
+  return routes.filter((route) => route.attempts.some((attempt) => finishedAt(attempt.event) >= sinceMs));
+}
+
 export type PresencePhase = 'entering' | 'present' | 'exiting';
 
 export interface Presence<T> {

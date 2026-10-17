@@ -20,6 +20,7 @@ import type { UsageEvent } from '../../../types/usageEvents';
 import {
   allocateSlots,
   arrivedRoutes,
+  routesFinishedSince,
   buildRoutingModel,
   groupRoutes,
   liveRecords,
@@ -50,6 +51,22 @@ interface RoutingRead {
   after?: number;
   /** Where the browser's clock stood against the server's when the answer arrived. */
   skewMs: number;
+}
+
+/**
+ * When the reader last started looking at the page, on the browser's clock: Infinity while it is
+ * hidden, and zero for a page that opened visible, so every request before the first read counts.
+ */
+function useShownSince(): React.MutableRefObject<number> {
+  const shownSinceRef = React.useRef(typeof document !== 'undefined' && document.visibilityState === 'hidden' ? Infinity : 0);
+  React.useEffect(() => {
+    const onChange = () => {
+      shownSinceRef.current = document.visibilityState === 'visible' ? Date.now() : Infinity;
+    };
+    document.addEventListener('visibilitychange', onChange);
+    return () => document.removeEventListener('visibilitychange', onChange);
+  }, []);
+  return shownSinceRef;
 }
 
 interface RoutingWindow {
@@ -88,6 +105,7 @@ export function RoutingPanel() {
 
   const isFetchingRef = React.useRef(false);
   const afterRef = React.useRef<number | undefined>(undefined);
+  const shownSinceRef = useShownSince();
   const { revision, liveState, notifySettled } = useLiveRevision({
     isEnabled: true,
     fallbackPollMs: EVENT_AUTO_REFRESH_MS,
@@ -129,10 +147,15 @@ export function RoutingPanel() {
     const next: RoutingWindow = { records, cooldowns: response.cooldowns, windowMs: response.window_ms, skewMs };
     rollingRef.current = next;
     setRolling(next);
-    // The first read replays nothing: opening the dashboard is not when those requests ran.
+    // The first read replays nothing: opening the dashboard is not when those requests ran. Nor does
+    // a request that finished while the page was hidden (see `routesFinishedSince`); the rows count it.
     if (previous && response.records.length > 0) {
       const seen = newestRecordIdOf(previous.records) ?? 0;
-      const fresh = arrivedRoutes(groupRoutes(liveRecords(records, response.as_of_ms, response.window_ms)), seen);
+      const shownSinceServerMs = shownSinceRef.current + skewMs;
+      const fresh = routesFinishedSince(
+        arrivedRoutes(groupRoutes(liveRecords(records, response.as_of_ms, response.window_ms)), seen),
+        shownSinceServerMs,
+      );
       if (fresh.length > 0) setArrivals((last) => ({ id: last.id + 1, routes: fresh }));
     }
   }, [read]);
@@ -191,7 +214,7 @@ export function RoutingPanel() {
   const isLive = liveState === 'live';
 
   return (
-    <Panel className={clsx('dashboard-tile is-wide', styles['panel'])} data-testid="dashboard-routing">
+    <Panel className={clsx('dashboard-tile', styles['panel'])} data-testid="dashboard-routing">
       <div className={styles['head']}>
         <span className={styles['title']}>
           <span className="tile-label">{t('routing.title')}</span>

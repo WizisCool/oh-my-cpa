@@ -117,20 +117,25 @@ export function createPacketPlayer(stage: PacketStage) {
   const flights = new Set<Flight>();
   const animations = new Set<Animation>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  /** Pauses inside a trip, with the resolver that lets a halt end the trip instead of stranding it. */
+  const waits = new Map<ReturnType<typeof setTimeout>, () => void>();
   const packets = new Set<Packet>();
   const lit = new Map<string, number>();
   let frame = 0;
   let inFlight = 0;
   let isDisposed = false;
+  /** Bumped by every halt: a trip started before it ends at its next step rather than resuming. */
+  let generation = 0;
+  const isCurrent = (trip: number) => !isDisposed && trip === generation;
 
   const track = (animation: Animation): Promise<void> => {
     animations.add(animation);
-    // A cancelled animation rejects; disposal is the only canceller.
+    // A cancelled animation rejects; a halt is the only canceller.
     return animation.finished.then(() => { animations.delete(animation); }, () => { animations.delete(animation); });
   };
   const wait = (ms: number) => new Promise<void>((resolve) => {
-    const timer = setTimeout(() => { timers.delete(timer); resolve(); }, ms);
-    timers.add(timer);
+    const timer = setTimeout(() => { waits.delete(timer); resolve(); }, ms);
+    waits.set(timer, resolve);
   });
 
   /** A lane flows while anything travels it or waits at its end, in the direction of travel. */
@@ -238,8 +243,8 @@ export function createPacketPlayer(stage: PacketStage) {
   };
 
   /** Carries a packet along one lane, forwards or back; false when the lane is not drawn. */
-  const fly = (packet: Packet, pathKey: string, color: string, isBack: boolean, durationMs: number): Promise<boolean> => {
-    if (isDisposed || !stage.path(pathKey)) return Promise.resolve(false);
+  const fly = (trip: number, packet: Packet, pathKey: string, color: string, isBack: boolean, durationMs: number): Promise<boolean> => {
+    if (!isCurrent(trip) || !stage.path(pathKey)) return Promise.resolve(false);
     packet.dot.style.setProperty('--packet-color', color);
     light(pathKey, color, isBack);
     return new Promise<boolean>((resolve) => {
@@ -283,6 +288,7 @@ export function createPacketPlayer(stage: PacketStage) {
 
 
   const replay = async (route: RoutingRoute) => {
+    const trip = generation;
     const packet = launch();
     if (!packet) return;
     inFlight++;
@@ -291,26 +297,27 @@ export function createPacketPlayer(stage: PacketStage) {
       const color = stage.color(route.modelId);
       const home = laneKey(route.modelId);
       acknowledge(route.modelId, 'request');
-      if (!(await fly(packet, home, color, false, LANE_HOP_MS))) return;
+      if (!(await fly(trip, packet, home, color, false, LANE_HOP_MS))) return;
       acknowledge(GATEWAY_NODE, 'request');
 
       for (let index = 0; index < route.attempts.length; index++) {
         const attempt = route.attempts[index];
         const edge = edgeKey(attempt.targetId);
         // A credential past the map's limit has no lane; the request ends at the gateway.
-        if (!(await fly(packet, edge, color, false, EDGE_HOP_MS))) return;
+        if (!(await fly(trip, packet, edge, color, false, EDGE_HOP_MS))) return;
         // The credential lights as the request docks, and washes in the answer's tone when it answers.
         acknowledge(attempt.targetId, 'request', false);
         await hold(edge, color, holdFor(attempt.event.latency_ms));
-        if (isDisposed) return;
+        if (!isCurrent(trip)) return;
         const isLast = index === route.attempts.length - 1;
         if (attempt.event.failed) {
           packet.dot.style.setProperty('--packet-color', TONE_COLORS.failure);
           acknowledge(attempt.targetId, 'failure');
           await wait(REFUSAL_PAUSE_MS);
+          if (!isCurrent(trip)) return;
           if (!isLast) {
             // Refused: back to the gateway, which sends it on to the next credential.
-            if (!(await fly(packet, edge, TONE_COLORS.failure, true, REFUSAL_HOP_MS))) return;
+            if (!(await fly(trip, packet, edge, TONE_COLORS.failure, true, REFUSAL_HOP_MS))) return;
             acknowledge(GATEWAY_NODE, 'failure');
             packet.dot.style.setProperty('--packet-color', color);
             continue;
@@ -321,29 +328,65 @@ export function createPacketPlayer(stage: PacketStage) {
         }
         // The answer, or the last refusal, goes home the way it came.
         const tone = attempt.event.failed ? 'failure' : 'success';
-        if (!(await fly(packet, edge, TONE_COLORS[tone], true, EDGE_HOP_MS))) return;
+        if (!(await fly(trip, packet, edge, TONE_COLORS[tone], true, EDGE_HOP_MS))) return;
         acknowledge(GATEWAY_NODE, tone);
-        if (!(await fly(packet, home, TONE_COLORS[tone], true, LANE_HOP_MS))) return;
+        if (!(await fly(trip, packet, home, TONE_COLORS[tone], true, LANE_HOP_MS))) return;
         acknowledge(route.modelId, tone);
         break;
       }
     } finally {
       inFlight--;
       setBusy();
-      if (!isDisposed) land(packet);
+      land(packet);
     }
   };
+
+  /**
+   * Ends every trip and clears the map back to rest, without retiring the player.
+   *
+   * A hidden page runs no animation frames and throttles its timers, so a trip left running there
+   * does not pause: its clock keeps going, and on return every hop it missed would complete in one
+   * frame each - the map would replay the whole time away at speed. Nothing on the map is worth
+   * resuming, because what a trip shows is "this is happening now".
+   */
+  const halt = () => {
+    generation++;
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    for (const flight of flights) flight.resolve(false);
+    flights.clear();
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+    for (const [timer, resolve] of waits) {
+      clearTimeout(timer);
+      resolve();
+    }
+    waits.clear();
+    for (const animation of animations) animation.cancel();
+    animations.clear();
+    for (const packet of packets) packet.holder.remove();
+    packets.clear();
+    for (const key of lit.keys()) stage.flow(key)?.classList.remove(stage.classNames.flowOn, stage.classNames.flowBack);
+    lit.clear();
+    stage.gateway()?.classList.remove(stage.classNames.gatewayBusy);
+  };
+  const isPageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  const onVisibilityChange = () => {
+    if (isPageHidden()) halt();
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibilityChange);
 
   return {
     /** Replays routes oldest first; a read with more than the cap replays its newest. */
     play(routes: readonly RoutingRoute[]) {
-      if (isDisposed) return;
+      // Nobody is watching a hidden page, and the trip could not run there anyway.
+      if (isDisposed || isPageHidden()) return;
       routes.slice(-MAX_REPLAYED_ROUTES).forEach((route, index) => {
         // Even the first starts on a timer: a model that arrived with this read gets
         // its row and lane in the render after the one that delivered the read.
         const timer = setTimeout(() => {
           timers.delete(timer);
-          if (isDisposed || inFlight >= MAX_LIVE_PACKETS) return;
+          if (isDisposed || isPageHidden() || inFlight >= MAX_LIVE_PACKETS) return;
           void replay(route);
         }, index * ROUTE_STAGGER_MS);
         timers.add(timer);
@@ -351,19 +394,8 @@ export function createPacketPlayer(stage: PacketStage) {
     },
     dispose() {
       isDisposed = true;
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
-      for (const flight of flights) flight.resolve(false);
-      flights.clear();
-      for (const timer of timers) clearTimeout(timer);
-      timers.clear();
-      for (const animation of animations) animation.cancel();
-      animations.clear();
-      for (const packet of packets) packet.holder.remove();
-      packets.clear();
-      for (const key of lit.keys()) stage.flow(key)?.classList.remove(stage.classNames.flowOn, stage.classNames.flowBack);
-      lit.clear();
-      stage.gateway()?.classList.remove(stage.classNames.gatewayBusy);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
+      halt();
     },
   };
 }

@@ -501,11 +501,10 @@ to `minmax(--heatmap-min-cell, 1fr)`, which divides the panel exactly. Dividing 
 whatever width the panel has was the earlier rule, and in a half-width column it left 8px squares
 in a strip a third the height of its neighbour.
 
-**It shares its row.** On desktop the field is the left half of a two-column row
-(`.dashboard-activity-row`), with credential quota on the right. The field sets the row's height:
-the quota list beside it takes whatever height that is and scrolls inside its own panel, and the
-ramp's key sits on the heatmap panel's bottom edge. Below 900px the row becomes a single column
-and the two panels stack.
+**It shares its row.** By default the field is the left half of a board row, with credential quota
+on the right (see Dashboard arrangement). The field sets the row's height: the quota list beside it
+takes whatever height that is and scrolls inside its own panel, and the ramp's key sits on the
+heatmap panel's bottom edge. Below 1100px each takes a row of its own and the two panels stack.
 
 **The current week is a complete column.** Its later days have not happened, so nothing is stored for
 them — the same fact as a day whose records were pruned, and they are drawn and treated identically
@@ -539,7 +538,7 @@ serving and blocked counts.
 **The list scrolls inside the panel.** Every credential is listed, so a large fleet is readable
 without leaving the dashboard, and the panel keeps the height of the row it shares: the list takes
 the height the activity grid gives the row (never less than three rows) and scrolls natively, by
-wheel, scrollbar or touch. Stacked below 900px it shows up to four and a half rows, the half row
+wheel, scrollbar or touch. Stacked below 1100px it shows up to four and a half rows, the half row
 being what says there is more.
 
 **It displays, with one control.** A row is not interactive — it scrolls under a finger, and a row
@@ -710,9 +709,34 @@ panels print every group's name and the list prints every group's numbers.
    identical or unreadable colours, and do not establish how the palette reads to a person with a
    colour-vision deficiency. See ADR 0006 for why that claim is not made.
 
+### Dashboard arrangement
+
+The dashboard is one four-column board of widgets - the six KPI tiles, the two model panels, live
+routing, token activity, credential quota and the provider list - and its arrangement is the
+operator's: the order, each widget's width and which widgets are hidden are one stored preference
+(`omc_dashboard_layout`, modelled in `web/src/types/dashboardLayout.ts`). The document lists every
+widget it knows; a widget a later release adds is missing from an older one and is placed after the
+widget that precedes it in the default order, and shown, so a new panel never arrives switched off.
+
+- **Widths are columns of four.** Each widget offers only the widths it reads at: a KPI tile any of
+  them, the model panels, activity grid, quota list and provider list a half or wider, the routing
+  map three quarters or the full row. Below 1100px the board has two columns, so a quarter stays a
+  half and anything wider takes the whole row; a phone offers no width control because nothing it
+  chose would show.
+- **Arranging is a mode.** The header's grid button enters it; until then the board carries no
+  handles. Each cell becomes a dashed frame holding a toolbar - a drag handle, the widget's name,
+  step earlier and later, hide, and the width choice - over an `inert` picture of the widget, so a
+  drag cannot open a drill-down and the operator arranges what they will actually read. A drag is
+  armed from the handle only, and the drop marker is a 3px accent bar on the side the widget will
+  land (above or below a cell that spans the whole row). Hidden widgets wait in a tray above the
+  board, one restore button each.
+- **Nothing is stored until Done.** Arranging edits a draft: Cancel drops it, Restore default puts
+  the catalog back into it, and Done writes the whole document once and confirms in a toast. The
+  six KPI tiles are the only widgets a first load draws placeholders for, in the arranged order.
+
 ### Dashboard live routing
 
-One wide card directly under the KPI tiles, outside the window picker's reach: it always shows a
+By default one wide card directly under the row the two model panels share, outside the window picker's reach: it always shows a
 rolling last minute, because it answers "which model is going to which credential right now", which a
 chosen span would turn into a report. There is no list of recent requests; that is the request list's.
 
@@ -784,7 +808,8 @@ gateway, and status colour where something is exceptional.
 
 ### Dashboard model panels
 
-Two peer cards between the live routing panel and the token activity grid, both driven by the window picker:
+Two peer widgets, by default sharing the row under the KPI tiles and above live routing, both driven
+by the window picker. They are placed independently and read one shared query:
 
 ```text
 ┌─ Token trend ──────────────────┐ ┌─ Model usage ─────────────────────────┐
@@ -1043,7 +1068,7 @@ radius-sm     4px    inputs, buttons, tags, cards (the app's radius)
 radius-lg     6px    modals/drawers outer shell only
 thread scale  4 · 4 · 6 · 8px     conversation workspaces and approval cards (ADR 0086, below)
 space scale   4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px
-section gap   32px (dashboard sections)
+section gap   32px (page sections); the dashboard board's cells are 16px apart
 card padding  20px (antd Card paddingLG)
 page head     title block left, actions right, 24px bottom margin
 header        56px tall, 1px bottom border
@@ -2136,7 +2161,11 @@ Hard rules:
    in use and is the map's one loop; no shadow animates - every glow is an overlay whose opacity
    changes; at most eight requests replay from one read, 70ms apart, and at most sixteen are on the map
    at once, a burst past it being skipped rather than queued; the first read replays nothing, because
-   opening the dashboard is not the moment those requests ran. Under reduced motion the readings
+   opening the dashboard is not the moment those requests ran, and neither does a request that
+   finished while the page was hidden - the live stream is closed then, so the read on return carries
+   them, and they are counted on the rows instead. Hiding the page ends every trip on the map: a
+   hidden page runs no animation frames, so a trip left running would complete every missed hop in a
+   frame each on return and replay the time away at speed. Under reduced motion the readings
    update, rows appear and leave without travel, and no dot, flow or glow is drawn. Counts never
    animate.
 

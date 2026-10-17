@@ -74,9 +74,12 @@ export function routingFixtures() {
   };
   return {
     reads: () => reads,
-    /** A request for `model`, refused by one credential and answered by the next. */
-    arrive(model) {
-      const now = Date.now() + skew;
+    /**
+     * A request for `model`, refused by one credential and answered by the next, finished `ageMs`
+     * ago - a request that ran while the page was away is older than the read that brings it.
+     */
+    arrive(model, { ageMs = 0 } = {}) {
+      const now = Date.now() + skew - ageMs;
       const requestId = `req-live-${nextId}`;
       seed().push(
         record(nextId++, now - 600, { model, request_id: requestId, failed: true, fail_status_code: 429, auth_index: 'auth-codex-01', provider_key_mask: 'sk-…c001', latency_ms: 300 }),
@@ -148,6 +151,28 @@ export async function routingMap({ base, page, check, fixtures }) {
   await until(async () => (await packets.count()) === 0, { label: 'the packets to finish', timeoutMs: 8_000 });
   check('the gateway counts the arrival\'s two attempts', /\b6 attempts\b/.test(await panel.locator('[data-testid="routing-gateway"]').innerText()));
 
+  // Away from the page. A hidden page runs no animation frames, so a trip left running there would
+  // finish every hop it missed in a frame each on return; and a request stored while nobody looked
+  // is not "now". The visibility is emulated - a headless page is never really hidden - which is
+  // exactly the signal the panel and the player act on.
+  const setVisibility = (state) => page.evaluate((next) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => next === 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  fixtures.arrive('deepseek-v4');
+  await until(async () => (await packets.count()) > 0, { label: 'a request travelling before the page hides', timeoutMs: 5_000 });
+  await setVisibility('hidden');
+  check('hiding the page ends every trip on the map', (await packets.count()) === 0);
+  // The live stream closes while the page is hidden, so the request stored meanwhile arrives with
+  // the read the reopened stream asks for on return - a read that starts after the reader is back.
+  fixtures.arrive('qwen-4-max', { ageMs: 5_000 });
+  await setVisibility('visible');
+  await until(async () => (await modelRow('qwen-4-max').count()) === 1, { label: 'the request stored while away' });
+  const readsAfterReturn = fixtures.reads();
+  await until(() => fixtures.reads() >= readsAfterReturn + 2, { label: 'two re-reads after the return' });
+  check('a request stored while the page was hidden is counted but not replayed on return', (await packets.count()) === 0);
+
   // The minute passes for the opening requests but not for the new one: their rows leave.
   // The exit lasts one presence beat, so the page records it rather than the probe polling for it.
   await page.evaluate(() => {
@@ -184,7 +209,7 @@ export async function routingNarrow({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   // The model panels render in the same pass as the routing panel's place, so once they are
   // on the page the routing panel would be too.
-  await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
+  await page.locator('.model-trend-card').waitFor({ timeout: 20_000 });
   check('a phone dashboard shows no routing panel', (await page.locator('[data-testid="dashboard-routing"]').count()) === 0);
   check('a phone dashboard opens neither the routing read nor its live stream', reads.length === 0, JSON.stringify(reads));
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

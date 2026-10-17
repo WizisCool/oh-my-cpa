@@ -1,0 +1,141 @@
+/* ── dashboard arrangement mode ──────────────────────────────────────────────
+   The editing chrome is drawn only while the operator arranges the board. Each cell becomes a
+   dashed frame holding a toolbar above a non-interactive picture of its widget, so the board keeps
+   its proportions and the operator arranges what they will actually read. */
+
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.tray-hint { min-width: 0; }
+
+.tray-hidden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tray-hidden-label { color: var(--meta); }
+
+.cell {
+  position: relative;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--motion-fast) ease, opacity var(--motion-fast) ease;
+}
+
+.cell:hover { border-color: var(--fg-2); }
+
+.is-dragging { opacity: 0.45; }
+
+/* The drop marker: a bar on the side the dragged widget will land. A cell that spans the whole row
+   takes a drop above or below it, which is the only side that means anything there. */
+.cell[data-drop]::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+  border-radius: var(--radius-xs);
+  pointer-events: none;
+}
+
+.cell[data-drop-axis="x"][data-drop]::after { top: 4px; bottom: 4px; width: 3px; }
+.cell[data-drop-axis="x"][data-drop="before"]::after { left: -10px; }
+.cell[data-drop-axis="x"][data-drop="after"]::after { right: -10px; }
+.cell[data-drop-axis="y"][data-drop]::after { left: 4px; right: 4px; height: 3px; }
+.cell[data-drop-axis="y"][data-drop="before"]::after { top: -10px; }
+.cell[data-drop-axis="y"][data-drop="after"]::after { bottom: -10px; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.handle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle:hover { color: var(--fg); }
+.handle:active { cursor: grabbing; }
+
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 4px;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spans { flex: none; }
+
+.content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  user-select: none;
+}
+
+.content > * { flex: 1 1 auto; }
+
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--meta);
+  font-size: var(--text-sm);
+}
+
+.board-empty {
+  grid-column: 1 / -1;
+  padding: 40px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .tray { margin-bottom: 12px; padding: 8px 10px; }
+  .cell { padding: 6px; }
+}

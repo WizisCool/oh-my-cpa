@@ -31,7 +31,7 @@ import { checkDashboardTooltipRows } from './dashboardCharts.mjs';
  */
 export async function dashboardModelPanels({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
+  await page.locator('.model-trend-card').waitFor({ timeout: 20_000 });
   // The marks are behind a lazy import, so the first frame after the panel appears is the Suspense
   // fallback rather than a canvas.
   await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
@@ -575,7 +575,7 @@ export async function dashboardModelPanels({ base, page, check }) {
 
   // ── the two cards stay inside their own width ──────────────────────────────
   const overflow = await page.evaluate(() =>
-    [...document.querySelectorAll('.dashboard-models .dashboard-tile')].map((card) => card.scrollWidth - card.clientWidth),
+    [...document.querySelectorAll('.model-trend-card, .model-usage-card')].map((card) => card.scrollWidth - card.clientWidth),
   );
   check(
     'neither model card overflows its own width',
@@ -1066,7 +1066,7 @@ export async function dashboardModelPanelFailures({ base, page, check }) {
  */
 export async function dashboardModelPanelsEmpty({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
+  await page.locator('.model-trend-card').waitFor({ timeout: 20_000 });
   await until(async () => (await page.locator('.model-empty, .model-trend canvas').count()) > 0, {
     label: 'the model panels to resolve',
   }).catch(() => {});

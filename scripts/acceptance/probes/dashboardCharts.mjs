@@ -204,7 +204,7 @@ export async function dashboardChartMarks({ base, page, check }) {
   );
 
   await page.locator('[data-testid="dashboard-unpriced-link"]').waitFor();
-  const alignment = await page.locator('.dashboard-grid > .dashboard-tile').evaluateAll((tiles) => {
+  const alignment = await page.locator('.dashboard-grid > [data-widget-kind="metric"] > .dashboard-tile').evaluateAll((tiles) => {
     const rows = new Map();
     for (const tile of tiles) {
       const top = Math.round(tile.getBoundingClientRect().top);

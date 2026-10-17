@@ -7,15 +7,6 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  /* The panel sits between the KPI grid and the model panels, outside both grids,
-     so it carries the grid's own gap below it. */
-  margin-bottom: 32px;
-}
-
-@media (max-width: 640px) {
-  .panel {
-    margin-bottom: 12px;
-  }
 }
 
 .head {

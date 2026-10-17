@@ -16,6 +16,7 @@ import {
   SERIES_SLOTS,
   allocateSlots,
   arrivedRoutes,
+  routesFinishedSince,
   buildRoutingModel,
   finishedAt,
   groupRoutes,
@@ -136,6 +137,17 @@ test('only requests past the newest one already seen replay, oldest first, and n
   assert.deepEqual(arrivedRoutes(routes, undefined), []);
   assert.deepEqual(arrivedRoutes(routes, 3).map((route) => route.key), ['req:b']);
   assert.deepEqual(arrivedRoutes(routes, 0).map((route) => route.lastId), [1, 3, 5]);
+});
+
+test('a request that finished while the page was hidden does not replay on return', () => {
+  // Finished at NOW - 10_000 + id + 100: the return at NOW - 9_850 falls between the two requests.
+  const routes = groupRoutes([event(60, { request_id: 'after' }), event(40, { request_id: 'away' })]);
+  const shownAt = NOW - 10_000 + 150;
+  assert.deepEqual(routesFinishedSince(routes, shownAt).map((route) => route.key), ['req:after']);
+  // A retry that ends after the return is a request the reader sees finish, so it plays.
+  const retried = groupRoutes([event(70, { request_id: 'retry' }), event(30, { request_id: 'retry', failed: true })]);
+  assert.deepEqual(routesFinishedSince(retried, shownAt).map((route) => route.key), ['req:retry']);
+  assert.deepEqual(routesFinishedSince(routes, Infinity), [], 'nothing replays while the page is hidden');
 });
 
 test('a row that left the window exits from where it was, and one that returns is simply present', () => {

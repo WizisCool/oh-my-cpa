@@ -4,7 +4,6 @@
 .section-heading { margin-bottom: 12px; }
 .status-pip { width: 7px; height: 7px; border-radius: var(--radius-xs); background: var(--success); }
 /* ── Dashboard Providers Section ─────────────────────────────────────────── */
-.dashboard-providers-section { margin-bottom: 32px; }
 .provider-list-panel {
   display: flex;
   flex-direction: column;
@@ -151,13 +150,24 @@
   }
 }
 .empty-copy { color: var(--muted); font-size: var(--text-md); }
-/* ── dashboard tiles: six cards in two rows, flat by design.md ─────────────── */
+/* ── dashboard board: every widget on one four-column grid ───────────────────
+   The operator arranges the board (see `web/src/types/dashboardLayout.ts`): each widget is one cell,
+   in the stored order, spanning the stored number of columns. Below 1100px the board has two
+   columns, so a quarter stays a half and anything wider takes the whole row. A cell is a flex
+   column so the panel inside it takes the row's full height, which is what lets two panels that
+   share a row - the activity grid and the quota list beside it by default - end on one line. */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 32px;
 }
+.dashboard-cell { display: flex; flex-direction: column; min-width: 0; grid-column: span 1; }
+.dashboard-cell[data-span="2"] { grid-column: span 2; }
+.dashboard-cell[data-span="3"] { grid-column: span 3; }
+.dashboard-cell[data-span="4"] { grid-column: span 4; }
+.dashboard-cell > .dashboard-tile,
+.dashboard-cell > .dashboard-section { flex: 1 1 auto; margin-bottom: 0; }
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tile-placeholder-hero { margin: 14px 0 0; }
 .tile-placeholder-spark { margin-top: 18px; }
@@ -200,7 +210,6 @@
 /* The dashboard's window picker keeps one width across presets, so the header's other
    actions do not shift when the window is changed. */
 .range-trigger { min-width: 138px; }
-.dashboard-secondary { margin-bottom: 32px; }
 .dashboard-footnote {
   display: flex;
   justify-content: space-between;
@@ -213,6 +222,7 @@
 .dashboard-empty { margin-bottom: 16px; padding: 40px 24px; }
 @media (max-width: 1100px) {
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-cell[data-span="3"], .dashboard-cell[data-span="4"] { grid-column: span 2; }
 }
 /* A phone keeps two columns. One tile per row spent a screen on three numbers; the small tiles
    are a label, a figure and a sparkline, which half the width holds, and the wide ones still span
@@ -223,11 +233,9 @@
   .tile-label { font-size: var(--text-sm); }
   .tile-split { gap: 10px; padding-left: 10px; }
 }
-.model-trend-card { grid-column: span 2; }
 .model-usage-card {
-  grid-column: span 2;
-  /* Both model cards share one grid row, so the taller trend card stretches the usage card even
-     when its own row is shorter. A flex column lets the body claim that spare height instead of
+  /* The usage card often shares a row with the taller trend card, which stretches it even when
+     its own content is shorter. A flex column lets the body claim that spare height instead of
      leaving the row at the top of the card with an empty strip beneath it. */
   display: flex;
   flex-direction: column;
@@ -335,12 +343,6 @@
 .model-empty { margin: 16px 0 0; }
 .model-chart-skeleton { height: 220px; }
 .model-alert, .model-stale-alert { margin-top: 12px; }
-@media (max-width: 1100px) {
-  .model-trend-card, .model-usage-card { grid-column: span 2; }
-}
-@media (max-width: 640px) {
-  .model-trend-card, .model-usage-card { grid-column: span 2; }
-}
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
    A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
    the newest weeks as fit at `--heatmap-cell-target` and stretches them to reach its edge, so the
@@ -351,14 +353,7 @@
    The component writes the fitted size as `--heatmap-cell`. Until it has measured - and whenever
    the whole year fits - the tracks are `minmax(--heatmap-min-cell, 1fr)`, which divides the
    panel exactly with no rounding seam. */
-/* ── dashboard activity & credential health row ────────────────────────────── */
-.dashboard-activity-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
-  align-items: stretch;
-}
+/* ── dashboard activity & credential health ───────────────────────────────── */
 /* Both panels stretch to the row's height and lay their content out as a column, so whichever
    is shorter spends the difference above its footer instead of ending early. */
 .heatmap-panel, .credential-quota-panel { margin-bottom: 0; min-width: 0; }
@@ -448,7 +443,9 @@
 .quota-alert { margin-top: 12px; }
 .quota-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 14px; }
 .quota-all-disabled { margin-top: 14px; }
-@media (max-width: 900px) {
+/* Below 1100px the board gives every half-width panel a row of its own, so there is no neighbour to
+   take a height from and the list sets its own. */
+@media (max-width: 1100px) {
   .quota-list { flex: none; min-height: 0; max-height: calc(var(--quota-row-height) * 4.5); }
 }
 @media (max-width: 640px) {
@@ -460,7 +457,6 @@
   }
 }
 @media (max-width: 900px) {
-  .dashboard-activity-row { grid-template-columns: 1fr; }
   /* A phone shows fewer weeks either way; the smaller target keeps a quarter in view. */
   .heatmap-scroll { --heatmap-cell-target: 14px; --heatmap-gap: 3px; }
 }
@@ -753,6 +749,6 @@
   .provider-jump-arrow { opacity: .5; transform: none; }
 }
 @media (max-width: 640px) {
-  .dashboard-grid { gap: 8px; margin-bottom: 12px; }
+  .dashboard-grid { gap: 12px; margin-bottom: 12px; }
   .dashboard-key-filter { min-width: 0; width: 100%; max-width: none; }
 }

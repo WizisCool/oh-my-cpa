@@ -126,5 +126,5 @@ test('dashboard readiness waits for its activity, credential quota and live rout
     '/management/quota',
     '/usage/routing',
   ]);
-  assert.equal(dashboard.content, '.dashboard-activity-row .heatmap-grid');
+  assert.equal(dashboard.content, '.heatmap-panel .heatmap-grid');
 });

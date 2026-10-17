@@ -44,6 +44,7 @@ import {
   dashboardTokenHeatmapMobile,
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
+import { dashboardLayout } from './probes/dashboardLayout.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
 import { sidebarNavCustomization } from './probes/sidebarNav.mjs';
 import { fontLibrary } from './probes/fontLibrary.mjs';
@@ -322,6 +323,22 @@ export const SCENARIOS = [
       ],
     },
     run: dashboardChartMarks,
+  },
+  {
+    // The board is the page's, so the scenario loads the dashboard with the chart fixtures and drives
+    // the arrangement editor on top of it: the board, the editor and the stored document are three
+    // renderings of one choice that no component test can see agree.
+    id: 'dashboard-layout',
+    name: 'the operator orders, sizes and hides dashboard widgets, and the board keeps the arrangement',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+      ],
+    },
+    run: dashboardLayout,
   },
   {
     id: 'provider-rate-marks',

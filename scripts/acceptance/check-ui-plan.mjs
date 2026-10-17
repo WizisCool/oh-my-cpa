@@ -59,6 +59,7 @@ const DASHBOARD_SCENARIOS = [
   'dashboard-heatmap-mobile',
   'dashboard-heatmap-pruned',
   'dashboard-heatmap-error',
+  'dashboard-layout',
   'provider-rate-marks',
   'mobile-console',
 ];
@@ -316,6 +317,12 @@ const SCENARIO_PATHS = [
   // reaches both: the heatmap is a sibling of the tiles, not a child of a chart.
   {
     prefix: 'web/src/components/dashboard/',
+    scenarios: DASHBOARD_SCENARIOS,
+  },
+  // The arrangement model decides what the board draws and in which order, so every scenario that
+  // reads the dashboard can move with it.
+  {
+    prefix: 'web/src/types/dashboardLayout',
     scenarios: DASHBOARD_SCENARIOS,
   },
   {

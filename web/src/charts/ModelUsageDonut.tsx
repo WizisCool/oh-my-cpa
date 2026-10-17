@@ -38,8 +38,8 @@ export interface ModelUsageDonutProps {
  *
  * **The library's legend is disabled.** Colour has to mean the same thing here and in the trend, and
  * the ranked list beside the ring carries the numbers anyway - a legend with no values and a list
- * with values would be two renderings of the same ranking. See `ModelUsagePanels`, which owns that
- * list for both panels.
+ * with values would be two renderings of the same ranking. See `useDashboardModels`, which owns the
+ * one read both panels draw from.
  */
 export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({
   groups,

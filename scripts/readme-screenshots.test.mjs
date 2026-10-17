@@ -23,7 +23,7 @@ function createCaptureFixture(waitBeforeCapture) {
         return;
       }
       assert.equal(predicate, hasReadmeScreenshotContent);
-      assert.equal(selector, '.dashboard-activity-row .heatmap-grid');
+      assert.equal(selector, '.heatmap-panel .heatmap-grid');
       assert.deepEqual(options, { timeout: 30_000 });
       waitCount += 1;
       if (waitCount === 2) await waitBeforeCapture();

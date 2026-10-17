@@ -46,7 +46,7 @@ test('the five request-records concerns select only their own scenarios', () => 
 test('a dashboard change selects every dashboard scenario', () => {
   // Registry order, which is the order the plan preserves and the order `--list` prints.
   const all = [
-    'dashboard-charts', 'provider-rate-marks', 'dashboard-chart-motion', 'dashboard-rolling-readouts',
+    'dashboard-charts', 'dashboard-layout', 'provider-rate-marks', 'dashboard-chart-motion', 'dashboard-rolling-readouts',
     'dashboard-model-panels', 'dashboard-model-panels-states', 'dashboard-model-panels-failure',
     'dashboard-model-panels-empty', 'dashboard-heatmap', 'dashboard-heatmap-pruned',
     'dashboard-heatmap-mobile', 'dashboard-heatmap-error', 'mobile-console',
@@ -236,7 +236,7 @@ test('a mixed change unions the narrow plans without widening', () => {
   // that keeps a two-page change from running everything.
   assert.deepEqual(plan.ids.sort(), [
     'custom-icon-library', 'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
-    'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
+    'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-layout', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
     'dashboard-rolling-readouts', 'icon-picker-stacking', 'mobile-console', 'overlay-back', 'phone-lists',
     'provider-icon-pick', 'provider-model-picker', 'provider-rate-marks',

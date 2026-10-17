@@ -21,7 +21,7 @@ async function checkActivityHealthLayout(page, check, isStacked) {
   const layout = await page.evaluate(() => {
     const heatmap = document.querySelector('.heatmap-panel').getBoundingClientRect();
     const health = document.querySelector('[data-testid="dashboard-credential-quota"]').getBoundingClientRect();
-    const row = document.querySelector('.dashboard-activity-row').getBoundingClientRect();
+    const row = document.querySelector('[data-testid="dashboard-board"]').getBoundingClientRect();
     return {
       heatmap: { left: heatmap.left, right: heatmap.right, top: heatmap.top, bottom: heatmap.bottom, width: heatmap.width },
       health: { left: health.left, right: health.right, top: health.top, bottom: health.bottom, width: health.width },

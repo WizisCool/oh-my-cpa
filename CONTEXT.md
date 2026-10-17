@@ -459,8 +459,16 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   style (`omc_token_style`), TPS calculation mode (`omc_tps_calculation_mode`),
   the model display view (`omc_models_view`), request list model brand icons
   (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), scroll smoothing
-  (`omc_scroll_smoothing`), the typeface roles (`omc_fonts`) and the rail entries the
-  console hides (`omc_nav_hidden`).
+  (`omc_scroll_smoothing`), the typeface roles (`omc_fonts`), the rail entries the
+  console hides (`omc_nav_hidden`) and the dashboard's widget arrangement
+  (`omc_dashboard_layout`).
+- **Dashboard Arrangement**: The order, width and visibility of the dashboard's widgets, stored as
+  the `omc_dashboard_layout` preference - every widget the console knows, in reading order, with its
+  width in columns of four and whether it is hidden. A widget a later release adds is missing from an
+  older document and is placed where the default order puts it, visible. It is edited in an
+  arrangement mode on the dashboard itself and stored only when the operator chooses Done. Like the
+  rail visibility it is console state: it changes what the dashboard draws, never what is served or
+  read for another page. See [[Preference]].
 - **Sidebar Visibility**: Which of the rail's entries this console shows, stored as the
   `omc_nav_hidden` preference - the set of *hidden* route keys, so a destination a later release
   adds arrives already visible rather than waiting to be re-enabled. The entries are turned off

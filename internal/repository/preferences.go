@@ -41,6 +41,11 @@ const (
 	// makes a destination a later release adds appear without anyone re-enabling it.
 	PreferenceNavHidden = "omc_nav_hidden"
 
+	// PreferenceDashboardLayout is the dashboard's widget arrangement: every widget the console
+	// knows, in reading order, with its width and whether it is hidden. A widget a later release
+	// adds is missing from an older document, and the console places and shows it by default.
+	PreferenceDashboardLayout = "omc_dashboard_layout"
+
 	// PreferenceFonts maps a typographic role - `ui` for the interface, `mono` for code
 	// and figures - to a built-in typeface or an installed family (`font:<id>`). A role
 	// left out uses the console's default. References to installed families are checked
