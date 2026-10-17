@@ -23,7 +23,7 @@
  * this code rather than a claim about the environment.
  */
 import { applyQueryFilters } from './filters.mjs';
-import { recordInstantsBetween, routingAt } from './liveRouting.mjs';
+import { routingAt, signalInstantsBetween } from './liveRouting.mjs';
 import { DATASET, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
@@ -236,13 +236,7 @@ function serveRouting(url, nowMs) {
 function serveLive(nowMs) {
   const encoder = new TextEncoder();
   const timers = new Set();
-  const signals = [];
-  let last = -Infinity;
-  for (const instant of recordInstantsBetween(nowMs, nowMs + LIVE_LIFETIME_MS, DATASET)) {
-    // Signals inside the gap merge into one later signal, so a burst costs one read.
-    last = Math.max(instant, last + LIVE_MIN_GAP_MS);
-    signals.push(last);
-  }
+  const signals = signalInstantsBetween(nowMs, nowMs + LIVE_LIFETIME_MS, DATASET, LIVE_MIN_GAP_MS);
   const stream = new ReadableStream({
     start(controller) {
       const later = (delayMs, run) => {

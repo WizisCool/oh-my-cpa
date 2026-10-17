@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { WINDOW_MS, attemptsBetween, recordInstantsBetween, routingAt } from './liveRouting.mjs';
+import { WINDOW_MS, attemptsBetween, routingAt, signalInstantsBetween } from './liveRouting.mjs';
 import { DATASET } from './routes.mjs';
 
 const NOW = Date.parse('2026-10-17T12:00:00Z');
@@ -80,9 +80,19 @@ describe('the simulated live traffic', () => {
     assert.ok(peak >= 2 && peak <= 10, `peak concurrency ${peak}`);
   });
 
-  it('signals each instant an attempt is recorded', () => {
-    const instants = recordInstantsBetween(NOW, NOW + 30_000, DATASET);
-    const expected = attemptsBetween(NOW, NOW + 30_000, DATASET).map(finished).filter((at) => at > NOW).sort((a, b) => a - b);
-    assert.deepEqual(instants, expected);
+  it('signals every recorded attempt, merging a burst into one read', () => {
+    const gapMs = 250;
+    const signals = signalInstantsBetween(NOW, NOW + 600_000, DATASET, gapMs);
+    const recorded = attemptsBetween(NOW, NOW + 600_000, DATASET).map(finished).filter((at) => at > NOW);
+    for (let index = 1; index < signals.length; index++) {
+      assert.ok(signals[index] - signals[index - 1] >= gapMs, `signals ${index - 1} and ${index} are closer than the gap`);
+    }
+    for (const at of recorded) {
+      // The first signal at or after an attempt is the read that finds it, and it never
+      // waits past the gap for one.
+      const covering = signals.find((signal) => signal >= at);
+      assert.ok(covering !== undefined && covering - at <= gapMs, `the attempt at ${at} is never read`);
+    }
+    assert.ok(signals.length < new Set(recorded).size, 'no burst was merged');
   });
 });

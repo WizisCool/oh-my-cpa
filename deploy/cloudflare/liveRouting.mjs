@@ -364,12 +364,24 @@ export function routingAt(nowMs, afterId, dataset) {
 }
 
 /**
- * The instants in (fromMs, toMs] at which an attempt is recorded, ascending: when the
- * live stream tells the console to read.
+ * When the live stream tells the console to read, for the attempts recorded in
+ * (fromMs, toMs], ascending.
+ *
+ * Like the gateway's coalescing hub, a burst costs one read: an attempt recorded at or
+ * before a signal already scheduled is found by that signal's read, so it schedules
+ * nothing, and the next signal waits at least `minGapMs` after the last.
  */
-export function recordInstantsBetween(fromMs, toMs, dataset) {
-  return attemptsBetween(fromMs, toMs, dataset)
+export function signalInstantsBetween(fromMs, toMs, dataset, minGapMs) {
+  const recorded = attemptsBetween(fromMs, toMs, dataset)
     .map((record) => record.timestamp_ms + record.latency_ms)
     .filter((instant) => instant > fromMs)
     .sort((left, right) => left - right);
+  const signals = [];
+  let last = -Infinity;
+  for (const instant of recorded) {
+    if (instant <= last) continue;
+    last = Math.max(instant, last + minGapMs);
+    signals.push(last);
+  }
+  return signals;
 }
