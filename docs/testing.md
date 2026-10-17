@@ -653,7 +653,7 @@ immediately after deletion and after reload; a remaining custom image, missing m
 fallback cannot satisfy it. The selected custom image is an explicit negative case for that
 restoration predicate.
 
-### Codex configuration path regression coverage
+### Configuration path regression coverage
 
 `scripts/test-config-patch.ts` owns canonical and historical field reads/writes,
 canonical false/null precedence, baseline restoration with comments, omitted
@@ -665,6 +665,14 @@ checks the resulting JSON and YAML readback independently. The existing
 configuration cross-stack acceptance saves both switches on and off at their
 canonical paths and reloads the page after each save. The API's revision guard,
 backup and secret restoration remain covered by their existing Go tests.
+
+The same suite owns the one setting whose absence is a default and whose zero is a
+setting: `upstream.claude.session-date-pin-days` reads CPA's 7 days when omitted, so
+an untouched gateway is never written, while an explicit `0` is saved at its own
+path and read back as `0` rather than as the default. The field arrived after the
+Claude section's relocation, so the suite also pins that the pre-relocation
+spelling is never written. The cross-stack acceptance saves that `0` and reloads,
+which is the only check that catches a readback falling back to the default.
 
 ### Configuration backup regression coverage
 

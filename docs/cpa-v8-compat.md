@@ -418,7 +418,7 @@ the settings page (`routingStrategy`, `routingSessionAffinity`,
 
 ### Added after v8.0.16
 
-Settings CPA introduced between v8.0.16 and v8.0.31, all at their v8 path only and all
+Settings CPA introduced between v8.0.16 and v8.0.32, all at their v8 path only and all
 edited by the settings page. A gateway older than the release that introduced a setting
 refuses a write to it (`config_rejected`); an untouched setting is never written.
 
@@ -429,6 +429,7 @@ refuses a write to it (`config_rejected`); an untouched setting is never written
 | `requests.streaming.send-keepalive-before-ft` | v8.0.27 | `streamingSendKeepaliveBeforeFt` |
 | `requests.tls-handshake-timeout-seconds` | v8.0.29 | `tlsHandshakeTimeoutSeconds` |
 | `upstream.claude.tool-search` | v8.0.24 | `claudeToolSearch` |
+| `upstream.claude.session-date-pin-days` | v8.0.32 | `claudeSessionDatePinDays`; CPA holds it as a pointer, so omitted is its 7 days and an explicit `0` keeps the continuity-scoped pin. The editor defaults to `7` and writes a `0` as a real setting |
 | `upstream.claude.header-defaults.anthropic-beta-strip`, `anthropic-beta-append`, `inject-diagnostics`, `client-request-id` | v8.0.30 | `claudeHeaderAnthropicBetaStrip`, `claudeHeaderAnthropicBetaAppend`, `claudeHeaderInjectDiagnostics`, `claudeHeaderClientRequestId` |
 | `oauth.providers.codex.signin-with-chatgpt-identifier` | v8.0.25 | `codexSigninWithChatgptIdentifier` |
 | `api-keys.claude[].keys[].native-tool-search` | v8.0.24 | The provider editor's per-key "Native tool search" switch |
