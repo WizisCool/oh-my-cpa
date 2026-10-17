@@ -1391,7 +1391,8 @@ from a cadence. The path from CPA to the screen has no fixed wait in it:
   connect, `usage` when something changed (at most one per 250 ms), and a comment
   heartbeat every 20 s. It ends after five minutes so a session that signed out
   cannot keep a stream; the browser reconnects and the reconnect re-authenticates.
-  Without a collector (ingestion off, the public demonstration) it answers 204.
+  Without a collector (ingestion off, demonstration mode) it answers 204; the public
+  demonstration's Worker streams signals for its simulated traffic instead.
 - In the browser, `web/src/api/usageLive.ts` opens one stream per tab, shared by
   every reader, closes it while the tab is hidden, and retries a 204 or 503 itself
   after 30 s because EventSource does not. `useLiveRevision` turns signals into a

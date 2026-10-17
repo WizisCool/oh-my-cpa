@@ -122,7 +122,16 @@ async function startLocalDemo() {
         },
       });
       response.writeHead(workerResponse.status, Object.fromEntries(workerResponse.headers));
-      response.end(await workerResponse.text());
+      // Streamed rather than buffered: the live usage stream stays open for minutes, and
+      // a buffered copy would hold the console's EventSource without ever delivering it.
+      if (!workerResponse.body) {
+        response.end();
+        return;
+      }
+      const reader = workerResponse.body.getReader();
+      response.on('close', () => void reader.cancel().catch(() => {}));
+      for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) response.write(chunk.value);
+      response.end();
       return;
     }
 

@@ -14,7 +14,7 @@ import { getAppConfig } from '../types/config';
  *   server ended the stream's lifetime. Readers keep their fallback poll.
  * - `live`: the stream is open. Readers rely on signals and stop polling.
  * - `unavailable`: the server answered without a stream - 204 when the deployment
- *   has no collector (ingestion off, the public demonstration), or 503 at the reader
+ *   has no collector (ingestion off, demonstration mode), or 503 at the reader
  *   limit. EventSource does not retry a non-200 answer, so this module retries after
  *   `UNAVAILABLE_RETRY_MS`; readers poll meanwhile.
  *

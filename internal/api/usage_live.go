@@ -38,8 +38,8 @@ type usageChangeSource interface {
 // signal the page re-reads the ordinary endpoints with its own filters and
 // cursor. A reader that missed signals while reconnecting re-reads on `ready`.
 //
-// 204 means "this deployment has no live source" (ingestion off, or the public
-// demonstration), which EventSource treats as final; the page then keeps its
+// 204 means "this deployment has no live source" (ingestion off, or demonstration
+// mode), which EventSource treats as final; the page then keeps its
 // polling fallback. 503 means the reader limit is reached.
 func (h *Handler) usageLive(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

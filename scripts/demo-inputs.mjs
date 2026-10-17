@@ -85,6 +85,8 @@ export const INPUTS = [
   // missing from this list, which meant the two files that most directly shape a served
   // response were the two the digest did not cover.
   'deploy/cloudflare/worker.mjs',
+  // The live routing read and the live stream are composed here rather than captured.
+  'deploy/cloudflare/liveRouting.mjs',
   'scripts/generate-demo-data.mjs',
   // The dataset states the pinned Go toolchain as the gateway's runtime version.
   'scripts/tools-versions.json',

@@ -23,6 +23,7 @@
  * this code rather than a claim about the environment.
  */
 import { applyQueryFilters } from './filters.mjs';
+import { recordInstantsBetween, routingAt } from './liveRouting.mjs';
 import { DATASET, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
@@ -30,6 +31,16 @@ const DEMO_HEADER = 'X-OMCPA-Demo';
 
 /** Refusal code the console renders as "this is disabled in the demonstration". */
 const REFUSED_CODE = 'demo_operation_refused';
+
+/**
+ * How long one live stream runs before it ends and the browser reconnects, and how often
+ * a quiet one says it is still there. Shorter than the gateway's own lifetime: a visitor
+ * is a stranger, and a connection held for nobody costs the same as one held for them.
+ */
+const LIVE_LIFETIME_MS = 120_000;
+const LIVE_HEARTBEAT_MS = 20_000;
+/** The gateway's spacing between two signals to one reader; closer ones merge. */
+const LIVE_MIN_GAP_MS = 250;
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -175,10 +186,6 @@ function matchEventIdentity(decoded, pathname, dataset) {
 }
 
 function serve(entry, nowMs, url) {
-  // A captured "no content" answer has no body to re-base, and a Response with a
-  // null-body status refuses even an empty string. The live usage stream is one:
-  // the demonstration has no collector, so it answers 204 and the console polls.
-  if (entry.status === 204) return new Response(null, { status: 204, headers: JSON_HEADERS });
   const deltaMs = nowMs - REFERENCE_MS;
   let body = entry.body;
   try {
@@ -208,6 +215,69 @@ function serve(entry, nowMs, url) {
   });
 }
 
+/**
+ * The live routing read, answered from the simulated traffic rather than the capture.
+ *
+ * A capture re-based on every read never holds a record newer than the last read's, so
+ * the panel it fed never saw a request land. The simulation is already on the viewer's
+ * clock, so nothing here is re-based.
+ */
+function serveRouting(url, nowMs) {
+  const after = url.searchParams.get('after');
+  const afterId = after !== null && /^\d+$/.test(after) ? Number(after) : undefined;
+  return new Response(JSON.stringify(routingAt(nowMs, afterId, DATASET)), { status: 200, headers: JSON_HEADERS });
+}
+
+/**
+ * The live usage stream: `ready`, then `usage` whenever a simulated attempt is recorded,
+ * framed as the gateway frames it (`internal/api/usage_live.go`). The console reads on
+ * each signal, so the routing panel plays requests as they land instead of polling.
+ */
+function serveLive(nowMs) {
+  const encoder = new TextEncoder();
+  const timers = new Set();
+  const signals = [];
+  let last = -Infinity;
+  for (const instant of recordInstantsBetween(nowMs, nowMs + LIVE_LIFETIME_MS, DATASET)) {
+    // Signals inside the gap merge into one later signal, so a burst costs one read.
+    last = Math.max(instant, last + LIVE_MIN_GAP_MS);
+    signals.push(last);
+  }
+  const stream = new ReadableStream({
+    start(controller) {
+      const later = (delayMs, run) => {
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          run();
+        }, Math.max(0, delayMs));
+        timers.add(timer);
+      };
+      const write = (frame) => controller.enqueue(encoder.encode(frame));
+      write('retry: 2000\nevent: ready\ndata: {}\n\n');
+      // The read a signal triggers must find the record, so it fires just after the instant.
+      for (const at of signals) later(at - nowMs + 20, () => write('event: usage\ndata: {}\n\n'));
+      for (let at = LIVE_HEARTBEAT_MS; at < LIVE_LIFETIME_MS; at += LIVE_HEARTBEAT_MS) later(at, () => write(': keepalive\n\n'));
+      later(LIVE_LIFETIME_MS, () => {
+        for (const timer of timers) clearTimeout(timer);
+        timers.clear();
+        controller.close();
+      });
+    },
+    cancel() {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      [DEMO_HEADER]: 'active',
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
@@ -231,6 +301,8 @@ export default {
     // overview reported the gateway connected. A hand-written response beside a generated
     // dataset is one that drifts from it, and this one drifted immediately.
     const name = responseNameFor(request);
+    if (name === 'usage-routing') return serveRouting(new URL(request.url), Date.now());
+    if (name === 'usage-live') return serveLive(Date.now());
     const entry = name ? DATASET.responses[name] : undefined;
     if (!entry) return notFoundResponse(pathname);
 

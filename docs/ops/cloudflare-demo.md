@@ -19,6 +19,7 @@ records why that trade was taken and what it costs.
 | Data | `deploy/cloudflare/data/responses.json` | Captured responses generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
+| Live traffic | `deploy/cloudflare/liveRouting.mjs` | Simulated gateway traffic that answers the live routing read and drives the live usage stream |
 | Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |
 
 Requests to a static asset never invoke the Worker; requests under `/api` always do.
@@ -97,6 +98,31 @@ window as a stale answer (`applyTail`), every tail in the served demonstration w
 discarded. `internal/api/demo_export_test.go` asserts that pair on the exported dataset,
 because the console simply keeps its full response when a tail is dropped - nothing visible
 fails.
+
+## The live routing panel runs on simulated traffic
+
+Re-basing keeps a report current, but the dashboard's live routing panel is not a report:
+it plays a request when a read returns a record newer than the last one it holds, and a
+capture re-based on every read never has one. So `GET /usage/routing` and
+`GET /usage/live` are the two reads the Worker composes instead of serving from the
+dataset.
+
+`liveRouting.mjs` is a small gateway that is always busy. Its traffic is a pure function
+of the wall clock - each 500 ms slot's request comes from a generator seeded with the
+slot's number - so every read of an instant agrees, and the console's `after` cursor and
+rolling minute work against it as they do against CPA. It calls `claude-opus-5.5`,
+`gpt-6-astra` and `deepseek-v4.1-flash` through five credentials the rest of the dataset
+already lists (`auth-claude-01`, `auth-codex-01`/`02`, `auth-ds-01`/`02`), at roughly one
+request a second with a handful in flight. Now and then an upstream error moves a request
+to the sibling credential, and every two and a half minutes a credential meets a rate
+limit and rests for 28 seconds while its sibling carries the traffic. Record ids lead with
+the instant an attempt finished, which is the order CPA stores them in; the callers' key
+identities are taken from the captured routing read so they match the key table.
+
+The live stream frames its signals as the gateway does - `ready`, then `usage` when an
+attempt is recorded, at most one per 250 ms - and ends after two minutes, when the browser
+reconnects. The captured `usage-live` entry stays the gateway's own demonstration-mode
+answer (204); the Worker does not serve it.
 
 ## Keeping it current is a gate, not a habit
 
