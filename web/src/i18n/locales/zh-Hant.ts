@@ -5,6 +5,8 @@
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
   "pricing.scope.channel": "渠道價",
+  "pricing.scope.shared": "通用價",
+  "pricing.scope.inherited": "沿用通用價格",
   "pricing.editor.channel_scope": "正在設定 {channel} 的專屬價格",
   "pricing.editor.channel_hint": "僅影響此渠道的該模型；渠道倍率仍會生效。未設定專屬價格時沿用通用價格。",
   "pricing.editor.restore_shared": "恢復通用價格",

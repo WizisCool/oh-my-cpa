@@ -226,18 +226,17 @@ export const PricingPage: React.FC = () => {
 
   const allGroups = React.useMemo(() => groupPricingModels(rows, data?.providers ?? []).map(group => ({
     ...group,
-    rows: group.rows.flatMap((row): BookRow[] => {
+    rows: group.rows.map((row): BookRow => {
       const channel = group.provider?.channel;
       const override = data?.channel_models?.find(price => price.channel === channel && price.model === row.model);
-      const shared = { ...row, targetChannel: channel, channelLabel: group.provider?.name };
       return override
-        ? [shared, { ...override, rowKind: 'priced', usage_30d: row.usage_30d, channelLabel: group.provider?.name }]
-        : [shared];
+        ? { ...override, rowKind: 'priced', usage_30d: row.usage_30d, channelLabel: group.provider?.name }
+        : { ...row, targetChannel: channel, channelLabel: group.provider?.name };
     }),
   })), [rows, data?.providers, data?.channel_models]);
 
   const counts = React.useMemo(() => {
-    const scopedRows = [...new Map(allGroups.flatMap(group => group.rows).map(row => [JSON.stringify([row.channel, row.model]), row])).values()];
+    const scopedRows = allGroups.flatMap(group => group.rows);
     const result: Record<ModelFilter, number> = { all: scopedRows.length, auto: 0, linked: 0, custom: 0, unpriced: 0, candidates: 0 };
     scopedRows.forEach((row) => {
       result[rowMode(row)] += 1;
@@ -282,6 +281,7 @@ export const PricingPage: React.FC = () => {
         <div className={styles['model-cell']}>
           <div className={styles['model-text']}>
             {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel')} · {row.channelLabel || row.channel}</span>}
+            {row.targetChannel && row.rowKind === 'priced' && <span className={styles['model-sub']}>{t('pricing.scope.inherited')}</span>}
             <span className={styles['model-name']} title={row.model}>{pricingModelIdentity(row.model).label}</span>
             {row.rowKind === 'priced' ? (
               <span className={styles['model-sub']}>
@@ -401,13 +401,16 @@ export const PricingPage: React.FC = () => {
           {row.targetChannel && <Button size="small" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
             {t('pricing.scope.channel')}
           </Button>}
+          {row.channel && <Button size="small" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
+            {t('pricing.scope.shared')}
+          </Button>}
         </div>
       ),
     },
   ];
 
-  const modelTotal = rows.length;
-  const pricedTotal = data?.models.length ?? 0;
+  const modelTotal = counts.all;
+  const pricedTotal = counts.all - counts.unpriced;
   const subtitle = data
     ? t('pricing.coverage', { priced: pricedTotal, total: modelTotal })
     : undefined;

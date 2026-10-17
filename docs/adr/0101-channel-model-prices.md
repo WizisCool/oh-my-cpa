@@ -31,7 +31,9 @@ The existing model editor endpoints take an optional channel query parameter.
 Channel writes require persisted provider membership and custom mode. Shared
 automatic prices, operator links and custom prices continue to work unchanged.
 Model Square resolves explicit routes and offers every distinct channel/model
-target. The price book keeps shared editing and adds labelled channel overrides.
+target. The price book shows one effective price per provider/model membership,
+labels channel overrides and inherited shared prices, and keeps editing for both
+scopes accessible from that row.
 
 ## Consequences
 

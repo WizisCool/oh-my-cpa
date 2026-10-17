@@ -5,6 +5,8 @@
  */
 export const MS: Readonly<Record<string, string>> = {
   "pricing.scope.channel": "Harga saluran",
+  "pricing.scope.shared": "Harga bersama",
+  "pricing.scope.inherited": "Menggunakan harga bersama",
   "pricing.editor.channel_scope": "Harga tersuai untuk {channel}",
   "pricing.editor.channel_hint": "Hanya untuk model ini pada saluran ini; pengganda saluran masih digunakan. Tanpa harga tersuai, harga bersama digunakan.",
   "pricing.editor.restore_shared": "Guna harga bersama",

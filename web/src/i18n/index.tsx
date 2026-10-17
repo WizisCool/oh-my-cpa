@@ -10,6 +10,8 @@ export type { Lang } from './language';
  */
 const DICT: Record<string, [string, string]> = {
   'pricing.scope.channel': ['渠道价', 'Channel price'],
+  'pricing.scope.shared': ['通用价', 'Shared price'],
+  'pricing.scope.inherited': ['沿用通用价格', 'Inherited shared price'],
   'pricing.editor.channel_scope': ['正在设置 {channel} 的专属价格', 'Custom price for {channel}'],
   'pricing.editor.channel_hint': ['仅影响此渠道的该模型；渠道倍率仍会生效。未设置专属价格时沿用通用价格。', 'Applies only to this model on this channel; the channel multiplier still applies. Without an override, the shared price is used.'],
   'pricing.editor.restore_shared': ['恢复通用价格', 'Use shared price'],
