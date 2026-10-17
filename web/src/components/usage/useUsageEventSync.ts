@@ -7,7 +7,7 @@ import { useT } from '../../i18n';
 import { EVENT_AUTO_REFRESH_MS, EVENT_SYNC_NOTICE_MS } from '../../types/usageEventCadence';
 import { eventWindowQuery } from '../../types/usageEventQuery';
 import type { UsageEventQuery } from '../../types/usageEvents';
-import { shouldPoll } from './pollingPolicy';
+import { useLiveRevision } from '../../hooks/useLiveRevision';
 import { shouldAnnounceStuckSync, syncOutcomeMessage, syncShortfallReason } from './syncPresentation';
 import { useToast } from '../feedback';
 
@@ -53,8 +53,8 @@ export function useUsageEventSync({
 }) {
   const t = useT();
   const toast = useToast();
-  // The list's poll counter. Both writers advance it: a manual sync and one tick
-  // of the interval below.
+  // The list's re-read counter for a manual sync; the live revision below is added
+  // to it, so either writer re-reads the list.
   const [refresh, setRefresh] = React.useState(0);
 
   /**
@@ -123,33 +123,22 @@ export function useUsageEventSync({
     return () => clearTimeout(timer);
   }, [isSyncing]);
 
-  // The poll reads the in-flight state through a ref rather than closing over it.
-  // Naming `result.isFetching` in the dependency list rebuilt the timer on every
-  // fetch, which reset the interval each time and turned a 10-second poll into
-  // "10 seconds after the last response finished" - the cadence the operator
-  // asked for is wall-clock, not round-trip dependent.
-
+  // New records reach the list as they are stored: the live channel signals each
+  // committed batch and the list re-reads at once. The fixed cadence remains only
+  // as the fallback while no stream is open. Both read the in-flight state through
+  // refs - a read in flight or a manual sync owning the next refresh holds the
+  // signal until it settles (`notifySettled`), rather than stacking reads.
   const isSyncingRef = React.useRef(false);
   isSyncingRef.current = isSyncing;
-  React.useEffect(() => {
-    if (!isAutoRefresh) return;
-    const timer = setInterval(() => {
-      // The three reasons to skip a tick live in `pollingPolicy.shouldPoll`: the tab
-      // is hidden, a read is already in flight, or a manual sync owns the next
-      // refresh. Skipping rather than queueing is what keeps the cadence wall-clock
-      // - a queued tick would fire the moment a slow query resolved.
-      if (!shouldPoll({
-        isAutoRefresh,
-        isVisible: document.visibilityState === 'visible',
-        isFetching: isFetchingRef.current,
-        isSyncing: isSyncingRef.current,
-      })) {
-        return;
-      }
-      setRefresh((value) => value + 1);
-    }, EVENT_AUTO_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [isAutoRefresh]);
+  const isBusyRef = React.useMemo(
+    () => ({ get current() { return isFetchingRef.current || isSyncingRef.current; } }),
+    [isFetchingRef],
+  );
+  const { revision: liveRevision, liveState, notifySettled } = useLiveRevision({
+    isEnabled: isAutoRefresh,
+    fallbackPollMs: EVENT_AUTO_REFRESH_MS,
+    isBusyRef,
+  });
 
   const { mutate: requestSync, isPending: isSyncPending } = syncMutation;
   React.useEffect(() => {
@@ -190,7 +179,9 @@ export function useUsageEventSync({
     isSyncing,
     facetWindow,
     facetRevision,
-    refresh,
+    refresh: refresh + liveRevision,
+    liveState,
+    notifySettled,
     handleManualRefresh,
   };
 }

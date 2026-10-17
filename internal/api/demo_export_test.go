@@ -219,6 +219,12 @@ func demoExportCases() []demoExportCase {
 			demoExportCase{Name: "client-key-usage-" + preset, Path: "/api/v1/management/client-key-usage?" + window},
 		)
 	}
+	// The dashboard's live routing panel reads one fixed window ending at the
+	// export's pinned now, which the Worker re-bases with every other timestamp.
+	cases = append(cases, demoExportCase{Name: "usage-routing", Path: "/api/v1/usage/routing"})
+	// The demonstration has no collector, so its live stream answers 204 and the
+	// pages keep polling the dataset.
+	cases = append(cases, demoExportCase{Name: "usage-live", Path: "/api/v1/usage/live"})
 	// The all-time window has no span to turn into bounds: the server starts it at the
 	// first usage record. It is still reproducible, because the export pins the
 	// handler's clock to the reference instant. The key table does not offer it.

@@ -48,6 +48,7 @@ import { omcSettings } from './probes/omcSettings.mjs';
 import { sidebarNavCustomization } from './probes/sidebarNav.mjs';
 import { fontLibrary } from './probes/fontLibrary.mjs';
 import { auditTrail, auditTrailNarrow, logsFixtures, logsSources } from './probes/logsPage.mjs';
+import { routingFixtures, routingMap, routingNarrow } from './probes/routingMap.mjs';
 import {
   providerRateMarks,
   providerRateOverview,
@@ -102,6 +103,8 @@ const auditRequests = [];
 const pluginManagementWrites = [];
 const pricingBookWrites = [];
 const configBackupsLog = [];
+/** The live routing scenario's fixture, which the probe tells when a request is stored. */
+const routingLive = routingFixtures();
 
 const routeErrorFixtures = () => [
   [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
@@ -834,6 +837,18 @@ export const SCENARIOS = [
     name: 'the audit page lists the trail as sentences on the shared list surface, opens an entry in a drawer, counts it from the summary and filters on the server',
     options: { routes: logsFixtures(auditRequests) },
     run: (context) => auditTrail({ ...context, auditRequests }),
+  },
+  {
+    id: 'dashboard-routing',
+    name: 'the dashboard\'s live routing map joins its rows, and a request stored while it is open travels it unless motion is reduced',
+    options: { routes: [...routingLive.routes, ...routeErrorFixtures()] },
+    run: (context) => routingMap({ ...context, fixtures: routingLive }),
+  },
+  {
+    id: 'dashboard-routing-narrow',
+    name: 'a phone dashboard leaves out the live routing panel and its live stream',
+    options: { routes: [...routingFixtures().routes, ...routeErrorFixtures()], viewport: { width: 360, height: 800 } },
+    run: routingNarrow,
   },
   {
     id: 'audit-trail-narrow',

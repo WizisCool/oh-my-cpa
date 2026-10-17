@@ -120,6 +120,16 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 		return SeedStats{}, err
 	}
 	stats.Requests, stats.OldestMS, stats.NewestMS = requests, oldest, newest
+	rerouted, err := seedReroutes(ctx, repo, now)
+	if err != nil {
+		return SeedStats{}, err
+	}
+	stats.Requests += rerouted
+	live, err := seedLiveMinute(ctx, repo, now)
+	if err != nil {
+		return SeedStats{}, err
+	}
+	stats.Requests += live
 	aliases, err := seedClientKeyAliases(ctx, repo)
 	if err != nil {
 		return SeedStats{}, err
@@ -336,9 +346,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 			profile := session.pickProfile(random, profiles)
 			keyIndex := pickWeighted(random, keyWeights(keys))
 			event := buildEvent(random, profile, credentials, hour, now)
-			event.APIGroupKey = fingerprints[keyIndex]
-			event.APIGroupLabel = "api_key"
-			event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
+			assignCaller(&event, keys[keyIndex], fingerprints[keyIndex])
 			events = append(events, event)
 		}
 		hour = hour.Add(time.Hour)
@@ -360,9 +368,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 		for _, offset := range []time.Duration{4 * time.Hour, 5 * time.Hour, 6 * time.Hour} {
 			event := buildEventAt(random, profile, credentials, now.Add(-offset))
 			event.AuthIndex = "auth-codex-02"
-			event.APIGroupKey = fingerprints[0]
-			event.APIGroupLabel = "api_key"
-			event.APIKeyMask = security.MaskSecret(keys[0].value)
+			assignCaller(&event, keys[0], fingerprints[0])
 			events = append(events, event)
 		}
 		break
@@ -381,6 +387,146 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 		}
 	}
 	return len(events), oldest, newest, nil
+}
+
+// assignCaller marks a record as sent by one gateway key, through the client
+// product that key belongs to.
+func assignCaller(event *usage.Event, key gatewayKey, fingerprint string) {
+	event.APIGroupKey = fingerprint
+	event.APIGroupLabel = "api_key"
+	event.APIKeyMask = security.MaskSecret(key.value)
+	if key.userAgent != "" {
+		agent := key.userAgent
+		event.UserAgent = &agent
+	}
+}
+
+// demoReroutes are the requests the history shows CPA moving to a second
+// credential: the first account answered 429, the second served the retry. CPA
+// writes a record per attempt, so each is two records sharing a request id, and
+// the routing page reads them as one rerouted request.
+var demoReroutes = []struct {
+	ago       time.Duration
+	requestID string
+}{
+	{ago: 48 * time.Second, requestID: "req_demo_reroute_1"},
+	{ago: 18 * time.Second, requestID: "req_demo_reroute_2"},
+}
+
+// demoRestingFor is how long the rerouted-from credential still rests after the
+// reference instant. The Worker moves every instant by one delta, so a visitor
+// always reads it as this far ahead.
+const demoRestingFor = 45 * time.Second
+
+// seedReroutes places the rerouted requests and the rate-limit error that put
+// their first credential to rest. The error is a rate limit rather than an
+// exhausted quota, so the quota page's view of that account is unchanged.
+func seedReroutes(ctx context.Context, repo *repository.Repository, now time.Time) (int, error) {
+	keys := gatewayKeyCatalog()
+	fingerprint, err := repo.UsageClientKeyFingerprint(keys[1].value)
+	if err != nil {
+		return 0, fmt.Errorf("derive caller key identity: %w", err)
+	}
+	var profile modelProfile
+	for _, candidate := range modelCatalog() {
+		if candidate.provider == "codex" {
+			profile = candidate
+			break
+		}
+	}
+	random := newDeterministic(0x2545F4914F6CDD1D)
+	events := make([]usage.Event, 0, len(demoReroutes)*2)
+	for _, reroute := range demoReroutes {
+		started := now.Add(-reroute.ago)
+		for attempt, authIndex := range []string{"auth-codex-01", "auth-codex-02"} {
+			event := buildEventAt(random, profile, map[string]string{profile.provider: authIndex}, started.Add(time.Duration(attempt)*1200*time.Millisecond))
+			event.EventKey = fmt.Sprintf("%s-%d", reroute.requestID, attempt)
+			event.RequestID = reroute.requestID
+			assignCaller(&event, keys[1], fingerprint)
+			if attempt == 0 {
+				event.Failed, event.FailStatusCode = true, 429
+				event.FailBody = `{"error":{"type":"rate_limit_error","message":"Rate limit reached for requests"}}`
+				event.OutputTokens, event.ReasoningTokens, event.CacheCreationTokens = 0, 0, 0
+				event.TotalTokens = event.InputTokens
+				event.LatencyMS = 380
+				event.ResponseModel, event.ModelSubstituted = "", false
+			} else {
+				event.Failed, event.FailStatusCode, event.FailBody = false, 0, ""
+				event.ResponseModel = profile.name
+				event.ModelSubstituted = false
+			}
+			events = append(events, event)
+		}
+	}
+	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
+		return 0, fmt.Errorf("seed rerouted requests: %w", err)
+	}
+	retryAfter := now.Add(demoRestingFor).UnixMilli()
+	return len(events), repo.InsertErrorEvent(ctx, usage.ErrorEvent{
+		InstanceID: instanceID, EventKey: "demo-rate-limit-codex-01", RequestID: demoReroutes[len(demoReroutes)-1].requestID,
+		Provider: "codex", Model: profile.name, AuthIndex: "auth-codex-01", StatusCode: 429, Code: "rate_limit_error",
+		Retryable: true, NextRetryAfterMS: &retryAfter, BackoffLevel: 1,
+		TimestampMS: now.Add(-demoReroutes[len(demoReroutes)-1].ago).UnixMilli(),
+	})
+}
+
+// demoLiveMinute is the traffic of the minute before the reference instant, so
+// the dashboard's live routing panel opens on several models answered by
+// several credentials. Each entry finishes `ago` before the reference instant.
+var demoLiveMinute = []struct {
+	model string
+	ago   time.Duration
+}{
+	{"gpt-5.6-luna", 52 * time.Second},
+	{"claude-opus-5.5", 44 * time.Second},
+	{"glm-5.3-flash", 37 * time.Second},
+	{"deepseek-v4-flash", 31 * time.Second},
+	{"gpt-5.6-luna", 26 * time.Second},
+	{"kimi-k3", 21 * time.Second},
+	{"claude-sonnet-5", 14 * time.Second},
+	{"deepseek-v4-flash", 9 * time.Second},
+	{"gpt-5.6-luna", 5 * time.Second},
+	{"claude-opus-5.5", 2 * time.Second},
+}
+
+// seedLiveMinute places demoLiveMinute. A request belongs to the minute it
+// finished in, so its start is placed one latency before its finish.
+func seedLiveMinute(ctx context.Context, repo *repository.Repository, now time.Time) (int, error) {
+	keys := gatewayKeyCatalog()
+	fingerprints := make([]string, len(keys))
+	for index, key := range keys {
+		fingerprint, err := repo.UsageClientKeyFingerprint(key.value)
+		if err != nil {
+			return 0, fmt.Errorf("derive caller key identity: %w", err)
+		}
+		fingerprints[index] = fingerprint
+	}
+	profiles := map[string]modelProfile{}
+	for _, profile := range modelCatalog() {
+		profiles[profile.name] = profile
+	}
+	credentials := credentialAuthIndexes()
+	random := newDeterministic(0x9E3779B97F4A7C15)
+	events := make([]usage.Event, 0, len(demoLiveMinute))
+	for index, entry := range demoLiveMinute {
+		profile, ok := profiles[entry.model]
+		if !ok {
+			return 0, fmt.Errorf("live minute names unknown model %q", entry.model)
+		}
+		event := buildEventAt(random, profile, credentials, now)
+		event.Failed, event.FailStatusCode, event.FailBody = false, 0, ""
+		event.LatencyMS = 600 + int64(index%4)*700
+		event.TimestampMS = now.Add(-entry.ago).UnixMilli() - event.LatencyMS
+		event.EventKey = fmt.Sprintf("req_demo_live_%02d", index)
+		event.RequestID = event.EventKey
+		key := index % len(keys)
+		assignCaller(&event, keys[key], fingerprints[key])
+		events = append(events, event)
+	}
+	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
+		return 0, fmt.Errorf("seed the live minute: %w", err)
+	}
+	return len(events), nil
 }
 
 // seedRollups folds the seeded history into the usage facts through the
@@ -432,9 +578,7 @@ func fillRecentWindow(random *deterministic, session workSession, profiles []mod
 		profile := session.pickProfile(random, profiles)
 		keyIndex := pickWeighted(random, keyWeights(keys))
 		event := buildEventAt(random, profile, credentials, at)
-		event.APIGroupKey = fingerprints[keyIndex]
-		event.APIGroupLabel = "api_key"
-		event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
+		assignCaller(&event, keys[keyIndex], fingerprints[keyIndex])
 		added = append(added, event)
 	}
 	return added
@@ -465,9 +609,7 @@ func recentSubstitutions(random *deterministic, profiles []modelProfile, credent
 				continue
 			}
 			keyIndex := pickWeighted(random, keyWeights(keys))
-			event.APIGroupKey = fingerprints[keyIndex]
-			event.APIGroupLabel = "api_key"
-			event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
+			assignCaller(&event, keys[keyIndex], fingerprints[keyIndex])
 			event.ResponseModel = profile.servedAs
 			event.ModelSubstituted = usage.IsModelSubstituted(event.Model, event.ResponseModel)
 			added = append(added, event)

@@ -5,7 +5,9 @@ import {
   Button,
   Listy,
   Popover,
+  Tooltip,
 } from 'antd';
+import clsx from 'clsx';
 import { Switch } from '../components/common/Switch';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -125,8 +127,13 @@ export const UsageEventsPage: React.FC = () => {
     facetWindow,
     facetRevision,
     refresh,
+    liveState,
+    notifySettled,
     handleManualRefresh,
   } = useUsageEventSync({ query, isAutoRefresh, isFetchingRef });
+  // Pushed or polled is told by the dot's colour and tooltip, so the dot also names it for
+  // a reader who has neither: a keyboard, a screen reader, or a finger with no hover.
+  const liveLabel = t(liveState === 'live' ? 'events.live_pushed' : 'events.live_polling');
   // The header's estimate of the window, re-read on every poll. It is display only:
   // the reads below send the window unresolved, so the server decides what "now" is.
   const displayWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
@@ -221,6 +228,10 @@ export const UsageEventsPage: React.FC = () => {
   // Assigned after the read it describes, so the poll's interval always observes
   // the latest value without naming it in its dependency list.
   isFetchingRef.current = result.isFetching;
+  // A record that landed while this read was in flight was held for it; it is read now.
+  React.useEffect(() => {
+    if (!result.isFetching) notifySettled();
+  }, [result.isFetching, notifySettled]);
 
   const handlePrevPage = React.useCallback(() => {
     if (!cursors.length || result.isFetching) return;
@@ -498,7 +509,11 @@ export const UsageEventsPage: React.FC = () => {
                 {/* The pulse only appears while the poll is actually running, so it
                     means "this list is moving" rather than "this page has a
                     setting". */}
-                {isAutoRefresh && <span className="req-live-pulse-dot" aria-hidden="true" />}
+                {isAutoRefresh && (
+                  <Tooltip title={liveLabel}>
+                    <span role="img" aria-label={liveLabel} className={clsx('req-live-pulse-dot', liveState !== 'live' && 'is-polling')} />
+                  </Tooltip>
+                )}
                 <span className="req-auto-refresh-label">{t('events.auto_refresh')}</span>
                 <Switch
                   id="req-auto-refresh"

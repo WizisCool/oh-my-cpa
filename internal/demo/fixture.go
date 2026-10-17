@@ -233,17 +233,21 @@ type gatewayKey struct {
 	alias string
 	// usageWeight decides how much of the fabricated traffic this key carries.
 	usageWeight int
+	// userAgent is the client product that uses this key, as CPA reports it after
+	// minimisation: the first token of the header. It is what names the caller on
+	// the routing page, so each key is one recognisable agent.
+	userAgent string
 }
 
 func gatewayKeyCatalog() []gatewayKey {
 	return []gatewayKey{
-		{value: "omc-demo-key-platform", alias: "platform-services", usageWeight: 5},
-		{value: "omc-demo-key-ci", alias: "ci-pipelines", usageWeight: 3},
+		{value: "omc-demo-key-platform", alias: "platform-services", usageWeight: 5, userAgent: "opencode/0.15.8"},
+		{value: "omc-demo-key-ci", alias: "ci-pipelines", usageWeight: 3, userAgent: "codex_cli_rs/0.47.0"},
 		// The alias is rendered in the request list, and the demonstration is public, so
 		// it names a role rather than a person: an operator's own device name here would
 		// put their identity on a page anyone can open.
-		{value: "omc-demo-key-laptop", alias: "personal-laptop", usageWeight: 2},
-		{value: "omc-demo-key-eval", alias: "eval-harness", usageWeight: 1},
+		{value: "omc-demo-key-laptop", alias: "personal-laptop", usageWeight: 2, userAgent: "claude-cli/2.0.14"},
+		{value: "omc-demo-key-eval", alias: "eval-harness", usageWeight: 1, userAgent: "python-httpx/0.27.2"},
 	}
 }
 

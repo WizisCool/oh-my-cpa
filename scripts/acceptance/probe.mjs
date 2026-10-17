@@ -209,6 +209,15 @@ export function defaultRoutes() {
       (url, method, request) => respondPreference(url, method, request.postData()),
     ],
 
+    // The live usage stream answers as a deployment without a collector does, so
+    // every reader falls back to its poll and a scenario's fixtures stay the only
+    // source of records. A probe about the stream itself declares its own entry.
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/usage/live', () => ({ status: 204, json: undefined })],
+    // The dashboard's live routing panel: a quiet gateway, unless a scenario says otherwise.
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/usage/routing', () => ({
+      as_of_ms: Date.now(), window_ms: 60_000, records: [], has_more: false, cooldowns: [],
+    })],
+    [(url, method) => method === 'GET' && url.pathname === '/omc/api/v1/management/config', () => ({ scalars: {} })],
     [(url, method) => method === 'GET' && url.pathname.endsWith('/custom-icons'), () => ({ icons: [] })],
     [(url, method) => method === 'GET' && url.pathname.endsWith('/api/v1/fonts'), () => ({ fonts: [] })],
     [(url, method) => method === 'GET' && url.pathname.endsWith('/management/auth-files'), () => ({ files: [], total: 0 })],

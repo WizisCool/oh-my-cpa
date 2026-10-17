@@ -783,6 +783,9 @@ export async function dashboardModelPanels({ base, page, check }) {
 
   const trendCanvas = page.locator('.model-trend canvas').first();
   const hoverTrend = async () => {
+    // The mouse moves in viewport coordinates, so the trend has to be on screen wherever the
+    // dashboard's layout above it puts it.
+    await trendCanvas.scrollIntoViewIfNeeded();
     const box = await trendCanvas.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     // A second move lands on a different pixel: the library's pointer tracking subscribes to movement,

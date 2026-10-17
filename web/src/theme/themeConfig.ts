@@ -53,6 +53,44 @@ export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic
  */
 export const MOTION_SCROLL: MotionToken = { duration: 160, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' };
 
+/**
+ * docs/design.md §7's `route` token: one hop of a stored request travelling the routing map, from
+ * the caller to the gateway or from the gateway to the credential that answered it.
+ *
+ * The only motion that runs on a live signal rather than on an action or a poll (§7 rule 9). It is
+ * longer than `roll` because the reader has to follow a point across most of the map's width, which
+ * a quarter second does not allow; it is a fixed length rather than one scaled by distance so a
+ * reroute's second hop lands on the same beat as a first. The easing starts and ends at rest, unlike
+ * the console's `ease`, because the hop begins at one node and settles on another.
+ */
+export const MOTION_ROUTE: MotionToken = { duration: 300, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' };
+
+/** The answering credential's acknowledgement when a hop lands on it: one fade, never repeated. */
+export const MOTION_ROUTE_LAND: MotionToken = { duration: 420, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
+/**
+ * A routing-map node or lane lighting as a request reaches it and settling back: the light rises
+ * over the first sixth and decays over the rest, so a card glows as the dot docks and cools while the
+ * reader's eye moves on, instead of blinking.
+ */
+export const MOTION_ROUTE_GLOW: MotionToken = { duration: 1200, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' };
+
+/**
+ * A routing-map row sliding to close or open a gap as rows enter and leave the rolling minute. On
+ * the decelerating curve, so the column settles rather than stops.
+ */
+export const MOTION_ROUTE_PRESENCE: MotionToken = { duration: 300, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
+/**
+ * A routing-map row arriving: it fades in while drifting a few pixels from its own edge of the map,
+ * on the console's decelerating curve. Longer than a transition because a row arriving is an event
+ * the reader should notice, and never past its target: the console has no bounce (§7).
+ */
+export const MOTION_ROUTE_ENTER: MotionToken = { duration: 300, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
+/** A routing-map row leaving the minute: shorter than its arrival and accelerating away. */
+export const MOTION_ROUTE_EXIT: MotionToken = { duration: 200, easing: 'cubic-bezier(0.4, 0, 1, 1)' };
+
 /** A live label repeats this glyph-only sweep; unlike a transition, its period lasts with the work. */
 export const MOTION_LIVE_TEXT: MotionToken = { duration: 900, easing: 'linear' };
 

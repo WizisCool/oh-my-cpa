@@ -29,7 +29,6 @@ import {
   isListStale,
   isViewChange,
   pendingArrivalCount,
-  shouldPoll,
 } from '../web/src/components/usage/pollingPolicy.ts';
 import {
   presetKeys,
@@ -397,34 +396,6 @@ test('a disposed controller commits nothing', () => {
   // nothing will cancel.
   search.change('after-dispose', (value) => commits.push(value));
   assert.equal(clock.pendingCount(), 0);
-});
-
-// ---------------------------------------------------------------------------
-// The polling decision
-// ---------------------------------------------------------------------------
-
-test('a tick runs only when the switch is on, the tab is visible and nothing else is reading', () => {
-  assert.equal(
-    shouldPoll({ isAutoRefresh: true, isVisible: true, isFetching: false, isSyncing: false }),
-    true,
-  );
-});
-
-test('every reason to skip a tick is honoured', () => {
-  const base = { isAutoRefresh: true, isVisible: true, isFetching: false, isSyncing: false };
-  assert.equal(shouldPoll({ ...base, isAutoRefresh: false }), false, 'off means no ticks');
-  assert.equal(shouldPoll({ ...base, isVisible: false }), false, 'a hidden tab has no reader');
-  assert.equal(shouldPoll({ ...base, isFetching: true }), false, 'a slow query cannot stack reads');
-  assert.equal(shouldPoll({ ...base, isSyncing: true }), false, 'a sync owns the next refresh');
-});
-
-test('the cadence is not a round-trip afterthought', () => {
-  // The tick fires on the interval regardless of how long the previous read took;
-  // the in-flight guard skips a tick rather than delaying the schedule. That is
-  // the difference between a 10s cadence and "10s after the last response".
-  const base = { isAutoRefresh: true, isVisible: true, isSyncing: false };
-  assert.equal(shouldPoll({ ...base, isFetching: true }), false, 'a busy read skips this tick');
-  assert.equal(shouldPoll({ ...base, isFetching: false }), true, 'the next tick still runs on schedule');
 });
 
 test('a poll is not a view change, but moving to another page or filter set is', () => {

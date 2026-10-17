@@ -48,9 +48,20 @@ describe('the dataset the demonstration is served from', () => {
 
   it('answers every response with a success', () => {
     // An error captured at export time would be served to a visitor as data.
+    // The one deliberate exception is the live usage stream, which a deployment without a
+    // collector answers with 204 so the console keeps reading the dataset on its poll.
     for (const [name, response] of Object.entries(DATASET.responses)) {
-      assert.equal(response.status, 200, `${name} was captured as ${response.status}`);
+      const expected = name === 'usage-live' ? 204 : 200;
+      assert.equal(response.status, expected, `${name} was captured as ${response.status}`);
     }
+  });
+
+  it('serves the live usage stream as no content, so EventSource stops and the console polls', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const response = await worker.fetch(request('/api/v1/usage/live'), env);
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), '');
   });
 });
 

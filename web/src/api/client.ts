@@ -91,6 +91,7 @@ export interface LogsStatus {
   logging_to_file: boolean;
   request_log: boolean;
 }
+import type { UsageRoutingResponse } from '../types/usageRouting';
 import { UsageEventPage, UsageEventDetail, UsageFacetsResponse, parseUsageIngestRefresh, type UsageIngestRefresh } from '../types/usageEvents';
 
 export class ApiError extends Error {
@@ -845,6 +846,14 @@ export const api = {
 
   async getUsageFacets(query: string): Promise<UsageFacetsResponse> {
     return request<UsageFacetsResponse>(`/usage/facets${query ? `?${query}` : ''}`, { method: 'GET' });
+  },
+
+  /**
+   * getUsageRouting reads the live routing window: the whole minute, or with
+   * `after` only the attempts recorded since that record.
+   */
+  async getUsageRouting(after?: number): Promise<UsageRoutingResponse> {
+    return request<UsageRoutingResponse>(`/usage/routing${after ? `?after=${after}` : ''}`, { method: 'GET' });
   },
 
   async getUsageIngestStatus(): Promise<unknown> {

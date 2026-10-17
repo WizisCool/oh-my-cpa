@@ -19,6 +19,8 @@ type Pipeline struct {
 	store       *repository.Repository
 	// refresh keeps overlapping manual syncs out of the pipeline.
 	refresh refreshLock
+	// changes tells live readers that stored usage data moved.
+	changes *Changes
 }
 
 // PipelineStatus is what the ingest status endpoint reports.
@@ -42,7 +44,21 @@ func NewPipeline(runner *Runner, processor *Processor, maintenance *Maintenance,
 	if store == nil {
 		return nil, errors.New("usage store is required")
 	}
-	return &Pipeline{runner: runner, processor: processor, maintenance: maintenance, store: store}, nil
+	changes := NewChanges()
+	// Capture wakes decode, and decode publishes: a record reaches a live reader
+	// in the time it takes to write and decode it, with no fixed interval between
+	// the gateway and the browser. Error events need no decode, so they publish
+	// straight from capture.
+	processor.SetCommitHandler(changes.Publish)
+	if runner != nil {
+		runner.SetCaptureHandlers(processor.Wake, changes.Publish)
+	}
+	return &Pipeline{runner: runner, processor: processor, maintenance: maintenance, store: store, changes: changes}, nil
+}
+
+// SubscribeChanges attaches a live reader; see Changes.
+func (p *Pipeline) SubscribeChanges() (<-chan struct{}, func(), error) {
+	return p.changes.Subscribe()
 }
 
 // Runner exposes the collector for wiring and tests.

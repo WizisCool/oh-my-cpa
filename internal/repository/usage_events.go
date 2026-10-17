@@ -317,7 +317,32 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		args = append(args, cursor.TimestampMS, cursor.ID)
 	}
 
-	query := `
+	query := usageEventListSelect
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
+	query += " ORDER BY e.timestamp_ms DESC, e.id DESC LIMIT ?"
+	args = append(args, page.Limit+1)
+
+	page.Items, err = r.queryUsageEventRows(ctx, query, args...)
+	if err != nil {
+		return page, err
+	}
+
+	if len(page.Items) > page.Limit {
+		page.Items = page.Items[:page.Limit]
+		page.HasMore = true
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = encodeEventCursor(last.TimestampMS, last.ID)
+	}
+	page.ArrivedCount = arrivedCount
+	return page, nil
+}
+
+// usageEventListSelect is the list projection of a request record: every column
+// a row prints, plus the triaged resource behind its credential. The join keeps
+// only unambiguous claims, so an index two resources share names neither.
+const usageEventListSelect = `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
@@ -337,18 +362,17 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index`
-	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
-	}
-	query += " ORDER BY e.timestamp_ms DESC, e.id DESC LIMIT ?"
-	args = append(args, page.Limit+1)
 
+// queryUsageEventRows runs a statement built on usageEventListSelect and scans
+// its rows.
+func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args ...any) ([]UsageEventRow, error) {
 	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {
-		return page, fmt.Errorf("list usage events: %w", err)
+		return nil, fmt.Errorf("list usage events: %w", err)
 	}
 	defer rows.Close()
 
+	items := []UsageEventRow{}
 	for rows.Next() {
 		var row UsageEventRow
 		var failed, generate int
@@ -365,7 +389,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
 			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode); errScan != nil {
-			return page, fmt.Errorf("scan usage event: %w", errScan)
+			return nil, fmt.Errorf("scan usage event: %w", errScan)
 		}
 		row.Failed = failed == 1
 		row.Generate = generate == 1
@@ -385,20 +409,12 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			row.CostUSD = &costUSD.Float64
 		}
 		row.HasRequestLog = strings.TrimSpace(row.RequestID) != ""
-		page.Items = append(page.Items, row)
+		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
-		return page, fmt.Errorf("iterate usage events: %w", err)
+		return nil, fmt.Errorf("iterate usage events: %w", err)
 	}
-
-	if len(page.Items) > page.Limit {
-		page.Items = page.Items[:page.Limit]
-		page.HasMore = true
-		last := page.Items[len(page.Items)-1]
-		page.NextCursor = encodeEventCursor(last.TimestampMS, last.ID)
-	}
-	page.ArrivedCount = arrivedCount
-	return page, nil
+	return items, nil
 }
 
 // GetUsageEvent loads one record by primary key.

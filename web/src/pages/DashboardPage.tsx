@@ -13,6 +13,7 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { usePreference } from '../hooks/usePreference';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
 import { maskKeyText } from '../utils/maskKey';
@@ -31,6 +32,7 @@ import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
+import { RoutingPanel } from '../components/dashboard/routing/RoutingPanel';
 import {
   CredentialQuota,
   CREDENTIAL_FILES_QUERY_KEY,
@@ -125,6 +127,7 @@ function rateTone(successRate: number | null | undefined): ChartTone {
 export const DashboardPage: React.FC = () => {
   useTimeZone();
   const t = useT();
+  const isPhone = useIsPhoneViewport();
   const navigate = useNavigate();
   // Shared with the navigation's attention mark, so the dashboard adds no request of its own.
   const { data: pricingAttention } = useQuery({
@@ -550,6 +553,13 @@ export const DashboardPage: React.FC = () => {
           />
         </Panel>
       </div>
+
+      {/* Live, and outside the time-range control's reach: the routing panel holds a rolling
+          minute of its own and reads whenever a request is stored, so it answers "which model
+          is going to which credential right now" whatever window the tiles show. A phone does
+          not mount it: the map needs its three columns to say anything, and a reduced list would
+          only repeat the request list, so the phone skips its reads and live connection too. */}
+      {!isPhone && <RoutingPanel />}
 
       {/* Between the six KPI tiles and the activity grid: the same window the tiles describe, read at
           model granularity. Inside the window picker's reach on purpose - unlike the grid below, which

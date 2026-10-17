@@ -119,6 +119,13 @@ const EXCEPTIONS = [
     why: 'A spinning refresh icon is the same kind of indeterminate loop as the heatmap bar above: 900ms is one rotation, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it.',
   },
   {
+    kind: 'duration',
+    file: 'components/dashboard/routing/RoutingPanel.module.css',
+    selector: '.edge-flow-on',
+    property: 'animation',
+    why: 'A routing lane flows for as long as a request travels it or waits at its end; 540ms is one dash period of the flow, not a transition between two states, and reduced motion removes it (docs/design.md §7 rule 9).',
+  },
+  {
     kind: 'layout',
     file: 'components/config/config.css',
     selector: '.settings-tls-body',

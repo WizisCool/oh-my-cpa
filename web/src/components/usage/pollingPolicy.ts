@@ -1,43 +1,4 @@
 /**
- * Whether one tick of the request list's auto-refresh poll should run.
- *
- * Auto-refresh is a fixed 10-second wall-clock cadence with three reasons to skip
- * a tick instead of queueing one. Skipping matters more than it looks: a poll that
- * queued would fire the moment a slow query resolved, so a slow gateway would
- * produce a burst of reads against data the first one had not finished reading.
- * The rule is therefore "read this list every ten seconds if there is a reader who
- * can see it and nothing better is already doing it", not "read it ten seconds
- * after the last response", which is the cadence drift that naming the in-flight
- * flag in a React dependency list used to reintroduce.
- */
-
-export interface PollDecisionInput {
-  /** The operator's on/off switch. Off means no ticks at all, not slower ones. */
-  isAutoRefresh: boolean;
-  /**
-   * The page's own visibility. A hidden tab is a reader who is not watching, so a
-   * tick is spent on nobody. The list is still correct when the tab returns: the
-   * next tick reads the window it is showing.
-   */
-  isVisible: boolean;
-  /** A list query is already in flight. */
-  isFetching: boolean;
-  /**
-   * A manual sync owns the next refresh. A poll landing on top of it would only
-   * add a read of the data the sync is about to replace.
-   */
-  isSyncing: boolean;
-}
-
-export function shouldPoll({ isAutoRefresh, isVisible, isFetching, isSyncing }: PollDecisionInput): boolean {
-  if (!isAutoRefresh) return false;
-  if (!isVisible) return false;
-  if (isFetching) return false;
-  if (isSyncing) return false;
-  return true;
-}
-
-/**
  * Whether the list is showing a view the reader has not seen the data for yet.
  *
  * The reader's *identity* is compared (the committed filters plus the page), not

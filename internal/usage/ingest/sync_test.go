@@ -253,8 +253,9 @@ func TestCaptureNowFlushesBufferedSubscriptionMessages(t *testing.T) {
 	waitForMode(t, runner, ModeSubscribe)
 
 	// A live subscription suppresses CPA's enqueue, so these records exist only
-	// in the reader's buffer until something flushes them. The idle interval is
-	// an hour, so the flush ticker cannot be what does it.
+	// in the collector until it writes them. Whether the collector persisted them
+	// on arrival or the manual pass drained them from the buffer, a sync that
+	// returns must leave both stored: that is what "synced" promises the page.
 	upstream.push("usage", usagePayload("stream-1"))
 	upstream.push("usage", usagePayload("stream-2"))
 
@@ -264,8 +265,8 @@ func TestCaptureNowFlushesBufferedSubscriptionMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptureNow: %v", err)
 	}
-	if outcome.Captured != 2 {
-		t.Fatalf("captured = %d, want 2 buffered records", outcome.Captured)
+	if got := inboxCount(t, store, ""); got != 2 {
+		t.Fatalf("inbox holds %d records after the sync, want both pushed records", got)
 	}
 	if outcome.Mode != ModeSubscribe {
 		t.Fatalf("mode = %q, want subscribe", outcome.Mode)

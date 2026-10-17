@@ -97,6 +97,8 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/usage/ingest-status', 'usage-ingest-status'],
   ['/api/v1/usage/facets', 'usage-facets'],
   ['/api/v1/usage/events', 'usage-events'],
+  ['/api/v1/usage/live', 'usage-live'],
+  ['/api/v1/usage/routing', 'usage-routing'],
   // The session endpoint sits under `/api/auth`, NOT under `/api/v1`: the console
   // builds it from its own auth root. Getting this wrong left every page on the login
   // card, because the console never learns it is signed in and renders the sign-in

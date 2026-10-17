@@ -49,6 +49,12 @@
   flex-shrink: 0;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 30%, transparent);
 }
+
+/* Records are polled rather than pushed: the list still moves, on the fallback cadence. */
+.req-live-pulse-dot.is-polling {
+  background: var(--muted);
+  box-shadow: none;
+}
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;

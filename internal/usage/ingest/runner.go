@@ -203,6 +203,10 @@ type Runner struct {
 
 	// onRefresh is invoked when CPA signals that its configuration changed.
 	onRefresh func()
+	// onInbox and onError are told when captured rows or an error event were
+	// persisted; see SetCaptureHandlers.
+	onInbox func()
+	onError func()
 
 	// syncRequests carries manual sync requests to the collector goroutine, which
 	// is the only consumer allowed to touch CPA's destructive queue. The buffer is
@@ -411,6 +415,16 @@ func (r *Runner) capturedSince(before int64) int {
 	return int(delta)
 }
 
+// SetCaptureHandlers installs the callbacks run after the collector persisted
+// something: inbox rows (onInbox) or a credential error event (onError). Both are
+// wired before Run starts and must not block.
+func (r *Runner) SetCaptureHandlers(onInbox, onError func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onInbox = onInbox
+	r.onError = onError
+}
+
 // SetRefreshHandler installs the CPA configuration-change callback.
 func (r *Runner) SetRefreshHandler(handler func()) {
 	r.mu.Lock()
@@ -590,6 +604,7 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 					r.recordError(fmt.Errorf("capture error event: %w", err))
 					continue
 				}
+				r.notify(r.errorHandler())
 			default:
 				return nil
 			}
@@ -607,6 +622,20 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 			}
 			if err := r.capture(ctx, ModeSubscribe, payload, &batch); err != nil {
 				return err
+			}
+			// Write as soon as the subscription has nothing more queued. A lone
+			// record is persisted at once instead of waiting for the flush tick,
+			// while a burst still lands as one batch because the buffer is not
+			// empty until the burst has been read. The record exists nowhere else,
+			// so a shutdown arriving mid-write must not abort it: the write runs
+			// under its own deadline and Run waits for it.
+			if len(stream.Messages()) == 0 {
+				persistCtx, cancelPersist := context.WithTimeout(context.WithoutCancel(ctx), finalFlushTimeout)
+				err := r.flush(persistCtx, ModeSubscribe, &batch)
+				cancelPersist()
+				if err != nil {
+					return err
+				}
 			}
 		case <-flush.C:
 			if err := r.flush(ctx, ModeSubscribe, &batch); err != nil {
@@ -882,9 +911,23 @@ func (r *Runner) flush(ctx context.Context, mode Mode, batch *[]string) error {
 		r.mu.Lock()
 		r.status.Captured += int64(written)
 		r.status.LastCaptureAt = &now
+		handler := r.onInbox
 		r.mu.Unlock()
+		r.notify(handler)
 	}
 	return nil
+}
+
+func (r *Runner) errorHandler() func() {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.onError
+}
+
+func (r *Runner) notify(handler func()) {
+	if handler != nil {
+		handler()
+	}
 }
 
 func (r *Runner) pop(ctx context.Context, mode Mode, count int) ([]string, error) {

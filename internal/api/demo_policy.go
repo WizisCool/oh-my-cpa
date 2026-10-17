@@ -184,6 +184,10 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/usage/events", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/events/{id}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/facets", demoAllow, ""},
+	// The live stream answers 204 in the demonstration, which has no collector to
+	// signal from; the pages keep polling the fixture instead.
+	{http.MethodGet, "/api/v1/usage/live", demoAllow, ""},
+	{http.MethodGet, "/api/v1/usage/routing", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/audit/events", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/audit/summary", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/audit/export", demoAllow, ""},

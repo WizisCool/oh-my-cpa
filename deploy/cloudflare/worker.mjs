@@ -175,6 +175,10 @@ function matchEventIdentity(decoded, pathname, dataset) {
 }
 
 function serve(entry, nowMs, url) {
+  // A captured "no content" answer has no body to re-base, and a Response with a
+  // null-body status refuses even an empty string. The live usage stream is one:
+  // the demonstration has no collector, so it answers 204 and the console polls.
+  if (entry.status === 204) return new Response(null, { status: 204, headers: JSON_HEADERS });
   const deltaMs = nowMs - REFERENCE_MS;
   let body = entry.body;
   try {

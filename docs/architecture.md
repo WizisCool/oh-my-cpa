@@ -948,7 +948,7 @@ Query for server state.
 | `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The Playground's `pages/playground/api.ts` and the Agent's `agent/transport.ts` wrap `requestResponse` and `agent/sse.ts` for their SSE routes, without duplicating auth or retry policy |
 | `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the canvas document and kit (`canvasDocument.ts`, `canvasKit.ts`) and the browser-side exports (`export.ts`: file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the auth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
-| `hooks/` | `usePreference`, `useProgressTask` (counts a component's lifetime, such as a Suspense fallback's, as loading-bar work), `useCustomIcons` (shared revisioned custom-icon metadata), `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useVisibleViewport` (effect-owned usable-viewport bounds; pure policy in `types/visibleViewport.ts`), `useFocusedRegion` (in-place workspace isolation and focus cleanup), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
+| `hooks/` | `usePreference`, `useProgressTask` (counts a component's lifetime, such as a Suspense fallback's, as loading-bar work), `useCustomIcons` (shared revisioned custom-icon metadata), `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useLiveRevision` (binds the shared live usage channel in `api/usageLive.ts` to a query revision, §6 "The live change signal"), `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useVisibleViewport` (effect-owned usable-viewport bounds; pure policy in `types/visibleViewport.ts`), `useFocusedRegion` (in-place workspace isolation and focus cleanup), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `scrollSmoothing.ts` (the console-wide wheel and keyboard glide, ADR 0046: discrete wheel notches and scrolling keys glide over the `scroll` token, virtualized lists are driven through their own wheel handling and get a glide's first step inside the input event, so the glide adds no latency to their own jump (ADR 0047), trackpads and touch are never glided; loaded on demand by `hooks/useScrollSmoothing.ts` and switched by the `omc_scroll_smoothing` preference, whose words live in `scrollSmoothingPreference.ts` so the engine stays out of the main entry), `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below), `download.ts` (`saveBlob`, the one download path: it attaches the anchor and releases the object URL on a delay, because revoking it in the click's own task cancels the save in Firefox and Safari), `format.ts` (`formatBytes`), `loadProgress.ts` (the loading bar's pure, clock-injected model: batches, settled and pending credit, the show delay and the never-backwards smoothing), `progressController.ts` (the injected clock, scheduling and hidden/reduced-motion lifecycle) and `progressTasks.ts` (the module-level registry of non-query work in flight, and the source shape the bar reads) |
@@ -958,7 +958,7 @@ Query for server state.
 | `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. `CpaLogPanel` renders into a host element it moves to the document body for its fullscreen viewer, because a routed page sits inside a transformed container that would confine `position: fixed`. Wire types and pure helpers (line parsing, the filters and their per-value counts) live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, direct settings action and an overflow menu for safe external links and confirmed removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys and CPA's `store` install record carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pluginRuntime.ts` waits for the gateway to load or unload a switched plugin. `pages/PluginsPage.tsx` owns the tab, which is the path (`/plugins`, `/plugins/store`, `/plugins/settings`), and reads the store only once its tab is opened. `pluginPages.ts` turns the plugin list into the pages plugins registered; `AppLayout` lists them in the navigation's Plugins group, reading the plugin list once per shell, and `pages/PluginPageHost.tsx` shows one at `/plugin-pages/<id>/<n>` in a frame on the plugin host, inside a console-written parent document that states the colour mode as `data-theme` (ADR 0060) |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks; each of those components imports the stylesheet that draws it (`RequestList.css` for the rows and their header, `RequestToolbar.css`, `RequestFilterChips.css`, `RequestFoldControls.css`, `RequestExportDialog.css`, `UsageEventDrawer.css`, `RequestFailureDetail.css`, and `requestMarks.css` for the marks the list and the detail share), so `pages/UsageEventsPage.css` holds only the page's own layout. The dashboard, the configuration panel, key management and the log viewer do the same with one stylesheet per directory (`components/dashboard/dashboard.css`, `components/config/config.css`, `components/keys/keys.css`, `components/logs/logs.css`), which leaves `web/src/index.css` the tokens, the Ant Design overrides, the shell, the shared primitives and the classes more than one surface uses; `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048) and the export of selected requests (`requestSelection.ts` decides the selection and what a redaction withholds, `requestSheetModel.ts` lays the image out as data, `requestExportJson.ts` builds the JSON document, and only `requestSheetPainter.ts` touches a canvas - so what an export can contain is asserted without a browser), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks; each of those components imports the stylesheet that draws it (`RequestList.css` for the rows and their header, `RequestToolbar.css`, `RequestFilterChips.css`, `RequestFoldControls.css`, `RequestExportDialog.css`, `UsageEventDrawer.css`, `RequestFailureDetail.css`, and `requestMarks.css` for the marks the list and the detail share), so `pages/UsageEventsPage.css` holds only the page's own layout. The dashboard, the configuration panel, key management and the log viewer do the same with one stylesheet per directory (`components/dashboard/dashboard.css`, `components/config/config.css`, `components/keys/keys.css`, `components/logs/logs.css`), which leaves `web/src/index.css` the tokens, the Ant Design overrides, the shell, the shared primitives and the classes more than one surface uses; `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, and `components/dashboard/routing/` carries `routingPackets.ts` (the imperative packet player, §7 rule 9 in `docs/design.md`), `usePresence.ts` and `rowMotion.ts` (rows entering, leaving and sliding on the map) beside the routing model in `types/usageRouting.ts`; `timeRangePolicy.ts`, `syncPresentation.ts`, `chipDisplay.ts` `requestListTouch.ts` (the request list under a finger: it follows the finger, coasts and folds the header, in place of the virtualizer's touch emulation, ADR 0048) and the export of selected requests (`requestSelection.ts` decides the selection and what a redaction withholds, `requestSheetModel.ts` lays the image out as data, `requestExportJson.ts` builds the JSON document, and only `requestSheetPainter.ts` touches a canvas - so what an export can contain is asserted without a browser), and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
 
 OAuth workspace sorting constructs its numeric/base-sensitive name collator lazily
 within one sort invocation, resolving the runtime default locale afresh. Numeric
@@ -1340,7 +1340,8 @@ CPA queue / subscription
                          rolls request records and decoded payloads out
   → /management/dashboard, /management/dashboard/tail,
     /management/dashboard/token-heatmap, /management/dashboard/models,
-    /management/dashboard/providers, /usage/events
+    /management/dashboard/providers, /usage/events, /usage/routing
+  → ingest.Changes       "stored data changed" → GET /usage/live (SSE)
 ```
 
 The pipeline exists because CPA's queue is destructive and short-lived: the only
@@ -1366,6 +1367,64 @@ RESP `LPOP`, and an unreachable RESP endpoint degrades to the HTTP usage queue
 4s → 8s → 10s, then capped) while a full batch drains with no delay. A wrong
 management key triggers a long cooldown instead of retrying, because CPA bans a
 client IP after repeated failures.
+
+### The live change signal
+
+A page that shows request records learns that one was stored from a signal, not
+from a cadence. The path from CPA to the screen has no fixed wait in it:
+
+- In `subscribe` mode the runner writes a pushed record to `usage_inboxes` as soon
+  as the subscription buffer is empty, rather than on the flush tick. The write
+  runs under a context detached from shutdown, bounded by the final-flush timeout,
+  because a record received from the destructive channel exists nowhere else.
+- The runner's capture handlers wake the decode processor, which otherwise idles on
+  its interval, and the processor publishes to `ingest.Changes` after each commit
+  that stored an event; an error-event capture publishes too, since a cooldown
+  changes what the routing panel draws.
+- `ingest.Changes` is a coalescing hub: each subscriber holds a one-slot channel and
+  a publish never blocks, so a burst of commits becomes one pending signal per
+  reader and a slow reader cannot stall the decoder. Readers are capped at
+  `MAX_CHANGE_SUBSCRIBERS`; past it `/usage/live` answers 503.
+- `GET /usage/live` is a server-sent event stream that carries no data: `ready` on
+  connect, `usage` when something changed (at most one per 250 ms), and a comment
+  heartbeat every 20 s. It ends after five minutes so a session that signed out
+  cannot keep a stream; the browser reconnects and the reconnect re-authenticates.
+  Without a collector (ingestion off, the public demonstration) it answers 204.
+- In the browser, `web/src/api/usageLive.ts` opens one stream per tab, shared by
+  every reader, closes it while the tab is hidden, and retries a 204 or 503 itself
+  after 30 s because EventSource does not. `useLiveRevision` turns signals into a
+  revision a query keys on, holding a signal that arrives during a read so it costs
+  exactly one follow-up read. Every reader treats `ready` as a signal, so whatever
+  changed while it was disconnected is read on reconnect, and each reader keeps its
+  10 s poll for as long as no stream is open.
+
+A signal never carries rows: each reader re-reads with its own filters and cursor,
+so a merged or missed signal cannot lose a record.
+
+### Live routing
+
+`GET /usage/routing` answers the attempts of a rolling `USAGE_ROUTING_WINDOW` (one
+minute), entirely from request records: CPA writes one per attempt, so a record is a
+route a request took, and records sharing a `request_id` are one request CPA rerouted
+(counted once, and as an error a caller saw only when its last attempt failed). An
+attempt belongs to the minute it finished in (`timestamp_ms + latency_ms`). Without
+`after` the answer is the whole minute, newest first and capped at
+`MAX_ROUTING_RECORDS` (`has_more` says the cap was hit); with `after=<record id>` it is
+only what was recorded since. Credentials resting now come from the newest
+`error_events` row per auth index whose retry or recovery time is still ahead.
+Records are projected exactly as the request list projects them, so the dashboard's
+routing panel (`components/dashboard/routing/`) names models and credentials the way
+the list does.
+
+The panel holds the minute in the browser: it reads the whole minute once, then on
+each live usage signal reads after the newest record it holds, merges, and ages
+records out on a one-second clock aligned to the server's `as_of_ms`; an incremental
+read that hit the cap restarts the window from it. The model it draws
+(`types/usageRouting.ts`) groups attempts into requests, folds models and credentials
+past the drawn limit into a count, and reconciles rows into entering, present and
+exiting so a row can animate out before it is removed. Nothing is inferred from
+configuration, and nothing is drawn as in flight: a request travels the map once its
+record is stored.
 
 ### Manual sync versus background collection
 
@@ -2702,8 +2761,8 @@ broad gates rather than nothing.
   policy and is tested directly. The one claim that stays in the browser is that a
   real pending timer survives a real clear-all, because it depends on a React state
   update and a URL write happening between the two.
-- **Refresh sequencing cannot be replaced by a poll-decision test.** A
-  `shouldPoll()` unit test says nothing about whether the page serialises the pull
+- **Refresh sequencing cannot be replaced by a read-policy test.** A
+  `createLiveReadPolicy()` unit test says nothing about whether the page serialises the pull
   before the reads, so the probe holds the response and observes the ordering.
 - **The copy path is split between a unit test and the browser.** Which route a copy
   takes - the async Clipboard API, or the selection path a plain-HTTP origin needs -

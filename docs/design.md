@@ -710,9 +710,81 @@ panels print every group's name and the list prints every group's numbers.
    identical or unreadable colours, and do not establish how the palette reads to a person with a
    colour-vision deficiency. See ADR 0006 for why that claim is not made.
 
+### Dashboard live routing
+
+One wide card directly under the KPI tiles, outside the window picker's reach: it always shows a
+rolling last minute, because it answers "which model is going to which credential right now", which a
+chosen span would turn into a report. There is no list of recent requests; that is the request list's.
+
+```text
+┌─ LIVE ROUTING  ● Live  [Last 60 s] ────────────────────────────────────────────────────────────────┐
+│  MODELS CALLED 3                                   CREDENTIALS & PROVIDERS 3                         │
+│  [◎] gpt-5.6-luna     12 req · 1.2 s ●╮                     ╭─● [o] Codex  sk-…c002  Answered last │
+│  [✳] claude-opus-5.5   6 req · 2.0 s ●─╲     ┌──────────┐ ╱                                       │
+│  [◇] glm-5.3-flash     2 req · 0.6 s ●──▶    │ [OMC]    │───● [o] Codex  sk-…c001  Rate limited ·   │
+│                                               │ Oh My CPA│ ╲                      back in 21 s      │
+│                                               │ Round    │  ╰─● [A] Claude sk-…cl01  6 req · 2.0 s  │
+│                                               └──────────┘                                         │
+└────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**It is the console's one lit surface**, by the product's decision: everywhere else depth is borders
+and background shifts (§1, §4), but this map shows live traffic, and the depth is what makes it read as
+something running rather than a diagram. The exception is scoped to it and held to three rules: depth
+sits on the gateway (a raised `--elevated` plate with a faint accent gradient and an accent sheen
+along its top edge, lifted by an accent glow on the dark page and by a neutral contact shadow with a
+faint accent bloom on the light one, where an accent glow alone turns muddy), on the rows (`--elevated` with a low shadow, and a glowing edge only while lit) and on
+the travelling dot (a glow in its own colour), over a faint dot grid fading to the panel's edges; no
+shadow is ever animated - each glow is an overlay whose opacity alone changes; and colour still
+means something - the models' series colours on their lanes, marks and ports, the accent on the
+gateway, and status colour where something is exceptional.
+
+- **The left column is only the model called** - the alias the caller named, else the model - with its
+  maker's mark, request count and mean latency. Volume is read from those counts and from the lanes'
+  width; the row prints no percentage and draws no share bar. No caller, client or key is drawn: the panel is about
+  where requests go. Each drawn model takes a categorical `--series-*` colour that it keeps for as long
+  as it stays on the panel; its port and its lane into the gateway carry it, and the name is always in
+  text beside it.
+- **The right column is the credential or provider that answered**, named as the request list names
+  it, through the same resolver: provider mark, provider, and the masked key or the OAuth account. The
+  state column says the one thing that is exceptional - `Rate limited`, `Quota exceeded` or `Cooling
+  down` with a countdown, in the warn tone - or else that it answered last (accent), or its count and
+  mean latency.
+- **The gateway** is the OMC mark on its own small tinted tile, the product name `Oh My CPA`, the
+  routing strategy CPA is configured with as a quiet chip, and the minute's attempts. A rail on each side is where the lanes dock, as long as
+  the fan of lanes it receives. While any request is on the map its rails and glow brighten, and they settle back over 600ms once the last one
+  has gone home.
+- **One lane per row.** A model has one lane into the gateway and a credential one lane out of it, the
+  lanes meeting the gateway side by side in their rows' order. Lanes per model and credential pair
+  tangled into a knot past a handful of each; which model went to which credential is what the
+  travelling requests show, in the model's colour. A credential's lane is neutral, `--warn` and dashed
+  while it rests, `--danger` when every attempt on it failed.
+- **Rows are ordered by name, never by volume**, so a count overtaking another does not reorder the
+  map under the reader. Volume decides only which seven models and seven credentials are drawn; the
+  rest are counted in a line below the column, and a resting credential is always drawn. Past four
+  rows in a column the rows tighten one step, never below a comfortable two-line row. When the panel itself is narrower than 940px
+  (`@container routingmap`, the rail open beside a laptop window), the lanes shorten and a
+  credential's state drops under its name instead of cutting the name to a letter.
+- **The header carries no counts**: the title, whether the panel is live, and the window. The rows
+  say how much went where, and the gateway how many attempts the minute held.
+- **The window rolls on the browser's clock.** An attempt belongs to the minute it finished in; when a
+  model's or credential's last attempt turns a minute old its row fades and drifts out toward its own
+  edge of the map, and the rows below close the gap. A model called for the first time in the minute
+  drifts in from the same edge (§7 rule 9).
+- **Light moves with the request, never ahead of it.** A row lights only when the travelling dot
+  docks in it, not when its record is read, and settles back over the glow beat; a lane brightens
+  behind the dot that crossed it and settles the same way (§7 rule 9). A row that has not been reached
+  by a dot - every row of the first read, and every row under reduced motion - stays at rest.
+- **An empty minute keeps the map's shape**: a dashed placeholder row on each side, joined to the
+  gateway by dashed lanes, says where models and credentials will appear, and leaves as the first
+  request's rows arrive.
+- **A phone does not show the panel.** The map needs its three columns to say anything, and a reduced
+  list of models and credentials would only repeat the request list, so below the phone breakpoint the
+  dashboard does not mount it - nor open its read and live stream.
+
 ### Dashboard model panels
 
-Two peer cards between the KPI tiles and the token activity grid, both driven by the window picker:
+Two peer cards between the live routing panel and the token activity grid, both driven by the window picker:
 
 ```text
 ┌─ Token trend ──────────────────┐ ┌─ Model usage ─────────────────────────┐
@@ -978,7 +1050,8 @@ header        56px tall, 1px bottom border
 sider         236px (58px collapsed), 1px right border
 ```
 
-Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
+Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown. The dashboard's live
+routing map is the one lit surface, and its scope is stated with it (§2, Dashboard live routing).
 `--focus-ring: 0 0 0 2px var(--accent)` is the only ring, and it is never drawn on a text field: a browser
 matches `:focus-visible` on every focused `input`/`textarea`, and those sit inside controls (Input with an
 affix, Select, pickers, number fields) that already mark focus on their outer box with the accent border
@@ -1915,6 +1988,12 @@ hover / state colour   ≤ fast — the acknowledgement must land on the pointer
 fast    50ms    antd motionDurationFast
 base    100ms   antd motionDurationMid and Slow: drawers, modals, route and data transitions
 roll    240ms   the dashboard's KPI readouts and the marks drawn from them (rules 8 and 5)
+route   300ms   one hop of a stored request across the dashboard's routing map (rule 9)
+land    420ms   a node's one-off acknowledgement of a hop landing on it (rule 9)
+glow    1200ms  a routing-map node or lane lighting as a request reaches it and settling back (rule 9)
+enter   300ms   a routing-map row arriving in the minute, drifting in (rule 9)
+exit    200ms   a routing-map row leaving the minute, accelerating away (rule 9)
+presence 300ms  a routing-map row or heading sliding to close or open a gap (rule 9)
 float   60ms    popovers and dropdowns — the click already said "open"
 scroll  160ms   a wheel notch or scrolling key gliding to where it would have jumped (easeOutCubic)
 ease    cubic-bezier(0.2, 0, 0, 1)
@@ -1924,8 +2003,12 @@ ease    cubic-bezier(0.2, 0, 0, 1)
 `base` and `float` as `--motion-fast`, `--motion-base` and `--motion-float` for every CSS transition
 and animation the console owns;
 `scripts/test-theme-presets.ts` parses both and asserts they equal the Ant Design tokens above, so the
-two spellings of one budget cannot drift apart again. `roll` is the only token with an exception
-attached, and it is scoped to the dashboard by rules 5 and 8. `scroll` is a JavaScript-only token
+two spellings of one budget cannot drift apart again. `roll` and `route` are the only tokens with an
+exception attached, both scoped to the dashboard: `roll` by rules 5 and 8, `route`, `land`, `glow`, `enter`,
+`exit` and `presence` by rule 9. The rule-9 tokens are JavaScript-only (`MOTION_ROUTE`,
+`MOTION_ROUTE_LAND`, `MOTION_ROUTE_GLOW`, `MOTION_ROUTE_ENTER`, `MOTION_ROUTE_EXIT` and
+`MOTION_ROUTE_PRESENCE` in `themeConfig.ts`) and drive Web Animations rather than a stylesheet; the
+gateway's 600ms settle is the routing panel's own `--motion-route-cool`. `scroll` is a JavaScript-only token
 (`MOTION_SCROLL` in `themeConfig.ts`) for the input glide below; no stylesheet animates a scroll.
 The separate `--motion-live-text` token (`MOTION_LIVE_TEXT`) is a 900ms linear loop for short
 work-in-flight labels, not a state-transition budget. `themePaletteCssVariables` and the root
@@ -2019,12 +2102,47 @@ Hard rules:
    the whole exception: those tiles change under a poll the reader did not ask for, a number
    that swaps in place is indistinguishable from a number that was already there, and the
    sweep is what says "this reading moved" without the page moving. Rule 5 gives the marks
-   drawn from those numbers the same token; nothing else in the console moves on a poll. For
+   drawn from those numbers the same token, and rule 9 lets a stored request travel the routing
+   map; nothing else in the console moves on a poll. For
    the digits the exception is cheap and scoped -
    glyphs transforming inside a 34px-tall box, so rules 1 and 2 hold as written, and a change
    of *unit* prints in place, because rolling 1.2 into 900 under a swapping unit word would
    show digits that never described the window. `prefers-reduced-motion` removes it and the
    value still updates. See ADR 0007 for the token and ADR 0008 for what rule 5 costs.
+9. **A stored request travels the routing map, and comes back** - Magpie's motion. When the
+   dashboard's live routing panel reads a request it has not shown, a glowing 9px dot in the model's
+   colour emerges from the model's port, travels its lane into the gateway and the credential's lane
+   out of it, moved on animation frames along each lane as it is drawn at that moment and eased in and
+   out over one `route` beat per hop (`MOTION_ROUTE`). The light passes through nodes rather than
+   resting on them: the dot fades in over the first fifth of each hop and sinks into the next port over
+   the last fifth, and the node it sinks into lights - its edge glows and its port sends out a ring -
+   rising quickly and settling back over the `glow` beat (`MOTION_ROUTE_GLOW`); a lane brightens behind
+   the dot that crossed it and settles the same way. A node lit again while it still glows rises from
+   the light it has, so a second request never blinks it dark first. The request waits in the
+   credential for a beat scaled from the attempt's real latency (120-480ms); then a wash in the
+   answer's tone spreads across the credential from its port and the dot emerges `--success` and flies
+   back through the gateway home to the model, or `--danger`, back to the gateway and on to the next
+   credential CPA tried. While a dot is on a lane or waits at its end, the lane's dashes flow in the
+   direction it travels, and while any dot is on the map the gateway's glow and rails brighten.
+   Rows arrive drifting a few pixels in from their own edge of the map as they fade in
+   (`MOTION_ROUTE_ENTER`), the rows of the first paint one after another; they leave the same way,
+   quicker and accelerating (`MOTION_ROUTE_EXIT`), and only then do the rows around them close the gap,
+   sliding by FLIP measured against the whole map so a column re-centring slides too
+   (`MOTION_ROUTE_PRESENCE`). Nothing scales or bounces. While rows move, the lanes are redrawn each
+   frame so none detaches from its row. This is the one motion that runs on a live signal rather than
+   on the reader's action, and it is allowed for the reason rule 8 is: a count that changes in place
+   does not say *which way* the request went, which is the reading the panel exists for. It is scoped
+   hard: opacity and transforms, except the lane flow, which animates the dash offset of the few lanes
+   in use and is the map's one loop; no shadow animates - every glow is an overlay whose opacity
+   changes; at most eight requests replay from one read, 70ms apart, and at most sixteen are on the map
+   at once, a burst past it being skipped rather than queued; the first read replays nothing, because
+   opening the dashboard is not the moment those requests ran. Under reduced motion the readings
+   update, rows appear and leave without travel, and no dot, flow or glow is drawn. Counts never
+   animate.
+
+   The map learns of a request when CPA stores its record, which is when it finished: CPA reports
+   nothing about a request while it runs. The trip therefore starts as soon as the record is read and
+   is kept short (about a second and a half door to door) so it reads as the request that just happened.
 
 ### Never hard-swap a view
 
@@ -2039,7 +2157,7 @@ custom range changes, manual refresh and background refetch.
 | Any request in flight | The app-wide 2px `.data-progress` bar, painted after a 200ms delay, whose fill hints at counted work and whose short activity marker reports waiting (below). Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with placeholders drawn at the content's geometry, not a bare full-page spinner swap. |
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
-| Auto-refresh poll | The view does not move, though a reading and a mark may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". Two things may move: a dashboard KPI number rolling to its new value, and any dashboard chart mark morphing to its own new revision - the six KPI sparklines, and the model trend and usage ring, which re-read on their own endpoint rather than on the tiles' (rules 8 and 5). |
+| Auto-refresh poll | The view does not move, though a reading and a mark may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". Three things may move: a dashboard KPI number rolling to its new value, any dashboard chart mark morphing to its own new revision - the six KPI sparklines, and the model trend and usage ring, which re-read on their own endpoint rather than on the tiles' (rules 8 and 5) - and a newly stored request travelling the routing map (rule 9). |
 
 `prefers-reduced-motion` removes the fade, drops the bar's pending estimate (it
 steps only when a task settles) and freezes the placeholders' breath, but the
@@ -2298,7 +2416,8 @@ The third is a container query rather than a viewport breakpoint, and deliberate
 list sits inside the page's content column, so the same viewport holds a different list width
 depending on whether the rail is open. "Do the columns still fit" is a question about the box
 the columns are in, and only the container can answer it. The same reasoning governs the
-dashboard's `@container modelusage (max-width: 500px)` panel stack.
+dashboard's `@container modelusage (max-width: 500px)` panel stack and the live routing map's
+`@container routingmap (max-width: 940px)` narrow layout.
 
 Above that threshold the request list **folds columns rather than scrolling sideways**. The grid
 has a floor - the sum of every column's width - and a window narrower than the floor used to get a

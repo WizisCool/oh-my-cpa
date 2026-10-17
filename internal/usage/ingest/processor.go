@@ -36,6 +36,13 @@ type Processor struct {
 	// instead of blocking past it.
 	drain chan struct{}
 
+	// wake cuts the idle pause short when the collector has just written inbox
+	// rows, so a record is decoded as soon as it is captured rather than on the
+	// next idle tick. It holds one pending signal; more would mean the same thing.
+	wake chan struct{}
+	// onCommit is told after each pass that committed events; see SetCommitHandler.
+	onCommit func()
+
 	mu     sync.RWMutex
 	status ProcessorStatus
 }
@@ -71,7 +78,22 @@ func NewProcessorWithFingerprinter(store *repository.Repository, logger *slog.Lo
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Processor{store: store, logger: logger, fingerprinter: fingerprinter, batchLimit: batchLimit, idleInterval: idleInterval, drain: make(chan struct{}, 1)}, nil
+	return &Processor{store: store, logger: logger, fingerprinter: fingerprinter, batchLimit: batchLimit, idleInterval: idleInterval, drain: make(chan struct{}, 1), wake: make(chan struct{}, 1)}, nil
+}
+
+// Wake asks the decode loop to run now instead of finishing its idle pause.
+// It never blocks.
+func (p *Processor) Wake() {
+	select {
+	case p.wake <- struct{}{}:
+	default:
+	}
+}
+
+// SetCommitHandler installs the callback run after a pass commits events. It is
+// set once during wiring, before Run starts.
+func (p *Processor) SetCommitHandler(handler func()) {
+	p.onCommit = handler
 }
 
 // Status copies the current decoder state.
@@ -105,11 +127,26 @@ func (p *Processor) Run(ctx context.Context) error {
 			continue
 		}
 		if processed == 0 {
-			if !sleepContext(ctx, p.idleInterval) {
+			if !p.idle(ctx) {
 				return nil
 			}
 		}
 	}
+}
+
+// idle pauses until the idle interval passes or the collector signals new inbox
+// rows. The interval stays as the floor of the loop: rows written by a path that
+// does not signal (a restart's leftover backlog) are still found on time.
+func (p *Processor) idle(ctx context.Context) bool {
+	timer := time.NewTimer(p.idleInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+	case <-p.wake:
+	}
+	return true
 }
 
 // ProcessOnce decodes one inbox batch and returns how many rows it handled.
@@ -231,6 +268,9 @@ func (p *Processor) processOnce(ctx context.Context) (int, error) {
 		p.mu.Lock()
 		p.status.Decoded += int64(committed)
 		p.mu.Unlock()
+		if committed > 0 && p.onCommit != nil {
+			p.onCommit()
+		}
 	}
 	if len(failures) > 0 {
 		marked, errMark := p.store.MarkUsageUndecodable(ctx, failures, lastReason)
