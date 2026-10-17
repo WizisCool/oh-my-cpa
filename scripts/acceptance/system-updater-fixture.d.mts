@@ -10,5 +10,7 @@ export interface SystemUpdaterFixture {
   (url: URL, method: string, body?: string | null): { status: number; json: SystemUpdaterResponse | Record<string, unknown> };
   /** Moves the admitted job to a stage, the way the sidecar does on its own. */
   advance(stage: SystemUpdateStage, error?: string): void;
+  /** Admits another job under an id of its own, the way an update started elsewhere arrives. */
+  admit(id: string, stage?: SystemUpdateStage): void;
 }
 export function createSystemUpdaterFixture(options?: { state?: SystemUpdaterState }): SystemUpdaterFixture;

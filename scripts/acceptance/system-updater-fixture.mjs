@@ -21,6 +21,13 @@ export function createSystemUpdaterFixture({ state = 'ready' } = {}) {
     status = { ...status, job: structuredClone(contract.accepted.job) };
     return { status: contract.accepted.status, json: structuredClone(status) };
   };
+  /**
+   * The updater admits another job under an id of its own, as it does for an update started
+   * somewhere else; `advance` then moves that job.
+   */
+  respond.admit = (id, stage = 'pulling') => {
+    status = { ...status, job: { ...structuredClone(contract.accepted.job), id, stage, error: '', finished: false } };
+  };
   respond.advance = (stage, error = '') => {
     const isFinished = ['done', 'already_current', 'rolled_back', 'failed'].includes(stage);
     status = { ...status, job: { ...status.job, stage, error, finished: isFinished } };

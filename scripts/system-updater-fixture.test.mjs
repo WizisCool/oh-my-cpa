@@ -22,6 +22,10 @@ test('updater fixture answers with the certified corpus and keeps state per inst
   assert.deepEqual(fixture(statusURL, 'GET').json.job, {
     ...SYSTEM_UPDATER_CONTRACT.accepted.job, stage: 'rolled_back', finished: true, error: 'the replacement exited after starting',
   });
+  fixture.admit('job-later');
+  assert.deepEqual(fixture(statusURL, 'GET').json.job, {
+    ...SYSTEM_UPDATER_CONTRACT.accepted.job, id: 'job-later', stage: 'pulling', error: '', finished: false,
+  });
   assert.equal(createSystemUpdaterFixture()(statusURL, 'GET').json.job, null, 'another instance has no job');
 });
 

@@ -182,6 +182,26 @@ it('reports one end for the job it gave up on, even when the updater answers aga
   surface.close();
 });
 
+it('reports a later update that arrives with its own job id', async () => {
+  const surface = mount();
+  await startUpdate();
+  surface.fixture.advance('done');
+  await surface.reread();
+  await waitFor(() => expect(surface.onFinished).toHaveBeenCalledTimes(1));
+
+  // A later update, admitted under an id of its own, is followed and reported too: the end already
+  // reported for the previous job must not swallow it. The stage line is what proves the page is
+  // following this job before it finishes; reading twice without it can collapse into one render.
+  surface.fixture.admit('job-later');
+  await surface.reread();
+  await screen.findByText('Pulling the new image…');
+  surface.fixture.advance('done');
+  await surface.reread();
+  await waitFor(() => expect(surface.onFinished).toHaveBeenCalledTimes(2));
+  expect(surface.onFinished.mock.calls[1][0].job).toMatchObject({ id: 'job-later', stage: 'done', finished: true });
+  surface.close();
+});
+
 it('follows an update that was already running when the page opened', async () => {
   const fixture = createSystemUpdaterFixture();
   fixture(new URL('http://127.0.0.1/api/v1/management/system/updater/apply'), 'POST', JSON.stringify(SYSTEM_UPDATER_CONTRACT.accepted.body));
