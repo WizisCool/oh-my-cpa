@@ -27,9 +27,10 @@ is not the same reading slowed down; it is a different, weaker reading.
 1. **The live routing map plays its full trip for every reader**, regardless of
    `prefers-reduced-motion`. That covers the travelling dot, the lane flow, the node glows, and rows
    entering and leaving; the panel no longer consults the query at all.
-2. **The exception is scoped to the routing map.** Every other animation in the console keeps honouring
-   the query: drawers, disclosures, the GitHub count, the loading bar, chart marks, placeholders and
-   the KPI readouts are unchanged. No global "ignore reduced motion" switch is introduced.
+2. **The exception is scoped to the routing map.** Apart from the input-following scroll glide
+   (ADR 0046), every other animation in the console keeps honouring the query: drawers, disclosures,
+   the GitHub count, the loading bar, chart marks, placeholders and the KPI readouts are unchanged. No
+   global "ignore reduced motion" switch is introduced.
 3. **The exception is recorded where the budget is enforced.** `scripts/check-motion.mjs` gains a
    `reduced` exception kind, keyed by file, selector and property, with the reason and a stale-entry
    failure. The routing lane's flow is the only selector in the table. `scripts/acceptance/probes/routingMap.mjs`
