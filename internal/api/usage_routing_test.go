@@ -131,6 +131,33 @@ func (p liveTestPipeline) SubscribeChanges() (<-chan struct{}, func(), error) {
 	return p.changes.Subscribe()
 }
 
+// Past the reader limit the stream refuses with 503 and the error contract, which
+// is what tells the browser to keep polling and retry later rather than hold a
+// connection the server will not serve.
+func TestUsageLiveRefusesReadersPastTheLimit(t *testing.T) {
+	changes := ingest.NewChanges()
+	for range ingest.MAX_CHANGE_SUBSCRIBERS {
+		_, unsubscribe, err := changes.Subscribe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(unsubscribe)
+	}
+	client, baseURL, _ := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.SetUsagePipeline(liveTestPipeline{changes: changes})
+	})
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/live")
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", response.StatusCode)
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil || body.Error != ingest.ErrTooManySubscribers.Error() {
+		t.Fatalf("body = %s (%v)", payload, err)
+	}
+}
+
 func TestUsageLiveSignalsAStoredChange(t *testing.T) {
 	changes := ingest.NewChanges()
 	client, baseURL, _ := startDashboardTestServer(t, nil, func(handler *Handler) {

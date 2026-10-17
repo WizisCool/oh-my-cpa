@@ -1374,13 +1374,15 @@ A page that shows request records learns that one was stored from a signal, not
 from a cadence. The path from CPA to the screen has no fixed wait in it:
 
 - In `subscribe` mode the runner writes a pushed record to `usage_inboxes` as soon
-  as the subscription buffer is empty, rather than on the flush tick. The write
-  runs under a context detached from shutdown, bounded by the final-flush timeout,
-  because a record received from the destructive channel exists nowhere else.
+  as the subscription buffer is empty, rather than on the flush tick. A record
+  received from the destructive channel exists nowhere else, so the write carries
+  no deadline while the collector runs; only a shutdown starts the final-flush
+  timeout that bounds it.
 - The runner's capture handlers wake the decode processor, which otherwise idles on
   its interval, and the processor publishes to `ingest.Changes` after each commit
-  that stored an event; an error-event capture publishes too, since a cooldown
-  changes what the routing panel draws.
+  that stored an event. Error events are read as they arrive, not on the flush
+  tick, and each capture publishes too, since a cooldown changes what the routing
+  panel draws.
 - `ingest.Changes` is a coalescing hub: each subscriber holds a one-slot channel and
   a publish never blocks, so a burst of commits becomes one pending signal per
   reader and a slow reader cannot stall the decoder. Readers are capped at

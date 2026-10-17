@@ -284,6 +284,30 @@ const maxSubscribeFailures = 3
 // finalFlushTimeout bounds the write of a batch still buffered when a subscription ends.
 const finalFlushTimeout = 3 * time.Second
 
+// persistContext is the context a write of pushed records runs under. A pushed
+// record exists nowhere else, so the write is not cut short while the collector
+// runs, however long the database keeps it waiting; only once ctx ends does it get
+// grace to finish, so a shutdown is not held by a stuck write.
+func persistContext(ctx context.Context, grace time.Duration) (context.Context, context.CancelFunc) {
+	persist, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	var timer *time.Timer
+	var mu sync.Mutex
+	stop := context.AfterFunc(ctx, func() {
+		mu.Lock()
+		defer mu.Unlock()
+		timer = time.AfterFunc(grace, cancel)
+	})
+	return persist, func() {
+		stop()
+		mu.Lock()
+		if timer != nil {
+			timer.Stop()
+		}
+		mu.Unlock()
+		cancel()
+	}
+}
+
 // NewRunner builds a collector. upstream and sink are required; errorSink may be
 // nil when CPA error collection is not wanted.
 func NewRunner(instanceID string, upstream Upstream, sink Sink, errorSink ErrorSink, logger *slog.Logger, config Config) (*Runner, error) {
@@ -589,22 +613,32 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 		defer cancel()
 		_ = r.flush(finalCtx, ModeSubscribe, &batch)
 	}()
+	captureError := func(payload string) {
+		if err := r.errorSink.CaptureErrorEvent(ctx, r.instanceID, payload, time.Now()); err != nil {
+			// A malformed notification must not kill the usage stream.
+			r.recordError(fmt.Errorf("capture error event: %w", err))
+			return
+		}
+		r.notify(r.errorHandler())
+	}
+	// The loop below reads errors as they arrive, since a cooldown is something a
+	// live reader draws; a nil channel is never ready, so without an error stream
+	// that case simply never fires.
+	var errorMessages <-chan string
+	if errorStream != nil {
+		errorMessages = errorStream.Messages()
+	}
 	captureErrors := func() error {
-		if errorStream == nil {
+		if errorMessages == nil {
 			return nil
 		}
 		for {
 			select {
-			case payload, ok := <-errorStream.Messages():
+			case payload, ok := <-errorMessages:
 				if !ok {
 					return nil
 				}
-				if err := r.errorSink.CaptureErrorEvent(ctx, r.instanceID, payload, time.Now()); err != nil {
-					// A malformed notification must not kill the usage stream.
-					r.recordError(fmt.Errorf("capture error event: %w", err))
-					continue
-				}
-				r.notify(r.errorHandler())
+				captureError(payload)
 			default:
 				return nil
 			}
@@ -616,6 +650,13 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 		case <-ctx.Done():
 			_ = captureErrors()
 			return nil
+		case payload, ok := <-errorMessages:
+			if !ok {
+				// The error channel is best-effort; a closed one stops being read.
+				errorMessages = nil
+				continue
+			}
+			captureError(payload)
 		case payload, ok := <-stream.Messages():
 			if !ok {
 				return errors.New("usage subscription closed by CPA")
@@ -627,10 +668,9 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 			// record is persisted at once instead of waiting for the flush tick,
 			// while a burst still lands as one batch because the buffer is not
 			// empty until the burst has been read. The record exists nowhere else,
-			// so a shutdown arriving mid-write must not abort it: the write runs
-			// under its own deadline and Run waits for it.
+			// so a shutdown arriving mid-write must not abort it: see persistContext.
 			if len(stream.Messages()) == 0 {
-				persistCtx, cancelPersist := context.WithTimeout(context.WithoutCancel(ctx), finalFlushTimeout)
+				persistCtx, cancelPersist := persistContext(ctx, finalFlushTimeout)
 				err := r.flush(persistCtx, ModeSubscribe, &batch)
 				cancelPersist()
 				if err != nil {

@@ -50,7 +50,6 @@
 
 .live-dot-on {
   background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 22%, transparent);
 }
 
 .window {

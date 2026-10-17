@@ -224,6 +224,10 @@ export const UsageEventsPage: React.FC = () => {
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
     staleTime: 5_000,
+    // Every live signal is a new key and a superseded page is never read again, so
+    // keeping it would hold a page per signal for the default five minutes.
+    // keepPreviousData works from the observer's last result, not the old entry.
+    gcTime: 0,
   });
   // Assigned after the read it describes, so the poll's interval always observes
   // the latest value without naming it in its dependency list.

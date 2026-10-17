@@ -52,6 +52,20 @@ type UsageRouting struct {
 	Cooldowns []UsageRoutingCooldown
 }
 
+// usageRoutingRecordsQuery reads a window's attempts, newest by arrival rather
+// than by start time: a long request that started early and finished just now is
+// the newest thing a live reader has to show.
+//
+// It names the time index. Left to itself the planner takes the (instance, id)
+// index because it already yields the order, and then filters the window row by
+// row; in a quiet minute it finds fewer than the limit and walks every retained
+// record before it stops. The time index bounds the read to the window and sorts
+// what is, by MAX_ROUTING_RECORDS and the lookback, a short list.
+var usageRoutingRecordsQuery = usageEventListSelect("usage_events e INDEXED BY idx_usage_events_instance_time") + `
+		WHERE e.instance_id = ? AND e.id > ?
+		  AND e.timestamp_ms >= ? AND e.timestamp_ms + MAX(e.latency_ms, 0) >= ?
+		ORDER BY e.id DESC LIMIT ?`
+
 // QueryUsageRouting reads the attempts that finished in the window (or, with
 // AfterID, the ones recorded since) and the credentials currently resting.
 func (r *Repository) QueryUsageRouting(ctx context.Context, query UsageRoutingQuery) (UsageRouting, error) {
@@ -66,12 +80,7 @@ func (r *Repository) QueryUsageRouting(ctx context.Context, query UsageRoutingQu
 	if limit <= 0 || limit > MAX_ROUTING_RECORDS {
 		limit = MAX_ROUTING_RECORDS
 	}
-	// Newest by arrival, not by start time: a long request that started early
-	// and finished just now is the newest thing a live reader has to show.
-	records, err := r.queryUsageEventRows(ctx, usageEventListSelect+`
-		WHERE e.instance_id = ? AND e.id > ?
-		  AND e.timestamp_ms >= ? AND e.timestamp_ms + MAX(e.latency_ms, 0) >= ?
-		ORDER BY e.id DESC LIMIT ?`,
+	records, err := r.queryUsageEventRows(ctx, usageRoutingRecordsQuery,
 		query.InstanceID, query.AfterID, query.FromMS-routingLatencyLookback, query.FromMS, limit+1)
 	if err != nil {
 		return result, fmt.Errorf("read routing records: %w", err)

@@ -317,7 +317,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		args = append(args, cursor.TimestampMS, cursor.ID)
 	}
 
-	query := usageEventListSelect
+	query := usageEventListSelect("usage_events e")
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -341,8 +341,11 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 
 // usageEventListSelect is the list projection of a request record: every column
 // a row prints, plus the triaged resource behind its credential. The join keeps
-// only unambiguous claims, so an index two resources share names neither.
-const usageEventListSelect = `
+// only unambiguous claims, so an index two resources share names neither. The
+// caller names the records' source, so a read that must not trust the planner's
+// choice of index can name one.
+func usageEventListSelect(from string) string {
+	return `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
@@ -353,7 +356,7 @@ const usageEventListSelect = `
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
 		       e.response_model, e.model_substituted, e.fail_status_code
-		FROM usage_events e
+		FROM ` + from + `
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
 			       CASE WHEN COUNT(1) = 1 THEN MIN(d.id) ELSE NULL END AS id,
@@ -362,6 +365,7 @@ const usageEventListSelect = `
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index`
+}
 
 // queryUsageEventRows runs a statement built on usageEventListSelect and scans
 // its rows.
