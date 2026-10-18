@@ -1,6 +1,6 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import React from 'react';
-import { useBlocker, useSearchParams } from 'react-router-dom';
+import { useBlocker } from 'react-router-dom';
 import {
   App as AntdApp,
   Button,
@@ -23,7 +23,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
-import { usePreference } from '../../hooks/usePreference';
+import { useOAuthManagementViewState } from './useOAuthManagementViewState';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
@@ -51,10 +51,8 @@ import {
   buildOAuthWorkspaceProjection,
   consumeOneShotIntent,
   filterOAuthWorkspaceRecords,
-  parseOAuthWorkspaceQuery,
   resolveAuthorizationProviderId,
   sortOAuthWorkspaceRecords,
-  updateWorkspaceSearch,
   workspaceProviderCounts,
   workspaceProviderOptions,
   type OAuthWorkspaceQuotaFilter,
@@ -67,23 +65,6 @@ import { SearchInput } from '../../components/common/SearchInput';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Toolbar } from '../../components/common/Toolbar';
 import { Pager } from '../../components/common/Pager';
-
-interface OAuthManagementViewPreference {
-  pageSize: 12 | 24 | 48;
-}
-
-const DEFAULT_VIEW_PREFERENCE: OAuthManagementViewPreference = {
-  pageSize: 12,
-};
-
-function parseViewPreference(raw: unknown): OAuthManagementViewPreference | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const record = raw as Record<string, unknown>;
-  const pageSize = record.pageSize === 12 || record.pageSize === 24 || record.pageSize === 48
-    ? record.pageSize
-    : DEFAULT_VIEW_PREFERENCE.pageSize;
-  return { pageSize };
-}
 
 interface CompletionPending {
   providerId: string;
@@ -108,16 +89,10 @@ export const OAuthManagementPage: React.FC = () => {
   const { modal } = AntdApp.useApp();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
   const visibleNow = useVisibleNow();
   const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
   const isDemo = isDemoMode();
-  const viewPreference = usePreference<OAuthManagementViewPreference>(
-    'oauth_management_view_v1',
-    DEFAULT_VIEW_PREFERENCE,
-    parseViewPreference,
-  );
-  const queryState = React.useMemo(() => parseOAuthWorkspaceQuery(searchParams), [searchParams]);
   React.useEffect(() => {
     if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc') {
       setIsFiltersOpen(true);
@@ -185,19 +160,13 @@ export const OAuthManagementPage: React.FC = () => {
     [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
   );
 
-  const pageSize = searchParams.has('page_size') ? queryState.pageSize : viewPreference.value.pageSize;
+  const pageSize = queryState.pageSize;
   const maxPage = Math.max(1, Math.ceil(visibleRecords.length / pageSize));
   const page = Math.min(queryState.page, maxPage);
   const pagedRecords = React.useMemo(
     () => visibleRecords.slice((page - 1) * pageSize, page * pageSize),
     [page, pageSize, visibleRecords],
   );
-
-  const setSearch = React.useCallback((
-    changes: Record<string, string | number | null | undefined>,
-  ) => {
-    setSearchParams((current) => updateWorkspaceSearch(current, changes), { replace: true });
-  }, [setSearchParams]);
 
   React.useEffect(() => {
     if (!filesQuery.data || queryState.page <= maxPage) return;
@@ -756,6 +725,7 @@ export const OAuthManagementPage: React.FC = () => {
           <div className={styles['filter-field']}>
             <span className={styles['filter-field-label']}>{t('af.detail_status')}</span>
             <Select<AuthFileStatusFilter>
+              disabled={!isViewLoaded}
               value={queryState.status}
               onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
               aria-label={t('af.detail_status')}
@@ -771,6 +741,7 @@ export const OAuthManagementPage: React.FC = () => {
           <div className={styles['filter-field']}>
             <span className={styles['filter-field-label']}>{t('omc.tab_quota')}</span>
             <Select<OAuthWorkspaceQuotaFilter>
+              disabled={!isViewLoaded}
               value={queryState.quota}
               onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
               aria-label={t('omc.tab_quota')}
@@ -792,6 +763,8 @@ export const OAuthManagementPage: React.FC = () => {
           <div className={styles['filter-field']}>
             <span className={styles['filter-field-label']}>{t('af.sort_label')}</span>
             <Select<AuthFileSortKey>
+              aria-label={t('af.sort_label')}
+              disabled={!isViewLoaded}
               value={queryState.sort}
               onChange={(sort) => setSearch({ sort: sort === 'name-asc' ? null : sort, page: null })}
               style={{ width: 160 }}
@@ -807,6 +780,7 @@ export const OAuthManagementPage: React.FC = () => {
           <div className={styles['toolbar-actions']}>
             <Button
               icon={<SearchOutlined />}
+              disabled={!isViewLoaded}
               onClick={() => {
                 setResetSearchToken((value) => value + 1);
                 setSearch({ q: null, status: null, quota: null, sort: null, page: null });
@@ -887,10 +861,10 @@ export const OAuthManagementPage: React.FC = () => {
             <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
             <Select
               value={pageSize}
+              disabled={!isViewLoaded}
               onChange={(size) => {
                 const next = size as 12 | 24 | 48;
                 setSearch({ page_size: next, page: null });
-                void viewPreference.set({ pageSize: next });
               }}
               style={{ width: 110 }}
               options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}

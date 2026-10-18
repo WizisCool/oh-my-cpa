@@ -63,12 +63,12 @@ export function useUsageEventViewState() {
   const hasExplicit = React.useMemo(() => hasExplicitEventQuery(initialParamsRef.current), []);
   const [hydrated, setHydrated] = React.useState(hasExplicit);
 
-  const [isAutoRefresh, setIsAutoRefresh] = React.useState(false);
+  const isAutoRefresh = viewPref.autoRefresh ?? false;
 
   // Bumped whenever filters are discarded on the operator's behalf, so a text
   // filter with a queued keystroke cannot commit after the discard.
   const [searchResetToken, setSearchResetToken] = React.useState(0);
-  const [grouping, setGrouping] = React.useState<EventGrouping>('time');
+  const grouping = viewPref.grouping ?? 'time';
 
   // The flat committed filter map, derived from the URL through the same
   // normalisation the request itself uses. Chips and persistence both read it,
@@ -107,9 +107,6 @@ export function useUsageEventViewState() {
   React.useEffect(() => {
     if (!prefReady || hydrated) return;
     setHydrated(true);
-    if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
-
     if (!hasExplicit) {
       const nextParams = new URLSearchParams();
       if (viewPref.from !== undefined) {
@@ -140,13 +137,6 @@ export function useUsageEventViewState() {
       }
     }
   }, [prefReady, hydrated, hasExplicit, viewPref, writeParams]);
-
-  // Restore the layout preferences even when arriving on a drill-down link.
-  React.useEffect(() => {
-    if (!prefReady || !hasExplicit) return;
-    if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
-  }, [prefReady, hasExplicit, viewPref.grouping, viewPref.autoRefresh]);
 
   /**
    * persistView writes the saved view for the *complete* next state.
@@ -287,7 +277,6 @@ export function useUsageEventViewState() {
   /** The grouping is a layout choice the saved view carries; see `persistView`. */
   const changeGrouping = React.useCallback(
     (next: EventGrouping) => {
-      setGrouping(next);
       persistView(params, { grouping: next });
     },
     [params, persistView],
@@ -303,7 +292,6 @@ export function useUsageEventViewState() {
   }, []);
   const toggleAutoRefresh = React.useCallback(
     (next: boolean) => {
-      setIsAutoRefresh(next);
       persistView(params, { grouping, autoRefresh: next });
     },
     [grouping, params, persistView],

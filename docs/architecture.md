@@ -853,6 +853,10 @@ form remains mounted so drafts survive tab switches; its dirty-close guard appli
 to the entire Drawer. Credential identity includes the auth index when resetting
 form sessions and caching models. Historical density URL values and preference
 fields remain readable compatibility data, but do not change the overview layout.
+`oauth_management_view_v1` stores page size, status, quota condition and sort order.
+Explicit URL dimensions override the saved defaults without persisting navigation;
+editing a control saves the effective view and resets pagination. Reset filters
+persists the default status, quota and sort while preserving page size.
 
 A quota refresh reports its outcome once, as a toast, so it never pushes the
 credential list down (ADR 0045). A run without a failing target - including one

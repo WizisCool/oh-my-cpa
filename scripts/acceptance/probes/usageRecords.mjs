@@ -759,6 +759,16 @@ export async function requestListInteractions({ base, page, check }) {
     check(`${label} measures group headers and keeps the final request reachable`,
       hasReachedLast && mounted > 0 && mounted < 40, `rows=${mounted} last=${await page.locator('.request-row .req-time-sub-id').last().innerText()}`);
     await returnToLatest();
+    const expectedGrouping = label === 'By source' ? 'source' : 'ua';
+    await until(async () => {
+      const saved = await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences.usage_events_view);
+      return saved?.grouping === expectedGrouping;
+    }, { label: `saved ${label} request grouping` });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.request-row').first().waitFor();
+    await until(async () => (await groupingSelect.innerText()).includes(label) && (await page.locator('.request-group-title').count()) > 0,
+      { label: `${label} request grouping after reload` });
+    check(`${label} request grouping survives reload`, (await groupingSelect.innerText()).includes(label));
   }
   await groupingSelect.click();
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')

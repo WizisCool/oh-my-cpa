@@ -104,6 +104,38 @@ const AUTH_FILE_SORTS = new Set<AuthFileSortKey>([
   'weight-desc',
 ]);
 const PAGE_SIZES = new Set<number>([12, 24, 48]);
+
+export interface OAuthManagementViewPreference {
+  pageSize: 12 | 24 | 48;
+  status: AuthFileStatusFilter;
+  quota: OAuthWorkspaceQuotaFilter;
+  sort: AuthFileSortKey;
+}
+
+export const DEFAULT_OAUTH_MANAGEMENT_VIEW: OAuthManagementViewPreference = {
+  pageSize: 12,
+  status: 'all',
+  quota: 'all',
+  sort: 'name-asc',
+};
+
+export function parseOAuthManagementView(raw: unknown): OAuthManagementViewPreference | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const record = raw as Record<string, unknown>;
+  const params = new URLSearchParams();
+  for (const key of ['status', 'quota', 'sort'] as const) {
+    if (typeof record[key] === 'string') params.set(key, record[key]);
+  }
+  const query = parseOAuthWorkspaceQuery(params);
+  return {
+    pageSize: typeof record.pageSize === 'number' && PAGE_SIZES.has(record.pageSize)
+      ? record.pageSize as 12 | 24 | 48
+      : DEFAULT_OAUTH_MANAGEMENT_VIEW.pageSize,
+    status: query.status,
+    quota: query.quota,
+    sort: query.sort,
+  };
+}
 const BUILTIN_SIGN_IN_IDS: Record<string, string> = {
   claude: 'anthropic',
   antigravity: 'antigravity',

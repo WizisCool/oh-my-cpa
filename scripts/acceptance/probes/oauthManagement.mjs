@@ -429,6 +429,27 @@ export async function oauthManagement({ base, page, check }) {
       (await page.locator('.oauth-management-page .ant-select').count()) >= 3,
     );
   }
+
+  await page.goto(`${base}/oauth-management`, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('oauth-credential-record').first().waitFor();
+  const filters = page.getByRole('button', { name: 'More filters', exact: true });
+  if (await filters.getAttribute('aria-expanded') !== 'true') await filters.click();
+  await page.getByRole('combobox', { name: 'Sort', exact: true }).click();
+  const savedSort = page.waitForResponse((response) => response.url().endsWith('/preferences/oauth_management_view_v1')
+    && response.request().method() === 'PUT' && response.ok());
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'Priority (High to Low)' }).click();
+  await savedSort;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('combobox', { name: 'Sort', exact: true }).waitFor();
+  check('OAuth sort control retains its selection after reload',
+    (await page.locator('#oauth-collection-filters').innerText()).includes('Priority (High to Low)'));
+  await page.goto(`${base}/oauth-management`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('combobox', { name: 'Sort', exact: true }).waitFor();
+  await until(async () => (await page.getByTestId('oauth-credential-record').first().getAttribute('data-auth-index')) === 'auth-02',
+    { label: 'saved priority sort after reload' });
+  check('OAuth priority sorting survives a fresh entry and orders the collection',
+    (await page.locator('#oauth-collection-filters').innerText()).includes('Priority (High to Low)')
+      && (await page.getByTestId('oauth-credential-record').first().getAttribute('data-auth-index')) === 'auth-02');
 }
 
 
