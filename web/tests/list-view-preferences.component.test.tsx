@@ -12,6 +12,7 @@ import { parseOAuthManagementView } from '../src/pages/oauthManagement/oauthWork
 let stored: Record<string, unknown>;
 let writes: { key: string; value: unknown }[];
 let shouldRejectWrite: boolean;
+let readResponse: Promise<Response> | undefined;
 const clients: QueryClient[] = [];
 
 function jsonResponse(value: unknown, status = 200) {
@@ -55,9 +56,10 @@ beforeEach(() => {
   stored = {};
   writes = [];
   shouldRejectWrite = false;
+  readResponse = undefined;
   vi.stubGlobal('fetch', vi.fn(async (input: string, options: RequestInit) => {
     if (input === '/omc/api/v1/preferences' && options.method === 'GET') {
-      return jsonResponse({ preferences: stored, time_zone: { server_timezone: 'UTC' } });
+      return readResponse ?? jsonResponse({ preferences: stored, time_zone: { server_timezone: 'UTC' } });
     }
     if (input.startsWith('/omc/api/v1/preferences/') && options.method === 'PUT') {
       const key = input.split('/').pop()!;
@@ -106,6 +108,26 @@ describe('list view preference persistence', () => {
     mount(<OAuthView />, '/?status=all&sort=name-desc&page=2&action=connect&connect_provider=codex');
     await waitFor(() => expect(readView()).toMatchObject({ pageSize: 24, status: 'all', quota: 'attention', sort: 'name-desc', page: 2, action: 'connect' }));
     expect(writes).toHaveLength(0);
+  });
+
+  it('enables URL-only OAuth controls after a failed read without overwriting unread preferences', async () => {
+    const unreadPreference = { pageSize: 48, status: 'disabled', quota: 'all', sort: 'name-desc' };
+    stored.oauth_management_view_v1 = unreadPreference;
+    let resolveRead!: (response: Response) => void;
+    readResponse = new Promise<Response>((resolve) => { resolveRead = resolve; });
+    mount(<OAuthView />);
+    const filterButton = screen.getByRole('button', { name: 'Filter OAuth' }) as HTMLButtonElement;
+    expect(filterButton.disabled).toBe(true);
+    await act(async () => { resolveRead(jsonResponse({ error: 'read_unavailable' }, 503)); });
+    await waitFor(() => expect(filterButton.disabled).toBe(false));
+    fireEvent.click(filterButton);
+    expect(readView()).toMatchObject({ status: 'enabled', quota: 'attention', sort: 'priority-desc' });
+    fireEvent.click(screen.getByRole('button', { name: 'Resize OAuth' }));
+    expect(readView().pageSize).toBe(24);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset OAuth' }));
+    expect(readView()).toMatchObject({ status: 'all', quota: 'all', sort: 'name-asc', pageSize: 24 });
+    expect(writes).toHaveLength(0);
+    expect(stored.oauth_management_view_v1).toEqual(unreadPreference);
   });
 
   it('rolls OAuth controls back when a save fails instead of retaining an unsaved URL override', async () => {

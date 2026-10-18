@@ -57,7 +57,7 @@ export async function liveTailSection(context) {
   check('auto-refresh is an on/off switch, not an interval picker', (await page.locator('.req-auto-refresh-select').count()) === 0);
   check('auto-refresh starts off', !(await autoRefreshSwitch.isChecked()));
   await autoRefreshSwitch.click();
-  check('auto-refresh turns on', await autoRefreshSwitch.isChecked());
+  await checkEventually('auto-refresh turns on', () => autoRefreshSwitch.isChecked());
   check(
     'the enabled switch states no cadence label',
     (await page.locator('.req-auto-refresh-cadence').count()) === 0,

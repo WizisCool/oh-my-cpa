@@ -19,7 +19,7 @@ export async function refreshAndLayoutSection(context) {
 
   // Switching the poll off again keeps the rest of the audit deterministic.
   await autoRefreshSwitch.click();
-  check('auto-refresh turns off again', !(await autoRefreshSwitch.isChecked()));
+  await checkEventually('auto-refresh turns off again', async () => !(await autoRefreshSwitch.isChecked()));
 
   // A manual refresh is the other event that re-reads the facets: the operator
   // asked for current data, and stale dropdown counts are on screen too.

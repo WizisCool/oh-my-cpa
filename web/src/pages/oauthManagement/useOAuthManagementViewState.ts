@@ -44,5 +44,5 @@ export function useOAuthManagementViewState() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams, resolvedParams, preference.loaded, preference.set]);
 
-  return { searchParams, setSearchParams, queryState, setSearch, isViewLoaded: preference.loaded };
+  return { searchParams, setSearchParams, queryState, setSearch, isViewLoaded: preference.ready };
 }

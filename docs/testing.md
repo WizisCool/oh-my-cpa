@@ -108,7 +108,8 @@ refetch lifecycle.
 
 `web/tests/list-view-preferences.component.test.tsx` owns OAuth view parsing,
 saved filter/sort/page-size restoration with a fresh QueryClient, explicit-link
-precedence, persisted reset and refused-write rollback. It also covers request
+precedence, persisted reset, refused-write rollback and usable URL-only controls
+after a failed preference read without overwriting unread preferences. It also covers request
 record grouping, auto-refresh and advanced-filter restoration from bare and
 explicit entry routes. The OAuth management and request interaction probes retain
 the real control wiring, reload and rendered collection-order claims.
