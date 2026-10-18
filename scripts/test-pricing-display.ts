@@ -384,6 +384,7 @@ check('a lane needs valid names that no other lane claims', () => {
   assert.deepEqual(tiersFromDrafts([service('a', [])], PRIORITY_BASE), { error: 'service', index: 0 });
   assert.deepEqual(tiersFromDrafts([service('a', ['auto'])], PRIORITY_BASE), { error: 'service', index: 0 });
   assert.deepEqual(tiersFromDrafts([service('a', ['pri ority'])], PRIORITY_BASE), { error: 'service', index: 0 });
+  assert.deepEqual(tiersFromDrafts([service('a', Array.from({ length: 9 }, (_, n) => `tier-${n}`))], PRIORITY_BASE), { error: 'service', index: 0 }, 'at most eight names, as the server allows');
   assert.deepEqual(tiersFromDrafts([service('a', ['priority']), service('b', ['fast', 'Priority'])], PRIORITY_BASE), { error: 'service', index: 1 });
   const ok = tiersFromDrafts([service('a', ['Priority', 'fast'])], PRIORITY_BASE);
   assert.deepEqual(ok, { tiers: [{ service_tiers: ['fast', 'priority'], prompt_price_per_1m: 1 }] });

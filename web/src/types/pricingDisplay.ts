@@ -571,6 +571,9 @@ export function parseRateText(value: string): number | undefined {
 /** The server's bound on one price's tiers. */
 export const MAX_TIERS = 16;
 
+/** The server's bound on one tier's service-tier names. */
+export const MAX_SERVICE_TIERS_PER_TIER = 8;
+
 export type TierDraftError = 'condition' | 'window' | 'rate' | 'base' | 'duplicate' | 'service';
 
 /**
@@ -599,7 +602,9 @@ export function tiersFromDrafts(
     const draft = drafts[index];
     if (draft.kind !== 'service') continue;
     const names = canonicalServiceTiers(draft.serviceTiers);
-    if (names.length === 0 || names.some((name) => !isValidServiceTierName(name))) return { error: 'service', index };
+    if (names.length === 0 || names.length > MAX_SERVICE_TIERS_PER_TIER || names.some((name) => !isValidServiceTierName(name))) {
+      return { error: 'service', index };
+    }
     for (const name of names) {
       if ((claimed.get(name) ?? draft.lane) !== draft.lane) return { error: 'service', index };
       claimed.set(name, draft.lane);

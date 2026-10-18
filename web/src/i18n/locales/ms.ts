@@ -2996,7 +2996,7 @@ export const MS: Readonly<Record<string, string>> = {
   "pricing.editor.lane_unnamed": "Tanpa nama",
   "pricing.editor.lane_context_hint": "Permintaan pada peringkat perkhidmatan ini yang inputnya mencapai ambang dibilkan pada langkah itu. Langkah di sini hanya untuk peringkat ini dan tidak pernah bertindih dengan tier konteks panjang standard; tanpanya, permintaan panjang pada peringkat ini membayar kadar peringkat di atas.",
   "pricing.editor.lane_blank_hint": "Kosong mengekalkan kadar peringkat ini",
-  "pricing.editor.tier_error_service": "Namakan peringkat perkhidmatan (huruf, digit, . _ -, bukan auto); setiap nama hanya milik satu harga peringkat",
+  "pricing.editor.tier_error_service": "Namakan satu hingga lapan peringkat perkhidmatan (huruf, digit, . _ -, bukan auto); setiap nama hanya milik satu harga peringkat",
   "pricing.editor.preview_service_tier": "Dibilkan pada",
   "cost.service_tier": "Peringkat perkhidmatan: {tier} (dilaporkan oleh huluan)",
   "cost.service_tier_requested": "Peringkat perkhidmatan: {tier} (diminta; huluan tidak melaporkan)",

@@ -3603,7 +3603,7 @@ const DICT: Record<string, [string, string]> = {
   'pricing.editor.lane_unnamed': ['未命名', 'Unnamed'],
   'pricing.editor.lane_context_hint': ['此等级的请求输入达到门槛后改按该档计价。这里的分段只对本等级生效，不与标准的上下文分段叠加；未设置时，本等级的长请求按上方的等级价格计费。', 'Requests on this service tier whose input reaches the threshold are billed at that step. Steps here apply only to this tier and never stack with the standard long-context tiers; without one, long requests on this tier pay the tier\'s rates above.'],
   'pricing.editor.lane_blank_hint': ['留空表示与此等级价格相同', 'Blank keeps this tier\'s rate'],
-  'pricing.editor.tier_error_service': ['请填写服务等级名称（字母、数字、. _ -，不能是 auto），且每个名称只能属于一组价格', 'Name the service tiers (letters, digits, . _ -, not auto); each name belongs to one tier price only'],
+  'pricing.editor.tier_error_service': ['请填写 1 到 8 个服务等级名称（字母、数字、. _ -，不能是 auto），且每个名称只能属于一组价格', 'Name one to eight service tiers (letters, digits, . _ -, not auto); each name belongs to one tier price only'],
   'pricing.editor.preview_service_tier': ['按服务等级', 'Billed on'],
   'cost.service_tier': ['服务等级：{tier}（上游响应）', 'Service tier: {tier} (reported by the upstream)'],
   'cost.service_tier_requested': ['服务等级：{tier}（请求指定，上游未上报）', 'Service tier: {tier} (requested; the upstream reported none)'],
