@@ -887,7 +887,7 @@ const DICT: Record<string, [string, string]> = {
   'omc.tps_calculation_desc': ["输出 Token ÷ 总耗时；排除首字延迟时先从总耗时中扣除，无法扣除时使用总耗时。", "Output tokens ÷ total latency; excluding first-token latency subtracts it when measurable, otherwise total latency is used."],
   'omc.tps_exclude_ttft': ["排除首字延迟", "Exclude first-token latency"],
   'omc.tps_include_ttft': ["包含首字延迟", "Include first-token latency"],
-  'events.tps_hint_fallback': ["首字延迟不可用或剩余窗口不足 50 ms，回退到：输出 Token ÷ 总耗时", "First-token latency is unavailable or the remaining window is below 50 ms; falls back to output tokens ÷ total latency"],
+  'events.tps_hint_fallback': ["首字延迟不可用、剩余窗口不足 50 ms，或推理 Token 生成于首字之前，回退到：输出 Token ÷ 总耗时", "First-token latency is unavailable, the remaining window is below 50 ms, or reasoning tokens preceded the first token; falls back to output tokens ÷ total latency"],
   'agent.capability.tps_calculation_get': ["读取 TPS 计算方式", "Read TPS calculation mode"],
   'agent.capability.tps_calculation_get.description': ["读取请求记录与 Playground 共用的 TPS 计算方式。", "Read the TPS calculation mode shared by request records and Playground."],
   'agent.capability.tps_calculation_set': ["修改 TPS 计算方式", "Change TPS calculation mode"],

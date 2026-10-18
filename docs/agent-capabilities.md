@@ -507,7 +507,9 @@ returns the saved mode. Both are available to Agent and MCP administrators under
 the existing policy. The write shares the console's `omc_tps_calculation_mode`
 preference and invalidates `preferences`; no secret or OAuth handoff is involved.
 It changes request-record and Playground TPS readouts, not original timings or usage.
-Exclusion subtracts measurable first-token latency and otherwise uses total latency;
+Exclusion subtracts measurable first-token latency and otherwise uses total latency,
+as it also does for records that report reasoning tokens (hidden reasoning precedes
+the first token, so the residual window never contained it);
 inclusion always uses total latency. Tests cover both adapters, shared preference
 reads/writes, defaults, invalid values and administrator refusal.
 

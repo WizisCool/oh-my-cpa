@@ -33,9 +33,19 @@ for (const mode of ['exclude_ttft', 'include_ttft'] as const) {
     assert.deepEqual(eventTokensPerSecond(record, mode), { tps: null, formatted: '—', basis: null });
   }
 }
+// Codex request 01a148ff: hidden reasoning ran before the first visible token, so dividing
+// all 814 output tokens by the 430 ms tail read ~1900 t/s. Reasoning rules the subtraction out
+// in either output convention; the TTFT readout itself stays measurable.
+const hiddenReasoning = {
+  generate: true, stream: true, latency_ms: 20_550, ttft_ms: 20_120,
+  tokens: { total: 152_714, input: 151_900, output: 814, reasoning: 767, cached: 0, cache_read: 0, cache_creation: 0 },
+};
+assert.equal(hasMeasurableTTFT(hiddenReasoning), true);
+assert.deepEqual(eventTokensPerSecond(hiddenReasoning), { tps: 814_000 / 20_550, formatted: '39.61 t/s', basis: 'fallback_total' });
+assert.equal(eventTokensPerSecond(hiddenReasoning, 'include_ttft').basis, 'include_ttft');
 const snapshot = structuredClone(event);
 eventTokensPerSecond(event, 'include_ttft');
 assert.deepEqual(event, snapshot);
 assert.equal(hasMeasurableTTFT(event), true);
 assert.equal(isNonStreamingEvent({ ...event, stream: false }), false);
-console.log('PASS TPS calculation: global modes, fallback, boundaries, timing metadata and hint basis');
+console.log('PASS TPS calculation: global modes, fallback, reasoning, boundaries, timing metadata and hint basis');

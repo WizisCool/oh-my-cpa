@@ -1173,7 +1173,7 @@ const tpsExact = eventTokensPerSecond({
   generate: true,
   latency_ms: 120_000,
   ttft_ms: 20_000,
-  tokens: { total: 20000, input: 9079, output: 10921, reasoning: 500, cached: 0, cache_read: 0, cache_creation: 0 },
+  tokens: { total: 20000, input: 9079, output: 10921, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
 });
 assert.equal(tpsExact.formatted, '109.21 t/s');
 assert.equal(tpsExact.basis, 'exclude_ttft');
@@ -1247,7 +1247,9 @@ assert.equal(tpsStreamingExplicit.basis, 'exclude_ttft');
 
 // Event b561ad87 (Codex OAuth):
 // Client sent stream=false, but upstream CodexExecutor captured genuine ttft_ms=4423,
-// latency=31251, with measurable residual window 26828ms. TTFT IS measurable and first-token-excluded rate is 52.18 t/s.
+// latency=31251, with measurable residual window 26828ms. TTFT IS measurable, so the record
+// keeps its TTFT readout; the 135 hidden reasoning tokens preceded that boundary, so TPS uses
+// total latency: 1400 * 1000 / 31251 = 44.80 t/s.
 const tpsB561ad87 = eventTokensPerSecond({
   generate: true,
   stream: false,
@@ -1255,8 +1257,8 @@ const tpsB561ad87 = eventTokensPerSecond({
   ttft_ms: 4_423,
   tokens: { total: 13508, input: 12108, output: 1400, reasoning: 135, cached: 2816, cache_read: 2816, cache_creation: 0 },
 });
-assert.equal(tpsB561ad87.formatted, '52.18 t/s'); // 1400 * 1000 / 26828 = 52.18
-assert.equal(tpsB561ad87.basis, 'exclude_ttft');
+assert.equal(tpsB561ad87.formatted, '44.80 t/s');
+assert.equal(tpsB561ad87.basis, 'fallback_total');
 
 // hasMeasurableTTFT tests
 assert.equal(hasMeasurableTTFT(undefined), false);

@@ -701,7 +701,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "omc.tps_calculation_desc": "輸出 Token ÷ 總耗時；排除首字延遲時先從總耗時中扣除，無法扣除時使用總耗時。",
   "omc.tps_exclude_ttft": "排除首字延遲",
   "omc.tps_include_ttft": "包含首字延遲",
-  "events.tps_hint_fallback": "首字延遲不可用或剩餘時間不足 50 ms，改用：輸出 Token ÷ 總耗時",
+  "events.tps_hint_fallback": "首字延遲不可用、剩餘時間不足 50 ms，或推理 Token 生成於首字之前，改用：輸出 Token ÷ 總耗時",
   "agent.capability.tps_calculation_get": "讀取 TPS 計算方式",
   "agent.capability.tps_calculation_get.description": "讀取請求記錄與 Playground 共用的 TPS 計算方式。",
   "agent.capability.tps_calculation_set": "修改 TPS 計算方式",

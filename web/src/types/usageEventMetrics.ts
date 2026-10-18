@@ -193,6 +193,13 @@ export function isNonStreamingEvent(
  * A collapsed first-token boundary cannot support subtraction, so exclusion falls back to
  * total latency. The residual may include server-side tools; it is not pure generation time.
  * Client streaming intent does not establish whether the observed boundary is measurable.
+ *
+ * Reported reasoning tokens also rule the subtraction out. Hidden reasoning (OpenAI and Codex
+ * encrypted reasoning, Gemini thoughts) is generated before the first visible token, so the
+ * residual window never contained it: 814 output tokens, 767 of them reasoning, over a 0.43 s
+ * tail reads as ~1900 t/s. Providers disagree on whether the output count includes reasoning,
+ * so the visible share cannot be isolated either, and the end-to-end average is the only rate
+ * the record supports without inflating it.
  */
 export function eventTokensPerSecond(
   event?: Partial<Pick<UsageEvent, 'generate' | 'latency_ms' | 'ttft_ms' | 'tokens' | 'stream'>>,
@@ -206,7 +213,7 @@ export function eventTokensPerSecond(
   }
 
   const basis: TpsCalculationBasis = mode === 'include_ttft' ? 'include_ttft'
-    : hasMeasurableTTFT(event) ? 'exclude_ttft' : 'fallback_total';
+    : hasMeasurableTTFT(event) && !(Number(event.tokens?.reasoning) > 0) ? 'exclude_ttft' : 'fallback_total';
   const durationMs = basis === 'exclude_ttft' ? latency - Number(event.ttft_ms) : latency;
   const tps = (output * 1000) / durationMs;
   return { tps, formatted: `${tps.toFixed(2)} t/s`, basis };
