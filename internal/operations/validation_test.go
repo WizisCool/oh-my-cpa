@@ -181,6 +181,35 @@ func TestOAuthExcludedModelsCapabilityIsConfirmedAndRevisioned(t *testing.T) {
 	}
 }
 
+func TestOAuthExclusionCapabilityGuidanceExplainsCredentialPrecedence(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := (&Service{}).registerOAuth(registry); err != nil {
+		t.Fatal(err)
+	}
+	for _, adapter := range []string{"agent", "mcp"} {
+		for _, name := range []string{"oauth_excluded_models_list", "oauth_set_excluded_models", "oauth_set_credential_fields"} {
+			definition, err := registry.Lookup(name, capability.Principal{Adapter: adapter, IsAdmin: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			guidance := []string{"non-empty", "replaces", "missing, empty or null list inherits the current provider rules", "CPA v8.0.33 or later", "upgrade older gateways before relying on", "CPA determines availability"}
+			if name == "oauth_set_credential_fields" {
+				guidance = append(guidance, "replaces provider exclusions, including *", "clearing restores inheritance")
+			} else {
+				guidance = append(guidance, "* blocks all models only for inheriting credentials")
+				if name == "oauth_set_excluded_models" {
+					guidance = append(guidance, "leaving non-empty credential overrides unchanged", "Clearing a credential list restores inheritance, not unrestricted access")
+				}
+			}
+			for _, fragment := range guidance {
+				if !strings.Contains(definition.Description, fragment) {
+					t.Errorf("%s/%s omits %q from guidance: %s", adapter, name, fragment, definition.Description)
+				}
+			}
+		}
+	}
+}
+
 func TestAgentCredentialFieldsRefuseSecretBearingKeys(t *testing.T) {
 	registry := capability.NewRegistry()
 	service := &Service{NormalizeCredentialFields: func(fields map[string]any) (map[string]any, error) { return fields, nil }}

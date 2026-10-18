@@ -966,6 +966,12 @@ assertion and the section geometry check are mutation-tested before delivery.
 `scripts/test-oauth-excluded-models.ts` owns normalization, exact/wildcard matching,
 validation, catalog coverage and independent exact rules under wildcard coverage.
 `scripts/test-oauth-model-alias.ts` pins the new mapping's retain-original default.
+`web/tests/oauth-exclusion-guidance.component.test.tsx` mounts the real rule and
+credential drawers with provider `*` and a non-empty credential override. It owns
+the scoped introduction, alias/catch-all/deletion warnings, CPA v8.0.33 requirement and the clearing hint,
+plus the empty-array safe-field PATCH that restores inheritance.
+`TestOAuthExclusionCapabilityGuidanceExplainsCredentialPrecedence` checks the
+registered Agent/MCP descriptions for the same scope and CPA authority.
 Go tests beside the OAuth exclusion facade own provider replacement/deletion,
 allowlisted catalog projection, request validation and refused readback. Audit fault
 injection checks that a rejected attempt audit prevents the upstream write, while a

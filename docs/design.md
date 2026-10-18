@@ -3062,7 +3062,10 @@ keep manual entry and default new mappings to retaining the original model (`for
 Exclusions use open checkbox rows, searchable catalog bulk actions and a separate
 list for typed IDs and wildcard rules. A wildcard-covered row identifies its rule
 and cannot be unchecked unless its own exact rule exists; the catch-all rule warns
-that every model will be excluded. The footer keeps Clear, Revert and Save reachable
+that every model is excluded only on credentials inheriting provider defaults.
+Non-empty credential lists replace these defaults; clearing a credential list
+restores inheritance. Alias warnings and provider-rule deletion confirmations
+scope their claims accordingly and leave availability to CPA. The footer keeps Clear, Revert and Save reachable
 on a phone. Existing palette, shape, typography and motion tokens are reused.
 
 ### Credential policies, Vertex import and gateway log tools

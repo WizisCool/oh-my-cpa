@@ -7,6 +7,19 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+### OAuth model-exclusion precedence
+
+CPA v8.0.33 is the first release containing
+[the credential exclusion priority change](https://github.com/router-for-me/CLIProxyAPI/commit/69d0ff8e295aea349966b16f20e2966421bfeb18).
+A non-empty credential `excluded_models` list replaces provider
+`oauth.excluded-models`; missing, empty or null inherits current provider rules.
+The v8.0.33 helper stores only credential rules, and the runtime resolves the
+provider fallback. Older supported v8 builds can merge the lists instead; upgrade
+them before relying on credential overrides. This is a feature-specific behavior
+boundary, not a change to OMC's v8.0.0 Management API baseline. The console and
+Agent/MCP guidance state the requirement, and CPA's per-credential model list
+remains authoritative. See [OAuth model rules](operations.md#oauth-model-rules).
+
 ### Codex behavior path compatibility
 
 CPA moved the shared Codex, Claude and xAI provider behavior out of

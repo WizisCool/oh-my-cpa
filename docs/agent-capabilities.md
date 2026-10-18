@@ -612,8 +612,16 @@ and `models`. Its preview names the provider and shows before/after rules; execu
 requires the operator's confirmation and rechecks the map revision under the shared
 whole-config write gate. It reuses the console facade's rule validation and verified
 CPA readback, then invalidates the exclusion map, credential model lists, Model Square and pricing.
-An empty list removes only that provider's rules. The wildcard `*` hides every model
-for that provider's OAuth credentials, so it must remain visible in the preview.
+An empty list removes only that provider's defaults, leaving non-empty credential
+`excluded_models` overrides unchanged. A non-empty credential list replaces, rather
+than extends, the provider defaults; a missing, empty or null list inherits the
+current provider rules. This precedence requires CPA v8.0.33 or later; upgrade
+older gateways before relying on credential overrides. The wildcard `*` hides every model only on inheriting
+credentials, so it must remain visible in the preview without implying a universal
+block. For example, provider `["*"]` with credential `["model-b"]` does not block
+`model-a` on that credential through the provider rule. Clearing the credential
+list restores inheritance of `*`, not unrestricted availability. CPA remains
+authoritative for availability; use its per-credential model list to check it.
 These capabilities are available through the built-in Agent and stdio MCP registry,
 without a new adapter or any secret-bearing response.
 

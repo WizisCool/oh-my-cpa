@@ -233,7 +233,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		AuthIndex string         `json:"auth_index"`
 		Fields    map[string]any `json:"fields"`
 	}
-	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models, expired, disable_cooling, websockets, using_api, request_retry (null inherits), request_scoped_errors (rules of status, match, match_regex and action; an empty list clears them), model_aliases (entries of name, alias and optional fork, display_name and force_mapping; an empty list clears them). Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
+	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models (a non-empty list replaces provider exclusions, including *; a missing, empty or null list inherits the current provider rules, so clearing restores inheritance; this precedence requires CPA v8.0.33 or later, so upgrade older gateways before relying on overrides; CPA determines availability), expired, disable_cooling, websockets, using_api, request_retry (null inherits), request_scoped_errors (rules of status, match, match_regex and action; an empty list clears them), model_aliases (entries of name, alias and optional fork, display_name and force_mapping; an empty list clears them). Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
 	metadata.Invalidates = []string{"management-auth-files", "management-quota", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input FieldsInput) (capability.Preview, error) {
 		fields, err := s.normalizeAgentCredentialFields(input.Fields)
@@ -304,7 +304,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := read(registry, "oauth_excluded_models_list", "Read the global per-provider OAuth model exclusion rules: the models CPA hides from every OAuth credential of a provider. A rule is a model ID or a pattern where * matches any characters.", func(ctx context.Context, _ Empty) (OAuthExcludedModelsView, error) {
+	if err := read(registry, "oauth_excluded_models_list", "Read provider OAuth/file-backed model exclusion defaults. A non-empty credential excluded_models list replaces, rather than extends, these defaults; a missing, empty or null list inherits the current provider rules. A rule is a model ID or a pattern where * matches any characters; provider * blocks all models only for inheriting credentials. This precedence requires CPA v8.0.33 or later; upgrade older gateways before relying on credential overrides. CPA determines availability; check its per-credential model list.", func(ctx context.Context, _ Empty) (OAuthExcludedModelsView, error) {
 		if s.OAuthExcludedModels == nil {
 			return OAuthExcludedModelsView{}, errors.New("capability_unavailable")
 		}
@@ -320,7 +320,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		Provider string   `json:"provider"`
 		Models   []string `json:"models"`
 	}
-	metadata = Meta("oauth_set_excluded_models", "Replace one provider's OAuth model exclusion rules after confirmation. Excluded models stop being served by every OAuth credential of that provider; the rule * excludes all of them. Empty models delete the provider's rules.", "write", "high")
+	metadata = Meta("oauth_set_excluded_models", "Replace one provider's OAuth/file-backed model exclusion defaults after confirmation. A non-empty credential excluded_models list replaces, rather than extends, these defaults; a missing, empty or null list inherits the current provider rules. Provider * blocks all models only for inheriting credentials. Empty models delete only the provider defaults, leaving non-empty credential overrides unchanged. Clearing a credential list restores inheritance, not unrestricted access. This precedence requires CPA v8.0.33 or later; upgrade older gateways before relying on credential overrides. CPA determines availability; check its per-credential model list.", "write", "high")
 	metadata.Invalidates = []string{"management-oauth-excluded-models", "auth-file-models", "model-square", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input SetExcludedModelsInput) (capability.Preview, error) {
 		if s.NormalizeOAuthExclusions == nil || s.OAuthExcludedModels == nil {

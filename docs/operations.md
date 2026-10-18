@@ -449,11 +449,29 @@ those cells stay blank.
 ## OAuth model rules
 
 Open **Model rules** in OAuth management to edit CPA's provider-wide aliases or
-model exclusions. These settings affect every OAuth/file-backed credential of
-the selected provider, not just one file. Exact exclusions and `*` patterns match
-case-insensitively; `*` excludes all models. Exclusions run before alias mapping,
-so aliasing an excluded upstream model does not make it available again. Use the
-credential configuration tab for an individual file's exclusion fields.
+model exclusions. Aliases are provider-scoped; exclusions are defaults for
+OAuth/file-backed credentials without a non-empty own `excluded_models` list.
+A non-empty credential list replaces, rather than extends, the provider's
+`oauth.excluded-models`. A missing, empty or null credential list inherits the
+current provider rules. Use the credential configuration tab to edit an override;
+clearing it restores inheritance, not unrestricted availability.
+
+Exact exclusions and `*` patterns match case-insensitively. Provider `*` excludes
+all models only for inheriting credentials: with provider `["*"]` and credential
+`["model-b"]`, the credential uses only `["model-b"]`, so `model-a` is not blocked
+by provider `*`. Clearing that override makes the credential inherit `*` again.
+Exclusions run before alias mapping; an alias cannot restore a source hidden by
+the applicable rules. Deleting provider rules removes those defaults but leaves
+non-empty credential overrides unchanged; it does not guarantee that models are
+served again. CPA's per-credential model list is authoritative for availability.
+Disable a credential explicitly when it must stop serving.
+
+This precedence requires **CPA v8.0.33 or later**; upgrade an older gateway before
+relying on credential overrides. OMC's general v8.0.0 Management API baseline is
+unchanged. The behavior follows CPA's [credential override change](https://github.com/router-for-me/CLIProxyAPI/commit/69d0ff8e295aea349966b16f20e2966421bfeb18).
+The upstream regression
+[`TestCodexExcludedModelsCredentialPriorityAfterPatchAndReload`](https://github.com/router-for-me/CLIProxyAPI/blob/2422c6b0f5fe16495320fa29456493874c1977a0/sdk/cliproxy/service_excluded_models_priority_test.go)
+checks immediate PATCH effects, reloads and restored inheritance after clearing.
 
 The facade exposes GET/PATCH at `/api/v1/management/auth-files/model-aliases` and
 `/api/v1/management/auth-files/excluded-models`. An exclusion PATCH carries

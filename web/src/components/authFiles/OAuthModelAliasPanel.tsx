@@ -18,7 +18,7 @@ interface OAuthModelAliasPanelProps {
   onChange: (update: (current: ManagementOAuthModelAliasDraft[]) => ManagementOAuthModelAliasDraft[]) => void;
   catalog: ManagementOAuthProviderModel[];
   catalogState: OAuthModelCatalogState;
-  /** The provider's saved exclusion rules: an alias of a hidden model serves nothing. */
+  /** Provider defaults cannot establish availability on credentials with their own list. */
   excludedRules: string[];
   isDisabled: boolean;
 }
