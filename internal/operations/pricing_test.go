@@ -268,7 +268,7 @@ func TestRequestCostBreakdownResultsPassTheirOwnSchema(t *testing.T) {
 	nanos, tier, start, end := int64(1_000_000_000), int64(0), 30, 830
 	price := pricing.ModelPrice{Model: "deepseek-chat", PromptPricePer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual,
 		Tiers: []pricing.PriceTier{{UTCStart: &start, UTCEnd: &end, TimeZone: "Asia/Shanghai"}}}
-	quote, err := pricing.Quote(price, 1, pricing.Tokens{Input: 1_000_000}, time.Date(2026, 10, 6, 17, 0, 0, 0, time.UTC).UnixMilli())
+	quote, err := pricing.Quote(price, 1, pricing.Tokens{Input: 1_000_000}, time.Date(2026, 10, 6, 17, 0, 0, 0, time.UTC).UnixMilli(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

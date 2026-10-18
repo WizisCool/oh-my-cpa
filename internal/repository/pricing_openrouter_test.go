@@ -479,3 +479,48 @@ func TestMatchReviewsRequireMigration031(t *testing.T) {
 		t.Fatalf("deleting a price before migration 31 failed: %v %v", deleted, err)
 	}
 }
+
+// The lock prices on the tier the upstream answered on, falls back to the
+// requested tier only when the response names none, and a later price change
+// leaves every stored cost and its explanation as they were.
+func TestServiceTierLockedWithRequest(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	price := pricing.ModelPrice{Model: "m", PromptPricePer1M: 2, CompletionPer1M: 10, PriceMultiplier: 1, Source: pricing.SourceManual,
+		Tiers: []pricing.PriceTier{{ServiceTiers: []string{"priority"}, PromptPricePer1M: float(4), CompletionPer1M: float(20)}}}
+	if err := r.ApplyModelPrice(ctx, price, ""); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UnixMilli()
+	cases := []struct {
+		key, requested, response, tier, source string
+		nanos                                  int64
+	}{
+		{"answered-priority", "auto", "priority", "priority", pricing.ServiceTierFromResponse, 6_000_000},
+		{"downgraded", "priority", "default", "default", pricing.ServiceTierFromResponse, 3_000_000},
+		{"unreported", "priority", "", "priority", pricing.ServiceTierFromRequest, 6_000_000},
+		{"auto", "auto", "", "", "", 3_000_000},
+	}
+	ids := map[string]int64{}
+	for _, c := range cases {
+		id, err := r.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: c.key, Model: "m", TimestampMS: at,
+			InputTokens: 1_000, OutputTokens: 100, ServiceTier: c.requested, ResponseServiceTier: c.response}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[c.key] = id
+	}
+	price.Tiers[0].PromptPricePer1M = float(8)
+	if err := r.ApplyModelPrice(ctx, price, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		breakdown, err := r.GetUsageEventCostBreakdown(ctx, ids[c.key])
+		if err != nil || breakdown.StoredNanos == nil || *breakdown.StoredNanos != c.nanos {
+			t.Fatalf("%s: stored %+v %v, want %d", c.key, breakdown, err, c.nanos)
+		}
+		if breakdown.ServiceTier != c.tier || breakdown.ServiceTierSource != c.source || !breakdown.RecomputedMatches {
+			t.Fatalf("%s: explanation %+v", c.key, breakdown)
+		}
+	}
+}

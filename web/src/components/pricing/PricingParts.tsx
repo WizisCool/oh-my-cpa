@@ -4,13 +4,14 @@ import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker, To
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
-import { ClockCircleOutlined, DeleteOutlined, PlusOutlined } from '../icons';
+import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
 import type { PriceTier, UpstreamModel } from '../../types/pricing';
 import {
   MAX_TIERS,
   RATE_KEYS,
+  canonicalServiceTiers,
   clockShiftMinutes,
   convertTierDraftUnit,
   formatHHMM,
@@ -18,12 +19,15 @@ import {
   formatRatePer1M,
   formatTokenCount,
   hasTimeWindow,
+  laneRates,
+  newLaneId,
   newTierDraft,
   parseRateText,
   parseTokenCount,
   priceSchedule,
   rateField,
   searchUpstreamModels,
+  serviceLanes,
   shiftClockText,
   tierTimeZone,
   type RateFields,
@@ -41,6 +45,7 @@ import { Pager } from '../common/Pager';
 /** The words for one tier's condition, which every surface that names a tier shares. */
 export function describeTier(t: TFunc, tier: PriceTier): string {
   const parts: string[] = [];
+  if (tier.service_tiers?.length) parts.push(t('pricing.tier.service', { tiers: tier.service_tiers.join(' / ') }));
   if (tier.min_prompt_tokens) parts.push(t('pricing.tier.long_context', { n: formatTokenCount(tier.min_prompt_tokens) }));
   if (hasTimeWindow(tier)) {
     parts.push(t('pricing.tier.window', { start: formatHHMM(tier.utc_start), end: formatHHMM(tier.utc_end), zone: tierTimeZone(tier) }));
@@ -57,6 +62,7 @@ export const TierBadges: React.FC<{ tiers: PriceTier[] | null | undefined }> = (
     <span className={styles['tier-badges']}>
       {tiers.map((tier, index) => (
         <span key={index} className={styles['tier-badge']}>
+          {tier.service_tiers?.length ? <ThunderboltOutlined aria-hidden="true" /> : null}
           {hasTimeWindow(tier) && <ClockCircleOutlined aria-hidden="true" />}
           {describeTier(t, tier)}
         </span>
@@ -209,6 +215,7 @@ function useScheduleCondition() {
   return React.useCallback((tier: PriceTier | null, upTo: number | null): string => {
     if (!tier) return upTo ? t('pricing.schedule.base_below', { n: formatTokenCount(upTo) }) : t('pricing.schedule.base');
     const parts: string[] = [];
+    if (tier.service_tiers?.length) parts.push(t('pricing.tier.service', { tiers: tier.service_tiers.join(' / ') }));
     if (tier.min_prompt_tokens) parts.push(t('pricing.schedule.context', { n: formatTokenCount(tier.min_prompt_tokens) }));
     if (hasTimeWindow(tier)) {
       const start = formatHHMM(tier.utc_start);
@@ -251,6 +258,7 @@ export const PriceSchedule: React.FC<{
           {rows.map((row) => (
             <tr key={row.tierIndex} className={clsx(activeTierIndex === row.tierIndex && styles['schedule-active'])}>
               <th scope="row">
+                {row.tier?.service_tiers?.length ? <ThunderboltOutlined aria-hidden="true" /> : null}
                 {row.tier && hasTimeWindow(row.tier) && <ClockCircleOutlined aria-hidden="true" />}
                 {condition(row.tier, row.upTo)}
               </th>
@@ -336,9 +344,11 @@ const WindowField: React.FC<{
 const TierRateFields: React.FC<{
   draft: TierDraft;
   base: RateFields | null;
+  /** What a blank rate keeps, when it is not the standard rate. */
+  blankHint?: string;
   onChange: (patch: Partial<TierDraft>) => void;
   onUnitChange: (unit: TierRateUnit) => void;
-}> = ({ draft, base, onChange, onUnitChange }) => {
+}> = ({ draft, base, blankHint, onChange, onUnitChange }) => {
   const t = useT();
   const isMultiple = draft.rateUnit === 'multiple';
   return (
@@ -354,7 +364,7 @@ const TierRateFields: React.FC<{
             { value: 'price', label: t('pricing.editor.rate_unit_price') },
           ]}
         />
-        <span className={styles['tier-note']}>{t('pricing.editor.tier_blank_hint')}</span>
+        <span className={styles['tier-note']}>{blankHint ?? t('pricing.editor.tier_blank_hint')}</span>
       </div>
       <div className={styles['tier-rates']}>
         {RATE_KEYS.map((key) => {
@@ -394,24 +404,59 @@ export interface TieredPricingEditorProps {
   onChange: (drafts: TierDraft[]) => void;
 }
 
+/** Service tiers offered when a lane is named; any other name the upstream reports can be typed. */
+const SERVICE_TIER_SUGGESTIONS = ['priority', 'fast', 'flex'];
+
 /**
- * Edits a custom price's tiers as the two questions operators actually ask - "does a long prompt
- * cost more?" and "is some time of day cheaper?" - each in its own section. A long-context tier
- * may also be limited to a window, which covers every tier the server accepts. A blank rate keeps
- * the base price, which is how providers publish tiers.
+ * Edits a custom price's tiers as the questions operators actually ask - "does a long prompt
+ * cost more?", "is some time of day cheaper?" and "what does the priority lane cost?". Standard
+ * requests keep the long-context and time-of-day sections; each service tier (priority, fast...)
+ * is a lane of its own, as providers publish it: its own rates and its own long-context steps.
+ * The lane switch only appears once a lane exists, so a price without one edits as before. A
+ * blank rate keeps the price it sits on: the standard price, or inside a lane the lane's.
  */
 export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts, base, invalid, onChange }) => {
   const t = useT();
   const consoleZone = useTimeZone();
+  const lanes = serviceLanes(drafts);
+  const [activeLane, setActiveLane] = React.useState('');
+  const lane = lanes.includes(activeLane) ? activeLane : '';
+  // An invalid tier in another lane would otherwise block saving out of sight.
+  const invalidLane = invalid ? drafts[invalid.index]?.lane ?? '' : null;
+  React.useEffect(() => {
+    if (invalidLane !== null) setActiveLane(invalidLane);
+  }, [invalidLane, invalid?.index]);
   const isFull = drafts.length >= MAX_TIERS;
+  const laneBase = laneRates(drafts, lane, base);
+  const laneDraft = drafts.find((draft) => draft.lane === lane && draft.kind === 'service');
+  const laneTiers = laneDraft?.serviceTiers ?? [];
   const update = (key: string, patch: Partial<TierDraft>) =>
     onChange(drafts.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
   const remove = (key: string) => onChange(drafts.filter((draft) => draft.key !== key));
   // A new window starts on the console's clock, the one the operator reads everything else in;
   // a vendor billing on another clock is one pick away.
   const add = (kind: TierKind) => onChange([...drafts, newTierDraft(kind === 'context'
-    ? { kind, minPromptTokens: formatTokenCount(200_000), timeZone: consoleZone }
-    : { kind, isWindowed: true, timeZone: consoleZone })]);
+    ? { kind, lane, serviceTiers: laneTiers, minPromptTokens: formatTokenCount(200_000), timeZone: consoleZone }
+    : { kind, lane, serviceTiers: laneTiers, isWindowed: true, timeZone: consoleZone })]);
+  const addLane = () => {
+    const used = new Set(drafts.flatMap((draft) => draft.serviceTiers));
+    const suggestion = SERVICE_TIER_SUGGESTIONS.find((name) => !used.has(name));
+    const id = newLaneId();
+    onChange([...drafts, newTierDraft({ kind: 'service', lane: id, serviceTiers: suggestion ? [suggestion] : [] })]);
+    setActiveLane(id);
+  };
+  const renameLane = (names: string[]) => {
+    const serviceTiers = canonicalServiceTiers(names.filter((name) => name.trim() !== ''));
+    onChange(drafts.map((draft) => (draft.lane === lane ? { ...draft, serviceTiers } : draft)));
+  };
+  const removeLane = () => {
+    onChange(drafts.filter((draft) => draft.lane !== lane));
+    setActiveLane('');
+  };
+  const laneLabel = (id: string) => {
+    const names = drafts.find((draft) => draft.lane === id)?.serviceTiers ?? [];
+    return names.length > 0 ? names.join(' / ') : t('pricing.editor.lane_unnamed');
+  };
   const errorFor = (index: number) => (invalid?.index === index ? (
     <p className={styles['field-error']} role="alert">{t(`pricing.editor.tier_error_${invalid.error}`)}</p>
   ) : null);
@@ -430,23 +475,76 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
       />
     </Tooltip>
   );
-  const rates = (draft: TierDraft) => (
+  const rates = (draft: TierDraft, rateBase: RateFields | null, blankHint?: string) => (
     <TierRateFields
       draft={draft}
-      base={base}
+      base={rateBase}
+      blankHint={blankHint}
       onChange={(patch) => update(draft.key, patch)}
-      onUnitChange={(unit) => base && onChange(drafts.map((item) => (item.key === draft.key ? convertTierDraftUnit(item, base, unit) : item)))}
+      onUnitChange={(unit) => rateBase && onChange(drafts.map((item) => (item.key === draft.key ? convertTierDraftUnit(item, rateBase, unit) : item)))}
     />
   );
-  const sectionDrafts = (kind: TierKind) => drafts.map((draft, index) => ({ draft, index })).filter(({ draft }) => draft.kind === kind);
+  const stepBlankHint = lane ? t('pricing.editor.lane_blank_hint') : undefined;
+  const sectionDrafts = (kind: TierKind) => drafts.map((draft, index) => ({ draft, index })).filter(({ draft }) => draft.lane === lane && draft.kind === kind);
+  const laneIndex = laneDraft ? drafts.indexOf(laneDraft) : -1;
 
   return (
     <div className={styles['tier-sections']}>
+      {lanes.length > 0 && (
+        <Segmented<string>
+          block
+          value={lane}
+          onChange={setActiveLane}
+          options={[
+            { value: '', label: t('pricing.editor.lane_standard') },
+            ...lanes.map((id) => ({ value: id, label: laneLabel(id) })),
+          ]}
+          data-testid="pricing-lane-switch"
+        />
+      )}
+
+      {lane && laneDraft && (
+        <section className={styles['tier-section']} data-testid="pricing-service-lane">
+          <div className={styles['tier-section-head']}>
+            <h3>{t('pricing.editor.lane_title')}</h3>
+            <Tooltip title={t('pricing.editor.lane_remove')}>
+              <Button
+                className="row-action-btn"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label={t('pricing.editor.lane_remove')}
+                onClick={removeLane}
+                data-testid="pricing-lane-remove"
+              />
+            </Tooltip>
+          </div>
+          <p className={styles['mode-hint']}>{t('pricing.editor.lane_hint')}</p>
+          <div className={clsx(styles['tier-row'], invalid?.index === laneIndex && styles['tier-row-invalid'])}>
+            <label className={styles['tier-field']}>
+              <span>{t('pricing.editor.lane_tiers')}</span>
+              <Select
+                mode="tags"
+                value={laneTiers}
+                onChange={renameLane}
+                tokenSeparators={[',', ' ']}
+                placeholder={t('pricing.editor.lane_tiers_placeholder')}
+                options={SERVICE_TIER_SUGGESTIONS.map((name) => ({ value: name, label: name }))}
+                aria-label={t('pricing.editor.lane_tiers')}
+                data-testid="pricing-lane-tiers"
+              />
+            </label>
+            {rates(laneDraft, base)}
+            {errorFor(laneIndex)}
+          </div>
+        </section>
+      )}
+
       <section className={styles['tier-section']} data-testid="pricing-context-tiers">
         <div className={styles['tier-section-head']}>
           <h3>{t('pricing.editor.context_title')}</h3>
         </div>
-        <p className={styles['mode-hint']}>{t('pricing.editor.context_hint')}</p>
+        <p className={styles['mode-hint']}>{t(lane ? 'pricing.editor.lane_context_hint' : 'pricing.editor.context_hint')}</p>
         {sectionDrafts('context').map(({ draft, index }) => {
           const threshold = parseTokenCount(draft.minPromptTokens);
           return (
@@ -485,7 +583,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
                 {t('pricing.editor.context_windowed')}
               </Checkbox>
               {draft.isWindowed && windowField(draft)}
-              {rates(draft)}
+              {rates(draft, laneBase, stepBlankHint)}
               {errorFor(index)}
             </div>
           );
@@ -506,7 +604,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
               {windowField(draft)}
               {removeButton(draft)}
             </div>
-            {rates(draft)}
+            {rates(draft, laneBase, stepBlankHint)}
             {errorFor(index)}
           </div>
         ))}
@@ -514,6 +612,9 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
           {t('pricing.editor.window_add')}
         </Button>
       </section>
+      <Button icon={<ThunderboltOutlined />} disabled={isFull} onClick={addLane} data-testid="pricing-add-service-lane">
+        {t('pricing.editor.lane_add')}
+      </Button>
       {isFull && <p className={styles['mode-hint']}>{t('pricing.editor.tier_limit', { n: MAX_TIERS })}</p>}
     </div>
   );

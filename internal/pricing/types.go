@@ -1,7 +1,8 @@
 // Package pricing keeps the per-model USD price book and computes request costs.
 // OpenRouter's public model list is the only automatic source. A price carries
 // four rates per 1M tokens (prompt, completion, cache read, cache write), an
-// optional list of tiers (long-context thresholds and time-of-day windows)
+// optional list of tiers (service tiers, long-context thresholds and time-of-day
+// windows)
 // and one model multiplier; a channel multiplier per CPA provider is applied on
 // top. A model without a price row is unpriced, never zero.
 package pricing
@@ -71,7 +72,13 @@ const (
 // without a zone is stored exactly as before: the version trigger compares the
 // stored text, so respelling existing windows would mint a version per price.
 // TimeZone names the clock the window is read on; empty means UTC.
+//
+// ServiceTiers limits a tier to requests billed on one of the named upstream
+// service tiers (see BilledServiceTier). The list is explicit on purpose: which
+// provider spellings share a rate, such as fast and priority, is the
+// operator's statement about that provider, never a mapping built in here.
 type PriceTier struct {
+	ServiceTiers     []string `json:"service_tiers,omitempty" jsonschema:"Applies when the request was billed on one of these upstream service tiers, such as priority or fast; the response tier is used, and the requested tier when the response reports none"`
 	MinPromptTokens  int64    `json:"min_prompt_tokens,omitempty" jsonschema:"Applies when the full prompt (cached tokens included) has at least this many tokens"`
 	UTCStart         *int     `json:"utc_start,omitempty" jsonschema:"Window start as HHMM (830 is 08:30) on the time_zone clock; set with utc_end"`
 	UTCEnd           *int     `json:"utc_end,omitempty" jsonschema:"Exclusive window end as HHMM on the time_zone clock; an end not after the start wraps past midnight"`
@@ -84,6 +91,14 @@ type PriceTier struct {
 
 // HasWindow reports whether the tier is limited to a time-of-day window.
 func (t PriceTier) HasWindow() bool { return t.UTCStart != nil && t.UTCEnd != nil }
+
+// HasServiceTiers reports whether the tier is limited to named service tiers.
+func (t PriceTier) HasServiceTiers() bool { return len(t.ServiceTiers) > 0 }
+
+// hasCondition reports whether the tier can be told apart from the base price.
+func (t PriceTier) hasCondition() bool {
+	return t.MinPromptTokens > 0 || t.HasWindow() || t.HasServiceTiers()
+}
 
 // tierLocations caches loaded zones: the request lock selects a tier for every
 // ingested request, and the embedded zone database is parsed on each load.
@@ -167,8 +182,13 @@ func (p *ModelPrice) ValidateWrite() error {
 	return nil
 }
 
-// maxTiers bounds one price's override list; OpenRouter publishes at most two.
-const maxTiers = 8
+// maxTiers bounds one price's override list. OpenRouter publishes at most two;
+// the headroom is for service-tier lanes that each carry their own long-context
+// steps.
+const maxTiers = 16
+
+// maxServiceTiersPerTier bounds one tier's service-tier list.
+const maxServiceTiersPerTier = 8
 
 // ValidateTiers rejects a tier that could never apply or that would poison
 // every estimate it is selected for.
@@ -196,8 +216,16 @@ func ValidateTiers(tiers []PriceTier) error {
 		} else if tier.TimeZone != "" {
 			return fmt.Errorf("tier %d: time_zone needs utc_start and utc_end", i)
 		}
-		if tier.MinPromptTokens == 0 && !tier.HasWindow() {
-			return fmt.Errorf("tier %d: a tier needs min_prompt_tokens or a time window", i)
+		if len(tier.ServiceTiers) > maxServiceTiersPerTier {
+			return fmt.Errorf("tier %d: at most %d service tiers are allowed", i, maxServiceTiersPerTier)
+		}
+		for _, name := range tier.ServiceTiers {
+			if !isValidServiceTier(NormalizeServiceTier(name)) {
+				return fmt.Errorf("tier %d: service tiers must be names such as priority or fast (letters, digits, '.', '_' or '-', at most 64)", i)
+			}
+		}
+		if !tier.hasCondition() {
+			return fmt.Errorf("tier %d: a tier needs service_tiers, min_prompt_tokens or a time window", i)
 		}
 		for _, rate := range []*float64{tier.PromptPricePer1M, tier.CompletionPer1M, tier.CacheReadPer1M, tier.CacheWritePer1M} {
 			if rate != nil && !isValidRate(*rate) {

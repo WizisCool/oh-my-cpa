@@ -3,6 +3,7 @@ import { compareModelNames, groupPricingModels, pagePricingGroups } from '../web
 import { pricingProviderIdentity, pricingModelIdentity } from '../web/src/components/pricing/pricingIdentity.ts';
 import type { PricingProvider } from '../web/src/types/pricing.ts';
 import {
+  billedServiceTier,
   convertTierDraftUnit,
   formatHHMM,
   formatMultiplier,
@@ -20,6 +21,7 @@ import {
   rateDelta,
   searchUpstreamModels,
   selectTier,
+  serviceLanes,
   shiftClockText,
   tierDraftsFrom,
   tiersFromDrafts,
@@ -300,6 +302,101 @@ check('pricing identity reuses provider overrides and keeps model names text-onl
   assert.equal(pricingProviderIdentity({ ...provider, family: 'codex', name: 'codex', is_oauth: true }).label, 'Codex');
   assert.equal(pricingProviderIdentity({ ...provider, family: 'unknown-plugin', name: 'unknown-plugin', is_oauth: true }).iconId, '');
   assert.deepEqual(pricingModelIdentity('GPT-5'), { label: 'GPT-5' });
+});
+
+// The issue's synthetic rate card (internal/pricing/service_tier_test.go): priority doubles every rate.
+const PRIORITY_BASE = { prompt_price_per_1m: 2, completion_price_per_1m: 10, cache_read_price_per_1m: 0.2, cache_write_price_per_1m: 2.5 };
+const PRIORITY_TIERS: PriceTier[] = [
+  { service_tiers: ['priority'], prompt_price_per_1m: 4, completion_price_per_1m: 20, cache_read_price_per_1m: 0.4, cache_write_price_per_1m: 5 },
+];
+
+check('a priority request pays the priority lane and every other tier the standard price', () => {
+  const price = { ...PRIORITY_BASE, price_multiplier: 1, tiers: PRIORITY_TIERS };
+  const tokens = { input: 1_000, output: 100, cache_read: 0, cache_write: 0 };
+  assert.ok(Math.abs(previewCostUsd(price, tokens, { serviceTier: 'priority' }).usd - 0.006) < 1e-12);
+  assert.ok(Math.abs(previewCostUsd(price, tokens, { serviceTier: ' Priority ' }).usd - 0.006) < 1e-12);
+  for (const tier of ['', 'default', 'flex']) assert.ok(Math.abs(previewCostUsd(price, tokens, { serviceTier: tier }).usd - 0.003) < 1e-12, tier);
+});
+
+check('the billed service tier is the response tier, else the requested one, never auto', () => {
+  assert.equal(billedServiceTier('priority', 'auto'), 'priority');
+  assert.equal(billedServiceTier('default', 'priority'), 'default');
+  assert.equal(billedServiceTier('', 'Priority'), 'priority');
+  assert.equal(billedServiceTier('auto', 'priority'), 'priority');
+  assert.equal(billedServiceTier(undefined, 'auto'), '');
+});
+
+check('a service-tier tier outranks a threshold, and a combined tier outranks both', () => {
+  const tiers: PriceTier[] = [
+    { min_prompt_tokens: 200_000, prompt_price_per_1m: 4 },
+    { service_tiers: ['fast', 'priority'], prompt_price_per_1m: 5 },
+    { service_tiers: ['priority'], min_prompt_tokens: 200_000, prompt_price_per_1m: 9 },
+  ];
+  assert.equal(selectTier(tiers, 10, 0, 'default'), -1);
+  assert.equal(selectTier(tiers, 300_000, 0, 'default'), 0);
+  assert.equal(selectTier(tiers, 10, 0, 'priority'), 1);
+  assert.equal(selectTier(tiers, 10, 0, 'fast'), 1);
+  assert.equal(selectTier(tiers, 300_000, 0, 'priority'), 2);
+  assert.equal(selectTier(tiers, 300_000, 0, 'fast'), 1, 'one tier, never a stack');
+});
+
+check('a lane opens as multiples of the standard price and saves the same tiers back', () => {
+  const drafts = tierDraftsFrom(PRIORITY_TIERS, PRIORITY_BASE);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind, 'service');
+  assert.deepEqual(drafts[0].serviceTiers, ['priority']);
+  assert.equal(drafts[0].rateUnit, 'multiple');
+  assert.equal(drafts[0].prompt, '2');
+  assert.deepEqual(tiersFromDrafts(drafts, PRIORITY_BASE), { tiers: PRIORITY_TIERS });
+});
+
+check('a lane step reads and writes its rates against the lane, never the standard price', () => {
+  const lane = 'lane-test';
+  const drafts = [
+    newTierDraft({ kind: 'service', lane, serviceTiers: ['priority'], prompt: '2', completion: '2' }),
+    newTierDraft({ kind: 'context', lane, serviceTiers: ['priority'], minPromptTokens: '200K', prompt: '2' }),
+  ];
+  const result = tiersFromDrafts(drafts, PRIORITY_BASE);
+  assert.ok('tiers' in result);
+  assert.deepEqual(result.tiers, [
+    { service_tiers: ['priority'], prompt_price_per_1m: 4, completion_price_per_1m: 20 },
+    // Input doubles against the lane's 4; a blank completion keeps the lane's 20, written out because
+    // the server fills a missing rate from the standard price.
+    { service_tiers: ['priority'], min_prompt_tokens: 200_000, prompt_price_per_1m: 8, completion_price_per_1m: 20 },
+  ]);
+  const reopened = tierDraftsFrom(result.tiers, PRIORITY_BASE);
+  assert.equal(serviceLanes(reopened).length, 1);
+  assert.deepEqual(tiersFromDrafts(reopened, PRIORITY_BASE), result, 'the lane round-trips');
+  const step = reopened.find((draft) => draft.kind === 'context')!;
+  assert.equal(step.prompt, '2');
+  assert.equal(step.completion, '', 'a rate equal to the lane opens blank');
+});
+
+check('a lane without rates of its own saves only its steps, and a step leaving a rate out bills the standard price', () => {
+  const stored: PriceTier[] = [{ service_tiers: ['priority'], min_prompt_tokens: 200_000, prompt_price_per_1m: 6 }];
+  const drafts = tierDraftsFrom(stored, PRIORITY_BASE);
+  assert.equal(drafts.filter((draft) => draft.kind === 'service').length, 1, 'the editor always has a place for the lane');
+  assert.deepEqual(tiersFromDrafts(drafts, PRIORITY_BASE), { tiers: stored });
+});
+
+check('a lane needs valid names that no other lane claims', () => {
+  const service = (lane: string, names: string[]) => newTierDraft({ kind: 'service', lane, serviceTiers: names, rateUnit: 'price', prompt: '1' });
+  assert.deepEqual(tiersFromDrafts([service('a', [])], PRIORITY_BASE), { error: 'service', index: 0 });
+  assert.deepEqual(tiersFromDrafts([service('a', ['auto'])], PRIORITY_BASE), { error: 'service', index: 0 });
+  assert.deepEqual(tiersFromDrafts([service('a', ['pri ority'])], PRIORITY_BASE), { error: 'service', index: 0 });
+  assert.deepEqual(tiersFromDrafts([service('a', ['priority']), service('b', ['fast', 'Priority'])], PRIORITY_BASE), { error: 'service', index: 1 });
+  const ok = tiersFromDrafts([service('a', ['Priority', 'fast'])], PRIORITY_BASE);
+  assert.deepEqual(ok, { tiers: [{ service_tiers: ['fast', 'priority'], prompt_price_per_1m: 1 }] });
+});
+
+check('lanes follow the standard ladder in the price schedule', () => {
+  const rows = priceSchedule(PRIORITY_BASE, [
+    { service_tiers: ['priority'], min_prompt_tokens: 200_000, prompt_price_per_1m: 8 },
+    { min_prompt_tokens: 200_000, prompt_price_per_1m: 4 },
+    ...PRIORITY_TIERS,
+  ]);
+  assert.deepEqual(rows.map((row) => row.tierIndex), [-1, 1, 2, 0]);
+  assert.equal(rows[0].upTo, 200_000, 'a lane step sets no bound on the standard rates');
 });
 
 console.log(`pricing display: ${cases} cases passed`);

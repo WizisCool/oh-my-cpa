@@ -21,7 +21,8 @@ export interface CostBreakdownViewProps {
 }
 
 /**
- * Why a request cost what it did: the tier that applied, each token bucket at its rate, both
+ * Why a request cost what it did: the tier that applied and the service tier it was billed on,
+ * each token bucket at its rate, both
  * multipliers, and which price version it was locked against. The stored amount is the answer;
  * the rows are its explanation, and a disagreement between them is stated rather than hidden.
  *
@@ -69,6 +70,12 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
         <Notice tone="warning" title={t('cost.invalid', { reason: breakdown.invalid_reason ?? '' })} />
       )}
       {quote?.tier && <p className={styles['breakdown-tier']}>{t('cost.tier', { tier: describeTier(t, quote.tier) })}</p>}
+      {/* The billed tier only explains a price that has service-tier lanes; elsewhere it decides nothing. */}
+      {breakdown.service_tier && version?.price.tiers?.some((tier) => tier.service_tiers?.length) && (
+        <p className={styles['breakdown-tier']} data-testid="cost-service-tier">
+          {t(breakdown.service_tier_source === 'request' ? 'cost.service_tier_requested' : 'cost.service_tier', { tier: breakdown.service_tier })}
+        </p>
+      )}
       {quote && (
         <table className={styles['breakdown-table']}>
           <thead>

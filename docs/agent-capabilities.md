@@ -454,11 +454,12 @@ a page, and none returns a secret.
 - `pricing_catalog_search` (`query`, `offset`): the stored OpenRouter snapshot matched
   on id, name and canonical slug, exact ids first, with rates and tiers.
 - `pricing_quote`: one hypothetical request (`input_tokens`, optional output and cache
-  tokens, `timestamp_ms`, `channel`) priced against `model`'s stored price or a
+  tokens, `timestamp_ms`, `channel`, `service_tier`) priced against `model`'s stored price or a
   `proposed` object shaped like `pricing_set`'s input. It returns the resolved `price`,
   the `breakdown` with the governing `tier_index`, and `cost_usd`. Nothing is written.
 - `requests_cost_breakdown` (`id`): a recorded request's pricing status, stored nanos,
-  locked price and channel versions, tier and per-bucket rates; `resource_missing` for
+  locked price and channel versions, tier, the billed `service_tier` with its
+  `service_tier_source` (`response` or `request`) and per-bucket rates; `resource_missing` for
   an unknown id.
 
 A time-of-day tier's `utc_start`/`utc_end` are HHMM on the clock named by `time_zone`,

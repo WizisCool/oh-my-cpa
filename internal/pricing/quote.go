@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,7 @@ type BreakdownBucket struct {
 // Breakdown explains a request cost with structured fields only: the console
 // localises every label, so nothing here is prose.
 type Breakdown struct {
+	ServiceTier       string            `json:"service_tier,omitempty"`
 	TierIndex         *int              `json:"tier_index,omitempty"`
 	Tier              *PriceTier        `json:"tier,omitempty"`
 	Buckets           []BreakdownBucket `json:"buckets"`
@@ -50,18 +52,25 @@ type Breakdown struct {
 }
 
 // SelectTier picks the single override that governs a request. A tier applies
-// when all of its conditions hold: min_prompt_tokens against the full input
-// (cached tokens included, as the providers count it) and a half-open window
-// [start, end) that wraps past midnight when end <= start. The window is read
-// on the tier's own clock (UTC unless it names a zone) at the request's own
-// timestamp, so late ingestion cannot move it and a zone's daylight saving
-// moves the window with the vendor's wall clock. Among applicable tiers the
-// highest threshold wins, then a windowed tier over an unwindowed one, then
-// list order — exactly one tier, never a stack.
-func SelectTier(tiers []PriceTier, inputTokens, timestampMS int64) (int, bool) {
+// when all of its conditions hold: the billed service tier among its
+// service_tiers, min_prompt_tokens against the full input (cached tokens
+// included, as the providers count it) and a half-open window [start, end)
+// that wraps past midnight when end <= start. The window is read on the tier's
+// own clock (UTC unless it names a zone) at the request's own timestamp, so
+// late ingestion cannot move it and a zone's daylight saving moves the window
+// with the vendor's wall clock. Among applicable tiers a service-tier tier wins
+// over one without, then the highest threshold, then a windowed tier over an
+// unwindowed one, then list order — exactly one tier, never a stack. Providers
+// publish a priority lane as its own rate card, long-context rates included,
+// so the lane is matched first and a priority long-context price is one
+// explicit tier carrying both conditions.
+func SelectTier(tiers []PriceTier, inputTokens, timestampMS int64, serviceTier string) (int, bool) {
 	best := -1
 	for i, tier := range tiers {
-		if tier.MinPromptTokens == 0 && !tier.HasWindow() {
+		if !tier.hasCondition() {
+			continue
+		}
+		if !tier.matchesServiceTier(serviceTier) {
 			continue
 		}
 		if tier.MinPromptTokens > 0 && clampTokens(inputTokens) < tier.MinPromptTokens {
@@ -78,6 +87,9 @@ func SelectTier(tiers []PriceTier, inputTokens, timestampMS int64) (int, bool) {
 }
 
 func tierOutranks(candidate, current PriceTier) bool {
+	if candidate.HasServiceTiers() != current.HasServiceTiers() {
+		return candidate.HasServiceTiers()
+	}
 	if candidate.MinPromptTokens != current.MinPromptTokens {
 		return candidate.MinPromptTokens > current.MinPromptTokens
 	}
@@ -130,20 +142,22 @@ func (p ModelPrice) effectiveRates(tier *PriceTier) (prompt, completion, cacheRe
 	return
 }
 
-// Quote prices one request at the given price and channel multiplier. Decimal
+// Quote prices one request at the given price and channel multiplier, on the
+// service tier BilledServiceTier names (empty for none). Decimal
 // rates are accumulated exactly, both multipliers are applied as exact fractions,
 // and the total is rounded half-up to USD nanos once — so a request with no
 // tiers and a 1x channel costs exactly what the pre-tier formula charged.
-func Quote(price ModelPrice, channelMultiplier float64, tokens Tokens, timestampMS int64) (Breakdown, error) {
+func Quote(price ModelPrice, channelMultiplier float64, tokens Tokens, timestampMS int64, serviceTier string) (Breakdown, error) {
 	if err := price.ValidateRates(); err != nil {
 		return Breakdown{}, err
 	}
 	if math.IsNaN(channelMultiplier) || math.IsInf(channelMultiplier, 0) || channelMultiplier <= 0 {
 		return Breakdown{}, errors.New("channel multiplier must be a positive number")
 	}
-	breakdown := Breakdown{ModelMultiplier: price.PriceMultiplier, ChannelMultiplier: channelMultiplier}
+	serviceTier = NormalizeServiceTier(serviceTier)
+	breakdown := Breakdown{ServiceTier: serviceTier, ModelMultiplier: price.PriceMultiplier, ChannelMultiplier: channelMultiplier}
 	var tier *PriceTier
-	if index, ok := SelectTier(price.Tiers, tokens.Input, timestampMS); ok {
+	if index, ok := SelectTier(price.Tiers, tokens.Input, timestampMS, serviceTier); ok {
 		selected := price.Tiers[index]
 		tier = &selected
 		breakdown.TierIndex = &index
@@ -198,7 +212,7 @@ func Quote(price ModelPrice, channelMultiplier float64, tokens Tokens, timestamp
 func (p ModelPrice) CostNanos(input, output, cacheRead, cacheWrite int64) (int64, error) {
 	price := p
 	price.Tiers = nil
-	breakdown, err := Quote(price, 1, Tokens{Input: input, Output: output, CacheRead: cacheRead, CacheWrite: cacheWrite}, 0)
+	breakdown, err := Quote(price, 1, Tokens{Input: input, Output: output, CacheRead: cacheRead, CacheWrite: cacheWrite}, 0, "")
 	return breakdown.TotalNanos, err
 }
 
@@ -247,15 +261,23 @@ func EncodeTiers(tiers []PriceTier) (string, error) {
 }
 
 // CanonicalTiers orders tiers the way they are stored, so a tie between two
-// equally ranked tiers resolves the same before and after a round trip.
+// equally ranked tiers resolves the same before and after a round trip. Tiers
+// without a service tier keep the order they always had, so a price without
+// service-tier rules stores the same text as before they existed.
 func CanonicalTiers(tiers []PriceTier) []PriceTier {
 	if len(tiers) == 0 {
 		return []PriceTier{}
 	}
 	sorted := make([]PriceTier, len(tiers))
 	copy(sorted, tiers)
+	for i := range sorted {
+		sorted[i].ServiceTiers = canonicalServiceTiers(sorted[i].ServiceTiers)
+	}
 	sort.SliceStable(sorted, func(i, j int) bool {
 		left, right := sorted[i], sorted[j]
+		if lane := strings.Compare(strings.Join(left.ServiceTiers, ","), strings.Join(right.ServiceTiers, ",")); lane != 0 {
+			return lane < 0
+		}
 		if left.MinPromptTokens != right.MinPromptTokens {
 			return left.MinPromptTokens < right.MinPromptTokens
 		}

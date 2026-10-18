@@ -14,14 +14,17 @@ export type PricingMode = 'auto' | 'linked' | 'custom';
 export type PricingMatchKind = '' | 'exact' | 'canonical' | 'normalized' | 'date_stripped' | 'alias' | 'linked';
 
 /**
- * One conditional rate override. It applies when every condition it carries holds: a prompt of at
- * least `min_prompt_tokens` (cached tokens included) and/or a request stamped inside the window
+ * One conditional rate override. It applies when every condition it carries holds: a request billed
+ * on one of `service_tiers`, a prompt of at least `min_prompt_tokens` (cached tokens included)
+ * and/or a request stamped inside the window
  * `[utc_start, utc_end)` in HHMM, which wraps past midnight when the end is not after the start.
  * The window is read on the `time_zone` clock - the vendor's billing clock - and on UTC when the
  * tier names none; the field names are the ones OpenRouter publishes UTC windows under.
  * A rate left out inherits the base price.
  */
 export interface PriceTier {
+  /** Upstream service tiers the tier is limited to, lowercase, such as ["priority", "fast"]. */
+  service_tiers?: string[];
   min_prompt_tokens?: number;
   utc_start?: number;
   utc_end?: number;
@@ -204,6 +207,7 @@ export interface BreakdownBucket {
 
 /** The request lock's own computation, re-run from the versions it locked. */
 export interface CostQuote {
+  service_tier?: string;
   tier_index?: number;
   tier?: PriceTier;
   buckets: BreakdownBucket[];
@@ -228,6 +232,9 @@ export interface RequestCostBreakdown {
   status: 'priced' | 'unpriced' | 'legacy_unpriced' | 'invalid_price';
   stored_nanos?: number;
   stored_tier?: number;
+  /** The service tier the request was billed on, and whether the response or the request named it. */
+  service_tier?: string;
+  service_tier_source?: 'response' | 'request';
   price_version?: PriceVersion;
   channel?: ChannelVersion;
   quote?: CostQuote;

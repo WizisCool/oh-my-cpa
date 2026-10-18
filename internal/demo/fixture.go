@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 // fixtureInstanceName is the CPA instance the fixture impersonates. The console
@@ -377,6 +378,7 @@ type priceRow struct {
 	completion float64
 	cacheRead  float64
 	cacheWrite float64
+	tiers      []pricing.PriceTier
 }
 
 // customPriceCatalog is the rates an operator set by hand: the relay and
@@ -385,10 +387,17 @@ type priceRow struct {
 func customPriceCatalog() []priceRow {
 	return []priceRow{
 		{model: "mimo-v2.5", prompt: 0.14, completion: 0.28, cacheRead: 0.0028, cacheWrite: 0.14},
-		{model: "minimax-m3", prompt: 0.3, completion: 1.2, cacheRead: 0.06, cacheWrite: 0.3},
+		// A priority lane, so the demo shows a request billed on the upstream's fast
+		// lane at its own rates beside the same model's standard requests.
+		{model: "minimax-m3", prompt: 0.3, completion: 1.2, cacheRead: 0.06, cacheWrite: 0.3, tiers: []pricing.PriceTier{{
+			ServiceTiers: []string{"priority"}, PromptPricePer1M: demoRate(0.6), CompletionPer1M: demoRate(2.4),
+			CacheReadPer1M: demoRate(0.12), CacheWritePer1M: demoRate(0.6),
+		}}},
 		{model: "qwen3.8-omni-flash", prompt: 0.15, completion: 0.47, cacheRead: 0.016, cacheWrite: 0.15},
 	}
 }
+
+func demoRate(value float64) *float64 { return &value }
 
 // channelCatalog is the channel multipliers the fixture configures: the Qwen
 // endpoint is billed under a coding-plan discount, so every request it answers

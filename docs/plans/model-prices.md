@@ -62,10 +62,22 @@ write), a model multiplier, and an optional list of **tiers**:
   is placed on that zone's wall clock at its own instant, so a zone's daylight
   saving moves the window with the vendor. The zone is unrelated to the OMC
   Time Zone, which only decides how the console displays time (ADR 0063);
-- a tier carrying both applies only when both hold.
+- a **service-tier tier** (`service_tiers`, such as `["priority","fast"]`)
+  applies when the request was billed on one of the named upstream service
+  tiers. The billed tier is the `response_service_tier` CPA reported, or the
+  requested `service_tier` when the response names none (an older gateway or a
+  silent upstream); `auto` and empty name no tier and never match. Names are
+  compared lowercased and trimmed. Which provider spellings share a rate is
+  listed in the price itself: no mapping between `fast` and `priority` is built
+  in;
+- a tier carrying several conditions applies only when all of them hold.
 
-Exactly one tier governs a request: the highest applicable threshold, then a
-windowed tier over an unwindowed one, then stored order. Rates a tier leaves
+Exactly one tier governs a request: a service-tier tier over one without, then
+the highest applicable threshold, then a windowed tier over an unwindowed one,
+then stored order. Providers publish a priority lane as its own rate card, so a
+priority long-context price is one tier carrying both `service_tiers` and
+`min_prompt_tokens`; without it, a priority request above the threshold pays the
+priority lane's rates, never a stack of both. Rates a tier leaves
 out inherit the base price. `pricing.Quote` is the single implementation; the
 console's editor preview mirrors it in `web/src/types/pricingDisplay.ts` and
 the logic suite pins the two against the same cases.

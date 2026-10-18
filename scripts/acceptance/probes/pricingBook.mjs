@@ -251,6 +251,13 @@ export async function pricingBook({ base, page, check, writes }) {
   await windowInputs.nth(1).fill('08:30');
   await windowInputs.nth(1).press('Enter');
   await windowTiers.locator('input[data-testid="pricing-tier-prompt"]').fill('0.5');
+  // A priority lane: its own rates, entered as a multiple of the standard price.
+  await editor.locator('[data-testid="pricing-add-service-lane"]').click();
+  const lane = editor.locator('[data-testid="pricing-service-lane"]');
+  check('adding a service tier price opens its lane beside the standard one', await isTrue(async () => (await editor.locator('[data-testid="pricing-lane-switch"]').innerText()).includes('priority') && await lane.isVisible(), 'the priority lane'));
+  check('the lane hides the standard tiers while it is edited', (await windowTiers.locator('[data-testid="pricing-tier-row"]').count()) === 0);
+  await lane.locator('input[data-testid="pricing-tier-prompt"]').fill('2');
+  check('the preview can price a request on the priority lane', await isTrue(async () => (await editor.locator('[data-testid="pricing-preview-service-tier"]').count()) === 1, 'the preview lane switch'));
   await promptInput.fill('1.5');
   await editor.locator('[data-testid="pricing-editor-save"]').click();
   const customSaved = await isTrue(async () => writes.some((write) => write.kind === 'model' && write.model === 'gpt-6-sol'), 'the custom write');
@@ -268,6 +275,11 @@ export async function pricingBook({ base, page, check, writes }) {
   check(
     'a time-of-day tier is saved on its billing clock, hours unconverted',
     JSON.stringify(customWrite?.body.tiers?.[1]) === JSON.stringify({ utc_start: 30, utc_end: 830, time_zone: 'Asia/Shanghai', prompt_price_per_1m: 0.75 }),
+    JSON.stringify(customWrite?.body.tiers),
+  );
+  check(
+    'a priority lane is saved as a service-tier tier priced from the edited base',
+    JSON.stringify(customWrite?.body.tiers?.[2]) === JSON.stringify({ service_tiers: ['priority'], prompt_price_per_1m: 3 }),
     JSON.stringify(customWrite?.body.tiers),
   );
   check('the editor closes after saving', await isTrue(async () => !(await editor.isVisible()), 'the editor closing'));

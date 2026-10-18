@@ -186,7 +186,7 @@ func (s *Service) registerUsage(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	return read(registry, "requests_cost_breakdown", "Explain one recorded request's cost: its pricing status, the stored amount in USD nanos, the price and channel versions it locked, the tier that governed it and each token bucket's rate. Use it to answer why a request cost what it did or why it is unpriced.", func(ctx context.Context, input struct {
+	return read(registry, "requests_cost_breakdown", "Explain one recorded request's cost: its pricing status, the stored amount in USD nanos, the price and channel versions it locked, the tier that governed it, the service tier it was billed on and each token bucket's rate. Use it to answer why a request cost what it did or why it is unpriced.", func(ctx context.Context, input struct {
 		ID int64 `json:"id"`
 	}) (repository.RequestCostBreakdown, error) {
 		ctx, cancel := queryContext(ctx)

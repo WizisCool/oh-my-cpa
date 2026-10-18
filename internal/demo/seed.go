@@ -210,7 +210,7 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 		if row, ok := custom[profile.name]; ok {
 			rows = append(rows, repository.ModelPrice{
 				Model: row.model, PromptPricePer1M: row.prompt, CompletionPer1M: row.completion,
-				CacheReadPer1M: row.cacheRead, CacheWritePer1M: row.cacheWrite, PriceMultiplier: 1, Source: pricing.SourceManual,
+				CacheReadPer1M: row.cacheRead, CacheWritePer1M: row.cacheWrite, PriceMultiplier: 1, Source: pricing.SourceManual, Tiers: row.tiers,
 			})
 			continue
 		}

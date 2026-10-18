@@ -2088,7 +2088,9 @@ operator ──▶ channel_model_prices ──triggers──▶ model_price_vers
 `usage_events` stores, in the event's own insert transaction and by the request
 timestamp, the price version id, the channel version id (absent means 1×), the
 index of the tier the request qualified for, and integer USD nanos computed by
-`pricing.Quote`. Historical totals never join the mutable tables, so a later edit
+`pricing.Quote`. The tier is selected on the request's billed service tier (the
+reported response tier, else the requested one), which is re-derived from the
+event's own immutable tier columns when the breakdown is explained. Historical totals never join the mutable tables, so a later edit
 cannot rewrite an invoice. A request with no effective price version is stored
 with pricing status `unpriced` (`legacy_unpriced` for rows that predate migration
 019), cost absent, and is never backfilled. The request detail recomputes a

@@ -123,7 +123,8 @@ func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedP
 			locked.channelVersion = &channel.ID
 		}
 	}
-	breakdown, err := pricing.Quote(version.Price.ModelPrice, multiplier, eventTokens(event.InputTokens, event.OutputTokens, event.CacheReadTokens, event.CacheCreationTokens), event.TimestampMS)
+	serviceTier, _ := pricing.BilledServiceTier(event.ResponseServiceTier, event.ServiceTier)
+	breakdown, err := pricing.Quote(version.Price.ModelPrice, multiplier, eventTokens(event.InputTokens, event.OutputTokens, event.CacheReadTokens, event.CacheCreationTokens), event.TimestampMS, serviceTier)
 	// Invalid or overflowing prices must not lose usage telemetry or look free.
 	if err != nil {
 		locked.channelVersion = nil
@@ -152,6 +153,8 @@ type RequestCostBreakdown struct {
 	Status            string             `json:"status"`
 	StoredNanos       *int64             `json:"stored_nanos,omitempty"`
 	StoredTier        *int64             `json:"stored_tier,omitempty"`
+	ServiceTier       string             `json:"service_tier,omitempty"`
+	ServiceTierSource string             `json:"service_tier_source,omitempty"`
 	Version           *PriceVersion      `json:"price_version,omitempty"`
 	Channel           *ChannelVersion    `json:"channel,omitempty"`
 	Quote             *pricing.Breakdown `json:"quote,omitempty"`
@@ -169,9 +172,12 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 	var versionID, channelID, storedNanos, storedTier sql.NullInt64
 	var timestampMS int64
 	var input, output, cacheRead, cacheWrite int64
+	var requestedTier, responseTier string
 	err := r.SQL().QueryRowContext(ctx, `SELECT pricing_status, cost_nanos, price_version_id, channel_version_id, price_tier,
- timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM usage_events WHERE id = ?`, id).Scan(
-		&result.Status, &storedNanos, &versionID, &channelID, &storedTier, &timestampMS, &input, &output, &cacheRead, &cacheWrite)
+ timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, service_tier, response_service_tier
+ FROM usage_events WHERE id = ?`, id).Scan(
+		&result.Status, &storedNanos, &versionID, &channelID, &storedTier, &timestampMS, &input, &output, &cacheRead, &cacheWrite,
+		&requestedTier, &responseTier)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -184,6 +190,9 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 	if storedTier.Valid {
 		result.StoredTier = &storedTier.Int64
 	}
+	// Both tier columns are stored with the event and never change, so the tier
+	// the lock matched is re-derived rather than stored a second time.
+	result.ServiceTier, result.ServiceTierSource = pricing.BilledServiceTier(responseTier, requestedTier)
 	if !versionID.Valid {
 		return result, nil
 	}
@@ -206,7 +215,7 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 		result.Channel = &channel
 		multiplier = channel.Multiplier
 	}
-	quote, err := pricing.Quote(version.Price.ModelPrice, multiplier, eventTokens(input, output, cacheRead, cacheWrite), timestampMS)
+	quote, err := pricing.Quote(version.Price.ModelPrice, multiplier, eventTokens(input, output, cacheRead, cacheWrite), timestampMS, result.ServiceTier)
 	if err != nil {
 		result.InvalidReason = err.Error()
 		return result, nil

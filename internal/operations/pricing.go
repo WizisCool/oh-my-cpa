@@ -475,6 +475,7 @@ type QuoteInput struct {
 	CacheWriteTokens int64       `json:"cache_write_tokens,omitempty"`
 	TimestampMS      int64       `json:"timestamp_ms,omitempty" jsonschema:"Request instant in epoch milliseconds, which decides the time-of-day tier; defaults to now"`
 	Channel          string      `json:"channel,omitempty" jsonschema:"Apply this channel's current multiplier; omit for 1x"`
+	ServiceTier      string      `json:"service_tier,omitempty" jsonschema:"Upstream service tier the request is billed on, such as priority, which decides a service-tier tier; omit or auto for none"`
 }
 
 type QuoteResult struct {
@@ -537,8 +538,9 @@ func (s *Service) QuotePrice(ctx context.Context, input QuoteInput) (QuoteResult
 			}
 		}
 	}
+	serviceTier, _ := pricing.BilledServiceTier("", input.ServiceTier)
 	breakdown, err := pricing.Quote(output.Price, multiplier, pricing.Tokens{Input: input.InputTokens, Output: input.OutputTokens,
-		CacheRead: input.CacheReadTokens, CacheWrite: input.CacheWriteTokens}, output.TimestampMS)
+		CacheRead: input.CacheReadTokens, CacheWrite: input.CacheWriteTokens}, output.TimestampMS, serviceTier)
 	if err != nil {
 		return QuoteResult{}, invalidParameters{err.Error()}
 	}
@@ -568,7 +570,7 @@ func (s *Service) registerPricing(registry *capability.Registry) error {
 	if err := read(registry, "pricing_catalog_search", "Search the stored OpenRouter price list by id or name, 20 per page, to find the upstream_id for a linked price or published rates and tiers to copy into a custom one.", s.SearchPricingCatalog); err != nil {
 		return err
 	}
-	if err := read(registry, "pricing_quote", "Price one hypothetical request with the rule recorded requests are billed by, against a model's stored price or a proposed pricing_set input that is not saved. The breakdown names the governing tier, so vary timestamp_ms or input_tokens to check a time-of-day window or long-context threshold before asking for approval.", s.QuotePrice); err != nil {
+	if err := read(registry, "pricing_quote", "Price one hypothetical request with the rule recorded requests are billed by, against a model's stored price or a proposed pricing_set input that is not saved. The breakdown names the governing tier, so vary service_tier, timestamp_ms or input_tokens to check a service-tier price, time-of-day window or long-context threshold before asking for approval.", s.QuotePrice); err != nil {
 		return err
 	}
 	metadata := Meta("pricing_sync", "Request a price refresh from OpenRouter, the configured pricing source.", "write", "high")

@@ -75,6 +75,7 @@ func projectPricingUsage(usage repository.PricingUsage) pricingUsageDTO {
 }
 
 type pricingPriceTierDTO struct {
+	ServiceTiers     []string `json:"service_tiers,omitempty"`
 	MinPromptTokens  int64    `json:"min_prompt_tokens,omitempty"`
 	UTCStart         *int     `json:"utc_start,omitempty"`
 	UTCEnd           *int     `json:"utc_end,omitempty"`
@@ -108,6 +109,7 @@ func projectPricingModel(row pricing.ModelPrice) pricingModelPriceDTO {
 		tiers = make([]pricingPriceTierDTO, len(row.Tiers))
 		for index, tier := range row.Tiers {
 			tiers[index] = pricingPriceTierDTO{
+				ServiceTiers:    tier.ServiceTiers,
 				MinPromptTokens: tier.MinPromptTokens, UTCStart: tier.UTCStart, UTCEnd: tier.UTCEnd, TimeZone: tier.TimeZone,
 				PromptPricePer1M: tier.PromptPricePer1M, CompletionPer1M: tier.CompletionPer1M,
 				CacheReadPer1M: tier.CacheReadPer1M, CacheWritePer1M: tier.CacheWritePer1M,

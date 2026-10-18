@@ -107,19 +107,49 @@ function inWindow(minute: number, startHHMM: number, endHHMM: number): boolean {
   return start < end ? minute >= start && minute < end : minute >= start || minute < end;
 }
 
+/** The one spelling service tiers are stored and compared in. */
+export function normalizeServiceTier(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+/**
+ * The service tier a request is priced on, by the server's rule: the tier the upstream reported,
+ * else the one the request asked for; `auto` and empty name no tier.
+ */
+export function billedServiceTier(response: string | null | undefined, requested: string | null | undefined): string {
+  for (const value of [response, requested]) {
+    const tier = normalizeServiceTier(value);
+    if (tier !== '' && tier !== 'auto') return tier;
+  }
+  return '';
+}
+
+function hasServiceTiers(tier: PriceTier): boolean {
+  return (tier.service_tiers?.length ?? 0) > 0;
+}
+
 /**
  * The single tier that governs a request, by the server's rule: every condition a tier carries
- * must hold - a window on the tier's own clock, never applying in a zone that cannot be read;
- * among those that do, the highest prompt threshold wins, then a windowed tier over an
- * unwindowed one, then list order. Returns -1 for the base rates.
+ * must hold - the billed service tier among its service tiers, a window on the tier's own clock,
+ * never applying in a zone that cannot be read; among those that do, a service-tier tier wins,
+ * then the highest prompt threshold, then a windowed tier over an unwindowed one, then list order.
+ * Returns -1 for the base rates.
  */
-export function selectTier(tiers: readonly PriceTier[] | null | undefined, inputTokens: number, timestampMs: number): number {
+export function selectTier(
+  tiers: readonly PriceTier[] | null | undefined,
+  inputTokens: number,
+  timestampMs: number,
+  serviceTier = '',
+): number {
   if (!tiers) return -1;
+  const billed = normalizeServiceTier(serviceTier);
   let best = -1;
   tiers.forEach((tier, index) => {
     const threshold = tier.min_prompt_tokens ?? 0;
     const windowed = hasTimeWindow(tier);
-    if (threshold === 0 && !windowed) return;
+    const laned = hasServiceTiers(tier);
+    if (threshold === 0 && !windowed && !laned) return;
+    if (laned && (billed === '' || !tier.service_tiers!.some((name) => normalizeServiceTier(name) === billed))) return;
     if (threshold > 0 && Math.max(inputTokens, 0) < threshold) return;
     if (windowed) {
       const minute = minuteOfDayIn(timestampMs, tierTimeZone(tier));
@@ -131,6 +161,10 @@ export function selectTier(tiers: readonly PriceTier[] | null | undefined, input
     }
     const current = tiers[best];
     const currentThreshold = current.min_prompt_tokens ?? 0;
+    if (laned !== hasServiceTiers(current)) {
+      if (laned) best = index;
+      return;
+    }
     if (threshold !== currentThreshold ? threshold > currentThreshold : windowed && !hasTimeWindow(current)) {
       best = index;
     }
@@ -156,9 +190,9 @@ export interface PreviewTokens {
 export function previewCostUsd(
   price: RateFields & { price_multiplier: number; tiers?: PriceTier[] | null },
   tokens: PreviewTokens,
-  options: { channelMultiplier?: number; timestampMs?: number } = {},
+  options: { channelMultiplier?: number; timestampMs?: number; serviceTier?: string } = {},
 ): { usd: number; tierIndex: number } {
-  const tierIndex = selectTier(price.tiers, tokens.input, options.timestampMs ?? Date.now());
+  const tierIndex = selectTier(price.tiers, tokens.input, options.timestampMs ?? Date.now(), options.serviceTier);
   const tier = tierIndex >= 0 && price.tiers ? price.tiers[tierIndex] : undefined;
   const prompt = tier?.prompt_price_per_1m ?? price.prompt_price_per_1m;
   const completion = tier?.completion_price_per_1m ?? price.completion_price_per_1m;
@@ -229,10 +263,11 @@ export function upstreamAuthor(id: string): string {
 
 /**
  * Which question a tier answers, as the editor groups them. A long-context tier always has a
- * prompt threshold and may also be limited to a window; a time-of-day tier has only a window.
+ * prompt threshold and may also be limited to a window; a time-of-day tier has only a window; a
+ * service tier's own rates (`service`) have no condition beyond the lane's service tiers.
  * The wire tier carries no kind - it is read from the conditions present.
  */
-export type TierKind = 'context' | 'window';
+export type TierKind = 'context' | 'window' | 'service';
 
 /**
  * How a tier's rates are entered. Providers publish long-context and off-peak prices as a multiple
@@ -265,6 +300,14 @@ export function rateField(key: RateKey): keyof RateFields {
 export interface TierDraft {
   key: string;
   kind: TierKind;
+  /**
+   * The price lane the tier belongs to: '' for standard requests, otherwise an editor-only id
+   * shared by every tier of one service-tier lane. Providers publish a priority lane as its own
+   * rate card, so a lane holds its own rates and its own long-context steps.
+   */
+  lane: string;
+  /** The lane's upstream service tiers, lowercase; empty on the standard lane. */
+  serviceTiers: string[];
   /** A token count as typed: "200000", "200,000", "200K" or "1M". */
   minPromptTokens: string;
   /** Whether a long-context tier is further limited to a window; a time-of-day tier always is. */
@@ -300,6 +343,8 @@ export function newTierDraft(partial: Partial<TierDraft> = {}): TierDraft {
   return {
     key: `tier-${tierDraftCounter}`,
     kind: 'context',
+    lane: '',
+    serviceTiers: [],
     minPromptTokens: '',
     isWindowed: false,
     windowStart: '',
@@ -319,28 +364,84 @@ function isReadableMultiple(ratio: number): boolean {
   return Number.isFinite(ratio) && ratio >= 0 && Math.abs(ratio * 1000 - Math.round(ratio * 1000)) < 1e-6;
 }
 
+let laneCounter = 0;
+
+/** A new editor-only lane id. */
+export function newLaneId(): string {
+  laneCounter += 1;
+  return `lane-${laneCounter}`;
+}
+
+/** A service-tier list as the server stores it: lowercase, trimmed, sorted, without repeats. */
+export function canonicalServiceTiers(names: readonly string[] | null | undefined): string[] {
+  return [...new Set((names ?? []).map(normalizeServiceTier))].sort();
+}
+
+/** Whether a name can be stored as a service tier: what the server accepts, and never auto. */
+export function isValidServiceTierName(name: string): boolean {
+  return /^[a-z0-9._-]{1,64}$/.test(name) && name !== 'auto';
+}
+
+function isLaneBaseTier(tier: PriceTier): boolean {
+  return hasServiceTiers(tier) && (tier.min_prompt_tokens ?? 0) === 0 && !hasTimeWindow(tier);
+}
+
 /**
  * Drafts for stored tiers. Given the base they apply over, a tier whose every rate is a readable
  * multiple of the base opens as multiples - how its provider published it - and any other as
  * absolute prices, so nothing is rounded on the way in.
+ *
+ * Tiers sharing a service-tier list open as one lane. Inside a lane the editor reads rates
+ * against the lane's own rates rather than the standard ones: a priority long-context step reads
+ * "input doubles" against the priority price. A stored rate the step leaves out bills the
+ * standard rate, so where the lane sets its own the draft shows it explicitly, and a rate equal
+ * to the lane's opens blank; `tiersFromDrafts` writes the same tiers back. Every lane gets one
+ * `service` draft, blank when the lane stores no rates of its own, which saves as nothing.
  */
 export function tierDraftsFrom(tiers: readonly PriceTier[] | null | undefined, base?: RateFields | null): TierDraft[] {
-  return (tiers ?? []).map((tier) => {
+  const list = tiers ?? [];
+  const laneIds = new Map<string, string>();
+  const laneBases = new Map<string, PriceTier>();
+  const laneOf = (tier: PriceTier) => {
+    const key = canonicalServiceTiers(tier.service_tiers).join(',');
+    if (key === '') return '';
+    if (!laneIds.has(key)) laneIds.set(key, newLaneId());
+    return laneIds.get(key)!;
+  };
+  for (const tier of list) {
+    const lane = laneOf(tier);
+    if (lane && isLaneBaseTier(tier) && !laneBases.has(lane)) laneBases.set(lane, tier);
+  }
+  const drafts = list.map((tier) => {
+    const lane = laneOf(tier);
     const hasThreshold = (tier.min_prompt_tokens ?? 0) > 0;
     const windowed = hasTimeWindow(tier);
-    const isMultiple = Boolean(base) && RATE_KEYS.every((key) => {
-      const rate = tier[RATE_FIELD[key]];
+    const kind: TierKind = lane && !hasThreshold && !windowed ? 'service' : hasThreshold ? 'context' : 'window';
+    const laneBase = lane && kind !== 'service' ? laneBases.get(lane) : undefined;
+    const reference = laneBase && base ? tierRates(base, laneBase) : base ?? null;
+    const shown = (key: RateKey): number | undefined => {
+      const field = RATE_FIELD[key];
+      const rate = tier[field];
+      if (!laneBase) return rate;
+      const laneRate = laneBase[field];
+      if (rate === undefined) return laneRate === undefined ? undefined : base?.[field];
+      return rate === laneRate ? undefined : rate;
+    };
+    const isMultiple = Boolean(reference) && RATE_KEYS.every((key) => {
+      const rate = shown(key);
       if (rate === undefined) return true;
-      const from = base![RATE_FIELD[key]];
+      const from = reference![RATE_FIELD[key]];
       return from > 0 && isReadableMultiple(rate / from);
     });
     const rateText = (key: RateKey) => {
-      const rate = tier[RATE_FIELD[key]];
+      const rate = shown(key);
       if (rate === undefined) return '';
-      return isMultiple ? numberText(rate / base![RATE_FIELD[key]]) : numberText(rate);
+      return isMultiple ? numberText(rate / reference![RATE_FIELD[key]]) : numberText(rate);
     };
     return newTierDraft({
-      kind: hasThreshold ? 'context' : 'window',
+      kind,
+      lane,
+      serviceTiers: canonicalServiceTiers(tier.service_tiers),
       minPromptTokens: hasThreshold ? formatTokenCount(tier.min_prompt_tokens!) : '',
       isWindowed: windowed,
       windowStart: hhmmText(tier.utc_start),
@@ -353,6 +454,50 @@ export function tierDraftsFrom(tiers: readonly PriceTier[] | null | undefined, b
       cacheWrite: rateText('cacheWrite'),
     });
   });
+  for (const [key, lane] of laneIds) {
+    if (!laneBases.has(lane)) drafts.push(newTierDraft({ kind: 'service', lane, serviceTiers: key.split(',') }));
+  }
+  return drafts;
+}
+
+/** The lanes the drafts hold besides the standard one, in the order they first appear. */
+export function serviceLanes(drafts: readonly TierDraft[]): string[] {
+  return [...new Set(drafts.filter((draft) => draft.lane !== '').map((draft) => draft.lane))];
+}
+
+/** A draft's rates as prices, read against `reference`; an error when one cannot be read. */
+function draftPrices(draft: TierDraft, reference: RateFields | null): Partial<RateFields> | 'rate' | 'base' {
+  const prices: Partial<RateFields> = {};
+  for (const key of RATE_KEYS) {
+    const value = parseRateText(draft[key]);
+    if (value === undefined) continue;
+    if (Number.isNaN(value)) return 'rate';
+    if (draft.rateUnit === 'multiple') {
+      if (!reference) return 'base';
+      prices[RATE_FIELD[key]] = cleanNumber(value * reference[RATE_FIELD[key]]);
+    } else {
+      prices[RATE_FIELD[key]] = value;
+    }
+  }
+  return prices;
+}
+
+/** The rates a lane's own `service` draft sets, as prices; empty when it sets none. */
+function laneOwnPrices(drafts: readonly TierDraft[], lane: string, base: RateFields | null): Partial<RateFields> | null {
+  const own = drafts.find((draft) => draft.lane === lane && draft.kind === 'service');
+  if (!own) return {};
+  const prices = draftPrices(own, base);
+  return typeof prices === 'string' ? null : prices;
+}
+
+/**
+ * The rates a lane's steps are read against: the standard rates with the lane's own laid over
+ * them. The standard lane reads the base itself; null while either cannot be read.
+ */
+export function laneRates(drafts: readonly TierDraft[], lane: string, base: RateFields | null): RateFields | null {
+  if (lane === '' || !base) return base;
+  const own = laneOwnPrices(drafts, lane, base);
+  return own ? { ...base, ...own } : null;
 }
 
 /**
@@ -424,36 +569,55 @@ export function parseRateText(value: string): number | undefined {
 }
 
 /** The server's bound on one price's tiers. */
-export const MAX_TIERS = 8;
+export const MAX_TIERS = 16;
 
-export type TierDraftError = 'condition' | 'window' | 'rate' | 'base' | 'duplicate';
+export type TierDraftError = 'condition' | 'window' | 'rate' | 'base' | 'duplicate' | 'service';
 
 /**
  * Converts the editor's tiers, refusing what the server would refuse and what could never apply:
  * a long-context tier needs a positive threshold, a window needs a start and a different end,
- * every rate must be a non-negative number, a multiple needs base rates to multiply, and two tiers
- * with the same conditions would leave the second unreachable. The first failing tier is reported
- * by its position in `drafts` so the editor can mark it.
+ * every rate must be a non-negative number, a multiple needs base rates to multiply, a lane needs
+ * valid service-tier names that no other lane claims, and two tiers with the same conditions
+ * would leave the second unreachable. The first failing tier is reported by its position in
+ * `drafts` so the editor can mark it.
  *
- * Long-context tiers are written before time-of-day ones. The server's rule only falls back to
- * list order between tiers with the same threshold and windowing, which always share a kind, so
- * the grouping never changes which tier governs a request.
+ * A lane step's blank rate keeps the lane's own rate, so it is written out explicitly: the server
+ * fills a missing rate from the standard price. A lane's `service` draft with no rates is not
+ * written - it would only make standard rates outrank the standard long-context steps.
+ *
+ * Standard tiers are written before lanes, long-context before time-of-day. The server's rule only
+ * falls back to list order between tiers with the same conditions' shape, which always share a
+ * kind and a lane, so the grouping never changes which tier governs a request.
  */
 export function tiersFromDrafts(
   drafts: readonly TierDraft[],
   base: RateFields | null = null,
 ): { tiers: PriceTier[] } | { error: TierDraftError; index: number } {
-  const converted: Array<{ kind: TierKind; tier: PriceTier }> = [];
+  const lanes = ['', ...serviceLanes(drafts)];
+  const claimed = new Map<string, string>();
+  for (let index = 0; index < drafts.length; index += 1) {
+    const draft = drafts[index];
+    if (draft.kind !== 'service') continue;
+    const names = canonicalServiceTiers(draft.serviceTiers);
+    if (names.length === 0 || names.some((name) => !isValidServiceTierName(name))) return { error: 'service', index };
+    for (const name of names) {
+      if ((claimed.get(name) ?? draft.lane) !== draft.lane) return { error: 'service', index };
+      claimed.set(name, draft.lane);
+    }
+  }
+  const order = (draft: TierDraft) => lanes.indexOf(draft.lane) * 3 + (draft.kind === 'service' ? 0 : draft.kind === 'context' ? 1 : 2);
+  const converted: Array<{ order: number; tier: PriceTier }> = [];
   const conditions = new Set<string>();
   for (let index = 0; index < drafts.length; index += 1) {
     const draft = drafts[index];
     const tier: PriceTier = {};
+    if (draft.lane) tier.service_tiers = canonicalServiceTiers(draft.serviceTiers);
     if (draft.kind === 'context') {
       const threshold = parseTokenCount(draft.minPromptTokens);
       if (threshold === undefined || Number.isNaN(threshold)) return { error: 'condition', index };
       tier.min_prompt_tokens = threshold;
     }
-    if (draft.kind === 'window' || draft.isWindowed) {
+    if (draft.kind === 'window' || (draft.kind === 'context' && draft.isWindowed)) {
       const start = parseHHMMText(draft.windowStart);
       const end = parseHHMMText(draft.windowEnd);
       if (start === null || end === null || start === end) return { error: 'window', index };
@@ -463,26 +627,24 @@ export function tiersFromDrafts(
       // untouched tier then saves byte-identical and mints no price version.
       if (draft.timeZone && draft.timeZone !== 'UTC') tier.time_zone = draft.timeZone;
     }
-    const condition = `${tier.min_prompt_tokens ?? 0}|${tier.utc_start ?? ''}|${tier.utc_end ?? ''}|${tier.time_zone ?? ''}`;
+    const isLaneStep = draft.lane !== '' && draft.kind !== 'service';
+    const reference = isLaneStep ? laneRates(drafts, draft.lane, base) : base;
+    const prices = draftPrices(draft, reference);
+    if (prices === 'rate') return { error: 'rate', index };
+    if (prices === 'base') return { error: 'base', index };
+    const laneOwn = isLaneStep ? laneOwnPrices(drafts, draft.lane, base) ?? {} : {};
+    for (const key of RATE_KEYS) {
+      const field = RATE_FIELD[key];
+      const price = prices[field] ?? laneOwn[field];
+      if (price !== undefined) tier[field] = price;
+    }
+    if (draft.kind === 'service' && RATE_KEYS.every((key) => tier[RATE_FIELD[key]] === undefined)) continue;
+    const condition = `${(tier.service_tiers ?? []).join(',')}|${tier.min_prompt_tokens ?? 0}|${tier.utc_start ?? ''}|${tier.utc_end ?? ''}|${tier.time_zone ?? ''}`;
     if (conditions.has(condition)) return { error: 'duplicate', index };
     conditions.add(condition);
-    for (const key of RATE_KEYS) {
-      const value = parseRateText(draft[key]);
-      if (value === undefined) continue;
-      if (Number.isNaN(value)) return { error: 'rate', index };
-      if (draft.rateUnit === 'multiple') {
-        if (!base) return { error: 'base', index };
-        tier[RATE_FIELD[key]] = cleanNumber(value * base[RATE_FIELD[key]]);
-      } else {
-        tier[RATE_FIELD[key]] = value;
-      }
-    }
-    converted.push({ kind: draft.kind, tier });
+    converted.push({ order: order(draft), tier });
   }
-  return {
-    tiers: [...converted.filter((item) => item.kind === 'context'), ...converted.filter((item) => item.kind === 'window')]
-      .map((item) => item.tier),
-  };
+  return { tiers: converted.map((item, position) => ({ ...item, position })).sort((left, right) => left.order - right.order || left.position - right.position).map((item) => item.tier) };
 }
 
 /** One line of a price ladder: when it applies and the four rates a request pays there. */
@@ -499,13 +661,13 @@ export interface PriceScheduleRow {
 
 /**
  * A price laid out as a ladder: the base rates, then long-context tiers from the lowest threshold
- * up, then time-of-day tiers. It reads what a request pays at each step rather than how the tiers
+ * up, then time-of-day tiers, then each service-tier lane the same way. It reads what a request pays at each step rather than how the tiers
  * are stored, which is the question an operator setting a price is asking.
  */
 export function priceSchedule(price: RateFields, tiers: readonly PriceTier[] | null | undefined): PriceScheduleRow[] {
   const list = tiers ?? [];
   const thresholds = list
-    .filter((tier) => (tier.min_prompt_tokens ?? 0) > 0 && !hasTimeWindow(tier))
+    .filter((tier) => (tier.min_prompt_tokens ?? 0) > 0 && !hasTimeWindow(tier) && !hasServiceTiers(tier))
     .map((tier) => tier.min_prompt_tokens!);
   const rows: PriceScheduleRow[] = [{
     tierIndex: -1,
@@ -516,10 +678,13 @@ export function priceSchedule(price: RateFields, tiers: readonly PriceTier[] | n
   }];
   // Always-on context tiers form the ladder the base row's `upTo` leads into; a context tier
   // limited to a window only covers its band part of the day, so it follows them with the
-  // plain time windows instead of sitting between two always-on steps.
-  const group = (tier: PriceTier) => ((tier.min_prompt_tokens ?? 0) > 0 ? (hasTimeWindow(tier) ? 1 : 0) : 2);
+  // plain time windows instead of sitting between two always-on steps. Each service-tier lane
+  // follows the standard ladder as its own: its own rates, then its steps.
+  const lane = (tier: PriceTier) => canonicalServiceTiers(tier.service_tiers).join(',');
+  const group = (tier: PriceTier) => (isLaneBaseTier(tier) ? -1 : (tier.min_prompt_tokens ?? 0) > 0 ? (hasTimeWindow(tier) ? 1 : 0) : 2);
   const order = list.map((tier, index) => ({ tier, index })).sort((left, right) => (
-    group(left.tier) - group(right.tier)
+    (lane(left.tier) === lane(right.tier) ? 0 : lane(left.tier) < lane(right.tier) ? -1 : 1)
+    || group(left.tier) - group(right.tier)
     || (left.tier.min_prompt_tokens ?? 0) - (right.tier.min_prompt_tokens ?? 0)
     || left.index - right.index
   ));

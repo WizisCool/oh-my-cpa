@@ -78,7 +78,7 @@ func FuzzQuoteLegacyParity(f *testing.F) {
 			return
 		}
 		want, wantErr := legacyCostNanos(price, input, output, read, write)
-		got, err := Quote(price, 1, Tokens{Input: input, Output: output, CacheRead: read, CacheWrite: write}, 0)
+		got, err := Quote(price, 1, Tokens{Input: input, Output: output, CacheRead: read, CacheWrite: write}, 0, "")
 		if (wantErr != nil) != (err != nil) {
 			t.Fatalf("error mismatch: legacy=%v quote=%v", wantErr, err)
 		}
@@ -95,14 +95,14 @@ func TestQuoteRoundsOnceAcrossMultipliers(t *testing.T) {
 	// One token at $0.001/1M is exactly 1 nano. Rounding after each multiplier
 	// gives 1.5 → 2, then 2 × 0.3 = 0.6 → 1; one rounding of 1 × 1.5 × 0.3 = 0.45
 	// gives 0.
-	breakdown, err := Quote(price, 0.3, Tokens{Input: 1}, 0)
+	breakdown, err := Quote(price, 0.3, Tokens{Input: 1}, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if breakdown.TotalNanos != 0 {
 		t.Fatalf("total = %d, want 0 (one rounding of 0.45 nanos)", breakdown.TotalNanos)
 	}
-	breakdown, err = Quote(ModelPrice{Model: "m", PromptPricePer1M: 2, PriceMultiplier: 1}, 0.3, Tokens{Input: 1_000_000}, 0)
+	breakdown, err = Quote(ModelPrice{Model: "m", PromptPricePer1M: 2, PriceMultiplier: 1}, 0.3, Tokens{Input: 1_000_000}, 0, "")
 	if err != nil || breakdown.TotalNanos != 600_000_000 {
 		t.Fatalf("channel multiplier: %+v %v", breakdown, err)
 	}
@@ -123,11 +123,11 @@ func longContextPrice() ModelPrice {
 
 func TestQuoteLongContextBoundary(t *testing.T) {
 	price := longContextPrice()
-	below, err := Quote(price, 1, Tokens{Input: 199_999, Output: 1_000_000}, 0)
+	below, err := Quote(price, 1, Tokens{Input: 199_999, Output: 1_000_000}, 0, "")
 	if err != nil || below.TierIndex != nil || below.TotalNanos != (199_999*3+15_000_000)*1000 {
 		t.Fatalf("below threshold: %+v %v", below, err)
 	}
-	at, err := Quote(price, 1, Tokens{Input: 200_000, Output: 1_000_000}, 0)
+	at, err := Quote(price, 1, Tokens{Input: 200_000, Output: 1_000_000}, 0, "")
 	if err != nil || at.TierIndex == nil || *at.TierIndex != 0 {
 		t.Fatalf("threshold not applied: %+v %v", at, err)
 	}
@@ -136,7 +136,7 @@ func TestQuoteLongContextBoundary(t *testing.T) {
 	}
 	// Cached tokens count toward the threshold: 150k cached + 60k fresh is a
 	// 210k-token prompt, billed at the tier's cache rate — inherited here.
-	cached, err := Quote(price, 1, Tokens{Input: 210_000, CacheRead: 150_000}, 0)
+	cached, err := Quote(price, 1, Tokens{Input: 210_000, CacheRead: 150_000}, 0, "")
 	if err != nil || cached.TierIndex == nil {
 		t.Fatalf("cached tokens ignored for the threshold: %+v %v", cached, err)
 	}
@@ -145,7 +145,7 @@ func TestQuoteLongContextBoundary(t *testing.T) {
 	}
 	// The highest eligible threshold wins; its missing completion rate inherits
 	// the base, not the lower tier.
-	highest, err := Quote(price, 1, Tokens{Input: 600_000, Output: 1_000_000}, 0)
+	highest, err := Quote(price, 1, Tokens{Input: 600_000, Output: 1_000_000}, 0, "")
 	if err != nil || highest.TierIndex == nil || *highest.TierIndex != 1 {
 		t.Fatalf("highest tier not chosen: %+v %v", highest, err)
 	}
@@ -166,7 +166,7 @@ func TestQuoteWrappingWindow(t *testing.T) {
 		discounted   bool
 	}{{15, 59, false}, {16, 0, true}, {23, 59, true}, {0, 0, false}, {8, 30, false}}
 	for _, tc := range cases {
-		breakdown, err := Quote(price, 1, Tokens{Input: 1_000_000}, at(tc.hour, tc.minute))
+		breakdown, err := Quote(price, 1, Tokens{Input: 1_000_000}, at(tc.hour, tc.minute), "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -177,12 +177,12 @@ func TestQuoteWrappingWindow(t *testing.T) {
 	complement := ModelPrice{Model: "m", PromptPricePer1M: 1, PriceMultiplier: 1,
 		Tiers: []PriceTier{{UTCStart: ptr(0), UTCEnd: ptr(1600), PromptPricePer1M: ptr(0.5)}}}
 	for _, tc := range cases {
-		breakdown, _ := Quote(complement, 1, Tokens{Input: 1}, at(tc.hour, tc.minute))
+		breakdown, _ := Quote(complement, 1, Tokens{Input: 1}, at(tc.hour, tc.minute), "")
 		if (breakdown.TierIndex != nil) == tc.discounted {
 			t.Fatalf("0000-1600 is not the complement at %02d:%02d", tc.hour, tc.minute)
 		}
 	}
-	if _, ok := SelectTier([]PriceTier{{UTCStart: ptr(900), UTCEnd: ptr(900)}}, 0, at(9, 0)); ok {
+	if _, ok := SelectTier([]PriceTier{{UTCStart: ptr(900), UTCEnd: ptr(900)}}, 0, at(9, 0), ""); ok {
 		t.Fatal("an empty window applied")
 	}
 }
@@ -195,11 +195,11 @@ func TestSelectTierPicksExactlyOne(t *testing.T) {
 		{UTCStart: ptr(0), UTCEnd: ptr(2359)},
 		{MinPromptTokens: 100, UTCStart: ptr(0), UTCEnd: ptr(2359)},
 	}
-	index, ok := SelectTier(tiers, 500, at(12, 0))
+	index, ok := SelectTier(tiers, 500, at(12, 0), "")
 	if !ok || index != 2 {
 		t.Fatalf("selected %d, want the windowed threshold tier", index)
 	}
-	index, ok = SelectTier(tiers, 50, at(12, 0))
+	index, ok = SelectTier(tiers, 50, at(12, 0), "")
 	if !ok || index != 1 {
 		t.Fatalf("selected %d, want the window-only tier", index)
 	}
@@ -208,7 +208,7 @@ func TestSelectTierPicksExactlyOne(t *testing.T) {
 // A version written under the retired models.dev source stays priceable.
 func TestQuoteAcceptsLegacyModelsDevVersion(t *testing.T) {
 	legacy := ModelPrice{Model: "m", PromptPricePer1M: 1, PriceMultiplier: 1, Source: SourceModelsDev}
-	if _, err := Quote(legacy, 1, Tokens{Input: 10}, 0); err != nil {
+	if _, err := Quote(legacy, 1, Tokens{Input: 10}, 0, ""); err != nil {
 		t.Fatalf("legacy version refused: %v", err)
 	}
 	if err := legacy.ValidateWrite(); err == nil {
@@ -289,14 +289,14 @@ func TestQuoteWindowIsReadInTheTiersOwnZone(t *testing.T) {
 		{"20:00 in Beijing, 01:00 would be UTC", utcMS(2026, 10, 6, 12, 0), false},
 		{"01:00 UTC is 09:00 in Beijing", utcMS(2026, 10, 6, 1, 0), false},
 	} {
-		breakdown, err := Quote(price, 1, Tokens{Input: 1_000_000}, test.timestampMS)
+		breakdown, err := Quote(price, 1, Tokens{Input: 1_000_000}, test.timestampMS, "")
 		if err != nil || (breakdown.TierIndex != nil) != test.wantTier {
 			t.Errorf("%s: tier applied = %v, want %v (%v)", test.name, breakdown.TierIndex != nil, test.wantTier, err)
 		}
 	}
 	// The same digits without a zone stay a UTC window, as every stored tier is.
 	price.Tiers[0].TimeZone = ""
-	if breakdown, _ := Quote(price, 1, Tokens{Input: 1}, utcMS(2026, 10, 6, 1, 0)); breakdown.TierIndex == nil {
+	if breakdown, _ := Quote(price, 1, Tokens{Input: 1}, utcMS(2026, 10, 6, 1, 0), ""); breakdown.TierIndex == nil {
 		t.Error("a tier without a zone must read its window in UTC")
 	}
 }
@@ -317,7 +317,7 @@ func TestQuoteZonedWindowFollowsDaylightSaving(t *testing.T) {
 		{"08:30 EDT, 09:30 by the winter offset", utcMS(2026, 7, 15, 12, 30), false},
 		{"17:30 EDT", utcMS(2026, 7, 15, 21, 30), false},
 	} {
-		if index, ok := SelectTier(price.Tiers, 1, test.timestampMS); ok != test.wantTier {
+		if index, ok := SelectTier(price.Tiers, 1, test.timestampMS, ""); ok != test.wantTier {
 			t.Errorf("%s: selected %d %v, want applied=%v", test.name, index, ok, test.wantTier)
 		}
 	}

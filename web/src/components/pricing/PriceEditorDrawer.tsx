@@ -15,6 +15,7 @@ import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { ModelPrice, PriceTier, PriceVersion, PricingMode, PricingModelUpdate, UpstreamModel } from '../../types/pricing';
 import {
+  canonicalServiceTiers,
   formatMultiplier,
   formatRatePer1M,
   formatUsd,
@@ -505,7 +506,8 @@ type PreviewPrice = RateFields & { price_multiplier: number; tiers?: PriceTier[]
  * The editor's cost preview: the model's median recent request priced now and after the change,
  * plus the largest recent prompt when it would reach a long-context tier - the request whose
  * price moves most when tiers change. Each row names the tier the new price bills it at, and a
- * request typed by hand can be tried against both prices.
+ * request typed by hand can be tried against both prices. When either price has service-tier
+ * lanes, every row can be priced as if it had been billed on one of them.
  */
 const PreviewRows: React.FC<{
   profile: { samples: number; input: number; output: number; cache_read: number; cache_write: number; max_input: number };
@@ -544,7 +546,10 @@ const PreviewRows: React.FC<{
       tokens: { input: trialIn, output: trialOut ?? 0, cache_read: 0, cache_write: 0 },
     });
   }
-  const quote = (price: PreviewPrice | null, tokens: typeof typical) => (price ? previewCostUsd(price, tokens) : null);
+  const laneTiers = canonicalServiceTiers([...(current?.tiers ?? []), ...(next?.tiers ?? [])].flatMap((tier) => tier.service_tiers ?? []));
+  const [previewServiceTier, setPreviewServiceTier] = React.useState('');
+  const serviceTier = laneTiers.includes(previewServiceTier) ? previewServiceTier : '';
+  const quote = (price: PreviewPrice | null, tokens: typeof typical) => (price ? previewCostUsd(price, tokens, { serviceTier }) : null);
   const tierLabel = (price: PreviewPrice, tierIndex: number) => (
     tierIndex >= 0 && price.tiers ? describeTier(t, price.tiers[tierIndex]) : t('pricing.schedule.base')
   );
@@ -553,6 +558,18 @@ const PreviewRows: React.FC<{
     <>
       {basis && <p className={styles['mode-hint']}>{basis}</p>}
       {!hasSamples && <p className={styles['mode-hint']}>{t('pricing.editor.preview_none')}</p>}
+      {laneTiers.length > 0 && (
+        <div className={styles.calculator}>
+          <span className={styles['calculator-label']}>{t('pricing.editor.preview_service_tier')}</span>
+          <Segmented<string>
+            size="small"
+            value={serviceTier}
+            onChange={setPreviewServiceTier}
+            options={[{ value: '', label: t('pricing.editor.lane_standard') }, ...laneTiers.map((name) => ({ value: name, label: name }))]}
+            data-testid="pricing-preview-service-tier"
+          />
+        </div>
+      )}
       {rows.length > 0 && (
         <table className={styles['preview-table']}>
           <thead>
