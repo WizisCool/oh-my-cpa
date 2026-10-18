@@ -88,6 +88,16 @@
   --series-4: #f43f5e;
   --series-5: #f59e0b;
   --series-6: #06b6d4;
+  /* The live routing map's lane identities (design.md §2, §7 rule 9). A lane is a connection, and a
+     connection drawn in green, amber or red reads as a verdict on it. Every slot therefore stays on
+     the cool side of the wheel, away from the status hues the rest of the map still uses on node
+     surfaces. */
+  --route-1: #3b82f6;
+  --route-2: #8b5cf6;
+  --route-3: #06b6d4;
+  --route-4: #ec4899;
+  --route-5: #d946ef;
+  --route-6: #94a3b8;
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
   --series-track: #2c2c30;
@@ -199,6 +209,12 @@
   --series-4: #e11d48;
   --series-5: #b45309;
   --series-6: #0891b2;
+  --route-1: #2563eb;
+  --route-2: #7c3aed;
+  --route-3: #0891b2;
+  --route-4: #db2777;
+  --route-5: #c026d3;
+  --route-6: #475569;
   --series-track: #e5e5ea;
   /* The same sweep as its darker steps, which is what stays legible on a light page. */
   --effort-1: #39626e;

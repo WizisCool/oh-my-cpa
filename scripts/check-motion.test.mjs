@@ -96,6 +96,23 @@ test('a keyframe animation without a reduced-motion counterpart is rejected', (t
   assert.deepEqual(problems(guarded), []);
 });
 
+test('a `reduced` exception waives the counterpart for one selector, and must be used', (t) => {
+  const exception = { kind: 'reduced', file: 'panel.css', selector: '.rise', property: 'animation', why: 'fixture' };
+  const unguarded = fixture(t, {
+    'panel.css': `.rise { animation: rise var(--motion-base) forwards; }\n@keyframes rise { from { opacity: 0; } to { opacity: 1; } }\n`,
+  });
+  assert.deepEqual(problems(unguarded, [exception]), []);
+
+  // The waiver is keyed by selector: another animation in the same file still owes its counterpart.
+  const other = fixture(t, {
+    'panel.css': `.other { animation: rise var(--motion-base) forwards; }\n@keyframes rise { from { opacity: 0; } to { opacity: 1; } }\n`,
+  });
+  assert.match(problems(other, [exception]).join('\n'), /no `prefers-reduced-motion` counterpart/);
+
+  const unused = fixture(t, { 'panel.css': `.panel { color: red; }\n` });
+  assert.match(problems(unused, [exception]).join('\n'), /`reduced` exception is no longer used/);
+});
+
 test('a `no-preference` block is motion, so its rules still owe a token and a counterpart', (t) => {
   const rawDuration = fixture(t, {
     'panel.css': `@media (prefers-reduced-motion: no-preference) { .rise { animation: rise 220ms ease; } }\n@keyframes rise { from { opacity: 0; } to { opacity: 1; } }\n@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }\n`,

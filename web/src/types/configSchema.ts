@@ -202,7 +202,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_behavior',
     descKey: 'cfg.grp_claude_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
+    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
   },
   {
     id: 'grp_claude_headers',
@@ -1161,6 +1161,22 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'switch',
     defaultValue: false,
     keywords: ['claude', 'codex', 'tool_search', 'tool search', 'defer_loading'],
+  },
+  {
+    id: 'claudeSessionDatePinDays',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_session_date_pin',
+    descKey: 'cfg.f_claude_session_date_pin_desc',
+    yamlPath: ['upstream', 'claude', 'session-date-pin-days'],
+    // CPA holds this as a pointer, so the key's absence and an explicit 0 are two
+    // different settings: omitted is 7 days, 0 keeps the legacy continuity-scoped
+    // pin. The default mirrors the omitted state rather than replacing the 0.
+    // The setting arrived after the section's own relocation, so it has no
+    // pre-relocation spelling a gateway could still be holding.
+    type: 'number',
+    min: 0,
+    defaultValue: 7,
+    keywords: ['claude', 'session', 'currentDate', 'date pin', 'retention', 'signature', 'cache'],
   },
   {
     id: 'claudeModelLevelCooling',

@@ -249,7 +249,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     observability: { logs: { debug: false, 'logging-to-file': true, 'request-log': true } },
     access: { 'api-keys': [FAKE_CLIENT_SECRET] },
     client: { codex: { 'optimize-multi-agent-v2': true } },
-    upstream: { codex: { 'orphan-delegation-compatibility': true } },
+    upstream: { codex: { 'orphan-delegation-compatibility': true }, claude: { 'tool-search': false } },
     plugins: { enabled: true, dir: 'plugins' },
     'config-version': 8,
   };

@@ -284,3 +284,82 @@ for (const setting of CODEX_BEHAVIOR_FIELDS) {
     assert.deepEqual(computeConfigChanges(parseDocument(nextYaml), rebased), [{ path: setting.path, value: true }]);
   });
 }
+
+// CPA holds the Claude session date pin as a pointer (`*int`): an absent key is its
+// 7-day default, while an explicit 0 is a different setting — the legacy
+// continuity-scoped pin. The schema default therefore has to reproduce the absent
+// key, not stand in for a value, so an untouched gateway is never written, and a
+// zero the operator typed has to survive the save and the readback instead of
+// reading as "unset".
+const CLAUDE_SESSION_YAML = `${SERVER_YAML}upstream:
+    claude:
+        tool-search: false # unrelated
+`;
+
+test('an untouched Claude session date pin sends nothing, and an explicit zero is a saved value', () => {
+  const pinDays = field('claudeSessionDatePinDays');
+  const server = parseDocument(CLAUDE_SESSION_YAML);
+  assert.equal(getFieldSemanticValue(server, pinDays), 7, 'an absent key reads as the default of 7 days');
+
+  const untouched = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(untouched, server, pinDays, 7);
+  assert.equal(untouched.toString(), server.toString(), 'the default reproduces the absent key');
+  assert.deepEqual(computeConfigChanges(server, untouched), []);
+
+  const draft = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(draft, server, pinDays, 0);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['upstream', 'claude', 'session-date-pin-days'], value: 0 },
+  ]);
+  assert.equal(draft.getIn(['upstream', 'claude', 'tool-search']), false, 'the sibling setting is untouched');
+  assert.equal(draft.toString().includes('# unrelated'), true, 'the rest of the file keeps its text');
+
+  const readback = parseDocument(draft.toString());
+  assert.equal(getFieldSemanticValue(readback, pinDays), 0, 'the explicit zero is not read back as the default');
+  const reopened = parseDocument(draft.toString());
+  updateFieldWithBaseline(reopened, readback, pinDays, 0);
+  assert.deepEqual(computeConfigChanges(readback, reopened), [], 'reopening on the zero leaves the field clean');
+});
+
+test('the Claude session date pin reads and edits only the canonical path', () => {
+  const pinDays = field('claudeSessionDatePinDays');
+  const server = parseDocument(CLAUDE_SESSION_YAML);
+  const draft = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(draft, server, pinDays, 4);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['upstream', 'claude', 'session-date-pin-days'], value: 4 },
+  ]);
+  assert.equal(draft.hasIn(['oauth']), false, 'the pre-relocation spelling is never written');
+});
+
+test('a gateway with no Claude settings at all gets the canonical upstream path, not the relocated alias', () => {
+  const server = parseDocument(SERVER_YAML);
+  const draft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(draft, server, field('claudeSessionDatePinDays'), 0);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['upstream'], value: { claude: { 'session-date-pin-days': 0 } } },
+  ]);
+  assert.equal(draft.hasIn(['oauth']), false, 'the pre-relocation spelling is never written');
+});
+
+test('clearing the Claude session date pin restores the omitted key instead of storing a zero', () => {
+  const pinDays = field('claudeSessionDatePinDays');
+  const server = parseDocument(CLAUDE_SESSION_YAML);
+  const draft = parseDocument(CLAUDE_SESSION_YAML);
+  updateFieldWithBaseline(draft, server, pinDays, null);
+  assert.equal(draft.toString(), server.toString(), 'a cleared box leaves the key absent');
+  assert.deepEqual(computeConfigChanges(server, draft), []);
+
+  // An explicit 0 is a setting, so clearing it removes the override the only way a number
+  // can state its default: CPA drops a written 7 as its known default on the way to disk.
+  const configuredYaml = CLAUDE_SESSION_YAML.replace(
+    'tool-search: false # unrelated',
+    "tool-search: false\n        session-date-pin-days: 0",
+  );
+  const configured = parseDocument(configuredYaml);
+  const cleared = parseDocument(configuredYaml);
+  updateFieldWithBaseline(cleared, configured, pinDays, null);
+  assert.deepEqual(computeConfigChanges(configured, cleared), [
+    { path: ['upstream', 'claude', 'session-date-pin-days'], value: 7 },
+  ]);
+});

@@ -4,9 +4,11 @@ import type { RoutingRoute } from '../../../types/usageRouting';
 /**
  * The routing map's travelling requests, after Magpie's: a dot leaves the
  * model, passes through the gateway to the credential CPA picked, waits there
- * while that credential answers, and comes back in the answer's colour. While a
- * dot is on a lane, or waiting at the end of it, the lane's dashes flow in the
- * direction it travels, so a busy route reads as traffic rather than as a line.
+ * while that credential answers, and comes back. While a dot is on a lane, or
+ * waiting at the end of it, the lane's dashes flow in the direction it travels,
+ * so a busy route reads as traffic rather than as a line. The dot and the flow
+ * stay in the model's identity colour in both directions; the answer's verdict
+ * is carried by the node surfaces, never by the line.
  *
  * The light is continuous from node to node. A dot emerges from a node's port
  * and sinks into the next one rather than appearing on top of it; the node it
@@ -89,7 +91,12 @@ export function edgeKey(targetId: string): string {
 
 export const GATEWAY_NODE = 'gateway';
 
-const TONE_COLORS: Record<Exclude<PacketTone, 'request'>, string> = {
+/**
+ * The node surfaces that still carry a verdict: the port's ring and the wash spread across the row
+ * when it answers or refuses. A lane and the dot on it never take these hues - a green or red line
+ * on a routing map reads as the state of the connection, which is not what the line means.
+ */
+const NODE_TONE_COLORS: Record<Exclude<PacketTone, 'request'>, string> = {
   success: 'var(--success)',
   failure: 'var(--danger)',
 };
@@ -205,11 +212,12 @@ export function createPacketPlayer(stage: PacketStage) {
       const { washRequest, washSuccess, washFailure } = stage.classNames;
       wash.classList.remove(washRequest, washSuccess, washFailure);
       wash.classList.add(tone === 'success' ? washSuccess : tone === 'failure' ? washFailure : washRequest);
+      wash.dataset.tone = tone;
       glow(wash, 1);
     }
     const ring = stage.ring(key);
     if (ring) {
-      ring.style.setProperty('--ring-color', tone === 'request' ? 'var(--accent)' : TONE_COLORS[tone]);
+      ring.style.setProperty('--ring-color', tone === 'request' ? 'var(--accent)' : NODE_TONE_COLORS[tone]);
       void track(ring.animate(
         [{ transform: 'scale(0.8)', opacity: 0.7 }, { transform: 'scale(2.2)', opacity: 0 }],
         { duration: MOTION_ROUTE_LAND.duration, easing: MOTION_ROUTE_LAND.easing },
@@ -311,26 +319,23 @@ export function createPacketPlayer(stage: PacketStage) {
         if (!isCurrent(trip)) return;
         const isLast = index === route.attempts.length - 1;
         if (attempt.event.failed) {
-          packet.dot.style.setProperty('--packet-color', TONE_COLORS.failure);
           acknowledge(attempt.targetId, 'failure');
           await wait(REFUSAL_PAUSE_MS);
           if (!isCurrent(trip)) return;
           if (!isLast) {
             // Refused: back to the gateway, which sends it on to the next credential.
-            if (!(await fly(trip, packet, edge, TONE_COLORS.failure, true, REFUSAL_HOP_MS))) return;
+            if (!(await fly(trip, packet, edge, color, true, REFUSAL_HOP_MS))) return;
             acknowledge(GATEWAY_NODE, 'failure');
-            packet.dot.style.setProperty('--packet-color', color);
             continue;
           }
         } else {
-          packet.dot.style.setProperty('--packet-color', TONE_COLORS.success);
           acknowledge(attempt.targetId, 'success');
         }
         // The answer, or the last refusal, goes home the way it came.
         const tone = attempt.event.failed ? 'failure' : 'success';
-        if (!(await fly(trip, packet, edge, TONE_COLORS[tone], true, EDGE_HOP_MS))) return;
+        if (!(await fly(trip, packet, edge, color, true, EDGE_HOP_MS))) return;
         acknowledge(GATEWAY_NODE, tone);
-        if (!(await fly(trip, packet, home, TONE_COLORS[tone], true, LANE_HOP_MS))) return;
+        if (!(await fly(trip, packet, home, color, true, LANE_HOP_MS))) return;
         acknowledge(route.modelId, tone);
         break;
       }

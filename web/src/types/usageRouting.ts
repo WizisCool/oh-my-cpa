@@ -83,17 +83,17 @@ export function targetIdOf(event: Pick<UsageEvent, 'auth_index' | 'provider'>): 
   return event.auth_index?.trim() ? `auth:${event.auth_index.trim()}` : `provider:${event.provider || ''}`;
 }
 
-/** The number of categorical series slots (`--series-1`…`--series-6`). */
-export const SERIES_SLOTS = 6;
+/** The number of routing lane slots (`--route-1`…`--route-6`). */
+export const ROUTE_SLOTS = 6;
 
 function hashSlot(id: string): number {
   let hash = 0;
   for (let index = 0; index < id.length; index++) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
-  return hash % SERIES_SLOTS;
+  return hash % ROUTE_SLOTS;
 }
 
 /**
- * Gives each drawn model a colour that it keeps while it stays on the panel.
+ * Gives each drawn model a lane colour that it keeps while it stays on the panel.
  *
  * A model already holding a slot keeps it: a row that changed colour because
  * another model arrived would read as a different model. A newcomer takes the
@@ -113,7 +113,7 @@ export function allocateSlots(previous: ReadonlyMap<string, number>, ids: readon
   for (const id of [...ids].sort()) {
     if (next.has(id)) continue;
     let slot = hashSlot(id);
-    for (let step = 0; step < SERIES_SLOTS && used.has(slot); step++) slot = (slot + 1) % SERIES_SLOTS;
+    for (let step = 0; step < ROUTE_SLOTS && used.has(slot); step++) slot = (slot + 1) % ROUTE_SLOTS;
     used.add(slot);
     next.set(id, slot);
   }

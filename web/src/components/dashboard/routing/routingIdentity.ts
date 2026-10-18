@@ -44,9 +44,9 @@ export function targetIdentity(event: UsageEvent, sources: IdentitySources): Tar
   return { title: info.title || event.provider || '—', credential, iconId: info.iconId, logo: info.logo };
 }
 
-/** The CSS colour of a caller's series slot. */
-export function seriesColor(slot: number): string {
-  return `var(--series-${slot + 1})`;
+/** The CSS colour of a model's lane slot: an identity hue, never a status hue. */
+export function routeColor(slot: number): string {
+  return `var(--route-${slot + 1})`;
 }
 
 export function formatLatency(ms: number): string {

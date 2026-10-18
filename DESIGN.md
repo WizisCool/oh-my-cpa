@@ -25,6 +25,12 @@ colors:
   series-4: "#f43f5e"
   series-5: "#f59e0b"
   series-6: "#06b6d4"
+  route-1: "#3b82f6"          # live routing lanes, cool identities only; light mode uses the darker steps
+  route-2: "#8b5cf6"
+  route-3: "#06b6d4"
+  route-4: "#ec4899"
+  route-5: "#d946ef"
+  route-6: "#94a3b8"
   effort-1: "#94bfce"         # reasoning-effort scale, minimal → max; light mode uses the darker steps
   effort-2: "#4eccd3"
   effort-3: "#91b7fe"
@@ -159,7 +165,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 - **Terminal-Flat Structure**: Zero drop shadows (`box-shadow: none`), no rounded bubble aesthetics, crisp 1px borders.
 - **Configurable Typography Roles**: Sarasa Mono SC is the default, with Berkeley Mono and IBM Plex Mono fallbacks. Interface text and code or aligned data use independently chosen UI and mono stacks.
 - **Quiet Chrome, Loud Data**: Dark charcoal scaffolding ensures that green, amber, red, and blue badges instantly telegraph system health.
-- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them, and a JavaScript-only 160ms `scroll` token for wheel notches and scrolling keys gliding to where they would have jumped; hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
+- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them, and a JavaScript-only 160ms `scroll` token for wheel notches and scrolling keys gliding to where they would have jumped; the live routing map's own hop/glow/presence tokens play in full for every reader, because the trip is the panel's reading rather than decoration (ADR 0102); hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
 
 ## Colors
 
@@ -173,9 +179,9 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 ### Series (categorical)
 
 The dashboard's model panels colour a **category**, not a state: a model is whatever upstream name the
-deployment serves, so its hue carries identity and no verdict. These are the one decorative colour
-family in the app, and the only exception to the semantic-only rule above; see
-`docs/adr/0006-categorical-series-palette.md` and `docs/design.md` §2.
+deployment serves, so its hue carries identity and no verdict. Together with the routing lane palette
+below, these are the decorative colour families in the app, and the only exception to the semantic-only
+rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.md` §2.
 
 - **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
   purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
@@ -187,6 +193,23 @@ family in the app, and the only exception to the semantic-only rule above; see
   `scripts/test-chart-marks.ts` from the palette itself. The slots above are the OMC Dark/OMC Light pair;
   the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
   mode's set.
+
+### Routing lanes (categorical, cool only)
+
+The live routing map draws one lane per called model. Here a status-coloured line is worse than
+elsewhere: the lane has no legend, only the row it starts from, so green, amber or red would read as a
+verdict on the connection. Its six slots therefore stay on the cool side of the wheel.
+
+- **Slots** (`--route-1` … `--route-6`): blue `#3b82f6` / `#2563eb`, violet `#8b5cf6` / `#7c3aed`, cyan
+  `#06b6d4` / `#0891b2`, pink `#ec4899` / `#db2777`, fuchsia `#d946ef` / `#c026d3`, slate `#94a3b8` /
+  `#475569` (dark / light).
+- **Credential lanes** are not identities: they are always `--fg-2`, and dashed while the credential
+  rests. A lane and the dot travelling it never take `--success`, `--warn` or `--danger`; the verdict
+  is a tone-coloured wash and port ring on the node, plus the row's text.
+- Every slot clears 3:1 against the card, differs from that palette's status hues, and stays at least
+  ΔE 25 from its neighbours. `scripts/test-chart-marks.ts` asserts all three properties from the
+  palette itself; the values above are the OMC Dark/OMC Light pair, mirrored in `web/src/index.css` as
+  the pre-hydration fallback.
 
 
 ### Reasoning effort (ordinal)

@@ -115,26 +115,32 @@ export function updateFieldWithBaseline(
     ? getFieldSemanticValue(serverDoc, field)
     : field.defaultValue;
 
+  // A number box has no empty state, and it shows the schema default whenever the key is
+  // omitted, so a cleared box means that default. Reading it as 0 instead would turn
+  // "unset" into a stored setting — the Claude session date pin's 0 keeps the legacy
+  // continuity-scoped pin — and would write 0 into a field whose default is not 0.
+  const value = field.type === 'number' && (newValue === undefined || newValue === null || newValue === '')
+    ? field.defaultValue ?? 0
+    : newValue;
+
   // Reverting a value must preserve an independent source-path relocation.
-  if (areValuesSemanticallyEqual(newValue, serverBaselineValue) && yamlPath.join('.') === baselinePath.join('.')) {
+  if (areValuesSemanticallyEqual(value, serverBaselineValue) && yamlPath.join('.') === baselinePath.join('.')) {
     restorePathFromServer(currentDoc, serverDoc, yamlPath);
     return;
   }
 
   // A cleared value still has to be representable in YAML: an empty string would
-  // be written back verbatim, so each field type gets the "off" value it can
-  // actually serialise.
-  if (newValue === undefined || newValue === null || newValue === '' || (Array.isArray(newValue) && newValue.length === 0)) {
+  // be written back verbatim, so a switch gets the "off" value it can serialise and
+  // every other type drops the path, where CPA reads its own default.
+  if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
     if (field.type === 'switch') {
       currentDoc.setIn(yamlPath, false);
-    } else if (field.type === 'number') {
-      currentDoc.setIn(yamlPath, field.defaultValue ?? 0);
     } else {
       currentDoc.deleteIn(yamlPath);
       pruneEmptyAncestors(currentDoc, serverDoc, yamlPath);
     }
   } else {
-    currentDoc.setIn(yamlPath, newValue);
+    currentDoc.setIn(yamlPath, value);
   }
 }
 

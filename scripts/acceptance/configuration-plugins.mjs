@@ -57,6 +57,36 @@ export async function runConfigurationPluginsAcceptance({
     await readCodexSwitches(isEnabled);
     check(`Codex behavior stays ${isEnabled} after saving and reloading`, true);
   }
+  // CPA holds the Claude session date pin as a pointer: an absent key means its 7-day
+  // default, while an explicit 0 is a different setting. A zero the operator saves has to
+  // reach the file and read back as 0 — a reader that falls back on truthiness would show
+  // the default again, and an editor that treats 0 as "unset" would never write it.
+  await until(async () => await page.locator('#cfg-claudeSessionDatePinDays').inputValue() === '7', {
+    label: 'the session date pin reads the 7-day default from an absent key',
+  });
+  await page.locator('#cfg-claudeSessionDatePinDays').fill('0');
+  await page.locator('.config-dirty-btn-save').click();
+  const [pinResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/management/config')
+      && response.request().method() === 'PATCH'),
+    page.locator('.ant-popconfirm:visible').getByRole('button', { name: /^(?:Confirm|确定)$/ }).click(),
+  ]);
+  const pinChanges = pinResponse.request().postDataJSON()?.changes;
+  check(
+    'the session date pin saves an explicit zero at its own path and nothing else',
+    pinResponse.ok() && JSON.stringify(pinChanges) === JSON.stringify([
+      { path: ['upstream', 'claude', 'session-date-pin-days'], value: 0 },
+    ]),
+    JSON.stringify(pinChanges),
+  );
+  await page.locator('.config-dirty-bar').waitFor({ state: 'hidden' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.config-page').first().waitFor({ state: 'visible' });
+  await openCodexBehavior();
+  await until(async () => await page.locator('#cfg-claudeSessionDatePinDays').inputValue() === '0', {
+    label: 'the saved zero survives the readback instead of reading as the default 7',
+  });
+  check('the session date pin keeps an explicit zero across a save and reload', true);
   const payloadNav = page.locator('.config-nav-btn').filter({ hasText: /Payload/ });
   await payloadNav.first().waitFor({ state: 'visible', timeout: 10000 });
   await payloadNav.first().click();

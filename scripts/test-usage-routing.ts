@@ -13,7 +13,7 @@ import test from 'node:test';
 import {
   MAX_DRAWN_MODELS,
   MAX_DRAWN_TARGETS,
-  SERIES_SLOTS,
+  ROUTE_SLOTS,
   allocateSlots,
   arrivedRoutes,
   routesFinishedSince,
@@ -128,8 +128,8 @@ test('a model keeps its colour while it stays, and a newcomer takes a free one',
   assert.equal(next.get('model:b'), first.get('model:b'));
   assert.notEqual(next.get('model:c'), next.get('model:b'));
   assert.equal(next.has('model:a'), false);
-  const many = allocateSlots(new Map(), Array.from({ length: SERIES_SLOTS }, (_, index) => `model:${index}`));
-  assert.equal(new Set(many.values()).size, SERIES_SLOTS, 'six drawn models never share a colour');
+  const many = allocateSlots(new Map(), Array.from({ length: ROUTE_SLOTS }, (_, index) => `model:${index}`));
+  assert.equal(new Set(many.values()).size, ROUTE_SLOTS, 'six drawn models never share a lane colour');
 });
 
 test('only requests past the newest one already seen replay, oldest first, and never on opening', () => {

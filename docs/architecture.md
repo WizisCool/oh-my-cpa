@@ -1084,8 +1084,9 @@ stylesheets and the inline `transition:` strings in components, and fails on a
 duration that is not a `--motion-*` token, a transition on a layout property (or
 on `all`), a keyframe animation with no `prefers-reduced-motion` counterpart, and
 a hover transitioning colour outside the fast token; the disclosures that need a
-layout animation are listed in its `EXCEPTIONS` table with a reason each, and a
-stale entry is itself a failure. The budget it enforces is stated in
+layout animation, and the routing map's lane flow that plays under reduced motion
+(ADR 0102), are listed in its `EXCEPTIONS` table with a reason each, and a stale
+entry is itself a failure. The budget it enforces is stated in
 `docs/design.md` §7, and the reasoning behind the hover bound is ADR 0009.
 
 The type and radius scales are held the same way. `pnpm check:style-tokens` reads
@@ -1427,7 +1428,9 @@ read that hit the cap restarts the window from it. The model it draws
 past the drawn limit into a count, and reconciles rows into entering, present and
 exiting so a row can animate out before it is removed. Nothing is inferred from
 configuration, and nothing is drawn as in flight: a request travels the map once its
-record is stored.
+record is stored. The trip and the row motion play for every reader, including one
+whose system reports `prefers-reduced-motion: reduce`, because the travel is the
+panel's reading; the exception is scoped in `docs/design.md` §7 rule 9 and ADR 0102.
 
 ### Manual sync versus background collection
 

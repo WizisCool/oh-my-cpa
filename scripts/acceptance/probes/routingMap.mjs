@@ -126,6 +126,32 @@ export async function routingMap({ base, page, check, fixtures }) {
   });
   check('every lane ends on the row it joins', landsOnRows);
 
+  // A line is a connection, not a verdict. The rows' status hues are reserved for the nodes, so no
+  // lane may resolve to the success, warning or failure colour. Read from rendered pixels rather than
+  // from the stylesheet: the lane's stroke is set inline from the model's palette slot, and the
+  // computed colour is what the reader sees.
+  const laneColors = await page.evaluate(() => {
+    const resolve = (variable) => {
+      const probe = document.createElement('span');
+      probe.style.color = `var(${variable})`;
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const mapNode = document.querySelector('[data-testid="routing-map"]');
+    return {
+      strokes: [...mapNode.querySelectorAll('[data-testid="routing-lane"] > path:first-child')]
+        .map((path) => getComputedStyle(path).stroke),
+      status: ['--success', '--warn', '--danger'].map(resolve),
+    };
+  });
+  check(
+    'no lane is drawn in a status hue',
+    laneColors.strokes.length > 0 && laneColors.strokes.every((stroke) => !laneColors.status.includes(stroke)),
+    JSON.stringify(laneColors),
+  );
+
   // Several live re-reads run with nothing new: none of them replays history.
   const before = fixtures.reads();
   await until(() => fixtures.reads() >= before + 2, { label: 'two live re-reads' });
@@ -137,15 +163,27 @@ export async function routingMap({ base, page, check, fixtures }) {
   const isTravelling = await until(async () => (await packets.count()) > 0, { label: 'a request packet', timeoutMs: 5_000 })
     .then(() => true, () => false);
   check('a request stored while the dashboard is open travels the map', isTravelling);
-  const isFlowing = await until(
+  // A flow is on only while a dot is on the lane, so reading the packet colours in the same pass is
+  // what makes the claim below non-vacuous: the request is visibly travelling when it is checked.
+  const travellingColors = await until(
     () => map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
-      .evaluateAll((flows) => flows.some((flow) => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0)),
+      .evaluateAll((flows) => flows.some((flow) => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0))
+      .then(async (isFlowing) => {
+        if (!isFlowing) return false;
+        const colors = await packets.evaluateAll((holders) => holders.map((holder) => holder.firstElementChild?.style.getPropertyValue('--packet-color') ?? ''));
+        return colors.length > 0 ? colors : false;
+      }),
     { label: 'a lane flowing under the request', timeoutMs: 3_000 },
-  ).then(() => true, () => false);
-  check('the lane a request travels flows while it is on it', isFlowing);
+  ).then((colors) => colors, () => []);
+  check('the lane a request travels flows while it is on it', travellingColors.length > 0);
+  check(
+    'the travelling request keeps the model colour, never a status hue',
+    travellingColors.length > 0 && travellingColors.every((color) => color.startsWith('var(--route-')),
+    JSON.stringify(travellingColors),
+  );
   const isAnswered = await until(
-    () => packets.evaluateAll((holders) => holders.some((holder) => holder.firstElementChild?.style.getPropertyValue('--packet-color').includes('--success'))),
-    { label: 'the response travelling back', timeoutMs: 8_000 },
+    () => modelRow('glm-5-air').locator('[data-tone="success"]').count().then((count) => count > 0),
+    { label: 'the answer acknowledged at the model', timeoutMs: 8_000 },
   ).then(() => true, () => false);
   check('the answering credential sends a response back to the model', isAnswered);
   await until(async () => (await packets.count()) === 0, { label: 'the packets to finish', timeoutMs: 8_000 });
@@ -191,11 +229,20 @@ export async function routingMap({ base, page, check, fixtures }) {
   check('a model whose last request turned a minute old animates out before it goes', exits.some((text) => text.includes('claude-sonnet-5-5')), JSON.stringify(exits));
   check('the model that is still inside the minute stays', (await modelRow('glm-5-air').count()) === 1);
 
-  // Under reduced motion a new request updates the readings and draws no packet.
+  // Windows' "Animation effects" switch reports reduced motion; the trip is the panel's reading, so
+  // it still plays for every reader (ADR 0102).
   await page.emulateMedia({ reducedMotion: 'reduce' });
   fixtures.arrive('kimi-k3');
   await until(async () => (await modelRow('kimi-k3').count()) === 1, { label: 'the next read' });
-  check('reduced motion draws no packet', (await packets.count()) === 0);
+  const travelsUnderReducedMotion = await until(async () => (await packets.count()) > 0, { label: 'a request packet under reduced motion', timeoutMs: 5_000 })
+    .then(() => true, () => false);
+  check('reduced motion still plays the request across the map', travelsUnderReducedMotion);
+  const flowsUnderReducedMotion = await until(
+    () => map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
+      .evaluateAll((flows) => flows.some((flow) => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0)),
+    { label: 'a lane flowing under reduced motion', timeoutMs: 3_000 },
+  ).then(() => true, () => false);
+  check('reduced motion still flows the lane under the request', flowsUnderReducedMotion);
 }
 
 export async function routingNarrow({ base, page, check }) {

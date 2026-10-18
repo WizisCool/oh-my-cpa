@@ -25,7 +25,7 @@ function layoutTopWithin(element: HTMLElement, container: HTMLElement | null): n
  * reflow never animates a layout property (docs/design.md §7 rules 1 and 9). The
  * slide is additive, so it composes with an entrance still running.
  */
-export function useFlip(ref: React.RefObject<HTMLElement | null>, containerRef: React.RefObject<HTMLElement | null>, isReducedMotion: boolean) {
+export function useFlip(ref: React.RefObject<HTMLElement | null>, containerRef: React.RefObject<HTMLElement | null>) {
   const topRef = React.useRef<number | undefined>(undefined);
   React.useLayoutEffect(() => {
     const element = ref.current;
@@ -33,7 +33,7 @@ export function useFlip(ref: React.RefObject<HTMLElement | null>, containerRef: 
     const top = layoutTopWithin(element, containerRef.current);
     const previous = topRef.current;
     topRef.current = top;
-    if (previous === undefined || Math.abs(previous - top) < 0.5 || isReducedMotion) return;
+    if (previous === undefined || Math.abs(previous - top) < 0.5) return;
     element.animate(
       [{ transform: `translateY(${previous - top}px)` }, { transform: 'translateY(0)' }],
       { duration: MOTION_ROUTE_PRESENCE.duration, easing: MOTION_ROUTE_PRESENCE.easing, composite: 'add' },
@@ -51,13 +51,13 @@ export function useFlip(ref: React.RefObject<HTMLElement | null>, containerRef: 
 export function useRowMotion(
   ref: React.RefObject<HTMLElement | null>,
   containerRef: React.RefObject<HTMLElement | null>,
-  { phase, away, delayMs, isReducedMotion }: { phase: PresencePhase; away: string; delayMs: number; isReducedMotion: boolean },
+  { phase, away, delayMs }: { phase: PresencePhase; away: string; delayMs: number },
 ) {
   const exitRef = React.useRef<Animation | undefined>(undefined);
 
   React.useLayoutEffect(() => {
     const element = ref.current;
-    if (!element || phase !== 'entering' || isReducedMotion) return;
+    if (!element || phase !== 'entering') return;
     element.animate(
       [{ opacity: 0, transform: away }, { opacity: 1, transform: 'none' }],
       { duration: MOTION_ROUTE_ENTER.duration, easing: MOTION_ROUTE_ENTER.easing, delay: delayMs, fill: 'backwards' },
@@ -70,7 +70,7 @@ export function useRowMotion(
     const element = ref.current;
     if (!element) return;
     if (phase === 'exiting') {
-      if (!isReducedMotion && !exitRef.current) {
+      if (!exitRef.current) {
         exitRef.current = element.animate(
           [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: away }],
           { duration: MOTION_ROUTE_EXIT.duration, easing: MOTION_ROUTE_EXIT.easing, fill: 'forwards' },
@@ -81,7 +81,7 @@ export function useRowMotion(
       exitRef.current = undefined;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isReducedMotion]);
+  }, [phase]);
 
-  useFlip(ref, containerRef, isReducedMotion);
+  useFlip(ref, containerRef);
 }
