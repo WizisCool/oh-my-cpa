@@ -29,13 +29,16 @@ var errAuthFileIdentityStale = errors.New("auth file changed; reload and try aga
 // name reused by a replacement would otherwise be patched first and reported as a
 // mismatch afterwards.
 func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *management.Client, name, authIndex string, fields map[string]any) (map[string]any, error) {
-	if strings.TrimSpace(authIndex) != "" {
+	if strings.TrimSpace(authIndex) != "" || hasVertexOpenAPIField(fields) {
 		current, err := client.AuthFiles(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := findManagementAuthFile(current.Files, name, authIndex); !ok {
+		if _, ok := findManagementAuthFile(current.Files, name, authIndex); !ok && strings.TrimSpace(authIndex) != "" {
 			return nil, errAuthFileIdentityStale
+		}
+		if err := requireVertexOpenAPITarget(current.Files, name, authIndex, fields); err != nil {
+			return nil, err
 		}
 	}
 	if _, err := client.PatchAuthFileFields(ctx, name, fields); err != nil {
@@ -140,6 +143,14 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 			writeError(writer, http.StatusBadGateway, err.Error())
 			return
 		}
+		if errors.Is(err, errAuthFileFieldNotApplicable) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, errManagementAuthFileNotFound) {
+			writeError(writer, http.StatusNotFound, err.Error())
+			return
+		}
 		writeCPAFacadeError(writer, err)
 		return
 	}
@@ -154,7 +165,7 @@ func managementAuthFileNeedsSafeReadback(fields map[string]any) bool {
 	for key := range fields {
 		switch key {
 		case "prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models",
-			"request_retry", "request_scoped_errors", "model_aliases":
+			"request_retry", "request_scoped_errors", "model_aliases", "openapi", "openapi_location", "openapi_models":
 			return true
 		}
 	}
@@ -192,6 +203,7 @@ func projectManagementAuthFileSafeFields(name string, data []byte) (managementAu
 	fields.RequestRetry = projectCredentialRequestRetry(source)
 	fields.ErrorRules = projectCredentialErrorRules(source)
 	fields.ModelAliases = projectCredentialModelAliases(source)
+	projectVertexOpenAPIFields(source, &fields)
 	return fields, nil
 }
 
@@ -249,6 +261,10 @@ func managementAuthFileFieldMismatch(requested map[string]any, file management.A
 		case "note":
 			if stringValue(raw) != boundedText(file.Note, managementAuthFileFieldLimit) {
 				return "note"
+			}
+		case "openapi", "openapi_location", "openapi_models":
+			if vertexOpenAPIFieldMismatch(key, raw, safe) {
+				return key
 			}
 		}
 	}
@@ -309,6 +325,11 @@ func normalizeManagementAuthFileFields(raw map[string]json.RawMessage) (map[stri
 		"request-scoped-errors": "request_scoped_errors",
 		"model_aliases":         "model_aliases",
 		"model-aliases":         "model_aliases",
+		"openapi":               "openapi",
+		"openapi_location":      "openapi_location",
+		"openapi-location":      "openapi_location",
+		"openapi_models":        "openapi_models",
+		"openapi-models":        "openapi_models",
 	}
 	fields := make(map[string]any, len(raw))
 	seen := make(map[string]string, len(raw))
@@ -366,6 +387,8 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 		return credentialErrorRulesWire(value)
 	case "model_aliases":
 		return credentialModelAliasesWire(value)
+	case "openapi", "openapi_location", "openapi_models":
+		return normalizeVertexOpenAPIField(name, value), nil
 	case "excluded_models":
 		raw := value.([]any)
 		seen := make(map[string]struct{}, len(raw))
@@ -391,7 +414,8 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 func validateManagementAuthFileField(name string, value any) error {
 	if value == nil {
 		switch name {
-		case "prefix", "proxy_url", "headers", "priority", "weight", "note", "expired", "request_retry":
+		case "prefix", "proxy_url", "headers", "priority", "weight", "note", "expired", "request_retry",
+			"openapi", "openapi_location", "openapi_models":
 			return nil
 		default:
 			return fmt.Errorf("field %q cannot be null", name)
@@ -444,6 +468,8 @@ func validateManagementAuthFileField(name string, value any) error {
 				return errors.New("headers must contain short string keys and values")
 			}
 		}
+	case "openapi", "openapi_location", "openapi_models":
+		return validateVertexOpenAPIField(name, value)
 	case "excluded_models":
 		models, ok := value.([]any)
 		if !ok || len(models) > 256 {

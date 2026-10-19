@@ -127,7 +127,16 @@ func (s *Service) RefreshCredential(ctx context.Context, target CredentialTarget
 
 // AGENT_CREDENTIAL_FIELDS is the agent-facing subset of the console's auth-file field
 // allowlist. headers and proxy_url are excluded because both can carry credential material.
-var AGENT_CREDENTIAL_FIELDS = map[string]bool{"prefix": true, "priority": true, "weight": true, "note": true, "excluded_models": true, "expired": true, "disable_cooling": true, "websockets": true, "using_api": true, "request_retry": true, "request_scoped_errors": true, "model_aliases": true}
+var AGENT_CREDENTIAL_FIELDS = map[string]bool{"prefix": true, "priority": true, "weight": true, "note": true, "excluded_models": true, "expired": true, "disable_cooling": true, "websockets": true, "using_api": true, "request_retry": true, "request_scoped_errors": true, "model_aliases": true, "openapi": true, "openapi_location": true, "openapi_models": true}
+
+func hasVertexOpenAPIField(fields map[string]any) bool {
+	for _, key := range management.VERTEX_OPENAPI_FIELDS {
+		if _, ok := fields[key]; ok {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *Service) normalizeAgentCredentialFields(fields map[string]any) (map[string]any, error) {
 	if len(fields) == 0 || len(fields) > 16 {
@@ -233,14 +242,24 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 		AuthIndex string         `json:"auth_index"`
 		Fields    map[string]any `json:"fields"`
 	}
-	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models (a non-empty list replaces provider exclusions, including *; a missing, empty or null list inherits the current provider rules, so clearing restores inheritance; this precedence requires CPA v8.0.33 or later, so upgrade older gateways before relying on overrides; CPA determines availability), expired, disable_cooling, websockets, using_api, request_retry (null inherits), request_scoped_errors (rules of status, match, match_regex and action; an empty list clears them), model_aliases (entries of name, alias and optional fork, display_name and force_mapping; an empty list clears them). Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
+	metadata = Meta("oauth_set_credential_fields", "Edit allowlisted routing metadata of one OAuth credential: prefix, priority, weight, note, excluded_models (a non-empty list replaces provider exclusions, including *; a missing, empty or null list inherits the current provider rules, so clearing restores inheritance; this precedence requires CPA v8.0.33 or later, so upgrade older gateways before relying on overrides; CPA determines availability), expired, disable_cooling, websockets, using_api, request_retry (null inherits), request_scoped_errors (rules of status, match, match_regex and action; an empty list clears them), model_aliases (entries of name, alias and optional fork, display_name and force_mapping; an empty list clears them); for a Vertex service account only: openapi (true or false forces or disables the OpenAPI route for partner and open models; null follows CPA's model-name detection), openapi_location (a Vertex location such as global for that route; null uses the credential's location) and openapi_models (model IDs to register from the credential; null clears them; provider-wide aliases can supply the same names). Credential secrets, headers and proxy URLs are not accepted here.", "write", "high")
 	metadata.Invalidates = []string{"management-auth-files", "management-quota", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input FieldsInput) (capability.Preview, error) {
 		fields, err := s.normalizeAgentCredentialFields(input.Fields)
 		if err != nil {
 			return capability.Preview{}, err
 		}
-		return s.credentialPreview(ctx, CredentialTarget{Name: input.Name, AuthIndex: input.AuthIndex}, map[string]any{"credential": CredentialTarget{Name: input.Name, AuthIndex: input.AuthIndex}, "fields": fields})
+		target := CredentialTarget{Name: input.Name, AuthIndex: input.AuthIndex}
+		file, err := s.authFile(ctx, target)
+		if err != nil {
+			return capability.Preview{}, err
+		}
+		// Refused at preview too, so a confirmation is never asked for a write
+		// the credential's kind would ignore.
+		if hasVertexOpenAPIField(fields) && !file.IsVertexServiceAccount() {
+			return capability.Preview{}, errors.New("invalid_parameters")
+		}
+		return capability.Preview{Target: target.Name, Revision: s.revision(file), Changes: map[string]any{"credential": target, "fields": fields}}, nil
 	}, func(ctx context.Context, input FieldsInput, revision, _ string) (Done, error) {
 		if s.UpdateCredentialFields == nil {
 			return Done{}, errors.New("capability_unavailable")

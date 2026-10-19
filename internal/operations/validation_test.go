@@ -6,8 +6,13 @@ import (
 	"errors"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 func TestScalarIntegersRejectTruncation(t *testing.T) {
@@ -234,5 +239,39 @@ func TestAgentCredentialFieldsRefuseSecretBearingKeys(t *testing.T) {
 	}
 	if _, err := service.normalizeAgentCredentialFields(map[string]any{"headers": map[string]any{"Authorization": "Bearer secret-value"}}); err == nil {
 		t.Fatal("headers reached the agent-facing allowlist")
+	}
+}
+
+func TestAgentVertexOpenAPIFieldsPreviewOnlyForVertexServiceAccounts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT {
+			_, _ = writer.Write([]byte("8"))
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"files":[{"name":"vertex.json","auth_index":"v","provider":"vertex","type":"vertex"},{"name":"codex.json","auth_index":"c","provider":"codex","type":"codex"}]}`))
+	}))
+	defer server.Close()
+	client, err := management.NewClient(server.URL, "management-key", 5*time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{
+		Client:                    func(context.Context) (*management.Client, error) { return client, nil },
+		NormalizeCredentialFields: func(fields map[string]any) (map[string]any, error) { return fields, nil },
+	}
+	registry := capability.NewRegistry()
+	if err := service.registerOAuth(registry); err != nil {
+		t.Fatal(err)
+	}
+	definition, err := registry.Lookup("oauth_set_credential_fields", capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := definition.Prepare(context.Background(), json.RawMessage(`{"name":"vertex.json","auth_index":"v","fields":{"openapi":true,"openapi_location":"global","openapi_models":["meta/llama-3.3-70b-instruct-maas"]}}`)); err != nil {
+		t.Fatalf("vertex overrides refused: %v", err)
+	}
+	if _, err := definition.Prepare(context.Background(), json.RawMessage(`{"name":"codex.json","auth_index":"c","fields":{"openapi":true}}`)); err == nil || !strings.Contains(err.Error(), "invalid_parameters") {
+		t.Fatalf("codex override preview = %v, want invalid_parameters", err)
 	}
 }

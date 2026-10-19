@@ -94,6 +94,16 @@ type managementAuthFileSafeFields struct {
 	// ModelAliases are the credential's own aliases, resolved before its
 	// provider's OAuth aliases.
 	ModelAliases []managementOAuthModelAlias `json:"model_aliases,omitempty"`
+	// OpenAPI is nil while a Vertex service account leaves the partner-model
+	// route to CPA's model-name detection; false is an explicit opt-out.
+	OpenAPI *bool `json:"openapi,omitempty"`
+	// OpenAPILocation overrides the credential's location for that route only.
+	OpenAPILocation string   `json:"openapi_location,omitempty"`
+	OpenAPIModels   []string `json:"openapi_models,omitempty"`
+	// OpenAPILegacyModels are names CPA also registers from the credential's
+	// `models` key. The console never writes that key, so they are reported
+	// rather than edited: removing a name from OpenAPIModels does not remove it.
+	OpenAPILegacyModels []string `json:"openapi_legacy_models,omitempty"`
 }
 
 func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {

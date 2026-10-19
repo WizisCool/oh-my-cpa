@@ -327,7 +327,9 @@ a new capability must not add them:
 - the credential fields that can transport secrets: `oauth_set_credential_fields`
   accepts `prefix`, `priority`, `weight`, `note`, `excluded_models`, `expired`,
   `disable_cooling`, `websockets`, `using_api`, `request_retry`,
-  `request_scoped_errors` and `model_aliases`, while `headers` and `proxy_url`
+  `request_scoped_errors` and `model_aliases`, plus a Vertex service account's
+  `openapi`, `openapi_location` and `openapi_models` (refused at preview for any other
+  credential), while `headers` and `proxy_url`
   stay console-only because either can carry credential material into a preview;
 - approval, secret submission, or OAuth completion for an operation an external agent
   prepared.

@@ -395,6 +395,9 @@ func (h *Handler) operationsService() *operations.Service {
 			return err
 		}
 		_, err = h.applyManagementAuthFileFields(ctx, client, target.Name, target.AuthIndex, fields)
+		if errors.Is(err, errAuthFileFieldNotApplicable) {
+			return errors.New("invalid_parameters")
+		}
 		return mapAgentProviderError(err)
 	}
 	h.bindProviderOperations(service)

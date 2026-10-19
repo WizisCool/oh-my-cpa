@@ -7,6 +7,7 @@ import {
   InputNumber,
   Form,
   Table,
+  Segmented,
   App as AntdApp,
 } from 'antd';
 import { Switch } from '../common/Switch';
@@ -51,6 +52,16 @@ import {
   readCredentialPolicyDraft,
   type CredentialPolicyDraft,
 } from './credentialPolicy';
+import {
+  buildVertexOpenAPIPatch,
+  isVertexServiceAccount,
+  MAX_VERTEX_OPENAPI_MODELS,
+  readVertexOpenAPIDraft,
+  vertexOpenAPIProblem,
+  type VertexOpenAPIDraft,
+  type VertexOpenAPIMode,
+  type VertexOpenAPIProblem,
+} from './vertexOpenAPI';
 import { SearchInput } from '../common/SearchInput';
 import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
@@ -88,6 +99,9 @@ interface FormValues {
   websockets?: boolean;
   using_api?: boolean;
   excluded_models?: string;
+  openapi_mode?: VertexOpenAPIMode;
+  openapi_location?: string;
+  openapi_models?: string;
 }
 
 // Listed out so the translation check can see every key the alias rules can report.
@@ -98,6 +112,11 @@ const ALIAS_PROBLEM_KEYS: Record<OAuthModelAliasValidationError, string> = {
   field_too_long: 'af.alias_error_field_too_long',
   alias_same: 'af.alias_error_alias_same',
   alias_duplicate: 'af.alias_error_alias_duplicate',
+};
+const VERTEX_PROBLEM_KEYS: Record<VertexOpenAPIProblem, string> = {
+  location: 'af.vertex_openapi_location_invalid',
+  models_too_many: 'af.vertex_openapi_models_too_many',
+  model_too_long: 'af.vertex_openapi_model_too_long',
 };
 const MAX_CREDENTIAL_WEIGHT = 1_000_000;
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
@@ -134,7 +153,16 @@ function formValues(
     websockets: safeFields?.websockets ?? false,
     using_api: safeFields?.using_api ?? false,
     excluded_models: excludedModelsText(safeFields?.excluded_models),
+    ...vertexFormValues(readVertexOpenAPIDraft(safeFields)),
   };
+}
+
+function vertexFormValues(draft: VertexOpenAPIDraft): Pick<FormValues, 'openapi_mode' | 'openapi_location' | 'openapi_models'> {
+  return { openapi_mode: draft.mode, openapi_location: draft.location, openapi_models: draft.models };
+}
+
+function vertexDraft(values: FormValues): VertexOpenAPIDraft {
+  return { mode: values.openapi_mode ?? 'inherit', location: values.openapi_location ?? '', models: values.openapi_models ?? '' };
 }
 
 function sameFormValues(left: FormValues, right: FormValues): boolean {
@@ -147,7 +175,8 @@ function sameFormValues(left: FormValues, right: FormValues): boolean {
     && Boolean(left.disable_cooling) === Boolean(right.disable_cooling)
     && Boolean(left.websockets) === Boolean(right.websockets)
     && Boolean(left.using_api) === Boolean(right.using_api)
-    && (left.excluded_models ?? '') === (right.excluded_models ?? '');
+    && (left.excluded_models ?? '') === (right.excluded_models ?? '')
+    && Object.keys(buildVertexOpenAPIPatch(vertexDraft(left), vertexDraft(right))).length === 0;
 }
 
 export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
@@ -169,6 +198,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();
   const [baseline, setBaseline] = useState<FormValues>({});
+  const isVertex = file ? isVertexServiceAccount(file) : false;
   const [isDirty, setIsDirty] = useState(false);
   // The policy lives beside the form rather than in it: its rules are a nested, reorderable
   // list, which the flat field comparison the form's dirty check relies on cannot express.
@@ -368,9 +398,17 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       );
       return;
     }
+    const vertexProblem = isVertex ? vertexOpenAPIProblem(vertexDraft(values)) : null;
+    if (vertexProblem) {
+      toast.warning(t(VERTEX_PROBLEM_KEYS[vertexProblem], { n: MAX_VERTEX_OPENAPI_MODELS }));
+      return;
+    }
     isPendingRef.current = true;
 
-    const patch: Record<string, unknown> = buildCredentialPolicyPatch(policy, policyBaseline);
+    const patch: Record<string, unknown> = {
+      ...buildCredentialPolicyPatch(policy, policyBaseline),
+      ...(isVertex ? buildVertexOpenAPIPatch(vertexDraft(values), vertexDraft(baseline)) : {}),
+    };
     const nextPriority = values.priority ?? 0;
     const nextWeight = values.weight ?? 1;
     if (nextPriority !== (baseline.priority ?? 0)) {
@@ -756,6 +794,53 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             )}
                           </div>
                         </div>
+
+                        {isVertex && (
+                          <div className={styles['policy']} data-testid="vertex-openapi-section">
+                            <h4 className={styles['policy-title']}>{t('af.vertex_openapi_section')}</h4>
+                            <div className={styles['policy-desc']}>{t('af.vertex_openapi_section_desc')}</div>
+                            <Form.Item
+                              name="openapi_mode"
+                              label={t('af.vertex_openapi_mode')}
+                              extra={t('af.vertex_openapi_mode_hint')}
+                            >
+                              <Segmented
+                                disabled={!safeFieldsReady}
+                                options={[
+                                  { value: 'inherit', label: t('af.vertex_openapi_mode_inherit') },
+                                  { value: 'on', label: t('af.vertex_openapi_mode_on') },
+                                  { value: 'off', label: t('af.vertex_openapi_mode_off') },
+                                ]}
+                              />
+                            </Form.Item>
+                            <Form.Item
+                              name="openapi_location"
+                              label={t('af.vertex_openapi_location')}
+                              extra={t('af.vertex_openapi_location_hint')}
+                            >
+                              <Input allowClear maxLength={64} disabled={!safeFieldsReady} placeholder="global" />
+                            </Form.Item>
+                            <Form.Item
+                              name="openapi_models"
+                              label={t('af.vertex_openapi_models')}
+                              extra={t('af.vertex_openapi_models_hint')}
+                            >
+                              <Input.TextArea
+                                rows={3}
+                                maxLength={65536}
+                                disabled={!safeFieldsReady}
+                                placeholder="meta/llama-3.3-70b-instruct-maas"
+                              />
+                            </Form.Item>
+                            {(safeFieldsQuery.data?.openapi_legacy_models?.length ?? 0) > 0 && (
+                              <div className={styles['policy-desc']} data-testid="vertex-openapi-legacy-models">
+                                {t('af.vertex_openapi_legacy_models', {
+                                  models: (safeFieldsQuery.data?.openapi_legacy_models ?? []).join(', '),
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         <Form.Item
                           className={styles['field-grid-wide']}

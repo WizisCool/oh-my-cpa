@@ -129,6 +129,17 @@ func (c *Client) AuthFileModels(ctx context.Context, name string) ([]AuthModel, 
 	return response.Models, nil
 }
 
+// VERTEX_OPENAPI_FIELDS are the credential metadata keys CPA reads only for a
+// Vertex service account's OpenAPI route to partner and open models.
+var VERTEX_OPENAPI_FIELDS = []string{"openapi", "openapi_location", "openapi_models"}
+
+// IsVertexServiceAccount reports whether the credential is a file-backed Vertex
+// service account, the only kind whose metadata carries the OpenAPI overrides.
+// Vertex API keys are configuration, not credential files.
+func (f AuthFile) IsVertexServiceAccount() bool {
+	return strings.EqualFold(strings.TrimSpace(f.Provider), "vertex") || strings.EqualFold(strings.TrimSpace(f.Type), "vertex")
+}
+
 type AuthFilesResponse struct {
 	Files []AuthFile `json:"files"`
 }

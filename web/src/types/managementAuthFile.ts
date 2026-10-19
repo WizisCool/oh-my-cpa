@@ -79,6 +79,14 @@ export interface ManagementAuthFileSafeFields {
   request_scoped_errors?: ProviderErrorRule[];
   /** The credential's own model aliases, resolved before its provider's. */
   model_aliases?: ManagementOAuthModelAlias[];
+  /** Vertex service accounts only. Absent while CPA detects partner models by name. */
+  openapi?: boolean;
+  /** Vertex service accounts only: the location for OpenAPI requests, when not the credential's own. */
+  openapi_location?: string;
+  /** Vertex service accounts only: model IDs registered from the credential. */
+  openapi_models?: string[];
+  /** Names CPA also registers from the credential's `models` key; reported, never written. */
+  openapi_legacy_models?: string[];
 }
 
 /** What the gateway stored for an imported Vertex service account; never the key. */
