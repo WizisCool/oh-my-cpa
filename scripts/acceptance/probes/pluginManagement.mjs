@@ -374,10 +374,19 @@ export async function pluginManagement({ base, page, check, writes }) {
       const style = getComputedStyle(glyph);
       return { ink: style.backgroundColor, text: getComputedStyle(glyph.closest('li')).color, mask: style.maskImage };
     });
+    const readSettledInk = async (label) => {
+      let ink;
+      // Menu icons transition their ink independently of the entry's theme token.
+      await until(async () => {
+        ink = await readInk();
+        return ink.ink === ink.text;
+      }, { label });
+      return ink;
+    };
     await page.getByRole('button', { name: /^Theme: Light$/ }).click();
     await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', 'the dark theme');
     await settleLayout(page);
-    const darkInk = await readInk();
+    const darkInk = await readSettledInk('the dark menu glyph colour');
     check('the selected SVG menu glyph follows the entry text colour', darkInk.ink === darkInk.text && darkInk.mask.includes(LOGO), JSON.stringify(darkInk));
     const headingGlyph = hosted.locator('[data-plugin-logo="svg"]');
     const headingInk = await headingGlyph.evaluate((glyph) => {
@@ -392,7 +401,7 @@ export async function pluginManagement({ base, page, check, writes }) {
     await page.getByRole('button', { name: /^Theme: Dark$/ }).click();
     const lightMode = await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', 'the light theme');
     await settleLayout(page);
-    const lightInk = await readInk();
+    const lightInk = await readSettledInk('the light menu glyph colour');
     check('the SVG menu glyph changes ink with the light theme', lightMode && lightInk.ink === lightInk.text && lightInk.ink !== darkInk.ink, JSON.stringify({ darkInk, lightInk }));
     await page.screenshot({ path: 'tmp/plugin-svg-logos/light.png' });
     await page.getByRole('button', { name: /^Theme: Follow system$/ }).click();
