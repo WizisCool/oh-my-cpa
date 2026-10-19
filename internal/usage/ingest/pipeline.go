@@ -148,9 +148,8 @@ type RefreshNowResult struct {
 	Mode string `json:"mode,omitempty"`
 	// Captured counts records persisted to the inbox by this pass.
 	Captured int `json:"captured"`
-	// Decoded counts usage events committed from the inbox while this sync ran.
-	// It is a window delta, so it can include a record captured before this pass
-	// whose decode was still outstanding when the pass started.
+	// Decoded counts processed inbox rows within this pass's capture bounds,
+	// including rows decoded before the persistence barrier began.
 	Decoded int `json:"decoded"`
 	// Pending is how many records from this pass were still awaiting decoding
 	// when the wait ended.
