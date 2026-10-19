@@ -1465,8 +1465,9 @@ Five properties are deliberate:
   waited for the next flush tick; and a single pop would report a clean sync with
   an older backlog still queued.
 - The decode barrier is scoped by a watermark (`MAX(usage_inboxes.id)` taken after
-  the pass), and its discard count by the same value read before the pass, so the
-  result describes this sync's own captures. Waiting for `pending == 0` instead would only finish during a lull,
+  the pass), and its decoded and discard counts by the same value read before
+  the pass, so the result describes this sync's own captures even when the
+  background decoder finishes before the barrier begins. Waiting for `pending == 0` instead would only finish during a lull,
   because records keep arriving while the refresh runs.
 - `synced` requires that nothing captured at or below the watermark was parked as
   undecodable. A poison payload leaves no event, so a barrier that ignored

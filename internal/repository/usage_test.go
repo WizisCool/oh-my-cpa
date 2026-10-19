@@ -131,6 +131,41 @@ func TestUsageInboxWatermarkScopesPendingCount(t *testing.T) {
 	}
 }
 
+func TestProcessedUsageInboxCountUsesCaptureBounds(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	appendRow := func(key string, shouldProcess bool) int64 {
+		t.Helper()
+		if _, err := repo.AppendUsageInbox(ctx, "default", "http_pull", []string{fmt.Sprintf(`{"request_id":%q}`, key)}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		id, err := repo.LatestUsageInboxID(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shouldProcess {
+			if err := repo.MarkUsageInboxProcessed(ctx, id, key); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return id
+	}
+	floor := appendRow("old", true)
+	appendRow("captured-decoded", true)
+	watermark := appendRow("captured-pending", false)
+	appendRow("later", true)
+	for _, bounds := range [][2]int64{{floor, watermark}, {0, 0}, {watermark, floor}, {watermark, watermark}} {
+		want := int64(0)
+		if bounds[0] == floor && bounds[1] == watermark {
+			want = 1
+		}
+		got, err := repo.CountProcessedUsageInboxBetween(ctx, bounds[0], bounds[1])
+		if err != nil || got != want {
+			t.Fatalf("processed between %d and %d = %d, %v; want %d", bounds[0], bounds[1], got, err, want)
+		}
+	}
+}
+
 func TestUsageInboxDiscardsPoisonAfterRetries(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()

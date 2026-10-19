@@ -382,6 +382,47 @@ func TestRefreshNowWaitsForEventsToBecomeQueryable(t *testing.T) {
 	}
 }
 
+func TestRefreshNowCountsRecordsDecodedBeforeCaptureReturns(t *testing.T) {
+	store := newStore(t)
+	upstream := newFakeUpstream()
+	upstream.holdPops()
+	runner, err := NewRunner("default", upstream, store, nil, nil, syncConfig(ModeHTTPPull))
+	if err != nil {
+		t.Fatal(err)
+	}
+	processor, err := NewProcessor(store, nil, 10, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipeline, err := NewPipeline(runner, processor, nil, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Force the decoder to win the scheduling race: capture normally wakes its
+	// goroutine, which can finish before CaptureNow returns to the caller.
+	runner.SetCaptureHandlers(func() {
+		if _, err := processor.ProcessOnce(context.Background()); err != nil {
+			t.Errorf("decode during capture: %v", err)
+		}
+	}, nil)
+	startRunner(t, runner)
+	upstream.waitForHeldPop(t)
+	upstream.releasePops([][]string{{}, {usagePayload("already-decoded")}})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := pipeline.RefreshNow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Synced || result.Captured != 1 || result.Decoded != 1 || result.Pending != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected result after early decode: %+v", result)
+	}
+	if got := eventsFor(t, store, "already-decoded"); got != 1 {
+		t.Fatalf("queryable events = %d, want 1", got)
+	}
+}
+
 func TestRefreshNowReportsUndrainedPass(t *testing.T) {
 	store := newStore(t)
 	upstream := newFakeUpstream()

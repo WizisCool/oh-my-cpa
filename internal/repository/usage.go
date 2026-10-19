@@ -181,6 +181,16 @@ func (r *Repository) CountUndecodableUsageInboxBefore(ctx context.Context, water
 // CountUndecodableUsageInboxBetween counts undecodable inbox rows above floor and
 // at or below watermark: the rows one capture pass produced, whoever discarded them.
 func (r *Repository) CountUndecodableUsageInboxBetween(ctx context.Context, floor, watermark int64) (int64, error) {
+	return r.countUsageInboxBetween(ctx, InboxDiscarded, floor, watermark)
+}
+
+// CountProcessedUsageInboxBetween counts this capture pass's decoded rows,
+// including those the background processor committed before its barrier began.
+func (r *Repository) CountProcessedUsageInboxBetween(ctx context.Context, floor, watermark int64) (int64, error) {
+	return r.countUsageInboxBetween(ctx, InboxProcessed, floor, watermark)
+}
+
+func (r *Repository) countUsageInboxBetween(ctx context.Context, status string, floor, watermark int64) (int64, error) {
 	if r == nil || r.SQL() == nil {
 		return 0, errors.New("repository is not initialized")
 	}
@@ -190,8 +200,8 @@ func (r *Repository) CountUndecodableUsageInboxBetween(ctx context.Context, floo
 	var count int64
 	if err := r.SQL().QueryRowContext(ctx, `
 		SELECT COUNT(1) FROM usage_inboxes
-		WHERE status = ? AND id > ? AND id <= ?`, InboxDiscarded, floor, watermark).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count undecodable usage inbox rows: %w", err)
+		WHERE status = ? AND id > ? AND id <= ?`, status, floor, watermark).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count %s usage inbox rows: %w", status, err)
 	}
 	return count, nil
 }

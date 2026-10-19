@@ -230,18 +230,22 @@ func (p *Pipeline) RefreshNow(ctx context.Context) (RefreshNowResult, error) {
 		result.Error = security.RedactText(err.Error())
 		return result, err
 	}
-	decodedBefore := p.processor.Status().Decoded
 	drain, err := p.processor.Drain(ctx, watermark, refreshDecodeSeconds)
-	result.Decoded = int(p.processor.Status().Decoded - decodedBefore)
 	result.Pending = drain.Pending
 	result.Failed = drain.Failed
 	if err != nil {
 		result.Error = security.RedactText(err.Error())
 		return result, err
 	}
-	// The drain only sees what it discards itself. The background decoder can
-	// give up on one of this pass's records before the drain starts, so the
-	// pass's own rows are counted instead of a before/after difference.
+	// The background decoder can finish this pass's rows before the barrier
+	// begins. Count their persisted outcomes, not a global counter difference
+	// that can miss early work or include another pass.
+	decoded, err := p.store.CountProcessedUsageInboxBetween(ctx, floor, watermark)
+	if err != nil {
+		result.Error = security.RedactText(err.Error())
+		return result, err
+	}
+	result.Decoded = int(decoded)
 	result.Failed, err = p.store.CountUndecodableUsageInboxBetween(ctx, floor, watermark)
 	if err != nil {
 		result.Error = security.RedactText(err.Error())
