@@ -920,10 +920,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .ant-menu-item-group-title { color: var(--meta) !important; font-size: var(--text-2xs); letter-spacing: .14em; text-transform: uppercase; padding: 14px 12px 6px; }
 .app-menu .ant-menu-item { color: var(--muted); margin: 2px 8px; width: calc(100% - 16px); padding-inline: 10px; border-radius: var(--radius-sm); }
 .app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 600; background: transparent !important; box-shadow: inset 2px 0 0 var(--fg) !important; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-/* A plugin page's logo is an image of whatever size the plugin shipped. The nav model hands the
+/* A plugin page's artwork can have any intrinsic size. The nav model hands the
    same element to the rail and to the sidebar-visibility dialog, so the glyph box belongs to the
    logo itself rather than to the rail that first drew it. */
-.app-menu-plugin-logo { width: 16px; height: 16px; flex: none; border-radius: var(--radius-xs); object-fit: contain; }
+.app-menu-plugin-logo { width: 16px; height: 16px; flex: none; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
 /* An available update marks the System Information entry: a `--warn` dot just outside the
    icon's corner, where it touches neither the glyph nor the row's hover fill. */

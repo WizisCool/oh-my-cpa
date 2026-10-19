@@ -1,8 +1,8 @@
 import React from 'react';
 import { Tooltip } from 'antd';
-import { ExternalLinkOutlined, GithubOutlined, PuzzleOutlined } from '../icons';
+import { ExternalLinkOutlined, GithubOutlined } from '../icons';
 import { useT } from '../../i18n';
-import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
+import { PluginIcon } from './PluginIcon';
 import { safeExternalURL } from '../../utils/externalUrl';
 import styles from './Plugins.module.css';
 
@@ -10,18 +10,11 @@ interface PluginLogoProps {
   logo?: string;
 }
 
-/**
- * A plugin's own mark, or the generic plugin glyph.
- *
- * Only inline artwork is drawn: the server inlines a declared logo or drops it, so a
- * remote URL reaching here would be a defect, and it falls back rather than loading.
- */
+/** The framed plugin mark used by management cards and page headings. */
 export function PluginLogo({ logo }: PluginLogoProps) {
-  const [hasFailed, setHasFailed] = React.useState(false);
-  const isDrawable = isRenderableLogoURL(logo) && !hasFailed;
   return (
-    <span className={styles.logo} aria-hidden="true" data-plugin-logo={isDrawable ? 'image' : 'fallback'}>
-      {isDrawable ? <img src={logo} alt="" onError={() => setHasFailed(true)} /> : <PuzzleOutlined size="55%" />}
+    <span className={styles.logo} aria-hidden="true">
+      <PluginIcon logo={logo} fallbackSize="55%" />
     </span>
   );
 }

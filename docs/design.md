@@ -1131,6 +1131,9 @@ and halo. Ringing the inner field too drew a second rectangle inside the control
 
 - `body { overflow: hidden }` — the shell is `100dvh`; sidebar and content
   scroll independently (`overscroll-behavior: contain`).
+- Plugin SVG marks use the surrounding text colour in navigation, management cards/drawers
+  and hosted-page headings. They are unframed glyphs: theme, hover and selected-state colours
+  apply without a separate icon palette. Raster plugin marks keep their original colours.
 - Nav groups: Operate / Gateway / Observe / Control, with the plugins group - management, the
   store, then each plugin's own page - before Control. Group labels 10px
   uppercase `--meta`. Items: icon + label only, no subtitles. Selected item =

@@ -17,7 +17,7 @@ import {
   BlockOutlined,
 } from '../icons';
 import { PLUGIN_PAGE_ROUTE_PREFIX, type PluginPageEntry } from '../plugins/pluginPages';
-import { isRenderableLogoURL } from '../../types/pluginOAuthProviders';
+import { PluginIcon } from '../plugins/PluginIcon';
 import type { NavEntry, NavGroup } from '../../types/sidebarNav';
 
 export { PLUGIN_PAGE_ROUTE_PREFIX };
@@ -94,9 +94,7 @@ export function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGrou
         key: page.route,
         labelKey: page.navLabel,
         isLiteralLabel: true,
-        icon: isRenderableLogoURL(page.logo)
-          ? <img className="app-menu-plugin-logo" src={page.logo} alt="" />
-          : <PuzzleOutlined />,
+        icon: <PluginIcon className="app-menu-plugin-logo" logo={page.logo} />,
       })),
     ],
   };

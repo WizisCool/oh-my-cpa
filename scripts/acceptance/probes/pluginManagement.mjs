@@ -13,7 +13,7 @@ import { settleLayout, until } from '../harness.mjs';
  */
 
 const LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#0F766E"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 ).toString('base64');
 
 const PLUGINS = {
@@ -158,7 +158,13 @@ export async function pluginManagement({ base, page, check, writes }) {
   const pageListed = await isTrue(async () => pageEntry.isVisible(), 'the plugin page entry');
   check('a running plugin\'s page is a navigation entry under its registered label', pageListed && (await pageEntry.innerText()).includes('Logger Console'));
   check('a plugin that is not running gets no page entry', (await page.locator('.app-menu [data-route-path^="/plugin-pages/quota-notifier"]').count()) === 0);
-  check('the page entry carries the plugin\'s own artwork', (await pageEntry.locator('img.app-menu-plugin-logo').count()) === 1);
+  check('the page entry carries the plugin\'s own artwork', (await pageEntry.locator('.app-menu-plugin-logo[data-plugin-logo="svg"]').count()) === 1);
+
+  await pageEntry.hover();
+  const hoverFollowsText = await isTrue(async () => pageEntry.locator('[data-plugin-logo="svg"]').evaluate((glyph) =>
+    getComputedStyle(glyph).backgroundColor === getComputedStyle(glyph.closest('li')).color,
+  ), 'the hovered menu glyph colour');
+  check('the SVG menu glyph inherits its hover text colour', hoverFollowsText);
 
   // ── store cards ─────────────────────────────────────────────────────────────
   const cards = page.locator('[data-plugin-panel="store"] article[data-store-id]');
@@ -175,8 +181,22 @@ export async function pluginManagement({ base, page, check, writes }) {
       && (await limiter.locator('a[href="https://limiter.example"]').count()) === 1,
   );
   const logger = page.locator('article[data-store-id="official/request-logger"]');
-  const logoLoaded = await isTrue(async () => logger.locator('[data-plugin-logo="image"] img').evaluate((img) => img.complete && img.naturalWidth > 0), 'the card logo');
+  const cardGlyph = logger.locator('[data-plugin-logo="svg"]');
+  const logoLoaded = await isTrue(async () => cardGlyph.evaluate(async (glyph) => {
+    const source = getComputedStyle(glyph).maskImage.match(/^url\("(.*)"\)$/)?.[1];
+    if (!source) return false;
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    return image.naturalWidth > 0;
+  }), 'the card logo');
   check('a card draws the plugin icon the registry publishes', logoLoaded);
+  const cardInk = await cardGlyph.evaluate((glyph) => {
+    const style = getComputedStyle(glyph);
+    return { mask: style.maskImage, ink: style.backgroundColor, text: getComputedStyle(glyph.closest('article')).color };
+  });
+  check('the SVG card mark uses the registry artwork as an alpha mask in the card text colour',
+    cardInk.mask.includes(LOGO) && cardInk.ink === cardInk.text, JSON.stringify(cardInk));
   check('a card without an icon draws the generic mark', (await limiter.locator('[data-plugin-logo="fallback"]').count()) === 1);
   check('an installed entry with a newer release offers the update', (await logger.getByRole('button', { name: /更新|Update/ }).count()) >= 1);
   check('the failing registry is named above the cards', (await page.getByText('down.example').count()) >= 1);
@@ -349,16 +369,42 @@ export async function pluginManagement({ base, page, check, writes }) {
     const viewport = page.viewportSize();
     check('the frame fills the content area below its heading', Boolean(box) && box.height > viewport.height * 0.6, JSON.stringify(box));
     check('the plugin page is the selected navigation entry', /ant-menu-item-selected/.test((await page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first().getAttribute('class')) ?? ''));
+    const selectedEntry = page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first();
+    const readInk = () => selectedEntry.locator('[data-plugin-logo="svg"]').evaluate((glyph) => {
+      const style = getComputedStyle(glyph);
+      return { ink: style.backgroundColor, text: getComputedStyle(glyph.closest('li')).color, mask: style.maskImage };
+    });
+    await page.getByRole('button', { name: /^Theme: Light$/ }).click();
+    await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', 'the dark theme');
+    await settleLayout(page);
+    const darkInk = await readInk();
+    check('the selected SVG menu glyph follows the entry text colour', darkInk.ink === darkInk.text && darkInk.mask.includes(LOGO), JSON.stringify(darkInk));
+    const headingGlyph = hosted.locator('[data-plugin-logo="svg"]');
+    const headingInk = await headingGlyph.evaluate((glyph) => {
+      const frame = glyph.parentElement;
+      return { ink: getComputedStyle(glyph).backgroundColor, title: getComputedStyle(frame.parentElement.nextElementSibling.firstElementChild).color, border: getComputedStyle(frame).borderColor, background: getComputedStyle(frame).backgroundColor };
+    });
+    check('the hosted SVG heading mark is unframed and inherits the heading colour',
+      headingInk.ink === headingInk.title && headingInk.border === 'rgba(0, 0, 0, 0)' && headingInk.background === 'rgba(0, 0, 0, 0)', JSON.stringify(headingInk));
+    await page.screenshot({ path: 'tmp/plugin-svg-logos/dark.png' });
+    // Follow the operating-system preference, which exercises the real theme provider.
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.getByRole('button', { name: /^Theme: Dark$/ }).click();
+    const lightMode = await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', 'the light theme');
+    await settleLayout(page);
+    const lightInk = await readInk();
+    check('the SVG menu glyph changes ink with the light theme', lightMode && lightInk.ink === lightInk.text && lightInk.ink !== darkInk.ink, JSON.stringify({ darkInk, lightInk }));
+    await page.screenshot({ path: 'tmp/plugin-svg-logos/light.png' });
+    await page.getByRole('button', { name: /^Theme: Follow system$/ }).click();
   }
   await page.goto(`${base}/plugin-pages/quota-notifier/0`, { waitUntil: 'domcontentloaded' });
   check('a page of a plugin that is not running is reported as unavailable', await isTrue(async () => page.locator('[data-plugin-page-unavailable]').isVisible(), 'the unavailable notice'));
 
   // ── the plugin page in the rail-visibility panel ────────────────────────────
-  // The panel draws the same nav-model element the rail does, outside the rail. The fixture logo
-  // is an SVG with no intrinsic size, which an unconstrained <img> lays out at 300x150.
+  // The panel draws the same nav-model element outside the rail; artwork must stay glyph-sized.
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /管理入口|Manage entries/ }).click();
-  const panelLogo = page.locator('[data-testid="sidebar-nav-dialog"] img.app-menu-plugin-logo');
+  const panelLogo = page.locator('[data-testid="sidebar-nav-dialog"] .app-menu-plugin-logo');
   const panelLogoShown = await isTrue(async () => panelLogo.isVisible(), 'the plugin logo in the sidebar panel');
   const panelLogoBox = panelLogoShown ? await panelLogo.boundingBox() : null;
   check('the plugin page\'s logo in the sidebar panel is drawn at the rail glyph size',

@@ -16,11 +16,15 @@
   color: var(--muted);
 }
 
-.logo img {
-  display: block;
+.logo > span {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+}
+
+.logo:has([data-plugin-logo="svg"]) {
+  border-color: transparent;
+  background: transparent;
+  color: inherit;
 }
 
 

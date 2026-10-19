@@ -788,6 +788,14 @@ outcome that is not cached, since running out of time is not an answer about the
 logo. A logo that cannot be inlined is reported as absent rather than as a URL, which
 is what makes every provider surface fall back to the vendored catalog mark; see §3.
 
+Plugin navigation, management cards/drawers and hosted-page headings share
+`PluginIcon`: SVG data URLs are isolated alpha masks painted with `currentColor`,
+so their ink follows theme, hover and selected states without inserting plugin SVG
+markup into the host DOM. Framed management marks drop their background and border
+for SVG glyphs. Raster data URLs retain their original colours as images; missing
+or failed artwork uses the generic plugin glyph. Provider-brand surfaces retain
+the plugin's original artwork colours.
+
 CPA reports a plugin's name, author, version and logo only once its host has loaded it, so
 an installed plugin that is disabled or waiting for a restart arrives with its id alone.
 `internal/api/management_plugin_identity.go` fills those empty fields - never a value the
