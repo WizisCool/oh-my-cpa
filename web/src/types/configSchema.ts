@@ -174,6 +174,9 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
       'codexDisableCloaking',
       'codexOptimizeMultiAgentV2',
       'codexEnableApplyPatch',
+      'codexWebSearchCacheEnabled',
+      'codexWebSearchCacheTtl',
+      'codexWebSearchCacheLimit',
       'codexOrphanDelegationCompatibility',
       'codexModelLevelCooling',
       'codexStreamBootstrapBuffering',
@@ -1028,6 +1031,42 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'switch',
     defaultValue: false,
     keywords: ['codex', 'apply', 'patch', 'freeform', 'tool'],
+  },
+  // CPA decodes this mapping strictly: `enabled` must be a boolean, `ttl` a
+  // string or whole seconds and `limit` an integer, and any other key is
+  // refused. The string box therefore writes the TTL as text, which CPA accepts
+  // for whole seconds as well as durations.
+  {
+    id: 'codexWebSearchCacheEnabled',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_web_search_cache',
+    descKey: 'cfg.f_codex_web_search_cache_desc',
+    yamlPath: ['client', 'codex', 'web-search-result-cache', 'enabled'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'web', 'search', 'cache', 'responses'],
+  },
+  {
+    id: 'codexWebSearchCacheTtl',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_web_search_cache_ttl',
+    descKey: 'cfg.f_codex_web_search_cache_ttl_desc',
+    yamlPath: ['client', 'codex', 'web-search-result-cache', 'ttl'],
+    type: 'string',
+    placeholderKey: '24h',
+    keywords: ['codex', 'web', 'search', 'cache', 'ttl'],
+  },
+  {
+    id: 'codexWebSearchCacheLimit',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_web_search_cache_limit',
+    descKey: 'cfg.f_codex_web_search_cache_limit_desc',
+    yamlPath: ['client', 'codex', 'web-search-result-cache', 'limit'],
+    type: 'number',
+    min: 0,
+    defaultValue: 1024,
+    unitKey: 'cfg.unit_entries',
+    keywords: ['codex', 'web', 'search', 'cache', 'limit'],
   },
   {
     id: 'codexOrphanDelegationCompatibility',

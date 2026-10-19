@@ -363,3 +363,48 @@ test('clearing the Claude session date pin restores the omitted key instead of s
     { path: ['upstream', 'claude', 'session-date-pin-days'], value: 7 },
   ]);
 });
+
+const WEB_SEARCH_CACHE_YAML = `client:
+    codex:
+        optimize-multi-agent-v2: true
+        web-search-result-cache:
+            enabled: true # opted in
+            ttl: 1800
+`;
+
+test('the web search result cache edits one leaf at a time beside its siblings', () => {
+  const server = parseDocument(WEB_SEARCH_CACHE_YAML);
+  assert.equal(getFieldSemanticValue(server, field('codexWebSearchCacheEnabled')), true);
+  assert.equal(getFieldSemanticValue(server, field('codexWebSearchCacheTtl')), 1800);
+  assert.equal(getFieldSemanticValue(server, field('codexWebSearchCacheLimit')), 1024, 'an omitted limit reads as the default');
+
+  const draft = parseDocument(WEB_SEARCH_CACHE_YAML);
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheLimit'), 1024);
+  assert.deepEqual(computeConfigChanges(server, draft), [], 'confirming the default limit writes nothing');
+
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheEnabled'), false);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['client', 'codex', 'web-search-result-cache', 'enabled'], value: false },
+  ], 'an explicit false is written at its own path and leaves the TTL in place');
+
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheEnabled'), true);
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheTtl'), '');
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['client', 'codex', 'web-search-result-cache', 'ttl'], remove: true },
+  ], 'a cleared TTL drops the key so CPA reads its 24h default');
+});
+
+test('the web search result cache writes the TTL as text and the limit as an integer', () => {
+  // CPA's decoder refuses a non-integer limit and accepts the TTL as a string or
+  // whole seconds, so typed seconds must reach the YAML as text, not as a float.
+  const server = parseDocument('client:\n    codex:\n        optimize-multi-agent-v2: true\n');
+  const draft = parseDocument('client:\n    codex:\n        optimize-multi-agent-v2: true\n');
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheTtl'), '1800');
+  updateFieldWithBaseline(draft, server, field('codexWebSearchCacheLimit'), 0);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['client', 'codex', 'web-search-result-cache'], value: { ttl: '1800', limit: 0 } },
+  ]);
+  const reloaded = parseDocument(draft.toString());
+  assert.equal(reloaded.getIn(['client', 'codex', 'web-search-result-cache', 'ttl']), '1800');
+  assert.equal(reloaded.getIn(['client', 'codex', 'optimize-multi-agent-v2']), true);
+});
