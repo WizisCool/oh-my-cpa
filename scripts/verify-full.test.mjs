@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runFullVerification } from './verify-full.mjs';
+import { runFullVerification } from './verify-full.ts';
 
 async function runFixture(failedLabels, isSerial = false) {
   const groups = [];

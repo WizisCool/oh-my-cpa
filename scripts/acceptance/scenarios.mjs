@@ -635,7 +635,7 @@ export const SCENARIOS = [
    *
    * `hasTouch` is the whole point of this scenario: the rules live in `@media (pointer: coarse)`
    * and `@media (hover: none)`, so on an ordinary context they are never exercised and the
-   * scenario would pass while testing nothing. See `createProbePage` for why it is `hasTouch`
+   * scenario would pass while testing nothing. The context sets `hasTouch`
    * without Playwright's `isMobile`.
    */
   {

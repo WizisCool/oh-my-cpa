@@ -1,4 +1,5 @@
-import { until } from './harness.mjs';
+import { until, settleLayout } from './harness.mjs';
+import { expect } from '@playwright/test';
 import { FAKE_CPA_MANAGEMENT_KEY } from '../fake-cpa.mjs';
 
 /**
@@ -122,7 +123,16 @@ export async function runConfigurationPluginsAcceptance({
     .first();
   let payloadRuleAdded = false;
   try {
-    await overrideRawPanel.locator('.ant-collapse-header').first().click();
+    const header = overrideRawPanel.locator('.ant-collapse-header').first();
+    await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    // Disclosure state commits before its expansion geometry; sampling a moving
+    // button can deliver pointer-up to a different control. Wait for the panel,
+    // not a version-specific Ant Design content wrapper.
+    await settleLayout(page);
+    await until(() => overrideRawPanel.evaluate(panel =>
+      panel.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')),
+    { label: 'payload disclosure fully expanded' });
     await overrideRawPanel
       .locator('.payload-empty-box button, .payload-add-rule-footer button')
       .filter({ hasText: /添加规则|Add Rule/ })

@@ -997,7 +997,10 @@ export async function systemInformationPage({ base, page, check }) {
           .filter({ hasText: '简体中文' })
           .first();
         if ((await languageItem.count()) === 1) {
-          await languageItem.click();
+          // This setup owns result-state persistence across a language change,
+          // not pointer stacking between a header tooltip and its open menu.
+          await languageItem.focus();
+          await languageItem.press('Enter');
           // Awaited rather than slept on: the card's own text is the evidence that the new catalog
           // actually took effect, which is what makes the effect re-run this check is about.
           await until(

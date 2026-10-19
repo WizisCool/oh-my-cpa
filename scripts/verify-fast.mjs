@@ -90,7 +90,7 @@ export async function runFastChecks(argv) {
     console.log(`[fast] changes relative to ${options.base}:`);
     for (const file of files) console.log(`  ${file}`);
     for (const id of selected) console.log(`  [${id}] ${CHECK_COMMANDS[id].label}`);
-    if (selected.includes('logic')) execFileSync(process.execPath, ['scripts/test-logic.mjs', '--files', JSON.stringify(files), '--plan'], {cwd:root, stdio:'inherit'});
+    if (selected.includes('logic')) execFileSync(process.execPath, ['--import', 'tsx', 'scripts/testing/logic.ts', '--files', JSON.stringify(files), '--plan'], {cwd:root, stdio:'inherit'});
     return true;
   }
 

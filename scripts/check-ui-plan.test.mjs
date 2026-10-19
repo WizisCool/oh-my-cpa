@@ -183,8 +183,10 @@ test('a change to the probe framework itself widens the plan', () => {
     'scripts/acceptance/probes/dashboardCharts.mjs',
     'scripts/acceptance/probes/usageRecords.mjs',
     'scripts/acceptance/check-ui-plan.mjs',
-    'scripts/browser-probes.mjs',
-    'scripts/check-ui.mjs',
+    'scripts/testing/probes.ts',
+    'scripts/acceptance/tests/catalog.spec.ts',
+    'scripts/acceptance/tests/harness.spec.ts',
+    'scripts/check-ui.ts',
   ]) {
     const plan = planScenarios([file], ALL);
     assert.deepEqual(plan.ids, ALL, `${file} widens the plan`);

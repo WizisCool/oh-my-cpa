@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 import { fulfillFixture } from '../browser-guard.mjs';
 import fs from 'node:fs';
 
@@ -723,7 +724,7 @@ export async function requestListInteractions({ base, page, check }) {
     });
     // The mounted window is what must stay bounded; it settles asynchronously, so
     // the count is read after the virtualizer stops changing it.
-    await sleep(400);
+    await expect(page.locator('.request-row .req-time-sub-id').last()).toHaveText(interactionRecords.at(-1).request_id);
     const mounted = await page.locator('.request-row').count();
     check('the virtualized window stays bounded at the bottom', mounted > 0 && mounted < 40, `rows=${mounted}`);
     await cellPopup.waitFor({ state: 'hidden' });
@@ -751,6 +752,10 @@ export async function requestListInteractions({ base, page, check }) {
     await until(async () => (await page.locator('.request-group-title').count()) > 0 &&
       (await page.locator('.request-row .req-time-sub-id').first().innerText()) === interactionRecords[0].request_id,
     { label: `first row after ${label}` });
+    // The first row is identical in both groupings. Observing it can release a
+    // stale holder that React is about to replace; the new group title cannot.
+    if (label === 'By client') await expect(page.locator('.request-group-title strong').first()).toHaveText('Client not recorded');
+    else await expect(page.locator('.request-group-title strong').first()).not.toHaveText('Client not recorded');
     const holder = page.locator('.request-list [class*="-holder"]').first();
     await holder.evaluate((element) => { element.scrollTop = element.scrollHeight; });
     const hasReachedLast = await until(async () => (await page.locator('.request-row .req-time-sub-id').last().innerText()) === lastRequestId,

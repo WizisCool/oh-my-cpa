@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
-import { validateArtifactGates, validateBrowserPhases, validateProbeJobs, validateActionSecurity } from './workflow-checks.mjs';
+import { validateArtifactGates, validateBrowserPhases, validateProbeJobs, validateActionSecurity, validateStaticJobs } from './workflow-checks.mjs';
 
 import { validateReleaseWorkflow } from './release-workflow.mjs';
 import { validateMaintenanceWorkflow } from './maintenance-workflow.mjs';
@@ -37,6 +37,7 @@ if (document.errors.length > 0) {
   // on a failed shard is each refused.
   validateBrowserPhases(browserSteps);
   validateProbeJobs(value.jobs);
+  validateStaticJobs(value.jobs);
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('install-chromium.mjs') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');

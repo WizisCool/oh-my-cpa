@@ -442,8 +442,9 @@ const PROBE_FRAMEWORK = [
   // of these a scenario really runs is `probe-impact.mjs`'s question, answered from
   // the import graph; without that context every one of them widens the plan.
   'scripts/acceptance/',
-  'scripts/browser-probes.mjs',
-  'scripts/check-ui.mjs',
+  'scripts/testing/',
+  'tsconfig.tooling.json',
+  'scripts/check-ui.ts',
 ];
 
 export function isProbeFramework(file) {

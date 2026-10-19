@@ -11,7 +11,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright-core';
+import { chromium, errors } from 'playwright-core';
 import {
   createFakeCpaServer,
   FAKE_ACCOUNT_SECRET,
@@ -399,13 +399,32 @@ try {
   if (!p0Only) {
     await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: providerSecrets });
 
-    // The pricing page must open fast: a full table render is the budget, not a
-    // spinner wait. This is the regression guard for the old 5s page freeze.
-    const pricingOpenStart = Date.now();
-    await page.goto(`${appURL}/pricing`);
-    await page.locator('[data-testid="pricing-page"]').first().waitFor({ state: 'visible', timeout: 3000 });
-    const pricingOpenMS = Date.now() - pricingOpenStart;
-    check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
+    // Measure the rendered table on the browser's navigation clock. Host-side
+    // protocol scheduling and unrelated load-event resources are not render freezes.
+    await page.addInitScript(() => {
+      if (!location.pathname.endsWith('/pricing')) return;
+      const observer = new MutationObserver(() => {
+        const edit = document.querySelector('[data-testid="pricing-row-edit"]');
+        if (!edit || edit.getBoundingClientRect().height <= 0) return;
+        window.__OMC_PRICING_READY_MS__ = performance.now();
+        observer.disconnect();
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    });
+    await page.goto(`${appURL}/pricing`, { waitUntil: 'commit' });
+    const pricingCheck = 'pricing table is usable within 3s of navigation';
+    let pricingReady;
+    try {
+      pricingReady = await page.waitForFunction(() => window.__OMC_PRICING_READY_MS__, undefined, { timeout: 3000 });
+    } catch (error) {
+      if (!(error instanceof errors.TimeoutError)) throw error;
+      check(pricingCheck, false, 'table was not ready within 3s of committed navigation');
+    }
+    if (pricingReady) {
+      const pricingOpenMS = await pricingReady.jsonValue();
+      await pricingReady.dispose();
+      check(pricingCheck, pricingOpenMS < 3000, `${Math.round(pricingOpenMS)}ms`);
+    }
 
     // The in-place editor keeps rates labelled and denominated without leaving the book.
     await page.locator('[data-testid="pricing-row-edit"]').first().click();

@@ -7,7 +7,7 @@ const EXTENSIONS = ['', '.ts', '.tsx', '.mjs', '.js', '.json', '/index.ts', '/in
 
 /** Development-only selection. Opaque suites always run; unowned changes widen to all. */
 export function planLogicSuites(files, suites, root) {
-  if (!files || files.some(file => /^(?:package\.json|pnpm-|web\/(?:package\.json|tsconfig|vite\.config)|scripts\/(?:ts-resolve|test-logic|logic-plan|verify-fast))/.test(file))) return suites;
+  if (!files || files.includes('tsconfig.tooling.json') || files.some(file => /^(?:package\.json|pnpm-|web\/(?:package\.json|tsconfig|vite\.config)|scripts\/(?:testing\/|logic-plan|verify-fast))/.test(file))) return suites;
   const relevant = files.filter(file => /\.(?:ts|tsx|js|mjs|json)$/.test(file));
   if (relevant.length === 0) return suites;
   const selected = new Set();

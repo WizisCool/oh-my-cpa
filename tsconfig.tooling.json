@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "scripts/testing/**/*.ts",
+    "scripts/check-demo.ts",
+    "scripts/*.test.ts",
+    "scripts/acceptance/tests/**/*.ts",
+    "scripts/check-ui.ts",
+    "scripts/verify-full.ts",
+    "scripts/verify-static.ts"
+  ]
+}

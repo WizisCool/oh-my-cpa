@@ -1,6 +1,6 @@
 # ADR 0095: Frame-timing probes run alone
 
-- Status: Accepted
+- Status: Accepted; execution ownership updated for Playwright Test on 2026-10-20
 - Date: 2026-10-12
 - Amends: ADR 0091's two-worker scheduling, for scenarios that assert motion frame by frame.
 
@@ -22,10 +22,10 @@ A retry or a looser threshold would also admit part of the defect each check exi
 1. A scenario that asserts motion frame by frame is marked `shouldRunAlone` in
    `scripts/acceptance/scenarios.mjs`, with its reason beside the mark. Today that is
    `scroll-smoothing` and `request-list-touch`.
-2. `runScenarioQueue` (`scripts/acceptance/probe-scheduler.mjs`) runs every other scenario
-   of the batch with the configured concurrency first, then the marked ones one at a time.
-   A failure in the shared part still runs them, and every error is reported.
-3. Thresholds, budgets, watchdogs, shard membership and catalog-order verdicts are unchanged.
+2. `scripts/testing/probes.ts` runs shared scenarios with the configured Playwright Test
+   worker count first, then invokes the marked scenarios with one worker. A failure in
+   the shared part still runs the exclusive part, and every verdict is retained.
+3. Frame thresholds, per-scenario budgets and shard membership remain protected; the native runner owns deadlines and reports.
    Marking a scenario is not a way to make a flaky one pass: it is for a scenario whose claim
    is about frames, with the frame-level reason stated.
 

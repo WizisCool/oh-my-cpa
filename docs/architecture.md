@@ -2034,7 +2034,8 @@ carries a revision stamped when the window is defined and on each manual refresh
 and nothing else: a filter change keeps the cached entry, because the facet read
 carries no filter, while a re-entered preset or a refresh is never answered from an
 entry still inside its `staleTime`.
-`scripts/browser-probes.mjs` asserts this directly: a manual refresh issues
+The `refresh-sequencing` scenario in `scripts/acceptance/scenarios.mjs` asserts this
+directly through `refreshRecords`: a manual refresh issues
 a `POST` to `/usage/ingest/refresh` *and the list and facet reads wait for it*.
 Request counts alone cannot establish that ordering — a page that fired all three
 in parallel would still issue all three — so the probe holds the pull's response
@@ -2667,7 +2668,7 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Cross-stack smoke | `pnpm verify:browser:smoke` | A local quick check of the thin path: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
 | Focused local cross-stack acceptance | `pnpm verify:browser:p0` | An optional focused local lane: the smoke path and its checks, then the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, and the unified OAuth management workspace. |
-| Browser-only probes | `pnpm verify:probes` | The full scenario catalog on the Vite dev server with mocked routes; this is not built-artifact coverage. CI runs it as three weight-balanced shards (`--shard i/3`) on every pull request and master push. Complete local catalogs reuse that partition in sequential batches through `scripts/acceptance/probe-batches.mjs`, with at most two independent contexts inside a batch (`--workers 1` for serial reproduction), retaining the watchdog, all verdicts and failure artifacts. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
+| Browser-only probes | `pnpm verify:probes` | The full scenario catalog on the Vite dev server with mocked routes; this is not built-artifact coverage. CI runs it as three weight-balanced shards (`--shard i/3`) on every pull request and master push. Complete local catalogs reuse the three CI partitions sequentially. Playwright Test executes shared scenarios with at most two isolated workers (`--workers 1` for serial reproduction), then marked frame-timing scenarios alone; the native runner owns budgets, cleanup and reports, while project fixtures retain strict runtime/network fault checks and failure artifacts. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
 | Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler served in-process, or an explicit deployment URL. Every route must complete its initial reads and render its page heading and content, with no API, transport or script errors. |
 | Go demo smoke | `pnpm verify:demo:go` | Separate coverage of the binary's demo mode: isolated settings, read-only refusals and permitted non-durable edits. This opt-in command is not part of `verify:full`. |
 
@@ -2679,8 +2680,8 @@ own sharded job on both events, behind one aggregate `probes` check (ADR 0032).
 
 `check:ui` and `verify:probes` run the **same scenarios** from
 `scripts/acceptance/scenarios.mjs`, ordered under `scripts/acceptance/probes/`.
-Both call the Vite dev-server harness in `scripts/acceptance/probe.mjs` with
-mocked endpoints. The difference is selection: `check:ui` selects affected scenarios
+Both delegate to Playwright Test through `scripts/testing/probes.ts`, with native
+Vite process ownership and context-local API fixtures from `scripts/acceptance/probe.mjs`. The difference is selection: `check:ui` selects affected scenarios
 (or an explicit scenario), while `verify:probes` runs the complete catalog.
 
 Neither substitutes for built-artifact acceptance. Production path resolution,
@@ -2804,19 +2805,24 @@ broad gates rather than nothing.
   context is granted no clipboard permission on purpose - granting it would stop the
   acceptance from exercising the fallback at all.
 
-### 12.2 Where the wall clock actually goes
+### 12.2 Execution cost and isolation
 
-Earlier profiling established that assertion count was not the cost, and reducing it did not by itself make the
-browser suite faster. Measured per line, the acceptance run's time sits in
-navigations, `waitFor` round trips and one ten-second cadence wait - which is why
-the useful levers were structural rather than subtractive:
+Browser startup, module delivery, navigation and layout dominate acceptance cost.
+Deleting assertions does not remove those costs. Execution ownership keeps routine
+feedback narrow and the full gates independent:
 
-| Lever | Effect |
+| Boundary | Execution policy |
 | --- | --- |
-| Fold four standalone Chromium probes into one shared server and browser, each scenario in its own context | Four dev servers and four browsers become one each |
-| Move the focused probes into `verify:full` | They were in no gate at all; a guarded invariant nobody runs is not guarded |
-| Fix the suite's CPU-sensitive reads, then run the two browser phases concurrently | About 12s on a 2-CPU runner, about 14s on four cores |
-| Remove the deletion window from the embedded-distribution sync | Not a speed fix: it removes a race between `pnpm build` and the Go gates, which is what made overlapping them safe to keep |
+| Local static work | Affected checks; incremental frontend types and strict tooling types |
+| Local UI work | Affected catalog scenarios on Vite with context-local API fixtures |
+| Full hosted static coverage | Separate Go, frontend and repository runners behind the fail-closed `static` aggregate |
+| Probe catalog | Playwright Test workers, fresh scenario contexts and invocation-owned Vite; three reviewed CI partitions |
+| Frame-level probes | One uncontended worker after the shared scenarios, within the same partition deadline |
+| Full local browser coverage | Harness, built acceptance, probes and demo run consecutively because they share the host's CPU |
+| Embedded distribution | Build settles before static Go readers enumerate embedded paths |
+
+Hosted critical-path and runner-cost improvements require matched hosted runs; local
+warm-cache timings alone do not establish either.
 
 Current wait removal is narrower than changing browser clocks. Demo navigation waits
 for successful, completed initial reads and visible page content, with explicit
@@ -3127,7 +3133,7 @@ labelled and linked by, while the two instants beside it are the day's own bound
 by different amounts they describe different days. The grid itself is captured on the
 seeded history's calendar rather than on the export machine's, since it is the one read
 whose window is derived from a clock rather than taken from the request. And the dataset's coverage is a
-gate rather than an instruction: `scripts/check-demo.mjs` fails when a console route
+gate rather than an instruction: `scripts/check-demo.ts` fails when a console route
 has no captured reads, when a source it derives from has changed, or when it carries a
 value that must not be public. That last check matters because the dataset is
 downloadable by anyone.

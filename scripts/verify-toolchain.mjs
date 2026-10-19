@@ -44,6 +44,7 @@ check('Go', goVersion, versions.go.version);
 check('pnpm', pnpmVersion, versions.pnpm.version);
 check('@ant-design/cli', packageVersion('@ant-design/cli'), versions.antDesignCli.version);
 check('playwright-core', packageVersion('playwright-core'), versions.playwrightCore.version);
+check('@playwright/test', packageVersion('@playwright/test'), versions.playwrightCore.version);
 
 const browsers = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', 'playwright-core', 'browsers.json'), 'utf8'));
 const chromium = browsers.browsers.find((browser) => browser.name === 'chromium');

@@ -37,9 +37,9 @@ export const CHECK_IDS = [
 ];
 
 const WEB_TEST_INFRASTRUCTURE = [
-  'scripts/ts-resolve.mjs',
   'scripts/verify-fast.mjs',
-  'scripts/test-logic.mjs',
+  'scripts/testing/logic.ts',
+  'tsconfig.tooling.json',
 ];
 
 const DEPENDENCY_INPUTS = new Set([
@@ -64,6 +64,9 @@ function planFileChecks(file) {
   if (file.endsWith('.md')) add('docs');
   if (file.startsWith('.github/workflows/') || file === 'scripts/validate-workflow.mjs') add('workflow');
   if (file.startsWith('scripts/') || file.startsWith('deploy/cloudflare/')) add('self-tests');
+  // allowJs infers exported JS signatures consumed by typed orchestration.
+  if ((/^(?:scripts|deploy\/cloudflare)\//.test(file) && /\.(?:mjs|ts)$/.test(file))
+      || file === 'tsconfig.tooling.json') add('type-check');
   if ((file.startsWith('scripts/') && file.endsWith('.ts'))
       || WEB_TEST_INFRASTRUCTURE.includes(file)) add('logic');
   if (/^web\/(?:vite\.config\.|tsconfig)/.test(file)) add(...FRONTEND_CHECKS, 'self-tests');

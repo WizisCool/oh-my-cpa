@@ -50,8 +50,8 @@ test('CI runs full built acceptance once on every event', () => {
 test('action pinning and credential isolation are invariant', () => {
   validateActionSecurity(workflow);
   for (const mutate of [
-    value => { value.jobs.static.steps[0].uses = 'actions/checkout@v7'; },
-    value => { delete value.jobs.static.steps[0].with['persist-credentials']; },
+    value => { value.jobs['static-checks'].steps[0].uses = 'actions/checkout@v7'; },
+    value => { delete value.jobs['static-checks'].steps[0].with['persist-credentials']; },
   ]) {
     const broken = structuredClone(workflow); mutate(broken);
     assert.throws(() => validateActionSecurity(broken));

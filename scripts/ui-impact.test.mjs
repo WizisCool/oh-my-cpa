@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
 import { buildImporterGraph, isCatalogAdditionOnly, isManifestScriptsOnly } from './acceptance/ui-impact.mjs';
@@ -379,7 +380,7 @@ test('every page the router loads has a scenario rule', () => {
 
 test('the real registry can be attributed', () => {
   const registry = fs.readFileSync(new URL('./acceptance/scenarios.mjs', import.meta.url), 'utf8');
-  const acceptanceFiles = execFileSync('git', ['ls-files', 'scripts/acceptance'], { encoding: 'utf8' }).split('\n').filter((file) => file.endsWith('.mjs'));
+  const acceptanceFiles = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance', 'scripts/testing'], { encoding: 'utf8' }).split('\n').filter(file => /\.(?:mjs|ts)$/.test(file));
   const result = planProbeChange(['scripts/acceptance/scenarios.mjs'], {
     readBase: () => registry,
     readCurrent: (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined),
@@ -392,13 +393,16 @@ test('the real registry can be attributed', () => {
 test('every module the real runner imports selects the whole catalog', () => {
   // Read from the runner's own imports rather than a list, so a helper added to it
   // tomorrow is held to the same rule without anyone naming it here.
-  const acceptanceFiles = execFileSync('git', ['ls-files', 'scripts/acceptance'], { encoding: 'utf8' }).split('\n').filter((file) => file.endsWith('.mjs'));
+  const acceptanceFiles = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance', 'scripts/testing'], { encoding: 'utf8' }).split('\n').filter(file => /\.(?:mjs|ts)$/.test(file));
   const read = (file) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
   const probeChange = (files) => planProbeChange(files, { readBase: read, readCurrent: read, acceptanceFiles });
-  const helpers = ['scripts/acceptance/probe.mjs', 'scripts/acceptance/probe-batches.mjs', 'scripts/browser-probes.mjs']
-    .flatMap((runner) => [...read(runner).matchAll(/from '\.\/(?:acceptance\/)?([\w-]+\.mjs)'/g)].map(([, name]) => `scripts/acceptance/${name}`))
-    .filter((file) => fs.existsSync(file) && file !== 'scripts/acceptance/scenarios.mjs' && file !== 'scripts/acceptance/probe-shards.mjs');
-  assert.ok(helpers.includes('scripts/acceptance/browser-guard.mjs') && helpers.includes('scripts/acceptance/lifecycle.mjs'), helpers.join(', '));
+  const modules = ['scripts/acceptance/probe.mjs', ...fs.readdirSync('scripts/testing')
+    .filter(file => /^(?:probe[^/]*|vite-server|harness)\.ts$/.test(file)).map(file => `scripts/testing/${file}`)];
+  const helpers = modules.flatMap(module => [...read(module).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/g)]
+    .map(([, specifier]) => path.posix.normalize(path.posix.join(path.posix.dirname(module), specifier))))
+    .filter(file => file.startsWith('scripts/acceptance/') && fs.existsSync(file)
+      && file !== 'scripts/acceptance/scenarios.mjs' && file !== 'scripts/acceptance/probe-shards.mjs');
+  assert.ok(helpers.includes('scripts/acceptance/browser-guard.mjs') && helpers.includes('scripts/acceptance/preferences-fixture.mjs'), helpers.join(', '));
   for (const file of new Set(helpers)) {
     assert.deepEqual(planScenarios([file], ALL, { probeChange }).ids, ALL, `${file} runs inside every scenario`);
     assert.deepEqual(planScenarios([file], ALL).ids, ALL, `${file} widens without attribution context`);
@@ -411,11 +415,12 @@ test('the real phone sweep and unrelated probes retain separate attribution', ()
   const acceptanceFiles = fs.readdirSync('scripts/acceptance/probes').filter((file) => file.endsWith('.mjs'))
     .map((file) => `scripts/acceptance/probes/${file}`);
   acceptanceFiles.push('scripts/acceptance/scenarios.mjs', 'scripts/acceptance/probe.mjs',
-    'scripts/acceptance/probe-batches.mjs', 'scripts/acceptance/probe-shards.mjs');
+    'scripts/testing/probe-fixtures.ts', 'scripts/acceptance/probe-shards.mjs');
   const read = (file) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
   const options = { readBase: read, readCurrent: read, acceptanceFiles };
-  assert.ok(planProbeChange(['scripts/acceptance/probe-batches.mjs'], options).all,
-    'batch orchestration is part of the runner, so it cannot silently narrow coverage');
+  for (const file of ['scripts/testing/probe-fixtures.ts', 'scripts/acceptance/tests/catalog.spec.ts', 'scripts/acceptance/tests/harness.spec.ts']) {
+    assert.ok(planProbeChange([file], options).all, `${file} owns native execution and must retain every scenario`);
+  }
   const sweep = planProbeChange(['scripts/acceptance/probes/mobileConsole.mjs'], options);
   assert.equal(sweep.all, undefined);
   assert.deepEqual([...sweep.ids], ['mobile-console']);
@@ -439,4 +444,36 @@ test('a production import of out-of-graph test infrastructure is unresolved and 
   const actual = buildImporterGraph();
   assert.deepEqual(actual.unresolved, []);
   assert.ok([...actual.importers.keys()].every(file => file.startsWith('web/src/')));
+});
+
+
+test('TypeScript domain helpers retain narrow attribution while native fixture imports widen', () => {
+  const sources = {
+    ...PROBES,
+    'scripts/acceptance/scenarios.mjs': REGISTRY.replace('./probes/alpha.mjs', './probes/alpha.ts'),
+    'scripts/acceptance/probes/alpha.ts': "import { helper } from '../typed-helper.ts'; export const alpha = helper;",
+    'scripts/acceptance/typed-helper.ts': 'export const helper: number = 1;',
+    'scripts/testing/probe-fixtures.ts': "import { fixture } from '../acceptance/native-helper.ts';",
+    'scripts/acceptance/native-helper.ts': 'export const fixture: number = 1;',
+  };
+  const options = {
+    readBase: (file) => sources[file], readCurrent: (file) => sources[file],
+    acceptanceFiles: Object.keys(sources),
+  };
+  assert.deepEqual([...planProbeChange(['scripts/acceptance/typed-helper.ts'], options).ids], ['first']);
+  assert.ok(planProbeChange(['scripts/acceptance/native-helper.ts'], options).all);
+});
+
+test('logic-only tooling stays outside the browser catalog while native execution changes widen', () => {
+  const acceptanceFiles = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance', 'scripts/testing'], { encoding: 'utf8' })
+    .split('\n').filter(file => /\.(?:mjs|ts)$/.test(file));
+  const read = file => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+  const options = { readBase: read, readCurrent: read, acceptanceFiles };
+  const impact = { probeChange: files => planProbeChange(files, options) };
+  for (const file of ['scripts/testing/logic.ts', 'scripts/testing/repository.ts', 'scripts/testing/checks.ts']) {
+    assert.deepEqual(planScenarios([file], ALL, impact).ids, [], file);
+  }
+  for (const file of ['scripts/testing/probe-config.ts', 'scripts/testing/probe-fixtures.ts', 'scripts/testing/vite-server.ts', 'scripts/testing/harness.ts']) {
+    assert.deepEqual(planScenarios([file], ALL, impact).ids, ALL, file);
+  }
 });

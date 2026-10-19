@@ -37,8 +37,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createProbeChecker } from './acceptance/probe.mjs';
-import { runProbeBatches } from './acceptance/probe-batches.mjs';
+import { runProbeCatalog } from './testing/probes.ts';
 import { parseProbeWorkers } from './acceptance/probe-options.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
@@ -52,8 +51,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // into a loud failure rather than a silent rebind.
 const PORT = 5181;
 
-function parseArgs(argv) {
-  const options = { all: false, list: false, plan: false, scenario: undefined, base: 'HEAD', workers: 2 };
+function parseArgs(argv: string[]) {
+  const options: { all: boolean; list: boolean; plan: boolean; scenario?: string; base: string; workers: number } = { all: false, list: false, plan: false, base: 'HEAD', workers: 2 };
   let hasWorkers = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -76,7 +75,7 @@ function parseArgs(argv) {
  * against a ref keeps the fast path usable between commits, which is where it is
  * most useful.
  */
-function changedFiles(base) {
+function changedFiles(base: string) {
   // `--no-renames` lists both sides of a rename, so a moved module is placed by its
   // old path's importers as well as its new one.
   const tracked = execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', base], {
@@ -117,19 +116,19 @@ if (options.scenario !== undefined && !ids.includes(options.scenario)) {
 const files = changedFiles(options.base);
 // The import graph costs a few seconds of transpiling, so it is built only when the
 // selection is actually being planned.
-const readCurrent = (file) => (fs.existsSync(path.join(root, file)) ? fs.readFileSync(path.join(root, file), 'utf8') : undefined);
-const readBase = (file) => readAtRef(options.base, file);
+const readCurrent = (file: string) => (fs.existsSync(path.join(root, file)) ? fs.readFileSync(path.join(root, file), 'utf8') : undefined);
+const readBase = (file: string) => readAtRef(options.base, file);
 const needsImpact = !options.all && options.scenario === undefined && files.length > 0;
 const impact = needsImpact
   ? {
     ...buildImporterGraph(),
-    isAdditionOnly: (file) => isCatalogAdditionOnly(file, readBase(file), readCurrent(file)),
-    isManifestScriptsOnly: (file) => isManifestScriptsOnly(file, readBase(file), readCurrent(file)),
-    probeChange: (changed) => planProbeChange(changed, {
+    isAdditionOnly: (file: string) => isCatalogAdditionOnly(file, readBase(file), readCurrent(file)),
+    isManifestScriptsOnly: (file: string) => isManifestScriptsOnly(file, readBase(file), readCurrent(file)),
+    probeChange: (changed: string[]) => planProbeChange(changed, {
       readBase,
       readCurrent,
-      acceptanceFiles: execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance'], { cwd: root, encoding: 'utf8' })
-        .split('\n').filter((file) => file.endsWith('.mjs')),
+      acceptanceFiles: execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance', 'scripts/testing'], { cwd: root, encoding: 'utf8' })
+        .split('\n').filter((file) => /\.(?:mjs|ts)$/.test(file)),
     }),
   }
   : undefined;
@@ -168,31 +167,6 @@ if (selectedIds.length === 0) {
   process.exit(0);
 }
 
-const selected = SCENARIOS.filter((scenario) => selectedIds.includes(scenario.id));
-// The checker is quiet here: a focused run prints only failures, because the fast
-// path exists to answer "is it broken" and a screenful of PASS lines buries the answer.
-// The release gate creates a verbose checker, where the list of what ran is the evidence.
-const { check, failures } = createProbeChecker({ quiet: true });
-
-console.log(`Running ${selected.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
+console.log(`Running ${selectedIds.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
 console.log(`Reason: ${selectionReason}; workers: ${options.workers}\n`);
-
-// The runner reports one line per failure with the scenario's own name alongside it,
-// so a focused run is as diagnostic as a full one without printing every pass.
-const startedAt = Date.now();
-const { passed, failures: runFailures } = await runProbeBatches({
-  port: PORT,
-  concurrency: options.workers,
-  batchCount: selected.length === SCENARIOS.length ? 3 : 1,
-  scenarios: selected.map((scenario) => ({ ...scenario, check })),
-});
-for (const failure of runFailures) check(`scenario ${failure} completed`, false);
-for (const failure of runFailures) console.error(`  ${failure} needed attention`);
-
-const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-if (failures.length > 0) {
-  console.error(`\n${failures.length} check(s) failed across ${passed}/${selected.length} scenario(s) in ${seconds}s.`);
-  console.error('Diagnostics are in tmp/probe-failure/.');
-  process.exit(1);
-}
-console.log(`\n${selected.length} scenario(s) passed in ${seconds}s.`);
+if (!await runProbeCatalog({ port: PORT, workers: options.workers, ids: selectedIds })) process.exitCode = 1;

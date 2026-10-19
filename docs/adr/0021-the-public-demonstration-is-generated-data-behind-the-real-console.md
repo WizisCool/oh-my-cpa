@@ -46,7 +46,7 @@ the shape the product actually emits.
 
 A dataset that describes the API cannot be kept current by intention, because the
 failure is invisible - the page renders, showing what the API said last month.
-`scripts/check-demo.mjs` fails when a console route has no declared reads, when a read
+`scripts/check-demo.ts` fails when a console route has no declared reads, when a read
 has no captured response, when a file the dataset derives from has changed, or when the
 dataset carries a value that must not be public.
 

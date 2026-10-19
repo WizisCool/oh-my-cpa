@@ -110,9 +110,10 @@ test('editing a logic test suite runs the logic suites', () => {
 });
 
 test('editing the test harness runs the logic suites', () => {
-  for (const file of ['scripts/ts-resolve.mjs', 'scripts/test-logic.mjs']) {
+  for (const file of ['tsconfig.tooling.json', 'scripts/testing/logic.ts']) {
     const plan = planChecks([file]);
     assert.ok(plan.includes('logic'), `${file} must select the logic suites, got ${plan.join(',')}`);
+    assert.ok(plan.includes('type-check'), `${file} must select tooling types, got ${plan.join(',')}`);
   }
 });
 
@@ -128,7 +129,7 @@ test('any other tooling change runs the repository self-tests', () => {
   // fire while no rule selected anything. The family of change that can silently
   // break every gate was the one family nothing checked.
   for (const file of ['scripts/sync-web-dist.mjs', 'scripts/check-docs.mjs', 'scripts/secret-scan.mjs']) {
-    assert.deepEqual(planChecks([file]), ['self-tests'], `${file} selects the self-tests`);
+    assert.deepEqual(planChecks([file]), ['type-check', 'self-tests'], `${file} selects typed consumers and self-tests`);
   }
 });
 
@@ -191,12 +192,12 @@ test('no planned check for any representative path reaches the browser or a buil
     'cmd/oh-my-cpa/main.go',
     'migrations/004_something.sql',
     'scripts/test-usage-event-view.ts',
-    'scripts/ts-resolve.mjs',
+    'tsconfig.tooling.json',
     'scripts/verify-fast.mjs',
     'scripts/sync-web-dist.mjs',
     'scripts/check-docs.mjs',
     'scripts/browser-acceptance.mjs',
-    'scripts/browser-probes.mjs',
+    'scripts/testing/probes.ts',
     'docs/architecture.md',
     'README.md',
     '.github/workflows/ci.yml',
@@ -321,4 +322,11 @@ test('changed files include committed, staged, deleted, renamed and untracked pa
 test('a Go test edit also runs the fixed-wait ratchet', () => {
   assert.deepEqual(planChecks(['internal/usage/ingest/sync_test.go']), ['go', 'self-tests']);
   assert.deepEqual(planChecks(['internal/usage/ingest/runner.go']), ['go']);
+});
+
+
+test('JS signatures used by typed tooling select their consumers type check', () => {
+  for (const file of ['scripts/acceptance/browser-guard.mjs', 'scripts/acceptance/probe.mjs', 'deploy/cloudflare/routes.mjs']) {
+    assert.ok(planChecks([file]).includes('type-check'), file);
+  }
 });

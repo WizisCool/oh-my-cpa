@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks } from './parallel-checks.mjs';
+import type { Check, Execute } from './testing/checks.ts';
 import { parseProbePort } from './acceptance/probe-options.mjs';
 
-export async function runFullVerification({ execute = runChecks, isSerial = false, probePort } = {}) {
+export async function runFullVerification({ execute = runChecks, isSerial = false, probePort }: { execute?: Execute; isSerial?: boolean; probePort?: number } = {}) {
   if (probePort !== undefined) parseProbePort(probePort);
-  async function runGroup(checks) {
+  async function runGroup(checks: Check[]) {
     if (!isSerial) return execute(checks);
     let hasPassed = true;
     for (const check of checks) {
@@ -48,7 +49,8 @@ export async function runFullVerification({ execute = runChecks, isSerial = fals
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const arguments_ = process.argv.slice(2);
-  let isSerial = false, probePort;
+  let isSerial = false;
+  let probePort: number | undefined;
   for (let i = 0; i < arguments_.length; i += 1) {
     if (arguments_[i] === '--serial' && !isSerial) isSerial = true;
     else if (arguments_[i] === '--probe-port' && probePort === undefined) probePort = parseProbePort(arguments_[++i]);

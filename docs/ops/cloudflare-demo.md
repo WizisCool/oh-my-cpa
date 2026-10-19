@@ -138,7 +138,7 @@ in a way nobody notices: the page renders, showing what the API said last month.
 - the dataset contains an operator identifier, a credential shape or a deployment
   hostname. The dataset is downloadable by anyone, so this is a leak rather than a defect.
 
-`scripts/check-demo.test.mjs` covers the gate itself, because a check that cannot fail is
+`scripts/check-demo.test.ts` covers the gate itself, because a check that cannot fail is
 worse than no check.
 
 **When you change a console page or its API shape:** regenerate with

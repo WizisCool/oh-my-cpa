@@ -42,10 +42,10 @@ const BASELINE = {
   'internal/usage/ingest/polling_test.go': 1,
   'internal/usage/ingest/sync_test.go': 3,
   'scripts/acceptance/harness.mjs': 5,
-  // One rejecting budget timer; no successful assertion waits on it.
+  // The shared cadence helper is counted once; existing callers have their own budgets.
+  'scripts/acceptance/probe.mjs': 1,
+  // One rejecting lifecycle budget; no successful assertion waits on it.
   'scripts/acceptance/lifecycle.mjs': 1,
-  // Two deadline guards and the polling cadence of the condition helpers themselves.
-  'scripts/acceptance/probe.mjs': 4,
   'scripts/acceptance/probes/dashboardCharts.mjs': 5,
   'scripts/acceptance/probes/dashboardTokenHeatmap.mjs': 8,
 
@@ -55,7 +55,7 @@ const BASELINE = {
 
   'scripts/acceptance/probes/systemInformation.mjs': 2,
   'scripts/acceptance/probes/touchErgonomics.mjs': 3,
-  'scripts/acceptance/probes/usageRecords.mjs': 4,
+  'scripts/acceptance/probes/usageRecords.mjs': 3,
   'scripts/acceptance/usage-events/filterPanel.mjs': 1,
   'scripts/acceptance/usage-events/searchAndRejections.mjs': 1,
   'scripts/browser-acceptance.mjs': 1,
@@ -74,7 +74,7 @@ const GO_WAIT = /time\.Sleep\(/g;
 
 function testFiles() {
   const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard',
-    'scripts/acceptance', 'scripts/browser-acceptance.mjs', 'scripts/browser-live-smoke.mjs',
+    'scripts/acceptance', 'scripts/testing', 'scripts/browser-acceptance.mjs', 'scripts/browser-live-smoke.mjs',
     'scripts/demo-smoke.mjs', 'scripts/demo-readiness.mjs', 'scripts/verify-demo.mjs', '*_test.go'], { encoding: 'utf8' });
   return [...new Set(listed.split('\n'))].filter((file) => file && !file.endsWith('.test.mjs') && fs.existsSync(file));
 }

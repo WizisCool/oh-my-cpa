@@ -6,7 +6,7 @@
  * every file that could be involved: a digest over the whole repository would fail on
  * a documentation edit and train everyone to regenerate without reading.
  *
- * Both `generate-demo-data.mjs` and `check-demo.mjs` import this list so the two can
+ * Both `generate-demo-data.mjs` and `check-demo.ts` import this list so the two can
  * never drift apart.
  */
 export const INPUTS = [

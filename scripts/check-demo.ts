@@ -24,15 +24,12 @@
  */
 import { createHash } from 'node:crypto';
 import { INPUTS as demoInputs } from './demo-inputs.mjs';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-const DATASET = join(root, 'deploy', 'cloudflare', 'data', 'responses.json');
-const PROVENANCE = join(root, 'deploy', 'cloudflare', 'data', 'provenance.json');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // The digest inputs live in one module so the generator and this check cannot drift.
 const INPUTS = demoInputs;
@@ -43,7 +40,7 @@ const INPUTS = demoInputs;
  * same reason that check duplicates it: importing the router would make a missing route
  * unrepresentable, and representing it is the point.
  */
-const CONSOLE_ROUTES = [
+export const CONSOLE_ROUTES = [
   '/dashboard',
   '/model-square',
   '/playground',
@@ -67,7 +64,7 @@ const CONSOLE_ROUTES = [
  * A route maps to the dataset entries its page needs, so the check fails when a page's
  * data has no captured response even if the route itself renders.
  */
-const ROUTE_READS = {
+export const ROUTE_READS: Record<string, string[]> = {
   '/dashboard': ['overview', 'pricing-attention', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc', 'usage-routing', 'usage-live'],
   '/model-square': ['model-square', 'pricing', 'usage-facets'],
   '/playground': ['api-keys', 'playground-models', 'playground-run-active'],
@@ -107,7 +104,7 @@ const RECORDING_FORBIDDEN = [
   { pattern: /hmac:[0-9a-f]{16,}/, why: 'a client key fingerprint' },
 ];
 
-async function digestOfInputs() {
+async function digestOfInputs(root: string) {
   const hash = createHash('sha256');
   for (const name of INPUTS) {
     // A listed file that has been renamed is a broken contract, not a smaller digest:
@@ -122,26 +119,29 @@ async function digestOfInputs() {
   return hash.digest('hex');
 }
 
-async function main() {
-  const failures = [];
+export async function checkDemo(root = ROOT, {
+  consoleRoutes = CONSOLE_ROUTES,
+  routeReads = ROUTE_READS,
+}: { consoleRoutes?: string[]; routeReads?: Record<string, string[]> } = {}) {
+  const DATASET = join(root, 'deploy', 'cloudflare', 'data', 'responses.json');
+  const PROVENANCE = join(root, 'deploy', 'cloudflare', 'data', 'provenance.json');
+  const failures: string[] = [];
 
   if (!existsSync(DATASET)) {
-    console.error(`  FAIL no dataset at ${relative(root, DATASET)}; run pnpm demo:generate`);
-    process.exitCode = 1;
-    return;
+    return { failures: [`no dataset at ${relative(root, DATASET)}; run pnpm demo:generate`], responseCount: 0 };
   }
 
   const dataset = JSON.parse(await readFile(DATASET, 'utf8'));
   const responses = new Set(Object.keys(dataset.responses ?? {}));
 
   // 1. Coverage: every route the console has, and every read each one makes.
-  const coveredRoutes = Object.keys(ROUTE_READS);
-  for (const route of CONSOLE_ROUTES) {
+  const coveredRoutes = Object.keys(routeReads);
+  for (const route of consoleRoutes) {
     if (!coveredRoutes.includes(route)) {
-      failures.push(`${route} is a console route with no reads declared in check-demo.mjs`);
+      failures.push(`${route} is a console route with no reads declared in check-demo.ts`);
     }
   }
-  for (const [route, reads] of Object.entries(ROUTE_READS)) {
+  for (const [route, reads] of Object.entries(routeReads)) {
     for (const read of reads) {
       if (!responses.has(read)) {
         failures.push(`${route} needs "${read}", which the dataset does not contain`);
@@ -150,7 +150,7 @@ async function main() {
   }
 
   // 2. Freshness: the dataset must acknowledge the code it was generated from.
-  const digest = await digestOfInputs();
+  const digest = await digestOfInputs(root);
   if (!existsSync(PROVENANCE)) {
     failures.push('no provenance.json; run pnpm demo:generate');
   } else {
@@ -187,19 +187,22 @@ async function main() {
     }
   }
 
-  for (const failure of failures) console.error(`  FAIL ${failure}`);
-  if (failures.length > 0) {
-    process.exitCode = 1;
-    return;
-  }
-  console.log(
-    `the demonstration dataset is current: ${responses.size} responses covering ${CONSOLE_ROUTES.length} console routes`,
-  );
+  return { failures, responseCount: responses.size };
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(`check-demo: ${error.message}`);
-  process.exitCode = 1;
+export async function runDemoCheck(root = ROOT): Promise<number> {
+  try {
+    const { failures, responseCount } = await checkDemo(root);
+    for (const failure of failures) console.error(`  FAIL ${failure}`);
+    if (failures.length) return 1;
+    console.log(`the demonstration dataset is current: ${responseCount} responses covering ${CONSOLE_ROUTES.length} console routes`);
+    return 0;
+  } catch (error) {
+    console.error(`check-demo: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await runDemoCheck();
 }

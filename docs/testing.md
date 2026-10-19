@@ -25,14 +25,14 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | The claim is about | Layer | Where | Runs in |
 | --- | --- | --- | --- |
 | Server behaviour: handlers, DTO allowlists, redaction, auth, repository queries, migrations, write serialisation, background loops | Go test | `*_test.go` beside the package | `go test ./...` |
-| A frontend decision that is a pure function: URL/state derivation, formatting, poll and debounce policy, sorting, validation | Logic suite (`node:test`) | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
+| A frontend decision that is a pure function: URL/state derivation, formatting, poll and debounce policy, sorting, validation | Logic suite (Node test runner + tsx) | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
 | Rendered React wiring: QueryClient subscriptions, optimistic shared state, hook async ownership and provider-to-component integration | Component integration (Vitest + jsdom + RTL) | `web/tests/**/*.component.test.tsx`, with `web/vitest.config.ts` | `pnpm test:components`, affected `test:fast`, full static/CI |
 | Typed frontend transport versus a handler-certified wire corpus: methods, paths, JSON/null/error/auth semantics | API contract (Vitest Node + Go + fixture self-test) | `web/tests/**/*.contract.test.ts`, matching `internal/api/*_test.go` and `scripts/acceptance/contracts/` | `pnpm test:components`, `go test ./...`, `pnpm test:self`; full static/CI |
 | Something only a real browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint, page-level request ordering/navigation and dev-server integration | Probe scenario | a module under `scripts/acceptance/probes/` plus an entry in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI `probes` |
 | The built binary, embedded SPA, fake CPA and seeded SQLite together: sign-in, route rendering, secret boundaries, cross-stack writes | Cross-stack acceptance | the domain module under `scripts/acceptance/` | `pnpm verify:browser` (full suite on pull requests and master) |
 | The public demonstration | Demo acceptance | route table in `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
 | The Go binary's own demonstration mode: isolated settings, read-only refusals, permitted non-durable edits | Go demo smoke | `scripts/demo-smoke.mjs` | `pnpm verify:demo:go` (opt-in; not part of CI or `verify:full`) |
-| A repository script or gate itself | Script self-test (`node:test`) | `scripts/<name>.test.mjs` or `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
+| A repository script or gate itself | Script self-test (`node:test` + tsx) | `scripts/<name>.test.ts` (existing `.test.mjs` remains discoverable) or `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
 
 Rules that keep the suite fast and honest:
 
@@ -233,23 +233,21 @@ their own marker and React error-boundary diagnostics locally. Navigation cancel
 Allowed origins include scheme, host and port. HTTP and WebSocket interception
 covers popups, and service workers are blocked. Later fixture routes must fulfill or
 fallback, never continue past the guard. `pnpm verify:browser:harness` executes real
-negative scenarios through `runProbes`: unrelated passing assertions must not erase
+negative scenarios through the actual Playwright Test process: unrelated passing assertions must not erase
 runtime, method, unknown-route, outbound HTTP or socket faults. It is a built-browser
 CI and full-local gate, not a script self-test; Chromium never enters `test:fast`.
 
-The probe runner owns Vite through an unpredictable readiness header, rejects port
-collisions, uses a fresh context per scenario, and retains a 120-second scenario
-budget and the 480-second batch watchdog. Catalog entrypoints use at most two
-independent scenario contexts; `--workers 1` reproduces identical coverage serially.
-A scenario marked `shouldRunAlone`, one that asserts motion frame by frame, runs after
-the rest of its batch with no sibling (ADR 0095).
-Separate built/browser/demo lanes and separate local batches still never overlap.
-Each worker owns its fixture/error/late-fault ledger and outcome; failures are
-collated in catalog order, every admitted worker is joined before shared teardown,
-and shutdown stops new admission. The browser-harness gate executes negative faults
-in both modes and proves concurrent storage/cookie/preference/fault isolation. `scripts/acceptance/lifecycle.mjs` bounds
-shutdown and escalates owned process termination. Chromium is launched through
-BrowserServer so a stuck close has a real child process to terminate. Parallel local
+Playwright Test owns the Vite process group and waits for a nonce emitted by that
+child after a strict port bind and the selected critical module graph has been
+transformed through Vite's API. No page is executed in a browser as part of that preparation. A different worktree's HTTP response cannot establish
+readiness; startup failure and cancellation use the runner's native process cleanup.
+Each scenario owns a fresh context, fixtures and fault ledger. Test budgets remain
+120 seconds with one 480-second deadline per partition, shared across its native invocations. Shared scenarios use at most
+two workers; frame claims run afterwards with one uncontended worker (ADR 0095).
+The fault-injection gate verifies storage, cookie, preference and verdict isolation
+with one and two workers. Cross-stack acceptance retains its bounded BrowserServer
+lifecycle helpers; the probe path uses native runner lifecycle management.
+Parallel local
 checks spool output under `tmp/check-output`, print verdicts on completion, record
 structured timings under `tmp/check-timings`, and terminate their owned process
 groups on cancellation. At each run start, recognized output/timing files older than
@@ -304,9 +302,9 @@ run:
 | Test | Registration |
 | --- | --- |
 | Go test | none |
-| Logic suite `scripts/test-*.ts` | none: `scripts/test-logic.mjs` discovers the files |
+| Logic suite `scripts/test-*.ts` | none: `scripts/testing/logic.ts` discovers the files |
 | Frontend integration `web/tests/**/*.component.test.tsx` / `web/tests/**/*.contract.test.ts` | none: recursive discovery in `scripts/test-components.mjs` and the standalone Vitest config; empty discovery fails |
-| Script self-test `*.test.mjs` | none: `scripts/test-self.mjs` discovers them |
+| Script self-test `*.test.ts` / `*.test.mjs` | none: `scripts/testing/repository.ts` discovers them |
 | Probe scenario | an entry in `scripts/acceptance/scenarios.mjs` (unique `id`). Optionally its measured seconds in `scripts/acceptance/probe-weights.json`, which only affects shard balance |
 | New console page | a rule in `SCENARIO_PATHS` in `scripts/acceptance/check-ui-plan.mjs` naming the scenarios that load its route, or `scenarios: []` if none does. `scripts/ui-impact.test.mjs` fails until the rule exists |
 | Lucide package version change | `pnpm icons:generate`, commit `web/src/generated/lucideIcons.json`; `scripts/generate-lucide-icons.test.mjs` fails until the file matches the installed package |
@@ -339,15 +337,15 @@ there is no hand-maintained suite registration map. `pnpm test:logic --plan --fi
 '["web/src/utils/maskKey.ts"]'` inspects a selection. The default command and every
 final/CI static run still execute all suites.
 
-Watchdog and normal teardown share one owned cleanup promise. Shutdown closes scenario
-admission immediately, so a context disposed by the watchdog cannot start another
-scenario against an undefined browser. Cleanup failures remain failures. Failure-diagnostic capture is inside the owned
-cleanup boundary, so an artifact write cannot bypass process shutdown. Malformed
-timing JSON is preserved as an invalid artifact and fails the evidence verdict,
-while subsequent scenarios continue recording their timings.
+Native runner teardown drains contexts and reclaims owned processes on completion,
+startup failure and cancellation. Project fixtures check the fault ledger after context
+closure so late events cannot be erased by a passing test body. Malformed timing JSON
+is preserved as an invalid artifact, fails the reporter's final verdict and does not
+stop subsequent scenarios recording evidence. Missing/duplicate IDs fail the catalog
+adapter independently.
 
 Probe samples under `tmp/probe-timings/<port>.json` include scenario ID, verdict, elapsed time
-and named steps. Failure evidence is isolated under `tmp/probe-failure/<port>/`; the negative browser harness has its own `tmp/browser-harness-failure/` and `tmp/browser-harness-timings/` namespaces. CI uploads probe samples even after failure. `pnpm report:probe-timings`
+and named steps. Failure evidence is isolated under `tmp/probe-failure/<port>/`; the negative browser harness has its own `tmp/browser-harness-failure/` and `tmp/browser-harness-report.json` namespaces. CI uploads probe samples even after failure. `pnpm report:probe-timings`
 calculates candidate median/p95 weights from compatible successful samples; it does
 not edit the snapshot. Review sample coverage and platform compatibility before
 updating `scripts/acceptance/probe-weights.json`. Provisional split scenarios are
@@ -402,7 +400,7 @@ conditions before interpreting timings; these binaries are not publication input
 | While editing | `pnpm test:fast` | Only the static checks the changed files need; the frontend type check is incremental. `--plan` prints the selection, `--base <ref>` includes committed changes |
 | While editing UI | `pnpm check:ui` | Only the probe scenarios the change can reach, on the dev server. `--plan` explains the selection; `--scenario <id>` runs one |
 | A feature is complete, and before pushing | `pnpm verify` and `pnpm check:ui` | The full static gates, the worktree secret scan and the affected browser scenarios |
-| Pull request (CI) | automatic | Static gates, secret scans, build, loading boundaries and bundle reports, the full cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
+| Pull request (CI) | automatic | Isolated Go/frontend/repository static lanes behind the required `static` aggregate, secret scans, build, loading boundaries and bundle reports, the full cross-stack acceptance, the **whole** probe catalog in three shards, and the demo acceptance |
 | Optional locally | `pnpm verify:full` | Everything CI runs, in one local command. Use it for changes to the build, the browser harness or the workflow, or to reproduce a CI failure |
 | Opt-in | `pnpm verify:demo:go` | The Go binary's own demo mode: a browser against a locally started binary with its own route assertions. It generates the dataset, so it is not part of CI |
 
@@ -424,12 +422,41 @@ How `check:ui` chooses scenarios (`scripts/acceptance/check-ui-plan.mjs`):
   path under `scripts/acceptance/` is attributed this way rather than from a list of
   names, so a new helper cannot select nothing.
 
-Complete local catalogs in `check:ui` and unsharded `verify:probes` reuse the existing three-way
-partition as sequential batches through `scripts/acceptance/probe-batches.mjs`. Every selected
-scenario runs exactly once; batches do not overlap browsers, keep the existing 480-second watchdog,
-aggregate failures and preserve earlier failure artifacts. Explicit CI shards and focused UI runs
-keep one runner invocation. `scripts/probe-batches.test.mjs` pins coverage, order, cleanup ownership,
-sequential execution and failure retention without starting a browser.
+The probe catalog runs through Playwright Test, configured in
+`scripts/testing/probe-config.ts`. `scripts/testing/probes.ts` applies the same reviewed
+shard partition to CI and delegates execution to the native runner; `check:ui` supplies
+only its affected IDs. Complete local catalogs use the same three CI partitions
+sequentially. Each partition has one 480-second deadline shared by its native phases;
+each phase retains its own artifact directory.
+Shared scenarios run with at most two workers, each with a fresh
+context and context-local fixtures. Frame-by-frame scenarios marked `shouldRunAlone`
+run in a subsequent single-worker invocation even if shared tests failed. Retries are
+zero and focused-only tests are forbidden. Native collection is checked against the
+registry in `scripts/probe-runner.test.ts`; missing or duplicate timing evidence fails
+independently of the runner's exit code.
+
+Playwright owns test budgets, scheduling, context/browser cleanup, steps and result
+reporting. Project fixtures own API allowlists, bounded expected faults, seeded state,
+and the post-close fault ledger. Failures keep native error reports, final DOM and PNG
+attachments under `tmp/probe-failure/`. Continuous tracing is disabled so instrumentation
+of the source-heavy dev server does not distort route/frame measurements.
+`pnpm verify:browser:harness` injects real runtime, fixture, outbound, assertion and setup
+faults and checks the actual runner's nonzero exit and positive controls with one and two
+workers. The native runner's scheduler is not reimplemented or unit-tested here.
+
+New orchestration and self-tests use TypeScript. `pnpm type-check:tooling` checks migrated
+entrypoints, fixtures, configuration, reporters and self-tests with strict NodeNext typing;
+it runs in both static verification and incremental `test:fast` type checking. `tsx`
+executes TypeScript and resolves imports but does not replace that type check. The existing
+logic suites run as isolated Node test files, with native bounded scheduling and automatic
+discovery. Existing JavaScript domain fixtures and remaining gates can be migrated in
+bounded changes; adding another ad-hoc loader or test scheduler is not the migration path.
+
+Demo negative controls copy their complete declared inputs into per-test temporary trees.
+They never rewrite the live dataset, route table, recording or gate. Freshness and the
+self-test pool may therefore remain concurrent without relying on timing or restoration
+retries. `scripts/check-demo.test.ts` includes concurrent positive/negative controls and
+byte-preservation checks against the live input set.
 
 Never add a skip switch or narrow a planner rule to make a slow run go away. If the
 selection is wider than the change warrants, add a path rule or a scenario mapping,
@@ -1114,7 +1141,7 @@ Unicode/numeric/equivalent labels, missing numeric defaults, stable ties, unknow
 fallback and immutable input/record identity. These are logic claims; OAuth browser
 scenarios retain responsive rows, filters, file actions, quota refresh and authorization
 wiring. `scripts/benchmark-oauth-sort.ts` is opt-in, not discovered as a test. Run it
-with `node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/benchmark-oauth-sort.ts`;
+with `node --import tsx scripts/benchmark-oauth-sort.ts`;
 it alternates both implementations on the same fixtures and reports warm median/p95
 plus process/locale/resource metadata without timing thresholds in correctness gates.
 Add `--expose-gc` for a separate post-GC retained-heap sample; GC never runs inside
@@ -1137,25 +1164,19 @@ a cheaper layer requires a replacement of equal strength (ADR 0089).
 
 ### Bounded probe scheduling
 
-`pnpm check:ui` and `pnpm verify:probes` use two independent scenario contexts per
-batch. Both accept `--workers 1` for resource-constrained hosts and diagnosis; this
-changes scheduling only, not selected IDs, assertions, waits or verdicts.
-`pnpm verify:full:serial` explicitly chooses that same serial probe path. Do not
-increase concurrency or a budget to make a run pass. Watchdog diagnostics name all
-active scenarios/steps. Existing condition-based readiness and complete hosted
-shard coverage remain mandatory. ADR 0091 and the governance ledger record measured
-wall/CPU/memory trade-offs and retained failure ownership. Scenarios marked
-`shouldRunAlone` in `scripts/acceptance/scenarios.mjs` (`scroll-smoothing`,
-`request-list-touch`) run after the shared part of their batch, one at a time, because a
-sibling context drops frames their checks would count as the defect (ADR 0095). The mark
-states its frame-level reason; it is not a way to quiet a scenario that fails for others.
+`pnpm check:ui` and `pnpm verify:probes` use at most two native workers for shared
+scenarios. Both accept `--workers 1`; selection, assertions and budgets stay the same.
+`pnpm verify:full:serial` chooses that serial path. Frame scenarios marked
+`shouldRunAlone` (`scroll-smoothing`, `request-list-touch`) run in a subsequent
+single-worker invocation even after a shared test fails, without trace instrumentation
+(ADR 0095). Native collection and exact timing-evidence checks protect complete coverage.
 
 ### Demo replay and generated-UI exports
 
 `scripts/test-demo-replay.ts` owns recording/event fidelity, localization/date templates,
 refetch/reset state and cancellation; `internal/demo/demo_test.go` owns full-year synthetic
 traffic, idle-day distribution and whole-UTC-date recent-traffic protection, including non-midnight
-reference times and equivalent instants in other time zones. `scripts/check-demo.test.mjs` owns
+reference times and equivalent instants in other time zones. `scripts/check-demo.test.ts` owns
 public recording privacy. `scripts/test-agent-workspace.ts` owns send admission: target-free
 demo replay, required live targets, and approval blocking in both modes.
 Built `scripts/verify-demo.mjs` sends both examples: the Agent replay must settle its generated
@@ -1259,3 +1280,13 @@ version comparison at 320px in the longest catalog. Signing is covered by
 by `scripts/release-plan.test.mjs`; `scripts/deployment.test.mjs` holds the Compose
 service to its boundary (the socket and nothing else). Real container replacement is
 exercised only by `scripts/docker-smoke.mjs`, described above.
+
+### Pricing navigation readiness
+
+Built acceptance retains the three-second pricing guard against the historical
+multi-second render freeze. It observes the first visible row's edit action, not an
+empty page container, using the browser's monotonic navigation clock. The readiness
+sample is collected in the renderer; host-side protocol scheduling and completion of
+unrelated load-event resources are not counted as rendering work. The threshold is
+unchanged. Bundle loading boundaries and the 20-row page policy remain independent
+regression guards; a loaded runner is not evidence of a hosted performance improvement.

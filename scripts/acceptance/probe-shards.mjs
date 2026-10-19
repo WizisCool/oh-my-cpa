@@ -2,7 +2,7 @@
  * Splits the probe catalog into balanced, disjoint shards.
  *
  * CI runs each shard on its own runner. Within each shard, catalog entrypoints
- * default to at most two independent scenario contexts sharing one browser;
+ * default to at most two isolated Playwright Test workers;
  * `--workers 1` retains the same coverage for serial reproduction. The worker
  * cap bounds local CPU and memory contention rather than eliminating it.
  *

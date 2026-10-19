@@ -11,8 +11,9 @@ Beyond the acceptance suite, six standalone probe entry points were deleted:
 `browser-usage-events.mjs`, `browser-refresh-sync.mjs`, `browser-icon-picker.mjs`,
 `browser-dashboard-charts.mjs`, `browser-column-alignment.mjs` and
 `browser-performance.mjs`. Every claim worth keeping now lives in
-`scripts/browser-probes.mjs`, which runs them as scenarios against one shared dev
-server and one browser:
+the probe catalog (`scripts/acceptance/scenarios.mjs`). Playwright Test executes
+`scripts/acceptance/tests/catalog.spec.ts` against an invocation-owned dev server
+and worker-owned browsers:
 
 | Former file | Where its claims live now |
 | --- | --- |
@@ -206,13 +207,21 @@ malformed-JSON-as-null responses were fixture drift, not authorized product beha
 Strict unknown/method harness faults, context isolation and existing scenario
 assertions are unchanged.
 
-## Phase-two browser execution ownership
+## Native browser execution ownership
 
-No assertion leaves Chromium in this scheduling change. Two bounded scenario
-workers share only the existing batch-owned Vite/Chromium, never a page, context,
-fixture store, storage, cookie jar or fault ledger. Serial reproduction runs the
-same catalog. Recovery locale cases reuse their already verified home landing
-instead of repeating an initial navigation; all real failure/reload/home and engine
-claims remain. Queue and real-browser fault tests cover both schedules, late-fault
-verdicts and peer release after setup failure. Measurements and trade-offs are
-recorded in `docs/plans/architecture-governance.md` and ADR 0091.
+The catalog retains every scenario and its domain assertions. Playwright Test owns
+bounded workers, isolated contexts, test budgets, reports and lifecycle cleanup.
+`scripts/probe-runner.test.ts` checks native collection against the full registry and
+exclusive frame-scenario partition; real injected faults and positive controls in
+`scripts/acceptance/tests/harness.spec.ts` protect the project-specific failure boundary.
+The handwritten queue, batch runner, watchdog and their implementation tests were
+removed: their scheduling claims now belong to the native runner, not another queue.
+The explicit continue-after-shared-failure and exact-evidence policies remain in the
+thin typed catalog adapter. ADR 0095's uncontended frame requirement is unchanged.
+
+Demo negative controls now mutate isolated input trees rather than live repository
+files. `scripts/check-demo.test.ts` retains source freshness, route/read coverage,
+provenance and privacy claims, plus concurrent positive/negative and byte-preservation
+controls. The restore-retry and final-restore tests are obsolete because no test writes
+the live input set. Route/read negative controls pass semantic inputs instead of editing
+JavaScript source strings.

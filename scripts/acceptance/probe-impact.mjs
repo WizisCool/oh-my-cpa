@@ -6,8 +6,8 @@
  * such changes touch one scenario's module or one registry entry, and a scenario's
  * result depends only on the code it runs. So the change is attributed:
  *
- *   - The **runner** (`probe.mjs`, the two entry scripts) owns the server, the browser
- *     and the contexts every scenario shares, so a change there still selects all.
+ *   - The **runner** owns server admission, workers, fixtures and fresh scenario
+ *     contexts, so a change there still selects all.
  *   - The **planners** decide which scenarios run, not what a scenario observes, and
  *     each is pinned by its own self-test, so they select none.
  *   - A **probe module** selects the scenarios whose registry entries reference any
@@ -28,13 +28,17 @@ const REGISTRY = 'scripts/acceptance/scenarios.mjs';
 
 export const PROBE_RUNNERS = [
   'scripts/acceptance/probe.mjs',
-  'scripts/acceptance/probe-batches.mjs',
   // Imported only by the catalog entry script, which is outside the acceptance
   // import graph, so the graph cannot attribute it to the runner.
   'scripts/acceptance/probe-options.mjs',
-  'scripts/browser-probes.mjs',
-  'scripts/check-ui.mjs',
+  'scripts/testing/probes.ts',
+  'scripts/check-ui.ts',
 ];
+
+function isProbeRunner(file) {
+  return PROBE_RUNNERS.includes(file) || file.startsWith('scripts/acceptance/tests/')
+    || /^scripts\/testing\/(?:probe[^/]*|vite-server|harness)\.ts$/.test(file);
+}
 
 export const PROBE_PLANNERS = [
   'scripts/acceptance/check-ui-plan.mjs',
@@ -179,16 +183,17 @@ function acceptanceGraph(files, readCurrent) {
  * Attributes changed probe code to scenarios.
  *
  * `readBase(file)` and `readCurrent(file)` return a file's text at the base and now
- * (undefined when absent); `acceptanceFiles` lists the `.mjs` modules under
- * `scripts/acceptance/`. Returns `{ all: reason }` or `{ ids, reasons }`.
+ * (undefined when absent); `acceptanceFiles` lists JS/TS modules under
+ * `scripts/acceptance/` and `scripts/testing/`. Returns `{ all: reason }` or `{ ids, reasons }`.
  */
 export function planProbeChange(files, { readBase, readCurrent, acceptanceFiles }) {
-  const probeFiles = files.filter((file) => PROBE_RUNNERS.includes(file) || file.startsWith(ACCEPTANCE));
+  if (files.includes('tsconfig.tooling.json')) return { all: 'the typed probe configuration changed' };
+  const probeFiles = files.filter(file => isProbeRunner(file) || file.startsWith(ACCEPTANCE) || file.startsWith('scripts/testing/'));
   const ids = new Set();
   const reasons = [];
   if (probeFiles.length === 0) return { ids, reasons };
 
-  const runners = probeFiles.filter((file) => PROBE_RUNNERS.includes(file));
+  const runners = probeFiles.filter(isProbeRunner);
   if (runners.length > 0) return { all: `the probe runner changed (${runners.join(', ')})` };
 
   const current = readRegistry(readCurrent(REGISTRY) ?? '');
@@ -226,7 +231,7 @@ export function planProbeChange(files, { readBase, readCurrent, acceptanceFiles 
       continue;
     }
     const affected = dependents(file, graph);
-    if ([...affected].some((module) => PROBE_RUNNERS.includes(module))) {
+    if ([...affected].some(isProbeRunner)) {
       return { all: `${file} is imported by the probe runner` };
     }
     // Only modules the registry imports can bind a scenario; one it never reaches is

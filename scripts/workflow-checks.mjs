@@ -81,7 +81,7 @@ export function validateProbeJobs(jobs) {
     throw new Error('CI workflow has no aggregate probe check that runs after every shard');
   }
   if (!aggregate.steps?.some((step) => step.env?.PROBES_RESULT === '${{ needs.probes.result }}'
-      && step.run === 'test "${PROBES_RESULT}" = success' && !step.if && !step['continue-on-error'])) {
+      && step.run === 'test "${PROBES_RESULT}" = success' && !Object.hasOwn(step, 'if') && !step['continue-on-error'])) {
     throw new Error('the aggregate probe check must fail unless every shard succeeded');
   }
 }
@@ -99,5 +99,34 @@ export function validateActionSecurity(workflow) {
         throw new Error('Checkout credentials must not persist');
       }
     }
+  }
+}
+
+export function validateStaticJobs(jobs) {
+  const lanes = jobs['static-checks'];
+  const names = lanes?.strategy?.matrix?.lane;
+  if (!lanes || Object.hasOwn(lanes, 'if') || lanes['continue-on-error'] || lanes.strategy?.['fail-fast'] !== false
+      || !Array.isArray(names) || names.length !== 3 || new Set(names).size !== 3
+      || !['go', 'frontend', 'repository'].every(name => names.includes(name))
+      || lanes.strategy.matrix.exclude?.length || lanes.strategy.matrix.include?.length) {
+    throw new Error('CI must run every isolated static lane on every event');
+  }
+  const run = lanes.steps?.find(step => step.name === 'Verify static lane');
+  if (run?.run !== 'pnpm verify:static:${{ matrix.lane }}' || Object.hasOwn(run, 'if') || run['continue-on-error']) {
+    throw new Error('Static matrix must execute every complete verification group');
+  }
+  const scan = lanes.steps?.find(step => step.name === 'Scan worktree and history');
+  if (scan?.if !== "matrix.lane == 'repository'" || scan['continue-on-error']
+      || scan.run !== 'pnpm verify:secrets:worktree\npnpm verify:secrets:history\n') {
+    throw new Error('Repository lane must scan both worktree and full history');
+  }
+  const checkout = lanes.steps?.find(step => step.uses?.startsWith('actions/checkout@'));
+  if (checkout?.with?.['fetch-depth'] !== 0) throw new Error('Repository security gates require full history');
+  const aggregate = jobs.static;
+  if (aggregate?.name !== 'static' || aggregate.if !== 'always()' || aggregate['continue-on-error']
+      || aggregate.needs !== 'static-checks'
+      || !aggregate.steps?.some(step => step.env?.STATIC_RESULT === '${{ needs.static-checks.result }}'
+        && step.run === 'test "${STATIC_RESULT}" = success' && !Object.hasOwn(step, 'if') && !step['continue-on-error'])) {
+    throw new Error('The stable static check must fail unless every lane succeeds');
   }
 }
