@@ -478,7 +478,7 @@ The facade exposes GET/PATCH at `/api/v1/management/auth-files/model-aliases` an
 `provider` and `models`; an empty `models` array removes that provider's rules.
 The provider model catalog is read at
 `/api/v1/management/auth-files/provider-models?provider=codex`; plugin-owned
-providers read the catalog CPA's plugin host publishes. Without a catalog, the
+providers read the catalog CPA's plugin host publishes (CPA v8.0.34 or later). Without a catalog, the
 editors still accept typed names. A successful write requires CPA readback;
 changes are serialized with other whole-config writes, backed up and audit logged
 (`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
