@@ -477,8 +477,9 @@ The facade exposes GET/PATCH at `/api/v1/management/auth-files/model-aliases` an
 `/api/v1/management/auth-files/excluded-models`. An exclusion PATCH carries
 `provider` and `models`; an empty `models` array removes that provider's rules.
 The provider model catalog is read at
-`/api/v1/management/auth-files/provider-models?provider=codex`. Without a catalog,
-the editors still accept typed names. A successful write requires CPA readback;
+`/api/v1/management/auth-files/provider-models?provider=codex`; plugin-owned
+providers read the catalog CPA's plugin host publishes. Without a catalog, the
+editors still accept typed names. A successful write requires CPA readback;
 changes are serialized with other whole-config writes, backed up and audit logged
 (`oauth_model_alias.update` or `oauth_excluded_models.update`). Demo mode allows
 reads but refuses durable changes.

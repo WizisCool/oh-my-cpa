@@ -1331,10 +1331,14 @@ a failed success-audit write is logged but the endpoint returns `200` with the
 verified provider and rules; the already-landed update must not be reported as failed.
 
 `GET /api/v1/management/auth-files/provider-models?provider=<key>` projects only
-model IDs and display names from the allowlisted OAuth channel's static model
-catalog. It is unaffected by aliases or exclusions and never reads credential secrets.
-An unknown channel or CPA's 400/404 returns `available: false`; other upstream
-failures remain failures. The editors retain manual entry without a catalog.
+model IDs and display names from the catalog CPA serves at
+`/routing/model-definitions/{channel}`: its static catalog for a built-in channel, and
+for any other channel the plugin host's or provider registry's models. The provider
+key is validated (lowercase letters, digits and hyphens, at most 64 characters) and
+escaped as one path segment before it reaches CPA. It is unaffected by aliases or
+exclusions and never reads credential secrets. CPA's 400 (unknown channel) or 404
+(a gateway without the route) returns `available: false`; other upstream failures
+remain failures. The editors retain manual entry without a catalog.
 Exclusion reads use CPA's trimmed, lowercase, deduplicated rules. The facade bounds
 provider count, rule count (512) and rule length (256 characters).
 Aliases and exclusions remain CPA-owned configuration, without a new OMC table.

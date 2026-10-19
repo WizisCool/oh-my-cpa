@@ -178,6 +178,13 @@ func TestManagementOAuthProviderModels(t *testing.T) {
 		case "/v8/management/routing/model-definitions/kimi":
 			writer.WriteHeader(http.StatusBadRequest)
 			_, _ = writer.Write([]byte(`{"error":"unknown channel"}`))
+		case "/v8/management/routing/model-definitions/candy-plugin":
+			// CPA serves a plugin channel from the plugin host's catalog. Fields
+			// beyond the model's identity stay on the gateway.
+			_, _ = writer.Write([]byte(`{"channel":"candy-plugin","models":[{"id":"candy-1","display_name":"Candy One","owned_by":"plugin","upstream_url":"https://upstream.invalid"},{"id":"candy-2"}]}`))
+		case "/v8/management/routing/model-definitions/legacy-plugin":
+			// A gateway that predates plugin catalogs has no such route.
+			writer.WriteHeader(http.StatusNotFound)
 		default:
 			_, _ = writer.Write([]byte(`{}`))
 		}
@@ -212,19 +219,35 @@ func TestManagementOAuthProviderModels(t *testing.T) {
 	if kimi := read("kimi"); kimi.Available || len(kimi.Models) != 0 {
 		t.Fatalf("kimi catalog = %#v", kimi)
 	}
-	before := len(recordedCPARequests(recorder))
-	if plugin := read("some-plugin"); plugin.Available || plugin.Models == nil {
+	plugin := read("candy-plugin")
+	if !plugin.Available || plugin.Provider != "candy-plugin" || len(plugin.Models) != 2 || plugin.Models[0].ID != "candy-1" || plugin.Models[0].DisplayName != "Candy One" || plugin.Models[1].ID != "candy-2" {
 		t.Fatalf("plugin catalog = %#v", plugin)
 	}
-	// A provider key outside CPA's channels never becomes part of an upstream path.
-	for _, request := range recordedCPARequests(recorder)[before:] {
+	if _, raw := doJSON(t, client, http.MethodGet, base+"candy-plugin", ""); strings.Contains(string(raw), "upstream_url") || strings.Contains(string(raw), "owned_by") {
+		t.Fatalf("plugin catalog leaked unlisted fields: %s", raw)
+	}
+	if legacy := read("legacy-plugin"); legacy.Available || legacy.Models == nil || len(legacy.Models) != 0 {
+		t.Fatalf("older gateway catalog = %#v", legacy)
+	}
+	paths := map[string]bool{}
+	for _, request := range recordedCPARequests(recorder) {
 		if strings.Contains(request.Path, "model-definitions") {
-			t.Fatalf("an unlisted channel reached CPA: %s", request.Path)
+			paths[request.Path] = true
 		}
 	}
+	for _, want := range []string{"/v8/management/routing/model-definitions/candy-plugin", "/v8/management/routing/model-definitions/legacy-plugin"} {
+		if !paths[want] {
+			t.Fatalf("plugin channel did not reach %s; requested %v", want, paths)
+		}
+	}
+	before := len(recordedCPARequests(recorder))
 	response, _ := doJSON(t, client, http.MethodGet, base+"..%2Fconfig", "")
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("invalid provider = %d, want 400", response.StatusCode)
+	}
+	// A refused provider key never becomes part of an upstream path.
+	if after := recordedCPARequests(recorder)[before:]; len(after) != 0 {
+		t.Fatalf("a refused provider reached CPA: %#v", after)
 	}
 }
 

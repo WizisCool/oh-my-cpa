@@ -195,6 +195,11 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       { id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet' },
       { id: 'claude-3-5-haiku', display_name: 'Claude 3.5 Haiku' },
     ],
+    // CPA answers a channel without a built-in catalog from the plugin host, as
+    // it does for the `iflow-auth` fixture plugin's OAuth provider.
+    iflow: [
+      { id: 'iflow-e2e-chat', display_name: 'iFlow E2E Chat' },
+    ],
   };
 
   // The codex API-key list is stateful for the same reason authFiles is: the

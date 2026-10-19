@@ -434,6 +434,18 @@ export async function runAuthFilesAcceptance({
     await aliasDrawer.locator('.ant-drawer-close').click();
     await aliasDrawer.waitFor({ state: 'hidden' });
 
+    // A plugin-owned provider has no built-in catalog; CPA serves it from the
+    // plugin host, and the rule editors pick from it like any other channel.
+    await aliasOpen.click();
+    await aliasDrawer.waitFor({ state: 'visible' });
+    await providerPicker.fill('iflow');
+    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /iflow/i }).first().click();
+    await aliasDrawer.getByTestId('oauth-model-rules-tab-excluded').click();
+    await checkEventually('the plugin provider catalog is offered to the exclusion editor',
+      () => aliasDrawer.locator('[data-testid="oauth-excluded-models-catalog"] [data-model="iflow-e2e-chat"]').isVisible());
+    await aliasDrawer.locator('.ant-drawer-close').click();
+    await aliasDrawer.waitFor({ state: 'hidden' });
+
     // 8. Viewports at 390px and 320px for the unified workspace
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 800 });
