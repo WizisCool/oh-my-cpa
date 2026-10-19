@@ -406,5 +406,6 @@ test('the web search result cache writes the TTL as text and the limit as an int
   ]);
   const reloaded = parseDocument(draft.toString());
   assert.equal(reloaded.getIn(['client', 'codex', 'web-search-result-cache', 'ttl']), '1800');
+  assert.equal(getFieldSemanticValue(reloaded, field('codexWebSearchCacheLimit')), 0, 'an explicit zero survives readback rather than reading as the default');
   assert.equal(reloaded.getIn(['client', 'codex', 'optimize-multi-agent-v2']), true);
 });
