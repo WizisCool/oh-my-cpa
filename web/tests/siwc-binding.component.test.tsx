@@ -66,8 +66,8 @@ function mount(file = FILE) {
   };
 }
 async function click(name: string) { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); }
-async function submitCallback() {
-  fireEvent.change(screen.getByRole('textbox', { name: 'Complete callback URL' }), { target: { value: CALLBACK } });
+async function submitCallback(callbackUrl = CALLBACK) {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Complete callback URL' }), { target: { value: callbackUrl } });
   await click('Submit callback URL');
 }
 
@@ -100,6 +100,21 @@ it('preserves the full callback and waits for completed credential readback befo
     expect(screen.getByRole('button', { name: 'Rebind SIWC' })).toBeTruthy();
     expect(window.localStorage.length).toBe(1);
     expect(window.sessionStorage.length).toBe(0);
+  } finally { surface.dispose(); }
+});
+
+it.each([
+  ['leading whitespace', ` \t${CALLBACK}`],
+  ['trailing whitespace', `${CALLBACK}\r\n `],
+  ['surrounding whitespace', ` \t${CALLBACK}\r\n `],
+])('trims %s without changing callback parameters', async (_label, callbackUrl) => {
+  const surface = mount();
+  try {
+    await click('Bind SIWC');
+    await submitCallback(callbackUrl);
+    const callback = surface.requests.find((request) => request.path.endsWith('/callback'));
+    expect(callback?.state).toBe('state-idx-1');
+    expect(callback?.body).toEqual({ redirect_url: CALLBACK });
   } finally { surface.dispose(); }
 });
 

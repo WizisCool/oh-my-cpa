@@ -116,7 +116,7 @@ export function useSIWCBindings(): SIWCBindings {
     operationVersions.current[key] = (operationVersions.current[key] ?? 0) + 1;
     update(key, { isBusy: true, error: undefined });
     try {
-      await api.submitSIWCCallback(session.state, session.callbackUrl);
+      await api.submitSIWCCallback(session.state, session.callbackUrl.trim());
       if (!owns(key, session.state)) return;
       update(key, { callbackUrl: '', isBusy: false });
       await check(key, session.state);

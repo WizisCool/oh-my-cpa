@@ -1299,7 +1299,9 @@ managed-ID binding requests, full callback preservation and conflict fidelity.
 fail-closed mutation audits, safe readback, expiry, gateway isolation and secret
 exclusion. `internal/operations/oauth_siwc_test.go` owns the Agent/MCP safe read
 projection. `web/tests/siwc-binding.component.test.tsx` owns bind/rebind controls,
-target-scoped async ownership across panel dismissal, callback submission,
-completion readback, cancellation and read-failure/expiry outcomes. The existing
+target-scoped async ownership across panel dismissal, callback submission and
+outer-whitespace trimming with parameter fidelity, completion readback,
+cancellation and read-failure/expiry outcomes. The existing
 `oauth-authorization-outcomes` probe owns real-browser detail-panel wiring and
-callback input persistence across close/reopen.
+callback input persistence across close/reopen, pending-attempt navigation and
+unload protection, and removal of those guards after confirmed completion.

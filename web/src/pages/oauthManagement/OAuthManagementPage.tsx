@@ -46,7 +46,7 @@ import { VertexImportModal } from '../../components/authFiles/VertexImportModal'
 import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { OAuthCredentialRecord } from './OAuthCredentialRecord';
 import { useOAuthSessions } from './useOAuthSessions';
-import { useSIWCBindings } from '../../hooks/useSIWCBindings';
+import { isSIWCPending, useSIWCBindings } from '../../hooks/useSIWCBindings';
 import { SIWCBindingPanel } from '../../components/authFiles/SIWCBindingPanel';
 import { useOAuthWorkspaceActions } from './useOAuthWorkspaceActions';
 import {
@@ -247,8 +247,9 @@ export const OAuthManagementPage: React.FC = () => {
   // Sessions outlive the drawer, so an ordinary route departure must be an
   // explicit operator decision. The browser handles hard unloads; the router
   // blocker covers in-app navigation without a history monkey patch.
+  const hasPendingAuthorization = sessions.activeProviders.length > 0 || Object.values(siwcBindings.sessions).some(isSIWCPending);
   const routeBlocker = useBlocker(({ currentLocation, nextLocation }) => (
-    sessions.activeProviders.length > 0 && currentLocation.pathname !== nextLocation.pathname
+    hasPendingAuthorization && currentLocation.pathname !== nextLocation.pathname
   ));
   React.useEffect(() => {
     if (routeBlocker.state !== 'blocked') return;
@@ -262,14 +263,14 @@ export const OAuthManagementPage: React.FC = () => {
     });
   }, [modal, routeBlocker, t]);
   React.useEffect(() => {
-    if (sessions.activeProviders.length === 0) return;
+    if (!hasPendingAuthorization) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [sessions.activeProviders.length]);
+  }, [hasPendingAuthorization]);
 
   React.useEffect(() => {
     if (Object.keys(completionPending).length === 0 || filesQuery.isFetching) return;
