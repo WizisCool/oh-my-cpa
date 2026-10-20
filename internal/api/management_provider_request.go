@@ -24,18 +24,20 @@ type SaveProviderModelEntry struct {
 }
 
 type SaveProviderRequest struct {
-	Family         string                   `json:"family"`
-	Name           string                   `json:"name"`
-	BaseURL        string                   `json:"base_url"`
-	Prefix         string                   `json:"prefix,omitempty"`
-	Priority       *int                     `json:"priority,omitempty"`
-	DisableCooling bool                     `json:"disable_cooling"`
-	APIKey         string                   `json:"api_key,omitempty"`
-	Keys           []SaveProviderKeyEntry   `json:"keys,omitempty"`
-	Models         []string                 `json:"models,omitempty"`
-	ModelEntries   []SaveProviderModelEntry `json:"model_entries,omitempty"`
-	Headers        map[string]string        `json:"headers,omitempty"`
-	Disabled       bool                     `json:"disabled"`
+	Family            string                   `json:"family"`
+	ExpectedAuthIndex string                   `json:"expected_auth_index,omitempty"`
+	ExpectedName      string                   `json:"expected_name,omitempty"`
+	Name              string                   `json:"name"`
+	BaseURL           string                   `json:"base_url"`
+	Prefix            string                   `json:"prefix,omitempty"`
+	Priority          *int                     `json:"priority,omitempty"`
+	DisableCooling    bool                     `json:"disable_cooling"`
+	APIKey            string                   `json:"api_key,omitempty"`
+	Keys              []SaveProviderKeyEntry   `json:"keys,omitempty"`
+	Models            []string                 `json:"models,omitempty"`
+	ModelEntries      []SaveProviderModelEntry `json:"model_entries,omitempty"`
+	Headers           map[string]string        `json:"headers,omitempty"`
+	Disabled          bool                     `json:"disabled"`
 	// RuntimePolicy, when present, is authoritative for cooling, the retry count
 	// and the error rules, and DisableCooling is ignored. A request without it
 	// keeps the single-switch cooling edit and leaves retry and rules as stored,

@@ -307,6 +307,11 @@ func (e providerPolicyEdit) applyToConfigKey(entry *management.ConfigAPIKey, isL
 		entry.RequestRetry = e.policy.RequestRetry
 		entry.RequestScopedErrors = rules
 	}
+	e.applyBehaviorToConfigKey(entry)
+	return nil
+}
+
+func (e providerPolicyEdit) applyBehaviorToConfigKey(entry *management.ConfigAPIKey) {
 	if behavior := e.behavior; behavior != nil {
 		if behavior.AlphaSearch != nil {
 			entry.AlphaSearch = *behavior.AlphaSearch
@@ -324,7 +329,6 @@ func (e providerPolicyEdit) applyToConfigKey(entry *management.ConfigAPIKey, isL
 			entry.Interactions = *behavior.Interactions
 		}
 	}
-	return nil
 }
 
 // applyToOpenAICompatibility is applyToConfigKey for an OpenAI-compatible

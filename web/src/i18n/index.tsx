@@ -2368,6 +2368,8 @@ const DICT: Record<string, [string, string]> = {
   'pro.add_provider_title': ['添加 AI 提供商', 'Add AI Provider'],
   'pro.edit_provider_title': ['编辑 AI 提供商', 'Edit AI Provider'],
   'pro.field_family': ['驱动类型 / 协议', 'Driver / Protocol'],
+  'pro.family_change_hint': ['保存后将迁移到所选协议；通用配置保留，原协议专属设置会移除。请确认接入端点和模型支持目标协议。', 'Saving moves this provider to the selected protocol. Shared settings are kept; settings specific to the old protocol are removed. Check that the endpoint and models support the new protocol.'],
+  'pro.family_change_keys_hint': ['保存后每个密钥将成为目标协议下的独立提供商，通用配置保留，原协议专属设置会移除。请确认接入端点和模型支持目标协议。', 'Saving creates a separate provider for each key under the selected protocol. Shared settings are kept; settings specific to the old protocol are removed. Check that the endpoint and models support the new protocol.'],
   'pro.family_openai_compat': ['OpenAI 兼容', 'OpenAI Compatible'],
   'pro.family_codex': ['Codex (Response)', 'Codex (Response)'],
   'pro.family_claude': ['Anthropic (Messages)', 'Anthropic (Messages)'],

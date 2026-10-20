@@ -89,16 +89,18 @@ func (c *Client) storedKeyGroups(ctx context.Context, path []string) ([]map[stri
 
 // storedKey is one key of a stored group, flattened the way CPA flattens it.
 type storedKey struct {
-	fields map[string]any
-	origin *keyGroupOrigin
+	fields     map[string]any
+	origin     *keyGroupOrigin
+	groupIndex int
+	keyIndex   int
 }
 
 func flattenKeyGroups(groups []map[string]any) []storedKey {
 	var out []storedKey
-	for _, group := range groups {
+	for groupIndex, group := range groups {
 		origin := &keyGroupOrigin{group: group}
 		keys, _ := group["keys"].([]any)
-		for _, rawKey := range keys {
+		for keyIndex, rawKey := range keys {
 			key, ok := rawKey.(map[string]any)
 			if !ok {
 				continue
@@ -114,7 +116,7 @@ func flattenKeyGroups(groups []map[string]any) []storedKey {
 					fields[name] = value
 				}
 			}
-			out = append(out, storedKey{fields: fields, origin: origin})
+			out = append(out, storedKey{fields: fields, origin: origin, groupIndex: groupIndex, keyIndex: keyIndex})
 		}
 	}
 	return out
@@ -493,11 +495,19 @@ func runtimeKeyAuthIndex(provider OpenAICompatibility, apiKey string) string {
 // UpdateOpenAICompatibility writes the OpenAI-compatible providers as v8
 // groups, one per provider.
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
+	groups, err := openAICompatibilityGroups(entries)
+	if err != nil {
+		return err
+	}
+	return c.writeKeyGroups(ctx, OPENAI_COMPATIBILITY_GROUPS_PATH, groups)
+}
+
+func openAICompatibilityGroups(entries []OpenAICompatibility) ([]map[string]any, error) {
 	groups := make([]map[string]any, 0, len(entries))
 	for _, entry := range entries {
 		group, err := wireObject(entry)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		keys := []any{}
 		if rawKeys, ok := group["api-key-entries"].([]any); ok {
@@ -522,5 +532,5 @@ func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAI
 		}
 		groups = append(groups, group)
 	}
-	return c.writeKeyGroups(ctx, OPENAI_COMPATIBILITY_GROUPS_PATH, groups)
+	return groups, nil
 }

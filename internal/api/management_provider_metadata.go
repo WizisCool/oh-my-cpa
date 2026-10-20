@@ -112,6 +112,43 @@ func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix
 	return h.repo.PutProviderPreferencesAfterDelete(ctx, encoded, idPrefix, deletedIndex)
 }
 
+// moveProviderMetadata shifts the source family's positional overlays and copies
+// the moved row's identity to every destination row in the same local transaction.
+func (h *Handler) moveProviderMetadata(ctx context.Context, oldID string, newIDs []string, name, website string, isWebsiteProvided bool) error {
+	family, index, err := parseProviderID(oldID)
+	if err != nil {
+		return err
+	}
+	prefix := idPrefixForFamily(family)
+	encoded := make(map[string]string, 3)
+	for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+		values, err := h.loadStringPreference(ctx, preference)
+		if err != nil {
+			return err
+		}
+		value := values[oldID]
+		if preference == repository.PreferenceProviderNames && name != "" {
+			value = name
+		}
+		if preference == repository.PreferenceProviderWebsites && isWebsiteProvided {
+			value = website
+		}
+		values = shiftPositionalProviderIDs(values, prefix, index)
+		for _, id := range newIDs {
+			delete(values, id)
+			if value != "" {
+				values[id] = value
+			}
+		}
+		document, err := json.Marshal(values)
+		if err != nil {
+			return err
+		}
+		encoded[preference] = string(document)
+	}
+	return h.repo.PutProviderPreferencesAfterDelete(ctx, encoded, prefix, index)
+}
+
 // idPrefixForFamily is the positional id prefix a family's rows carry.
 func idPrefixForFamily(family string) string {
 	if spec, ok := lookupProviderConfigFamily(family); ok {

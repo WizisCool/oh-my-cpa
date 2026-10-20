@@ -306,16 +306,29 @@ export function ProviderEditorDrawer({
           {/* Driver & Name */}
           <Row gutter={16}>
             <Col xs={24} sm={12}>
-              <Form.Item label={t('pro.field_family')} required>
+              <Form.Item
+                label={t('pro.field_family')}
+                required
+                extra={editingProvider && formFamily !== editingProvider.family
+                  ? t(formFamily !== 'openai-compatibility' && formKeys.length > 1
+                    ? 'pro.family_change_keys_hint'
+                    : 'pro.family_change_hint')
+                  : undefined}
+              >
                 <Select
+                  aria-label={t('pro.field_family')}
                   value={formFamily}
                   onChange={(val) => {
-                  setFormFamily(val);
-                  if (!iconManuallySelected) {
-                    setFormIcon(getProviderDefaultIcon(val, formName, formBaseURL));
-                  }
-                }}
-                  disabled={!!editingProvider}
+                    setFormFamily(val);
+                    modelFetchSeqRef.current += 1;
+                    setEndpointModels([]);
+                    setIsPullingModels(false);
+                    setIsModelPickerOpen(false);
+                    if (!iconManuallySelected) {
+                      setFormIcon(getProviderDefaultIcon(val, formName, formBaseURL));
+                    }
+                  }}
+                  disabled={createProviderMutation.isPending || updateProviderMutation.isPending}
                   options={familyOptions}
                 />
               </Form.Item>

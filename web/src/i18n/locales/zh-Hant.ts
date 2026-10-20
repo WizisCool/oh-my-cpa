@@ -2067,6 +2067,8 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "pro.add_provider_title": "新增 AI 供應商",
   "pro.edit_provider_title": "編輯 AI 供應商",
   "pro.field_family": "驅動型別 / 協議",
+  "pro.family_change_hint": "儲存後將遷移到所選協議；通用設定保留，原協議專屬設定會移除。請確認接入端點和模型支援目標協議。",
+  "pro.family_change_keys_hint": "儲存後每個金鑰將成為目標協議下的獨立提供商，通用設定保留，原協議專屬設定會移除。請確認接入端點和模型支援目標協議。",
   "pro.family_openai_compat": "OpenAI 相容",
   "pro.family_codex": "Codex (Response)",
   "pro.family_claude": "Anthropic (Messages)",

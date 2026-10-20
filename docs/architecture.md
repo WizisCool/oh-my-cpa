@@ -686,6 +686,36 @@ because the v8 API refuses its field names. The configuration page's backup dial
 (`web/src/components/config/ConfigBackupsButton.tsx`) withholds restore while the editor
 is dirty and reloads the editor's baseline afterwards.
 
+### Editing a provider's protocol driver
+
+The provider editor can change an existing row's family. `PUT /management/providers/{id}`
+uses the id for the source and the request's `family` for the destination; an omitted
+family keeps the source protocol. The save carries the observed `expected_auth_index`
+or `expected_name`, and a stale source is refused with `409`.
+
+`management_provider_family_move.go` converts the edited provider's common fields to
+the destination schema. Credentials, key weights and proxies, headers, model aliases,
+thinking settings and supported model options survive; old protocol-specific settings
+are removed, and the editor explains this before saving. Explicit key-level runtime
+policy remains authoritative over edited shared policy when keys split into separate
+rows. A move to OpenAI-compatible keeps shared settings on the provider rather than
+pinning duplicate key-level overrides, so later provider edits stay effective. An
+OpenAI-compatible provider with multiple keys becomes one row per key in a config
+API-key family. The response
+names the first destination row in `id` and every new row in `ids`.
+
+`management.Client.MoveProviderFamily` matches the visible source to its stored group
+or key, keeps all unrelated stored groups and runtime-hidden keys unchanged, and sends
+both family arrays in one sparse `PATCH /v8/management/config`. The source may become
+an empty array: a separate append and delete would not be atomic. The write takes the
+provider gate, retains the exact pre-edit configuration as a backup, and guards that
+snapshot with `If-Match`. Ambiguous source identities and destination collisions refuse
+the move. After CPA accepts, names, websites and icons move to every destination row,
+and later source ids
+shift in one local transaction; metadata failure reports `provider_commit_partial`.
+The browser refreshes those overlays before writing a newly chosen icon, and probes or
+model pulls on a changed draft use the selected protocol rather than the source id.
+
 ### Provider families are data, not code paths
 
 CPA stores `claude`, `codex`, `gemini`, `meta`, `xai`, `vertex` and `interactions`

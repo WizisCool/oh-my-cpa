@@ -153,6 +153,10 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 	if err != nil || index < 0 {
 		return nil, newProviderWriteError(400, "invalid provider id")
 	}
+	targetFamily := strings.ToLower(strings.TrimSpace(req.Family))
+	if targetFamily != "" && targetFamily != family {
+		return h.moveProviderFamily(ctx, client, id, family, targetFamily, index, req, audit)
+	}
 	name := strings.TrimSpace(req.Name)
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
@@ -207,6 +211,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 				}
 				entry := &(*list)[index]
+				if err := (patchProviderStatusRequest{ExpectedName: req.ExpectedName}).verifyName(entry.Name); err != nil {
+					return err
+				}
 				if name != "" {
 					entry.Name = name
 				}
@@ -271,6 +278,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
 		}
 		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) error {
+			if err := (patchProviderStatusRequest{ExpectedAuthIndex: req.ExpectedAuthIndex}).verifyAuthIndex(entry.AuthIndex); err != nil {
+				return err
+			}
 			if err := policyEdit.applyToConfigKey(entry, req.DisableCooling); err != nil {
 				return err
 			}

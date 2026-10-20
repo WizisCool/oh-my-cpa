@@ -164,6 +164,8 @@ export interface SaveProviderModelItem {
 
 export interface SaveProviderPayload {
   family: string;
+  expected_auth_index?: string;
+  expected_name?: string;
   name: string;
   base_url?: string;
   prefix?: string;

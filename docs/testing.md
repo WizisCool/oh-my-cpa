@@ -76,6 +76,20 @@ Rules that keep the suite fast and honest:
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
+### Provider protocol changes
+
+`internal/api/management_provider_family_move_test.go` owns the complete protocol-pair
+matrix, credential and common-setting preservation, multi-key splitting, positional
+metadata movement and invalid/stale-save refusals. It also pins shared settings remaining
+editable after migration and key-specific runtime policy overriding edited shared policy
+when a multi-key provider splits into separate rows. The management client's
+`provider_family_move_test.go` owns preservation of unrelated stored groups and
+runtime-hidden keys, a single two-family PATCH, exact pre-write backups and `If-Match`
+conflict handling. `web/tests/provider-protocol.component.test.tsx` mounts the real editor,
+hook and API client to own protocol selection, adapted save payloads and icon-cache
+reconciliation before subsequent preference writes. Existing provider browser scenarios
+retain drawer, picker, layout and page-level integration claims.
+
 ### Rendered component integration
 
 `pnpm test:components` runs the complete, automatically discovered frontend integration layer: rendered `*.component.test.tsx` suites and Node-environment `*.contract.test.ts` suites.

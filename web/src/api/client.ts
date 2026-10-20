@@ -697,8 +697,8 @@ export const api = {
     });
   },
 
-  async updateManagementProvider(id: string, payload: SaveProviderPayload): Promise<{ status: string; id: string }> {
-    return request<{ status: string; id: string }>(`/management/providers/${encodeURIComponent(id)}`, {
+  async updateManagementProvider(id: string, payload: SaveProviderPayload): Promise<{ status: string; id: string; ids?: string[] }> {
+    return request<{ status: string; id: string; ids?: string[] }>(`/management/providers/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });

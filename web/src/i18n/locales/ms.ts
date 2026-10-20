@@ -2067,6 +2067,8 @@ export const MS: Readonly<Record<string, string>> = {
   "pro.add_provider_title": "Tambah Pembekal AI",
   "pro.edit_provider_title": "Edit Pembekal AI",
   "pro.field_family": "Pemandu / Protokol",
+  "pro.family_change_hint": "Menyimpan akan memindahkan penyedia ini ke protokol yang dipilih. Tetapan umum dikekalkan; tetapan khusus protokol lama dibuang. Pastikan titik akhir dan model menyokong protokol baharu.",
+  "pro.family_change_keys_hint": "Menyimpan akan mencipta penyedia berasingan bagi setiap kunci di bawah protokol yang dipilih. Tetapan umum dikekalkan; tetapan khusus protokol lama dibuang. Pastikan titik akhir dan model menyokong protokol baharu.",
   "pro.family_openai_compat": "Serasi OpenAI",
   "pro.family_codex": "Codex (Respons)",
   "pro.family_claude": "Anthropic (Mesej)",

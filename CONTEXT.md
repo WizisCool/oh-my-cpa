@@ -228,6 +228,13 @@ success. Whole-list provider writes are therefore serialised console-side, and
 **last-intent** is a property of the per-provider queue, not of that
 serialisation: the gateway writer orders writes but does not merge them.
 
+An existing provider can change its protocol driver. Its source id and observed
+identity still address the row being edited; the selected family names the destination.
+A migration keeps credentials and common settings, removes settings specific to the old
+protocol, and preserves every key (one destination row per key for single-key families).
+Both family lists change in one backed-up, revision-guarded write. Names, websites and
+icons move with the provider, and later source rows keep their own metadata.
+
 A confirmed write settles from its own response rather than a second list read,
 and a list read that a confirmation overtook is discarded instead of published,
 so a confirmed value is never replaced by an older one. A transient failure is

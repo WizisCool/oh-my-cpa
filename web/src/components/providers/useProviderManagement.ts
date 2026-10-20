@@ -133,7 +133,7 @@ export function useProviderManagement({
     setIsModelPickerOpen(false);
     try {
       const res = await api.pullProviderModels({
-        provider_id: editingProvider ? editingProvider.id : undefined,
+        provider_id: editingProvider?.family === formFamily ? editingProvider.id : undefined,
         family: formFamily,
         base_url: rawUrl,
         api_key: firstKey,
@@ -324,7 +324,7 @@ export function useProviderManagement({
     }
     try {
       const probed = await api.probeProvider({
-        provider_id: editingProvider ? editingProvider.id : undefined,
+        provider_id: editingProvider?.family === formFamily ? editingProvider.id : undefined,
         family: formFamily,
         base_url: formBaseURL.trim(),
         api_key: apiKey,
@@ -508,13 +508,27 @@ export function useProviderManagement({
     mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload; icon: string }) =>
       api.updateManagementProvider(id, payload),
     onSuccess: async (data, variables) => {
-      const result = await writeProviderIcon(data.id, variables.icon);
-      if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      if (data.id !== variables.id) {
+        // Refresh the overlays moved by the server before merging an icon pick,
+        // or the cached source ids would be written back over the new positions.
+        handleCloseProviderDrawer();
+        void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+        await queryClient.fetchQuery({ queryKey: ['preferences'], queryFn: api.getPreferences, staleTime: 0 });
+      }
+      for (const id of data.ids ?? [data.id]) {
+        const result = await writeProviderIcon(id, variables.icon);
+        if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      }
       toast.success(t('pro.provider_updated'));
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
+      if (apiErrorCode(err) === 'provider_commit_partial') {
+        handleCloseProviderDrawer();
+        void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+        void queryClient.invalidateQueries({ queryKey: ['preferences'] });
+      }
       const msg = describeError(err);
       toast.error(msg);
     },
@@ -727,6 +741,8 @@ export function useProviderManagement({
 
     const payload: SaveProviderPayload = {
       family: formFamily,
+      expected_auth_index: editingProvider?.auth_index,
+      expected_name: editingProvider?.upstream_name || editingProvider?.name,
       name: formName.trim() || 'Custom Provider',
       base_url: formBaseURL.trim(),
       website: formWebsite.trim(),
