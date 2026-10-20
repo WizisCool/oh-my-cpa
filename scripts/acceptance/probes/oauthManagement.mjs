@@ -1,3 +1,4 @@
+import { verifySIWCBinding } from './siwcBinding.mjs';
 import fs from 'node:fs/promises';
 import { createWarmupFixture } from '../warmup-fixture.mjs';
 import { fulfillFixture } from '../browser-guard.mjs';
@@ -1112,6 +1113,7 @@ export async function oauthTokenCapacity(fixtures) {
 }
 export async function oauthAuthorizationOutcomes(fixtures) {
   await fixtures.step('authorization completion and read failures', () => verifyAuthorizationOutcomes(fixtures));
+  await fixtures.step('credential-scoped SIWC binding', () => verifySIWCBinding(fixtures, files));
 }
 export async function oauthWorkspaceScale(fixtures) {
   await fixtures.step('batch quotas and cancellation', () => verifyWorkspaceScale(fixtures));

@@ -7,6 +7,36 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+### Credential-scoped SIWC binding
+
+CPA v8.0.35 adds `POST /v8/management/oauth/siwc/bind` and the Codex
+credential summaries `siwc_bind_supported`, `use_siwc`, `siwc_bound`, and
+optional RFC3339 `siwc_expires_at`. OMC projects these summaries through its
+credential list and the existing Agent/MCP credential read. Missing support
+metadata disables binding. Stored material presence and expiry are not live
+validity checks.
+
+The credential detail offers Bind SIWC and an explicitly confirmed Rebind SIWC.
+The server resolves a unique credential identity and sends only CPA's managed
+ID/name to the fixed binding endpoint. This is standalone/local-file-only;
+Home mode, non-file backends and older gateways are unavailable. There is no
+fallback to ordinary Codex login. CPA alone preserves the existing credential,
+exchanges tokens, saves the SIWC partition, and publishes it to its auth manager.
+
+Binding sessions are process-local and target-scoped. The browser pastes the
+complete `http://127.0.0.1:1455/auth/callback` URL, including the issued
+`client_id`, even when that page cannot load: this flow starts no loopback
+listener. OMC forwards the URL unchanged after matching its state and redirect
+origin/path. Callback values are never stored in preferences or audit records.
+Attempt audits are fail-closed for start, callback and cancellation. Callback
+acceptance remains pending; only completed status followed by safe credential
+readback is success. Readback failure after completion stays in verification
+without offering a second mutation. Cancellation preserves `cancelled:false`.
+Uncompleted attempts expire after five minutes. OMC retains local records for
+ten minutes for terminal reconciliation, without retaining callback values.
+
+Source: [CPA v8.0.35 management contract](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.35/docs/management-api-v8.md).
+
 ### OAuth model-exclusion precedence
 
 CPA v8.0.33 is the first release containing
@@ -542,6 +572,7 @@ Every operation is addressed at its `/v8/management` route, with no fallback:
 | --- | --- |
 | Credential files: list, upload, delete, download, models, status, fields | `/credentials`, `/credentials/download`, `/credentials/models`, `/credentials/status`, `/credentials/fields` |
 | OAuth login, status, cancellation, callback | `/oauth/auth-url?provider=`, `/oauth/status`, `/oauth/session`, `/oauth/callback` |
+| SIWC credential binding (shared OAuth status, cancellation and callback) | `/oauth/siwc/bind` |
 | Plugins: list, delete, store, install | `/plugins`, `/plugins/<id>`, `/plugins/store`, `/plugins/store/<id>/install` |
 | Usage queue (HTTP pull) | `/observability/usage/queue` |
 | API-key usage | `/observability/usage/api-keys` |

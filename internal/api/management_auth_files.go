@@ -28,26 +28,30 @@ var errManagementAuthFileNotFound = errors.New("auth file not found")
 // shape. Account, path, token, metadata, and other credential-bearing fields
 // are not part of this DTO; downloads are a separate, explicit admin action.
 type managementAuthFileResponse struct {
-	Name           string                                `json:"name"`
-	AuthIndex      string                                `json:"auth_index,omitempty"`
-	Type           string                                `json:"type,omitempty"`
-	Provider       string                                `json:"provider,omitempty"`
-	Status         string                                `json:"status,omitempty"`
-	StatusMessage  string                                `json:"status_message,omitempty"`
-	Disabled       bool                                  `json:"disabled"`
-	Unavailable    bool                                  `json:"unavailable"`
-	RuntimeOnly    bool                                  `json:"runtime_only"`
-	Email          string                                `json:"email,omitempty"`
-	ProjectID      string                                `json:"project_id,omitempty"`
-	Success        int64                                 `json:"success"`
-	Failed         int64                                 `json:"failed"`
-	RecentRequests []managementAuthFileRequestBucket     `json:"recent_requests,omitempty"`
-	Quota          *managementQuotaObservation           `json:"quota,omitempty"`
-	ModelQuotas    map[string]managementQuotaObservation `json:"model_quotas,omitempty"`
-	Models         []managementAuthFileModel             `json:"models,omitempty"`
-	Priority       int                                   `json:"priority,omitempty"`
-	Weight         int64                                 `json:"weight,omitempty"`
-	Note           string                                `json:"note,omitempty"`
+	SIWCBindSupported bool                                  `json:"siwc_bind_supported"`
+	UseSIWC           bool                                  `json:"use_siwc"`
+	SIWCBound         bool                                  `json:"siwc_bound"`
+	SIWCExpiresAt     string                                `json:"siwc_expires_at,omitempty"`
+	Name              string                                `json:"name"`
+	AuthIndex         string                                `json:"auth_index,omitempty"`
+	Type              string                                `json:"type,omitempty"`
+	Provider          string                                `json:"provider,omitempty"`
+	Status            string                                `json:"status,omitempty"`
+	StatusMessage     string                                `json:"status_message,omitempty"`
+	Disabled          bool                                  `json:"disabled"`
+	Unavailable       bool                                  `json:"unavailable"`
+	RuntimeOnly       bool                                  `json:"runtime_only"`
+	Email             string                                `json:"email,omitempty"`
+	ProjectID         string                                `json:"project_id,omitempty"`
+	Success           int64                                 `json:"success"`
+	Failed            int64                                 `json:"failed"`
+	RecentRequests    []managementAuthFileRequestBucket     `json:"recent_requests,omitempty"`
+	Quota             *managementQuotaObservation           `json:"quota,omitempty"`
+	ModelQuotas       map[string]managementQuotaObservation `json:"model_quotas,omitempty"`
+	Models            []managementAuthFileModel             `json:"models,omitempty"`
+	Priority          int                                   `json:"priority,omitempty"`
+	Weight            int64                                 `json:"weight,omitempty"`
+	Note              string                                `json:"note,omitempty"`
 }
 
 type managementAuthFileRequestBucket struct {

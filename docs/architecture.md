@@ -838,6 +838,19 @@ only when both the auth file and quota response carry one unique nonempty
 the same surface, and no write is authorized from an ambiguous target. The pure
 projection lives in `web/src/pages/oauthManagement/oauthWorkspaceLogic.ts`.
 
+SIWC bindings are a distinct credential-scoped operation, not provider login.
+`internal/api/management_siwc.go` resolves a unique managed target, admits at most
+128 retained sessions, and serializes callback, cancellation and completion
+readback per attempt. It pins the gateway URL and credential identity in memory;
+callback bodies are not retained. Each mutation requires a successful attempt
+audit. The four non-secret summary fields have explicit console and capability
+allowlists. CPA owns token exchange, file preservation and publication.
+`web/src/hooks/useSIWCBindings.ts` holds attempts above credential selection,
+keyed by name and auth index, so closing or switching the detail panel cannot
+mix targets. CPA completion is followed by safe target readback before success;
+readback failure keeps the completed mutation in verification. See
+[SIWC compatibility](cpa-v8-compat.md#credential-scoped-siwc-binding).
+
 Authorization sessions live above the Connect Drawer in
 `useOAuthSessions`, keyed by provider id, so minimizing or closing the task panel
 does not stop polling, duplicate a checker or cancel an upstream session. A status

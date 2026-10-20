@@ -38,3 +38,16 @@ export interface OAuthCancelResponse {
    */
   cancelled?: boolean;
 }
+
+export interface SIWCBindingStart {
+  url: string;
+  state: string;
+  flow: 'siwc_bind';
+  expires_in: number;
+}
+
+export interface SIWCBindingStatus {
+  status: 'wait' | 'ok' | 'error';
+  completed?: boolean;
+  file?: import('./managementAuthFile').ManagementAuthFile;
+}

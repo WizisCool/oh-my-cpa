@@ -46,6 +46,8 @@ import { VertexImportModal } from '../../components/authFiles/VertexImportModal'
 import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { OAuthCredentialRecord } from './OAuthCredentialRecord';
 import { useOAuthSessions } from './useOAuthSessions';
+import { useSIWCBindings } from '../../hooks/useSIWCBindings';
+import { SIWCBindingPanel } from '../../components/authFiles/SIWCBindingPanel';
 import { useOAuthWorkspaceActions } from './useOAuthWorkspaceActions';
 import {
   buildOAuthWorkspaceProjection,
@@ -231,6 +233,7 @@ export const OAuthManagementPage: React.FC = () => {
       [providerId]: { providerId, snapshot, startedAt: Date.now() },
     }));
   }, []);
+  const siwcBindings = useSIWCBindings();
   const sessions = useOAuthSessions(choices, handleAuthorizationCompleted, { shouldNotifyCompletion: false });
   const startSession = React.useCallback((providerId: string) => {
     preStartSnapshotRef.current[providerId] = new Set(recordsRef.current.map((record) => record.key));
@@ -920,6 +923,7 @@ export const OAuthManagementPage: React.FC = () => {
         initialSection={drawerSection}
         canEdit={Boolean(selectedRecord?.canEditFile)}
         hasExternalDraft={hasWarmupDraft}
+        siwcContent={selectedRecord?.file ? <SIWCBindingPanel file={selectedRecord.file} canEdit={selectedRecord.canEditFile} bindings={siwcBindings} /> : undefined}
         quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
         warmupContent={selectedRecord?.authIndex && selectedRecord.hasUniqueAuthIndex && ['codex', 'claude'].includes(selectedRecord.displayProvider)
           ? <CredentialWarmup key={selectedRecord.authIndex} authIndex={selectedRecord.authIndex} onDirtyChange={setHasWarmupDraft} /> : undefined}

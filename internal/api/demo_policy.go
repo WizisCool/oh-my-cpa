@@ -257,6 +257,10 @@ var demoPolicy = []demoPolicyRule{
 	// Sign-in: starting a real OAuth exchange is the one thing a public demo must
 	// never do, because it would mint a credential against a real provider account.
 	{http.MethodPost, "/api/v1/management/oauth/start", demoRefuse, "sign-in is disabled: the demo holds no provider account to authorize"},
+	{http.MethodPost, "/api/v1/management/oauth/siwc/bind", demoRefuse, "credential binding is disabled in the demonstration"},
+	{http.MethodPost, "/api/v1/management/oauth/siwc/callback", demoRefuse, "credential binding is disabled in the demonstration"},
+	{http.MethodGet, "/api/v1/management/oauth/siwc/status", demoRefuse, "credential binding is disabled in the demonstration"},
+	{http.MethodDelete, "/api/v1/management/oauth/siwc/session", demoRefuse, "credential binding is disabled in the demonstration"},
 	{http.MethodPost, "/api/v1/management/oauth/callback", demoRefuse, "sign-in is disabled: the demo holds no provider account to authorize"},
 	{http.MethodDelete, "/api/v1/management/oauth/session", demoRefuse, "sign-in is disabled: the demo holds no provider account to authorize"},
 

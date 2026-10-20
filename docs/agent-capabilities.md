@@ -650,3 +650,11 @@ requiring prior manual activation. Manual approval authorizes one optional tiny 
 request and post-request activation observation, not token access or reset-credit redemption.
 The shared implementation enforces unknown/paid billing protection and
 uncertainty-aware idempotency; uncertain results must never be automatically replayed.
+
+### SIWC credential summaries
+
+`oauth_credentials_list` includes `siwc_bind_supported`, `use_siwc`, `siwc_bound`,
+and optional `siwc_expires_at` for credential inspection. Missing support means
+unsupported. Material presence and stored expiry are not live validity checks.
+The binding lifecycle remains operator-driven in credential detail: the agent
+and MCP do not receive a bind, callback, activation or unbind capability.

@@ -8,12 +8,16 @@ import (
 )
 
 type Credential struct {
-	Name       string `json:"name"`
-	AuthIndex  string `json:"auth_index"`
-	Provider   string `json:"provider"`
-	Status     string `json:"status"`
-	IsDisabled bool   `json:"is_disabled"`
-	Revision   string `json:"revision"`
+	SIWCBindSupported bool   `json:"siwc_bind_supported"`
+	UseSIWC           bool   `json:"use_siwc"`
+	SIWCBound         bool   `json:"siwc_bound"`
+	SIWCExpiresAt     string `json:"siwc_expires_at,omitempty"`
+	Name              string `json:"name"`
+	AuthIndex         string `json:"auth_index"`
+	Provider          string `json:"provider"`
+	Status            string `json:"status"`
+	IsDisabled        bool   `json:"is_disabled"`
+	Revision          string `json:"revision"`
 }
 type Credentials struct {
 	Items []Credential `json:"items"`
@@ -165,7 +169,7 @@ func (s *Service) registerOAuth(registry *capability.Registry) error {
 			return output, errors.New("tool_result_too_large")
 		}
 		for _, file := range files.Files {
-			output.Items = append(output.Items, Credential{safeLabel(file.Name), file.AuthIndex, file.Provider, file.Status, file.Disabled, s.revision(file)})
+			output.Items = append(output.Items, Credential{SIWCBindSupported: file.SIWCBindSupported, UseSIWC: file.UseSIWC, SIWCBound: file.SIWCBound, SIWCExpiresAt: file.SafeSIWCSummary().SIWCExpiresAt, Name: safeLabel(file.Name), AuthIndex: file.AuthIndex, Provider: file.Provider, Status: file.Status, IsDisabled: file.Disabled, Revision: s.revision(file)})
 		}
 		return output, err
 	}); err != nil {

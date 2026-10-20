@@ -49,6 +49,19 @@ func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (OAuthAuthUR
 	return response, nil
 }
 
+// BindSIWC delegates token exchange and credential preservation entirely to CPA.
+func (c *Client) BindSIWC(ctx context.Context, name string) (OAuthAuthURLResponse, error) {
+	var response OAuthAuthURLResponse
+	err := c.doJSONBody(ctx, http.MethodPost, "/oauth/siwc/bind", map[string]string{"name": name}, &response)
+	return response, err
+}
+
+// SubmitSIWCCallback preserves CPA's conflicts instead of reconciling them as
+// ordinary login's automatic-loopback callback race.
+func (c *Client) SubmitSIWCCallback(ctx context.Context, redirectURL string) error {
+	return c.doJSONBody(ctx, http.MethodPost, "/oauth/callback", map[string]string{"provider": "codex", "redirect_url": redirectURL}, nil)
+}
+
 type OAuthStatusResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`

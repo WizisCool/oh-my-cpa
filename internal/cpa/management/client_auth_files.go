@@ -144,7 +144,26 @@ type AuthFilesResponse struct {
 	Files []AuthFile `json:"files"`
 }
 
+// SIWCSummary contains presence/configuration facts, never token material.
+// A missing support field is deliberately indistinguishable from false.
+type SIWCSummary struct {
+	SIWCBindSupported bool   `json:"siwc_bind_supported"`
+	UseSIWC           bool   `json:"use_siwc"`
+	SIWCBound         bool   `json:"siwc_bound"`
+	SIWCExpiresAt     string `json:"siwc_expires_at,omitempty"`
+}
+
+func (s SIWCSummary) SafeSIWCSummary() SIWCSummary {
+	if expiry, err := time.Parse(time.RFC3339, s.SIWCExpiresAt); err == nil {
+		s.SIWCExpiresAt = expiry.UTC().Format(time.RFC3339)
+	} else {
+		s.SIWCExpiresAt = ""
+	}
+	return s
+}
+
 type AuthFile struct {
+	SIWCSummary
 	ID            string `json:"id"`
 	AuthIndex     string `json:"auth_index"`
 	Name          string `json:"name"`

@@ -18,6 +18,10 @@ export interface ManagementAuthFileModel {
 }
 
 export interface ManagementAuthFile {
+  siwc_bind_supported?: boolean;
+  use_siwc?: boolean;
+  siwc_bound?: boolean;
+  siwc_expires_at?: string;
   name: string;
   auth_index?: string;
   type?: string;

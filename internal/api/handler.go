@@ -86,6 +86,8 @@ type Handler struct {
 	// clock; only the demo dataset export sets it.
 	nowFn func() time.Time
 
+	siwcBindings siwcBindingStore
+
 	configMu       sync.Mutex
 	startTime      time.Time
 	limiter        *loginLimiter
@@ -312,6 +314,10 @@ func (h *Handler) routes() chi.Router {
 				v1.Patch("/management/providers/status", h.patchManagementProviderStatus)
 				v1.Get("/management/oauth/providers", h.listOAuthProviders)
 				v1.Post("/management/oauth/start", h.startOAuthFlow)
+				v1.Post("/management/oauth/siwc/bind", h.startSIWCBinding)
+				v1.Get("/management/oauth/siwc/status", h.getSIWCBindingStatus)
+				v1.Post("/management/oauth/siwc/callback", h.submitSIWCBindingCallback)
+				v1.Delete("/management/oauth/siwc/session", h.cancelSIWCBinding)
 				v1.Get("/management/oauth/status", h.getOAuthStatus)
 				v1.Post("/management/oauth/callback", h.handleOAuthCallback)
 				v1.Delete("/management/oauth/session", h.cancelOAuthSession)

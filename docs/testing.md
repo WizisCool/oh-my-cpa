@@ -1290,3 +1290,16 @@ sample is collected in the renderer; host-side protocol scheduling and completio
 unrelated load-event resources are not counted as rendering work. The threshold is
 unchanged. Bundle loading boundaries and the 20-row page policy remain independent
 regression guards; a loaded runner is not evidence of a hosted performance improvement.
+
+### Credential-scoped SIWC binding
+
+`internal/cpa/management/client_siwc_test.go` owns upstream summary decoding,
+managed-ID binding requests, full callback preservation and conflict fidelity.
+`internal/api/management_siwc_test.go` owns target resolution, callback scoping,
+fail-closed mutation audits, safe readback, expiry, gateway isolation and secret
+exclusion. `internal/operations/oauth_siwc_test.go` owns the Agent/MCP safe read
+projection. `web/tests/siwc-binding.component.test.tsx` owns bind/rebind controls,
+target-scoped async ownership across panel dismissal, callback submission,
+completion readback, cancellation and read-failure/expiry outcomes. The existing
+`oauth-authorization-outcomes` probe owns real-browser detail-panel wiring and
+callback input persistence across close/reopen.

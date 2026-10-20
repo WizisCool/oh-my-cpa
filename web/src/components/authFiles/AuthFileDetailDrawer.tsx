@@ -77,6 +77,7 @@ interface AuthFileDetailDrawerProps {
   onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
   quotaContent?: React.ReactNode;
+  siwcContent?: React.ReactNode;
   warmupContent?: React.ReactNode;
   hasExternalDraft?: boolean;
   initialSection?: 'overview' | 'warmup' | 'configuration' | 'models';
@@ -186,6 +187,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onSaved,
   onDownload,
   quotaContent,
+  siwcContent,
   warmupContent,
   hasExternalDraft = false,
   initialSection = 'overview',
@@ -575,6 +577,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 children: (
                   <div>
                     {quotaContent}
+                    {siwcContent}
                     <details className={styles['credential-metadata']}>
                       <summary>{t('common.details')}</summary>
                       {/* Overview and identity */}

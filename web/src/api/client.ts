@@ -43,7 +43,7 @@ import {
 } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
-import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse } from '../types/oauth';
+import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse, SIWCBindingStart, SIWCBindingStatus } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import {
   SystemInfoResponse,
@@ -1015,6 +1015,24 @@ export const api = {
   // OAuth
   async getOAuthProviders(): Promise<{ providers: OAuthProviderItem[] }> {
     return request<{ providers: OAuthProviderItem[] }>('/management/oauth/providers', { method: 'GET' });
+  },
+
+  async bindSIWC(target: { name: string; auth_index: string; rebind: boolean }): Promise<SIWCBindingStart> {
+    return request<SIWCBindingStart>('/management/oauth/siwc/bind', { method: 'POST', body: JSON.stringify(target) });
+  },
+
+  async getSIWCBindingStatus(state: string): Promise<SIWCBindingStatus> {
+    return request<SIWCBindingStatus>(`/management/oauth/siwc/status?state=${encodeURIComponent(state)}`, { method: 'GET' });
+  },
+
+  async submitSIWCCallback(state: string, redirectUrl: string): Promise<OAuthCallbackResponse> {
+    return request<OAuthCallbackResponse>(`/management/oauth/siwc/callback?state=${encodeURIComponent(state)}`, {
+      method: 'POST', body: JSON.stringify({ redirect_url: redirectUrl }),
+    });
+  },
+
+  async cancelSIWCBinding(state: string): Promise<OAuthCancelResponse> {
+    return request<OAuthCancelResponse>(`/management/oauth/siwc/session?state=${encodeURIComponent(state)}`, { method: 'DELETE' });
   },
 
   async startOAuthFlow(provider: string): Promise<StartOAuthResponse> {
