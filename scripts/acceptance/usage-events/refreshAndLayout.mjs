@@ -14,6 +14,7 @@ export async function refreshAndLayoutSection(context) {
     responseBodies,
     clickSettled,
     autoRefreshSwitch,
+    until,
   } = context;
 
 
@@ -39,6 +40,13 @@ export async function refreshAndLayoutSection(context) {
   page.off('request', countManualFacet);
   check('a manual refresh re-reads the facets', facetRefreshLanded && manualFacets.length >= 1, `requests=${manualFacets.length}`);
   await page.screenshot({ path: path.join(root, 'tmp', 'req-page-desktop.png') });
+  // The pointer is still on the refresh control, whose name is a tooltip. Left there, the tooltip is
+  // a popup placed for the desktop layout, and a narrower viewport would count it as the page's
+  // own overflow. The sweep measures the layout, so the pointer leaves and the tooltip goes first.
+  await page.mouse.move(0, 0);
+  await until(async () => (await page.locator('.ant-tooltip:not(.ant-tooltip-hidden)').count()) === 0, {
+    label: 'the refresh tooltip to close',
+  });
   for (const width of [768, 390]) {
     await page.setViewportSize({ width, height: 800 });
     // Measured once it stops moving instead of after a flat pause: the property
