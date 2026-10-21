@@ -73,6 +73,11 @@
   font-size: var(--text-sm);
 }
 
+/* The endpoint notice is part of the Base URL field, so it keeps the field rhythm. */
+.endpoint-notice {
+  margin-bottom: 16px;
+}
+
 .flag-list {
   display: flex;
   flex-direction: column;

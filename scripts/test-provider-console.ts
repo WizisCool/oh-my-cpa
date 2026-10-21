@@ -23,6 +23,14 @@ import {
   summarizeProviders,
   totalProviderTraffic,
 } from '../web/src/components/providers/providerOverview.ts';
+import {
+  OPENCODE_SESSION_HEADER,
+  OPENCODE_SESSION_HEADER_VALUE,
+  hasOpenCodeSessionHeader,
+  isOpenCodeEndpoint,
+  withOpenCodeSessionHeader,
+} from '../web/src/components/providers/opencodeSession.ts';
+import type { FormHeaderItem } from '../web/src/components/providers/managementProviders.ts';
 import type { ProviderItem } from '../web/src/types/providers.ts';
 
 // ---- provider ids: the list's key is not the API's family name ----
@@ -376,3 +384,72 @@ const relaysOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTER
 assert.deepEqual(relaysOnly.statusCounts, { all: 2, active: 2, disabled: 0, attention: 1 });
 
 console.log('PASS provider overview: traffic joins by upstream name, attention and facets count consistently');
+
+// ---- OpenCode endpoints and the session header they require ----
+
+// OpenCode publishes one lane per base path and keeps adding them, so the lane is
+// recognized from the host rather than from a path list that goes stale. The host
+// is compared on a dot boundary: a relay whose *path* merely spells opencode.ai,
+// or a lookalike such as opencode.ai.example.test, is somebody else's endpoint and
+// must not be described as OpenCode.
+for (const lane of [
+  'https://opencode.ai',
+  'https://opencode.ai/',
+  'https://opencode.ai/zen/v1',
+  'https://opencode.ai/zen/go/v1',
+  'https://opencode.ai/inference/go/openai/v1',
+  'https://opencode.ai/lane-published-later/anthropic/v2',
+  'https://API.OpenCode.ai/zen/v1',
+  'https://opencode.ai.:443/zen/v1',
+  'https://opencode.ai/zen/v1?trace=1#models',
+]) {
+  assert.equal(isOpenCodeEndpoint(lane), true, `${lane} is an OpenCode endpoint`);
+}
+for (const notOpenCode of [
+  '',
+  '   ',
+  'opencode.ai/zen/v1',
+  'http://opencode.ai/zen/v1',
+  'https://opencode.ai.example.test/zen/v1',
+  'https://notopencode.ai/zen/v1',
+  'https://relay.example/opencode.ai/zen/v1',
+  'https://opencode.ai:bad/zen/v1',
+  'javascript:alert(1)',
+]) {
+  assert.equal(isOpenCodeEndpoint(notOpenCode), false, `${JSON.stringify(notOpenCode)} is not an OpenCode endpoint`);
+}
+
+// A blank entry is still missing: CPA would send an empty header, which is not the
+// session id OpenCode asks for. A filled entry is satisfied whatever its value,
+// because an operator's own mapping outranks this suggestion.
+const header = (key: string, value: string, id = 'hdr'): FormHeaderItem => ({ id, key, value });
+assert.equal(hasOpenCodeSessionHeader([]), false);
+assert.equal(hasOpenCodeSessionHeader([header('x-opencode-session', '  ')]), false);
+assert.equal(hasOpenCodeSessionHeader([header(' X-OpenCode-Session ', 'ses_operator')]), true);
+assert.equal(hasOpenCodeSessionHeader([header('X-Team', '$CPA-SESSION-ID')]), false);
+
+const teamHeader = header('X-Team', 'alpha', 'hdr-team');
+const appended = withOpenCodeSessionHeader([teamHeader], 'hdr-new');
+assert.deepEqual(appended, [
+  teamHeader,
+  { id: 'hdr-new', key: OPENCODE_SESSION_HEADER, value: OPENCODE_SESSION_HEADER_VALUE },
+]);
+assert.equal(appended[1].value, '$CPA-SESSION-ID', 'the suggestion is the placeholder CPA expands');
+// A second click is not a second header, and the draft it returns is the same
+// reference so React can bail out of the update.
+assert.equal(withOpenCodeSessionHeader(appended, 'hdr-other'), appended);
+// The operator's own session mapping is never overwritten or duplicated.
+const operatorMapping = [header('X-OpenCode-Session', 'ses_operator')];
+assert.equal(withOpenCodeSessionHeader(operatorMapping, 'hdr-new'), operatorMapping);
+assert.equal(
+  withOpenCodeSessionHeader([header('x-opencode-session', ''), header('x-opencode-session', 'ses_operator', 'hdr-2')], 'hdr-new').length,
+  2,
+  'a filled entry satisfies the requirement even beside a blank one',
+);
+// A blank entry the operator started is the one that receives the value.
+assert.deepEqual(
+  withOpenCodeSessionHeader([teamHeader, header('x-opencode-session', ' ', 'hdr-blank')], 'hdr-new'),
+  [teamHeader, { id: 'hdr-blank', key: 'x-opencode-session', value: '$CPA-SESSION-ID' }],
+);
+
+console.log('PASS OpenCode guidance: the host selects the lane, and one filled session header is enough');

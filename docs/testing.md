@@ -90,6 +90,13 @@ hook and API client to own protocol selection, adapted save payloads and icon-ca
 reconciliation before subsequent preference writes. Existing provider browser scenarios
 retain drawer, picker, layout and page-level integration claims.
 
+`web/tests/provider-opencode-session.component.test.tsx` mounts the same editor for the
+OpenCode endpoint guidance: the suggestion follows the base URL typed into the draft rather
+than the provider the drawer was opened from, one click fills the collapsed Custom Headers
+group with the literal `x-opencode-session: $CPA-SESSION-ID`, a draft that already names its
+own session id stays quiet, and nothing is written before Save. The host-boundary detection
+and the idempotent merge beneath it belong to `scripts/test-provider-console.ts`.
+
 ### Rendered component integration
 
 `pnpm test:components` runs the complete, automatically discovered frontend integration layer: rendered `*.component.test.tsx` suites and Node-environment `*.contract.test.ts` suites.
