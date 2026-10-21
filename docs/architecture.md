@@ -2300,10 +2300,11 @@ never overwrites a newer one). The overview and the credential detail serve that
 `last_refresh` beside the retained observation, and `quota.ApplyReadingHealth` derives
 the status the console presents: a failed attempt newer than the reading outranks it —
 auth-like failures become `error` with the `reauth` recommendation, the rest `stale` with
-the previous numbers standing — an active cooldown still outranks both, and a healthy or
-warning reading whose own announced boundary has passed unseen (past
-`reset_at_ms` + the reset grace, and taken before that boundary) becomes `stale` with no
-error attached. `exhausted` keeps its status: it is what stops the credential, and the
+the previous numbers standing, and a credential with no stored observation at all becomes
+`error` rather than `stale`, because there is nothing on screen to call out of date — an
+active cooldown still outranks both, and a healthy or warning reading whose own announced
+boundary has passed unseen (past `reset_at_ms` + the reset grace, and taken before that
+boundary) becomes `stale` with no error attached. `exhausted` keeps its status: it is what stops the credential, and the
 reset-driven read answers it within minutes. The workspace therefore states a failure
 that outlives its toast, counts a stale reading apart from the healthy total, offers a
 single-credential refresh in the row that reports it, and never presents a reading days

@@ -3110,6 +3110,7 @@ const DICT: Record<string, [string, string]> = {
   'quota.redeem_credit_failed': ['使用重置积分失败：{msg}', 'Failed to redeem credit: {msg}'],
   'quota.redeem_cooldown_warning': ['额度已重置，但未能清除网关冷却。请对该凭证使用“清除冷却”，不要再消耗重置额度', 'Quota reset, but the gateway cooldown couldn\'t be cleared. Use Clear cooldown on this credential; don\'t redeem another reset'],
   'quota.credential_disabled': ['该凭据已在 CPA 中停用', 'Credential disabled in CPA'],
+  'quota.reading_failed': ['读数获取失败', 'The reading could not be fetched'],
   'quota.not_observed_yet': ['尚未读取配额，点击「刷新额度」获取', 'Quota not read yet — use Refresh quota'],
   'quota.usage_not_published': ['上游已应答但未返回配额窗口', 'Upstream answered without a quota window'],
   'quota.no_live_probe': ['该提供商不提供实时配额探测', 'This provider offers no live quota probe'],

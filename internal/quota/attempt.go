@@ -37,26 +37,31 @@ func ReadOutcome(reading *NormalizedQuota, err error) (isUsable bool, reason str
 // ApplyReadingHealth sets the status the console presents from a stored reading and the last
 // attempt to re-read it.
 //
+// hasStoredReading says whether the caller holds an observation to present at all. It decides what
+// a failure means: with a reading, the failure is a reason that the previous numbers are still on
+// screen; without one, the failure is the whole answer about the credential, and there is nothing
+// for the attempt to be "older than".
+//
 // The order is by how much each fact constrains the operator, and it continues the order
 // EvaluateStatusAndRecommendation already uses. A disabled credential is the operator's own
 // decision. An active cooldown is the gateway blocking traffic right now, which a failed quota
 // read says nothing about. A failed attempt is newer information than the reading it failed to
 // replace, so it outranks what the reading claimed - as an auth failure (the credential needs
 // signing in again) or as an ordinary refusal that left the previous numbers standing. Last, a
-// reading that announced a window boundary which has since passed unseen cannot keep claiming
-// to be current: nobody has data about the cycle that began.
+// reading that announced a window boundary which has since passed unseen cannot keep claiming to
+// be current: nobody has data about the cycle that began.
 //
 // exhausted is deliberately not overridden by an age rule: its numbers still say "no capacity",
 // which is what stops the credential, and the reset-driven read answers the question within
 // minutes of a boundary.
-func ApplyReadingHealth(q *NormalizedQuota, attempt *ReadAttempt, nowMS int64) {
+func ApplyReadingHealth(q *NormalizedQuota, attempt *ReadAttempt, hasStoredReading bool, nowMS int64) {
 	if q == nil || q.Disabled {
 		return
 	}
 	if (q.ActiveCooldown != nil && q.ActiveCooldown.IsActive) || q.Status == "cooldown" {
 		return
 	}
-	if attempt != nil && attempt.IsFailed && attempt.AttemptedAtMS > q.ObservedAtMS {
+	if attempt != nil && attempt.IsFailed && (!hasStoredReading || attempt.AttemptedAtMS >= q.ObservedAtMS) {
 		q.Error = attempt.Failure
 		if looksLikeAuthFailure(attempt.Failure) {
 			q.Status = "error"
@@ -68,12 +73,25 @@ func ApplyReadingHealth(q *NormalizedQuota, attempt *ReadAttempt, nowMS int64) {
 			}
 			return
 		}
-		q.Status = "stale"
+		if hasStoredReading {
+			q.Status = "stale"
+			q.Recommendation = QuotaRecommendation{
+				Status:   "warning",
+				Priority: "medium",
+				Action:   "refresh",
+				Reason:   "最近一次额度刷新失败，正在显示上一次成功读取的数据，可尝试重新刷新",
+			}
+			return
+		}
+		// No snapshot to present, so nothing can be called out of date: the credential is an error
+		// that a retry may clear, and the page says that instead of asking for a first read that
+		// has already been attempted.
+		q.Status = "error"
 		q.Recommendation = QuotaRecommendation{
 			Status:   "warning",
 			Priority: "medium",
 			Action:   "refresh",
-			Reason:   "最近一次额度刷新失败，正在显示上一次成功读取的数据，可尝试重新刷新",
+			Reason:   "最近一次额度刷新失败，尚未取得额度读数，可尝试重新刷新",
 		}
 		return
 	}

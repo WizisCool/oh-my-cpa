@@ -44,7 +44,7 @@ func TestApplyReadingHealthAuthFailureOutranksTheReading(t *testing.T) {
 	q := readingWithReset(now-hourMS, now+4*hourMS)
 	attempt := &ReadAttempt{AttemptedAtMS: now, IsFailed: true, Failure: "HTTP 401: token expired"}
 
-	ApplyReadingHealth(q, attempt, now)
+	ApplyReadingHealth(q, attempt, true, now)
 
 	if q.Status != "error" {
 		t.Fatalf("status = %q, want error", q.Status)
@@ -67,7 +67,7 @@ func TestApplyReadingHealthTransientFailureKeepsTheOldNumbers(t *testing.T) {
 	q := readingWithReset(now-hourMS, now+4*hourMS)
 	attempt := &ReadAttempt{AttemptedAtMS: now, IsFailed: true, Failure: "HTTP 500: upstream timeout"}
 
-	ApplyReadingHealth(q, attempt, now)
+	ApplyReadingHealth(q, attempt, true, now)
 
 	if q.Status != "stale" {
 		t.Fatalf("status = %q, want stale", q.Status)
@@ -85,7 +85,7 @@ func TestApplyReadingHealthIgnoresAnAttemptOlderThanTheReading(t *testing.T) {
 	q := readingWithReset(now-minuteMS, now+4*hourMS)
 	attempt := &ReadAttempt{AttemptedAtMS: now - hourMS, IsFailed: true, Failure: "HTTP 401: token expired"}
 
-	ApplyReadingHealth(q, attempt, now)
+	ApplyReadingHealth(q, attempt, true, now)
 
 	if q.Status != "healthy" {
 		t.Fatalf("status = %q, want the reading that is newer than the failed attempt", q.Status)
@@ -102,7 +102,7 @@ func TestApplyReadingHealthLeavesCooldownAndDisabledAlone(t *testing.T) {
 	cooldown := readingWithReset(now-hourMS, now+4*hourMS)
 	cooldown.ActiveCooldown = &ActiveCooldown{IsActive: true, Reason: "rate limited"}
 	cooldown.Status = "cooldown"
-	ApplyReadingHealth(cooldown, attempt, now)
+	ApplyReadingHealth(cooldown, attempt, true, now)
 	if cooldown.Status != "cooldown" {
 		t.Fatalf("status = %q, want the cooldown that is blocking traffic now", cooldown.Status)
 	}
@@ -110,7 +110,7 @@ func TestApplyReadingHealthLeavesCooldownAndDisabledAlone(t *testing.T) {
 	disabled := readingWithReset(now-hourMS, now+4*hourMS)
 	disabled.Disabled = true
 	disabled.Status = "idle"
-	ApplyReadingHealth(disabled, attempt, now)
+	ApplyReadingHealth(disabled, attempt, true, now)
 	if disabled.Status != "idle" {
 		t.Fatalf("status = %q, want idle", disabled.Status)
 	}
@@ -121,7 +121,7 @@ func TestApplyReadingHealthFlagsAReadingThatOutlivedItsReset(t *testing.T) {
 	reset := now - 2*hourMS
 	q := readingWithReset(now-3*hourMS, reset)
 
-	ApplyReadingHealth(q, &ReadAttempt{AttemptedAtMS: now - 3*hourMS}, now)
+	ApplyReadingHealth(q, &ReadAttempt{AttemptedAtMS: now - 3*hourMS}, true, now)
 
 	if q.Status != "stale" {
 		t.Fatalf("status = %q, want stale: a boundary the reading announced has passed unseen", q.Status)
@@ -140,10 +140,56 @@ func TestApplyReadingHealthDoesNotFlagAFreshReadingOfAnEndedCycle(t *testing.T) 
 	// accurately, and flagging it would flicker the console at every rollover.
 	q := readingWithReset(now-1000, now-minuteMS)
 
-	ApplyReadingHealth(q, nil, now)
+	ApplyReadingHealth(q, nil, true, now)
 
 	if q.Status != "healthy" {
 		t.Fatalf("status = %q, want healthy", q.Status)
+	}
+}
+
+func TestApplyReadingHealthReportsAFailedFirstRead(t *testing.T) {
+	// The console has never read this credential, so the caller has no observation to present and
+	// stamps the row with the request's own instant. The attempt is still the newest fact there is.
+	now := time.Now().UnixMilli()
+	unread := &NormalizedQuota{AuthIndex: "idx", Status: "idle", ObservedAtMS: now, Windows: []QuotaWindow{}}
+
+	ApplyReadingHealth(unread, &ReadAttempt{AttemptedAtMS: now, IsFailed: true, Failure: "HTTP 401: token expired"}, false, now)
+
+	if unread.Status != "error" {
+		t.Fatalf("status = %q, want error: a failed first read is not 'never read'", unread.Status)
+	}
+	if unread.Recommendation.Action != "reauth" {
+		t.Fatalf("recommendation = %+v, want the reauth action", unread.Recommendation)
+	}
+	if unread.Error != "HTTP 401: token expired" {
+		t.Fatalf("error = %q, want the provider's reason", unread.Error)
+	}
+}
+
+func TestApplyReadingHealthDoesNotCallAnUnreadCredentialStale(t *testing.T) {
+	// "Stale" says a snapshot on screen has outlived its boundary. With no snapshot there is
+	// nothing to call out of date, so a retryable failure is an error with a refresh hint.
+	now := time.Now().UnixMilli()
+	unread := &NormalizedQuota{AuthIndex: "idx", Status: "idle", ObservedAtMS: now, Windows: []QuotaWindow{}}
+
+	ApplyReadingHealth(unread, &ReadAttempt{AttemptedAtMS: now, IsFailed: true, Failure: "HTTP 500: upstream timeout"}, false, now)
+
+	if unread.Status != "error" {
+		t.Fatalf("status = %q, want error", unread.Status)
+	}
+	if unread.Recommendation.Action != "refresh" {
+		t.Fatalf("recommendation = %+v, want refresh", unread.Recommendation)
+	}
+}
+
+func TestApplyReadingHealthKeepsAFailedAttemptOlderThanItsReadingIgnored(t *testing.T) {
+	// A stored observation newer than the recorded attempt is the console's current answer, even
+	// when the attempt beside it failed: the write that would have been newer already happened.
+	now := time.Now().UnixMilli()
+	q := readingWithReset(now-minuteMS, now+4*hourMS)
+	ApplyReadingHealth(q, &ReadAttempt{AttemptedAtMS: now - 2*hourMS, IsFailed: true, Failure: "HTTP 401: token expired"}, true, now)
+	if q.Status != "healthy" || q.Error != "" {
+		t.Fatalf("status = %q error = %q, want the newer reading", q.Status, q.Error)
 	}
 }
 
@@ -153,7 +199,7 @@ func TestApplyReadingHealthDoesNotOverrideExhaustionWithAge(t *testing.T) {
 	q.Status = "exhausted"
 	q.Windows[0].RemainingPercent = floatPtr(0)
 
-	ApplyReadingHealth(q, nil, now)
+	ApplyReadingHealth(q, nil, true, now)
 
 	if q.Status != "exhausted" {
 		t.Fatalf("status = %q, want exhausted: it is what stops the credential", q.Status)

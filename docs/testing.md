@@ -955,7 +955,9 @@ disabled credential left alone, a fresh reading of an ended cycle not flickering
 `exhausted` keeping its status. `internal/api/management_quota_attempt_test.go` owns the
 wire: a failing refresh leaves the overview reporting `error`/`stale` with `last_refresh`
 and the previous observation's windows and observed time, an auth failure counts as
-attention, and the next successful read clears it. `scripts/test-quota-attempt.ts` owns
+attention, the next successful read clears it, and a credential with no stored observation
+reports its failed first read as `error`/reauth in both the overview and the credential
+detail - with no history row, because a failed read is not an observation. `scripts/test-quota-attempt.ts` owns
 the row's two lines (failed attempt versus outlived reset, and silence when neither
 applies), and `web/tests/credential-quota.component.test.tsx` renders the statement beside
 the retained numbers and the row's own refresh control.

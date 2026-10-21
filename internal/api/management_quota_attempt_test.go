@@ -250,3 +250,134 @@ func itoa(value int) string {
 	}
 	return string(digits)
 }
+
+// TestQuotaRefreshFailureWithoutAReading covers the credential the console has never read: there is
+// no observation for the failure to sit beside, so the attempt is the only fact there is - and a
+// page that presented it as "idle, never read" would hide the sign-in that has to happen.
+func TestQuotaRefreshFailureWithoutAReading(t *testing.T) {
+	const managementKey = "management-secret"
+
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer "+managementKey {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v8/management/credentials":
+			_, _ = writer.Write([]byte(`{"files":[{
+				"id":"file-1","name":"codex-fresh.json","auth_index":"codex-idx-1",
+				"type":"codex","provider":"codex","disabled":false
+			}]}`))
+		case "/v8/management/requests/api-call":
+			_, _ = writer.Write([]byte(`{"status_code":401,"body":{"message":"token expired"}}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer cpaServer.Close()
+
+	handler := testHandler(t, "")
+	appServer := httptest.NewServer(handler.Router())
+	defer appServer.Close()
+
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := cipher.Encrypt([]byte(managementKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := handler.repo.UpsertInstance(context.Background(), domain.CPAInstance{
+		ID:                      "default",
+		Name:                    "Default",
+		BaseURL:                 cpaServer.URL,
+		UsageAddr:               strings.TrimPrefix(cpaServer.URL, "http://"),
+		ManagementKeyCiphertext: ciphertext,
+		ManagementKeyNonce:      nonce,
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginResp.Body.Close()
+
+	refreshResp, err := client.Post(appServer.URL+"/api/v1/management/quota/refresh", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
+	if err != nil {
+		t.Fatalf("POST /quota/refresh failed: %v", err)
+	}
+	defer refreshResp.Body.Close()
+	if refreshResp.StatusCode != http.StatusOK {
+		t.Fatalf("refresh status = %d, want 200", refreshResp.StatusCode)
+	}
+
+	overviewResp, err := client.Get(appServer.URL + "/api/v1/management/quota")
+	if err != nil {
+		t.Fatalf("GET /quota failed: %v", err)
+	}
+	defer overviewResp.Body.Close()
+	var overview struct {
+		Summary quota.QuotaOverviewSummary `json:"summary"`
+		Quotas  []QuotaItemDTO             `json:"quotas"`
+	}
+	if err := json.NewDecoder(overviewResp.Body).Decode(&overview); err != nil {
+		t.Fatalf("decode overview failed: %v", err)
+	}
+	if len(overview.Quotas) != 1 {
+		t.Fatalf("quotas = %d, want 1", len(overview.Quotas))
+	}
+	row := overview.Quotas[0]
+	if row.Status != "error" {
+		t.Fatalf("row status = %q, want error: a failed first read is not 'never read'", row.Status)
+	}
+	if row.Recommendation.Action != "reauth" {
+		t.Fatalf("recommendation = %+v, want the reauth action", row.Recommendation)
+	}
+	if row.LastRefresh == nil || row.LastRefresh.Outcome != repository.QuotaRefreshAttemptFailed || !strings.Contains(row.LastRefresh.Error, "401") {
+		t.Fatalf("last_refresh = %+v, want the failed attempt", row.LastRefresh)
+	}
+	if len(row.Windows) != 0 {
+		t.Fatalf("windows = %d, want none: nothing was ever observed", len(row.Windows))
+	}
+	if overview.Summary.AttentionCount != 1 {
+		t.Fatalf("attention_count = %d, want the failing credential counted", overview.Summary.AttentionCount)
+	}
+
+	detailResp, err := client.Get(appServer.URL + "/api/v1/management/quota/codex-idx-1")
+	if err != nil {
+		t.Fatalf("GET /quota/{authIndex} failed: %v", err)
+	}
+	defer detailResp.Body.Close()
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200", detailResp.StatusCode)
+	}
+	var detail struct {
+		Quota       quota.NormalizedQuota            `json:"quota"`
+		LastRefresh *QuotaRefreshAttemptDTO          `json:"last_refresh"`
+		History     []repository.QuotaSnapshotRecord `json:"history"`
+	}
+	if err := json.NewDecoder(detailResp.Body).Decode(&detail); err != nil {
+		t.Fatalf("decode detail failed: %v", err)
+	}
+	if detail.Quota.Status != "error" || detail.Quota.Recommendation.Action != "reauth" {
+		t.Fatalf("detail quota = %q/%+v, want error with reauth", detail.Quota.Status, detail.Quota.Recommendation)
+	}
+	if detail.LastRefresh == nil || detail.LastRefresh.Outcome != repository.QuotaRefreshAttemptFailed {
+		t.Fatalf("detail last_refresh = %+v, want the failed attempt", detail.LastRefresh)
+	}
+	if len(detail.History) != 0 {
+		t.Fatalf("history = %d, want none: a failed read is not an observation", len(detail.History))
+	}
+}

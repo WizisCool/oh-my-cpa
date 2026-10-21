@@ -337,6 +337,20 @@ describe('a failed refresh stays on the page', () => {
     expect(screen.queryByText(/Last refresh failed/)).toBeNull();
   });
 
+  it('does not tell a failed first read to be fetched for the first time', () => {
+    renderSurface(quota('codex-unread', [], {
+      status: 'error',
+      error: 'HTTP 401: token expired',
+      recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
+      last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: token expired' },
+    }));
+    expect(screen.getByText('Error')).toBeTruthy();
+    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    // Nothing was observed, so there is no snapshot to call stale and no first read still to make.
+    expect(screen.getByText('The reading could not be fetched')).toBeTruthy();
+    expect(screen.queryByText(/not read yet/i)).toBeNull();
+  });
+
   it('says nothing about refreshing while the reading is current', () => {
     renderSurface(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]));
     expect(screen.getByText('Normal')).toBeTruthy();

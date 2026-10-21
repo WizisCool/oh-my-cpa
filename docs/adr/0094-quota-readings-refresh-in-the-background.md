@@ -1,6 +1,6 @@
 # ADR 0094: Quota readings refresh in the background
 
-- Status: Accepted
+- Status: Accepted, amended 2026-10-22 (see "A failed read leaves a trace for the console")
 - Date: 2026-10-12
 
 ## Context
@@ -80,8 +80,10 @@ reading and the provider's redacted reason - written by the one helper every rea
 goes through, and served as `last_refresh` beside the reading. The status the console
 presents then follows `quota.ApplyReadingHealth`: a failed attempt newer than the reading
 outranks it (auth-like failures as `error` with the reauth recommendation, the rest as
-`stale` with the previous numbers standing), an active cooldown outranks both, and a
-healthy or warning reading whose own announced reset has passed unseen reads as `stale`.
+`stale` with the previous numbers standing, or as `error` when the credential holds no
+observation at all and nothing on screen could be called out of date), an active cooldown
+outranks both, and a healthy or warning reading whose own announced reset has passed unseen
+reads as `stale`.
 Recording an attempt does not change the cadence: the loop's retry backoff stays
 in-process memory, so a restart still re-reads a failing credential once.
 

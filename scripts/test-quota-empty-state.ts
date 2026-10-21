@@ -7,11 +7,13 @@ function credential(overrides: {
   disabled?: boolean;
   refreshSupported?: boolean;
   status?: string;
+  lastRefresh?: { attempted_at_ms: number; outcome: 'succeeded' | 'failed'; error?: string };
 } = {}) {
   return {
     disabled: overrides.disabled ?? false,
     capabilities: { refresh_supported: overrides.refreshSupported ?? true },
     status: overrides.status ?? 'idle',
+    ...(overrides.lastRefresh ? { last_refresh: overrides.lastRefresh } : {}),
   } as Parameters<typeof quotaEmptyStateKey>[0];
 }
 
@@ -36,4 +38,19 @@ test('the reason a credential has no window decides the message', () => {
   // A credential that has a reading never reaches this decision, but a status it does not know still
   // resolves to the message that asks for one rather than to an empty claim.
   assert.equal(quotaEmptyStateKey(credential({ status: 'healthy' })), 'quota.not_observed_yet');
+});
+
+test('a failed read is not described as one nobody has asked for', () => {
+  // The credential has no window because the read failed, not because nobody tried: telling the
+  // reader to fetch it for the first time would hide the failure the row is reporting.
+  const failed = quotaEmptyStateKey(credential({
+    status: 'error',
+    lastRefresh: { attempted_at_ms: 1_800_000_000_000, outcome: 'failed', error: 'HTTP 401: token expired' },
+  }));
+  assert.equal(failed, 'quota.reading_failed');
+  assert.equal(quotaEmptyStateKey(credential({ status: 'idle' })), 'quota.not_observed_yet');
+  assert.equal(
+    quotaEmptyStateKey(credential({ status: 'error', lastRefresh: { attempted_at_ms: 1_800_000_000_000, outcome: 'succeeded' } })),
+    'quota.not_observed_yet',
+  );
 });

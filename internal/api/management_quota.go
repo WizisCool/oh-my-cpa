@@ -574,6 +574,10 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		Capabilities: caps,
 		Windows:      []quota.QuotaWindow{},
 	}
+	// Whether an observation exists at all is what a failure means here: beside a reading it is a
+	// reason the previous numbers still stand, and without one it is the whole answer about the
+	// credential. See quota.ApplyReadingHealth.
+	hasStoredReading := false
 
 	if h.repo != nil {
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
@@ -589,6 +593,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		}
 		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
 			if snapshot, ok := snapshots[authIndex]; ok {
+				hasStoredReading = true
 				normalized.ObservedAtMS = snapshot.ObservedAtMS
 				// See buildQuotaOverview: an empty reading survives only through the stored status.
 				normalized.Status = snapshot.Status
@@ -620,7 +625,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 	lastAttempts := h.lastQuotaAttempts(ctx, []string{authIndex})
 	attempt := quotaAttemptOf(lastAttempts[authIndex])
-	quota.ApplyReadingHealth(&normalized, attempt, nowMS)
+	quota.ApplyReadingHealth(&normalized, attempt, hasStoredReading, nowMS)
 	h.attachWindowCapacity(ctx, &normalized, nowMS)
 
 	var history []repository.QuotaSnapshotRecord
@@ -767,7 +772,8 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 
 		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 		attempt := quotaAttemptOf(lastAttempts[authIndex])
-		quota.ApplyReadingHealth(&normalized, attempt, nowMS)
+		_, hasStoredReading := latestSnapshots[authIndex]
+		quota.ApplyReadingHealth(&normalized, attempt, hasStoredReading, nowMS)
 		h.attachWindowCapacity(ctx, &normalized, nowMS)
 
 		switch normalized.Status {

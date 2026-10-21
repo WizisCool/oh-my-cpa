@@ -428,9 +428,11 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   the provider's redacted reason when the try produced no reading (migration 044). The
   console presents it as `last_refresh` beside the reading, and it decides what the row
   says: an authentication failure reads as `error` and offers re-authorization, any other
-  failure leaves the previous numbers standing as `stale`, and a reading whose own window
-  reset has passed unseen also reads as `stale` because nobody has data about the cycle
-  that began. It outlives the toast that announced it, which is the point.
+  failure leaves the previous numbers standing as `stale`, a credential nobody has read
+  reads as `error` with a refresh hint instead (there is no snapshot to call out of date),
+  and a reading whose own window reset has passed unseen also reads as `stale` because
+  nobody has data about the cycle that began. It outlives the toast that announced it,
+  which is the point.
 - **Quota Auto Refresh**: The background re-reading of stored quota observations,
   under the deployment-wide `omc_quota_auto_refresh` policy edited on OMC Settings
   (ADR 0094). It has two independent triggers. A **reset-driven read** (on by default)
