@@ -36,7 +36,12 @@ export async function checkWaitingActivity({ base, page, check }, selector, { sh
       if (viewport.mode) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           if (await page.evaluate(mode => document.documentElement.dataset.themeMode === mode, viewport.mode)) break;
+          // A theme change lands inside a view transition, a frame or more after the click, so each
+          // step waits for the preference to move before reading the mode it settled on; reading at
+          // once saw the old mode and clicked again, past the one it wanted.
+          const preference = await page.evaluate(() => document.documentElement.dataset.themePreference);
           await page.getByRole('button', { name: /^Theme:/ }).click();
+          await page.waitForFunction(previous => document.documentElement.dataset.themePreference !== previous, preference);
         }
         check(`${selector}/${viewport.mode}: the real theme control selects the test mode`,
           await page.evaluate(mode => document.documentElement.dataset.themeMode === mode, viewport.mode));
