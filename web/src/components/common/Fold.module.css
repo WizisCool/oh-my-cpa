@@ -1,0 +1,51 @@
+/* The grid 0fr/1fr technique folds the body from its own height, whatever that turns out to be.
+   The body fades with it, so content does not slide into view fully inked while the edge is still
+   moving, and fades out faster than it folds, so what is leaving is gone before the edge arrives. Closed, it is hidden from focus and assistive
+   technology, after the fold has finished rather than before. */
+.fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--motion-base) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    visibility 0s linear var(--motion-base);
+}
+
+.fold[data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--motion-base) var(--ease-standard),
+    opacity var(--motion-base) var(--ease-standard),
+    visibility 0s linear 0s;
+}
+
+.fold-inner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Once open, nothing inside is clipped: a focus ring at the body's edge, or a popup anchored in it. */
+.fold[data-open] > .fold-inner {
+  overflow: visible;
+  animation: fold-clip var(--motion-base) step-end;
+}
+
+@keyframes fold-clip {
+  from { overflow: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold,
+  .fold[data-open] {
+    transition: none;
+  }
+  .fold[data-open] > .fold-inner {
+    animation: none;
+  }
+}

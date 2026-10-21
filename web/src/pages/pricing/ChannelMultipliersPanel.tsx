@@ -152,16 +152,15 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
             title={t('pricing.channels.reset_confirm', { channel: label })}
             confirmLabel={t('pricing.channels.reset')}
             onConfirm={() => reset.mutate()}
+            tooltip={t('pricing.channels.reset')}
           >
-            <Tooltip title={t('pricing.channels.reset')}>
-              <Button
-                size="small"
-                className="row-action-btn"
-                icon={<UndoOutlined />}
-                loading={reset.isPending}
-                aria-label={`${t('pricing.channels.reset')}: ${label}`}
-              />
-            </Tooltip>
+            <Button
+              size="small"
+              className="row-action-btn"
+              icon={<UndoOutlined />}
+              loading={reset.isPending}
+              aria-label={`${t('pricing.channels.reset')}: ${label}`}
+            />
           </ConfirmAction>
         )}
       </div>

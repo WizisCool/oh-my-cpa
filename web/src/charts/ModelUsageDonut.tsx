@@ -127,7 +127,7 @@ export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({
               }}
               // A 2px stroke in the card's own colour separates adjacent slices. Without it two neighbouring
               // hues touch directly, which is where a boundary is hardest to find.
-              style={{ stroke: colors.surface, lineWidth: 2, radius: 0.92, innerRadius: 0.68 }}
+              style={{ stroke: colors.bg, lineWidth: 2, radius: 0.92, innerRadius: 0.68 }}
               // A ring with no axes: the coordinate is theta, so an axis would be a line through the middle
               // of the drawing.
               axis={false}

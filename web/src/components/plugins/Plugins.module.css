@@ -1,6 +1,5 @@
 /* Plugins.module.css — the plugin management page: installed list, store cards, settings.
-   Terminal-flat console: 1px borders, no shadows. Class names are kebab-case and read
-   through styles['kebab-case']. */
+   Class names are kebab-case and read through styles['kebab-case']. */
 
 /* ── shared ─────────────────────────────────────────────────────────────── */
 
@@ -10,9 +9,9 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
   color: var(--muted);
 }
 
@@ -54,8 +53,8 @@
   align-items: center;
   gap: 4px;
   padding: 0 6px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--fg-2);
   font-size: var(--text-xs);
   line-height: 18px;
@@ -63,12 +62,12 @@
 }
 
 .badge-warn {
-  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
 }
 
 .badge-accent {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 
@@ -88,7 +87,7 @@
 
 .meta-item + .meta-item::before {
   margin-right: 8px;
-  color: var(--border);
+  color: var(--meta);
   content: '·';
 }
 
@@ -105,16 +104,15 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--muted);
-  transition: color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
 
 .icon-link:hover,
 .icon-link:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--fg);
 }
 
 .status-strip {
@@ -148,8 +146,8 @@
 .installed-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 2px;
+  margin: 12px -14px 0;
 }
 
 .installed-row {
@@ -158,9 +156,14 @@
   align-items: start;
   gap: 12px 14px;
   padding: 12px 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--radius-md);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+/* Rows of the card that holds them, not cards of their own: a frame inside a frame said the list
+   twice. The pointer brings a wash, as it does on every other list. */
+.installed-row:hover {
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
 }
 
 .installed-row .logo {
@@ -232,14 +235,17 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  transition: border-color var(--motion-fast) ease-out;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
 
+/* A store card is something to open, so the pointer raises it a step: its edge darkens and the
+   raised shadow comes under it, without moving it. */
 .store-card:hover {
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--fg) 18%, transparent);
+  box-shadow: var(--shadow-raised);
 }
 
 .card-head {
@@ -434,7 +440,7 @@
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 
@@ -662,6 +668,6 @@
   margin-bottom: 16px;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
 }

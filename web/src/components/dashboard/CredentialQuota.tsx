@@ -225,7 +225,6 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
             </span>
             {onRefreshQuota && board.rows.length > 0 && (
               <RefreshButton
-                isIconOnly
                 size="small"
                 className="quota-refresh"
                 label={t('quota.btn_refresh_quota')}

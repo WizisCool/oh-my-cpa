@@ -165,9 +165,12 @@ function sameColour(left, right) {
   check('the two themes do not resolve the same accent', !sameColour(lightMark.accent, darkMark.accent), `light=${lightMark.accent} dark=${darkMark.accent}`);
 
   // The wordmark is left-aligned on the rail's own text axis, not centred, so it lines up
-  // with the navigation below it.
+  // with the navigation below it: the section labels' text, not the edge of an item's hover fill.
   const markBox = await page.locator('.app-brand-logo').first().boundingBox();
-  const navBox = await page.locator('.app-menu .ant-menu-item').first().boundingBox();
+  const navBox = await page.locator('.app-menu .ant-menu-item-group-title').first().evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { x: box.left + parseFloat(getComputedStyle(node).paddingLeft) };
+  });
   check('the brand mark sits on the navigation column', markBox !== null && navBox !== null && Math.abs(markBox.x - navBox.x) <= 6, `mark.x=${markBox?.x} nav.x=${navBox?.x}`);
   check('the brand mark does not fill the rail', markBox !== null && markBox.width < 200, `width=${markBox?.width}`);
 

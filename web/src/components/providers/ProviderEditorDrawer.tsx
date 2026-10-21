@@ -9,7 +9,7 @@ import {
   Row,
   Select,
 } from 'antd';
-import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '../icons';
+import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { useCustomIcons } from '../../hooks/useCustomIcons';
@@ -24,6 +24,7 @@ import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFam
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
 import { EditorSection } from './EditorSection';
+import { Fold } from '../common/Fold';
 import { RuntimePolicySection } from './RuntimePolicySection';
 import { countPolicyOverrides } from './runtimePolicy';
 import { ModelOptionsFields } from './ModelOptionsFields';
@@ -520,7 +521,8 @@ export function ProviderEditorDrawer({
                             <Button
                               type="text"
                               size="small"
-                              icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                              icon={<DownOutlined className={styles['chevron']} />}
+                              data-expanded={isExpanded || undefined}
                               aria-hidden="true"
                               tabIndex={-1}
                               onClick={() => toggleKeyExpanded(k.id)}
@@ -551,71 +553,69 @@ export function ProviderEditorDrawer({
                         </div>
 
                         {/* Key Item Body (when expanded) */}
-                        {isExpanded && (
-                          <div className={styles['item-body']}>
-                            {/* API Key */}
-                            <div>
-                              <div className={styles['item-field-label']}>
-                                {t('pro.api_key_label')}
-                              </div>
-                              <SecretInput
-                                value={k.apiKey || ''}
-                                onChange={(e) =>
-                                  setFormKeys((prev) =>
-                                    prev.map((item) =>
-                                      item.id === k.id ? { ...item, apiKey: e.target.value } : item
-                                    )
-                                  )
-                                }
-                                placeholder={t('pro.field_key_ph_create')}
-                                className={styles['full-width']}
-                              />
+                        <Fold isOpen={isExpanded} className={styles['item-body']}>
+                          {/* API Key */}
+                          <div>
+                            <div className={styles['item-field-label']}>
+                              {t('pro.api_key_label')}
                             </div>
-
-                            {/* Proxy URL */}
-                            <div>
-                              <div className={styles['item-field-label']}>
-                                {t('pro.proxy_url_label')}
-                              </div>
-                              <Input
-                                value={k.proxyUrl || ''}
-                                onChange={(e) =>
-                                  setFormKeys((prev) =>
-                                    prev.map((item) =>
-                                      item.id === k.id ? { ...item, proxyUrl: e.target.value } : item
-                                    )
+                            <SecretInput
+                              value={k.apiKey || ''}
+                              onChange={(e) =>
+                                setFormKeys((prev) =>
+                                  prev.map((item) =>
+                                    item.id === k.id ? { ...item, apiKey: e.target.value } : item
                                   )
-                                }
-                                placeholder="http://127.0.0.1:7890"
-                                className={styles['full-width']}
-                              />
+                                )
+                              }
+                              placeholder={t('pro.field_key_ph_create')}
+                              className={styles['full-width']}
+                            />
+                          </div>
+
+                          {/* Proxy URL */}
+                          <div>
+                            <div className={styles['item-field-label']}>
+                              {t('pro.proxy_url_label')}
                             </div>
-
-                            {/* Schedule Weight */}
-                            <div>
-                              <div className={styles['item-field-label']}>
-                                {t('pro.weight_label')}
-                              </div>
-                              <InputNumber
-                                value={k.weight ?? 1}
-                                onChange={(val) =>
-                                  setFormKeys((prev) =>
-                                    prev.map((item) =>
-                                      item.id === k.id ? { ...item, weight: val ?? 1 } : item
-                                    )
+                            <Input
+                              value={k.proxyUrl || ''}
+                              onChange={(e) =>
+                                setFormKeys((prev) =>
+                                  prev.map((item) =>
+                                    item.id === k.id ? { ...item, proxyUrl: e.target.value } : item
                                   )
-                                }
-                                min={0}
-                                max={1000000}
-                                className={styles['full-width']}
-                                placeholder="1"
-                              />
-                              <div className={styles['field-hint']}>
-                                {t('pro.weight_desc')}
-                              </div>
+                                )
+                              }
+                              placeholder="http://127.0.0.1:7890"
+                              className={styles['full-width']}
+                            />
+                          </div>
+
+                          {/* Schedule Weight */}
+                          <div>
+                            <div className={styles['item-field-label']}>
+                              {t('pro.weight_label')}
+                            </div>
+                            <InputNumber
+                              value={k.weight ?? 1}
+                              onChange={(val) =>
+                                setFormKeys((prev) =>
+                                  prev.map((item) =>
+                                    item.id === k.id ? { ...item, weight: val ?? 1 } : item
+                                  )
+                                )
+                              }
+                              min={0}
+                              max={1000000}
+                              className={styles['full-width']}
+                              placeholder="1"
+                            />
+                            <div className={styles['field-hint']}>
+                              {t('pro.weight_desc')}
                             </div>
                           </div>
-                        )}
+                        </Fold>
                       </div>
                     );
                   })}
@@ -812,7 +812,7 @@ export function ProviderEditorDrawer({
                             <Button
                               type="text"
                               size="small"
-                              icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                              icon={<DownOutlined className={styles['chevron']} />}
                               aria-label={m.name || t('pro.actual_request_model')}
                               aria-expanded={isExpanded}
                               onClick={() => toggleModelExpanded(m.id)}
@@ -835,76 +835,74 @@ export function ProviderEditorDrawer({
                           </div>
 
                           {/* Model Card Body (expanded) */}
-                          {isExpanded && (
-                            <div className={styles['item-body']}>
-                              {/* Only the OpenAI-compatible model entry has the image flag;
-                                  CPA refuses it on every other family's list. */}
-                              {supportsModelImage && (
-                                <div>
-                                  <Checkbox
-                                    checked={m.image || false}
-                                    onChange={(e) => updateModelImage(m.id, e.target.checked)}
-                                  >
-                                    <span className={styles['flag-label']}>
-                                      {t('pro.allow_image_endpoint')}
-                                    </span>
-                                  </Checkbox>
-                                  <div className={styles['flag-desc']}>
-                                    {t('pro.allow_image_endpoint_desc')}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Option: Allowed Thinking Levels */}
+                          <Fold isOpen={isExpanded} className={styles['item-body']}>
+                            {/* Only the OpenAI-compatible model entry has the image flag;
+                                CPA refuses it on every other family's list. */}
+                            {supportsModelImage && (
                               <div>
-                                <div className={styles['item-field-label']}>
-                                  {t('pro.allowed_thinking_levels')}
+                                <Checkbox
+                                  checked={m.image || false}
+                                  onChange={(e) => updateModelImage(m.id, e.target.checked)}
+                                >
+                                  <span className={styles['flag-label']}>
+                                    {t('pro.allow_image_endpoint')}
+                                  </span>
+                                </Checkbox>
+                                <div className={styles['flag-desc']}>
+                                  {t('pro.allow_image_endpoint_desc')}
                                 </div>
-                                <Row gutter={[10, 10]}>
-                                  {THINKING_LEVEL_OPTIONS.map((opt) => {
-                                    const isChecked =
-                                      m.thinking?.levels?.includes(opt.value) || false;
-                                    return (
-                                      <Col xs={24} sm={12} key={opt.value}>
-                                        <div
-                                          role="button"
-                                          tabIndex={0}
-                                          onClick={() => toggleThinkingLevel(m.id, opt.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === ' ' || e.key === 'Enter') {
-                                              e.preventDefault();
-                                              toggleThinkingLevel(m.id, opt.value);
-                                            }
-                                          }}
-                                          aria-pressed={isChecked}
-                                          className={`${styles['level-option']} ${isChecked ? styles['level-option-checked'] : ''}`}
-                                        >
-                                          <Checkbox checked={isChecked} tabIndex={-1} className={styles['level-check']}>
-                                            <span className={styles['level-label']}>{t(opt.labelKey)}</span>
-                                          </Checkbox>
-                                          <span className={styles['level-value']}>{opt.value}</span>
-                                        </div>
-                                      </Col>
-                                    );
-                                  })}
-                                </Row>
                               </div>
+                            )}
 
-                              <ModelOptionsFields
-                                idPrefix={`model-${m.id}`}
-                                options={m.options}
-                                fields={modelOptionFields}
-                                problem={modelOptionsProblem(m.options, modelOptionFields)}
-                                onChange={(patch) =>
-                                  setFormModels((prev) =>
-                                    prev.map((item) =>
-                                      item.id === m.id ? { ...item, options: { ...item.options, ...patch } } : item
-                                    )
-                                  )
-                                }
-                              />
+                            {/* Option: Allowed Thinking Levels */}
+                            <div>
+                              <div className={styles['item-field-label']}>
+                                {t('pro.allowed_thinking_levels')}
+                              </div>
+                              <Row gutter={[10, 10]}>
+                                {THINKING_LEVEL_OPTIONS.map((opt) => {
+                                  const isChecked =
+                                    m.thinking?.levels?.includes(opt.value) || false;
+                                  return (
+                                    <Col xs={24} sm={12} key={opt.value}>
+                                      <div
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => toggleThinkingLevel(m.id, opt.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === ' ' || e.key === 'Enter') {
+                                            e.preventDefault();
+                                            toggleThinkingLevel(m.id, opt.value);
+                                          }
+                                        }}
+                                        aria-pressed={isChecked}
+                                        className={`${styles['level-option']} ${isChecked ? styles['level-option-checked'] : ''}`}
+                                      >
+                                        <Checkbox checked={isChecked} tabIndex={-1} className={styles['level-check']}>
+                                          <span className={styles['level-label']}>{t(opt.labelKey)}</span>
+                                        </Checkbox>
+                                        <span className={styles['level-value']}>{opt.value}</span>
+                                      </div>
+                                    </Col>
+                                  );
+                                })}
+                              </Row>
                             </div>
-                          )}
+
+                            <ModelOptionsFields
+                              idPrefix={`model-${m.id}`}
+                              options={m.options}
+                              fields={modelOptionFields}
+                              problem={modelOptionsProblem(m.options, modelOptionFields)}
+                              onChange={(patch) =>
+                                setFormModels((prev) =>
+                                  prev.map((item) =>
+                                    item.id === m.id ? { ...item, options: { ...item.options, ...patch } } : item
+                                  )
+                                )
+                              }
+                            />
+                          </Fold>
                         </div>
                       );
                     })}

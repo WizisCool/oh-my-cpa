@@ -261,6 +261,33 @@ export async function providerModelPicker({ base, page, check }) {
     `password=${keyFields.passwords} masked=${keyFields.masked}`,
   );
 
+  // A disclosure head fills a card that clips to its rounded edge, so a ring drawn outward is cut to a
+  // stray stroke. Whatever the ring's shape, every part of it must land inside the clipping card.
+  for (const [label, toggle] of [
+    ['a section head', drawer.locator('button[aria-expanded]').filter({ hasText: /API Keys|API 密钥条目/ })],
+    ['a key card toggle', drawer.locator('[class*="item-card"] button[aria-expanded]').first()],
+  ]) {
+    await toggle.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    const ring = await toggle.evaluate((node) => {
+      const style = getComputedStyle(node);
+      const spread = [...style.boxShadow.matchAll(/(-?[\d.]+)px/g)].map((match) => Number(match[1]))[3] ?? 0;
+      const outset = /inset/.test(style.boxShadow) ? 0 : spread;
+      let clip = node.parentElement;
+      while (clip && getComputedStyle(clip).overflow === 'visible') clip = clip.parentElement;
+      const own = node.getBoundingClientRect();
+      const box = clip.getBoundingClientRect();
+      return {
+        isFocused: node.matches(':focus-visible'),
+        isInside: own.left - outset >= box.left && own.right + outset <= box.right
+          && own.top - outset >= box.top && own.bottom + outset <= box.bottom,
+        shadow: style.boxShadow,
+      };
+    });
+    check(`${label}'s focus ring is drawn whole, not clipped by its card`, ring.isFocused && ring.isInside, JSON.stringify(ring));
+  }
+
   await drawer.locator('button[aria-expanded]').filter({ hasText: /Custom Models|自定义模型/ }).click({ timeout: 10_000 });
   await drawer.getByRole('button', { name: /Fetch Model List|获取模型列表/i }).click({ timeout: 10_000 });
   const picker = page.locator('.ant-modal').filter({ hasText: /Choose models|选择模型/i });
@@ -306,14 +333,22 @@ export async function providerModelPicker({ base, page, check }) {
   await requestModel.fill('fixture-custom-model');
   check('the collapsed custom model still allows editing its upstream name',
     await requestModel.inputValue() === 'fixture-custom-model');
+  const foldedHeight = (await newModel.boundingBox())?.height;
   await expansion.click();
   await newModel.locator('[class*="item-body"]').waitFor({ state: 'visible' });
   check('the new model advanced settings can still be explicitly expanded',
     await expansion.getAttribute('aria-expanded') === 'true');
   await expansion.click();
-  await newModel.locator('[class*="item-body"]').waitFor({ state: 'detached' });
+  // The body folds away rather than unmounting, so collapsed means hidden from the reader.
+  await newModel.locator('[class*="item-body"]').waitFor({ state: 'hidden' });
   check('the new model advanced settings can be collapsed again',
     await expansion.getAttribute('aria-expanded') === 'false');
+  // The body's padding and rule sit inside the folding row: left outside it, they outlived the fold
+  // and a card closed after opening stood taller than it had before.
+  const refoldedHeight = (await newModel.boundingBox())?.height;
+  check('a card folded shut is as tall as before it opened',
+    foldedHeight !== undefined && refoldedHeight === foldedHeight,
+    `before=${foldedHeight} after=${refoldedHeight}`);
 }
 
 export function customIconProbeRoutes() {

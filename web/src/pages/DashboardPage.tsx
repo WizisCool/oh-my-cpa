@@ -67,6 +67,7 @@ import {
 import { LoadFailure, useToast } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
+import { ToolButton } from '../components/common/ToolButton';
 import '../components/dashboard/dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -317,7 +318,7 @@ export const DashboardPage: React.FC = () => {
         <div className="terminal-page dashboard-page">
           <PageHeader
             title={t('nav.dashboard')}
-            actions={<RefreshButton label={t('common.retry')} onRefresh={() => void refetch()} />}
+            actions={<RefreshButton isLabelled label={t('common.retry')} onRefresh={() => void refetch()} />}
           />
           <LoadFailure
             title={t('dash.error_title')}
@@ -596,9 +597,9 @@ export const DashboardPage: React.FC = () => {
           <>
             <TimeRangeControl range={range} onChange={applyRange} />
             <ActionMenu>
-              <Button icon={<HistoryOutlined />} onClick={handleDrillDown}>{t('nav.usage_events')}</Button>
+              <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
               <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
-              <Button icon={<AppstoreOutlined />} onClick={() => setLayoutDraft(layout)}>{t('dash.layout.arrange')}</Button>
+              <ToolButton icon={<AppstoreOutlined />} label={t('dash.layout.arrange')} onClick={() => setLayoutDraft(layout)} />
             </ActionMenu>
             {clientKeyOptions.length > 0 && (
               <Select
@@ -627,18 +628,14 @@ export const DashboardPage: React.FC = () => {
                 prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
               />
             )}
-            <Button icon={<HistoryOutlined />} onClick={handleDrillDown}>
-              {t('nav.usage_events')}
-            </Button>
-            <Tooltip title={t('dash.layout.arrange')}>
-              <Button
-                icon={<AppstoreOutlined />}
-                aria-label={t('dash.layout.arrange')}
-                onClick={() => setLayoutDraft(layout)}
-                data-testid="dashboard-layout-arrange"
-              />
-            </Tooltip>
-            <RefreshButton isIconOnly label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
+            <ToolButton icon={<HistoryOutlined />} label={t('nav.usage_events')} onClick={handleDrillDown} />
+            <ToolButton
+              icon={<AppstoreOutlined />}
+              label={t('dash.layout.arrange')}
+              onClick={() => setLayoutDraft(layout)}
+              data-testid="dashboard-layout-arrange"
+            />
+            <RefreshButton label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
           </>
         )}
       />

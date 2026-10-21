@@ -21,10 +21,13 @@ export interface SearchInputProps
  * Pages built this from antd's `Input` each time, which is how the glyph came to have three
  * colours, some fields lost their accessible name, and the glyph was announced on a few of them.
  * Width belongs to the caller's layout (`className`); everything inside the frame belongs here.
+ * It is a filled field: a search narrows what is already on the page, so it reads as part of the
+ * toolbar rather than as a form field asking for input.
  */
 export function SearchInput({ value, onChange, label, placeholder, className, ...rest }: SearchInputProps) {
   return (
     <Input
+      variant="filled"
       {...rest}
       className={clsx('search-input', className)}
       allowClear

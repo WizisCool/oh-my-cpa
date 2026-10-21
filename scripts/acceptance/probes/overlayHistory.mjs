@@ -152,15 +152,16 @@ export async function overlayBackDismisses({ base, page, check }) {
   //
   // The hook is wired into dialogs as well as drawers, and a scenario that only ever opened a drawer
   // would pass while Back did nothing for every dialog in the console.
-  await arriveFrom(base, page, '/api-keys');
-  await page.locator('.keys-page').first().waitFor({ timeout: 20_000 });
-  await page.getByRole('button', { name: /Add API Key|添加 API 密钥/ }).first().click();
+  // The provider list's icon picker is a dialog opened straight from the page.
+  await arriveFrom(base, page, '/ai-providers');
+  await page.locator('.providers-page').first().waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^(Change Icon|更改图标)/ }).first().click();
   await page.locator('.ant-modal').first().waitFor({ state: 'visible', timeout: 5_000 });
   await page.goBack();
   const afterModalBack = await settled(page);
   check(
     'a Back closes a dialog and leaves the route alone',
-    afterModalBack.modals === 0 && afterModalBack.route.startsWith(`${basePath}/api-keys`),
+    afterModalBack.modals === 0 && afterModalBack.route.startsWith(`${basePath}/ai-providers`),
     `modals=${afterModalBack.modals} route=${afterModalBack.route}`,
   );
 

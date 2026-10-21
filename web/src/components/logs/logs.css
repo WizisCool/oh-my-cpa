@@ -1,19 +1,23 @@
 .logs-search { width: 216px; }
 .logs-levels { display: inline-flex; gap: 4px; }
 .log-level-chip {
-  border: 1px solid var(--border);
+  height: 28px;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--meta);
+  color: var(--muted);
   font: inherit;
   font-size: var(--text-sm);
-  padding: 2px 7px;
+  padding: 0 9px;
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.log-level-chip:hover { color: var(--fg-2); border-color: var(--muted); }
-.log-level-chip.is-active { color: var(--fg); border-color: var(--accent); background: var(--hover-inset); }
-.log-level-chip.is-warn.is-active { color: var(--warn); border-color: var(--warn); }
-.log-level-chip.is-error.is-active, .log-level-chip.is-fatal.is-active { color: var(--danger); border-color: var(--danger); }
+/* A toggle strip like the console's other filters: unfilled at rest, a wash when on, and the
+   level's own hue only for the two that report trouble. */
+.log-level-chip:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.log-level-chip.is-active { color: var(--fg); background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.log-level-chip.is-warn.is-active { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.log-level-chip.is-error.is-active, .log-level-chip.is-fatal.is-active { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .logs-counts { margin-left: auto; color: var(--meta); font-size: var(--text-sm); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 .logs-tail { position: relative; }
 .logs-alert { margin-bottom: 10px; }
@@ -28,7 +32,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 .log-more {

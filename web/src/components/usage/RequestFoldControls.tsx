@@ -25,8 +25,6 @@ export function RequestFoldToggle({ collapse, onToggle }: { collapse: ViewFlag; 
   return (
     <Tooltip title={label}>
       <Button
-        size="small"
-        type="text"
         className="req-expand-toggle-btn"
         aria-label={label}
         icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}

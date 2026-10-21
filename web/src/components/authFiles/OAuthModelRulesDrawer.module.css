@@ -194,7 +194,7 @@
   max-height: 360px;
   overflow-y: auto;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
 }
 
 .catalog .row {

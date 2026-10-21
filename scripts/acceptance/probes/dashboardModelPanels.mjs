@@ -461,16 +461,27 @@ export async function dashboardModelPanels({ base, page, check }) {
   const ringCanvas = page.locator('.model-ring canvas').first();
   await ringCanvas.scrollIntoViewIfNeeded();
   const ringBox = await ringCanvas.boundingBox();
-  // The band's own mid-radius, measured against the canvas rather than assumed: the ring is inset by
-  // its padding, so a fraction taken from the canvas edge can fall inside the hole or outside the
-  // outer edge, and either miss lands on no slice at all. The band spans the mark's inner to outer
-  // radius, and its midpoint is the point that is inside the arc at every share.
-  const ringRadius = Math.min(ringBox.width, ringBox.height) * 0.38;
   // G2 sweeps the ring counterclockwise from twelve o'clock, so the first group occupies the arc from
   // 0 to its share of the circle and its midpoint is half of that. The sign is the observable that
   // decides whether the probe lands on the slice it names: read the wrong way it hovers the group on
   // the other side of twelve o'clock, and the assertion below then fails against a correct tooltip.
   const hoverAngle = -Math.PI / 2 - firstShare * Math.PI;
+  // The band's own mid-radius, read from the painted pixels along that angle rather than assumed: the
+  // library insets the ring by a fixed margin, so any fraction of the canvas lands inside the band at
+  // one frame size and past its outer edge at another, and either miss hovers no slice at all.
+  const ringRadius = await ringCanvas.evaluate((canvas, angle) => {
+    const context = canvas.getContext('2d');
+    const scale = canvas.width / canvas.getBoundingClientRect().width;
+    const centre = canvas.width / 2;
+    const painted = [];
+    for (let step = 0; step < centre; step += 1) {
+      const x = Math.round(centre + Math.cos(angle) * step);
+      const y = Math.round(centre + Math.sin(angle) * step);
+      if (context.getImageData(x, y, 1, 1).data[3] > 200) painted.push(step);
+    }
+    return painted.length === 0 ? 0 : (painted[0] + painted.at(-1)) / 2 / scale;
+  }, hoverAngle);
+  check('the ring band is painted along the first slice\'s mid-angle', ringRadius > 0, `radius=${ringRadius}`);
   const hoverX = ringBox.x + ringBox.width / 2 + Math.cos(hoverAngle) * ringRadius;
   const hoverY = ringBox.y + ringBox.height / 2 + Math.sin(hoverAngle) * ringRadius;
   await page.mouse.move(hoverX, hoverY);
@@ -698,11 +709,9 @@ export async function dashboardModelPanels({ base, page, check }) {
   // spec proves the spec, and the light card is exactly the surface on which a wrong ink still looks
   // correct.
   //
-  // The ink is matched to the token rather than allowed to sit near it. `--border-soft` and `--border`
-  // are neighbours in every palette, and the axis rule is drawn in the second of the two at a coverage of
-  // about 110 - so a tolerance wide enough to let that rule stand in for the grid would pass on a mark
-  // that never painted a grid at all, which is exactly the state this asserts against. Measured on the
-  // canvas, a rule drawn in the token rounds to 0-1 of a channel.
+  // The ink is matched to the token rather than allowed to sit near it: the grid is the `--border` step,
+  // and a tolerance wide enough to accept its neighbours would accept ink the palette never named.
+  // Measured on the canvas, a rule drawn in the token rounds to 0-1 of a channel.
   const CHROME_INK_TOLERANCE = 4;
   // A 0.5px rule reaches an alpha of about 125, and the library's own opacity step leaves about 13: the
   // floor between them rejects the faded ink rather than a particular rule width.
@@ -716,9 +725,10 @@ export async function dashboardModelPanels({ base, page, check }) {
   // canvas width. Counting *rows* rather than pixels is what separates the grid from the incidental
   // near-token pixel - a marker, a label edge - that a whole-canvas maximum would accept as a gridline.
   const GRID_ROW_COVERAGE = 0.15;
-  // The y-axis draws about seven rules on this fixture. Two is the floor: it survives a tick-count change
-  // and it is still zero for a mark whose grid ink never reached the canvas.
-  const GRID_ROWS_MIN = 2;
+  // The y-axis draws about seven rules on this fixture. Three is the floor: it survives a tick-count
+  // change, and the axis rule - drawn in the same `--border` ink, one row - cannot reach it alone, so it
+  // still fails a mark whose grid never reached the canvas.
+  const GRID_ROWS_MIN = 3;
   const chromeInk = () => page.evaluate(([tolerance, inkCoverage, labelTolerance, labelCoverage, rowCoverage]) => {
     const channels = (value) => {
       const text = String(value).trim();
@@ -734,7 +744,7 @@ export async function dashboardModelPanels({ base, page, check }) {
     probe.getContext('2d').drawImage(canvas, 0, 0);
     const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
     const styles = getComputedStyle(document.documentElement);
-    const gridToken = channels(styles.getPropertyValue('--border-soft'));
+    const gridToken = channels(styles.getPropertyValue('--border'));
     const chromeToken = channels(styles.getPropertyValue('--muted'));
     const labelToken = channels(styles.getPropertyValue('--fg-2'));
     const isToken = (offset, token, within = tolerance) => Math.abs(data[offset] - token[0]) <= within

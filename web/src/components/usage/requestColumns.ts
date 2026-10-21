@@ -4,8 +4,8 @@ export type RequestColumnId =
   | 'provider'
   | 'model'
   | 'mode'
-  | 'latency'
   | 'tps'
+  | 'latency'
   | 'tokens'
   | 'cost'
   | 'cache'
@@ -85,16 +85,6 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     foldOrder: 5,
   },
   {
-    id: 'latency',
-    labelKey: 'events.col_latency',
-    align: 'right',
-    defaultWidth: 76,
-    minWidth: 68,
-    maxWidth: 140,
-    flexGrow: 0,
-    resizable: true,
-  },
-  {
     id: 'tps',
     labelKey: 'events.col_tps',
     align: 'right',
@@ -104,6 +94,16 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     flexGrow: 0,
     resizable: true,
     foldOrder: 3,
+  },
+  {
+    id: 'latency',
+    labelKey: 'events.col_latency',
+    align: 'right',
+    defaultWidth: 76,
+    minWidth: 68,
+    maxWidth: 140,
+    flexGrow: 0,
+    resizable: true,
   },
   {
     // Rigid like every other figure: its counts have a known width, and a share

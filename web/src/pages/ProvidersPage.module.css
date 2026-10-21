@@ -41,10 +41,7 @@
 
 .window-label {
   color: var(--meta);
-  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 @media (max-width: 640px) {

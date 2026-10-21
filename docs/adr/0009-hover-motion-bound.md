@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-17
+- Amended by: ADR 0103, which keeps the bound and moves the `fast` token to 120ms.
 
 ## Context
 

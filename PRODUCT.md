@@ -98,19 +98,19 @@ are also available through the read-only `models_list` capability.
 ## Brand Commitments
 
 - **Brand Identity**: Oh My CPA, signature command-line prompt prefix `›_`, "Make CPA yours".
-- **Visual Style**: Terminal-flat console (minimalist flat terminal developer console).
-  - Flat with zero shadows: Global `box-shadow: none`, no decorative gradients; visual hierarchy is expressed purely via 1px hairline borders and background tonal shifts;
-  - Configurable typography roles: Sarasa Mono SC is the default, with Berkeley Mono / IBM Plex Mono as fallbacks; interface text and monospace text can use separately chosen faces, with the mono role reserved for code and aligned data;
+- **Visual Style**: A quiet console: the navigation on a canvas, the work on one inset panel.
+  - Flat until summoned: static surfaces are a fill and a 1px hairline, and only summoned layers (menus, popovers, toasts, dialogs, side sheets) carry a soft shadow; no decorative gradients;
+  - Configurable typography roles: Sarasa Mono SC is the default, with Berkeley Mono / IBM Plex Mono as fallbacks; interface text and monospace text can use separately chosen faces, with the mono role reserved for identifiers, keys, paths and code;
   - Quiet chrome, loud data: UI scaffolding recedes into dark charcoal neutrals; saturated color is reserved exclusively for operational states;
   - Strictly semantic colors: Green (healthy/enabled), amber (degraded/warning), red (error/disabled), gray (offline/inactive);
-  - High-tempo motion: Transitions pinned to ≤ 100ms with zero spring physics; hover states land within the 50ms fast token; no loading shimmer. Chart marks and the dashboard's KPI numbers are the one named exception, morphing on a 240ms `roll` token (ADR 0007, ADR 0008).
+  - Quiet motion: a 120 · 160 · 180 · 240ms ladder with zero spring physics; hover states land within the 120ms fast token; no loading shimmer. Chart marks and the dashboard's KPI numbers morph on the 240ms `roll` token (ADR 0007, ADR 0008, ADR 0103).
 
 ## Evidence on Hand
 
 - **Core Domain Terminology & Rules**: `CONTEXT.md`;
 - **Module Map, Data Flows & Invariants**: `docs/architecture.md`;
 - **Architecture Decision Records**: `docs/adr/`;
-- **Visual System & Token Authority**: `docs/design.md`, with the palette itself in `web/src/theme/palette.ts` (nine authored tokens per palette, seventeen derived) and its projection into `web/src/theme/themeConfig.ts` and `web/src/index.css` (root `DESIGN.md` is the synchronized design-tool summary);
+- **Visual System & Token Authority**: `docs/design.md`, with the palette itself in `web/src/theme/palette.ts` (nine authored tokens per palette, eighteen derived) and its projection into `web/src/theme/themeConfig.ts` and `web/src/index.css` (root `DESIGN.md` is the synchronized design-tool summary);
 - Automated test suites: `internal/api/*_test.go`, covering credential protection, dashboard statistics, quota throttling, and DTO allowlist enforcement; `internal/demo/demo_test.go`, covering the fixture, its refusal layers and the total route classification; `scripts/verify-demo.mjs` (`pnpm verify:demo`), driving a browser across the served console's routes and their initial reads; and `scripts/demo-smoke.mjs` (`pnpm verify:demo:go`), doing the same against the binary's own demonstration mode.
 
 ## Product Principles

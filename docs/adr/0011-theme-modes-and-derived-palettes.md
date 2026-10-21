@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-18
+- Amended by: ADR 0103, which adds `canvas` as an eighteenth derived token.
 
 ## Context
 

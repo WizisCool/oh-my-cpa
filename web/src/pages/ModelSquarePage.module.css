@@ -8,19 +8,20 @@
 .chip-group { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .maker-strip { margin: 16px 0 8px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 28px; padding: 3px 10px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 12px;
+  border: 0; border-radius: var(--radius-md); background: color-mix(in srgb, var(--fg) 4%, transparent);
   color: var(--fg-2); font: inherit; font-size: var(--text-sm); line-height: 1.5; cursor: pointer;
-  transition: color var(--motion-fast) ease-out, background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
-.chip:hover { color: var(--fg); background: var(--hover); }
+.chip:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.chip[aria-pressed="true"] { color: var(--fg); border-color: var(--fg-2); background: var(--selected-inset); }
-.chip[aria-pressed="true"] :global(.count) { color: var(--fg-2); }
+/* The chosen maker is the one solid chip: ink on the page, the way a selected segment reads. */
+.chip[aria-pressed="true"] { color: var(--bg); background: var(--fg); }
+.chip[aria-pressed="true"] :global(.count) { color: color-mix(in srgb, var(--bg) 70%, transparent); }
 
 /* Drawn from the palette at chrome weight; the frame gives the glyph a brand mark's footprint. */
 .generic-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--muted); }
-.generic-mark-framed { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg-2); }
+.generic-mark-framed { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg-2); }
 
 .empty { margin: 48px 0; }
 .group-list { display: flex; flex-direction: column; padding: 0; margin: 0; list-style: none; }
@@ -35,7 +36,7 @@
 .model-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; padding: 12px 0 0; margin: 0; list-style: none; }
 .model-row {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-content: space-between; row-gap: 6px; min-width: 0;
-  padding: 6px 4px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  padding: 6px 4px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
   transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
 }
 .model-row:hover { background: var(--hover); border-color: var(--fg-2); }
@@ -74,7 +75,7 @@
 
 .served-by { margin-bottom: 24px; }
 .served-by h3, .link-row h3 { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
-.served-by ul { padding: 0; margin: 8px 0 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.served-by ul { padding: 0; margin: 8px 0 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .served-by li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 12px; min-width: 0; font-size: var(--text-sm); }
 .served-by li + li { border-top: 1px solid var(--border-soft); }
 .served-name { color: var(--fg); font-size: var(--text-md); }
@@ -91,7 +92,7 @@
 
 .stat-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
 .limit-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 20px; }
-.stat-tiles > div { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); min-width: 0; }
+.stat-tiles > div { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); min-width: 0; }
 .stat-tiles dt { color: var(--muted); font-size: var(--text-xs); }
 .stat-tiles dd { margin: 6px 0 0; color: var(--fg); font-size: var(--text-lg); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat-tiles dd .is-absent { font-size: var(--text-md); font-weight: 400; }

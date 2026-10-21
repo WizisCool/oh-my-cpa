@@ -11,6 +11,7 @@ import {
 } from '../web/src/components/usage/requestSelection.ts';
 import { buildRequestExport, REQUEST_EXPORT_SCHEMA } from '../web/src/components/usage/requestExportJson.ts';
 import { buildRequestSheet, sheetStrings } from '../web/src/components/usage/requestSheetModel.ts';
+import { modelMarkIconId } from '../web/src/types/modelSquare.ts';
 import { indexCredentialFiles } from '../web/src/types/usageEventIdentity.ts';
 import type { UsageEvent } from '../web/src/types/usageEvents.ts';
 
@@ -113,8 +114,8 @@ const providerLines = (masks: ReturnType<typeof effectiveMasks>) =>
     .rows.map((row) => row.cells.provider.lines);
 const [oauthLines, keyLines] = providerLines(effectiveMasks([], []));
 assert.deepEqual(oauthLines, [
-  [{ kind: 'text', text: 'Claude', tone: 'fg', size: 13, weight: 600, isMono: true }, { kind: 'tag', text: 'OAuth', tone: 'accent' }],
-  [{ kind: 'text', text: ACCOUNT, tone: 'meta', size: 11, weight: 400, isMono: true }],
+  [{ kind: 'text', text: 'Claude', tone: 'fg', size: 13, weight: 500, isMono: false }, { kind: 'tag', text: 'OAuth', tone: 'fg2' }],
+  [{ kind: 'text', text: ACCOUNT, tone: 'muted', size: 11, weight: 400, isMono: false }],
 ], 'an OAuth cell is its provider, then the account');
 assert.equal(keyLines.length, 2, 'an API-key cell is its provider, then the masked key');
 assert.deepEqual(keyLines[1], oauthLines[1].map((segment) => ({ ...segment, text: PROVIDER_KEY })), 'both credential lines are drawn alike');
@@ -136,10 +137,20 @@ const modeSheet = (masks: ReturnType<typeof effectiveMasks>) =>
   buildRequestSheet({ rows: moded, masks, colWidths: {}, caption: 'caption', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials });
 const modeCell = modeSheet(effectiveMasks([], [])).rows[0].cells.mode.lines;
 assert.deepEqual(modeCell, [[
-  { kind: 'tag', text: 'xHigh', tone: 'fg2', effortStep: 5 },
+  { kind: 'tag', text: 'XHigh', tone: 'fg2', effortStep: 5 },
   { kind: 'glyph', glyph: 'non_stream', tone: 'muted', isBoxed: true },
 ]], 'the mode cell draws the effort on its scale step, then the non-streaming mark');
 assert.equal(modeSheet(effectiveMasks([], [])).rows[0].cells.model.lines.length, 1, 'the model cell is the name alone');
+
+// The picture carries the model's mark when the list does, resolved the way the list resolves it.
+const markedModel = (event: UsageEvent, showModelIcons: boolean) =>
+  buildRequestSheet({ rows: [event], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials, showModelIcons })
+    .rows[0].cells.model.lines[0][0];
+assert.deepEqual(markedModel(events[0], true), { kind: 'mark', mark: { iconId: modelMarkIconId('claude-opus') } }, 'a known model is drawn with its maker\'s mark');
+assert.ok(modelMarkIconId('claude-opus'), 'the fixture model resolves to a maker');
+assert.deepEqual(markedModel({ ...events[0], model: 'house-model-7' } as UsageEvent, true), { kind: 'glyph', glyph: 'model', tone: 'muted' },
+  'a model with no maker is drawn with the neutral mark, as the list draws it');
+assert.equal(markedModel(events[0], false).kind, 'text', 'with model marks turned off the line starts with the name');
 assert.deepEqual(
   buildRequestSheet({ rows: [events[1]], masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials }).rows[0].cells.mode.lines,
   [[{ kind: 'text', text: '—', tone: 'muted', size: 12, weight: 400, isMono: false }]],
@@ -152,7 +163,7 @@ const fastSheet = buildRequestSheet({
 assert.deepEqual(fastSheet.rows[0].cells.mode.lines, [[{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true }]],
   'a request served on the fast lane draws the lightning mark');
 const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
-assert.ok(!modeHidden.includes('xHigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
+assert.ok(!modeHidden.includes('XHigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
 const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>
   buildRequestExport({ rows: moded, masks: effectiveMasks([], columns), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
 assert.equal(modeJson(['model']).reasoning_effort, 'xhigh', 'the JSON keeps the effort when only the model is withheld');

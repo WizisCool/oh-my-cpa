@@ -227,7 +227,10 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, folde
             // under `axis` is never read at all - which is where the grid's ink used to be declared, and
             // why the grid kept the library's own. The axis labels are styled on `axis.x` above instead,
             // because that is the object the axis renderer reads for them.
-            axis: { gridStroke: colors.borderSoft, gridStrokeOpacity: 1 },
+            // The grid is the `border` step, the token design.md §2 names for chart grid rules. The chart
+            // is drawn supersampled and scaled down, which leaves a one-pixel rule at roughly half its
+            // ink; at the soft step that half was invisible on a light card.
+            axis: { gridStroke: colors.border, gridStrokeOpacity: 1 },
             // The crosshair is drawn by the tooltip interaction, so its ink is a `tooltip` token of the
             // *theme* - a different `tooltip` from the mark's interaction spec below, which is read from
             // the interaction's own options. Both rules are drawn, because `crosshairsY` follows the

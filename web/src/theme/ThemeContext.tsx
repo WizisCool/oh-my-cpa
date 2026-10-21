@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 
 import {
   emptyCustomPalette,
@@ -66,6 +67,23 @@ export interface ThemeContextValue {
 const ThemeContext = React.createContext<ThemeContextValue | undefined>(undefined);
 
 /** The preference this browser had at load, so the first frame is painted before any request. */
+type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => unknown };
+
+/**
+ * Runs a palette change inside a view transition, so the browser cross-fades a snapshot of the old
+ * page into the new one in a single composited layer: the switch reads as one movement rather than a
+ * snap, and costs no per-element work at all. Without the API, or for a reader who asked for reduced
+ * motion, the change simply lands.
+ */
+function withCrossFade(update: () => void): void {
+  const start = (document as ViewTransitionDocument).startViewTransition;
+  if (typeof start !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    update();
+    return;
+  }
+  start.call(document, () => flushSync(update));
+}
+
 function bootstrapPreferences(): { preferences: ThemePreferences; isDirty: boolean } {
   return readStoredThemePreferences() ?? { preferences: DEFAULT_THEME_PREFERENCES, isDirty: false };
 }
@@ -127,6 +145,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [customFor, preferences.palettes, themeMode],
   );
 
+  // A palette change repaints every surface in one frame. Without this, each element's own colour
+  // transition fires at once - hundreds of them, each easing from the old palette - and the switch
+  // smears across a dozen dropped frames instead of landing. Transitions are held off from the
+  // commit until two frames later, by which time the new palette has painted.
+  const hasPaintedPalette = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (!hasPaintedPalette.current) {
+      hasPaintedPalette.current = true;
+      return undefined;
+    }
+    const root = document.documentElement;
+    root.dataset.themeSwitching = '';
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => delete root.dataset.themeSwitching);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      delete root.dataset.themeSwitching;
+    };
+  }, [theme]);
+
   React.useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme.id;
@@ -152,7 +191,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const setModePreference = React.useCallback(
-    (next: ThemeModePreference) => commit((current) => ({ ...current, mode: next })),
+    (next: ThemeModePreference) => withCrossFade(() => commit((current) => ({ ...current, mode: next }))),
     [commit],
   );
 
@@ -165,9 +204,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Leaving the editor without committing is the rule, not an oversight: only a *completed* change
       // is persisted, so switching to another palette drops the gesture in progress and keeps every
       // change that had already completed.
-      setEditingCustomMode(undefined);
-      setPreviewMode(undefined);
-      commit((current) => ({ ...current, palettes: { ...current.palettes, [mode]: ref } }));
+      withCrossFade(() => {
+        setEditingCustomMode(undefined);
+        setPreviewMode(undefined);
+        commit((current) => ({ ...current, palettes: { ...current.palettes, [mode]: ref } }));
+      });
     },
     [commit],
   );

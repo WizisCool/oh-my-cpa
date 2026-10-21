@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
@@ -110,6 +110,23 @@ describe('AppDrawer', () => {
     const panel = document.querySelector<HTMLElement>('.ant-drawer-content-wrapper');
     expect(panel?.style.width).toBe('min(420px, 100vw)');
   });
+
+  it('keeps showing what it showed while open as it closes, though the caller has cleared it', () => {
+    const view = (record: string | null) => (
+      <I18nProvider>
+        <AppDrawer open={record !== null} title={record} footer={record && <button type="button">Copy {record}</button>}>
+          {record && <p>Body of {record}</p>}
+        </AppDrawer>
+      </I18nProvider>
+    );
+    const { rerender } = render(view('request 42'));
+
+    rerender(view(null));
+
+    expect(screen.getByText('Body of request 42')).toBeTruthy();
+    expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('request 42');
+    expect(document.querySelector('.app-drawer-footer-actions button')?.textContent).toBe('Copy request 42');
+  });
 });
 
 describe('Tag', () => {
@@ -167,6 +184,28 @@ describe('ConfirmAction', () => {
       </I18nProvider>,
     );
     expect(screen.getByRole('button', { name: 'Confirm' }).classList.contains('ant-btn-dangerous')).toBe(false);
+  });
+
+  it("puts the trigger's tooltip away while the confirmation is open", async () => {
+    render(
+      <I18nProvider>
+        <ConfirmAction title="Delete this key?" confirmLabel="Delete" tooltip="Delete key">
+          <button type="button">Remove</button>
+        </ConfirmAction>
+      </I18nProvider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Remove' });
+    fireEvent.mouseEnter(trigger);
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Delete key'));
+
+    fireEvent.click(trigger);
+
+    await screen.findByRole('button', { name: 'Cancel' });
+    // jsdom never ends a motion, so a tooltip on its way out keeps its node in the leave state.
+    await waitFor(() => {
+      const tooltip = screen.queryByText('Delete key')?.closest('.ant-tooltip');
+      expect(!tooltip || /-leave\b/.test(tooltip.className)).toBe(true);
+    });
   });
 });
 

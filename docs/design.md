@@ -1,19 +1,18 @@
 # Oh My CPA · Brand & Theme Tokens
 
-Single source of truth for the visual system. OpenCode-inspired, product-owned:
-interaction patterns and information density draw inspiration from OpenCode's
-minimalist developer console, while the brand wordmark, warm terminal palette,
-CPA information architecture, and security boundaries strictly belong to Oh My CPA.
+Single source of truth for the visual system. The information density and engineer-first
+patterns draw on minimalist developer consoles; the brand wordmark, the palettes, the CPA
+information architecture and the security boundaries belong to Oh My CPA.
 The palette is declared and derived in code at:
 
-- `web/src/theme/palette.ts` — the nine authored tokens per palette, the seventeen derived tokens, and
+- `web/src/theme/palette.ts` — the nine authored tokens per palette, the eighteen derived tokens, and
   the registered palettes
 - `web/src/theme/themeConfig.ts` — the antd `ThemeConfig` projection
 - `web/src/index.css` — the pre-hydration fallback's custom properties on `:root`
 
 **Rule: never hardcode a color in components.** Read the resolved palette, or use the CSS variable.
 
-**Rule: the tables in §2 are generated, not authored.** Seventeen of a palette's tokens are computed
+**Rule: the tables in §2 are generated, not authored.** Eighteen of a palette's tokens are computed
 from the other nine (`derivePalette`), so a value here that disagrees with the function is a defect in
 this document. Changing an *authored* token is a one-line change plus the tables it moves; changing a
 *relationship* - how a hover fill relates to the page, how deep a filled control goes - means changing a
@@ -23,26 +22,40 @@ registered one; see `docs/adr/0011-theme-modes-and-derived-palettes.md`.
 
 ## 1. Design language
 
-Terminal-flat console. Depth comes from **1px borders + background shifts**,
-never shadows or gradients. Sarasa Mono SC first (Berkeley Mono, then IBM Plex
-Mono as fallbacks) unless the operator chooses another typeface, 4px radii, dense but
-breathable spacing.
+A quiet panel on a canvas (ADR 0103). The navigation stands on the canvas; the page is drawn on
+one inset, rounded panel; anything the reader summons lifts off that panel with a soft shadow.
+Static structure is a fill and a hairline, grouping is enclosure rather than division, interface
+text reads in the bundled Sarasa Mono SC unless the operator chooses another typeface, and motion is short,
+decelerating and never decorative. Dense where the data is dense, generous where a page is read.
 
 | Principle | Meaning |
 | --- | --- |
-| Flat | `box-shadow: none` globally; borders carry all structure |
-| Typography roles | Interface text uses the UI stack; code and aligned data use the mono stack, with tabular numerals |
+| Two layers of chrome | The rail on `--canvas`, the work on the `--bg` panel; the panel's edge is the only separation between them |
+| Flat until summoned | Cards, tables and the layout carry no shadow; menus, popovers, toasts, dialogs and sheets lift with `--shadow-float` / `--shadow-overlay` |
+| Enclosure, not division | A group is one hairline enclosure on the page's own ground; rows inside it part with a dashed inset rule |
+| Quiet controls | A secondary control is a foreground wash, not an outline; hairlines belong to what encloses content |
+| Typography roles | Interface text uses the UI stack (Sarasa Mono SC by default); code and aligned data use the mono stack, with tabular numerals |
 | Quiet chrome, loud data | UI scaffolding stays muted; status color is reserved for real state |
 | Semantic color only | Green/red/amber mean enabled/error/warning — never decoration |
 
 ## 2. Color palette
 
-A palette is **nine authored tokens and seventeen derived ones**. `web/src/theme/palette.ts` declares the
+A palette is **nine authored tokens and eighteen derived ones**. `web/src/theme/palette.ts` declares the
 authored set and computes the rest; `docs/adr/0011-theme-modes-and-derived-palettes.md` records the
 formula, its calibrated constants, and the places where applying it changed the values below. Nothing in
 this section is hand-tuned any more, so a value here that disagrees with `derivePalette` is a defect in
 this document rather than a palette exception - `scripts/test-theme-presets.ts` asserts the stylesheet's
 fallback against the same function, though it cannot read this table.
+
+**One visible step in both modes.** The derivation's blends are fractions of a palette's own
+distances, and a light palette's distances are short, so a soft rule and a chart's grid
+derived from it used to land at roughly half the perceptual step the same tokens take on a dark page,
+and the trend's grid vanished in light mode. `--border-soft` therefore stands at least 0.06 of OKLCH
+lightness off `--bg` (`BORDER_SOFT_FLOOR` in `palette.ts`). OKLCH lightness is perceptual, so one
+floor is one visible step in either mode; the dark built-ins already clear it, and an operator's
+faint light palette is lifted to it. OMC Light's own border and surface were deepened to the dark
+palette's steps for the same reason. Hover keeps its blend: it is the ground the effort badges'
+fixed hues are tuned against.
 
 ### The authored tokens
 
@@ -67,14 +80,14 @@ console renders what the operator asked for.
 | Token | Value | antd mapping | Usage |
 | --- | --- | --- | --- |
 | `--bg` | `#121214` | `colorBgBase`, `colorBgLayout`, `colorBgContainer` | App background, inputs, tables |
-| `--surface` | `#1c1c1f` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
+| `--surface` | `#1c1c1f` | `colorBgElevated`, `colorFillQuaternary` | Cards, panels, dropdowns, hover states |
 | `--elevated` | `#222226` | `colorBgElevated` for overlays | Menus, popovers, dialogs |
 | `--fg` | `#f4f4f6` | `colorText`, `colorTextBase` | Primary text |
 | `--fg-2` | `#a1a1aa` | `colorTextSecondary` | Secondary text |
 | `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels, chart crosshair rules |
 | `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
-| `--accent` | `#00a2fb` | `colorInfo`, `colorLink`, Button `defaultHover*` / `defaultActive*` | Links, info, active bars, selection, an outlined button's hover and pressed ink |
+| `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
 | `--accent-hover` | `#0579bd` | `colorPrimary` | Filled primary buttons |
 | `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | A filled control, hovered or pressed |
 | `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
@@ -82,7 +95,7 @@ console renders what the operator asked for.
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ef4444` | `colorError` | Failed / disabled / delete |
 
-**Derived** (computed, listed for reference): `--border-soft` `#212124`, `--hover`/`--row-hover` `#272729`,
+**Derived** (computed, listed for reference): `--canvas` `#09090a`, `--border-soft` `#212124`, `--hover`/`--row-hover` `#272729`,
 `--selected-inset` `#2e2e37`, `--hover-inset` `#121214`, `--tooltip-bg` `#1c1c1f`, `--heatmap-quiet`
 `#212124`, `--heatmap-busy` `#00a2fb`, `--heatmap-zero-recorded` `#2c2c30`,
 `--heatmap-zero-unrecorded` `#212124`, `--heatmap-tip-link` `#00a2fb`, `--series-track` `#2c2c30`,
@@ -94,22 +107,22 @@ per-mode constants; see the reasoning-effort scale below.
 | Token | Value |
 | --- | --- |
 | `--bg` | `#ffffff` |
-| `--surface` | `#f6f6f8` |
+| `--surface` | `#f1f1f3` |
 | `--elevated` | `#ffffff` |
 | `--fg` | `#1c1c1e` |
 | `--fg-2` | `#505055` |
 | `--muted` | `#787880` |
 | `--meta` | `#98989f` |
-| `--border` | `#e5e5ea` |
+| `--border` | `#dcdce1` |
 | `--accent` | `#005d8f` |
 | `--accent-hover` | `#004a73` |
 | `--accent-active` | `#023b5d` |
 | `--accent-on` | `#ffffff` |
 
-**Derived**: `--border-soft` `#f1f1f4`, `--hover`/`--row-hover` `#f3f3f3`, `--selected-inset` `#eaedef`,
-`--hover-inset` `#f2f2f2`, `--tooltip-bg` `#1c1c1e`, `--heatmap-quiet` `#f1f1f4`, `--heatmap-busy`
-`#005d8f`, `--heatmap-zero-recorded` `#e5e5ea`, `--heatmap-zero-unrecorded` `#f1f1f4`,
-`--heatmap-tip-link` `#005d8f`, `--series-track` `#e5e5ea`, `--cache-rate-yellow` `#b45309`,
+**Derived**: `--canvas` `#f5f5f5`, `--border-soft` `#ebebee`, `--hover`/`--row-hover` `#f3f3f3`, `--selected-inset` `#eaedef`,
+`--hover-inset` `#f2f2f2`, `--tooltip-bg` `#1c1c1e`, `--heatmap-quiet` `#ebebee`, `--heatmap-busy`
+`#005d8f`, `--heatmap-zero-recorded` `#dcdce1`, `--heatmap-zero-unrecorded` `#ebebee`,
+`--heatmap-tip-link` `#005d8f`, `--series-track` `#dcdce1`, `--cache-rate-yellow` `#b45309`,
 `--cache-rate-green` `#059669`.
 
 ### Registered palettes
@@ -196,7 +209,7 @@ Success, warn and danger are per-mode constants rather than derived tokens (`MOD
 ### Status pip semantics
 
 `ok/loaded → success` · `degraded/quota → warn` · `invalid/error/401 → danger`
-· `inactive/offline/disabled → meta (gray)`. Pips are 7×7px, radius 2px.
+· `inactive/offline/disabled → meta (gray)`. Pips are round 6–7px dots.
 
 **One pip per verdict.** A pip labels the state of the number it sits on, so a
 row that shows a rate and its two components gets one pip — on the rate. The
@@ -277,11 +290,11 @@ asked" to find it.
 | --- | --- | --- |
 | Provider | Which provider answered, and on which credential? | The provider's name with an `OAuth` badge when the credential is one, then the credential on the second line: the account for OAuth, the masked key for an API key. Both lines are set alike on every row, so the first is always a provider and the second always a credential. |
 | Model | Which model answered? | The call model by default (requested model in requested-model view). An alias shows its routed upstream on a neutral `--fg-2` second line; a served substitution takes priority on that line in `--warn`, with routing detail retained in the tooltip. A preflight tag stays here because it qualifies what the record is. |
-| Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px boxed mark per departure from an ordinary streamed call: a filled bolt in `--accent` when the response's service tier was `fast` or `priority`, and the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
+| Mode | How was the request made? | The reasoning-effort badge on its scale, then one 18px filled mark per departure from an ordinary streamed call: a filled bolt in `--accent` when the response's service tier was `fast` or `priority`, and the crossed-out broadcast glyph for a non-streaming response. An em dash when there is nothing to say. |
 
 Rules:
 
-- **A row is two lines at most**, so every row is the same 68px and the virtual list's estimate
+- **A row is two lines at most**, so every row is the same 72px and the virtual list's estimate
   holds. A third fact needs another column or the detail drawer, never a third line.
 - **A mark states a departure, never the default.** A streamed request carries no "streamed" mark,
   and the requested service tier (`auto`) stays in the drawer.
@@ -337,7 +350,7 @@ Export offers two formats under one set of redaction choices:
 
 | Format | For | Contents |
 | --- | --- | --- |
-| Image (PNG) | Showing people what a model or a source did | The list's columns as a sheet, under the wordmark and a caption (count, time). The newest 100 selected rows. |
+| Image (PNG) | Showing people what a model or a source did | The list's columns as a sheet, under the wordmark and a caption (count, time), drawn in the list's own vocabulary - the soft head rule, the verdict dot, filled tags and the provider tile, and the model's maker mark when the list shows model marks. The newest 100 selected rows. |
 | JSON | A program | Stored values (milliseconds, counts, dollars), every selected row, with a `schema` name and the list of what was redacted. |
 
 - **Redaction is by what a reader could learn.** OAuth account names and keys (the caller's key
@@ -350,7 +363,7 @@ Export offers two formats under one set of redaction choices:
   hundred rows cost one paint instead of a clone of several thousand elements, and the preview
   is the canvas that is saved. It is wider than the list (1480px minimum, at up to 2x) so no
   column is cramped, and uses the list's own marks: provider artwork, the result pill, the
-  cache-rate badge, the non-streaming and substituted-model glyphs.
+  cache-rate reading, the non-streaming and substituted-model glyphs.
 
 A non-streaming response is marked with the crossed-out broadcast glyph (`NonStreamOutlined`)
 and labelled "Non-streaming response". The stacked-boxes glyph belongs to Model Square and is
@@ -358,8 +371,8 @@ not reused for it.
 
 ### Cache-rate scale
 
-The request list's cache-rate badge is the one continuous reading in the app:
-the value itself is a quality, so the badge paints it instead of bucketing it.
+The request list's cache rate is the one continuous reading in the app:
+the value itself is a quality, so the list paints it instead of bucketing it.
 `0%` yellow → `100%` green, with no thresholds and no steps. **Red is not on the
 scale**: a low hit rate is not a failure, and the danger hue is reserved for
 failed requests, so a weakly-cached request never reads as an error.
@@ -368,8 +381,6 @@ failed requests, so a weakly-cached request never reads as an error.
 | --- | --- | --- | --- |
 | `--cache-rate-yellow` | `#f59e0b` | `#b45309` | 0% stop |
 | `--cache-rate-green` | `#10b981` | `#059669` | 100% stop |
-| `--cache-rate-tint` | `14%` | `20%` | badge fill = hue over `--bg` |
-| `--cache-rate-edge` | `32%` | `34%` | badge border = hue over `--bg` |
 
 Rules:
 
@@ -382,19 +393,16 @@ Rules:
    `--cache-rate-yellow` to the mode's `--warn` and `--cache-rate-green` to its
    `--success` (`scripts/test-theme-presets.ts` asserts both), so the light stops
    are the darker reading of the same two hues (the low end is ochre — a
-   saturated yellow cannot also be legible on a light page). The rule for the
-   11px badge text is **4.5:1** against the badge's own tint, and only the dark
-   stops meet it. Measured with `contrastRatio` (`web/src/theme/colorMath.ts`),
-   each stop against its own tint composited over the ground: OMC Dark reads
-   **6.87:1** at the 0% stop and **6.06:1** at the 100% stop on the page,
-   **6.16:1** and **5.38:1** on a hovered or selected row (`--surface`); OMC
-   Light reads **3.81:1** and **2.95:1** on the page, **3.54:1** and **2.77:1**
-   on such a row. These are measurements rather than a pinned bound: no check
-   asserts them. The light fill is stronger than the dark one because a light
-   page needs more tint before the badge reads as a badge, which is why the two
-   tints differ.
+   saturated yellow cannot also be legible on a light page). The reading is
+   13px/500 text in its hue with a dot, straight on the row, with no box: a
+   badge's fill and edge were a second frame inside every row and cost the
+   light stops contrast. Measured with `contrastRatio`
+   (`web/src/theme/colorMath.ts`) on the page: OMC Dark reads **8.71:1** at the
+   0% stop and **7.38:1** at the 100% stop; OMC Light reads **5.02:1** and
+   **3.77:1**. These are measurements rather than a pinned bound: no check
+   asserts them.
 3. **The top of the scale is presentation policy.** `100%` is not shown: the
-   badge stops at **99.9%** (`MAX_CACHE_RATE`; the Go dashboard aggregate caps
+   reading stops at **99.9%** (`MAX_CACHE_RATE`; the Go dashboard aggregate caps
    identically) so the app never claims a perfect hit rate. Readings carry **one
    decimal**; a rate that rounds to zero reads as `0%`, never `0.0%`.
 4. **No data is not 0%.** A record with no token data gets the same badge shape
@@ -436,8 +444,7 @@ label so the colour is never the only carrier (WCAG 1.4.1).
 | `--effort-4` | `high` | `#bda7fe` | `#6343a4` | violet |
 | `--effort-5` | `xhigh` | `#f08dee` | `#8a2b8a` | magenta |
 | `--effort-6` | `max` | `#ff8cc1` | `#9b2065` | pink |
-| `--effort-tint` | | `14%` | `12%` | badge fill = step over the ground |
-| `--effort-edge` | | `32%` | `30%` | badge border = step over the ground |
+| `--effort-tint` | | `14%` | `12%` | badge fill = step over the ground; the badge has no edge |
 
 Rules:
 
@@ -450,11 +457,11 @@ Rules:
 3. **An unranked level stays neutral, and neutral is plain rather than faint.** A
    provider-specific value (`instant`, `ultra`, `auto`, a token budget) is printed as recorded at
    the neutral step. Painting it as the top of the scale would state an order nobody published. The
-   neutral step is `--fg-2`, secondary text: the badge's tint and edge are thin by design, and
+   neutral step is `--fg-2`, secondary text: the badge's tint is thin by design, and
    `--muted` through them left the level close to unreadable.
 4. **The steps are per-mode constants, not derived tokens**, for the reason the series slots are: an
    operator's accent must not rotate what a level looks like. Every palette inherits its mode's set.
-5. **Each step, the neutral one included, clears 4.5:1** as 10px badge text on its own tint, over the page, the card and the
+5. **Each step, the neutral one included, clears 4.5:1** as 11px badge text on its own tint, over the page, the card and the
    row's hover fill, in every registered palette. `scripts/test-effort-scale.ts` asserts that, the
    ranking, and that the stylesheet's fallback values match the palette.
 
@@ -513,10 +520,10 @@ rendering hole: the shape promises a full week.
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `--heatmap-quiet` | `#212124` | `#f1f1f4` | the ramp's floor: a cell with no traffic |
+| `--heatmap-quiet` | `#212124` | `#ebebee` | the ramp's floor: a cell with no traffic |
 | `--heatmap-busy` | `#00a2fb` | `#005d8f` | the ramp's ceiling: the window's busiest day |
-| `--heatmap-zero-recorded` | `#2c2c30` | `#e5e5ea` | recorded, no traffic |
-| `--heatmap-zero-unrecorded` | `#212124` | `#f1f1f4` | nothing stored for that day |
+| `--heatmap-zero-recorded` | `#2c2c30` | `#dcdce1` | recorded, no traffic |
+| `--heatmap-zero-unrecorded` | `#212124` | `#ebebee` | nothing stored for that day |
 
 ### Credential quota
 
@@ -578,12 +585,13 @@ preferences:
   draws attention to the *absence* of data, which is the loudest thing in a panel whose subject is
   the handful of coloured cells. GitHub's empty state is a wall of quiet blocks, and that is what
   this is.
-- **Ordered against the card.** The panel sits at `--surface`, and both steps are a shade lighter
-  than it on dark (darker on light), so the 4px gaps read as the card showing through. The order
-  carries the meaning: unrecorded (no information) is closest to the card at ~1.06:1, empty (a
-  measurement of zero) at ~1.16:1, and a measured day is the only thing clearly louder at ~1.23:1.
-  Anchoring these to `--bg` was the defect: `--bg` is a step *up* from the card on dark, so
-  "empty" rendered brighter than the panel and the ramp's floor rendered quieter than empty.
+- **Ordered against the card.** The panel is drawn on the page's own ground (`--bg`, ADR 0103), and
+  both steps are a shade lighter than it on dark (darker on light), so the 4px gaps read as the card
+  showing through. The order carries the meaning: unrecorded (no information) is closest to the card
+  at ~1.17:1 (1.19:1 light), empty (a measurement of zero) a step further at ~1.35:1 (1.37:1), and a
+  measured day climbs from there to the accent at 6.74:1 (7.09:1). Each step must sit on the card's
+  side of the ink, never past it: a zero state louder than the ramp's floor would read as a measured
+  day.
 
 Rules:
 
@@ -659,7 +667,7 @@ colour are untouched and still mean exactly one thing.
 | `--series-4` | `#f43f5e` | `#e11d48` | coral |
 | `--series-5` | `#f59e0b` | `#b45309` | amber |
 | `--series-6` | `#06b6d4` | `#0891b2` | cyan |
-| `--series-track` | `#2c2c30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track - the `border` step in each mode |
+| `--series-track` | `#2c2c30` | `#dcdce1` | the trend's plot floor and the ring's unfilled track - the `border` step in each mode |
 
 The six slots are **per-mode constants, not derived tokens**: they are semantics rather than palette,
 so an operator's accent cannot rotate them (`docs/adr/0011-theme-modes-and-derived-palettes.md`). Every
@@ -1031,7 +1039,7 @@ Every role ends in the Sarasa stack, which draws any character a chosen family l
 | `--text-md` | 13px | Labels, descriptions, notice and toast copy |
 | `--text-base` | 14px | Body (antd `fontSize`) |
 | `--text-lg` | 16px | Section headings, drawer and modal titles, the touch focus floor |
-| `--text-xl` | 22px | The page title |
+| `--text-xl` | 20px | The page title, a counted tile's figure |
 
 A stylesheet writes a size on this scale as its token and never as a fractional pixel value. A
 display numeral (the hero number, a KPI value) or an icon keeps a literal size, because it belongs
@@ -1040,13 +1048,13 @@ resolves without a fallback.
 
 | Level | Size / weight | Usage |
 | --- | --- | --- |
-| Page title (`--text-xl`) | 22px / 700 | One per page, the verdict or page name |
+| Page title (`--text-xl`) | 20px / 600, letter-spacing −0.01em | One per page, the verdict or page name |
 | Section h2 | 16px / 600 | Dashboard sections |
 | Hero number | 42px / 700, letter-spacing −0.04em | The one big KPI |
 | KPI value | 28px / 700 | Stat cards |
 | Body | 14px / 400 | Default |
 | Data / mono | 12–13px | Tables, logs, code |
-| Eyebrow | 10px / 500, letter-spacing 0.16em, uppercase, `--muted` | Tiny group labels above KPI numbers only |
+| Caption | 12px / 500, reading case, `--muted` | Column heads, field labels, group names; log levels and unit marks keep their own case because they label data |
 
 **Hierarchy rules:**
 
@@ -1087,47 +1095,65 @@ reading column between a nav track and a balancing gutter) and the conversation 
 - **Lists do not change the column.** A list is its own frame and spans the
 content column; its width follows from the column, not from the viewport or from
 a column count. Measured at a 1920px viewport: every list frame is 1376 wide and
-at the same x, whether it stands alone (AI Providers, OAuth, pricing) or is the
-body of a card whose head names it (key management, where the card is the frame).
+at the same x, whether it stands alone (AI Providers, OAuth, key management, pricing) or is the
+body of a card whose head names it.
 - **A page's own surface is never wider than the page.** Sideways scrolling for a
 wide table happens inside the list's frame, so the column stays where the reader left it.
 
 ## 4. Shape, spacing, elevation
 
 ```text
-radius-xs     2px    marks too small for 4px to read as a corner: pips, bar ends, 16px logos
-radius-sm     4px    inputs, buttons, tags, cards (the app's radius)
-radius-lg     6px    modals/drawers outer shell only
-thread scale  4 · 4 · 6 · 8px     conversation workspaces and approval cards (ADR 0086, below)
+radius-xs     2px    marks: bar ends, heatmap swatches, 16px logos
+radius-check  4px    check boxes, which the control step would round into a dot
+radius-sm     6px    controls: inputs, buttons, tags, row actions, chips
+999px                status pips and series dots, which are round
+radius-md     8px    menus and their rows, popovers, rail entries, inner boxes, counted tiles
+radius-lg     12px   enclosures: cards, lists, settings groups, dialogs, drawers, the content panel
+thread scale  8 · 6 · 10 · 12px   document · control · surface · thread (ADR 0086, ADR 0103)
 space scale   4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px
 section gap   32px (page sections); the dashboard board's cells are 16px apart
 card padding  20px (antd Card paddingLG)
 page head     title block left, actions right, 24px bottom margin
-header        56px tall, 1px bottom border
-sider         236px (58px collapsed), 1px right border
+panel inset   8px from the window's top, right and bottom edges; none on a phone
+header        52px tall, inside the panel, no rule under it
+sider         236px (58px collapsed), on the canvas, no rule beside it
 ```
 
-Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown. The dashboard's live
-routing map is the one lit surface, and its scope is stated with it (§2, Dashboard live routing).
+**The scale nests.** A shape inside another takes the step below its frame, so an inner corner never
+reads rounder than the edge around it. `pnpm check:style-tokens` refuses a literal that is a step and a
+4px or 5px corner, which is a step nobody chose.
+
+**Elevation belongs to what floats.** Layout, cards and tables carry no shadow. A layer the reader
+summoned carries a hairline *and* a shadow: `--shadow-float` for menus, popovers, select and date
+panels and toasts; `--shadow-overlay` for dialogs and the desktop side sheet; `--shadow-raised` for the
+one-pixel lift of a switch knob, a segmented thumb, the empty-state sheet and the composer at rest.
+Dark mode carries its own, deeper set, because a light shadow does not read on a dark page. The modal
+and drawer mask (`--overlay-mask`) dims the page rather than hiding it. The dashboard's live routing
+map keeps its own lit depth, and its scope is stated with it (§2, Dashboard live routing).
 `--focus-ring: 0 0 0 2px var(--accent)` is the only ring, and it is never drawn on a text field: a browser
 matches `:focus-visible` on every focused `input`/`textarea`, and those sit inside controls (Input with an
 affix, Select, pickers, number fields) that already mark focus on their outer box with the accent border
-and halo. Ringing the inner field too drew a second rectangle inside the control.
+and halo. Ringing the inner field too drew a second rectangle inside the control. A control that fills a card
+clipped to its rounded edge - a disclosure head in the provider editor - draws the same ring inset,
+following the card's corners, because the outward ring would be cut to one stray stroke.
 
 ## 5. Layout skeleton
 
 ```text
-┌──────────┬──────────────────────────────────────────┐
-│ wordmark │ nav / breadcrumb       GitHub + actions   │ 56px, border-bottom
-│──────────┼──────────────────────────────────────────┤
-│ nav      │                                          │
-│ (groups) │ page content        ← scrolls alone      │
-│          │                                          │
-│ foot:    │                                          │
-│ CPA conn │                                          │
-└──────────┴──────────────────────────────────────────┘
-   236px        1fr    — both columns scroll independently
+ canvas ─────────────────────────────────────────────────────
+│ wordmark  ╭──────────────────────────────────────────────╮ │
+│           │ nav / breadcrumb          GitHub + actions   │ │ 52px, no rule
+│ nav       │                                              │ │
+│ (groups)  │ page content            ← scrolls alone      │ │
+│           │                                              │ │
+│           ╰──────────────────────────────────────────────╯ │
+ ─────────────────────────────────────────────────────────── 8px inset
+   236px                  1fr — rail and panel scroll independently
 ```
+
+The rail stands on `--canvas`; the header and the route content are one panel on `--bg`, with a 1px
+`--border` edge and the `lg` corner. At the phone breakpoint (900px) the panel loses its inset, edge
+and corner and becomes the screen.
 
 - `body { overflow: hidden }` — the shell is `100dvh`; sidebar and content
   scroll independently (`overscroll-behavior: contain`).
@@ -1135,10 +1161,12 @@ and halo. Ringing the inner field too drew a second rectangle inside the control
   and hosted-page headings. They are unframed glyphs: theme, hover and selected-state colours
   apply without a separate icon palette. Raster plugin marks keep their original colours.
 - Nav groups: Operate / Gateway / Observe / Control, with the plugins group - management, the
-  store, then each plugin's own page - before Control. Group labels 10px
-  uppercase `--meta`. Items: icon + label only, no subtitles. Selected item =
-  2px `--fg` inset rule (`box-shadow: inset 2px 0 0 var(--fg)`) + `--fg` bold text,
-  never a filled background block. Hover uses `--surface` for immediate feedback.
+  store, then each plugin's own page - before Control. Group labels 12px / 500 in reading
+  case, `--meta`. Items: a 16px icon in `--muted` + label in `--fg-2`, no subtitles, 32px rows with
+  the `md` corner. Hover is `--fg` washed 5% over the rail; the selected item is an 8% wash with
+  `--fg` text at 500 and its icon in `--fg`. The washes are foreground over whatever the rail
+  stands on, so the same rule reads on the canvas and on the phone sheet; a coloured bar or an
+  accent fill never marks the selection, because the rail is chrome and colour belongs to data.
 - The rail is the operator's: which of its entries a deployment shows is a stored preference
   (`omc_nav_hidden`, holding the *hidden* routes, so an entry a later release adds arrives
   already visible), set from the OMC settings page - one row that opens the rail's own panel,
@@ -1182,7 +1210,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - On phones the action cluster keeps its full control widths with a 4px gap and 12px safe-area-aware edge padding; the navigation toggle does not shrink, and the current breadcrumb truncates with an ellipsis rather than overlapping actions. Connection status and version are the System Information page's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 8. **Form Workbench & Setting Group Panels**
    - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
-   - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
+   - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (one 1px hairline enclosure on the panel's `--bg` ground with the `lg` corner, rows parted by a dashed rule inset 20px from the edge) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
      1. **Form Grid**: Labels and descriptions on top, controls below; related short fields (such as Host and Port, retry counts and delays) sit side by side; short number inputs are bounded to 120px and picker selects to 280px, while a list field's tag editor fills its column and grows as its tags wrap, since it has no dropdown to open and no longest option to size against;
      2. **Settings List**: Toggles and flags use in-card row lists with "title and description on left + Switch on right", bounded by the panel container;
      3. **Managed Elsewhere**: A group whose field is edited on its own page (the proxy client API keys) states how much is configured and leads there with a single action, rather than carrying a second editor that could disagree with the first. It renders in search results too, so searching for that field finds the panel that names it;
@@ -1193,12 +1221,12 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - **Monaco YAML Source Editor**:
      - **Offline & Zero-CDN Constraint**: Injects locally bundled `monaco-editor` core with `editor.worker` and `yaml.worker`; never loads assets via CDN; disables remote schema requests (`enableSchemaRequest: false`);
      - **On-demand Lazy Loading**: Dynamic import via `React.lazy` prevents bloat on initial page loads; Vite aliases prune unused language workers, bundling only `editor.worker` (274 KB) and `yaml.worker` (1017 KB);
-     - **Terminal-Flat Theme Integration**: Dedicated `omc-dark` and `omc-light` themes match the Sarasa Mono SC font stack and 1px hairline borders, eliminating the jarring contrast of VS Code default themes;
+     - **Console Theme Integration**: Dedicated `omc-dark` and `omc-light` themes match the console's mono stack and 1px hairline borders, eliminating the jarring contrast of VS Code default themes;
      - **Full IDE Capabilities**: YAML syntax highlighting, bracket matching, indentation guides, folding, `Ctrl+F` search/replace, native `Ctrl+S` interception, and explicit format/validation hints.
    - **Floating Dirty Action Bar & Confirmation Semantics**:
      - **Trigger**: Appears only when unsaved edits exist (`isDirty === true`), fully hidden otherwise; the top toolbar concurrently shows a Discard button;
      - **Viewport Centered & Non-intrusive**: Centered dynamically within the content column based on `--app-sider-width`; outer container uses `pointer-events: none` to avoid blocking lower page interactions;
-     - **Terminal-Flat Tone**: 1px border, solid `--surface` background, and amber dirty indicator pip;
+     - **Quiet Tone**: 1px border, solid `--surface` background, the `lg` corner, and amber dirty indicator pip;
      - **Confirmation Rules**: Save actions trigger a `ConfirmAction` (and `Ctrl+S`/`Cmd+S` triggers a confirmation modal); Discard actions revert immediately without confirmation, cleanly dismissing the dirty bar; Save is disabled with tooltip explanations when YAML has syntax errors or required fields are incomplete.
    - **Modular Payload Rules Builder**:
      - **Structured Collapsible Panels**: Replaces generic raw textareas with structured panels (Default rules, Default Raw rules, Override rules, Override Raw rules, Filter rules); all categories start collapsed, explicit disclosure choices survive external document updates, and a failed save opens the first invalid category;
@@ -1225,8 +1253,16 @@ reader moving between pages never sees the refresh control jump or resize:
   changed secret that revokes clients - and it sits on the confirmation, where the action happens.
 - **Actions at the default control height (32px)**, wrapping as a group. The primary action, when
   there is one, is the *last* action so it sits at the page's right edge; refresh comes first.
-- **One refresh control** (`RefreshButton`): the header's own rotate glyph, labelled "Refresh" or
-  icon-only with a tooltip where the row is crowded. A read in flight *spins the glyph* instead of
+- **The title row is pinned to the top** and drawn at the action row's 32px height, so every page's
+  title lands on the same line whether or not a line follows it; aligned to the bottom, a page with a
+  subtitle lifted its title six pixels above one without, and moving between them jumped.
+- **Secondary actions are glyphs** (`ToolButton`): a 32px square named by its tooltip and accessible
+  name. A row of labelled buttons is as wide as its words in the reading language and reflowed under
+  the pointer from page to page; squares do not. The page's primary action keeps its label - it is the
+  one a reader looks for by name - and so does a menu row: inside `ActionMenu` a `ToolButton` takes its
+  label back, because a glyph alone names nothing in a list.
+- **One refresh control** (`RefreshButton`): the header's own rotate glyph, a `ToolButton`; it keeps
+  its label only as a failed read's retry, where it is the page's way forward. A read in flight *spins the glyph* instead of
   setting antd's `loading`, which swallows clicks and swaps the glyph for a spinner of another shape.
   `SyncOutlined` is reserved for synchronisation jobs (the pricing catalogue, a quota refresh).
 - **Stacked blocks share one rhythm.** A page of alerts, panels and lists uses `.terminal-page-stack`
@@ -1234,9 +1270,11 @@ reader moving between pages never sees the refresh control jump or resize:
 - **State is a pip and a word** (`StatusLabel`: success / warn / danger / accent / neutral), not a
   filled tag. A column of coloured boxes carried no information the word did not.
 - **Row actions are quiet 28px squares** (`.row-actions` / `.row-action-btn`), 8px apart so the
-  touch rules' hit insets meet rather than overlap. The glyph takes the accent on hover, and a
-  destructive action shows the danger colour only on hover - a column of red bins read as a column
-  of errors. Destructive actions confirm in a `ConfirmAction` whose confirming button is the danger one.
+  touch rules' hit insets meet rather than overlap. At rest an action is its `--muted` glyph alone,
+  with no frame or fill - a framed button repeated down every row was the loudest thing in a list -
+  and the pointer brings up a `--fg` 7% wash under it with the glyph in `--fg`. A destructive action
+  shows the danger colour, over a 12% danger wash, only on hover - a column of red bins read as a
+  column of errors. Destructive actions confirm in a `ConfirmAction` whose confirming button is the danger one.
   Installed plugin rows keep configuration directly accessible beside a matching overflow button;
   repository/homepage links and uninstall live in that menu. The enable switch is separated from
   the action pair by a quiet rule, and uninstall confirms against the same row. These controls use
@@ -1250,17 +1288,22 @@ reader moving between pages never sees the refresh control jump or resize:
   card alone.
 - **Table headers never wrap.** A squeezed column wraps its cells, not its name.
 - **One list surface.** Every wide list is drawn the way the OAuth credential list is: a 1px
-  `--border` frame with the small radius, a header strip on `--surface` (mono 10px, weight 600,
-  uppercase, `--muted`, 8px × 16px), rows on `--bg` at 12px × 16px divided by `--border-soft`
-  rules, and a `--surface` hover. The shared `.data-table` rule in `web/src/index.css` draws it
+  `--border` frame with the `lg` corner, column names with no band of their own (the caption type:
+  12px, weight 500, reading case, `--muted`, 8px × 16px, over the same soft rule the rows use), rows
+  on `--bg` at 12px × 16px divided by `--border-soft` rules, and a `--fg` 3% hover wash; the row
+  whose record is open in a drawer takes a 6% wash, never an edge bar. The shared `.data-table` rule in `web/src/index.css` draws it
   for `ResponsiveList`; a list that is the whole body of a card adds `.data-table-flush`, so the
   card is the frame and no list sits in a frame inside a frame.
 - **A list summarised before it is listed opens with `StatTiles`** (`web/src/components/common/`):
-  a strip of counted tiles on `--bg` with a 1px `--border` frame, a 12px label (a `StatusLabel` for
-  a toned tile, plain for the "everything" tile) over a 22px tabular count, which paints in its tone
+  a strip of counted tiles on `--bg` with a 1px `--border` frame and the `md` corner, a 12px label (a
+  `StatusLabel` for a toned tile, plain for the "everything" tile) over a 20px tabular count, which paints in its tone
   only when non-zero. Each tile is also the list's filter (`aria-pressed`; the selected one takes
   the accent frame and `--hover-inset`), and the ruled `Toolbar` of search and selects sits
-  directly under it. The audit trail's outcomes and the AI provider list's states both use it.
+  directly under it. The audit trail's outcomes, the AI provider list's states and the key list's
+  use over the last 24 hours (all, used, idle) use it. The two Gateway lists are built from the same
+  parts: the summary under the title, the tiles, the ruled toolbar with the window's totals at its
+  end, a table whose rows open on a 36px wash tile and end in quiet row actions, and an `AppDrawer`
+  for the editor.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (a compact `EmptyState`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
@@ -1295,8 +1338,8 @@ how serious it is:
 
 - **One outcome, one surface.** A toast is never repeated as a banner, and a result never opens an
   information-only dialog: `modal.confirm` asks before an action, a toast reports after it.
-- **A toast** is a floating panel like a menu: `--elevated` fill, a 1px `--border` edge (shadows are
-  off, so the border is its only edge), the 4px radius, one width (420px, antd's `Notification.width`
+- **A toast** is a floating panel like a menu: `--elevated` fill, a 1px `--border` edge and
+  `--shadow-float` (§4), the `lg` corner, one width (420px, antd's `Notification.width`
   token) and an 18px icon. It opens at the top centre, never stacks into a collapsed pile, and holds
   for 2s (a brief success), 3s (info or a success with detail), 4s (warning) or 5s (error); an
   offered shortcut gets 6s, and hovering pauses the remaining timer instead of restarting it.
@@ -1318,11 +1361,10 @@ how serious it is:
   attachment through one keyed toast, so a repeat replaces the last one; a check for updates the
   operator asked for reports its failure in a toast with the reason, and only an automatic check
   states its failure in the versions card.
-- **A notice is a callout, not a boxed banner.** A 2px rule in the tone's colour on the leading
-  edge - the mark the navigation and a selected record use for "here" - over a `--thread-field`
-  fill with no border and the 4px radius on the trailing corners only. The tone's code takes the
-  first line, in the table header's type (10px, 600, uppercase letterforms, 0.08em) and the tone's
-  colour - `INFO` `--accent`, `WARNING` `--warn`, `ERROR` `--danger`, `SUCCESS` `--success` - so it
+- **A notice is a tinted wash, not a flagged banner.** It belongs to the region it describes, so
+  it is drawn like part of the page: its tone mixed 8% into `--bg` for the fill, a hairline of the
+  tone at 16%, and the `md` corner, with no bar on its edge. The tone's code takes the first line
+  (11px, 600, 0.02em) in the tone's colour - `INFO` `--accent`, `WARNING` `--warn`, `ERROR` `--danger`, `SUCCESS` `--success` - so it
   never rests on colour; the headline follows at 13px on its own line at the full measure, with its
   detail under it in `--fg-2`, and its tools at the trailing edge.
 - **A notice's action sits beside the sentence; its close control sits in the corner.** An action
@@ -1374,34 +1416,41 @@ supplies content and layout width; what is inside the frame is not restyled per 
   list), `medium` 600px (an editor, one record), `wide` 760px (a record with tabs, a table or a
   document). The close control sits at the trailing end of the head and is always named. The footer
   is two slots - `footerStart` for a state note or a reset, `footer` for the actions that finish the
-  work, at the trailing edge - and wraps instead of squeezing. The phone navigation sheet and the
-  time-range sheet are not side panels and keep antd's `Drawer`.
+  work, at the trailing edge - and wraps instead of squeezing. Closing, it keeps the title, body and
+  footer it last showed open until it has slid away, so a caller that closes it by clearing its
+  selection does not send it out blank; its body holds a stable scrollbar gutter, so a section
+  unfolding past the panel's height does not narrow every card mid-fold. The phone navigation sheet
+  and the time-range sheet are not side panels and keep antd's `Drawer`.
 - **`SearchInput` - a filter-as-you-type field.** The search glyph in `--muted`, the text, and a
   clear control. `label` is its accessible name and its placeholder unless a longer placeholder is
   given; `onChange` receives the text. Width is the caller's.
 - **`EmptyState` - a region that holds nothing.** A centred column: a mark, the state in one line,
-  optionally one further line and one action. The mark is three shortening 2px rules in `--border` -
-  the rows that are not there - and replaces Ant Design's illustrated tray, since the console has no
-  illustration language (§1). `block` (40px vertical padding, with the mark) stands in for a list or
-  a page section; `compact` (20px, no mark) sits inside a panel, a picker or a drawer section.
+  optionally one further line and one action. The mark is a 44px sheet on `--bg` with the `md`
+  corner and `--shadow-raised`, carrying three shortening 2px rules in `--border` - the rows that are
+  not there - with a second `--surface` sheet fanned 9° behind it. It is drawn in CSS from the page's
+  own layers in place of Ant Design's illustrated tray: the console's only pictures are the shapes its
+  pages are made of. The title is 14px / 500 in `--fg`, the further line 13px `--muted`. `block` (48px
+  vertical padding, with the mark) stands in for a list or a page section; `compact` (20px, no mark) sits inside a panel, a picker or a drawer section.
   Loading is `PageLoading` and failure is `LoadFailure`; neither is an empty state.
 - **`SectionHeading` - the head of a section**, at three weights: `section` (`--text-lg` / 600) opens
   a part of a page, `group` (`--text-base` / 600) a panel, a settings group or a drawer section, and
-  `label` (`--text-xs` / 600, uppercase, 0.04em, `--muted`) a short run of fields or facts. It takes
+  `label` (`--text-xs` / 600, `--muted`, reading case) a short run of fields or facts. It takes
   an optional count in tabular numerals after the title, one description line (not on a `label`) and
   an `extra` control at the trailing edge. The element (`h2`-`h4`, `div`) follows the document
   outline, independent of the weight. The frame around a head stays with its caller.
 - **`Tag` - a short fact about a row**: a type, a state, a count. 22px tall, `--radius-sm`,
-  `--text-sm`, tabular numerals; `small` is 18px, `--radius-xs`, `--text-2xs`. It carries no margin -
-  spacing is the row's gap. Five tones: `neutral` (`--fg-2` on `--bg` with a `--border` edge) and
-  `success`, `warn`, `danger`, `accent`, each the tone's ink on a 10% tint with a 36% edge. A tone
-  states health or emphasis and nothing else; a brand colour is a per-site custom property, not a
-  sixth tone. `ToggleTag` is the pressable form, for a small set of mutually exclusive filters: muted
-  and frameless at rest, `--hover-inset` with a `--border` edge when pressed.
+  `--text-sm`, tabular numerals; `small` is 18px, `--radius-sm`, `--text-xs`. It carries no margin -
+  spacing is the row's gap, and no edge - a row of outlined facts read as a strip of boxes. Five
+  tones: `neutral` (`--fg-2` on a 6% wash of the ink) and `success`, `warn`, `danger`, `accent`, each
+  the tone's ink on a 12% tint. A tone states health or emphasis and nothing else; a brand colour is a
+  per-site custom property, not a sixth tone. `ToggleTag` is the pressable form, for a small set of
+  mutually exclusive filters: muted and unfilled at rest, an 8% wash when pressed.
 - **`ConfirmAction` - a confirmation anchored to its trigger**, for an action that is cheap to
   confirm and local to a row. The cancel label is fixed; the confirming button is named for the
   action (`confirmLabel`) and `isDanger` colours it for a deletion. A decision that needs a paragraph
-  or a typed name is a modal, not this.
+  or a typed name is a modal, not this. The trigger's tooltip is passed as `tooltip`, never wrapped
+  around the trigger by the caller: it steps aside while the confirmation is open, where a tooltip
+  left up covered the confirmation's own buttons.
 - **`SelectionBar` - what can be done with the ticked rows.** It is rendered only while something is
   selected. The leading side holds the count (a live region), an optional qualifying note and the
   controls that change the selection; the actions sit at the trailing edge and wrap below on a
@@ -1441,29 +1490,29 @@ supplies content and layout width; what is inside the frame is not restyled per 
 ### Switch
 
 Every on/off control is `web/src/components/common/Switch.tsx`; antd's `Switch` is not used, and
-`pnpm check:feedback` refuses its import (`raw-switch`). The control is drawn for the console rather
-than taken as a pill:
+`pnpm check:feedback` refuses its import (`raw-switch`). The control is the console's own pill:
 
 ```text
-size      track     thumb    corner   use
-default   40×22     16px     6px      a settings row, a drawer field
-small     32×18     12px     5px      a list row, a table cell, a toolbar
-touch     44×24     18px     6px      both sizes under `(pointer: coarse)`
+size      track     knob     use
+default   36×20     16px     a settings row, a drawer field
+small     30×17     13px     a list row, a table cell, a toolbar
+touch     44×24     20px     both sizes under `(pointer: coarse)`
 ```
 
-- **A rounded rectangle with a concentric thumb.** The thumb sits 2px inside the track's 1px edge
-  and its corner is the track's minus those 3px, so the two outlines run parallel. The travel and
-  both state marks are derived from the same four numbers, so a size is one block.
-- **Off is an outline; on is a fill.** Off is a transparent track with a `--muted` edge and a
-  `--muted` thumb, and hovering an enabled switch steps both to `--fg-2`. On fills the track with
-  `--success` and paints the thumb in `--accent-on`, the ink a filled control carries.
-- **The state is written on the track.** The stretch the thumb is not covering carries a bar when
-  on and a ring when off. Side, fill and mark agree, so the reading never rests on colour.
+- **A pill with a concentric knob.** The knob is a circle 2px inside the track, so the two outlines
+  stay concentric at every size; the travel and both state marks are derived from three numbers.
+- **The knob is a raised disc.** It is the page's lightest ink - `--bg` on a light palette, `--fg` on a
+  dark one - with `--shadow-raised`, so it reads as the same object on either.
+- **Off is a pale wash; on is a fill.** Off is `--fg` washed 16% (24% hovered); on fills the track
+  with `--success`.
+- **The state is written on the track.** The stretch the knob is not covering carries a bar in
+  `--accent-on` when on and a `--fg-2` ring when off. Side, fill and mark agree, so the reading never
+  rests on colour: a pale track beside a light knob does not reach a control's contrast floor alone.
 - **Disabled** is 45% opacity. **Pending** (`loading`) holds the state, refuses input, reports
-  `aria-busy`, hollows the thumb and drops the marks, at full strength so a write in flight does
+  `aria-busy`, hollows the knob and drops the marks, at full strength so a write in flight does
   not read as unavailable; it is a static mark, not a spinner.
-- **Motion**: the thumb slides by `transform` in `base` and leans 2px toward its next side while
-  pressed; the track, edge, thumb and mark colours change in `fast`.
+- **Motion**: the knob slides by `transform` in `base` on the decelerating curve and leans 2px toward
+  its next side while pressed; the track and mark colours change in `fast`.
 - The element is a native `<button role="switch">`, so a wrapping `<label>`, `htmlFor`, Space/Enter,
   the shared focus ring and `Form.Item valuePropName="checked"` need no wiring. It is controlled:
   `checked` and `onChange(checked)`. A switch with no visible label of its own carries `aria-label`.
@@ -1528,10 +1577,11 @@ The choice is stored on the server, not in the browser: a reload, a service
 restart and a container rebuild must all bring back the window the operator was
 looking at. A date picker that is not in use never sits in the toolbar.
 
-The selected preset is marked the way the side rail marks its page — a straight 2px
-accent rule on a square edge and the text weight, not a filled block. A closed custom
-range turns the trigger's border and text to the accent: it is a fixed fact, and must
-not be taken for a window that is still moving. Polling is paced to the resolution being
+The trigger is a field, not a button: it takes a filled select's well, inset, chevron and
+height, and in the request toolbar it shares one size with the model and provider fields
+beside it. The selected preset is marked the way the side rail marks its page — a soft
+wash and the text weight. A closed custom range turns the trigger's fill and text to the
+accent: it is a fixed fact, and must not be taken for a window that is still moving. Polling is paced to the resolution being
 served — `bucket / 12`, clamped to 5s–120s — because refreshing faster than the
 grid can change costs queries and buys nothing. There is no "live" switch: the
 shortest preset **is** live. It is fifteen minutes at one bucket per minute, so
@@ -1542,15 +1592,16 @@ narrow to read as a trend and an hour too coarse to feel like it was moving.
 
 **The thread uses a restrained shape and fill scale** (ADR 0081, refined by ADR 0086). A conversation is read as a document
 with a few objects resting on it, so an element is rounded by what it is, and grouped by a fill
-where the console would draw a box. Printed output and controls share the console's 4px geometry;
-floating surfaces use 6px and larger conversation objects stop at 8px:
+where the console would draw a box. The radii sit on the console's corner scale (§4): controls take
+the control step, printed matter and floating surfaces the steps above it, and the composer, bubbles
+and cards the card step:
 
 | Token | Value | What takes it |
 | --- | --- | --- |
-| `--radius-document` | 4px | printed matter: a figure, a table, a code frame, a mono argument chip |
-| `--radius-control` | 4px | what is pressed inside the thread: a call row, a picker trigger, a chip, a card's buttons |
-| `--radius-surface` | 6px | a field panel or a floating list: a card's change list, a failure note, a popover |
-| `--radius-thread` | 8px | the composer, the operator's bubble, the question panel, an approval card, a suggestion |
+| `--radius-document` | 8px | printed matter: a figure, a table, a code frame, a mono argument chip |
+| `--radius-control` | 6px | what is pressed inside the thread: a call row, a picker trigger, a chip, a card's buttons |
+| `--radius-surface` | 10px | a field panel or a floating list: a card's change list, a failure note, a popover |
+| `--radius-thread` | 12px | the composer, the operator's bubble, the question panel, an approval card, a suggestion |
 | `--thread-field` / `--thread-field-hover` | `--fg` at 5% / 8% | a borderless grouping fill, and its hover |
 | `--thread-hairline` | `--fg` at 12% | the one edge an object resting on the page may have |
 
@@ -1558,9 +1609,10 @@ Their pre-hydration defaults are declared in `web/src/index.css`; `THREAD_RADII`
 `THREAD_FILL_SHARES` in `web/src/theme/palette.ts` own the radii and foreground percentages and `themePaletteCssVariables` in
 `web/src/theme/themeConfig.ts` projects the fill and radius tokens for every preset and custom palette. They apply inside the conversation workspaces and to the approval card
 wherever it is drawn; HTML conversation exports read the same `THREAD_RADII` constants.
-The rest of the console keeps the 4px radius. Rows are separated by spacing
-and a hover fill, never by a rule between each; a state colours its notice faintly and adds no
-edge bar; nothing gains a shadow. Motion stays within §7's budget, with a press scaling a pressed
+Rows are separated by spacing and a hover fill, never by a rule between each; a state colours its
+notice faintly and adds no edge bar. The composer is the one object that sits above the thread: the
+panel's ground, a hairline and `--shadow-raised`, deepening to `--shadow-float` while it has focus,
+with a firmer edge rather than an accent ring; the `/` and `@` lists float with `--shadow-float`. Motion stays within §7's budget, with a press scaling a pressed
 object by 2-4% over `--motion-fast`.
 
 The Playground (`/playground`) and the Agent (`/agent`) are one workspace with two bodies. The
@@ -1808,8 +1860,8 @@ height follows its content between 48px and 16384px, measured to include overflo
 without using the viewport as a minimum, so it can both grow and shrink after local interactions.
 Normal content scrolls with the transcript, and the frame's document never draws a scrollbar of
 its own: a bar that appeared while the frame caught up took width from the canvas and redrew it.
-Content above the cap, and the full-screen view, still scroll by wheel, touch and keys. Component surfaces and diagram nodes use `--radius-surface` (6px);
-controls use `--radius-control` (4px), including in streamed previews and HTML exports. Charts and tables inside it are drawn by the console's kit (ADR 0073) from the theme
+Content above the cap, and the full-screen view, still scroll by wheel, touch and keys. Component surfaces and diagram nodes use `--radius-surface` (10px);
+controls use `--radius-control` (6px), including in streamed previews and HTML exports. Charts and tables inside it are drawn by the console's kit (ADR 0073) from the theme
 variables the frame is given, so they follow the palette in both schemes: marks on the series
 palette, `--border` grid rules, `--muted` tick and legend text formatted the way the console
 formats tokens, money, durations and shares; a table with `--muted` 12px heads that sort on click,
@@ -1946,6 +1998,8 @@ sending, and they leave with the next message.
 
 Adding a provider custom model creates a collapsed row: its request model and optional alias are immediately editable, while image capability and reasoning-effort controls open only through the row's disclosure action. Existing row expansion is preserved.
 
+The row's head stands on the card itself rather than a `--surface` band, because the two name fields are filled wells and a well on its own colour has no edge. Its body - and every other disclosure in the provider editor, a key's body and a section's - unfolds through the shared `Fold` (`components/common/Fold.tsx`): the grid 0fr/1fr technique over `base`, the content fading with it, and one chevron that turns rather than two icons swapped. A body mounts the first time it opens and stays, so closing folds it away instead of cutting it; the caller's padding and rule sit inside the clipping row, so a card folded shut is exactly as tall as before it opened. Thinking levels are tiles drawn as washes - 4% of the ink at rest, 7% under the pointer, a 12% accent tint once picked - so eight tiles do not draw sixteen outlines.
+
 ## 6. antd theme wiring (themeConfig.ts)
 
 Non-obvious decisions, keep these when editing:
@@ -1955,36 +2009,38 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
 - `colorPrimary: accentHover` (`#0579bd` in OMC Dark, `#004a73` in OMC Light) — filled controls
   use the deeper step; `colorInfo/colorLink: accent` (`#00a2fb` / `#005d8f`). This is why buttons
   don't glow antd-blue while links stay recognizable.
-- Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
-  `activeBarBorderWidth: 0` — kills the default blue selected block and avoids
-  heavy filled blocks; active position uses the left 2px `--fg` inset rule.
-- Modal & Drawer: `1px solid var(--border)`, zero shadow, 4px/6px radii. Simple
+- Layout: `bodyBg` and `siderBg` are `canvas`, `headerBg` is `bg`, `headerHeight` 52.
+- Menu: transparent item fills, `itemHeight` 32, `itemBorderRadius` 8, `itemColor = fg2`,
+  `itemSelectedColor = fg`, `activeBarBorderWidth: 0`. The rail's hover and selected washes are
+  the stylesheet's (§5), because they are foreground over whatever the rail stands on.
+- Radii: `borderRadius` and `borderRadiusSM` 6, `borderRadiusOuter` 8, `borderRadiusLG` 12, so a
+  card, a table header and a dialog take the `lg` corner from Ant Design itself; Dropdown, Select and
+  Popover panels take 10 with 6px rows; Tooltip 8.
+- Modal & Drawer: `1px solid var(--border)`, `--shadow-overlay` from the stylesheet, the `lg`
+  corner; a desktop right-hand Drawer is inset 8px from the window like the content panel. Simple
   single-task dialogs use a clean uninterrupted body ("Title → Field/Content →
   Right-aligned Actions") without decorative header/footer hairline dividers;
   only complex Drawers retain section dividers.
 - Table: `headerBg = surface` with no header split lines; the header type and the row rules are
   the list surface in §5 (`.data-table`).
-- All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
+- All shadow tokens set to `'none'`: elevation is the stylesheet's `--shadow-*` set (§4), which
+  follows the palette's mode without the theme being rebuilt. Motion tokens are §7's ladder
+  (`motionDurationFast` 0.12s, `Mid` 0.18s, `Slow` 0.24s) with the decelerating `motionEaseOut`.
 - Components pinned: Button 32/28px with `primaryColor = accentOn` and `Input` active ring
-  `accent22`, Select optionSelectedBg = surface, Tag defaultBg = bg. The button label is pinned
+  `accent22`, Select optionSelectedBg = hover at weight 500, Tag defaultBg = bg. The button label is pinned
   because Ant Design defaults it to `colorTextLightSolid`, so a palette with a light accent fill
   would otherwise draw white on it. `createThemeConfig` takes the *resolved* palette rather than an id,
   so the antd tokens are a projection of the same object the stylesheet, the charts and the Monaco theme
   read, and an operator's own palette reaches Ant Design through the same path a registered one does.
-- Button, outlined (default and dashed): `defaultHoverColor`, `defaultHoverBorderColor`,
-  `defaultActiveColor` and `defaultActiveBorderColor` are all `accent`. Ant Design derives the four
-  from `colorPrimaryHover` and `colorPrimaryActive`, which are `accentActive` here so that a filled
-  control deepens under the pointer. That step is a *fill* - solved to carry `accentOn`, not to be
-  read against the page - and as a label on the button's own `--bg` fill it would read **2.70:1** in
-  OMC Dark and **2.69:1** in Midnight for as long as a "Refresh" or "Details" stayed hovered.
-  `accent` is the ladder's text step: on `--bg` it reads **4.95:1** (Sandstone) to **12.12:1**
-  (Forest) across the six registered palettes, and in an operator's palette it is the token whose
-  ratio the editor already reports against the page, so a hovered label is as legible as that row
-  says. It is also the ink a row action takes on hover (§5), so an outlined button and a row action
-  answer the pointer alike; a field's hover edge stays `muted`, because the accent is a field's focus
-  state. Pressed keeps the hover ink, as the filled control's pressed fill keeps its hover fill.
-  `scripts/test-theme-presets.ts` measures the hovered and pressed label against `--bg` in every
-  registered palette.
+- Button, secondary (default): a foreground wash, not an outline. `defaultBg`, `defaultHoverBg` and
+  `defaultActiveBg` are `--fg` at 6%, 10% and 13% over `transparent`, every `default*BorderColor` is
+  `transparent`, and every `default*Color` is `fg`: the fill deepening is the acknowledgement, and the
+  accent stays a link and a selection. A dashed button keeps a `--border` dashed edge on a
+  transparent fill (the stylesheet's `.ant-btn-variant-dashed`), because it draws the slot the next
+  item will fill. `scripts/test-theme-presets.ts` composites each state's wash over `--bg` the way the
+  browser paints `color-mix` and measures the label against it in every registered palette and an
+  accent sweep of operator palettes; a field's hover edge stays `muted`, because the accent is a
+  field's focus state.
 - Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
@@ -2041,12 +2097,13 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
 Drawer wrappers transition only their transform. Width and maximum width adopt the current
 viewport immediately, including during opening motion; resizing never interpolates a sheet
 past the viewport. Under reduced motion the wrapper transition is disabled entirely.
-The existing motion durations, palette and token mappings are unchanged.
 
 ```text
-hover / state colour   ≤ fast — the acknowledgement must land on the pointer's frame (rule 7)
-fast    50ms    antd motionDurationFast
-base    100ms   antd motionDurationMid and Slow: drawers, modals, route and data transitions
+hover / state colour   ≤ fast — the acknowledgement must land with the pointer (rule 7)
+fast    120ms   antd motionDurationFast: hover, press, colour, a leaving panel
+float   160ms   a summoned panel - popover, menu, select or date panel - fading in as it settles
+base    180ms   antd motionDurationMid: route and data transitions, disclosures, a switch's knob
+slow    240ms   antd motionDurationSlow: a dialog rising into place, a side sheet
 roll    240ms   the dashboard's KPI readouts and the marks drawn from them (rules 8 and 5)
 route   300ms   one hop of a stored request across the dashboard's routing map (rule 9)
 land    420ms   a node's one-off acknowledgement of a hop landing on it (rule 9)
@@ -2054,16 +2111,16 @@ glow    1200ms  a routing-map node or lane lighting as a request reaches it and 
 enter   300ms   a routing-map row arriving in the minute, drifting in (rule 9)
 exit    200ms   a routing-map row leaving the minute, accelerating away (rule 9)
 presence 300ms  a routing-map row or heading sliding to close or open a gap (rule 9)
-float   60ms    popovers and dropdowns — the click already said "open"
 scroll  160ms   a wheel notch or scrolling key gliding to where it would have jumped (easeOutCubic)
-ease    cubic-bezier(0.2, 0, 0, 1)
+ease    cubic-bezier(0.2, 0, 0, 1)      state changes and leaving panels (--ease-standard)
+ease-out cubic-bezier(0.16, 1, 0.3, 1)  entrances: most of the move lands in the first third (--ease-out)
 ```
 
 **The table is the budget, and the stylesheet is held to it.** `web/src/index.css` mirrors `fast`,
-`base` and `float` as `--motion-fast`, `--motion-base` and `--motion-float` for every CSS transition
-and animation the console owns;
-`scripts/test-theme-presets.ts` parses both and asserts they equal the Ant Design tokens above, so the
-two spellings of one budget cannot drift apart again. `roll` and `route` are the only tokens with an
+`float`, `base` and `slow` as `--motion-fast`, `--motion-float`, `--motion-base` and `--motion-slow`
+for every CSS transition and animation the console owns;
+`scripts/test-theme-presets.ts` parses both, asserts `fast`, `base` and `slow` equal the Ant Design
+tokens above and pins the ladder itself, so the two spellings of one budget cannot drift apart again. `roll` and `route` are the only tokens with an
 exception attached, both scoped to the dashboard: `roll` by rules 5 and 8, `route`, `land`, `glow`, `enter`,
 `exit` and `presence` by rule 9. The rule-9 tokens are JavaScript-only (`MOTION_ROUTE`,
 `MOTION_ROUTE_LAND`, `MOTION_ROUTE_GLOW`, `MOTION_ROUTE_ENTER`, `MOTION_ROUTE_EXIT` and
@@ -2089,8 +2146,10 @@ than a transition between two states: the heatmap's re-read bar, the icon spinne
 loader, the streaming caret, the loading bar's waiting activity and the first-load placeholders'
 breath. §7 handles those by freezing or removing them under reduced motion rather than by shortening them.
 A `reduced` exception waives the reduced-motion counterpart for one selector whose motion is the
-reading rather than decoration: the live routing map's lane flow is the only one, and ADR 0102 records
-why the whole trip plays under the preference.
+reading rather than decoration, or whose end the library waits for: the live routing map's lane flow
+(ADR 0102 records why the whole trip plays under the preference), and a dialog's entrance and exit,
+which rc-dialog finishes on `animationend` - it moves focus in when the entrance ends and unmounts the
+wrapper when the exit ends - so they cross-fade over `fast` instead of being removed.
 `scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
@@ -2098,11 +2157,32 @@ with a zoom under reduced motion as well, and the panel has to be pinned to its 
 than merely un-animated, because rc-motion holds the enter state inline until the animation ends.
 That surface is asserted in the browser now, not only in the declaration.
 
-No bounces, no scale-ins. Content appears; it does not "fly".
+**Entrances fade and settle; nothing flies.** Ant Design zooms a panel in from 80% (a dialog from
+20%, out of the pointer) and stretches a menu down from 80% of its height; the stylesheet replaces
+those keyframes. A summoned panel fades in over `float` while settling the last 4% toward its
+origin, a menu or select panel also drops its last 4px toward its control, a dialog rises 8px into
+place over `slow`, and a leaving panel fades over `fast` - all on `--ease-out`, opacity and
+transform only. No bounce and no overshoot: the reader sees the result arrive, not travel. Under
+reduced motion a panel is pinned to its settled state, and a dialog keeps only an opacity fade:
+removing its animation would leave focus behind it on open and a transparent wrapper over the page
+on close.
+
+**Feedback that follows the hand.** A button gives a little under a press (`scale(0.97)`) and
+returns on release, so a click is felt before what it starts has answered; a field never does,
+which is why the time window, drawn as a field, is exempt. A side sheet decelerates into place on
+`--ease-out` and accelerates away, instead of antd's symmetric `ease`. A palette change - the
+header's mode button, a mode or palette choice in OMC Settings - cross-fades the whole page over
+`slow` through the View Transitions API, one composited layer rather than every element easing its
+own colours; for the two frames the repaint takes, `data-theme-switching` on the root holds every
+element's own transition off, so nothing smears behind the fade. Under reduced motion, or without the
+API, the change lands at once. A virtual list's scrollbar (the request list, a select's options)
+takes the same quiet wash as the page's own, through `--rc-virtual-list-scrollbar-bg`. antd's click
+wave and its space between two Chinese characters of a button label are both off: no platform
+control draws either.
 
 ### Motion is restraint, not decoration
 
-The interface is deliberately raw and terminal-like. Motion exists only to make
+The interface is quiet. Motion exists only to make
 state changes feel continuous and **hand-following** (responsive direct manipulation) — never to impress.
 When fluidity and flourish compete, keep fluidity; when flourish and
 performance compete, drop the flourish.
@@ -2151,12 +2231,12 @@ Hard rules:
    progress bar follows rule 4 instead: it waits 200ms to suppress fast-request
    flashes.
 7. **A hover lands within the fast token.** A hover is the interface acknowledging the
-   pointer, so it must land on the frame the pointer arrives — a transition longer than
-   `fast` (50ms) is a drag, not an acknowledgement, and the rule was written after antd's
+   pointer, so it must land as the pointer arrives — a transition longer than
+   `fast` (120ms) is a drag, not an acknowledgement, and the rule was written after antd's
    `motionDurationSlow` default of 0.3s on menu-item hover, submenu expand and the sider
-   collapse. All three tokens are pinned ≤ 0.1s in `themeConfig.ts` for the same reason.
-   The bound is on the *duration*, not on the property (ADR 0009): three frames is the
-   acknowledgement, and anything longer is the drag. Two narrower rules stand inside it: a
+   collapse. The rail's own entries transition on `fast` in the stylesheet for the same reason,
+   whatever Ant Design's menu would spend. The bound is on the *duration*, not on the property
+   (ADR 0009, ADR 0103): a short softening is the acknowledgement, and anything longer is the drag. Two narrower rules stand inside it: a
    hover may never animate a layout property, and the one element that scales under the
    pointer (the heatmap mark) may not fade its colour, because the fade would smear behind
    the scale it is meant to accompany.
@@ -2224,7 +2304,7 @@ custom range changes, manual refresh and background refetch.
 
 | Situation | Required behaviour |
 | --- | --- |
-| Route change | Content sits in a keyed `.route-transition` that fades in over 100ms with a 3px rise, and the scroll position resets with the new page. |
+| Route change | Content sits in a keyed `.route-transition` that fades in over `base` (180ms) with a 3px rise, and the scroll position resets with the new page. |
 | Query key change (preset, range, filter) | `placeholderData: keepPreviousData` — the previous result stays on screen while the next one loads. |
 | Any request in flight | The app-wide 2px `.data-progress` bar, painted after a 200ms delay, whose fill hints at counted work and whose short activity marker reports waiting (below). Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with placeholders drawn at the content's geometry, not a bare full-page spinner swap. |
@@ -2417,7 +2497,7 @@ that is on screen while the list scrolls:
 | Not allowed | Why |
 | --- | --- |
 | `backdrop-filter` | The compositor must re-read the pixels behind the element as those pixels change underneath it — the worst possible case for a blur, because a scroll changes them every frame. Chrome on Windows commonly resolves this in software rather than on the GPU, which is why the same build scrolls smoothly on macOS and heavily on Windows. |
-| `box-shadow` | Paint cost grows with the blur radius and the area covered, and it repaints when the element moves. The console has no shadow language anyway (§1). |
+| `box-shadow` | Paint cost grows with the blur radius and the area covered, and it repaints when the element moves. The console's shadows belong to summoned layers (§4), which never ride along with a scroll. |
 
 The floating back-to-top pill is the case that matters: it appears *precisely* when
 the reader is scrolling. It is an opaque `--surface` with a 1px border, which reads
@@ -2505,6 +2585,8 @@ horizontal scrollbar, which moved the cost and token figures off screen and made
 scroll. The list now measures its own width and hides columns, one at a time, until the rest fit:
 user agent first, then the caller's key, speed, cache rate and mode. The columns that say what the
 request was and what it cost - time, result, provider, model, latency, tokens, cost - never fold;
+speed sits before latency, so latency and tokens - the two figures with a second line - read as one
+pair;
 they stay until the list becomes stacked records. This adds no threshold: the fold points are the
 measured widths of the columns the operator currently has (`foldRequestColumns` in
 `web/src/components/usage/requestColumns.ts`), so a resized column moves them. A folded column is
@@ -2567,8 +2649,8 @@ over every drag that started on the filters and every drag that reached the end 
 bounced at its own end, or reloaded the page when pulled down at the top. Over the list the browser
 keeps only sideways panning and zoom (`touch-action: pan-x pinch-zoom`).
 
-The request list starts with a 68px virtual-row estimate, projected through Listy's
-component token (22px font height plus twice 23px block padding). Its wrapper padding
+The request list starts with a 72px virtual-row estimate, projected through Listy's
+component token (22px font height plus twice 25px block padding). Its wrapper padding
 is overridden to zero by `web/src/pages/UsageEventsPage.css`: this projection supplies
 a sizing hint, while the existing row CSS owns visible spacing. Actual item and
 group-header heights are still measured, including the taller phone rows.
@@ -2692,7 +2774,7 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 
 ### Content-first phone tools
 
-At `640px` and below the shell header is one 48px row (`--app-header-height`; 56px above):
+At `640px` and below the shell header is one 48px row (`--app-header-height`; 52px above):
 navigation, the ellipsised current page name, refresh and a labelled More trigger. The click-open tools menu shows the current theme and language,
 repository and sign-out; demo mode keeps its marker and write restrictions. Menu rows are at least
 44px high. Back or Escape dismisses the menu and restores its trigger focus; an action opening a
@@ -2826,8 +2908,8 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
       formula - an operator's own palette has to inherit it
 - [ ] A continuous scale (cache rate) reads from its own tokens, never a
       per-component hex, and stays ≥ 4.5:1 against its own badge fill
-- [ ] No shadows, no gradients, 4px radius
-- [ ] Mono font inherited (never set a new font-family)
+- [ ] No gradients; a shadow only on a summoned layer; corners from the 2 · 6 · 8 · 12 scale, one step below the frame
+- [ ] Fonts from the roles only: `--font-ui` for names, prose and figures, `--font-mono` for identifiers, keys, paths and code (never a new font-family)
 - [ ] The page opens with `PageHeader`; a refresh is `RefreshButton`; a state is `StatusLabel`; a list is `ResponsiveList`
 - [ ] An action's outcome is a `useToast` toast; a failed read is a `LoadFailure` with Retry in the region's place; a condition is a `Notice` (§5, Feedback surfaces)
 - [ ] One page title; subtitles only with live data; no duplicated translations
@@ -2994,7 +3076,7 @@ states "shown of total" and offers one clear action. Search and maker live in th
 Makers are open sections under a heading rule. Named makers sort alphabetically; the
 multiple-maker group (a shared alias spanning several makers) and the unidentified group follow
 them. Inside a section each client model name is a compact card on `--surface` with a 1px
-`--border` and the 4px radius - the dashboard tiles' surface at a directory's density - and the
+`--border` and the 8px radius - the dashboard tiles' corner at a directory's density - and the
 cards fill the section's width in as many columns as fit (280px minimum, `auto-fill`, 12px
 gaps): a model here is a
 name, a price and a connection, which is too little to justify a full-width line. A card holds
@@ -3021,7 +3103,7 @@ moves sideways.
 
 A maker with brand artwork shows it. The two groups that are not a maker draw the console's
 own Lucide glyph (a cube for unidentified, layers for multiple) at 1.5px stroke in `--fg-2`,
-framed by a 1px `--border`, `--surface` and the 4px radius once the mark is 20px or larger;
+framed by a 1px `--border`, `--surface` and the 6px radius once the mark is 20px or larger;
 smaller marks are the bare glyph in `--muted`. They read as chrome beside the artwork, never
 as another brand. The navigation entry uses the boxes glyph, distinct from the dashboard's grid.
 

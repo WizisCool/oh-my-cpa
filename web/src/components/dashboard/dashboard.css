@@ -2,7 +2,7 @@
 .dashboard-alert { margin-bottom: 16px; }
 .dashboard-section { margin-bottom: 32px; }
 .section-heading { margin-bottom: 12px; }
-.status-pip { width: 7px; height: 7px; border-radius: var(--radius-xs); background: var(--success); }
+.status-pip { width: 7px; height: 7px; border-radius: 999px; background: var(--success); }
 /* ── Dashboard Providers Section ─────────────────────────────────────────── */
 .provider-list-panel {
   display: flex;
@@ -80,7 +80,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid var(--surface);
+  border: 1px solid var(--bg);
 }
 .status-pip.is-active { background: var(--success); }
 .status-pip.is-disabled { background: var(--danger); }
@@ -251,7 +251,7 @@
   list-style: none;
 }
 .model-legend-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.model-legend-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); flex: none; }
+.model-legend-swatch { width: 8px; height: 8px; border-radius: 999px; flex: none; }
 .model-legend-label {
   color: var(--fg-2);
   font-size: var(--text-sm);
@@ -318,7 +318,7 @@
   font-variant-numeric: tabular-nums;
 }
 .model-usage-row:last-child { border-bottom: none; }
-.model-usage-swatch { width: 8px; height: 8px; border-radius: var(--radius-xs); }
+.model-usage-swatch { width: 8px; height: 8px; border-radius: 999px; }
 .model-usage-name {
   color: var(--fg);
   font-size: var(--text-md);
@@ -504,7 +504,7 @@
   left: 0;
   /* Above the hovered cell's lifted mark. */
   z-index: 2;
-  background: var(--surface);
+  background: var(--bg);
 }
 .heatmap-month-track, .heatmap-grid {
   display: grid;
@@ -540,7 +540,7 @@
   bottom: 0;
   left: 100%;
   width: 14px;
-  background: linear-gradient(to right, var(--surface), transparent);
+  background: linear-gradient(to right, var(--bg), transparent);
   pointer-events: none;
   opacity: 0;
 }
@@ -556,11 +556,9 @@
   width: 100%;
   border: 0;
   border-radius: var(--radius-xs);
-  /* One step down from the panel it sits on, not a step up. The panel's own background is
-     `--surface`, and in the dark theme the obvious choice for an empty cell (`--border-soft`)
-     *is* `--surface`: every empty day would blend into the panel and the grid would read as a
-     scatter of isolated marks. `--bg` is the inset step in both themes, which is the same
-     token the hover states use for the same reason. */
+  /* An empty day is a quiet step off the card, which sits on the page's own ground: the
+     recorded-zero step is the border ink and the unrecorded one the soft divider, so both stay
+     visible as slots without competing with a measured day. */
   background: var(--heatmap-zero-recorded);
   padding: 0;
 }

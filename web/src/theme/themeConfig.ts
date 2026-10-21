@@ -39,7 +39,7 @@ export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0
  * A presence fade is not the readout's motion but the acknowledgement that its digit count changed,
  * and holding it to `base` is what stops an arriving `,000` from trailing the sweep over `roll`.
  */
-export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 180, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
 /**
  * docs/design.md §7's `scroll` token: one wheel notch or scrolling key gliding to where it would have
@@ -94,10 +94,18 @@ export const MOTION_ROUTE_EXIT: MotionToken = { duration: 200, easing: 'cubic-be
 /** A live label repeats this glyph-only sweep; unlike a transition, its period lasts with the work. */
 export const MOTION_LIVE_TEXT: MotionToken = { duration: 900, easing: 'linear' };
 
+/** The ink at a share of opacity, as an eight-digit hex every consumer of a token can parse. */
+function inkWash(ink: string, share: number): string {
+  return `${ink}${Math.round((share / 100) * 255).toString(16).padStart(2, '0')}`;
+}
+
 export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'palette'>): ThemeConfig {
   const dark = resolved.mode === 'dark';
   const t = resolved.palette;
 
+  // Static surfaces stay flat: a card is a fill and a hairline. The stylesheet gives the floating
+  // layers their shadow from `--shadow-float` and `--shadow-overlay`, so the elevation follows the
+  // palette's mode without the theme being rebuilt (design.md §4).
   const noShadow = {
     boxShadow: 'none',
     boxShadowSecondary: 'none',
@@ -149,54 +157,68 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       colorBgContainer: t.bg,
       colorBgElevated: t.elevated,
       colorBgLayout: t.bg,
-      colorFillTertiary: t.surface,
+      // A filled field is a wash of the ink, not the surface colour: a field drawn in `--surface`
+      // vanished on every card painted `--surface`, and a wash stands one step off whatever ground
+      // it sits on. The shares are the conversation fields', so every field in the console is one.
+      colorFillTertiary: inkWash(t.fg, THREAD_FILL_SHARES.field),
+      colorFillSecondary: inkWash(t.fg, THREAD_FILL_SHARES.fieldHover),
       colorFillQuaternary: t.surface,
       colorBgSpotlight: t.tooltipBg,
 
-      borderRadius: 4,
-      borderRadiusLG: 6,
-      borderRadiusSM: 4,
+      // design.md §4's corner scale: controls 6, menus and popovers 8, cards and dialogs 12.
+      borderRadius: 6,
+      borderRadiusSM: 6,
+      borderRadiusLG: 12,
+      borderRadiusXS: 2,
+      borderRadiusOuter: 8,
       wireframe: false,
-      motionDurationFast: '0.05s',
-      motionDurationMid: '0.1s',
-      motionDurationSlow: '0.1s',
+      motionDurationFast: '0.12s',
+      motionDurationMid: '0.18s',
+      motionDurationSlow: '0.24s',
+      motionEaseOut: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      motionEaseInOut: 'cubic-bezier(0.2, 0, 0, 1)',
     },
     components: {
+      // The shell stands on the canvas; the page is drawn in the content panel at `bg`.
       Layout: {
-        bodyBg: t.bg,
+        bodyBg: t.canvas,
         headerBg: t.bg,
-        headerHeight: 56,
-        headerPadding: '0 24px 0 16px',
-        siderBg: t.bg,
+        headerHeight: 52,
+        headerPadding: '0 20px 0 12px',
+        siderBg: t.canvas,
       },
+      // The rail's entries are soft filled rows: the selected one is a fill a step off the
+      // canvas, never a coloured bar, because the rail is chrome and the colour belongs to data.
       Menu: {
-        itemBg: t.bg,
-        darkItemBg: t.bg,
-        subMenuItemBg: t.bg,
-        darkSubMenuItemBg: t.bg,
+        itemBg: 'transparent',
+        darkItemBg: 'transparent',
+        subMenuItemBg: 'transparent',
+        darkSubMenuItemBg: 'transparent',
         popupBg: t.elevated,
-        itemHeight: 34,
+        itemHeight: 32,
         iconMarginInlineEnd: 10,
-        itemBorderRadius: 4,
-        itemColor: t.muted,
-        darkItemColor: t.muted,
+        itemBorderRadius: 8,
+        itemColor: t.fg2,
+        darkItemColor: t.fg2,
         itemHoverColor: t.fg,
         darkItemHoverBg: t.hover,
         darkItemHoverColor: t.fg,
-        itemSelectedBg: 'transparent',
+        itemSelectedBg: t.hover,
         itemSelectedColor: t.fg,
-        darkItemSelectedBg: 'transparent',
+        darkItemSelectedBg: t.hover,
         darkItemSelectedColor: t.fg,
         activeBarBorderWidth: 0,
       },
       Card: {
         ...noShadow,
         paddingLG: 20,
-        borderRadiusLG: 4,
+        borderRadiusLG: 12,
         colorBorderSecondary: t.border,
       },
       Table: {
-        headerBg: t.surface,
+        // No header band: the column names are captions over the rows, divided from them by the
+        // same soft rule the rows use, as the request list draws its head.
+        headerBg: t.bg,
         borderColor: t.borderSoft,
         rowHoverBg: t.rowHover,
         headerColor: t.muted,
@@ -207,8 +229,8 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         headerSplitColor: 'transparent',
       },
       // Request rows supply their own padding. This token keeps Listy's initial
-      // height estimate near their 68 px minimum instead of mounting extra rows.
-      Listy: { itemPaddingBlock: 23 },
+      // height estimate near their 72 px minimum instead of mounting extra rows.
+      Listy: { itemPaddingBlock: 25 },
       Button: {
         controlHeight: 32,
         controlHeightSM: 28,
@@ -219,18 +241,22 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         // light would otherwise draw a white label on it. `accentOn` is solved by the derivation, so
         // this is the same value on a built-in palette and on an operator's own.
         primaryColor: t.accentOn,
-        // The ink an outlined button - default or dashed - takes under the pointer and while pressed.
-        // Ant Design derives all four from `colorPrimaryHover` and `colorPrimaryActive`, which this
-        // config points at `accentActive` so that a filled control deepens. That step is a fill: it is
-        // solved to carry `accentOn`, not to be read against the page, and as a label on `bg` it
-        // measured 2.70:1 in OMC Dark and 2.69:1 in Midnight. `accent` is the ladder's text step - the
-        // one the palette editor reports against 4.5:1 on the page - and the ink a row action already
-        // takes on hover. Pressed keeps the hover ink, as the filled control's pressed fill keeps its
-        // hover fill.
-        defaultHoverColor: t.accent,
-        defaultHoverBorderColor: t.accent,
-        defaultActiveColor: t.accent,
-        defaultActiveBorderColor: t.accent,
+        // A secondary button is a soft fill rather than an outline: hairlines belong to the things
+        // that enclose content, and a toolbar of outlined buttons drew a box around every verb.
+        // The fills are the foreground washed over whatever the button stands on, so the same
+        // button reads on the page, on a card and on the canvas. The label stays in the text
+        // colour under the pointer - the fill deepening is the acknowledgement - because the
+        // accent is a link and a selection, not a hover.
+        defaultBg: 'color-mix(in srgb, var(--fg) 6%, transparent)',
+        defaultBorderColor: 'transparent',
+        defaultColor: t.fg,
+        defaultHoverBg: 'color-mix(in srgb, var(--fg) 10%, transparent)',
+        defaultHoverBorderColor: 'transparent',
+        defaultHoverColor: t.fg,
+        defaultActiveBg: 'color-mix(in srgb, var(--fg) 13%, transparent)',
+        defaultActiveBorderColor: 'transparent',
+        defaultActiveColor: t.fg,
+        textHoverBg: 'color-mix(in srgb, var(--fg) 6%, transparent)',
         primaryShadow: 'none',
         defaultShadow: 'none',
         dangerShadow: 'none',
@@ -252,15 +278,22 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         hoverBorderColor: t.muted,
         activeShadow: `0 0 0 2px ${t.accent}22`,
       },
+      // A track filled one step off the page with a raised thumb: the choice reads as a physical
+      // switch position rather than as a row of outlined buttons.
       Segmented: {
         controlHeight: 32,
         controlHeightSM: 28,
         fontSizeSM: 13,
-        trackBg: dark ? t.bg : t.border,
+        borderRadius: 8,
+        borderRadiusSM: 6,
+        trackPadding: 2,
+        trackBg: t.surface,
         itemSelectedBg: dark ? t.border : t.elevated,
-        itemColor: t.fg2,
+        itemColor: t.muted,
         itemSelectedColor: t.fg,
+        itemHoverColor: t.fg,
         itemHoverBg: 'transparent',
+        itemActiveBg: 'transparent',
       },
       Tabs: {
         horizontalItemPadding: '8px 4px',
@@ -271,18 +304,20 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         titleFontSize: 14,
       },
       Drawer: { ...noShadow },
-      Modal: { ...noShadow },
-      Popover: { ...noShadow, colorBgElevated: t.elevated },
-      Dropdown: { ...noShadow, colorBgElevated: t.elevated },
-      Select: { optionSelectedBg: t.selected, optionSelectedColor: t.fg, colorBgElevated: t.elevated },
-      Tooltip: { colorBgSpotlight: t.tooltipBg },
-      Tag: { borderRadiusSM: 4, defaultBg: t.bg },
+      Modal: { ...noShadow, borderRadiusLG: 12, titleFontSize: 16 },
+      Popover: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: 10 },
+      Dropdown: { ...noShadow, colorBgElevated: t.elevated, borderRadiusLG: 10, borderRadiusSM: 6, paddingBlock: 6, controlPaddingHorizontal: 10 },
+      Select: { optionSelectedBg: t.hover, optionSelectedColor: t.fg, optionSelectedFontWeight: 500, colorBgElevated: t.elevated, borderRadiusLG: 10, borderRadiusSM: 6 },
+      Tooltip: { colorBgSpotlight: t.tooltipBg, borderRadius: 8 },
+      Tag: { borderRadiusSM: 6, defaultBg: t.bg },
+      // `--radius-check`: the control step would round a 16px box into a dot.
+      Checkbox: { borderRadiusSM: 4 },
       Progress: { remainingColor: t.border },
       Descriptions: { itemPaddingBottom: 10 },
       Statistic: { contentFontSize: 26 },
       // Every toast is one width - a report with file names and reasons included - because antd
       // lays toasts out in a column of this width, and a wider notice would overhang it.
-      Notification: { width: 420, borderRadiusLG: 4, colorBgElevated: t.elevated },
+      Notification: { width: 420, borderRadiusLG: 12, colorBgElevated: t.elevated },
       Empty: { colorIcon: t.meta },
       Spin: { colorPrimary: t.muted },
     },
@@ -294,6 +329,7 @@ export function themePaletteCssVariables(palette: ThemePalette): Record<string, 
     '--bg': palette.bg,
     '--surface': palette.surface,
     '--bg-surface': palette.surface,
+    '--canvas': palette.canvas,
     '--elevated': palette.elevated,
     '--fg': palette.fg,
     '--fg-2': palette.fg2,

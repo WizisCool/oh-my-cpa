@@ -1,12 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import {
-  Button,
-  Dropdown,
-  Table,
-  Tooltip,
-} from 'antd';
-import type { MenuProps } from 'antd';
+import { Button, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   CopyOutlined,
@@ -14,10 +8,8 @@ import {
   EditOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  HistoryOutlined,
   KeyOutlined,
-  MoreOutlined,
-  PlusOutlined,
-  SearchOutlined,
 } from '../icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
@@ -26,60 +18,47 @@ import { formatTimeAgo } from '../../utils/format';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
-import type { ClientAPIKeyItem, ClientKeyUsageItem } from '../../types/providers';
-import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { PhoneRow } from '../common/PhoneRow';
-import { phoneRowFields } from '../common/phoneRowFields';
-import styles from './ApiKeysList.module.css';
-import { useToast } from '../feedback';
-import { EmptyState } from '../common/EmptyState';
+import { ResponsiveList } from '../common/ResponsiveList';
 import { ConfirmAction } from '../common/ConfirmAction';
+import { useToast } from '../feedback';
+import type { ApiKeyRecord } from './keyOverview';
+import styles from './ApiKeysList.module.css';
 import './keys.css';
 
-/** One rendered row: a key from CPA's client-key list plus the identity and
- *  traffic Oh My CPA knows about it. A key has no state of its own to report —
- *  CPA accepts it by presence in that list (see ADR 0010). */
-export interface ApiKeyRecord {
-  id: string;
-  /** Position in the client-key array; an edit writes back to this index. */
-  index: number;
-  key: string;
-  usageFingerprint?: string;
-  alias?: string;
-  aliasVersion: number;
-  usage?: ClientKeyUsageItem;
-}
+export type { ApiKeyRecord } from './keyOverview';
 
 export interface ApiKeysListProps {
-  /** The keys CPA holds, in the order of its configuration document. */
-  apiKeys: string[];
-  /** The stored keys and their aliases. */
-  metadata?: ClientAPIKeyItem[];
-  /** Keyed by usage fingerprint. */
-  usage?: Record<string, ClientKeyUsageItem>;
+  /** The rows the page's filters leave, in the order of CPA's configuration document. */
+  records: readonly ApiKeyRecord[];
+  isLoading: boolean;
+  /** True when the read failed with nothing cached, so the page's alert is the one statement. */
+  isBlocked?: boolean;
+  /** The empty copy: no key configured, or none matching the filters. */
+  emptyText: React.ReactNode;
   formatTime: (ms: number) => string;
-  /** The list's search box, applied to the name and the key text. */
-  searchQuery: string;
   /** True while a write is in flight: the row actions that write wait for it. */
   isBusy?: boolean;
   /** The demonstration refuses every write, so the controls that write say so. */
   isReadOnly?: boolean;
-  onAdd: () => void;
-  /** Opens the row's editor: one dialog for its name and its secret. */
+  /** Opens the row's editor: one panel for its name and its secret. */
   onEdit: (index: number) => void;
   onDelete: (record: ApiKeyRecord) => void;
   onViewRequests: (record: ApiKeyRecord) => void;
 }
 
+/**
+ * The key list: one row per gateway client key, drawn with the provider list's parts - an identity
+ * tile, the facts a reader compares across rows, and quiet row actions - so the two Gateway lists
+ * read alike. Below 640px it renders labelled rows from the same columns (ADR 0012).
+ */
 export const ApiKeysList: React.FC<ApiKeysListProps> = ({
-  apiKeys,
-  metadata,
-  usage,
+  records,
+  isLoading,
+  isBlocked,
+  emptyText,
   formatTime,
-  searchQuery,
   isBusy = false,
   isReadOnly = false,
-  onAdd,
   onEdit,
   onDelete,
   onViewRequests,
@@ -91,46 +70,6 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   const nowMS = useVisibleNow();
 
   const [revealedKeys, setRevealedKeys] = React.useState<Record<string, boolean>>({});
-  /** The row whose delete confirmation is open. It survives the dropdown closing
-   *  on item click, which is why the confirmation is driven from state rather
-   *  than from the menu item itself. */
-  const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
-
-  const metaByKey = React.useMemo(() => {
-    const map = new Map<string, ClientAPIKeyItem>();
-    for (const item of metadata ?? []) map.set(item.key, item);
-    return map;
-  }, [metadata]);
-
-  const dataSource: ApiKeyRecord[] = React.useMemo(
-    () =>
-      apiKeys.map((key, index) => {
-        const entry = metaByKey.get(key);
-        const usageFingerprint = entry?.usage_fingerprint;
-        return {
-          id: usageFingerprint ? `key-${usageFingerprint}` : `key-${index}`,
-          index,
-          key,
-          usageFingerprint,
-          alias: entry?.alias || undefined,
-          aliasVersion: entry?.alias_version ?? 0,
-          usage: usageFingerprint ? usage?.[usageFingerprint] : undefined,
-        };
-      }),
-    [apiKeys, metaByKey, usage],
-  );
-
-  const isPhone = useIsPhoneViewport();
-
-  const filteredData = React.useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return dataSource;
-    return dataSource.filter(
-      (record) =>
-        (record.alias ?? '').toLowerCase().includes(query) ||
-        record.key.toLowerCase().includes(query),
-    );
-  }, [dataSource, searchQuery]);
 
   const handleDelete = (record: ApiKeyRecord) => {
     onDelete(record);
@@ -152,62 +91,19 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     toast.error(t('cfg.copy_failed'));
   };
 
-  /** The overflow menu holds what is not about the secret: following a key's
-   *  traffic, and the one irreversible action. */
-  const menuItems = (record: ApiKeyRecord): MenuProps['items'] => [
-    {
-      key: 'requests',
-      icon: <SearchOutlined />,
-      // Disabled rather than hidden, with the reason on the item: a key with no
-      // stored traffic has no identity to filter by, and that absence is worth
-      // seeing.
-      disabled: !record.usageFingerprint,
-      label: (
-        <span title={record.usageFingerprint ? undefined : t('keys.not_linked')}>
-          {t('keys.view_requests')}
-        </span>
-      ),
-      onClick: () => onViewRequests(record),
-    },
-    { type: 'divider' },
-    {
-      key: 'delete',
-      danger: true,
-      icon: <DeleteOutlined />,
-      disabled: isReadOnly || isBusy,
-      label: t('cfg.api_keys_delete'),
-      onClick: () => setPendingDeleteId(record.id),
-    },
-  ];
+  const nameOf = (record: ApiKeyRecord) => record.alias ?? t('keys.unnamed');
 
-  /**
-   * The name cell, which is also the rename affordance.
-   *
-   * One function for both renderings: the table's cell and the phone row's headline are the same
-   * control, and a rename that works in one place and not the other is the divergence a second
-   * copy would produce eventually.
-   */
   const nameCell = (record: ApiKeyRecord) => (
-    <button
-      type="button"
-      className={styles['name-button']}
-      onClick={() => onEdit(record.index)}
-      disabled={isReadOnly}
-      title={t('keys.rename_title')}
-      // Named for what it does rather than "Edit", which is the row action's name: two
-      // controls in one row must not be indistinguishable to a screen reader.
-      aria-label={`${t('keys.rename_title')}: ${record.alias ?? t('keys.unnamed')}`}
-    >
-      <span className={styles['name-mark']} aria-hidden="true">
+    <div className={styles['identity']}>
+      <span className={styles['mark']} aria-hidden="true">
         <KeyOutlined />
       </span>
       {record.alias ? (
-        <span className={styles['name-text']}>{record.alias}</span>
+        <span className={styles['name']}>{record.alias}</span>
       ) : (
-        <span className={styles['name-unnamed']}>{t('keys.unnamed')}</span>
+        <span className={styles['unnamed']}>{t('keys.unnamed')}</span>
       )}
-      <EditOutlined className={styles['name-edit-icon']} />
-    </button>
+    </div>
   );
 
   /**
@@ -284,85 +180,71 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     );
   };
 
-  const renderActions = (record: ApiKeyRecord) => {
-    const moreButton = (
-      <button
-        type="button"
-        className="config-key-action"
-        aria-label={`${t('keys.actions_more')}: ${record.alias ?? t('keys.unnamed')}`}
-        aria-haspopup="menu"
+  // The provider list's three glyphs, in its order: look, edit, remove. Looking at a key is
+  // following its traffic, which needs the fingerprint stored traffic carries; without one the
+  // action is disabled and says why, because that absence is worth seeing.
+  const renderActions = (record: ApiKeyRecord) => (
+    <div className="row-actions">
+      <Tooltip title={record.usageFingerprint ? t('keys.view_requests') : t('keys.not_linked')}>
+        <Button
+          size="small"
+          className="row-action-btn"
+          icon={<HistoryOutlined />}
+          disabled={!record.usageFingerprint}
+          onClick={() => onViewRequests(record)}
+          aria-label={`${t('keys.view_requests')}: ${nameOf(record)}`}
+        />
+      </Tooltip>
+      <Tooltip title={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_edit')}>
+        <Button
+          size="small"
+          className="row-action-btn"
+          icon={<EditOutlined />}
+          disabled={isReadOnly}
+          onClick={() => onEdit(record.index)}
+          aria-label={`${t('cfg.api_keys_edit')}: ${nameOf(record)}`}
+        />
+      </Tooltip>
+      <ConfirmAction
+        title={t('cfg.api_keys_delete_confirm')}
+        description={t('keys.delete_confirm_desc')}
+        confirmLabel={t('cfg.api_keys_delete')}
+        isDanger
+        disabled={isReadOnly || isBusy}
+        onConfirm={() => handleDelete(record)}
+        tooltip={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_delete')}
       >
-        <MoreOutlined />
-      </button>
-    );
-    return (
-      <div className="keys-row-actions">
-        {/* One editor for both of a key's editable parts: its name and its value. */}
-        <Tooltip title={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_edit')}>
-          <button
-            type="button"
-            className="config-key-action"
-            onClick={() => onEdit(record.index)}
-            disabled={isReadOnly}
-            aria-label={`${t('cfg.api_keys_edit')}: ${record.alias ?? t('keys.unnamed')}`}
-          >
-            <EditOutlined />
-          </button>
-        </Tooltip>
-        {pendingDeleteId === record.id ? (
-          <ConfirmAction
-            open
-            title={t('cfg.api_keys_delete_confirm')}
-            description={t('keys.delete_confirm_desc')}
-            confirmLabel={t('cfg.api_keys_delete')}
-            isDanger
-            onConfirm={() => {
-              setPendingDeleteId(null);
-              handleDelete(record);
-            }}
-            onCancel={() => setPendingDeleteId(null)}
-            // The visibility is owned here, so the overlay's own dismissals - a click
-            // outside it, Escape - have to be accepted rather than ignored, or the row
-            // keeps a confirmation the operator cannot close.
-            onOpenChange={(next) => {
-              if (!next) setPendingDeleteId(null);
-            }}
-          >
-            {moreButton}
-          </ConfirmAction>
-        ) : (
-          <Dropdown menu={{ items: menuItems(record) }} trigger={['click']} placement="bottomRight">
-            {moreButton}
-          </Dropdown>
-        )}
-      </div>
-    );
-  };
+        <Button
+          size="small"
+          danger
+          className="row-action-btn"
+          icon={<DeleteOutlined />}
+          disabled={isReadOnly || isBusy}
+          aria-label={`${t('cfg.api_keys_delete')}: ${nameOf(record)}`}
+        />
+      </ConfirmAction>
+    </div>
+  );
 
-  /**
-   * The list's columns: the one description of what a key shows.
-   *
-   * The table renders them, and `phoneRowFields` derives the phone row's fields from the same
-   * array - so a column added here reaches both renderings, and a column's label and value
-   * cannot differ between them. Built per render: it closes over the reveal map and callbacks
-   * above, which change every render, so a memo would never hit.
-   */
+  // The list's columns are the one description of what a key shows: the table renders them, and
+  // the phone row derives its fields from the same array.
   const columns: ColumnsType<ApiKeyRecord> = [
     {
       title: t('keys.col_name'),
       key: 'name',
+      minWidth: 200,
       render: (_: unknown, record: ApiKeyRecord) => nameCell(record),
     },
     {
       title: t('keys.col_key'),
       key: 'key',
-      width: 400,
+      width: 380,
       render: (_: unknown, record: ApiKeyRecord) => keyCell(record),
     },
     {
       title: t('keys.col_requests_window'),
       key: 'requests',
-      width: 150,
+      width: 160,
       align: 'right' as const,
       render: (_: unknown, record: ApiKeyRecord) => usageCell(record),
     },
@@ -376,70 +258,24 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     {
       title: t('keys.col_actions'),
       key: 'actions',
-      width: 104,
+      width: 120,
       align: 'right' as const,
       render: (_: unknown, record: ApiKeyRecord) => renderActions(record),
     },
   ];
 
-  if (apiKeys.length === 0) {
-    return (
-      <div className={styles['empty-box']}>
-        <span className={styles['empty-mark']} aria-hidden="true">
-          <KeyOutlined />
-        </span>
-        <div className={styles['empty-title']}>{t('keys.empty_title')}</div>
-        <div className={styles['empty-desc']}>{t('keys.empty_desc')}</div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={onAdd}
-          disabled={isReadOnly}
-          title={isReadOnly ? t('demo.blocked') : undefined}
-        >
-          {t('keys.empty_cta')}
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <>
-      {filteredData.length === 0 ? (
-        <div className={styles['empty-box']}>
-          <EmptyState size="compact" title={t('keys.search_empty')} />
-        </div>
-      ) : isPhone ? (
-        /* One record per block below 640px. The fields are derived from `columns` rather than
-           restated, so the row prints what the table would have printed - in the table's own
-           order, with the table's own labels. The name and the key are drawn as the headline
-           and the summary, which is why they are skipped as fields. */
-        <div>
-          {filteredData.map((record, index) => (
-            <PhoneRow
-              key={record.id}
-              identity={nameCell(record)}
-              summary={keyCell(record)}
-              fields={phoneRowFields(columns, record, { skip: ['name', 'key', 'actions'], index })}
-              actions={renderActions(record)}
-            />
-          ))}
-        </div>
-      ) : (
-        /* Sideways scrolling stays inside the card, so the page's content column stays where the
-           reader left it. The card is the list's frame, so the table draws none of its own. */
-        <div className="table-scroll data-table data-table-flush">
-          <Table<ApiKeyRecord>
-            className="config-api-keys-table"
-            size="small"
-            rowKey="id"
-            dataSource={filteredData}
-            pagination={false}
-            scroll={{ x: 'max-content' }}
-            columns={columns}
-          />
-        </div>
-      )}
-    </>
+    <div className={styles['key-list']}>
+      <ResponsiveList<ApiKeyRecord>
+        columns={columns}
+        dataSource={records}
+        rowKey="id"
+        isLoading={isLoading}
+        isBlocked={isBlocked}
+        emptyText={emptyText}
+        phone={{ identity: 'name', actions: ['actions'] }}
+        tableProps={{ className: 'config-api-keys-table', scroll: { x: 'max-content' } }}
+      />
+    </div>
   );
 };

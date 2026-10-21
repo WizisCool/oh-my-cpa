@@ -361,20 +361,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 6: total latency */}
-        <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
-          <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className="req-latency-val">
-            {formatEventDuration(event.latency_ms)}
-          </strong>
-          {hasMeasurableTTFT(event) && (
-            <span className="req-ttft-val">
-              TTFT {formatEventDuration(event.ttft_ms)}
-            </span>
-          )}
-        </div>
-
-        {/* Column 7: output tokens per second */}
+        {/* Column 6: output tokens per second */}
         <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.basis !== null ? (
@@ -387,6 +374,19 @@ export const RequestRow = React.memo<RequestRowProps>(
             </RequestTooltip>
           ) : (
             <span className="req-tps-none">—</span>
+          )}
+        </div>
+
+        {/* Column 7: total latency */}
+        <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
+          <span className="req-mobile-label">{t('events.col_latency')}</span>
+          <strong className="req-latency-val">
+            {formatEventDuration(event.latency_ms)}
+          </strong>
+          {hasMeasurableTTFT(event) && (
+            <span className="req-ttft-val">
+              TTFT {formatEventDuration(event.ttft_ms)}
+            </span>
           )}
         </div>
 

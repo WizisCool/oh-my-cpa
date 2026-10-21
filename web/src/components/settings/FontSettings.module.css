@@ -64,7 +64,7 @@
   overflow-y: auto;
   list-style: none;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
 }
 
 .row {

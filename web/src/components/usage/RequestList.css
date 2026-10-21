@@ -4,13 +4,12 @@
   align-items: center;
   gap: var(--req-grid-gap);
   padding: 0 var(--req-pad-inline);
-  height: 38px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--text-xs);
-  font-weight: 600;
+  height: 40px;
+  background: transparent;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--muted);
-  letter-spacing: 0.02em;
   user-select: none;
   flex-shrink: 0;
   width: 100%;
@@ -91,8 +90,8 @@
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
   gap: var(--req-grid-gap);
-  min-height: 68px;
-  padding: 13px var(--req-pad-inline);
+  min-height: 72px;
+  padding: 14px var(--req-pad-inline);
   border: 0;
   border-bottom: 1px solid var(--border-soft);
   border-radius: 0;
@@ -103,22 +102,16 @@
   font-size: var(--text-sm);
   position: relative;
   contain: layout style;
-  transition: background var(--motion-fast) ease;
+  transition: background-color var(--motion-fast) var(--ease-standard);
 }
+/* Washes of the ink rather than a second fill, so hover, the open record and a ticked row read as
+   one family of states over whatever ground the list stands on. The open record is the strongest
+   and needs no bar: the drawer beside it already says which one is open. */
 .request-row:hover {
-  background: var(--surface);
+  background-color: color-mix(in srgb, var(--fg) 3%, transparent);
 }
 .request-row.is-selected {
-  background: var(--surface);
-}
-.request-row.is-selected::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent);
+  background-color: color-mix(in srgb, var(--fg) 6%, transparent);
 }
 .request-row:focus-visible {
   outline: 2px solid var(--accent);
@@ -161,7 +154,7 @@
   align-items: center;
   justify-content: center;
   align-self: stretch;
-  margin: -13px -8px -13px calc(-1 * var(--req-pad-inline));
+  margin: -14px -8px -14px calc(-1 * var(--req-pad-inline));
   padding-left: calc(var(--req-pad-inline) - 8px);
   cursor: pointer;
   user-select: none;
@@ -178,11 +171,11 @@
   appearance: none;
   position: relative;
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   margin: 0;
   border: 1px solid var(--muted);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-check);
   background: var(--bg);
   cursor: pointer;
   transition: background-color var(--motion-fast), border-color var(--motion-fast);
@@ -232,7 +225,7 @@
   }
 }
 .request-row.is-checked {
-  background: var(--surface);
+  background-color: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 /* Column 1: Time */
 .req-col-time {
@@ -285,31 +278,35 @@
   align-items: flex-start;
   justify-content: center;
 }
+/* The verdict is a dot and a word. A success is the expected case, so its word is in the
+   secondary ink and only its dot keeps the hue; a failure is the exception an operator scans for,
+   so it keeps the hue in the word as well, on a faint wash of its own. */
 .req-result-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: 2px 8px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: 2px 8px 2px 0;
   border-radius: var(--radius-sm);
   line-height: 1.4;
   white-space: nowrap;
 }
 .req-result-pill.is-success {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+  color: var(--fg-2);
+}
+.req-result-pill.is-success .req-result-bullet {
+  background: var(--success);
 }
 .req-result-pill.is-failed {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  padding-left: 8px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 .req-result-bullet {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-xs);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
   background: currentColor;
 }
 /* Column 3: Provider & Credential */
@@ -322,14 +319,13 @@
   min-width: 0;
 }
 .req-provider-icon-wrapper {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
   flex-shrink: 0;
 }
 .req-provider-content {
@@ -348,8 +344,7 @@
 }
 .req-provider-title {
   font-size: var(--text-md);
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
+  font-weight: 500;
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -357,25 +352,21 @@
 }
 .req-badge-oauth {
   font-size: var(--text-2xs);
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
-  padding: 1px 5px;
+  font-weight: 500;
+  padding: 1px 6px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--fg-2);
   flex-shrink: 0;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 /* The credential that answered the request - an OAuth account, or an API key
    masked the way the key list masks a caller key. One style for both, so the
-   line means the same thing on every row: monospace so a mask's head and tail
-   line up between rows, and the metadata colour so it reads as an annotation on
-   the provider name rather than as a second title. */
+   line means the same thing on every row, in the muted ink so it reads as an
+   annotation on the provider name rather than as a second title. */
 .req-provider-credential {
-  font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
-  color: var(--meta);
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -392,8 +383,7 @@
 }
 .req-model-name {
   font-size: var(--text-md);
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
+  font-weight: 500;
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -401,10 +391,9 @@
 }
 .req-preflight-badge {
   font-size: var(--text-2xs);
-  font-family: var(--font-mono, monospace);
-  padding: 0 5px;
+  padding: 1px 6px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -415,7 +404,6 @@
   gap: 4px;
   max-width: 100%;
   font-size: var(--text-xs);
-  font-family: var(--font-mono, monospace);
   overflow: hidden;
 }
 .req-model-served {
@@ -457,16 +445,14 @@
    the tint and edge are too thin to carry a tertiary grey. */
 .req-effort-badge {
   --effort-hue: var(--fg-2);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
-  line-height: 16px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 18px;
   text-transform: capitalize;
-  padding: 0 5px;
+  padding: 0 7px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
   color: var(--effort-hue);
-  border: 1px solid color-mix(in srgb, var(--effort-hue) var(--effort-edge), transparent);
   white-space: nowrap;
   cursor: help;
 }
@@ -476,7 +462,7 @@
 }
 .req-latency-val {
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
@@ -494,15 +480,13 @@
 }
 .req-tps-val {
   font-size: var(--text-md);
-  font-weight: 600;
-  font-family: var(--font-mono, monospace);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 .req-tps-none {
   font-size: var(--text-sm);
   color: var(--muted);
-  font-family: var(--font-mono, monospace);
   text-align: right;
 }
 /* Column 6: Tokens */
@@ -517,13 +501,12 @@
 }
 .req-tokens-total strong {
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg);
 }
 .req-tokens-total small {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--muted);
-  text-transform: uppercase;
 }
 .req-tokens-breakdown {
   display: flex;
@@ -555,7 +538,7 @@
 }
 .req-cost-val {
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
@@ -604,14 +587,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--text-xs);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--cache-rate-hue);
-  background: color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-tint), transparent);
-  border: 1px solid color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-edge), transparent);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
   line-height: 1.3;
 }
 /* No token data at all is not a 0% reading: the badge keeps its shape but
@@ -622,11 +601,11 @@
 .req-cache-bullet {
   width: 6px;
   height: 6px;
-  border-radius: var(--radius-xs);
+  border-radius: 999px;
   background: var(--cache-rate-hue);
 }
 .req-cache-count {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -638,7 +617,6 @@
 .req-key-val {
   font-size: var(--text-sm);
   font-weight: 500;
-  font-family: var(--font-mono, monospace);
   color: var(--fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -651,7 +629,6 @@
 }
 .req-ua-val {
   font-size: var(--text-xs);
-  font-family: var(--font-mono, monospace);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -660,11 +637,9 @@
 }
 .req-mobile-label {
   display: none;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   margin-bottom: 2px;
 }
 .request-chevron {
@@ -855,7 +830,6 @@
   .req-result-pill.is-success,
   .req-result-pill.is-failed {
     padding: 0;
-    border: 0;
     background: none;
     font-size: var(--text-sm);
   }
@@ -863,11 +837,7 @@
     color: var(--muted);
     font-weight: 400;
   }
-  .req-result-pill.is-success .req-result-bullet {
-    background: var(--success);
-  }
   .req-fast-icon {
-    border-color: var(--border);
     background: none;
     color: var(--muted);
     font-weight: 400;

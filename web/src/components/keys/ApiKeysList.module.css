@@ -1,81 +1,44 @@
-/* ApiKeysList.module.css — Gateway client key list.
-   Terminal-flat console: 1px borders, no shadows. Class names are kebab-case and
-   read through styles['kebab-case']. */
+/* ApiKeysList.module.css — the gateway client key list, drawn with the provider list's parts. */
 
-/* The name cell is the rename affordance (design.md: naming is a first-class action), drawn as
-   the key's identity - a mark and the name - rather than as a form control. */
-.name-button {
-  display: inline-flex;
+.key-list { min-width: 0; }
+
+.identity {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 100%;
+  gap: 12px;
   min-width: 0;
-  padding: 4px 8px 4px 4px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--fg);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--motion-fast) ease-out, background var(--motion-fast) ease-out;
 }
 
-.name-button:not(:disabled):hover {
-  border-color: var(--border);
-  background: var(--hover);
-}
-
-.name-button:disabled {
-  cursor: default;
-}
-
-.name-mark {
-  display: inline-flex;
+/* The provider list's identity tile, at the same size and the same wash, so the two Gateway lists
+   start every row on the same shape. A key has no brand, so the tile holds the key glyph. */
+.mark {
+  display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
   color: var(--muted);
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
 }
 
-.name-text {
+.name {
   min-width: 0;
   overflow: hidden;
-  font-weight: 600;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Unnamed is a state, stated in the muted ink - not a dashed placeholder chip that reads as a
-   control of its own. */
-.name-unnamed {
+/* Unnamed is a state, stated in the muted ink - not a placeholder chip that reads as a control. */
+.unnamed {
   color: var(--muted);
+  font-size: var(--text-md);
   font-style: italic;
-}
-
-.name-edit-icon {
-  flex-shrink: 0;
-  color: var(--meta);
-  font-size: var(--text-xs);
-  opacity: 0;
-  transition: opacity var(--motion-fast) ease-out;
-}
-
-.name-button:not(:disabled):hover .name-edit-icon,
-.name-button:focus-visible .name-edit-icon {
-  opacity: 1;
-}
-
-/* A finger has no hover, so the rename glyph is always drawn where no pointer can reveal it. */
-@media (hover: none) {
-  .name-edit-icon {
-    opacity: .7;
-  }
 }
 
 .usage {
@@ -88,7 +51,7 @@
 
 .usage-requests {
   color: var(--fg);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -121,49 +84,4 @@
 
 .muted {
   color: var(--meta);
-}
-
-/* Empty State */
-.empty-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 40px 0 32px;
-  text-align: center;
-}
-
-.empty-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 20px;
-}
-
-.empty-title {
-  color: var(--fg);
-  font-size: var(--text-base);
-  font-weight: 600;
-}
-
-.empty-desc {
-  max-width: 420px;
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .name-button,
-  .name-edit-icon {
-    transition: none;
-  }
 }

@@ -2,12 +2,7 @@ import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Button,
-  Input,
-  Modal,
-} from 'antd';
-import { PageLoading } from '../components/common/PageLoading';
+import { Button, Input } from 'antd';
 import {
   KeyOutlined,
   PlusOutlined,
@@ -22,7 +17,8 @@ import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
-import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
+import { ApiKeysList } from '../components/keys/ApiKeysList';
+import { buildKeyRecords, summarizeKeys, type ApiKeyRecord, type KeyUseFilter } from '../components/keys/keyOverview';
 import { updateFieldWithBaseline, getFieldSemanticValue } from '../components/config/configDirty';
 import { computeConfigChanges } from '../components/config/configPatch';
 import { describeConfigSaveError } from '../components/config/configSaveErrors';
@@ -35,8 +31,12 @@ import { SecretInput } from '../components/common/SecretInput';
 import styles from './ApiKeysPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { SearchInput } from '../components/common/SearchInput';
-import { Panel } from '../components/common/Panel';
+import { Toolbar } from '../components/common/Toolbar';
+import { StatTiles } from '../components/common/StatTiles';
+import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
+import { AppDrawer } from '../components/common/AppDrawer';
 import { CopyButton } from '../components/common/CopyButton';
+import { successRateTone } from '../types/usageEventMetrics';
 import '../components/keys/keys.css';
 
 /** The longest name the alias endpoint accepts. */
@@ -60,6 +60,12 @@ interface EditorState {
 
 const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: '' };
 
+const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: string; hintKey?: string }[] = [
+  { key: 'all', tone: 'neutral', labelKey: 'keys.stat_all' },
+  { key: 'active', tone: 'success', labelKey: 'keys.stat_active' },
+  { key: 'idle', tone: 'neutral', labelKey: 'keys.stat_idle', hintKey: 'keys.stat_idle_hint' },
+];
+
 /**
  * ApiKeysPage owns the gateway client API keys as their own surface.
  *
@@ -75,6 +81,10 @@ const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: ''
  *
  * A key has no disabled state to edit — CPA authenticates by presence in the list, so removing
  * a key is the only way to stop it, and that is what the list offers.
+ *
+ * The page is laid out with the provider list's parts - the summary under the title, the tiles
+ * that filter the list, the ruled toolbar, the table, and a side panel for the editor - so the
+ * Gateway pages read as one console.
  */
 export const ApiKeysPage: React.FC = () => {
   const timeZone = useTimeZone();
@@ -109,6 +119,7 @@ export const ApiKeysPage: React.FC = () => {
   });
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [useFilter, setUseFilter] = React.useState<KeyUseFilter>('all');
   const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
   const [keyInput, setKeyInput] = React.useState('');
   const [aliasInput, setAliasInput] = React.useState('');
@@ -385,122 +396,161 @@ export const ApiKeysPage: React.FC = () => {
   };
 
   const keyCount = currentApiKeys.length;
-  // The summary reads the same window the list's counts do, so the two never disagree.
-  const activeFingerprints = new Set(
-    (keysQuery.data?.keys ?? [])
-      .filter((item) => currentApiKeys.includes(item.key) && item.usage_fingerprint)
-      .map((item) => item.usage_fingerprint as string),
+  const records = React.useMemo(
+    () => buildKeyRecords(currentApiKeys, keysQuery.data?.keys, usageByFingerprint),
+    [currentApiKeys, keysQuery.data, usageByFingerprint],
   );
-  const activeCount = [...activeFingerprints].filter((fp) => (usageByFingerprint[fp]?.requests ?? 0) > 0).length;
-  const windowRequests = [...activeFingerprints].reduce((sum, fp) => sum + (usageByFingerprint[fp]?.requests ?? 0), 0);
+  // Traffic is joined by fingerprint, which the key read carries; until both are in, a use tile
+  // would count every key as idle.
+  const isUsageKnown = Boolean(usageQuery.data && keysQuery.data);
+  const overview = summarizeKeys(records, useFilter, searchQuery, isUsageKnown);
+  const isFiltered = useFilter !== 'all' || searchQuery.trim() !== '';
+  const isBlocked = configQuery.isError && !configQuery.data;
   const isEditing = editor.index !== null;
   const isValueChanged = isEditing && keyInput.trim() !== '' && keyInput.trim() !== editor.originalKey;
+  const canWrite = !isDemo && Boolean(apiKeysField) && Boolean(serverDoc);
+
+  const summary = keyCount > 0 ? (
+    <span className={styles['summary']}>
+      <span data-testid="keys-count">{t('cfg.api_keys_count', { n: keyCount })}</span>
+      {overview.counts && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span>{t('keys.summary_active', { n: overview.counts.active })}</span>
+        </>
+      )}
+      {saveMutation.isPending && (
+        <span className={styles['saving']} role="status">
+          <SyncOutlined spin /> {t('keys.applying')}
+        </span>
+      )}
+    </span>
+  ) : undefined;
+
+  const addButton = (
+    <Button
+      type="primary"
+      icon={<PlusOutlined />}
+      disabled={!canWrite}
+      title={isDemo ? t('demo.blocked') : undefined}
+      onClick={openAddEditor}
+    >
+      {t('cfg.api_keys_add')}
+    </Button>
+  );
+  const isRefreshing = configQuery.isFetching || keysQuery.isFetching || usageQuery.isFetching;
 
   return (
     <div className="terminal-page terminal-page-stack keys-page">
       <PageHeader
         title={t('keys.title')}
+        subtitle={summary}
         mobileActions={(
           <>
-            <ActionMenu><RefreshButton isRefreshing={configQuery.isFetching || keysQuery.isFetching || usageQuery.isFetching} onRefresh={refreshAll} /></ActionMenu>
-            <Button type="primary" icon={<PlusOutlined />} disabled={isDemo || !apiKeysField || !serverDoc} title={isDemo ? t('demo.blocked') : undefined} onClick={openAddEditor}>{t('cfg.api_keys_add')}</Button>
+            <ActionMenu><RefreshButton isRefreshing={isRefreshing} onRefresh={refreshAll} /></ActionMenu>
+            {addButton}
           </>
         )}
         actions={(
           <>
-            <RefreshButton
-              isRefreshing={configQuery.isFetching || keysQuery.isFetching || usageQuery.isFetching}
-              onRefresh={refreshAll}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              disabled={isDemo || !apiKeysField || !serverDoc}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={openAddEditor}
-            >
-              {t('cfg.api_keys_add')}
-            </Button>
+            <RefreshButton isRefreshing={isRefreshing} onRefresh={refreshAll} />
+            {addButton}
           </>
         )}
       />
 
-      {/* One container for the whole list: its head, its rule and the rows are one surface
-          rather than a card holding another card holding a toolbar (design.md: prefer
-          border-separated open rows over nested card wrappers). The card keeps its own 20px
-          inset, which is what makes this list exactly as wide as every other list. */}
-      <Panel className={styles['keys-panel']}>
-        <div className={styles['keys-head']}>
-          <div className={styles['keys-head-title']}>
-            <h2 className={styles['keys-head-name']}>{t('cfg.api_keys_list')}</h2>
-            <div className={styles['keys-summary']}>
-              <span data-testid="keys-count">{t('cfg.api_keys_count', { n: keyCount })}</span>
-              {keyCount > 0 && usageQuery.data && (
-                <>
-                  <span className={styles['keys-summary-divider']} aria-hidden="true">·</span>
-                  <span>{t('keys.summary_active', { n: activeCount })}</span>
-                  <span className={styles['keys-summary-divider']} aria-hidden="true">·</span>
-                  <span>{t('keys.summary_requests', { n: windowRequests.toLocaleString() })}</span>
-                </>
-              )}
-              {saveMutation.isPending && (
-                <span className={styles['keys-summary-saving']} role="status">
-                  <SyncOutlined spin /> {t('keys.applying')}
-                </span>
-              )}
-            </div>
-          </div>
-          {keyCount > 0 && (
-            <SearchInput
-              label={t('keys.search_placeholder')}
-              value={searchQuery}
-              onChange={setSearchQuery}
-              className={styles['keys-search']}
-            />
-          )}
-        </div>
+      {isBlocked && (
+        <LoadFailure
+          title={t('cfg.load_failed')}
+          detail={t('cfg.load_failed_desc')}
+          onRetry={() => void configQuery.refetch()}
+        />
+      )}
 
-        {configQuery.isPending ? (
-          <div className={styles['keys-state']}>
-            <PageLoading variant="block" />
-          </div>
-        ) : configQuery.isError && !configQuery.data ? (
-          <div className={styles['keys-state']}>
-            <LoadFailure
-              title={t('cfg.load_failed')}
-              detail={t('cfg.load_failed_desc')}
-              onRetry={() => void configQuery.refetch()}
-            />
-          </div>
-        ) : (
-          <ApiKeysList
-            apiKeys={currentApiKeys}
-            metadata={keysQuery.data?.keys}
-            usage={usageByFingerprint}
-            formatTime={formatUsageTime}
-            searchQuery={searchQuery}
-            isBusy={saveMutation.isPending}
-            isReadOnly={isDemo}
-            onAdd={openAddEditor}
-            onEdit={openKeyEditor}
-            onDelete={(record) => void handleDeleteRecord(record)}
-            onViewRequests={viewRequestsFor}
+      <section className={styles['overview']}>
+        <StatTiles
+          ariaLabel={t('keys.use_filter')}
+          testId="key-stats"
+          tileTestIdPrefix="key-stat"
+          selected={useFilter}
+          onSelect={setUseFilter}
+          tiles={USE_TILES.map((tile) => ({
+            key: tile.key,
+            label: t(tile.labelKey),
+            count: tile.key === 'all' && !overview.counts
+              ? (configQuery.data ? overview.visible.length : undefined)
+              : overview.counts?.[tile.key],
+            tone: tile.tone,
+            hint: tile.hintKey ? t(tile.hintKey) : undefined,
+          }))}
+        />
+
+        <Toolbar variant="ruled" className="logs-toolbar">
+          <SearchInput
+            className={styles['search']}
+            label={t('keys.search_placeholder')}
+            value={searchQuery}
+            onChange={setSearchQuery}
           />
-        )}
-      </Panel>
+          {isFiltered && (
+            <Button type="link" size="small" onClick={() => { setSearchQuery(''); setUseFilter('all'); }}>
+              {t('pro.clear_filters')}
+            </Button>
+          )}
+          {/* The window's totals over every key, whatever the filters show: the line answers "how
+              busy is the gateway's front door", not "how busy is this view". */}
+          <div className={styles['window-summary']} data-testid="key-window-summary">
+            <span className={styles['window-label']}>{t('pro.window_24h')}</span>
+            {overview.window ? (
+              <>
+                <span>{t('pro.traffic_requests', { n: overview.window.requests.toLocaleString() })}</span>
+                {overview.window.successRate !== null && (
+                  <StatusLabel tone={successRateTone(overview.window.successRate)}>
+                    {t('pro.window_success_rate', { rate: overview.window.successRate.toFixed(1) })}
+                  </StatusLabel>
+                )}
+              </>
+            ) : (
+              <span>{usageQuery.isPending ? '…' : t('pro.traffic_unknown')}</span>
+            )}
+          </div>
+        </Toolbar>
+      </section>
+
+      <ApiKeysList
+        records={overview.visible}
+        isLoading={configQuery.isPending}
+        isBlocked={isBlocked}
+        emptyText={keyCount > 0 ? t('keys.search_empty') : t('keys.empty_title')}
+        formatTime={formatUsageTime}
+        isBusy={saveMutation.isPending}
+        isReadOnly={isDemo}
+        onEdit={openKeyEditor}
+        onDelete={(record) => void handleDeleteRecord(record)}
+        onViewRequests={viewRequestsFor}
+      />
 
       {/* One editor for both of a key's editable parts: the secret CPA authenticates it with,
-          and the name this console shows it by. */}
-      <Modal
+          and the name this console shows it by. It is a side panel, as the provider editor is. */}
+      <AppDrawer
         title={isEditing ? t('keys.modal_title_edit') : t('keys.modal_title_add')}
         open={editor.isOpen}
-        onOk={() => void handleSaveKey()}
-        confirmLoading={isSavingEditor}
-        okButtonProps={{ disabled: !keyInput.trim() }}
-        onCancel={closeEditor}
-        okText={isEditing ? t('common.save') : t('keys.create')}
-        cancelText={t('common.cancel')}
+        onClose={closeEditor}
+        width="narrow"
         destroyOnHidden
+        footer={(
+          <>
+            <Button onClick={closeEditor}>{t('common.cancel')}</Button>
+            <Button
+              type="primary"
+              loading={isSavingEditor}
+              disabled={!keyInput.trim()}
+              onClick={() => void handleSaveKey()}
+            >
+              {isEditing ? t('common.save') : t('keys.create')}
+            </Button>
+          </>
+        )}
       >
         <div className="keys-key-editor">
           <label className="keys-key-editor-label" htmlFor="gateway-key-value">
@@ -548,7 +598,7 @@ export const ApiKeysPage: React.FC = () => {
             className="config-alias-input"
           />
         </div>
-      </Modal>
+      </AppDrawer>
     </div>
   );
 };

@@ -66,6 +66,7 @@ import { LoadFailure, Notice, useToast } from '../../components/feedback';
 import { SearchInput } from '../../components/common/SearchInput';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Toolbar } from '../../components/common/Toolbar';
+import { ToolButton } from '../../components/common/ToolButton';
 import { Pager } from '../../components/common/Pager';
 
 interface CompletionPending {
@@ -511,38 +512,35 @@ export const OAuthManagementPage: React.FC = () => {
         mobileActions={(
           <>
             <ActionMenu>
-              <Button icon={<UploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()}>{t('af.upload')}</Button>
-              <Button icon={<CloudUploadOutlined />} disabled={isDemo || actions.isOperating} onClick={() => setIsVertexImportOpen(true)}>{t('af.vertex_open')}</Button>
-              <Button icon={<BranchesOutlined />} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open">{t('af.rules_open')}</Button>
+              <ToolButton icon={<UploadOutlined />} label={t('af.upload')} disabled={isDemo || actions.isOperating} onClick={() => fileInputRef.current?.click()} />
+              <ToolButton icon={<CloudUploadOutlined />} label={t('af.vertex_open')} disabled={isDemo || actions.isOperating} onClick={() => setIsVertexImportOpen(true)} />
+              <ToolButton icon={<BranchesOutlined />} label={t('af.rules_open')} disabled={actions.isOperating} onClick={() => setIsModelRulesOpen(true)} data-testid="oauth-management-model-rules-open" />
             </ActionMenu>
             <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>{t('omc.connect_account')}</Button>
           </>
         )}
         actions={(
           <>
-            <Button
+            <ToolButton
               icon={<UploadOutlined />}
+              label={t('af.upload')}
               disabled={isDemo || actions.isOperating}
               onClick={() => fileInputRef.current?.click()}
-            >
-              {t('af.upload')}
-            </Button>
-            <Button
+            />
+            <ToolButton
               icon={<CloudUploadOutlined />}
+              label={t('af.vertex_open')}
               disabled={isDemo || actions.isOperating}
               onClick={() => setIsVertexImportOpen(true)}
               data-testid="oauth-management-vertex-import-open"
-            >
-              {t('af.vertex_open')}
-            </Button>
-            <Button
+            />
+            <ToolButton
               icon={<BranchesOutlined />}
+              label={t('af.rules_open')}
               disabled={actions.isOperating}
               onClick={() => setIsModelRulesOpen(true)}
               data-testid="oauth-management-model-rules-open"
-            >
-              {t('af.rules_open')}
-            </Button>
+            />
             <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>
               {t('omc.connect_account')}
             </Button>

@@ -38,7 +38,7 @@
 }
 .tile {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: hidden;
   min-width: 0;
   background: var(--surface);
@@ -87,7 +87,7 @@
   justify-content: center;
   height: 88px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 .selected-mark {
@@ -130,7 +130,7 @@
   padding: 32px 24px;
   text-align: center;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
 }
 .empty > :first-child {
   font-size: 32px;
@@ -200,7 +200,7 @@
   padding: 24px 16px;
   min-height: 196px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   text-align: center;
   transition:
@@ -264,7 +264,7 @@
   flex-direction: column;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   text-align: center;
 }
@@ -281,7 +281,7 @@
   min-height: 140px;
   border: 1px solid var(--border-soft);
   background: var(--bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .preview-panel img {
   object-fit: contain;
@@ -302,7 +302,7 @@
   min-height: 44px;
   padding: 10px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
   font-size: var(--text-xs);
   color: var(--fg-2);
@@ -339,7 +339,7 @@
   width: 104px;
   height: 104px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .delete-artwork > span:last-child {
@@ -374,7 +374,7 @@
   padding: 16px;
   border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   font-size: var(--text-sm);
 }
 .delete-impact > :nth-child(2) {

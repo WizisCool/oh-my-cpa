@@ -41,6 +41,7 @@ import {
 import type { Content, Message, PlaygroundParameters, PlaygroundSession, PlaygroundTarget, Turn } from './state';
 import { usePlaygroundRun } from './usePlaygroundRun';
 import styles from './PlaygroundPage.module.css';
+import { ToolButton } from '../../components/common/ToolButton';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
 
 /**
@@ -367,13 +368,9 @@ export const PlaygroundPage: React.FC = () => {
           },
         }}
       >
-        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting}>
-          <span className={styles['action-label']}>{t('agent.export')}</span>
-        </Button>
+        <ToolButton label={t('agent.export')} icon={<DownloadOutlined />} loading={isExporting} disabled={turns.length === 0 || isRunning || isExporting} />
       </Dropdown>
-      <Button aria-label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation}>
-        <span className={styles['action-label']}>{t('pg.new_chat')}</span>
-      </Button>
+      <ToolButton label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation} />
       <LabelTip title={t('pg.parameters')}>
         <Button
           aria-label={t('pg.parameters')}

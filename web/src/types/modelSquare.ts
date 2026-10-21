@@ -91,6 +91,22 @@ const MODEL_FAMILY_RULES: readonly [RegExp, string][] = [
   [/^sonar(?:-|$)/, 'perplexity'], [/^nemotron(?:-|$)/, 'nvidia'], [/^step-/, 'stepfun'],
 ];
 
+/**
+ * The catalog mark a model is drawn with: its maker's model mark, else the maker's own. A name
+ * that resolves to no maker - a custom alias, say - is tried again as the upstream it routes to.
+ */
+export function modelMarkIconId(model: string, fallbackModel = '', metadata?: ModelReference): string | undefined {
+  const primary = model.trim();
+  const fallback = fallbackModel.trim();
+  for (const [identity, reference] of [[primary, metadata], [fallback !== primary ? fallback : '', undefined]] as const) {
+    if (!identity) continue;
+    const maker = resolveModelManufacturer(identity, reference);
+    const candidate = maker.modelIconId || maker.iconId;
+    if (candidate) return candidate;
+  }
+  return undefined;
+}
+
 export function resolveModelManufacturer(identity: string, metadata?: ModelReference): ModelManufacturer {
   if (!identity) return UNKNOWN_MANUFACTURER;
   const author = (metadata?.id ?? identity).split('/').slice(0, -1).join('/').toLowerCase();

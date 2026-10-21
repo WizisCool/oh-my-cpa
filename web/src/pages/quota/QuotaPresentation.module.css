@@ -58,7 +58,7 @@
   font-size: var(--text-xs);
   background: var(--hover-inset);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .windows-list {
@@ -181,7 +181,7 @@
 .rec-banner {
   background: var(--hover-inset);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-size: var(--text-xs);
   display: flex;
@@ -203,7 +203,7 @@
 .banner-dot {
   width: 7px;
   height: 7px;
-  border-radius: var(--radius-xs);
+  border-radius: 999px;
   flex-shrink: 0;
 }
 
@@ -311,18 +311,17 @@
 .head :global(.tag) {
   height: 20px;
   padding: 0 6px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: 550;
 }
 
 .plan {
   color: var(--fg-2);
-  background: var(--hover-inset);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  border-radius: var(--radius-sm);
   padding: 1px 6px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 550;
   min-width: 0;
   overflow: hidden;
@@ -339,11 +338,10 @@
   gap: 4px;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  background: var(--hover-inset);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xs);
-  padding: 1px 5px;
+  font-size: var(--text-xs);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
 }
 
 .observed {
@@ -435,11 +433,10 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px dashed var(--border-soft);
-  border-radius: var(--radius-xs);
-  color: var(--meta);
+  border-radius: var(--radius-md);
+  color: var(--muted);
   font-size: var(--text-xs);
-  background: var(--hover-inset);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
   min-height: 38px;
 }
 

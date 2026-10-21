@@ -12,8 +12,10 @@
  *      A fractional pixel size is refused outright: it is a step between two tokens, which is a
  *      scale of its own. Sizes that are neither - a display numeral, an icon - are literals, because
  *      they belong to one surface and the scale has no step for them.
- *   2. **A corner radius of 2, 3 or 4 pixels is written as its token.** The console has two small
- *      radii; three pixels is a third one.
+ *   2. **A corner radius on the scale is written as its token**, and one between its small steps is
+ *      refused. The scale nests - 2, 6, 8, 12, with 4 for a check box - so an inner shape takes the step
+ *      below its frame; a 5px corner is a step nobody chose, and three pixels was once a third
+ *      spelling of two.
  *   3. **A `--text-*` or `--radius-*` reference names a variable a stylesheet defines, and carries
  *      no fallback.** An undefined variable makes the whole declaration invalid at computed-value
  *      time, which is how five `var(--radius-xs)` call sites drew square corners unnoticed; a
@@ -29,8 +31,10 @@ import { fileURLToPath } from 'node:url';
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Pixel sizes the type scale owns, so a literal of the same size is a missed token. */
-const TEXT_SCALE = { 10: '2xs', 11: 'xs', 12: 'sm', 13: 'md', 14: 'base', 16: 'lg', 22: 'xl' };
-const RADIUS_SCALE = { 2: 'xs', 3: 'xs', 4: 'sm' };
+const TEXT_SCALE = { 10: '2xs', 11: 'xs', 12: 'sm', 13: 'md', 14: 'base', 16: 'lg', 20: 'xl' };
+const RADIUS_SCALE = { 2: 'xs', 3: 'xs', 4: 'check', 6: 'sm', 8: 'md', 12: 'lg' };
+/** A corner between the small steps: neither a check box's corner nor a control's. */
+const OFF_SCALE_RADII = new Set(['5']);
 
 function walkStylesheets(directory, found = []) {
   if (!fs.existsSync(directory)) return found;
@@ -68,6 +72,8 @@ export function findViolations(source, definedTokens) {
       const literal = /^([0-9]+)px$/.exec(part);
       if (literal && RADIUS_SCALE[literal[1]]) {
         violations.push({ line, message: `a ${literal[1]}px corner is \`var(--radius-${RADIUS_SCALE[literal[1]]})\`` });
+      } else if (literal && OFF_SCALE_RADII.has(literal[1])) {
+        violations.push({ line, message: `a ${literal[1]}px corner sits between \`--radius-check\` and \`--radius-sm\`` });
       }
     }
   }

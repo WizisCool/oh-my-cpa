@@ -1,16 +1,14 @@
-/* Four numbers are the whole geometry: the thumb sits 2px inside the 1px edge, and its travel,
-   its corner and both state marks are derived from them, so a size is one block and its parts
-   cannot disagree. The thumb's corner is the track's minus that 3px, which keeps the two
-   outlines concentric. */
+/* Three numbers are the whole geometry: the knob sits 2px inside the track, and its travel and
+   both corners follow from them, so a size is one block and its parts cannot disagree. The track
+   is a pill and the knob a circle, so the two outlines stay concentric at every size. */
 .switch {
-  --switch-width: 40px;
-  --switch-height: 22px;
+  --switch-width: 36px;
+  --switch-height: 20px;
   --switch-thumb: 16px;
-  --switch-radius: 6px;
-  --switch-travel: calc(var(--switch-width) - 6px - var(--switch-thumb));
+  --switch-travel: calc(var(--switch-width) - 4px - var(--switch-thumb));
   --switch-mark: calc(var(--switch-thumb) / 2);
-  /* The centre of the stretch of track the thumb is not covering, from either edge. */
-  --switch-mark-centre: calc(var(--switch-travel) / 2 + 1px);
+  /* The centre of the stretch of track the knob is not covering, from either edge. */
+  --switch-mark-centre: calc(var(--switch-travel) / 2 + 2px);
 
   position: relative;
   display: inline-block;
@@ -20,41 +18,45 @@
   height: var(--switch-height);
   padding: 0;
   vertical-align: middle;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--muted);
-  border-radius: var(--switch-radius);
+  background: color-mix(in srgb, var(--fg) 16%, transparent);
+  border: 0;
+  border-radius: calc(var(--switch-height) / 2);
   cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease-standard),
-              border-color var(--motion-fast) var(--ease-standard),
-              color var(--motion-fast) var(--ease-standard);
+  transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
 .is-small {
-  --switch-width: 32px;
-  --switch-height: 18px;
-  --switch-thumb: 12px;
-  --switch-radius: 5px;
+  --switch-width: 30px;
+  --switch-height: 17px;
+  --switch-thumb: 13px;
 }
 
-/* The thumb takes the button's `color`, so one declaration per state paints it and the marks
-   together. It moves by transform: a slide on `left` would be a layout transition. */
+/* The knob is a raised disc of the page's lightest ink: the page itself on a light palette, the
+   text colour on a dark one, so it reads as the same object on either. It moves by transform: a
+   slide on `left` would be a layout transition. */
 .thumb {
+  --switch-knob: var(--fg);
+
   position: absolute;
   top: 2px;
   left: 2px;
   box-sizing: border-box;
   width: var(--switch-thumb);
   height: var(--switch-thumb);
-  background: currentColor;
-  border: 2px solid currentColor;
-  border-radius: calc(var(--switch-radius) - 3px);
-  transition: transform var(--motion-base) var(--ease-standard);
+  background: var(--switch-knob);
+  border: 2px solid var(--switch-knob);
+  border-radius: 50%;
+  box-shadow: var(--shadow-raised);
+  transition: transform var(--motion-base) var(--ease-out);
 }
 
-/* The state is written on the track as well as shown by the thumb's side: a bar for on, a ring
-   for off, each in the space the thumb has left. Position, fill and mark agree, so the reading
-   never rests on colour. */
+:global(:root[data-theme-mode='light']) .thumb {
+  --switch-knob: var(--bg);
+}
+
+/* The state is also written on the track: a bar for on, a ring for off, each in the stretch the
+   knob has left. Side, fill and mark agree, so the reading never rests on colour - a pale track
+   beside a white knob does not reach a control's contrast floor on its own. */
 .switch::before,
 .switch::after {
   content: '';
@@ -71,7 +73,7 @@
   left: var(--switch-mark-centre);
   width: 2px;
   margin-left: -1px;
-  background: currentColor;
+  background: var(--accent-on);
   border-radius: 1px;
 }
 
@@ -79,22 +81,19 @@
   right: var(--switch-mark-centre);
   width: var(--switch-mark);
   margin-right: calc(var(--switch-mark) / -2);
-  border: 1.5px solid currentColor;
+  border: 1.5px solid var(--fg-2);
   border-radius: 50%;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .switch:hover:enabled {
-  color: var(--fg-2);
-  border-color: var(--fg-2);
+  background: color-mix(in srgb, var(--fg) 24%, transparent);
 }
 
-/* On, the track is the semantic fill and the thumb is the ink a filled control carries. */
+/* On, the track takes the semantic fill. */
 .is-checked,
 .is-checked:hover:enabled {
-  color: var(--accent-on);
   background: var(--success);
-  border-color: var(--success);
 }
 
 .is-checked .thumb {
@@ -102,14 +101,14 @@
 }
 
 .is-checked::before {
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 .is-checked::after {
   opacity: 0;
 }
 
-/* A press leans the thumb toward the side it is about to take. */
+/* A press leans the knob toward the side it is about to take. */
 .switch:active:enabled .thumb {
   transform: translateX(2px);
 }
@@ -123,9 +122,9 @@
   opacity: 0.45;
 }
 
-/* Pending is a hollow thumb, not a spinner: the write is short, and the held position already
-   says which state was asked for. It keeps full strength so it does not read as unavailable,
-   and drops the marks so the hollow thumb is the only open shape on the track. */
+/* Pending is a hollow knob, not a spinner: the write is short, and the held position already
+   says which state was asked for. It keeps full strength so it does not read as unavailable, and
+   drops the marks so the hollow knob is the only open shape on the track. */
 .is-loading:disabled {
   cursor: progress;
   opacity: 1;
@@ -146,7 +145,6 @@
   .switch {
     --switch-width: 44px;
     --switch-height: 24px;
-    --switch-thumb: 18px;
-    --switch-radius: 6px;
+    --switch-thumb: 20px;
   }
 }

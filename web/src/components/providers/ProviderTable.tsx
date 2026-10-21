@@ -108,7 +108,7 @@ export function ProviderTable({
       key: 'name',
       // The name is the row's identity: auto layout otherwise hands its width to the endpoint
       // and breaks "Anthropic Claude" one syllable per line.
-      minWidth: 184,
+      minWidth: 208,
       render: (_, record) => {
         const iconId = resolveProviderIcon(
           providerIcons,
@@ -228,9 +228,10 @@ export function ProviderTable({
     {
       title: t('pro.col_models_headers'),
       key: 'models_headers',
-      // Two pills a line: three in a column made every row three pills tall, one line of three
-      // was wider than the traffic column it would have cost.
-      width: 148,
+      // Two counts a line, wrapping between counts and never inside one. The floor is what keeps
+      // auto layout from squeezing it to one count a line to make room for the endpoint.
+      width: 160,
+      minWidth: 160,
       render: (_, record) => {
         const modelCount = providerModelCount(record);
         const keyCount = providerKeyCount(record);
@@ -361,18 +362,17 @@ export function ProviderTable({
             onConfirm={() => deleteProviderMutation.mutate(record.id)}
             isDanger
             disabled={isDemo}
+            tooltip={isDemo ? t('demo.blocked') : t('common.delete')}
           >
-            <Tooltip title={isDemo ? t('demo.blocked') : t('common.delete')}>
-              <Button
-                size="small"
-                danger
-                className="row-action-btn"
-                icon={<DeleteOutlined />}
-                disabled={isDemo}
-                loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
-                aria-label={`${t('common.delete')}: ${record.name}`}
-              />
-            </Tooltip>
+            <Button
+              size="small"
+              danger
+              className="row-action-btn"
+              icon={<DeleteOutlined />}
+              disabled={isDemo}
+              loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
+              aria-label={`${t('common.delete')}: ${record.name}`}
+            />
           </ConfirmAction>
         </div>
       ),
@@ -383,14 +383,16 @@ export function ProviderTable({
   // state, the switch and the actions are the row's control strip - printing them twice would make
   // the row read as if it had two states that could disagree.
   return (
-    <ResponsiveList
-      columns={providerColumns}
-      dataSource={providers}
-      rowKey="id"
-      isLoading={providersLoading}
-      isBlocked={isBlocked}
-      emptyText={emptyText}
-      phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
-    />
+    <div className={styles['provider-list']}>
+      <ResponsiveList
+        columns={providerColumns}
+        dataSource={providers}
+        rowKey="id"
+        isLoading={providersLoading}
+        isBlocked={isBlocked}
+        emptyText={emptyText}
+        phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
+      />
+    </div>
   );
 }

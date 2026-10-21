@@ -2,7 +2,7 @@ import { FilterDisclosure } from '../common/FilterDisclosure';
 import { ActionMenu } from '../common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Segmented, Select, Tooltip } from 'antd';
+import { Button, Segmented, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
@@ -52,6 +52,7 @@ import { useToast } from '../feedback';
 import { LoadFailure } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { Toolbar } from '../common/Toolbar';
+import { ToolButton } from '../common/ToolButton';
 import { Count } from '../common/Count';
 
 /** How long typing settles before the search asks the server. */
@@ -339,15 +340,16 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         actions={(
           <>
             <RefreshButton
-              label={t('common.refresh')}
               isRefreshing={(query.isFetching && !query.isFetchingNextPage) || summary.isFetching}
               onRefresh={refresh}
             />
-            <Tooltip title={t('audit.export_hint')}>
-              <Button icon={<DownloadOutlined />} loading={isExporting} onClick={() => void onExport()}>
-                {t('audit.export')}
-              </Button>
-            </Tooltip>
+            <ToolButton
+              icon={<DownloadOutlined />}
+              label={t('audit.export')}
+              tooltip={t('audit.export_hint')}
+              loading={isExporting}
+              onClick={() => void onExport()}
+            />
           </>
         )}
       />

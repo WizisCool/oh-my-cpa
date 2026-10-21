@@ -343,7 +343,7 @@ matters, and the rest are deliberately shown as payload.
 spacing, and the antd token mapping. `web/src/theme/palette.ts` is the single
 source of truth for the palettes: a **palette** is nine **authored tokens**
 (`bg`, `surface`, `elevated`, `fg`, `fg2`, `muted`, `meta`, `border`, `accent`)
-and seventeen **derived tokens** computed from them, so the six **registered
+and eighteen **derived tokens** computed from them, so the six **registered
 palettes** and an operator's own are the same kind of object. `themeConfig.ts`
 projects a resolved palette onto Ant Design and onto the stylesheet's custom
 properties; every other surface - charts, the heatmap, the Monaco editor, the
@@ -712,7 +712,7 @@ A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was alre
    CPA authenticates inbound caller requests strictly against its active client-key list (`api-keys:`, or `access.api-keys` in a v8-layout file), and that list is the only state a client key has: present (accepted) or absent (rejected with 401 Unauthorized). Oh My CPA deliberately models no suspended or disabled state of its own, because a flag stored here could not stop CPA from accepting the key and would therefore read as a security control it is not. Stopping a key means removing it from that list, through the same revision-guarded draft transaction as other ordinary facade configuration writes (see ADR 0010).
    - Removal is irreversible for the secret: Oh My CPA stores no copy of a key value, so the console's delete confirmation states that the value cannot be recovered and must be copied first if it is wanted.
    - A custom name and the key's historical traffic outlive its removal, because `client_key_aliases` and `usage_events` are keyed by the usage fingerprint rather than by the key text.
-   - The list on the Key Management console (`/api-keys`) carries no status filter, because there is no status to filter: it is exactly what CPA will accept.
+   - The list on the Key Management console (`/api-keys`) carries no status filter, because there is no status to filter: it is exactly what CPA will accept. Its tiles filter by observed use over the last 24 hours (used, idle), which is traffic this console recorded, not a state of the key.
 
 4. **Multi-dimensional observability and filtering**:
    - Both the Request Records console (`/usage/events`) and the Dashboard (`/dashboard`) support filtering metrics, throughput, token volume, model ranking, and drill-down links by specific client key fingerprint (`api_key`).

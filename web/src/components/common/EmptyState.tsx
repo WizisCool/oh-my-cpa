@@ -20,9 +20,9 @@ export interface EmptyStateProps {
 /**
  * What a region shows when it holds nothing.
  *
- * The mark is three shortening rules - the rows that are not there - drawn from the border ink, in
- * place of Ant Design's illustrated tray: the console has no illustration language (design.md §1),
- * and a picture of a box was the only one on most pages. Loading and failure are not empty states;
+ * The mark is a sheet carrying three shortening rules - the rows that are not there - with a second
+ * sheet fanned behind it, drawn in CSS from the page's own layers in place of Ant Design's
+ * illustrated tray: the console's only pictures are the shapes its pages are made of (design.md §1). Loading and failure are not empty states;
  * they belong to `PageLoading` and `LoadFailure`.
  */
 export function EmptyState({ title, description, children, size = 'block', className, testId }: EmptyStateProps) {

@@ -1,5 +1,5 @@
 /**
- * The palette model: nine authored tokens, seventeen derived ones, and the built-in
+ * The palette model: nine authored tokens, eighteen derived ones, and the built-in
  * palettes each mode offers.
  *
  * **The split is the design.** A palette used to be thirty hand-tuned hex values, which
@@ -28,9 +28,9 @@ import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice 
 // Live labels sweep this same foreground over secondary ink; motion adds no palette colour.
 export const THREAD_FILL_SHARES = { field: 5, fieldHover: 8, hairline: 12 } as const;
 
-// Printed output and controls share the console geometry; larger conversation objects keep
-// a modest hierarchy without introducing a separate rounded visual language.
-export const THREAD_RADII = { document: 4, control: 4, surface: 6, thread: 8 } as const;
+// Conversation shapes sit on the console's corner scale (design.md §4): controls take the
+// control step, printed documents and floating surfaces the menu steps, the composer the card step.
+export const THREAD_RADII = { document: 8, control: 6, surface: 10, thread: 12 } as const;
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -92,6 +92,8 @@ export const CORE_TOKEN_KEYS: readonly (keyof ThemeCore)[] = [
  * re-derived per surface. Phone density changes layout, never this colour contract.
  */
 export interface ThemePalette extends ThemeCore {
+  /** The ground the navigation stands on, one step behind the content panel the page is drawn in. */
+  canvas: string;
   borderSoft: string;
   hover: string;
   rowHover: string;
@@ -131,6 +133,38 @@ export interface ThemePalette extends ThemeCore {
 const NEUTRAL_BLEND: Record<ThemeMode, { hover: number; hoverInset: number; borderSoft: number; selected: number }> = {
   dark: { hover: 0.116, hoverInset: 0, borderSoft: 0.583, selected: 0.075 },
   light: { hover: 0.045, hoverInset: 0.05, borderSoft: 0.541, selected: 0.038 },
+};
+
+/**
+ * The least OKLCH lightness the soft rule must stand off the page.
+ *
+ * The blends above are fractions of a palette's own distances, and a light palette's distances are
+ * short: its border sits a few points below white, so a soft rule and a chart's grid derived from it
+ * came out at roughly half the perceptual step they take on a dark page, and the grid vanished.
+ * OKLCH lightness is perceptual, so one floor gives both modes the same visible step; the dark
+ * built-ins already clear it and are unchanged, and an operator's faint light palette is lifted to it
+ * rather than inheriting the fade. Hover is left to its blend: it sits under the effort badges, whose
+ * hues are fixed semantics tuned against it.
+ */
+const BORDER_SOFT_FLOOR = 0.06;
+
+/** `color`, moved away from `ground` along its own direction until the two are `floor` apart. */
+function standOff(ground: string, color: string, toward: string, floor: number): string {
+  const groundLightness = oklchLightness(ground);
+  const delta = oklchLightness(color) - groundLightness;
+  if (Math.abs(delta) >= floor) return color;
+  const direction = delta !== 0 ? Math.sign(delta) : Math.sign(oklchLightness(toward) - groundLightness) || -1;
+  return withLightness(color, Math.min(1, Math.max(0, groundLightness + direction * floor)));
+}
+
+/**
+ * How far the canvas recedes behind the content panel. A light canvas is a faint step toward the
+ * foreground - the panel reads as the sheet of paper on the desk - while a dark canvas sinks
+ * toward black, because a lighter frame around a dark page reads as a glow rather than as a desk.
+ */
+const CANVAS_BLEND: Record<ThemeMode, { toward: 'fg' | 'black'; share: number }> = {
+  dark: { toward: 'black', share: 0.24 },
+  light: { toward: 'fg', share: 0.04 },
 };
 
 /**
@@ -337,7 +371,7 @@ function accentLadder(mode: ThemeMode, accent: string): { hover: string; active:
 }
 
 /**
- * derivePalette computes the seventeen tokens a palette does not author.
+ * derivePalette computes the eighteen tokens a palette does not author.
  *
  * Pure and total: the same nine tokens always produce the same palette, so the pre-hydration
  * fallback in `index.css`, the six built-ins and an operator's palette are one code path.
@@ -346,10 +380,12 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
   const blend = NEUTRAL_BLEND[mode];
   const semantics = MODE_SEMANTICS[mode];
   const hover = mixOklch(core.bg, core.fg, blend.hover);
-  const borderSoft = mixOklch(core.bg, core.border, blend.borderSoft);
+  const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
+  const canvasBlend = CANVAS_BLEND[mode];
   return {
     ...core,
+    canvas: mixOklch(core.bg, canvasBlend.toward === 'fg' ? core.fg : '#000000', canvasBlend.share),
     borderSoft,
     hover,
     // The two hover fills are one value by construction: a row under the pointer and a
@@ -425,13 +461,13 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
     descriptionKey: 'theme.omc_light_desc',
     core: {
       bg: '#ffffff',
-      surface: '#f6f6f8',
+      surface: '#f1f1f3',
       elevated: '#ffffff',
       fg: '#1c1c1e',
       fg2: '#505055',
       muted: '#787880',
       meta: '#98989f',
-      border: '#e5e5ea',
+      border: '#dcdce1',
       accent: '#005d8f',
     },
   },

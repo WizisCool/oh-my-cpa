@@ -1,5 +1,6 @@
 import { formatCacheRate } from '../../theme/cacheScale';
 import { displayEffortName, effortStep } from '../../theme/effortScale';
+import { modelMarkIconId } from '../../types/modelSquare';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -44,20 +45,27 @@ import { formatRequestTimestamp } from './requestTimestamp';
 export type SheetTone = 'fg' | 'fg2' | 'muted' | 'meta' | 'accent' | 'success' | 'danger' | 'warn';
 
 /** The glyphs a cell uses where the list uses an icon: a marker a reader already knows from the list. */
-export type SheetGlyph = 'non_stream' | 'substituted' | 'fast';
+export type SheetGlyph = 'non_stream' | 'substituted' | 'routed' | 'fast' | 'model' | 'reasoning';
 
 export type SheetSegment =
   /** Plain text. The first text segment of a line is the one that gives way when the line is too long. */
   | { kind: 'text'; text: string; tone: SheetTone; size: number; weight: 400 | 500 | 600; isMono?: boolean }
   /**
-   * A small bordered tag: OAuth, a reasoning effort, a preflight. An effort
-   * that ranks on the reasoning-effort scale names its step, which outranks the tone.
+   * A small filled tag: OAuth, a reasoning effort, a preflight. A neutral tone is a wash of the
+   * ink, a hued one a tint of its hue. An effort that ranks on the reasoning-effort scale names
+   * its step, which outranks the tone.
    */
   | { kind: 'tag'; text: string; tone: SheetTone; effortStep?: number }
-  /** A tinted pill led by a square bullet: the result, and the cache rate. */
-  | { kind: 'pill'; text: string; tone: SheetTone; cacheRate?: number }
+  /**
+   * A reading led by a round dot: the result, and the cache rate. A washed reading is drawn on a
+   * tint of its tone, the way the list sets a failure apart; otherwise only the dot carries the hue
+   * unless the word is given a tone of its own.
+   */
+  | { kind: 'dot'; text: string; tone: SheetTone; textTone?: SheetTone; isWashed?: boolean; cacheRate?: number }
   /** One of the list's own glyphs, boxed when the list draws it as a badge and filled when the list fills it. */
   | { kind: 'glyph'; glyph: SheetGlyph; tone: SheetTone; isBoxed?: boolean; isFilled?: boolean }
+  /** A brand mark drawn inline at the text's size: the model's maker. */
+  | { kind: 'mark'; mark: SheetMark }
   /** A redaction bar. It carries nothing of the value it stands in for. */
   | { kind: 'mask' };
 
@@ -71,7 +79,7 @@ export interface SheetMark {
 }
 
 export interface SheetCell {
-  /** The provider's mark, drawn before the cell's lines. */
+  /** The provider's mark, drawn on a tile before the cell's lines. */
   mark?: SheetMark;
   lines: SheetLine[];
 }
@@ -105,8 +113,8 @@ export interface RequestSheet {
 export const SHEET_MIN_WIDTH = 1480;
 
 export const SHEET_LINE_HEIGHT = 18;
-const ROW_MIN_HEIGHT = 68;
-const ROW_PAD_BLOCK = 26;
+const ROW_MIN_HEIGHT = 72;
+const ROW_PAD_BLOCK = 28;
 
 /**
  * resolveSheetColumns turns the list's track definitions into pixel columns the
@@ -158,6 +166,8 @@ export interface RequestSheetInput {
   tokenStyle: TokenNumberStyle;
   tpsMode: TpsCalculationMode;
   modelView?: 'call' | 'model';
+  /** The list's own preference: when it draws model marks, so does the picture. */
+  showModelIcons?: boolean;
   credentials: CredentialIndex;
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
@@ -176,6 +186,9 @@ const text = (
   isMono = false,
 ): SheetSegment => ({ kind: 'text', text: value, tone, size, weight, isMono });
 
+/** The list sets an effort in `text-transform: capitalize`; a canvas has no such property. */
+const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
 /** buildRequestSheet lays the selected records out as the sheet the painter draws. */
 export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
   const { t, masks } = input;
@@ -193,6 +206,12 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
     const providerKeyMask = provider.isOAuth ? '' : maskKeyText(event.provider_key_mask);
     const cache = eventCacheRate(event.tokens);
     const tps = eventTokensPerSecond(event, input.tpsMode);
+    const isCallView = input.modelView === 'call';
+    const displayModel = isCallView ? event.model_alias || event.model : event.model;
+    const modelIcon = displayModel ? modelMarkIconId(displayModel, event.model) : undefined;
+    const modelMark: SheetSegment = modelIcon
+      ? { kind: 'mark', mark: { iconId: modelIcon } }
+      : { kind: 'glyph', glyph: 'model', tone: 'muted' };
 
     const cells: Record<RequestColumnId, SheetCell> = {
       time: {
@@ -204,40 +223,42 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         ],
       },
       result: {
-        lines: [[{ kind: 'pill', text: t(eventResultLabelKey(event)), tone: event.failed ? 'danger' : 'success' }]],
+        lines: [[
+          event.failed
+            ? { kind: 'dot', text: t(eventResultLabelKey(event)), tone: 'danger', isWashed: true }
+            : { kind: 'dot', text: t(eventResultLabelKey(event)), tone: 'success', textTone: 'fg2' },
+        ]],
       },
       provider: {
         mark: { iconId: provider.iconId, logo: provider.logo },
         lines: [
           [
-            text(provider.title, 'fg', 13, 600, true),
-            ...(provider.isOAuth ? [{ kind: 'tag', text: 'OAuth', tone: 'accent' } as const] : []),
+            text(provider.title, 'fg', 13, 500),
+            ...(provider.isOAuth ? [{ kind: 'tag', text: 'OAuth', tone: 'fg2' } as const] : []),
           ],
           // The credential line: an OAuth account - usually an address - or the
           // masked key. Each has its own mask; the provider's name always stays.
           ...(provider.isOAuth && provider.credential
-            ? [masks.has('provider_account') ? MASK_LINE : [text(provider.credential, 'meta', 11, 400, true)]]
+            ? [masks.has('provider_account') ? MASK_LINE : [text(provider.credential, 'muted', 11)]]
             : []),
           ...(providerKeyMask
-            ? [masks.has('provider_key') ? MASK_LINE : [text(providerKeyMask, 'meta', 11, 400, true)]]
+            ? [masks.has('provider_key') ? MASK_LINE : [text(providerKeyMask, 'muted', 11)]]
             : []),
         ],
       },
       model: {
         lines: [
           [
-            text(
-              (input.modelView === 'call' ? (event.model_alias || event.model) : event.model) || t('events.not_captured'),
-              'fg',
-              13,
-              600,
-              true,
-            ),
+            ...(input.showModelIcons ? [modelMark] : []),
+            text(displayModel || t('events.not_captured'), 'fg', 13, 500),
             ...(!event.generate ? [{ kind: 'tag', text: t('events.preflight'), tone: 'muted' } as const] : []),
           ],
+          // A substitution outranks the routed upstream, as it does on the list's second line.
           ...(event.model_substituted && event.response_model
-            ? [[{ kind: 'glyph', glyph: 'substituted', tone: 'warn' } as const, text(event.response_model, 'warn', 11, 400, true)]]
-            : []),
+            ? [[{ kind: 'glyph', glyph: 'substituted', tone: 'warn' } as const, text(event.response_model, 'warn', 11)]]
+            : isCallView && displayModel !== event.model && event.model
+              ? [[{ kind: 'glyph', glyph: 'routed', tone: 'fg2' } as const, text(event.model, 'fg2', 11)]]
+              : []),
         ],
       },
       mode: {
@@ -245,7 +266,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
           event.reasoning_effort || isFastTierEvent(event) || isNonStreamingEvent(event)
             ? [
                 ...(event.reasoning_effort
-                  ? [{ kind: 'tag', text: displayEffortName(event.reasoning_effort), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
+                  ? [{ kind: 'tag', text: capitalize(displayEffortName(event.reasoning_effort)), tone: 'fg2', effortStep: effortStep(event.reasoning_effort) ?? undefined } as const]
                   : []),
                 ...(isFastTierEvent(event)
                   ? [{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true } as const]
@@ -259,31 +280,28 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       },
       latency: {
         lines: [
-          [text(formatEventDuration(event.latency_ms), 'fg', 13, 600)],
+          [text(formatEventDuration(event.latency_ms), 'fg', 13, 500)],
           ...(hasMeasurableTTFT(event)
-            ? [[text(`TTFT ${formatEventDuration(event.ttft_ms)}`, 'muted', 10)]]
+            ? [[text(`TTFT ${formatEventDuration(event.ttft_ms)}`, 'muted', 11)]]
             : []),
         ],
       },
-      tps: { lines: [[text(tps.formatted, tps.basis === null ? 'muted' : 'fg', 12, 500)]] },
+      tps: { lines: [[tps.basis === null ? text('—', 'muted', 12) : text(tps.formatted, 'fg', 13, 500)]] },
       tokens: {
         lines: [
           [
-            text(formatTokens(event.tokens.total, input.tokenStyle), 'fg', 13, 600),
-            text('tokens', 'muted', 9, 500),
+            text(formatTokens(event.tokens.total, input.tokenStyle), 'fg', 13, 500),
+            text('tokens', 'muted', 11),
           ],
           [
-            text(
-              [
-                `↑ ${formatTokens(event.tokens.input, input.tokenStyle)}`,
-                `↓ ${formatTokens(event.tokens.output, input.tokenStyle)}`,
-                ...(event.tokens.reasoning > 0
-                  ? [`✦ ${formatTokens(event.tokens.reasoning, input.tokenStyle)}`]
-                  : []),
-              ].join('   '),
-              'muted',
-              10,
-            ),
+            text(`↑ ${formatTokens(event.tokens.input, input.tokenStyle)}`, 'muted', 11),
+            text(`↓ ${formatTokens(event.tokens.output, input.tokenStyle)}`, 'muted', 11),
+            ...(event.tokens.reasoning > 0
+              ? [
+                  { kind: 'glyph', glyph: 'reasoning', tone: 'muted' } as const,
+                  text(formatTokens(event.tokens.reasoning, input.tokenStyle), 'muted', 11),
+                ]
+              : []),
           ],
         ],
       },
@@ -291,7 +309,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         lines: [
           [
             event.cost_usd != null
-              ? text(`$${event.cost_usd.toFixed(4)}`, 'fg', 13, 600)
+              ? text(`$${event.cost_usd.toFixed(4)}`, 'fg', 13, 500)
               : text('—', 'muted', 13),
           ],
         ],
@@ -300,16 +318,16 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         lines: [
           [
             cache.hasData
-              ? { kind: 'pill', text: formatCacheRate(cache.rate), tone: 'success', cacheRate: cache.rate }
-              : { kind: 'pill', text: '—', tone: 'muted' },
+              ? { kind: 'dot', text: formatCacheRate(cache.rate), tone: 'success', cacheRate: cache.rate }
+              : { kind: 'dot', text: '—', tone: 'muted' },
           ],
           ...(cache.hasData
-            ? [[text(t('events.cache_hit_count', { count: cache.cached.toLocaleString() }), 'muted', 10)]]
+            ? [[text(t('events.cache_hit_count', { count: cache.cached.toLocaleString() }), 'muted', 11)]]
             : []),
         ],
       },
-      key: { lines: [[text(eventKeyLabel(event), 'fg2', 12, 500, true)]] },
-      ua: { lines: [[text(eventUserAgentLabel(event), 'muted', 11, 400, true)]] },
+      key: { lines: [[text(eventKeyLabel(event), 'fg2', 12, 500)]] },
+      ua: { lines: [[text(eventUserAgentLabel(event), 'muted', 11)]] },
     };
 
     for (const column of REQUEST_COLUMNS) {
@@ -329,7 +347,7 @@ export function sheetStrings(sheet: RequestSheet): string[] {
     for (const column of sheet.columns) {
       for (const line of row.cells[column.id].lines) {
         for (const segment of line) {
-          if (segment.kind !== 'mask' && segment.kind !== 'glyph') strings.push(segment.text);
+          if (segment.kind !== 'mask' && segment.kind !== 'glyph' && segment.kind !== 'mark') strings.push(segment.text);
         }
       }
     }

@@ -43,25 +43,33 @@ export function AppDrawer({
   footerStart,
   className,
   children,
+  title,
   ...rest
 }: AppDrawerProps) {
   const t = useT();
-  const hasFooter = isRendered(footer) || isRendered(footerStart);
+  // Callers open a panel on a selection and close it by clearing that selection, so on the closing
+  // frame their content is already gone. The panel keeps showing what it showed while open until
+  // it has slid away, rather than sliding out blank.
+  const lastOpen = React.useRef({ children, title, footer, footerStart });
+  if (rest.open) lastOpen.current = { children, title, footer, footerStart };
+  const shown = lastOpen.current;
+  const hasFooter = isRendered(shown.footer) || isRendered(shown.footerStart);
   return (
     <Drawer
       {...rest}
+      title={shown.title}
       className={clsx('app-drawer', className)}
       placement="right"
       size={DRAWER_WIDTHS[width]}
       closable={{ placement: 'end', 'aria-label': t('common.close') }}
       footer={hasFooter ? (
         <div className="app-drawer-footer">
-          {isRendered(footerStart) && <div className="app-drawer-footer-start">{footerStart}</div>}
-          {isRendered(footer) && <div className="app-drawer-footer-actions">{footer}</div>}
+          {isRendered(shown.footerStart) && <div className="app-drawer-footer-start">{shown.footerStart}</div>}
+          {isRendered(shown.footer) && <div className="app-drawer-footer-actions">{shown.footer}</div>}
         </div>
       ) : undefined}
     >
-      {children}
+      {shown.children}
     </Drawer>
   );
 }

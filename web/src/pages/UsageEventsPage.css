@@ -15,7 +15,7 @@
 }
 .request-window {
   color: var(--muted);
-  margin: 8px 0 0;
+  margin: 2px 0 0;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -68,7 +68,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   position: relative;
 }
 .request-pagination {

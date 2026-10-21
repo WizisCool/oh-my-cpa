@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-08
 - Amends: ADR 0081's radius values. Its fill, framing, typography and motion rules remain unchanged.
+- Amended by: ADR 0103, which moves the console onto a 2 · 6 · 8 · 12 corner scale and the conversation radii with it.
 
 ## Context
 

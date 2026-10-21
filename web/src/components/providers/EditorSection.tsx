@@ -1,7 +1,8 @@
 import React from 'react';
-import { DownOutlined, UpOutlined } from '../icons';
+import { DownOutlined } from '../icons';
 import styles from './ProviderEditorDrawer.module.css';
 import { Count } from '../common/Count';
+import { Fold } from '../common/Fold';
 
 export interface EditorSectionProps {
   title: React.ReactNode;
@@ -27,10 +28,10 @@ export function EditorSection({ title, count, isOpen, onToggle, children }: Edit
           {count !== undefined && <Count className={styles['section-count']}>{count}</Count>}
         </span>
         <span className={styles['section-chevron']} aria-hidden="true">
-          {isOpen ? <UpOutlined /> : <DownOutlined />}
+          <DownOutlined className={styles['chevron']} />
         </span>
       </button>
-      {isOpen && <div className={styles['section-body']}>{children}</div>}
+      <Fold isOpen={isOpen} className={styles['section-body']}>{children}</Fold>
     </section>
   );
 }

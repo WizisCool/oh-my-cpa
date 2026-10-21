@@ -19,7 +19,7 @@
   width: 52px;
   height: 52px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--fg);
 }
@@ -50,7 +50,7 @@
   padding: 16px;
   border: 1px solid var(--border);
   border-top: 2px solid var(--warn);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 

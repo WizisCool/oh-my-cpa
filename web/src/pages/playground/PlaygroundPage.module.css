@@ -44,7 +44,7 @@
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-left: 2px solid var(--danger);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
   font-size: var(--text-md);
 }
@@ -52,10 +52,6 @@
 .turn-error code {
   color: var(--muted);
   font-size: var(--text-xs);
-}
-
-.action-label {
-  white-space: nowrap;
 }
 
 /* ── editing the last message ───────────────────────────────────────────────── */
@@ -132,7 +128,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -208,8 +204,4 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 640px) {
-  .action-label {
-    display: none;
-  }
-}
+

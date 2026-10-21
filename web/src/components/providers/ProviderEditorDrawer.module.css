@@ -7,7 +7,7 @@
   margin-bottom: 16px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -101,7 +101,7 @@
   margin-bottom: 16px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -124,6 +124,19 @@
   background: var(--hover);
 }
 
+/* A head fills its card edge to edge, and the card clips to its rounded border, so the console's
+   outward ring would be cut to one stray stroke along the head's lower edge. The ring is drawn
+   inside instead, following the card's own corners; a key card's toggle draws it inside too, a few
+   points in from the card's edge. */
+.section-head:focus-visible,
+.item-toggle:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent) !important;
+}
+
+.section-head:focus-visible {
+  border-radius: calc(var(--radius-lg) - 1px);
+}
+
 .section-title {
   font-size: var(--text-base);
   font-weight: 600;
@@ -138,6 +151,18 @@
   display: inline-flex;
   color: var(--meta);
   font-size: var(--text-sm);
+}
+
+/* One chevron that turns with its disclosure, rather than two icons swapped: the turn is the
+   same motion as the fold under it, so the control and the body read as one gesture. */
+.chevron {
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+/* A key card's chevron is a pointer-only twin of its toggle, so it carries the state as data. */
+[aria-expanded='true'] .chevron,
+[data-expanded] .chevron {
+  transform: rotate(180deg);
 }
 
 .section-body {
@@ -184,7 +209,7 @@
 .item-card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -193,7 +218,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px 6px 0;
+  padding: 6px 8px 6px 4px;
 }
 
 .item-toggle {
@@ -202,7 +227,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 4px 14px;
+  padding: 4px 10px;
   border: 0;
   background: transparent;
   color: var(--fg);
@@ -238,8 +263,8 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 14px 16px;
-  border-top: 1px solid var(--border);
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .item-field-label {
@@ -343,12 +368,13 @@
   scroll-margin-bottom: 24px;
 }
 
+/* The head stands on the card itself. A band of `--surface` here put the two filled name fields on
+   their own colour, so in a light palette they had no edge at all. */
 .model-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--surface);
 }
 
 .model-input {
@@ -361,33 +387,34 @@
   font-size: var(--text-xs);
 }
 
-/* A thinking level is a toggle drawn as a tile: the accent edge and a tint mixed from the accent
-   over the card mark it selected in either mode, where a fixed rgba only worked on dark. */
+/* A thinking level is a toggle drawn as a tile: a wash of the ink at rest, a deeper one under the
+   pointer, and a tint of the accent once picked. Washes rather than edges, so eight tiles do not
+   draw sixteen outlines, and mixed over whatever card they sit on, so they hold in either mode. */
 .level-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  transition: background-color var(--motion-fast) var(--ease-standard);
   user-select: none;
 }
 
 .level-option:hover {
-  border-color: var(--muted);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
 }
 
-.level-option-checked {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+.level-option-checked,
+.level-option-checked:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .level-option-checked .level-label {
-  font-weight: 600;
+  color: var(--fg);
+  font-weight: 500;
 }
 
 /* The checkbox mirrors the tile's state; the tile takes the click. */
@@ -400,6 +427,6 @@
 }
 
 .level-value {
-  color: var(--meta);
+  color: var(--muted);
   font-size: var(--text-xs);
 }

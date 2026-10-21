@@ -68,30 +68,18 @@ export async function runKeyManagementAcceptance({
     // silently match nothing and time out instead of asserting.
     const keySummary = await page.locator('.keys-page [data-testid="keys-count"]').first().innerText();
     check('key management counts the listed keys', /(^|\D)1(\D|$)/.test(keySummary), `summary="${keySummary}"`);
-    // The surface is one container: a card holding another card holding a toolbar
-    // is the nesting the open-list rule exists to prevent, and it is what made the
-    // old page read as a frame inside a frame.
+    // The list stands on the page in the console's one list frame, as the provider list does,
+    // rather than inside a card of its own: a frame inside a frame is what the open-list rule
+    // exists to prevent.
     const containerCount = await page.locator('.keys-page .ant-card').count();
-    const nestedPanelCount = await page.locator('.keys-page .settings-group').count();
-    check(
-      'key management renders one container rather than nested frames',
-      containerCount === 1 && nestedPanelCount === 0,
-      `cards=${containerCount} nested=${nestedPanelCount}`,
-    );
-    // ...and that card is the list's frame: the table runs to its edges, as every other
-    // list's rows run to their own frame, rather than drawing a second frame inside it.
-    const cardBodyPadding = await page
-      .locator('.keys-page .ant-card-body')
-      .first()
-      .evaluate((el) => getComputedStyle(el).paddingLeft);
     const tableBorder = await page
       .locator('.keys-page .data-table')
       .first()
       .evaluate((el) => getComputedStyle(el).borderLeftWidth);
     check(
-      'the key list is flush inside its card, with no frame of its own',
-      cardBodyPadding === '0px' && tableBorder === '0px',
-      `padding=${cardBodyPadding} border=${tableBorder}`,
+      'the key list is framed once, by the shared list frame',
+      containerCount === 0 && tableBorder === '1px',
+      `cards=${containerCount} border=${tableBorder}`,
     );
     // Masked by default: the row shows a preview, never the stored secret.
     const keyText = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
@@ -194,13 +182,13 @@ export async function runKeyManagementAcceptance({
       (await aliasRow.locator('td').first().innerText()).trim().length > 0,
       `name="${await aliasRow.locator('td').first().innerText()}"`,
     );
-    // One editor holds both of a key's editable parts; it is the row's edit control,
-    // and the name cell opens the same dialog.
+    // One editor holds both of a key's editable parts, in a side panel opened by the row's
+    // edit control.
     await aliasRow.getByRole('button', { name: /编辑|Edit/ }).click();
-    const renameInput = page.locator('.ant-modal input#gateway-key-alias');
+    const renameInput = page.locator('.ant-drawer-open input#gateway-key-alias');
     await renameInput.waitFor({ state: 'visible', timeout: 10000 });
     await renameInput.fill(clientKeyAlias);
-    await page.locator('.ant-modal .ant-btn-primary').click();
+    await page.locator('.ant-drawer-open .app-drawer-footer .ant-btn-primary').click();
     await checkEventually(
       'the new name is saved and shown in the key table',
       async () => (await aliasRow.locator('td').first().innerText()).includes(clientKeyAlias),
@@ -219,36 +207,36 @@ export async function runKeyManagementAcceptance({
     );
     responseBodies.length = 0;
 
-    // Adding a key is a draft operation: the modal must generate a valid value,
+    // Adding a key is a draft operation: the panel must generate a valid value,
     // expose the value it will submit, and leave the saved configuration untouched
     // when cancelled. It must not require another silent reveal of an existing key.
     const addKeyButton = page.locator('.keys-page button').filter({ hasText: /Add key|添加|新增/i }).first();
     await addKeyButton.click();
-    const keyModal = page.locator('.ant-modal:visible');
-    await keyModal.waitFor({ state: 'visible', timeout: 5000 });
-    check('key add dialog labels the input it submits', (await keyModal.locator('label[for="gateway-key-value"]').count()) === 1);
-    await keyModal.locator('button').filter({ hasText: /Generate random key|生成随机密钥/i }).click();
-    const generatedKey = await keyModal.locator('#gateway-key-value').inputValue();
-    check('key add dialog generates a non-empty gateway key', /^sk-cpa-[0-9a-f]{32}$/.test(generatedKey), `key=${generatedKey.slice(0, 10)}…`);
-    check('key add dialog enables save only for a non-empty key', !(await keyModal.locator('.ant-btn-primary').isDisabled()));
-    // The dialog traps focus inside its own subtree, so its copy control is asserted
+    const keyPanel = page.locator('.ant-drawer-open');
+    await keyPanel.waitFor({ state: 'visible', timeout: 5000 });
+    check('key add panel labels the input it submits', (await keyPanel.locator('label[for="gateway-key-value"]').count()) === 1);
+    await keyPanel.locator('button').filter({ hasText: /Generate random key|生成随机密钥/i }).click();
+    const generatedKey = await keyPanel.locator('#gateway-key-value').inputValue();
+    check('key add panel generates a non-empty gateway key', /^sk-cpa-[0-9a-f]{32}$/.test(generatedKey), `key=${generatedKey.slice(0, 10)}…`);
+    check('key add panel enables save only for a non-empty key', !(await keyPanel.locator('.app-drawer-footer .ant-btn-primary').isDisabled()));
+    // The panel traps focus inside its own subtree, so its copy control is asserted
     // here and not only on the list: a copy path that attaches its scratch element
-    // outside the dialog selects nothing, and `execCommand('copy')` answers `true` for
-    // that empty selection. The draft is pasted back with the dialog closed, because
+    // outside the panel selects nothing, and `execCommand('copy')` answers `true` for
+    // that empty selection. The draft is pasted back with the panel closed, because
     // its focus trap would keep the probe input from taking focus while it is open.
     // The control acknowledges in place, so the acknowledgement cannot be one an earlier
     // step left behind: it belongs to this button and lasts only while its check mark shows.
-    const dialogCopyState = keyModal.locator('.keys-key-editor-actions [data-copy-state="copied"]');
-    await keyModal.locator('.keys-key-editor-actions button').filter({ hasText: /^(复制|Copy)$/ }).click();
+    const panelCopyState = keyPanel.locator('.keys-key-editor-actions [data-copy-state="copied"]');
+    await keyPanel.locator('.keys-key-editor-actions button').filter({ hasText: /^(复制|Copy)$/ }).click();
     // The app's own statement that the copy completed, rather than a fixed pause that
     // only guesses when it did.
     await checkEventually(
-      'the key dialog copy control reports a copy it made',
-      async () => (await dialogCopyState.count()) > 0,
-      { label: "the key dialog's copy acknowledgement" },
+      'the key panel copy control reports a copy it made',
+      async () => (await panelCopyState.count()) > 0,
+      { label: "the key panel's copy acknowledgement" },
     );
-    await keyModal.locator('.ant-modal-footer .ant-btn-default').first().click();
-    await keyModal.waitFor({ state: 'hidden', timeout: 5000 });
+    await keyPanel.locator('.app-drawer-footer .ant-btn-default').first().click();
+    await keyPanel.waitFor({ state: 'hidden', timeout: 5000 });
     await page.evaluate(() => {
       const probe = document.createElement('input');
       probe.setAttribute('data-copy-probe', '');
@@ -263,7 +251,7 @@ export async function runKeyManagementAcceptance({
     const pastedDraftKey = await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.value ?? '');
     await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.remove());
     check(
-      'the key dialog copy control puts the draft key on the clipboard',
+      'the key panel copy control puts the draft key on the clipboard',
       generatedKey.length > 0 && pastedDraftKey === generatedKey,
       `match=${pastedDraftKey === generatedKey} pastedLength=${pastedDraftKey.length} expectedLength=${generatedKey.length}`,
     );
@@ -365,10 +353,7 @@ export async function runKeyManagementAcceptance({
     const listRow = page.locator('.config-api-keys-table .ant-table-row').first();
     await listRow.waitFor({ state: 'visible', timeout: 15000 });
     const rowsBeforeDelete = await page.locator('.config-api-keys-table .ant-table-row').count();
-    await listRow.getByRole('button', { name: /更多操作|More actions/ }).click();
-    // Addressed as a menu item rather than by text: the label and its wrapper span both
-    // read as "删除", which is a strict-mode violation in a click locator.
-    await page.locator('.ant-dropdown:visible').getByRole('menuitem', { name: /删除|Delete/ }).click();
+    await listRow.getByRole('button', { name: /^(删除|Delete)/ }).click();
     const deleteConfirm = page.locator('.ant-popover:visible');
     await deleteConfirm.waitFor({ state: 'visible', timeout: 5000 });
     const deleteCopy = await deleteConfirm.innerText();
@@ -377,9 +362,7 @@ export async function runKeyManagementAcceptance({
       /无法恢复/.test(deleteCopy) || /cannot be recovered/i.test(deleteCopy),
       `copy="${deleteCopy.replace(/\n/g, ' ')}"`,
     );
-    // The label is matched with an optional inner space: antd inserts one between the two
-    // characters of a two-character label, so the accessible name reads "取 消".
-    await deleteConfirm.getByRole('button', { name: /取\s*消|Cancel/ }).click();
+    await deleteConfirm.getByRole('button', { name: /^(取消|Cancel)$/ }).click();
     await deleteConfirm.waitFor({ state: 'hidden', timeout: 5000 });
     check(
       'cancelling the removal leaves the key list unchanged',

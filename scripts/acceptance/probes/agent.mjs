@@ -1003,7 +1003,7 @@ export async function agentViews({ base, page, check, expectProblem }) {
     return radii;
   });
   check('interactive components use the console surface and control corners',
-    componentRadii.join('|') === '6px|6px|6px|4px|6px', componentRadii.join('|'));
+    componentRadii.join('|') === '10px|10px|10px|6px|10px', componentRadii.join('|'));
 
   const download = page.waitForEvent('download');
   await figure.getByRole('button', { name: 'Save as image', exact: true }).click();

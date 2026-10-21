@@ -32,8 +32,8 @@
 
 .title {
   margin: 0;
-  font-weight: 700;
-  letter-spacing: -.02em;
+  font-weight: 600;
+  letter-spacing: -.01em;
   white-space: nowrap;
 }
 
@@ -250,7 +250,7 @@
   width: 7px;
   height: 7px;
   flex-shrink: 0;
-  border-radius: var(--radius-xs);
+  border-radius: 999px;
   background: var(--meta);
 }
 
@@ -747,6 +747,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
   background: var(--elevated);
+  box-shadow: var(--shadow-float);
 }
 
 .trigger-rows {
@@ -809,21 +810,27 @@
   font-size: var(--text-sm);
 }
 
+/* The composer is the one object on the conversation's page that the reader writes into, so it is
+   the one that sits slightly above it: the panel's own ground, a hairline, and a raised shadow that
+   deepens to the floating one while it has focus. Focus is the lift and a firmer edge, not a
+   coloured ring - the accent stays for what the conversation links to. */
 .composer-frame {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-thread);
-  background: var(--surface);
-  transition: border-color var(--motion-fast);
+  background: var(--bg);
+  box-shadow: var(--shadow-raised);
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .composer-frame:hover {
-  border-color: var(--muted);
+  border-color: color-mix(in srgb, var(--fg) 22%, transparent);
 }
 
 .composer-frame:focus-within {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+  box-shadow: var(--shadow-float);
 }
 
 .composer-body {
@@ -1439,7 +1446,7 @@
   padding: 8px 12px;
   border: 0;
   border-top: 1px solid var(--border-soft);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -1551,10 +1558,8 @@
 .section-title {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
-  letter-spacing: .16em;
-  text-transform: uppercase;
 }
 
 .field {

@@ -84,7 +84,7 @@
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .upstream-head {
@@ -173,7 +173,7 @@
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
 }
 
 .picker-option {
@@ -337,7 +337,7 @@
   width: 100%;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .tier-row-invalid {

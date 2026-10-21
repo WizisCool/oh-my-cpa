@@ -1,7 +1,7 @@
 .code-frame {
   margin: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   overflow: hidden;
 }

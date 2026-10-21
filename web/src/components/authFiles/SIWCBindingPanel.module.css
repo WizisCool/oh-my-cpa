@@ -6,7 +6,7 @@
   padding: 16px;
   margin-block: 16px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
 }
 .hint {
   margin: 0;

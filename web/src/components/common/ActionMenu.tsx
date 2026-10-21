@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Popover } from 'antd';
 import { MoreOutlined } from '../icons';
 import { useT } from '../../i18n';
+import { LabelledActionsContext } from './ToolButton';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 
 export interface ActionMenuProps {
@@ -59,7 +60,7 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
             }
           }}
         >
-          {children}
+          <LabelledActionsContext.Provider value>{children}</LabelledActionsContext.Provider>
         </div>
       )}
     >

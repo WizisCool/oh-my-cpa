@@ -438,7 +438,7 @@ export const CpaLogPanel: React.FC = () => {
                   onClick={() => setIsFullscreen(!isFullscreen)}
                 />
               </Tooltip>
-              <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
+              <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} disabled={!isTail} />
               {/* Truncating the file is irreversible, so it asks first - in the same popover every
                   other destructive action in the console uses. */}
               <ConfirmAction
@@ -448,10 +448,9 @@ export const CpaLogPanel: React.FC = () => {
                 isConfirming={truncate.isPending}
                 onConfirm={() => truncate.mutate()}
                 disabled={isDemo}
+                tooltip={isDemo ? t('demo.blocked') : t('logs.clear')}
               >
-                <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear')}>
-                  <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
-                </Tooltip>
+                <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
               </ConfirmAction>
             </div>
           </Toolbar>

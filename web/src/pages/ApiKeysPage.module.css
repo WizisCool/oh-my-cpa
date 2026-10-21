@@ -1,59 +1,16 @@
-/* ApiKeysPage.module.css — Gateway client key management.
-   Terminal-flat console: 1px borders, zero shadows, pure background shifts.
-   The list is one container: a head row, its rule, and the rows. */
+/* ApiKeysPage.module.css — the key list's overview: use tiles, then the toolbar.
+   The tiles and the toolbar are the provider list's own (StatTiles, `.logs-toolbar`), so the
+   Gateway pages that summarise their rows before listing them read as one console. */
 
-.keys-panel {
-  overflow: hidden;
-}
-
-/* The card is the list's frame: the head and the table run to its edges, as the OAuth list
-   does, rather than floating in a 20px inset with a second frame of their own. A phone keeps
-   the inset, because its rows are open blocks rather than a table. */
-.keys-panel :global(.ant-card-body) {
-  padding: 0;
-}
-
-/* The head names the list and states what it holds - how many keys, how many answered traffic
-   in the window, and how much - with the search on the right. It wraps rather than scrolls. */
-.keys-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 16px;
-  flex-wrap: wrap;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.keys-head-title {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.keys-head-name {
-  margin: 0;
-  color: var(--fg);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.keys-summary {
-  display: flex;
+.summary {
+  display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  color: var(--muted);
-  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.keys-summary-divider {
-  color: var(--meta);
-}
-
-.keys-summary-saving {
+.saving {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -61,32 +18,43 @@
   color: var(--accent);
 }
 
-.keys-search {
-  width: 260px;
-  max-width: 100%;
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* Loading and failure states take the rows' own inset, so the surface does not change shape
-   when the query resolves. */
-.keys-state {
-  min-height: 88px;
-  padding: 16px;
+/* The toolbar sits directly on the list below it; the page stack already spaces the two. */
+.overview :global(.logs-toolbar) {
+  margin-bottom: 0;
+}
+
+.search {
+  width: 260px;
+}
+
+.window-summary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.window-label {
+  color: var(--meta);
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 640px) {
-  .keys-panel :global(.ant-card-body) {
-    padding: 16px;
-  }
-
-  .keys-head {
-    padding: 0 0 14px;
-  }
-
-  .keys-state {
-    padding: 16px 0 0;
-  }
-
-  .keys-search {
+  .search {
     width: 100%;
+  }
+
+  .window-summary {
+    margin-left: 0;
   }
 }

@@ -355,6 +355,7 @@ const PaletteSetting: React.FC<{ mode: ThemeMode }> = ({ mode }) => {
       <SettingRow
         label={t(mode === 'light' ? 'omc.palette_light' : 'omc.palette_dark')}
         control={<PaletteChooser mode={mode} />}
+        isStacked
       />
       {editingCustomMode === mode && <CustomPaletteEditor mode={mode} />}
     </>

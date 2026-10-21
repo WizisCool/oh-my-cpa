@@ -1175,10 +1175,13 @@ export async function dashboardTokenHeatmapPruned({ base, page, check }) {
     states.ratio.unrecorded < states.ratio.empty && states.ratio.empty < states.ratio.measured,
     `unrecorded=${states.ratio.unrecorded} empty=${states.ratio.empty} measured=${states.ratio.measured}`,
   );
-  // And both zeros stay quiet: they must never compete with the greens that carry the data.
+  // And both zeros stay quiet: they must never compete with the greens that carry the data. The card
+  // is drawn on the page ground (`--bg`), where the two steps measure ~1.17 and ~1.35 on dark and
+  // ~1.19 and ~1.37 on light (docs/design.md §2); a ceiling a step above each catches a zero token
+  // moved toward the ink without freezing the exact shade.
   check(
     'neither zero state competes with the measured cells',
-    states.ratio.unrecorded < 1.15 && states.ratio.empty < 1.2,
+    states.ratio.unrecorded < 1.2 && states.ratio.empty < 1.4,
     `unrecorded=${states.ratio.unrecorded} empty=${states.ratio.empty}`,
   );
 }

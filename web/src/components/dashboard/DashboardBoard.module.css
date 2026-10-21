@@ -12,7 +12,7 @@
   margin-bottom: 16px;
   padding: 10px 14px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-size: var(--text-sm);
 }
@@ -33,7 +33,7 @@
   gap: 8px;
   padding: 8px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   transition: border-color var(--motion-fast) ease, opacity var(--motion-fast) ease;
 }
 
@@ -130,7 +130,7 @@
   grid-column: 1 / -1;
   padding: 40px 16px;
   border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   color: var(--muted);
   text-align: center;
 }

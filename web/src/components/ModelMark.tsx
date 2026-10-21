@@ -1,5 +1,5 @@
 import React from 'react';
-import { resolveModelManufacturer, type ModelReference } from '../types/modelSquare';
+import { modelMarkIconId, type ModelReference } from '../types/modelSquare';
 import { BoxOutlined } from './icons';
 import { LobeIcon } from './LobeIcon';
 
@@ -27,10 +27,7 @@ export interface ModelMarkProps {
  * ModelMark renders the maker's brand mark for a model identity or call point,
  * using the same resolution rules as Model Square.
  *
- * Robust and decoupled:
- * - Safely handles unknown, empty, or unparseable names without throwing.
- * - Supports fallback resolution (e.g., custom alias falling back to requested upstream model).
- * - Falls back to a clean neutral glyph when no brand icon is available.
+ * A name with no maker falls back to the upstream it routes to, then to a neutral glyph.
  */
 export const ModelMark: React.FC<ModelMarkProps> = React.memo(({
   model,
@@ -41,30 +38,11 @@ export const ModelMark: React.FC<ModelMarkProps> = React.memo(({
   className,
   style,
 }) => {
-  const primary = (model ?? callPoint ?? '').trim();
-  const fallback = (fallbackModel ?? '').trim();
-
-  const iconId = React.useMemo(() => {
-    if (primary) {
-      try {
-        const maker = resolveModelManufacturer(primary, metadata);
-        const candidate = maker.modelIconId || maker.iconId;
-        if (candidate) return candidate;
-      } catch {
-        // Safe fallback
-      }
-    }
-    if (fallback && fallback !== primary) {
-      try {
-        const fallbackMaker = resolveModelManufacturer(fallback);
-        const candidate = fallbackMaker.modelIconId || fallbackMaker.iconId;
-        if (candidate) return candidate;
-      } catch {
-        // Safe fallback
-      }
-    }
-    return undefined;
-  }, [primary, metadata, fallback]);
+  const primary = model ?? callPoint ?? '';
+  const iconId = React.useMemo(
+    () => modelMarkIconId(primary, fallbackModel, metadata),
+    [primary, fallbackModel, metadata],
+  );
 
   if (iconId) {
     return (

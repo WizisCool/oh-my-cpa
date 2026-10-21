@@ -200,7 +200,7 @@ for (const definition of BUILT_IN_PALETTES) {
   for (const [name, share] of [['field', 5], ['field-hover', 8], ['hairline', 12]] as const) {
     assert.equal(variables[`--thread-${name}`], `color-mix(in srgb, var(--fg) ${share}%, transparent)`);
   }
-  for (const [name, radius] of [['document', 4], ['control', 4], ['surface', 6], ['thread', 8]] as const) {
+  for (const [name, radius] of [['document', 8], ['control', 6], ['surface', 10], ['thread', 12]] as const) {
     assert.equal(variables[`--radius-${name}`], `${radius}px`);
   }
 }
@@ -332,7 +332,7 @@ function cssBlockVariables(selector: string, stylesheet = css): Record<string, s
 // light visitor actually gets is the two blocks merged - which is also how an alias inherited from
 // `:root` still lands on the right token.
 const snapshotVariables = cssBlockVariables(':root {', SNAPSHOT_CSS);
-for (const [name, radius] of [['document', 4], ['control', 4], ['surface', 6], ['thread', 8]] as const) {
+for (const [name, radius] of [['document', 8], ['control', 6], ['surface', 10], ['thread', 12]] as const) {
   assert.equal(snapshotVariables[`--radius-${name}`], `${radius}px`, `HTML exports keep the ${name} geometry`);
 }
 
@@ -406,60 +406,49 @@ for (const mode of ['dark', 'light'] as const) {
   }
 }
 
-// ── the outlined control's ink, hovered and pressed ──────────────────────────
+// ── the secondary button's fill and ink ─────────────────────────────────────
 //
-// Ant Design reads a default or dashed button's hover and pressed ink from `colorPrimaryHover` and
-// `colorPrimaryActive` unless the Button component names its own, and the projection points both of
-// those at the pressed *fill* so that a filled control deepens. A fill is solved to sit under
-// `accentOn`, not to be read on the page: as a label it measured 2.70:1 in OMC Dark and 2.69:1 in
-// Midnight for as long as the button stayed under the pointer. So the ink is taken the way Ant Design
-// resolves it - the component token where the projection pins one, the alias it falls back to where
-// it does not - which is what makes a projection that drops a pin fail here on the ratio it would
-// paint rather than on a missing key.
-const OUTLINED_BUTTON_STATES = [
-  { state: 'hovered', label: 'defaultHoverColor', edge: 'defaultHoverBorderColor', fallback: 'colorPrimaryHover' },
-  { state: 'pressed', label: 'defaultActiveColor', edge: 'defaultActiveBorderColor', fallback: 'colorPrimaryActive' },
+// A default button is a soft fill rather than an outline: the foreground washed over whatever it
+// stands on, deepening under the pointer and while pressed, with a transparent edge. Its label stays
+// the palette's text colour in every state - the accent is a link and a selection, not a hover - so
+// what is asserted is that the projection pins exactly that, and that the label still clears the text
+// floor on the deepest fill, composited over the page the way the browser's `color-mix` paints it.
+const SECONDARY_BUTTON_STATES = [
+  { state: 'resting', fill: 'defaultBg', label: 'defaultColor', edge: 'defaultBorderColor' },
+  { state: 'hovered', fill: 'defaultHoverBg', label: 'defaultHoverColor', edge: 'defaultHoverBorderColor' },
+  { state: 'pressed', fill: 'defaultActiveBg', label: 'defaultActiveColor', edge: 'defaultActiveBorderColor' },
 ] as const;
 
-function outlinedButtonInks(config: ReturnType<typeof createThemeConfig>) {
-  const aliases = antdTheme.getDesignToken(config);
-  const button = config.components?.Button;
-  return OUTLINED_BUTTON_STATES.map(({ state, label, edge, fallback }) => ({
-    state,
-    label: button?.[label] ?? aliases[fallback],
-    edge: button?.[edge] ?? aliases[fallback],
-  }));
+/** `color-mix(in srgb, var(--fg) N%, transparent)` over `ground`, as the browser composites it. */
+function compositeForegroundWash(fill: string, fg: string, ground: string): string {
+  const match = /^color-mix\(in srgb, var\(--fg\) (\d+(?:\.\d+)?)%, transparent\)$/.exec(fill);
+  assert.ok(match, `a secondary button's fill is a foreground wash (${fill})`);
+  const share = Number(match[1]) / 100;
+  const channels = (hex: string) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  const [top, bottom] = [channels(fg), channels(ground)];
+  return `#${top.map((value, index) => Math.round(value * share + bottom[index] * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
 }
 
 const textFloor = CONTRAST_FLOORS.text;
 assert.ok(textFloor !== undefined, 'text is a role with a contrast floor');
-for (const definition of BUILT_IN_PALETTES) {
-  const resolved = resolvedBuiltInPalette(definition.id);
-  for (const { state, label, edge } of outlinedButtonInks(createThemeConfig(resolved))) {
-    // An outlined button's own fill is the container colour, which the projection sets to the page.
-    const ratio = contrastRatio(label, resolved.palette.bg);
+const projectedPalettes = [
+  ...BUILT_IN_PALETTES.map((definition) => resolvedBuiltInPalette(definition.id)),
+  ...(['dark', 'light'] as const).flatMap((mode) => {
+    const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light');
+    return ACCENT_SWEEP.map((accent) => resolvePalette(mode, 'custom', { base: base.id, core: { ...base.core, accent } }));
+  }),
+];
+for (const resolved of projectedPalettes) {
+  const button = createThemeConfig(resolved).components?.Button;
+  for (const { state, fill, label, edge } of SECONDARY_BUTTON_STATES) {
+    assert.equal(button?.[label], resolved.palette.fg, `${resolved.id}: a ${state} secondary button's label is the text colour`);
+    assert.equal(button?.[edge], 'transparent', `${resolved.id}: a ${state} secondary button draws no edge`);
+    const painted = compositeForegroundWash(String(button?.[fill]), resolved.palette.fg, resolved.palette.bg);
+    const ratio = contrastRatio(resolved.palette.fg, painted);
     assert.ok(
       ratio >= textFloor,
-      `${definition.id}: a ${state} default button's label (${label}) reads ${ratio.toFixed(2)}:1 on the page (${resolved.palette.bg}), want >= ${textFloor}:1`,
+      `${resolved.id}: a ${state} secondary button's label reads ${ratio.toFixed(2)}:1 on its fill (${painted}), want >= ${textFloor}:1`,
     );
-    // One ink per state: a label that moved to a legible step beside an edge left on the fill step
-    // is the same defect, half repaired.
-    assert.equal(edge, label, `${definition.id}: a ${state} default button's edge takes its label's ink`);
-  }
-}
-
-// An operator's palette has no floor to assert - the console renders the accent it is given - so what
-// is pinned for it is where the ink comes from: its own accent, the token the editor already measures
-// against the page. The hovered label then reads exactly as that row reports, rather than through a
-// second pair the editor never shows.
-for (const mode of ['dark', 'light'] as const) {
-  const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light');
-  for (const accent of ACCENT_SWEEP) {
-    const authored = resolvePalette(mode, 'custom', { base: base.id, core: { ...base.core, accent } });
-    for (const { state, label, edge } of outlinedButtonInks(createThemeConfig(authored))) {
-      assert.equal(label, authored.palette.accent, `${mode} accent ${accent}: a ${state} default button's label is the authored accent`);
-      assert.equal(edge, authored.palette.accent, `${mode} accent ${accent}: a ${state} default button's edge is the authored accent`);
-    }
   }
 }
 
@@ -493,7 +482,7 @@ assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-m
 const toMilliseconds = (value: string | undefined, label: string): number => {
   const match = /^([\d.]+)(ms|s)$/.exec(value ?? '');
   assert.ok(match, `${label} is a duration (${String(value)})`);
-  return match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]);
+  return match[2] === 's' ? Math.round(Number(match[1]) * 1000) : Number(match[1]);
 };
 const stylesheetToken = (name: string): number => {
   const match = new RegExp(`--motion-${name}:\\s*([\\d.]+(?:ms|s))`).exec(css);
@@ -507,21 +496,22 @@ assert.equal(stylesheetToken('fast'), toMilliseconds(antdMotion?.motionDurationF
   '--motion-fast is the fast token Ant Design animates with');
 assert.equal(stylesheetToken('base'), toMilliseconds(antdMotion?.motionDurationMid, 'motionDurationMid'),
   '--motion-base is the mid token Ant Design animates with');
-assert.equal(stylesheetToken('base'), toMilliseconds(antdMotion?.motionDurationSlow, 'motionDurationSlow'),
-  'the slow token is pinned to the same budget, so a drawer cannot outlast the table');
+assert.equal(stylesheetToken('slow'), toMilliseconds(antdMotion?.motionDurationSlow, 'motionDurationSlow'),
+  '--motion-slow is the slow token, so a drawer and a dialog spend the same beat in both spellings');
 // `float` has no Ant Design counterpart - the console owns it, because antd exposes no token for the
-// floating panels' entrance - so it is pinned to §7's documented 60ms instead.
-const floatMatch = /--motion-float:\s*([\d.]+(?:ms|s))/.exec(css);
-assert.ok(floatMatch, 'web/src/index.css defines --motion-float');
-assert.equal(toMilliseconds(floatMatch[1], '--motion-float'), 60, 'the float token is §7\u2019s 60ms');
-assert.ok(stylesheetToken('fast') < stylesheetToken('base'), 'fast is the shorter of the two');
-assert.ok(stylesheetToken('base') <= 100, `§7 caps the budget at 100ms (base=${stylesheetToken('base')}ms)`);
+// floating panels' entrance - so it is pinned to §7's documented 160ms instead.
+assert.equal(stylesheetToken('float'), 160, 'the float token is §7\u2019s 160ms');
+assert.deepEqual(
+  [stylesheetToken('fast'), stylesheetToken('float'), stylesheetToken('base'), stylesheetToken('slow')],
+  [120, 160, 180, 240],
+  '§7\u2019s ladder: fast < float < base < slow, and nothing past the quarter second',
+);
 
 // The route transition is the one rule whose *documented* duration is not the fast token: §7's table
-// states that a route change fades in over 100ms. Nothing observable changed while it read `fast`,
-// because the two tokens held the same number - which is exactly why it needs pinning.
+// states that a route change fades in over `base`. Nothing observable changed while it read `fast`
+// back when the two tokens held the same number - which is exactly why it needs pinning.
 assert.match(css, /\.route-transition\s*\{[^}]*animation:[^;]*var\(--motion-base\)/,
-  'the route transition spends the token its documented 100ms names');
+  'the route transition spends the token its documented duration names');
 
 // The stylesheet's own accent fills draw their label from the projected variable, so a palette whose fill
 // is light does not keep a hardcoded white label the palette cannot support.

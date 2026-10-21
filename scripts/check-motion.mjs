@@ -130,6 +130,20 @@ const EXCEPTIONS = [
   },
   {
     kind: 'reduced',
+    file: 'index.css',
+    selector: '.ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active',
+    property: 'animation',
+    why: 'rc-dialog moves focus into a dialog when its entrance ends, so an entrance with no animation never ends and focus stays behind the dialog. Reduced motion swaps the settle for an opacity-only fade rather than removing it.',
+  },
+  {
+    kind: 'reduced',
+    file: 'index.css',
+    selector: '.ant-modal.ant-zoom-leave.ant-zoom-leave-active',
+    property: 'animation',
+    why: 'rc-dialog unmounts the dialog wrapper when its exit ends; with no animation the transparent wrapper stays over the page and swallows every click. Reduced motion keeps an opacity-only fade rather than removing it.',
+  },
+  {
+    kind: 'reduced',
     file: 'components/dashboard/routing/RoutingPanel.module.css',
     selector: '.edge-flow-on',
     property: 'animation',
@@ -141,6 +155,20 @@ const EXCEPTIONS = [
     selector: '.settings-tls-body',
     property: 'grid-template-rows',
     why: 'A disclosure. Expanding and collapsing an accordion reflows by definition, and the grid 0fr/1fr technique is the least costly form of it; the alternative is an accordion that snaps open, which reads as broken.',
+  },
+  {
+    kind: 'layout',
+    file: 'components/common/Fold.module.css',
+    selector: '.fold',
+    property: 'grid-template-rows',
+    why: 'The shared disclosure body: a provider\u2019s keys and models, the editor\u2019s sections and the configuration panel\u2019s cards unfold from a height known only once drawn. The grid 0fr/1fr technique is the least costly form of that reflow, as `.settings-tls-body` does, and reduced motion removes it.',
+  },
+  {
+    kind: 'layout',
+    file: 'components/common/Fold.module.css',
+    selector: '.fold[data-open]',
+    property: 'grid-template-rows',
+    why: 'The open state of the same disclosure, which states its own transition so the fade can run on a different clock in each direction.',
   },
   {
     kind: 'layout',

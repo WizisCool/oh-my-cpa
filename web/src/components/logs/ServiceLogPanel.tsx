@@ -123,7 +123,7 @@ export const ServiceLogPanel: React.FC = () => {
               aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
             />
           </Tooltip>
-          <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} />
+          <RefreshButton label={t('logs.reload')} onRefresh={tail.reload} />
         </div>
       </Toolbar>
 

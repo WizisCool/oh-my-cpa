@@ -1,3 +1,9 @@
+.provider-list { min-width: 0; }
+/* Nine columns of facts share the content column, so cells sit 12px from their neighbours rather
+   than the console's 16px: at 16px the row was wider than the frame and cut the actions off. */
+.provider-list :global(.data-table .ant-table-wrapper .ant-table-thead > tr > th),
+.provider-list :global(.data-table .ant-table-wrapper .ant-table-tbody > tr > td) { padding-inline: 12px; }
+
 .provider-identity {
   display: flex;
   align-items: center;
@@ -14,15 +20,15 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-standard);
+  transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
 .provider-mark:hover {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
 }
 
 .provider-text {
@@ -36,7 +42,7 @@
   min-width: 0;
   color: var(--fg);
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -56,8 +62,7 @@
 .provider-meta-text {
   min-width: 0;
   overflow: hidden;
-  color: var(--meta);
-  font-family: var(--font-mono);
+  color: var(--muted);
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -70,36 +75,33 @@
   font-weight: 500;
 }
 
-/* The family's brand colour arrives as `--family-color`; the tint and the edge are mixed over the
-   page so the tag sits on the active palette's surface in either mode. */
+/* The family's brand colour arrives as `--family-color`; the tint is mixed over the page so the
+   tag sits on the active palette's surface in either mode, and carries no edge of its own. */
 .protocol-tag-branded {
-  border-color: color-mix(in srgb, var(--family-color) 40%, var(--bg));
+  border-color: transparent;
   background: color-mix(in srgb, var(--family-color) 10%, var(--bg));
   color: var(--family-color);
 }
 
-/* A long endpoint breaks onto a second line rather than holding one wide line: the row is two
-   lines tall anyway (name and meta), and the width it frees keeps the count pills two a line. */
+/* One line, cut at its end: an address broken mid-host reads as two addresses, and the tooltip
+   carries the whole of it. */
 .endpoint {
-  display: -webkit-box;
-  max-width: 190px;
+  max-width: 176px;
   overflow: hidden;
-  color: var(--fg);
+  color: var(--fg-2);
   font-size: var(--text-sm);
   line-height: 18px;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prefix-chip {
   display: inline-block;
   flex-shrink: 0;
-  padding: 0 5px;
-  border: 1px solid var(--border);
+  padding: 0 6px;
   border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--fg-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 16px;
@@ -110,29 +112,25 @@
   font-size: var(--text-md);
 }
 
+/* The three counts are a line of facts, not three objects: plain text spaced apart, wrapping
+   between counts and never inside one. A divider glyph would begin the wrapped line. */
 .count-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px 12px;
 }
 
 .count-pill {
   display: inline-block;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
   color: var(--fg-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 20px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-/* A count that explains a warning (a switched-on row with no key) carries the warn tone on its
-   frame and number, never on the fill, so the pill still reads as one of the row's counts. */
+/* A count that explains a warning (a switched-on row with no key) is the one in the warn tone. */
 .count-pill-warn {
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
   color: var(--warn);
 }
 

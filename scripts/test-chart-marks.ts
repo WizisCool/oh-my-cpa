@@ -179,7 +179,7 @@ for (const preset of RESOLVED_PALETTES) {
 
 // ── CSS and TypeScript token synchronization ──────────────────────────────
 //
-// The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, seventeen derived) and
+// The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, eighteen derived) and
 // projected by `themeConfig.ts` for Ant Design, React components and
 // chart runtime options, and in `web/src/index.css` for stylesheet consumers. Assert that every series
 // token matches character for character so the two copies cannot drift.

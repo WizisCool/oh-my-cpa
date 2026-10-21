@@ -1,11 +1,18 @@
-/* ── time range picker: one button, one surface ─────────────────────────────── */
-.time-range-trigger {
+/* ── time range picker: one field, one surface ─────────────────────────────── */
+/* Drawn as a filled select: the same well, the same 11px inset and the same chevron, so in a
+   toolbar of selects it reads as one more of them. It does not give under a press the way a
+   button does, because a field never does. */
+.time-range-trigger.ant-btn {
   max-width: 260px;
   justify-content: flex-start;
   gap: 8px;
-  color: var(--fg-2);
+  padding-inline: 11px;
+  color: var(--fg);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+.time-range-trigger.ant-btn:not(:disabled):active { transform: none; }
+.time-range-trigger .ant-btn-icon { color: var(--muted); }
 .time-range-trigger-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -14,8 +21,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.time-range-trigger-caret { flex: none; color: var(--meta); font-size: var(--text-2xs); }
-.time-range-trigger.is-frozen { border-color: var(--accent); color: var(--accent); }
+.time-range-trigger-caret { flex: none; color: var(--meta); font-size: var(--text-sm); }
+.time-range-trigger.ant-btn.is-frozen,
+.time-range-trigger.ant-btn.is-frozen:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.time-range-trigger.is-frozen .ant-btn-icon { color: var(--accent); }
 
 /* The panel draws its own padding so the preset rail can run the popover's full height. */
 .time-range-popover .ant-popover-container { padding: 0; }
@@ -47,34 +59,31 @@
   border-top: 1px solid var(--border-soft);
 }
 .time-range-custom-caret { color: var(--meta); font-size: var(--text-2xs); }
-.time-range-custom-toggle[aria-expanded="true"] { background: var(--hover-inset); color: var(--fg); }
-.time-range-panel[data-mode="custom"] > .time-range-rail { border-right: 1px solid var(--border); }
+.time-range-custom-toggle[aria-expanded="true"] { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
+.time-range-panel[data-mode="custom"] > .time-range-rail { border-right: 1px solid var(--border-soft); }
 .time-range-option {
   display: block;
   width: 100%;
   padding: 6px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-2);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.time-range-option:hover { background: var(--hover-inset); color: var(--fg); }
+.time-range-option:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
 .time-range-option:focus-visible,
 .time-range-day:focus-visible,
 .time-range-month-step:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-/* The selected row is marked the way the side rail marks its page: a straight 2px rule and
-   the weight, not a filled block. The rule's side has no radius - an inset shadow follows
-   the corner, and a rounded one bends the rule into a bracket. */
+/* The selected row is marked the way the side rail marks its page: a soft wash and the weight. */
 .time-range-option.is-active {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
   color: var(--fg);
-  font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: 500;
 }
-.time-range-option.is-active:focus-visible { box-shadow: inset 2px 0 0 var(--accent), var(--focus-ring); }
 
 /* ── custom range ── */
 .time-range-custom { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 12px; }
@@ -95,7 +104,7 @@
   color: var(--muted);
   cursor: pointer;
 }
-.time-range-month-step:hover:not(:disabled) { background: var(--hover-inset); color: var(--fg); }
+.time-range-month-step:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg); }
 .time-range-month-step:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.5; }
 .time-range-month-step.is-spacer { visibility: hidden; }
 
@@ -116,10 +125,12 @@
   font: inherit;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.time-range-day:hover:not(:disabled) { background: var(--hover-inset); color: var(--fg); }
+.time-range-day:hover:not(:disabled) { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg); }
 .time-range-day:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.45; }
-.time-range-day.is-today { color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+/* Today is named by its ink alone: a ring would be one more outline in a grid of soft cells. */
+.time-range-day.is-today { color: var(--accent); font-weight: 600; }
 .time-range-day.is-in-range,
 .time-range-day.is-in-range:hover:not(:disabled) { border-radius: 0; background: var(--time-range-band); color: var(--fg); }
 .time-range-day.is-range-start { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
@@ -144,12 +155,13 @@
   gap: 2px 8px;
   min-width: 0;
   padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--thread-field);
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
-/* The end the next press on the calendar will set. */
-.time-range-field.is-next { border-color: var(--accent); }
+/* The end the next press on the calendar will set: the well a focused field becomes. */
+.time-range-field.is-next { border-color: var(--accent); background: var(--elevated); }
 .time-range-field-label { flex: 1 0 100%; color: var(--meta); font-size: var(--text-xs); }
 .time-range-field-value { color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .time-range-field-value.is-empty { color: var(--meta); }

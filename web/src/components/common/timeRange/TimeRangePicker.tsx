@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Checkbox, Drawer, Popover } from 'antd';
-import { CaretDownOutlined, ClockCircleOutlined, LeftOutlined, RightOutlined } from '../../icons';
+import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
 import { languageLocale, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../../hooks/useOverlayHistory';
@@ -241,8 +241,12 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
     </div>
   );
 
+  // A field, not a button: it holds a value and opens a choice of values, exactly as the selects
+  // beside it do, so it takes their fill, hover and chevron rather than the button wash.
   const trigger = (
     <Button
+      variant="filled"
+      color="default"
       className={[
         'time-range-trigger',
         // A closed range is a fixed fact, not a rolling one. Marking it keeps the reader from
@@ -257,7 +261,7 @@ export const TimeRangePicker: React.FC<TimeRangePickerProps> = ({
       onClick={isSheet ? open : undefined}
     >
       <span className="time-range-trigger-text">{label}</span>
-      <CaretDownOutlined className="time-range-trigger-caret" />
+      <DownOutlined className="time-range-trigger-caret" />
     </Button>
   );
 

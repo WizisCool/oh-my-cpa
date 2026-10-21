@@ -16,6 +16,7 @@ import { useToast } from '../feedback';
 import { describeConfigSaveError } from './configSaveErrors';
 import styles from './ConfigBackupsButton.module.css';
 import { Tag } from '../common/Tag';
+import { ToolButton } from '../common/ToolButton';
 import { ConfirmAction } from '../common/ConfirmAction';
 
 const { Text } = Typography;
@@ -142,9 +143,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
 
   return (
     <>
-      <Button size="small" icon={<HistoryOutlined />} onClick={() => setIsOpen(true)}>
-        {t('cfg.backups')}
-      </Button>
+      <ToolButton icon={<HistoryOutlined />} label={t('cfg.backups')} onClick={() => setIsOpen(true)} />
       <Modal
         open={isOpen}
         title={t('cfg.backups_title')}
@@ -234,17 +233,16 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
                       confirmLabel={t('cfg.backups_restore')}
                       disabled={Boolean(blockedReason)}
                       onConfirm={() => restoreMutation.mutateAsync(backup).catch(() => undefined)}
+                      tooltip={blockedReason}
                     >
-                      <Tooltip title={blockedReason}>
-                        <Button
-                          size="small"
-                          icon={<RollbackOutlined />}
-                          disabled={Boolean(blockedReason) || (restoreMutation.isPending && restoreMutation.variables?.id !== backup.id)}
-                          loading={restoreMutation.isPending && restoreMutation.variables?.id === backup.id}
-                        >
-                          {t('cfg.backups_restore')}
-                        </Button>
-                      </Tooltip>
+                      <Button
+                        size="small"
+                        icon={<RollbackOutlined />}
+                        disabled={Boolean(blockedReason) || (restoreMutation.isPending && restoreMutation.variables?.id !== backup.id)}
+                        loading={restoreMutation.isPending && restoreMutation.variables?.id === backup.id}
+                      >
+                        {t('cfg.backups_restore')}
+                      </Button>
                     </ConfirmAction>
                     <Button
                       size="small"

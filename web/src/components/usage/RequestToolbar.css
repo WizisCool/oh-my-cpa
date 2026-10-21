@@ -20,21 +20,18 @@
 }
 /* The multi-select facets hold several tags, so they get more room than a
    single-value dropdown and cannot be squeezed to a tag-less stub. */
-/* The basis is what decides wrapping, so it is sized for the narrowest desktop content column
-   (1440px viewport, 1140px of row): search, window, verdict, two facets and "More filters" fit on
-   one line there, and the facets take whatever the row has left above that. */
-.request-filters > .req-facet-select {
-  flex: 2 1 160px;
-  min-width: 150px;
-  max-width: 320px;
+/* The window and the two facets are one family of fields and share one size, so the row reads as a
+   rhythm of equal wells rather than three widths chosen apart. The basis is what decides wrapping:
+   at the narrowest desktop content column (1440px viewport) search, window, verdict, two facets and
+   "More filters" fit on one line, and the three fields take whatever the row has left above that. */
+.request-filters > .req-facet-select,
+.request-filters > .req-time-button {
+  flex: 1 1 180px;
+  min-width: 160px;
+  max-width: 280px;
 }
 .request-filters > .req-result-segmented {
   flex-shrink: 0;
-}
-.request-filters > .req-time-button {
-  flex: 1 1 190px;
-  min-width: 170px;
-  max-width: 260px;
 }
 .req-more-filters {
   flex-shrink: 0;
@@ -50,7 +47,7 @@
   height: 16px;
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--surface);
   font-size: var(--text-2xs);

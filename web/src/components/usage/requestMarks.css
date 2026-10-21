@@ -21,14 +21,14 @@
   white-space: nowrap;
 }
 /* The compact status marker used by the verdict filter controls. It shares the
-   Result column's square-bullet vocabulary and its success/danger tokens, so an
+   Result column's dot vocabulary and its success/danger tokens, so an
    outcome is legible the same way in the filter and in the rows it filters.
    Only the verdicts carry one; the all-requests segment is labelled in words. */
 .req-result-marker {
   display: inline-block;
   width: 6px;
   height: 6px;
-  border-radius: var(--radius-xs);
+  border-radius: 999px;
   background: currentColor;
   flex-shrink: 0;
 }
@@ -65,23 +65,20 @@
 /* The fast lane is the accent, not amber: lightning is conventionally yellow, but
    amber is this console's warning hue and a request served quickly is not one. */
 .req-fast-icon {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
 }
 .req-fast-icon svg {
   fill: currentColor;
 }
 .req-non-stream-icon {
-  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--muted);
-  border: 1px solid color-mix(in srgb, var(--muted) 26%, var(--border));
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
 .req-non-stream-icon:hover {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);
-  border-color: color-mix(in srgb, var(--muted) 45%, var(--border));
 }
 .request-served-model {
   display: inline-flex;

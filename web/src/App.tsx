@@ -105,12 +105,27 @@ const FontSync: React.FC = () => {
   return null;
 };
 
+const TAG_CONFIG = { variant: 'filled' } as const;
+const WAVE_CONFIG = { disabled: true } as const;
+const BUTTON_CONFIG = { autoInsertSpace: false } as const;
+
 const ThemedShell: React.FC = () => {
   const { lang } = useI18n();
   const { theme } = useTheme();
   const antdTheme = React.useMemo(() => createThemeConfig(theme), [theme]);
   return (
-    <ConfigProvider locale={ANTD_LOCALES[lang]} theme={antdTheme}>
+    <ConfigProvider
+      locale={ANTD_LOCALES[lang]}
+      theme={antdTheme}
+      // Fields are wells, not boxes: a filled control reads as part of the toolbar or form it sits
+      // in, and its edge appears only under focus. A tag is a soft fill with no edge for the same
+      // reason. The click wave is a material ripple that no native control draws, and a space
+      // pushed between two Chinese characters ("取 消") is a typesetting habit no platform keeps.
+      variant="filled"
+      tag={TAG_CONFIG}
+      wave={WAVE_CONFIG}
+      button={BUTTON_CONFIG}
+    >
       <AntdApp notification={TOAST_CONFIG}>
         <ThemeServerSync />
         <ScrollSmoothingSync />

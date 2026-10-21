@@ -54,6 +54,7 @@ import { Tag } from '../components/common/Tag';
 import { ConfirmAction } from '../components/common/ConfirmAction';
 import { Panel } from '../components/common/Panel';
 import { CopyButton } from '../components/common/CopyButton';
+import { ToolButton } from '../components/common/ToolButton';
 import '../components/config/config.css';
 
 const { Text } = Typography;
@@ -257,9 +258,7 @@ export const ConfigPage: React.FC = () => {
             />
             <ActionMenu label={t('cfg.tools')}>
               <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
-              <Button size="small" icon={<ReloadOutlined />} disabled={isDirty || configQuery.isFetching} onClick={() => void configQuery.refetch()}>
-                {t('cfg.reload')}
-              </Button>
+              <ToolButton icon={<ReloadOutlined />} label={t('cfg.reload')} disabled={isDirty || configQuery.isFetching} onClick={() => void configQuery.refetch()} />
               <span className="action-menu-label">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: isDirty ? t('cfg.source_dirty') : t('cfg.source_clean') })}</span>
             </ActionMenu>
           </div>
@@ -285,7 +284,6 @@ export const ConfigPage: React.FC = () => {
               <Tag tone="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
             )}
             <Segmented
-              size="small"
               value={viewMode}
               onChange={(val) => void handleViewModeChange(val as 'visual' | 'source')}
               options={[
@@ -298,7 +296,6 @@ export const ConfigPage: React.FC = () => {
           <div className="config-toolbar-actions">
             {viewMode === 'visual' && (
               <SearchInput
-                size="small"
                 className="config-search-input"
                 label={t('cfg.search_placeholder')}
                 value={searchQuery}
@@ -308,20 +305,17 @@ export const ConfigPage: React.FC = () => {
 
             <ConfigBackupsButton isDirty={isDirty} onRestored={reloadBaseline} />
 
-            <Button
-              size="small"
+            <ToolButton
               icon={<ReloadOutlined />}
+              label={t('cfg.reload')}
               onClick={() => void configQuery.refetch()}
               loading={configQuery.isFetching}
               disabled={isDirty}
-            >
-              {t('cfg.reload')}
-            </Button>
+            />
 
             {/* Discard needs no confirmation: it is the non-destructive direction. */}
             {isDirty && (
               <Button
-                size="small"
                 icon={<UndoOutlined />}
                 disabled={saveMutation.isPending}
                 onClick={handleDiscardChanges}
@@ -338,7 +332,6 @@ export const ConfigPage: React.FC = () => {
                 global modal the keyboard path uses. */}
             {hasConfigErrors ? (
               <Button
-                size="small"
                 type="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
@@ -356,7 +349,6 @@ export const ConfigPage: React.FC = () => {
                 disabled={!isDirty || saveMutation.isPending || isDemo}
               >
                 <Button
-                  size="small"
                   type="primary"
                   icon={<SaveOutlined />}
                   loading={saveMutation.isPending}
@@ -439,12 +431,13 @@ export const ConfigPage: React.FC = () => {
 
             {searchQuery ? (
               /* Search Results: Grouped by semantic Setting Group Panels */
-              <div className="settings-stack">
+              <div className="settings-stack route-transition" key="search">
                 {searchMatchedGroups.map((sg) => renderGroupPanel(sectionContext, sg.group, sg.matchedFieldIds, 'search'))}
               </div>
             ) : (
-              /* Standard Section Group Panels */
-              <div className="settings-stack">
+              /* Standard Section Group Panels. Keyed by section, so a switch draws the new
+                 section's cards in with the route's own entrance instead of swapping them. */
+              <div className="settings-stack route-transition" key={activeSection}>
                 {getGroupsForSection(activeSection).map((grp) => renderGroupPanel(sectionContext, grp))}
               </div>
             )}

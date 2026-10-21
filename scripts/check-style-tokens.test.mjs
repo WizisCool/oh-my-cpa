@@ -9,7 +9,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { findViolations, runCheck } from './check-style-tokens.mjs';
 
-const TOKENS = ':root { --text-sm: 12px; --text-md: 13px; --radius-xs: 2px; --radius-sm: 4px; }\n';
+const TOKENS = ':root { --text-sm: 12px; --text-md: 13px; --radius-xs: 2px; --radius-check: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; }\n';
 const silent = { log() {}, error() {} };
 
 function messages(t, files) {
@@ -41,8 +41,10 @@ test('a custom property that merely ends in font-size is not a font size', (t) =
   assert.equal(messages(t, { 'a.css': `${TOKENS}.a { --ant-notification-icon-font-size: 12px; }\n` }), '');
 });
 
-test('a small corner radius must be its token, in shorthand and longhand', (t) => {
-  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 4px; }\n` }), /var\(--radius-sm\)/);
+test('a corner radius on the scale must be its token, in shorthand and longhand', (t) => {
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 6px; }\n` }), /var\(--radius-sm\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 8px; }\n` }), /var\(--radius-md\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 12px; }\n` }), /var\(--radius-lg\)/);
   assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 0 3px 3px 0; }\n` }), /var\(--radius-xs\)/);
   assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-top-left-radius: 2px; }\n` }), /var\(--radius-xs\)/);
   assert.equal(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 0 var(--radius-sm) 50% 999px; }\n` }), '');
@@ -61,7 +63,13 @@ test('a commented-out declaration is not a violation', (t) => {
 
 test('a value on the line after its property is still checked, and reported where it starts', (t) => {
   assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  font-size:\n    12px;\n}\n` }), /var\(--text-sm\)/);
-  assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  border-radius:\n    0\n    4px;\n}\n` }), /var\(--radius-sm\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  border-radius:\n    0\n    6px;\n}\n` }), /var\(--radius-sm\)/);
+});
+
+test('a corner between the small steps is refused rather than mapped', (t) => {
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 4px; }\n` }), /var\(--radius-check\)/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 5px; }\n` }), /between `--radius-check` and `--radius-sm`/);
+  assert.match(messages(t, { 'a.css': `${TOKENS}.a { border-radius: 0 5px 5px 0; }\n` }), /between/);
   assert.match(messages(t, { 'a.css': `${TOKENS}.a {\n  font-size: var(\n    --text-md,\n    13px\n  );\n}\n` }), /carries a fallback/);
   assert.deepEqual(
     findViolations('.a {\n  color: red;\n  font-size:\n    12px;\n}\n', new Set()).map((violation) => violation.line),

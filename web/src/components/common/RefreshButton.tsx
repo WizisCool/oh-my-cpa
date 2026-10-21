@@ -1,7 +1,8 @@
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import type { ButtonProps } from 'antd';
 import { ReloadOutlined } from '../icons';
 import { useT } from '../../i18n';
+import { ToolButton } from './ToolButton';
 
 export interface RefreshButtonProps {
   onRefresh: () => void;
@@ -9,8 +10,11 @@ export interface RefreshButtonProps {
   isRefreshing?: boolean;
   /** Overrides the plain "Refresh" name, for a control that re-reads something narrower. */
   label?: string;
-  /** Draws the glyph alone, named by its tooltip, for a toolbar that is already crowded. */
-  isIconOnly?: boolean;
+  /**
+   * Keeps the label beside the glyph. For the one place a refresh is the page's only way
+   * forward - a failed read's retry - where it is a primary action rather than a tool.
+   */
+  isLabelled?: boolean;
   disabled?: boolean;
   size?: ButtonProps['size'];
   className?: string;
@@ -29,7 +33,7 @@ export function RefreshButton({
   onRefresh,
   isRefreshing = false,
   label,
-  isIconOnly = false,
+  isLabelled = false,
   disabled,
   size,
   className,
@@ -37,24 +41,22 @@ export function RefreshButton({
   const t = useT();
   const name = label ?? t('common.refresh');
   const icon = <ReloadOutlined spin={isRefreshing} />;
-  if (isIconOnly) {
+  if (isLabelled) {
     return (
-      <Tooltip title={name}>
-        <Button
-          size={size}
-          className={className}
-          icon={icon}
-          aria-label={name}
-          aria-busy={isRefreshing}
-          disabled={disabled}
-          onClick={onRefresh}
-        />
-      </Tooltip>
+      <Button size={size} className={className} icon={icon} aria-busy={isRefreshing} disabled={disabled} onClick={onRefresh}>
+        {name}
+      </Button>
     );
   }
   return (
-    <Button size={size} className={className} icon={icon} aria-busy={isRefreshing} disabled={disabled} onClick={onRefresh}>
-      {name}
-    </Button>
+    <ToolButton
+      size={size}
+      className={className}
+      icon={icon}
+      label={name}
+      aria-busy={isRefreshing}
+      disabled={disabled}
+      onClick={onRefresh}
+    />
   );
 }

@@ -24,7 +24,7 @@
 
 .recovery-panel {
   border-color: var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   box-shadow: none;
 }
 
@@ -68,7 +68,7 @@
   margin: 0;
   padding: 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--fg-2);
   font-family: var(--font-mono);

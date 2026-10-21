@@ -74,15 +74,10 @@
   cursor: pointer;
 }
 
-/* The row whose entry is open in the Drawer, marked the way the console marks a selected
-   row: an accent rule, not a filled block. Every row reserves the rule's width, so marking
-   one moves nothing. */
-.audit-row > td:first-child {
-  border-left: 2px solid transparent;
-}
-
-.audit-row-open > td:first-child {
-  border-left-color: var(--accent);
+/* The row whose entry is open in the Drawer, marked the way the request list marks its open
+   record: a wash of the ink across the row, which moves nothing. */
+.audit-row-open > td {
+  background: color-mix(in srgb, var(--fg) 6%, transparent) !important;
 }
 
 .audit-time {
@@ -107,9 +102,8 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
   color: var(--muted);
   font-size: var(--text-md);
 }
@@ -128,9 +122,8 @@
   max-width: 100%;
   padding: 0 6px;
   overflow: hidden;
-  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
   color: var(--fg-2);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
