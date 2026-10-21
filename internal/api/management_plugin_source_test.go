@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
@@ -34,6 +36,12 @@ type managedSourceCPA struct {
 	reads   int
 	install string
 	yaml    string
+	// abortConfigRead closes the connection instead of answering the configuration
+	// read, which is how a transport failure - not an HTTP error - reaches the handler.
+	abortConfigRead bool
+	// rejectStoreSourcesWrite makes CPA refuse a write that names the store sources,
+	// quoting content in the refusal so a test can prove the quote is not echoed.
+	rejectStoreSourcesWrite bool
 }
 
 func (f *managedSourceCPA) sourceList() []string {
@@ -99,10 +107,26 @@ func (f *managedSourceCPA) serve(writer http.ResponseWriter, request *http.Reque
 
 	switch {
 	case request.Method == http.MethodGet && path == "/config.yaml":
+		if f.abortConfigRead {
+			if hijacker, ok := writer.(http.Hijacker); ok {
+				if connection, _, err := hijacker.Hijack(); err == nil {
+					_ = connection.Close()
+					return
+				}
+			}
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		writer.Header().Set("Content-Type", "application/yaml")
 		_, _ = writer.Write([]byte(f.render()))
 	case request.Method == http.MethodPatch && path == "/config":
 		body, _ := io.ReadAll(request.Body)
+		if f.rejectStoreSourcesWrite && strings.Contains(string(body), "store-sources") {
+			f.writes = append(f.writes, request.Method+" "+path+" "+string(body))
+			writer.WriteHeader(http.StatusBadRequest)
+			_, _ = writer.Write([]byte(`{"error":"invalid_config","message":"plugins.store-sources: SUPER-SECRET-VALUE is not accepted"}`))
+			return
+		}
 		f.writes = append(f.writes, request.Method+" "+path+" "+string(body))
 		var merge struct {
 			Plugins struct {
@@ -513,4 +537,229 @@ func TestPluginSourceReconcileErrorAfterASaveSaysTheSaveLanded(t *testing.T) {
 	if recorder.Code != http.StatusUnprocessableEntity || strings.Contains(body, "configuration was saved") {
 		t.Fatalf("plain refusal = %d %s, want it to claim no save", recorder.Code, body)
 	}
+}
+
+// The writer chooses the answer by condition. A local failure answers as a local
+// failure, CPA's failure is reduced to the allowlist, and a rejection is never quoted
+// - so a table name, a transport host or the refused content cannot reach a caller.
+func TestWritePluginSourceErrorKeepsErrorDetailOutOfTheResponse(t *testing.T) {
+	cases := []struct {
+		name        string
+		err         error
+		isAfterSave bool
+		status      int
+		want        string
+		notWant     []string
+	}{
+		{
+			name:    "preference read",
+			err:     fmt.Errorf("%w: SELECT ui_preferences: no such table", errPluginSourcePreferenceUnavailable),
+			status:  http.StatusInternalServerError,
+			want:    "internal server error",
+			notWant: []string{"ui_preferences", "no such table"},
+		},
+		{
+			name:        "preference read after a save",
+			err:         fmt.Errorf("%w: SELECT ui_preferences: no such table", errPluginSourcePreferenceUnavailable),
+			isAfterSave: true,
+			status:      http.StatusInternalServerError,
+			want:        "configuration was saved",
+			notWant:     []string{"ui_preferences", "no such table"},
+		},
+		{
+			name:    "transport",
+			err:     errors.New(`Get "http://10.0.0.7:8317/v8/management/config.yaml": dial tcp 10.0.0.7:8317: connect: connection refused`),
+			status:  http.StatusBadGateway,
+			want:    "CPA management request failed",
+			notWant: []string{"10.0.0.7", "/v8/management/config.yaml"},
+		},
+		{
+			name: "rejected configuration",
+			err: &management.HTTPError{
+				StatusCode: http.StatusBadRequest,
+				Body:       `{"error":"invalid_config","message":"plugins.store-sources: SUPER-SECRET-VALUE is not accepted"}`,
+			},
+			status:  http.StatusBadGateway,
+			want:    "CPA rejected the configuration",
+			notWant: []string{"SUPER-SECRET-VALUE"},
+		},
+		{
+			name:        "rejected configuration after a save",
+			err:         &management.HTTPError{StatusCode: http.StatusBadRequest, Body: `{"error":"invalid_config","message":"SUPER-SECRET-VALUE"}`},
+			isAfterSave: true,
+			status:      http.StatusBadGateway,
+			want:        "configuration was saved",
+			notWant:     []string{"SUPER-SECRET-VALUE"},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			writePluginSourceError(recorder, testCase.err, testCase.isAfterSave)
+			body := recorder.Body.String()
+			if recorder.Code != testCase.status || !strings.Contains(body, testCase.want) {
+				t.Fatalf("response = %d %s, want %d with %q", recorder.Code, body, testCase.status, testCase.want)
+			}
+			for _, leaked := range testCase.notWant {
+				if strings.Contains(body, leaked) {
+					t.Fatalf("response leaked %q: %s", leaked, body)
+				}
+			}
+		})
+	}
+}
+
+// A database failure while reading the switch is a local failure: the caller gets the
+// console's fixed internal-error answer and the detail stays in the log. Nothing is
+// written without a readable switch, and a save that landed says so.
+func TestPluginSourceReconcileHidesPreferenceReadFailure(t *testing.T) {
+	t.Run("store read", func(t *testing.T) {
+		gateway := &managedSourceCPA{}
+		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+		if _, err := repo.SQL().Exec(`DROP TABLE ui_preferences`); err != nil {
+			t.Fatalf("drop the preference table: %v", err)
+		}
+
+		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
+		if response.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("plugin store: status %d body %s, want an internal failure", response.StatusCode, body)
+		}
+		for _, leaked := range []string{"ui_preferences", "no such table", "SELECT"} {
+			if strings.Contains(string(body), leaked) {
+				t.Fatalf("response leaked %q: %s", leaked, body)
+			}
+		}
+		if writes := gateway.recordedWrites(); len(writes) != 0 {
+			t.Fatalf("configuration writes = %q, want none without a readable switch", writes)
+		}
+	})
+
+	t.Run("after a configuration save", func(t *testing.T) {
+		gateway := &managedSourceCPA{}
+		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+		if _, err := repo.SQL().Exec(`DROP TABLE ui_preferences`); err != nil {
+			t.Fatalf("drop the preference table: %v", err)
+		}
+
+		payload, _ := json.Marshal(map[string]any{
+			"revision": gateway.revision(),
+			"changes":  []map[string]any{{"path": []string{"observability", "logs", "debug"}, "value": true}},
+		})
+		response, body := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(payload))
+		if response.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("save configuration: status %d body %s, want an internal failure", response.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "configuration was saved") {
+			t.Fatalf("response = %s, want the save acknowledged", body)
+		}
+		for _, leaked := range []string{"ui_preferences", "no such table", "SELECT"} {
+			if strings.Contains(string(body), leaked) {
+				t.Fatalf("response leaked %q: %s", leaked, body)
+			}
+		}
+		writes := gateway.recordedWrites()
+		if len(writes) != 1 || !strings.Contains(writes[0], "observability") {
+			t.Fatalf("configuration writes = %q, want the operator's save only", writes)
+		}
+	})
+}
+
+// CPA's failure text can carry the gateway's URL or the content it refused. The
+// response names the failure in the allowlist's words and nothing else.
+func TestPluginSourceReconcileReportsCPAFailuresWithoutTheirDetail(t *testing.T) {
+	t.Run("transport failure", func(t *testing.T) {
+		gateway := &managedSourceCPA{abortConfigRead: true}
+		client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+
+		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
+		if response.StatusCode != http.StatusBadGateway {
+			t.Fatalf("plugin store: status %d body %s, want a gateway failure", response.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "CPA management request failed") {
+			t.Fatalf("response = %s, want the allowlisted CPA failure", body)
+		}
+		for _, leaked := range []string{"127.0.0.1", "/v8/management/config.yaml", "EOF"} {
+			if strings.Contains(string(body), leaked) {
+				t.Fatalf("response leaked %q: %s", leaked, body)
+			}
+		}
+	})
+
+	t.Run("rejected content", func(t *testing.T) {
+		gateway := &managedSourceCPA{rejectStoreSourcesWrite: true}
+		client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+
+		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
+		if response.StatusCode != http.StatusBadGateway {
+			t.Fatalf("plugin store: status %d body %s, want a gateway failure", response.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "CPA rejected the configuration") {
+			t.Fatalf("response = %s, want the allowlisted rejection", body)
+		}
+		if strings.Contains(string(body), "SUPER-SECRET-VALUE") {
+			t.Fatalf("response echoed the refused content: %s", body)
+		}
+	})
+}
+
+// An audit record that cannot be written refuses the repair. The response is a fixed
+// sentence rather than the database's account of the failed insert, and the gateway's
+// file keeps whatever the operator had.
+func TestPluginSourceReconcileAuditFailureIsFixedAndFailClosed(t *testing.T) {
+	rejectSourceAudit := func(t *testing.T, repo *repository.Repository) {
+		t.Helper()
+		if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_plugin_source_audit BEFORE INSERT ON audit_events
+			WHEN NEW.action = 'plugin.source'
+			BEGIN SELECT RAISE(FAIL, 'audit insert failed: disk I/O error'); END`); err != nil {
+			t.Fatalf("create the audit trigger: %v", err)
+		}
+	}
+
+	t.Run("store read", func(t *testing.T) {
+		gateway := &managedSourceCPA{}
+		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+		rejectSourceAudit(t, repo)
+
+		response, body := getJSON(t, client, baseURL+"/omc/api/v1/management/plugin-store")
+		if response.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("plugin store: status %d body %s, want a refusal", response.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "audit record could not be written") {
+			t.Fatalf("response = %s, want the fixed audit refusal", body)
+		}
+		for _, leaked := range []string{"disk I/O error", "RAISE", "audit insert failed"} {
+			if strings.Contains(string(body), leaked) {
+				t.Fatalf("response leaked %q: %s", leaked, body)
+			}
+		}
+		if writes := gateway.recordedWrites(); len(writes) != 0 {
+			t.Fatalf("configuration writes = %q, want none without an audit record", writes)
+		}
+	})
+
+	t.Run("after a configuration save", func(t *testing.T) {
+		gateway := &managedSourceCPA{}
+		client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+		rejectSourceAudit(t, repo)
+
+		payload, _ := json.Marshal(map[string]any{
+			"revision": gateway.revision(),
+			"changes":  []map[string]any{{"path": []string{"observability", "logs", "debug"}, "value": true}},
+		})
+		response, body := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(payload))
+		if response.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("save configuration: status %d body %s, want a refusal", response.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "configuration was saved") || !strings.Contains(string(body), "audit record could not be written") {
+			t.Fatalf("response = %s, want the saved statement and the fixed audit refusal", body)
+		}
+		if strings.Contains(string(body), "disk I/O error") {
+			t.Fatalf("response leaked the audit failure: %s", body)
+		}
+		writes := gateway.recordedWrites()
+		if len(writes) != 1 || !strings.Contains(writes[0], "observability") {
+			t.Fatalf("configuration writes = %q, want the operator's save only", writes)
+		}
+	})
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 /**
@@ -60,6 +59,28 @@ func (h *Handler) omcPluginSourceEnabled(ctx context.Context) (bool, error) {
 	return *enabled, nil
 }
 
+// errPluginSourcePreferenceUnavailable marks a switch that could not be read. It
+// wraps the repository's error for the log only: a database failure can name tables
+// and values that must not reach a caller, and the response is chosen by this
+// condition rather than by whatever text came back.
+var errPluginSourcePreferenceUnavailable = errors.New("the plugin source preference could not be read")
+
+// errPluginSourceAuditUnavailable marks a repair refused because its audit record
+// could not be written. A sentinel rather than a message, so the response stays a
+// fixed sentence however the audit implementation words its failure.
+var errPluginSourceAuditUnavailable = errors.New("the plugin source repair could not be audited")
+
+// pluginSourceEnabled reads the switch through the condition the response writer
+// recognises. The requirement that makes the caller fail closed - no repair without a
+// readable switch - is also what keeps the repository's error out of the response.
+func (h *Handler) pluginSourceEnabled(ctx context.Context) (bool, error) {
+	enabled, err := h.omcPluginSourceEnabled(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%w: %v", errPluginSourcePreferenceUnavailable, err)
+	}
+	return enabled, nil
+}
+
 // reconcileOMCPluginSource makes CPA's store-source list agree with the preference
 // and reports whether the source is on. It takes the same gate and mutex a
 // configuration save does, so it can never interleave with one.
@@ -67,7 +88,7 @@ func (h *Handler) reconcileOMCPluginSource(ctx context.Context, request *http.Re
 	if h.cfg.IsDemoMode {
 		// The demonstration serves a fixture and refuses configuration writes; its
 		// dataset already lists the registry.
-		return h.omcPluginSourceEnabled(ctx)
+		return h.pluginSourceEnabled(ctx)
 	}
 	if err := h.providerWrites.acquire(ctx); err != nil {
 		return false, err
@@ -83,7 +104,7 @@ func (h *Handler) reconcileOMCPluginSource(ctx context.Context, request *http.Re
 // lock scope, so repairing what that save removed cannot land between the save and
 // the revision it reports.
 func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *http.Request, client *management.Client) (bool, error) {
-	enabled, err := h.omcPluginSourceEnabled(ctx)
+	enabled, err := h.pluginSourceEnabled(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -101,7 +122,7 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 
 	details := map[string]any{"source": pluginregistry.OMCSourceURL, "enabled": enabled}
 	if auditErr := h.recordAudit(request, "plugin.source", "config", "plugins.store-sources", "attempt", details); auditErr != nil {
-		return false, errors.New("audit failure; the plugin source was not changed")
+		return false, errPluginSourceAuditUnavailable
 	}
 	sources := configyaml.StoreSourcesWith(settings.StoreSources, pluginregistry.OMCSourceURL, enabled)
 	change := management.ConfigChange{Path: []string{"plugins", "store-sources"}, Value: sources}
@@ -135,15 +156,19 @@ func dropOMCPluginSource(store *management.PluginStore) {
 }
 
 // writePluginSourceError reports that the managed registry could not be brought in
-// line with the operator's choice. A busy write gate keeps its own retryable answer;
-// everything else names the plugin source, because a store served without it is not
-// the store the operator configured.
+// line with the operator's choice. The message is chosen by condition, never by
+// copying the error: a repository failure names tables, a transport failure names the
+// gateway's URL, and a rejected configuration can quote the content that was refused.
+//
+// A busy write gate keeps its own retryable answer, local failures answer as local,
+// and everything else is CPA's answer, which `publicCPAErrorMessage` reduces to its
+// allowlisted sentences.
 func writePluginSourceError(writer http.ResponseWriter, err error, isAfterConfigSave bool) {
-	if errors.Is(err, errProviderWriteBusy) {
+	switch {
+	case errors.Is(err, errProviderWriteBusy):
 		writeProviderWriteError(writer, err)
 		return
-	}
-	if errors.Is(err, configyaml.ErrPluginSettingsUnreadable) {
+	case errors.Is(err, configyaml.ErrPluginSettingsUnreadable):
 		if isAfterConfigSave {
 			// The save landed before the repair read it back. Say so: the editor's
 			// next save meets the revision conflict, and a message that read as a
@@ -156,20 +181,39 @@ func writePluginSourceError(writer http.ResponseWriter, err error, isAfterConfig
 		}
 		writePluginSettingsUnreadable(writer, err)
 		return
+	case errors.Is(err, errPluginSourcePreferenceUnavailable):
+		if isAfterConfigSave {
+			// The save is durable; only the repair is missing. Saying so is what
+			// keeps the editor's next save from reading as an unexplained conflict.
+			writeJSON(writer, http.StatusInternalServerError, map[string]any{
+				"error": "the configuration was saved, but the Oh My CPA plugin source could not be restored",
+				"code":  "plugin_source_reconcile_failed",
+			})
+			return
+		}
+		// A local failure with no safe detail to share. The repository's words go
+		// to the log, which is where an operator can act on them.
+		writeInternalError(writer, err)
+		return
+	case errors.Is(err, errPluginSourceAuditUnavailable):
+		// Fail-closed: nothing was written, so the response says the repair was
+		// refused rather than what the audit insert reported.
+		message := "the Oh My CPA plugin source could not be changed because its audit record could not be written"
+		if isAfterConfigSave {
+			message = "the configuration was saved, but the Oh My CPA plugin source could not be restored because its audit record could not be written"
+		}
+		writeJSON(writer, http.StatusInternalServerError, map[string]any{
+			"error": message,
+			"code":  "plugin_source_reconcile_failed",
+		})
+		return
 	}
+
 	message := "the Oh My CPA plugin source could not be written to the gateway configuration: "
 	if isAfterConfigSave {
 		message = "the configuration was saved, but the Oh My CPA plugin source could not be restored: "
 	}
-	var httpErr *management.HTTPError
-	if errors.As(err, &httpErr) ||
-		errors.Is(err, management.ErrConfigBackupUnavailable) ||
-		errors.Is(err, management.ErrConfigPartiallyApplied) ||
-		errors.Is(err, management.ErrManagementV8Required) {
-		message += publicCPAErrorMessage(err)
-	} else {
-		message += boundedText(security.RedactText(err.Error()), 512)
-	}
+	message += publicCPAErrorMessage(err)
 	writeJSON(writer, http.StatusBadGateway, map[string]any{
 		"error": message,
 		"code":  "plugin_source_reconcile_failed",
