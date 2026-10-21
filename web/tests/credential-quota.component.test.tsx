@@ -9,6 +9,7 @@ import {
 } from '../src/components/dashboard/CredentialQuota';
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
+import { CompactQuotaView } from '../src/pages/quota/CompactQuotaView';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../src/types/quota';
 
@@ -283,5 +284,103 @@ describe('paid usage, balances and usage breakdown', () => {
     const breakdown = document.querySelector('[data-quota-usage-breakdown]') as HTMLElement;
     expect(within(breakdown).getByText('96%')).toBeTruthy();
     expect(within(breakdown).getByText('Unavailable')).toBeTruthy();
+  });
+});
+
+describe('a failed refresh stays on the page', () => {
+  const renderSurface = (item: QuotaItem) => render(
+    <MemoryRouter>
+      <I18nProvider>
+        <CredentialQuotaBody item={item} nowMS={NOW_MS} isDemo={false} />
+      </I18nProvider>
+    </MemoryRouter>,
+  );
+
+  it('names the reason and the time beside the reading it left standing', () => {
+    renderSurface(quota('codex-main', [quotaWindow('five_hour', 100, 600)], {
+      status: 'error',
+      observed_at_ms: NOW_MS - 3 * 24 * HOUR_MS,
+      error: 'HTTP 401: unauthorized',
+      recommendation: { status: 'needs_reauth', priority: 'critical', action: 'reauth', reason: 'reauthorize' },
+      last_refresh: { attempted_at_ms: NOW_MS - 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
+    }));
+    // The status, the reason and the retained window are on screen together: the row must not
+    // present an old reading as current, and must not blank the numbers the operator can still use.
+    expect(screen.getByText('Error')).toBeTruthy();
+    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    // The provider's own words appear in the warning above the numbers and again as raw evidence
+    // in the collapsed diagnostics, which is where the drawer keeps every unmodified reading.
+    expect(screen.getAllByText(/HTTP 401: unauthorized/).length).toBeGreaterThan(0);
+    expect(screen.getByText('100%')).toBeTruthy();
+  });
+
+  it('explains a stale reading by its own reset boundary when nothing failed', () => {
+    renderSurface(quota('codex-old', [quotaWindow('five_hour', 40, 2)], {
+      status: 'stale',
+      observed_at_ms: NOW_MS - 8 * HOUR_MS,
+    }));
+    expect(screen.getByText('Stale')).toBeTruthy();
+    expect(screen.getByText(/past its own window reset/)).toBeTruthy();
+    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
+  });
+
+  it('still prints a reason it has no attempt record for', () => {
+    // A refresh response merged ahead of the read that serves it carries its own reason and no
+    // attempt; the drawer must not swallow it in the gap.
+    renderSurface(quota('codex-merged', [quotaWindow('five_hour', 60, 2)], {
+      status: 'error',
+      error: 'HTTP 503: upstream unavailable',
+    }));
+    expect(screen.getByText('Error')).toBeTruthy();
+    // Once in the notice above the numbers, once as raw evidence in the diagnostics.
+    expect(screen.getAllByText(/HTTP 503: upstream unavailable/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
+  });
+
+  it('says nothing about refreshing while the reading is current', () => {
+    renderSurface(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]));
+    expect(screen.getByText('Normal')).toBeTruthy();
+    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
+    expect(screen.queryByText(/past its own window reset/)).toBeNull();
+  });
+});
+
+describe('a row that says it is out of date', () => {
+  const staleItem = (overrides: Partial<QuotaItem> = {}): QuotaItem =>
+    quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
+      status: 'stale',
+      observed_at_ms: NOW_MS - 8 * HOUR_MS,
+      last_refresh: { attempted_at_ms: NOW_MS - 5 * 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
+      ...overrides,
+    });
+
+  const renderRow = (item: QuotaItem, onRefresh?: () => void) => render(
+    <MemoryRouter>
+      <I18nProvider>
+        <CompactQuotaView item={item} nowMS={NOW_MS} onRefresh={onRefresh} />
+      </I18nProvider>
+    </MemoryRouter>,
+  );
+
+  it('answers its own complaint with one refresh, without opening the drawer', () => {
+    const refresh = vi.fn();
+    renderRow(staleItem(), refresh);
+    expect(screen.getByText('Stale')).toBeTruthy();
+    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    const control = screen.getByTestId('quota-stale-refresh');
+    fireEvent.click(control);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no refresh when the caller has none to offer', () => {
+    const { container } = renderRow(staleItem(), undefined);
+    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
+  });
+
+  it('leaves a current reading without the control, and without the complaint', () => {
+    const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
+    expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
+    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
   });
 });

@@ -231,6 +231,101 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 	return records, rows.Err()
 }
 
+// Quota refresh attempt outcomes. A stored outcome is what the console reads to decide
+// whether a credential's last try produced a reading; only these two exist, because a try
+// either answered the question or did not.
+const (
+	QuotaRefreshAttemptSucceeded = "succeeded"
+	QuotaRefreshAttemptFailed    = "failed"
+)
+
+// QuotaRefreshAttemptRecord is the latest attempt to read one credential's quota.
+//
+// It is kept apart from QuotaSnapshotRecord because the two answer different questions: a
+// snapshot records a reading, so a failed read must not become one; an attempt records that
+// somebody tried, so a failure has a place to live after its toast is gone. The reason is
+// stored here rather than on the snapshot because a snapshot has no error column and no
+// business carrying a failure it does not describe.
+type QuotaRefreshAttemptRecord struct {
+	AuthIndex     string `json:"auth_index"`
+	AttemptedAtMS int64  `json:"attempted_at_ms"`
+	Outcome       string `json:"outcome"`
+	Error         string `json:"error,omitempty"`
+}
+
+// SaveQuotaRefreshAttempt upserts one credential's latest attempt.
+//
+// An attempt older than the stored one is refused rather than applied: batch reads run
+// concurrently, so a slow credential can finish after a newer manual read of the same one,
+// and the console must report the read that happened last, not the one that landed last.
+func (r *Repository) SaveQuotaRefreshAttempt(ctx context.Context, attempt QuotaRefreshAttemptRecord) error {
+	if r == nil || r.SQL() == nil {
+		return errors.New("repository is not initialized")
+	}
+	authIndex := strings.TrimSpace(attempt.AuthIndex)
+	if authIndex == "" {
+		return errors.New("auth_index is required")
+	}
+	if attempt.Outcome != QuotaRefreshAttemptSucceeded && attempt.Outcome != QuotaRefreshAttemptFailed {
+		return fmt.Errorf("invalid quota refresh outcome %q", attempt.Outcome)
+	}
+	query := `
+		INSERT INTO quota_refresh_attempts (auth_index, attempted_at_ms, outcome, error)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(auth_index) DO UPDATE SET
+			attempted_at_ms = excluded.attempted_at_ms,
+			outcome = excluded.outcome,
+			error = excluded.error
+		WHERE excluded.attempted_at_ms >= quota_refresh_attempts.attempted_at_ms
+	`
+	if _, err := r.SQL().ExecContext(ctx, query, authIndex, attempt.AttemptedAtMS, attempt.Outcome, attempt.Error); err != nil {
+		return fmt.Errorf("save quota refresh attempt: %w", err)
+	}
+	return nil
+}
+
+// GetQuotaRefreshAttempts reads the latest attempt of each requested credential in one query.
+func (r *Repository) GetQuotaRefreshAttempts(ctx context.Context, authIndexes []string) (map[string]QuotaRefreshAttemptRecord, error) {
+	result := make(map[string]QuotaRefreshAttemptRecord)
+	if r == nil || r.SQL() == nil {
+		return result, nil
+	}
+	validIndexes := make([]string, 0, len(authIndexes))
+	for _, authIndex := range authIndexes {
+		trimmed := strings.TrimSpace(authIndex)
+		if trimmed != "" {
+			validIndexes = append(validIndexes, trimmed)
+		}
+	}
+	if len(validIndexes) == 0 {
+		return result, nil
+	}
+	placeholders := strings.Repeat("?,", len(validIndexes))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(validIndexes))
+	for i, authIndex := range validIndexes {
+		args[i] = authIndex
+	}
+	query := fmt.Sprintf(`
+		SELECT auth_index, attempted_at_ms, outcome, error
+		FROM quota_refresh_attempts
+		WHERE auth_index IN (%s)
+	`, placeholders)
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return result, fmt.Errorf("query quota refresh attempts: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record QuotaRefreshAttemptRecord
+		if err := rows.Scan(&record.AuthIndex, &record.AttemptedAtMS, &record.Outcome, &record.Error); err != nil {
+			return result, fmt.Errorf("scan quota refresh attempt: %w", err)
+		}
+		result[record.AuthIndex] = record
+	}
+	return result, rows.Err()
+}
+
 // ClearCooldownEvidence durably resets local quota_exceeded flags in error_events when cooldown is cleared.
 func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string) error {
 	if r == nil || r.SQL() == nil {

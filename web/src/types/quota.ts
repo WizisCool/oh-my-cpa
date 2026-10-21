@@ -163,6 +163,18 @@ export interface QuotaCapabilities {
   reset_credit_supported: boolean;
 }
 
+/**
+ * The last attempt to read a credential's quota, kept apart from the reading itself.
+ *
+ * A failed read never becomes an observation, so this is the only thing that can tell a page
+ * "refreshed three minutes ago and it failed" while the numbers on screen are older than that.
+ */
+export interface QuotaRefreshAttempt {
+  attempted_at_ms: number;
+  outcome: 'succeeded' | 'failed';
+  error?: string;
+}
+
 export interface QuotaItem {
   auth_index: string;
   name: string;
@@ -180,6 +192,8 @@ export interface QuotaItem {
   capabilities: QuotaCapabilities;
   raw_signals?: Record<string, string>;
   error?: string;
+  /** Absent until something has tried to read this credential; see QuotaRefreshAttempt. */
+  last_refresh?: QuotaRefreshAttempt;
 
   // Backwards compatibility fields
   quota?: ManagementQuotaObservation;
@@ -223,4 +237,5 @@ export interface CredentialQuotaDetailResponse {
   quota: QuotaItem;
   history: QuotaSnapshotHistoryItem[];
   model_quotas?: Record<string, ManagementQuotaObservation>;
+  last_refresh?: QuotaRefreshAttempt;
 }

@@ -419,6 +419,18 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   own status instead of as an absence, so the console never asks the operator to
   repeat the read that just came back empty; a credential nobody has read keeps the
   idle reading that does ask for one.
+- **Quota Reading**: The last successful observation of a credential's quota, stamped
+  with the instant it was taken. A failed read is not a reading: it never replaces the one
+  on record, so the console keeps presenting the previous numbers beside the instant they
+  were observed at.
+- **Quota Read Attempt**: The last try to read a Quota Reading, whichever surface asked -
+  a manual refresh, the background loop, a warmup probe or the Agent. It records when, and
+  the provider's redacted reason when the try produced no reading (migration 044). The
+  console presents it as `last_refresh` beside the reading, and it decides what the row
+  says: an authentication failure reads as `error` and offers re-authorization, any other
+  failure leaves the previous numbers standing as `stale`, and a reading whose own window
+  reset has passed unseen also reads as `stale` because nobody has data about the cycle
+  that began. It outlives the toast that announced it, which is the point.
 - **Quota Auto Refresh**: The background re-reading of stored quota observations,
   under the deployment-wide `omc_quota_auto_refresh` policy edited on OMC Settings
   (ADR 0094). It has two independent triggers. A **reset-driven read** (on by default)

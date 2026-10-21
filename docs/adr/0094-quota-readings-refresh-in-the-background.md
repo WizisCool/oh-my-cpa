@@ -71,6 +71,20 @@ switched off back on. `quota_auto_refresh_get` and
 **A demonstration never starts the loop.** Its gateway is the fixture, and the
 demonstration starts no loop of its own beyond the HTTP server.
 
+**A failed read leaves a trace for the console, not an observation.** Because a failed or
+stale read is never stored, the stored reading could not say that the console's own
+refreshes had stopped working: the operator saw a toast, and the page went on presenting a
+reading days old as the current answer. Migration 044 adds `quota_refresh_attempts` - one
+row per credential, holding when the last read was attempted, whether it produced a
+reading and the provider's redacted reason - written by the one helper every read path
+goes through, and served as `last_refresh` beside the reading. The status the console
+presents then follows `quota.ApplyReadingHealth`: a failed attempt newer than the reading
+outranks it (auth-like failures as `error` with the reauth recommendation, the rest as
+`stale` with the previous numbers standing), an active cooldown outranks both, and a
+healthy or warning reading whose own announced reset has passed unseen reads as `stale`.
+Recording an attempt does not change the cadence: the loop's retry backoff stays
+in-process memory, so a restart still re-reads a failing credential once.
+
 ## Consequences
 
 - An exhausted credential reads as recovered about a minute after its window resets,
@@ -83,4 +97,8 @@ demonstration starts no loop of its own beyond the HTTP server.
   reads.
 - The attempt memory is lost on restart, so a failing credential that is due may be
   tried once more after a restart; the round limit still bounds that.
-- No table or migration is added; the readings remain `quota_snapshots` rows.
+- The readings remain `quota_snapshots` rows; migration 044 adds only the per-credential
+  attempt record the console reports beside them.
+- A failure now outlives its toast: a page opened later still says the last refresh failed
+  and when, and a credential whose reading is older than the boundary it announced no
+  longer reads as healthy.

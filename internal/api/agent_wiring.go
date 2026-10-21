@@ -223,14 +223,12 @@ func (h *Handler) operationsService() *operations.Service {
 				h.agent.lastRefresh[authIndex] = time.Now()
 				h.agent.refreshMu.Unlock()
 
-				value, err := quota.NewService(client).RefreshCredentialQuota(ctx, file, h.loadPriorNormalizedQuota(ctx, authIndex))
+				value, err := h.refreshQuotaReading(ctx, quota.NewService(client), file, h.loadPriorNormalizedQuota(ctx, authIndex))
 				if err != nil {
 					return operations.Quota{}, err
 				}
-				if value.Status != "error" && value.Status != "stale" {
-					if err = h.persistNormalizedQuotaSnapshot(ctx, value); err != nil {
-						return operations.Quota{}, err
-					}
+				if err = h.persistNormalizedQuotaSnapshot(ctx, value); err != nil {
+					return operations.Quota{}, err
 				}
 				h.attachWindowCapacity(ctx, value, h.now().UnixMilli())
 				return operations.SafeQuota(value), nil

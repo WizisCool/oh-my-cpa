@@ -188,12 +188,14 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
+			refreshed, err := h.refreshQuotaReading(ctx, svc, file, prior)
 			// The same persistence rule as a manual refresh: a failed or stale read
 			// never replaces the last good observation.
-			isRefreshed := err == nil && refreshed != nil && refreshed.Status != "error" && refreshed.Status != "stale"
+			isRefreshed := err == nil && refreshed != nil
 			if isRefreshed {
-				if persistErr := h.persistNormalizedQuotaSnapshot(ctx, refreshed); persistErr != nil {
+				if isUsable, _ := quota.ReadOutcome(refreshed, nil); !isUsable {
+					isRefreshed = false
+				} else if persistErr := h.persistNormalizedQuotaSnapshot(ctx, refreshed); persistErr != nil {
 					isRefreshed = false
 				}
 			}

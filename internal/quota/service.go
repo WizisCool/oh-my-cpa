@@ -140,6 +140,18 @@ func NewServiceWithClock(client CPAClient, clock func() time.Time) *Service {
 	return service
 }
 
+// Now is the instant this service stamps a read with.
+//
+// A caller that records the attempt beside the reading asks for it here rather than using its own
+// clock: the attempt and the observation must be orderable by the same time base, or a page can
+// decide the failure predates the reading it in fact followed.
+func (s *Service) Now() time.Time {
+	if s == nil || s.now == nil {
+		return time.Now()
+	}
+	return s.now()
+}
+
 // DetectProvider maps file Type and Provider to a standard quota provider key.
 // Note: generic gemini is NOT classified as antigravity!
 func DetectProvider(fileType, provider string) string {

@@ -1,5 +1,6 @@
 import React from 'react';
-import { ThunderboltOutlined } from '../../components/icons';
+import { Button } from 'antd';
+import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import {
@@ -15,6 +16,7 @@ import { quotaRemainingStroke } from './quotaThresholds';
 import { orderQuotaWindows, pickCompactQuotaWindows, quotaWindowKindOf } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
 import { compactCooldownDiagnostic } from './quotaCooldown';
+import { outlivedResetLine, refreshFailureLine } from './quotaAttempt';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import styles from './QuotaPresentation.module.css';
@@ -23,6 +25,15 @@ import { Meter } from '../../components/common/Meter';
 interface CompactQuotaViewProps {
   item: QuotaItem;
   nowMS: number;
+  /**
+   * Asks the gateway for a fresh reading of this credential.
+   *
+   * Offered only where the row says its numbers are out of date, so the control appears beside the
+   * statement that needs it rather than in every row: the reader who notices the problem is the one
+   * who can fix it, without opening the Drawer.
+   */
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 /**
@@ -34,22 +45,28 @@ interface CompactQuotaViewProps {
  * weekly windows, side by side, each with its share, its bar and when it resets, plus how
  * many banked reset credits the account holds as a reading.
  *
- * It carries no control of its own. Spending a reset credit is irreversible, so it belongs
- * to the Drawer's Quota tab, where the credit expiries it consumes are on screen beside the
- * confirmation; a row is a reading, and the row's Details action and its menu are the way in.
- * Every other family an endpoint like Antigravity publishes, the credit expiries, cooldowns
- * and raw diagnostics are in that same tab, which renders the complete native reading through
- * `CredentialQuotaBody`.
+ * It carries no control that changes anything upstream. Spending a reset credit is irreversible, so
+ * it belongs to the Drawer's Quota tab, where the credit expiries it consumes are on screen beside
+ * the confirmation; a row is a reading, and the row's Details action and its menu are the way in.
+ * The one exception is the refresh offered beside a stale or failed reading, which only asks for a
+ * read - the same request the background loop makes - because that is the row's own complaint and
+ * the operator should not have to open anything to answer it. Every other family an endpoint like
+ * Antigravity publishes, the credit expiries, cooldowns and raw diagnostics are in that same tab,
+ * which renders the complete native reading through `CredentialQuotaBody`.
  */
 export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
   item,
   nowMS,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const windows = pickCompactQuotaWindows(orderQuotaWindows(item.windows ?? []));
   const planText = item.plan?.plan_label;
   const cooldownDiagnostic = compactCooldownDiagnostic(item);
+  const failureLine = refreshFailureLine(item, nowMS, t);
+  const staleLine = outlivedResetLine(item, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;
 
   return (
@@ -80,6 +97,31 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
           <div className={styles['rec-text']}>
             {cooldownDiagnostic}
           </div>
+        </div>
+      )}
+
+      {(failureLine || staleLine) && (
+        <div
+          className={`${styles['rec-banner']} ${failureLine ? styles['rec-banner-danger'] : ''}`}
+          data-quota-failure-line={failureLine ? 'failed' : 'stale'}
+        >
+          <span className={styles['banner-dot']} style={{ background: failureLine ? 'var(--danger)' : 'var(--warn)' }} />
+          <div className={styles['rec-text']} title={failureLine ?? staleLine ?? undefined}>
+            {failureLine ?? staleLine}
+          </div>
+          {onRefresh && (
+            <Button
+              size="small"
+              type="link"
+              icon={<SyncOutlined spin={isRefreshing} />}
+              className={styles['banner-action']}
+              disabled={isRefreshing || item.disabled || !item.capabilities?.refresh_supported}
+              onClick={onRefresh}
+              data-testid="quota-stale-refresh"
+            >
+              {t('quota.btn_refresh_quota')}
+            </Button>
+          )}
         </div>
       )}
 

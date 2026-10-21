@@ -372,7 +372,7 @@ func writeWarmupError(writer http.ResponseWriter, err error) {
 
 func (h *Handler) refreshWarmupObservation(ctx context.Context, client *management.Client, file management.AuthFile) (*warmup.Observation, error) {
 	service := quota.NewServiceWithClock(client, h.now)
-	reading, err := service.RefreshCredentialQuota(ctx, file, h.loadPriorNormalizedQuota(ctx, file.AuthIndex))
+	reading, err := h.refreshQuotaReading(ctx, service, file, h.loadPriorNormalizedQuota(ctx, file.AuthIndex))
 	if err != nil || reading == nil || reading.Error != "" || reading.Status == "error" || reading.Status == "stale" || reading.WarmupEvidence == nil {
 		return nil, errors.New("quota_unknown")
 	}

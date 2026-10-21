@@ -198,6 +198,10 @@
   color: var(--fg-2);
   line-height: 1.4;
   flex: 1;
+  /* A provider's own reason can be one long token; the banner wraps it instead of pushing the
+   * refresh beside it out of the row. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .banner-dot {
@@ -205,6 +209,15 @@
   height: 7px;
   border-radius: 999px;
   flex-shrink: 0;
+}
+
+/* The refresh beside an out-of-date reading: a text button, so the row keeps the height of one
+ * credential and the action reads as part of the sentence that asks for it. */
+.banner-action {
+  flex-shrink: 0;
+  height: auto;
+  padding: 0;
+  font-size: var(--text-xs);
 }
 
 .rec-sub-danger {

@@ -8,6 +8,7 @@ import { formatGmtOffsetLabel, formatObservedAgo, formatQuotaMoney, formatSnapsh
 import { QuotaProgressBar } from './QuotaProgressBar';
 import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
+import { outlivedResetLine, refreshFailureLine } from './quotaAttempt';
 import styles from './QuotaPresentation.module.css';
 import { Notice } from '../../components/feedback';
 import { SectionHeading } from '../../components/common/SectionHeading';
@@ -74,7 +75,12 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   };
   const hasDiagnostics = Object.keys(rawSignals).length > 0
     || Object.keys(item.model_quotas ?? {}).length > 0
-    || Boolean(item.error);
+    || Boolean(item.error)
+    || Boolean(item.last_refresh);
+  // The attempt is what explains a status the reading alone cannot: the reason and when it
+  // happened, printed once above the numbers rather than left to the toast that announced it.
+  const failureLine = refreshFailureLine(item, nowMS, t);
+  const staleLine = outlivedResetLine(item, t);
 
   // Grant scope identifiers are upstream window ids, not display text: known
   // ones resolve to the localized window labels, anything upstream adds
@@ -137,13 +143,28 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         )}
       </div>
 
-      {item.error && (
+      {failureLine ? (
+        <Notice
+          tone="error"
+          description={failureLine}
+          className={styles['quota-diagnostic-alert']}
+        />
+      ) : item.error ? (
+        // A reading that carries a reason but no recorded attempt is one the console has not
+        // stored an attempt for yet - a refresh response merged ahead of the read that serves it.
+        // Its own words are still what the operator should read.
         <Notice
           tone="error"
           description={item.error}
           className={styles['quota-diagnostic-alert']}
         />
-      )}
+      ) : staleLine ? (
+        <Notice
+          tone="warning"
+          description={staleLine}
+          className={styles['quota-diagnostic-alert']}
+        />
+      ) : null}
 
       {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || item.reset_credits || extraUsage) && (
         <div className={styles['meta-row']}>
@@ -337,6 +358,16 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         <details className={styles['quota-diagnostics']}>
           <summary>{t('omc.quota_diagnostics')}</summary>
           {item.error && <div className={styles['diagnostic-line']}>{item.error}</div>}
+          {item.last_refresh && (
+            <div className={styles['diagnostic-line']}>
+              <span className={styles['meta-label']}>{t('quota.last_refresh_at')}</span>
+              <span>
+                {formatObservedAgo(item.last_refresh.attempted_at_ms, nowMS, t)}
+                {' · '}
+                {t(item.last_refresh.outcome === 'failed' ? 'quota.last_refresh_outcome_failed' : 'quota.last_refresh_outcome_succeeded')}
+              </span>
+            </div>
+          )}
           {Object.entries(rawSignals).map(([key, value]) => (
             <div className={styles['diagnostic-line']} key={`signal-${key}`}>
               <span className={styles['meta-label']}>{key}</span>

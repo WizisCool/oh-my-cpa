@@ -403,3 +403,64 @@ func TestQueryCredentialModelWindowUsageRejectsUninitializedRepository(t *testin
 		}
 	}
 }
+
+func TestRepositoryQuotaRefreshAttempts(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+
+	nowMS := time.Now().UnixMilli()
+	failed := QuotaRefreshAttemptRecord{
+		AuthIndex:     "auth-attempt",
+		AttemptedAtMS: nowMS,
+		Outcome:       QuotaRefreshAttemptFailed,
+		Error:         "HTTP 401: unauthorized",
+	}
+	if err := repo.SaveQuotaRefreshAttempt(ctx, failed); err != nil {
+		t.Fatalf("SaveQuotaRefreshAttempt failed: %v", err)
+	}
+
+	attempts, err := repo.GetQuotaRefreshAttempts(ctx, []string{"auth-attempt", "auth-absent", " "})
+	if err != nil {
+		t.Fatalf("GetQuotaRefreshAttempts failed: %v", err)
+	}
+	if got := attempts["auth-attempt"]; got.Outcome != QuotaRefreshAttemptFailed || got.Error != failed.Error || got.AttemptedAtMS != nowMS {
+		t.Fatalf("attempt = %+v, want the failed read", got)
+	}
+	if _, ok := attempts["auth-absent"]; ok {
+		t.Fatal("a credential nobody tried must not report an attempt")
+	}
+
+	// A newer success replaces the failure it followed: the console asks what the last try was.
+	if err := repo.SaveQuotaRefreshAttempt(ctx, QuotaRefreshAttemptRecord{
+		AuthIndex:     "auth-attempt",
+		AttemptedAtMS: nowMS + 1000,
+		Outcome:       QuotaRefreshAttemptSucceeded,
+	}); err != nil {
+		t.Fatalf("SaveQuotaRefreshAttempt (success) failed: %v", err)
+	}
+	attempts, _ = repo.GetQuotaRefreshAttempts(ctx, []string{"auth-attempt"})
+	if got := attempts["auth-attempt"]; got.Outcome != QuotaRefreshAttemptSucceeded || got.Error != "" {
+		t.Fatalf("attempt = %+v, want the later success with no reason left over", got)
+	}
+
+	// A slow read that finishes after a newer one must not resurrect its own outcome.
+	if err := repo.SaveQuotaRefreshAttempt(ctx, QuotaRefreshAttemptRecord{
+		AuthIndex:     "auth-attempt",
+		AttemptedAtMS: nowMS,
+		Outcome:       QuotaRefreshAttemptFailed,
+		Error:         "HTTP 500: late arrival",
+	}); err != nil {
+		t.Fatalf("SaveQuotaRefreshAttempt (late) failed: %v", err)
+	}
+	attempts, _ = repo.GetQuotaRefreshAttempts(ctx, []string{"auth-attempt"})
+	if got := attempts["auth-attempt"]; got.Outcome != QuotaRefreshAttemptSucceeded {
+		t.Fatalf("attempt = %+v, want the later success to survive an older write", got)
+	}
+
+	if err := repo.SaveQuotaRefreshAttempt(ctx, QuotaRefreshAttemptRecord{AuthIndex: " ", AttemptedAtMS: nowMS, Outcome: QuotaRefreshAttemptFailed}); err == nil {
+		t.Fatal("an attempt with no credential must be refused")
+	}
+	if err := repo.SaveQuotaRefreshAttempt(ctx, QuotaRefreshAttemptRecord{AuthIndex: "auth-attempt", AttemptedAtMS: nowMS, Outcome: "maybe"}); err == nil {
+		t.Fatal("an unknown outcome must be refused")
+	}
+}

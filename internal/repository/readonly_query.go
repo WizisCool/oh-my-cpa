@@ -67,6 +67,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"pricing_match_reviews":         nil,
 	"pricing_sync_state":            nil,
 	"pricing_upstream_catalog":      nil,
+	"quota_refresh_attempts":        nil,
 	"quota_snapshots":               nil,
 	"release_check_state":           nil,
 	"release_index":                 nil,

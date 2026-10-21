@@ -1,0 +1,111 @@
+package quota
+
+import "github.com/oh-my-cpa/oh-my-cpa/internal/security"
+
+// ReadAttempt is the last time somebody tried to read a credential's quota, as the console
+// needs it: when, and the provider's own reason when the try produced no reading.
+//
+// It is not a reading. A failed try leaves the stored observation alone, so keeping the try
+// beside it is what lets a page say "refreshed three minutes ago, failed with 401" instead of
+// presenting a reading from three days ago as today's answer.
+type ReadAttempt struct {
+	AttemptedAtMS int64
+	IsFailed      bool
+	// Failure is the redacted reason the read produced, in the provider's words.
+	Failure string
+}
+
+// ReadOutcome answers what one read produced: whether it is a usable reading the snapshot may
+// keep, and the reason when it is not.
+//
+// Every surface that reads a credential asks this one question - the manual refresh, the
+// background loop, the warmup probe and the Agent capability - so "this refresh failed" and
+// "the operator was told" cannot drift apart.
+func ReadOutcome(reading *NormalizedQuota, err error) (isUsable bool, reason string) {
+	if err != nil {
+		return false, security.RedactText(err.Error())
+	}
+	if reading == nil {
+		return false, ""
+	}
+	if reading.Status == "error" || reading.Status == "stale" || reading.Error != "" {
+		return false, security.RedactText(reading.Error)
+	}
+	return true, ""
+}
+
+// ApplyReadingHealth sets the status the console presents from a stored reading and the last
+// attempt to re-read it.
+//
+// The order is by how much each fact constrains the operator, and it continues the order
+// EvaluateStatusAndRecommendation already uses. A disabled credential is the operator's own
+// decision. An active cooldown is the gateway blocking traffic right now, which a failed quota
+// read says nothing about. A failed attempt is newer information than the reading it failed to
+// replace, so it outranks what the reading claimed - as an auth failure (the credential needs
+// signing in again) or as an ordinary refusal that left the previous numbers standing. Last, a
+// reading that announced a window boundary which has since passed unseen cannot keep claiming
+// to be current: nobody has data about the cycle that began.
+//
+// exhausted is deliberately not overridden by an age rule: its numbers still say "no capacity",
+// which is what stops the credential, and the reset-driven read answers the question within
+// minutes of a boundary.
+func ApplyReadingHealth(q *NormalizedQuota, attempt *ReadAttempt, nowMS int64) {
+	if q == nil || q.Disabled {
+		return
+	}
+	if (q.ActiveCooldown != nil && q.ActiveCooldown.IsActive) || q.Status == "cooldown" {
+		return
+	}
+	if attempt != nil && attempt.IsFailed && attempt.AttemptedAtMS > q.ObservedAtMS {
+		q.Error = attempt.Failure
+		if looksLikeAuthFailure(attempt.Failure) {
+			q.Status = "error"
+			q.Recommendation = QuotaRecommendation{
+				Status:   "needs_reauth",
+				Priority: "critical",
+				Action:   "reauth",
+				Reason:   "最近一次额度刷新认证失败，凭据可能已失效，建议重新授权",
+			}
+			return
+		}
+		q.Status = "stale"
+		q.Recommendation = QuotaRecommendation{
+			Status:   "warning",
+			Priority: "medium",
+			Action:   "refresh",
+			Reason:   "最近一次额度刷新失败，正在显示上一次成功读取的数据，可尝试重新刷新",
+		}
+		return
+	}
+	if (q.Status == "healthy" || q.Status == "warning") && ReadingOutlivedReset(q, nowMS) {
+		q.Status = "stale"
+		q.Recommendation = QuotaRecommendation{
+			Status:   "warning",
+			Priority: "low",
+			Action:   "refresh",
+			Reason:   "读数已超过其窗口的重置时间，刷新以获取当前额度",
+		}
+	}
+}
+
+// ReadingOutlivedReset reports whether a window the reading itself announced has reset since
+// it was taken, longer ago than the reset-driven refresh waits before re-reading it.
+//
+// The reading must predate the boundary: a fresh read that reports a boundary already in the
+// past describes the cycle upstream still serves, and flagging it would make the console
+// flicker into "stale" at every rollover until the re-read lands.
+func ReadingOutlivedReset(q *NormalizedQuota, nowMS int64) bool {
+	if q == nil {
+		return false
+	}
+	graceMS := AUTO_REFRESH_RESET_GRACE.Milliseconds()
+	for _, window := range q.Windows {
+		if window.ResetAtMS == nil {
+			continue
+		}
+		if q.ObservedAtMS < *window.ResetAtMS && nowMS > *window.ResetAtMS+graceMS {
+			return true
+		}
+	}
+	return false
+}

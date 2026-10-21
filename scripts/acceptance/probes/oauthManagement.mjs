@@ -51,27 +51,38 @@ function quotaFor(index) {
   const cooldown = index === 8 || index === 9;
   const unsupported = index === 10;
   const credits = index === 11;
+  // One credential's last refresh failed, so its reading is eight hours old and every surface has
+  // to say so: this is the shape the real overview serves for a credential the console could not
+  // re-read - the retained observation, the failed attempt beside it, and no claim to be current.
+  // It sits past the first screenful, because the row that reports a failure is legitimately one
+  // line taller and the density check below is about the ordinary rows.
+  const stale = index === 6;
   return {
     auth_index: files[index].auth_index,
     name: files[index].name,
     type: files[index].type,
     provider: files[index].provider,
     disabled: false,
-    status: cooldown ? 'cooldown' : unsupported ? 'idle' : 'healthy',
-    observed_at_ms: Date.now(),
+    status: cooldown ? 'cooldown' : unsupported ? 'idle' : stale ? 'stale' : 'healthy',
+    observed_at_ms: stale ? Date.now() - 8 * 3_600_000 : Date.now(),
     plan: { plan_type: 'pro', plan_label: 'Pro', tier: 'premium', ...(index === 3 ? { subscription_active: false } : {}) },
     windows,
     active_cooldown: cooldown ? { is_active: true, reason: index === 9 ? KNOWN_COOLDOWN_REASON : 'Fixture unexpected upstream cooldown', recover_at_ms: Date.now() + 900_000 } : undefined,
     // The bank holds two credits while upstream considers none of them applicable right
     // now. That combination is exactly the reported defect: the action must still exist.
     reset_credits: credits ? { available_count: 2, applicable_available_count: 0 } : undefined,
-    recommendation: { status: cooldown ? 'cooldown' : 'healthy', priority: cooldown ? 'high' : 'none', action: cooldown ? 'clear_cooldown' : 'none', reason: '' },
+    recommendation: stale
+      ? { status: 'warning', priority: 'medium', action: 'refresh', reason: 'Fixture reading is out of date' }
+      : { status: cooldown ? 'cooldown' : 'healthy', priority: cooldown ? 'high' : 'none', action: cooldown ? 'clear_cooldown' : 'none', reason: '' },
     capabilities: {
       refresh_supported: !unsupported,
       clear_cooldown_supported: cooldown,
       reset_credit_supported: credits,
     },
-    ...(index === 9 ? { error: 'Fixture quota refresh failed' } : {}),
+    ...(stale ? {
+      error: 'Fixture quota refresh failed',
+      last_refresh: { attempted_at_ms: Date.now() - 300_000, outcome: 'failed', error: 'Fixture quota refresh failed' },
+    } : { last_refresh: { attempted_at_ms: Date.now() - 60_000, outcome: 'succeeded' } }),
     quota_exceeded: false,
   };
 }
@@ -227,9 +238,28 @@ export async function oauthManagement({ base, page, check }) {
   check('the consolidated cooldown status explains the known condition', (await cooldownTooltip.innerText()).includes('CPA 429 rate limit protection active'));
   await cooldownRow.getByRole('button', { name: /^(Details|详情):/i }).click();
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
-  check('the quota drawer retains raw cooldown evidence and refresh failure diagnostics',
-    (await detailPanel.innerText()).includes(KNOWN_COOLDOWN_REASON)
-      && (await detailPanel.innerText()).includes('Fixture quota refresh failed'));
+  check('the quota drawer retains raw cooldown evidence',
+    (await detailPanel.innerText()).includes(KNOWN_COOLDOWN_REASON));
+  await detailPanel.locator('.ant-drawer-close').click();
+  await detailPanel.waitFor({ state: 'hidden' });
+
+  // A reading the console could not refresh must not keep reading Normal: the row states the
+  // failure, counts apart from the healthy total, and offers the one action that answers it.
+  const staleRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-07"]');
+  check('a failed refresh leaves the row saying so, with its own refresh beside it',
+    (await staleRow.locator('[data-quota-failure-line="failed"]').count()) === 1
+      && (await staleRow.innerText()).includes('Fixture quota refresh failed')
+      && (await staleRow.getByTestId('quota-stale-refresh').count()) === 1,
+    (await staleRow.innerText()).replace(/\n/g, ' | '));
+  check('a current reading offers no refresh of its own',
+    (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"] [data-testid="quota-stale-refresh"]').count()) === 0);
+  check('the out-of-date reading is counted apart from the healthy total',
+    (await page.getByTestId('oauth-summary-stale').count()) === 1);
+  await staleRow.getByRole('button', { name: /^(Details|详情):/i }).click();
+  await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
+  check('the quota drawer states the failed refresh beside the numbers it left standing',
+    (await detailPanel.innerText()).includes('Fixture quota refresh failed')
+      && (await detailPanel.getByText('Stale', { exact: true }).count()) === 1);
   await detailPanel.locator('.ant-drawer-close').click();
   await detailPanel.waitFor({ state: 'hidden' });
   const unexpectedCooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-09"]');
@@ -900,9 +930,25 @@ async function verifyWorkspaceScale({ base, page, check }) {
     reads.files += 1;
     await route.fulfill({ json: { files: scaleFiles, total: 48 } });
   };
+  // A failed read leaves the stored observation alone, so the overview answers from that reading
+  // plus the recorded attempt. The mock does the same, which is what lets the row be wrong before
+  // the fix and right after it: the failure survives the query the refresh invalidates.
+  const failedAttempts = new Map();
   const quotaHandler = async (route) => {
     reads.quota += 1;
-    await route.fulfill({ json: { quotas: scaleQuota, total: 48 } });
+    const served = scaleQuota.map((item) => {
+      const failure = failedAttempts.get(item.auth_index);
+      if (!failure) return { ...item, last_refresh: { attempted_at_ms: Date.now() - 3_600_000, outcome: 'succeeded' } };
+      return {
+        ...item,
+        status: 'stale',
+        error: failure,
+        observed_at_ms: Date.now() - 8 * 3_600_000,
+        last_refresh: { attempted_at_ms: Date.now(), outcome: 'failed', error: failure },
+        recommendation: { status: 'warning', priority: 'medium', action: 'refresh', reason: '' },
+      };
+    });
+    await route.fulfill({ json: { quotas: served, total: served.length } });
   };
   const pendingBatches = [];
   const batchHandler = async (route) => {
@@ -912,10 +958,12 @@ async function verifyWorkspaceScale({ base, page, check }) {
     peakBatches = Math.max(peakBatches, activeBatches);
     if (batches.length === 1) await new Promise(resolve => pendingBatches.push(resolve));
     activeBatches -= 1;
+    const failure = `Fixture upstream failure (refresh ${Math.ceil(batches.length / 3)})`;
+    if (indexes.includes('scale-7')) failedAttempts.set('scale-7', failure);
     await route.fulfill({ json: { status: 'ok', quotas: indexes
       .filter((index) => index !== 'scale-13')
       .map((index) => ({ ...scaleQuota.find((item) => item.auth_index === index),
-        ...(index === 'scale-7' ? { status: 'error', error: `Fixture upstream failure (refresh ${Math.ceil(batches.length / 3)})` } : {}),
+        ...(index === 'scale-7' ? { status: 'error', error: failure } : {}),
       })) } });
   };
   const countModels = (request) => {
@@ -949,6 +997,18 @@ async function verifyWorkspaceScale({ base, page, check }) {
       JSON.stringify({ sizes: batches.map((batch) => batch.length), peakBatches }));
     check('batch errors and missing results remain visible to the operator',
       report.includes('Fixture upstream failure') && report.includes('scale-13'), report);
+    // The report is a toast; the row is what somebody who was not watching the moment sees.
+    const failedRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="scale-7"]');
+    await until(async () => (await failedRow.locator('[data-quota-failure-line="failed"]').count()) === 1, {
+      label: 'the failed credential to state its failed refresh in the row',
+    });
+    check('a failed batch target reads out of date and offers its own refresh',
+      /Stale|快照已过期/.test(await failedRow.innerText())
+        && (await failedRow.getByTestId('quota-stale-refresh').count()) === 1,
+      (await failedRow.innerText()).replace(/\n/g, ' | '));
+    check('a target the batch did refresh keeps reading current',
+      (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="scale-0"] [data-quota-failure-line]').count()) === 0
+        && /Normal|正常/.test(await page.locator('[data-testid="oauth-credential-record"][data-auth-index="scale-0"]').innerText()));
     // Exercise the real copy action without depending on the machine's clipboard permission.
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
       configurable: true, value: { writeText: async () => {} },

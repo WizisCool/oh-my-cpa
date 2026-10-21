@@ -359,7 +359,10 @@ export const OAuthManagementPage: React.FC = () => {
   const totalCount = records.length;
   const disabledCount = records.filter((record) => isAuthFileDisabled(record.file)).length;
   const attentionCount = records.filter((record) => !isAuthFileDisabled(record.file) && (record.isQuotaAttention || isAuthFileProblem(record.file))).length;
-  const healthyCount = records.filter((record) => isAuthFileHealthy(record.file) && !record.isQuotaAttention).length;
+  const healthyCount = records.filter((record) => isAuthFileHealthy(record.file) && !record.isQuotaAttention && record.quotaCondition !== 'stale').length;
+  // A reading whose own window has reset is not "normal": nobody knows the current numbers. It is
+  // counted apart from both, because it is not something to act on now either - refreshing it is.
+  const staleCount = records.filter((record) => !isAuthFileDisabled(record.file) && record.quotaCondition === 'stale').length;
   const knownTotal = filesQuery.isPending ? '—' : totalCount;
 
   const providerTabs = React.useMemo(
@@ -460,6 +463,11 @@ export const OAuthManagementPage: React.FC = () => {
           <CompactQuotaView
             item={record.quota}
             nowMS={visibleNow}
+            isRefreshing={isRefreshing}
+            // Offered where the row itself says its reading is out of date, so the operator can
+            // answer the row's complaint in the row; a credential the gateway cannot read on
+            // demand offers nothing, rather than a button that would fail.
+            onRefresh={record.canRefreshQuota ? () => void actions.refreshQuotaForRecord(record) : undefined}
           />
         );
       }
@@ -571,6 +579,15 @@ export const OAuthManagementPage: React.FC = () => {
               <span className={styles['summary-attention']}>
                 <span className={styles['status-dot']} />
                 {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
+              </span>
+            </>
+          )}
+          {!filesQuery.isPending && staleCount > 0 && (
+            <>
+              <span className={styles['summary-divider']}>·</span>
+              <span className={styles['summary-disabled']} data-testid="oauth-summary-stale">
+                <span className={styles['status-dot']} />
+                {t('omc.quota_stale_count', { n: staleCount })}
               </span>
             </>
           )}
