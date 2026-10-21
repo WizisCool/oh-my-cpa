@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -60,9 +61,9 @@ func (h *Handler) omcPluginSourceEnabled(ctx context.Context) (bool, error) {
 }
 
 // errPluginSourcePreferenceUnavailable marks a switch that could not be read. It
-// wraps the repository's error for the log only: a database failure can name tables
-// and values that must not reach a caller, and the response is chosen by this
-// condition rather than by whatever text came back.
+// wraps the repository's error so errors.Is can still reach the cause; the response
+// is chosen by this condition, never by its text, because a database failure can name
+// tables and values that must not reach a caller.
 var errPluginSourcePreferenceUnavailable = errors.New("the plugin source preference could not be read")
 
 // errPluginSourceAuditUnavailable marks a repair refused because its audit record
@@ -76,7 +77,7 @@ var errPluginSourceAuditUnavailable = errors.New("the plugin source repair could
 func (h *Handler) pluginSourceEnabled(ctx context.Context) (bool, error) {
 	enabled, err := h.omcPluginSourceEnabled(ctx)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", errPluginSourcePreferenceUnavailable, err)
+		return false, fmt.Errorf("%w: %w", errPluginSourcePreferenceUnavailable, err)
 	}
 	return enabled, nil
 }
@@ -185,6 +186,8 @@ func writePluginSourceError(writer http.ResponseWriter, err error, isAfterConfig
 		if isAfterConfigSave {
 			// The save is durable; only the repair is missing. Saying so is what
 			// keeps the editor's next save from reading as an unexplained conflict.
+			// The cause goes to the log; the response stays fixed.
+			slog.Error("the managed plugin source could not be restored after a configuration save", "error", err)
 			writeJSON(writer, http.StatusInternalServerError, map[string]any{
 				"error": "the configuration was saved, but the Oh My CPA plugin source could not be restored",
 				"code":  "plugin_source_reconcile_failed",

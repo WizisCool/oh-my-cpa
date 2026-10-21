@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -760,6 +762,70 @@ func TestPluginSourceReconcileAuditFailureIsFixedAndFailClosed(t *testing.T) {
 		writes := gateway.recordedWrites()
 		if len(writes) != 1 || !strings.Contains(writes[0], "observability") {
 			t.Fatalf("configuration writes = %q, want the operator's save only", writes)
+		}
+	})
+}
+
+// A dropped request must not hide the repository's cause from classification or the
+// log, while the answer stays the same fixed sentence: the sentinel selects the
+// response, and no repository text reaches it.
+func TestPluginSourcePreferenceErrorKeepsTheRepositoryCause(t *testing.T) {
+	gateway := &managedSourceCPA{}
+	var handler *Handler
+	startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve, func(h *Handler) { handler = h })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := handler.pluginSourceEnabled(ctx)
+	if err == nil {
+		t.Fatal("a canceled preference read returned no error")
+	}
+	if !errors.Is(err, errPluginSourcePreferenceUnavailable) {
+		t.Fatalf("the sentinel was lost: %v", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the repository cause was lost: %v", err)
+	}
+
+	t.Run("both fixed responses keep the cause out", func(t *testing.T) {
+		for _, testCase := range []struct {
+			name        string
+			isAfterSave bool
+			want        string
+		}{
+			{name: "store read", want: "internal server error"},
+			{name: "after a configuration save", isAfterSave: true, want: "configuration was saved"},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				recorder := httptest.NewRecorder()
+				writePluginSourceError(recorder, err, testCase.isAfterSave)
+				body := recorder.Body.String()
+				if recorder.Code != http.StatusInternalServerError || !strings.Contains(body, testCase.want) {
+					t.Fatalf("response = %d %s, want 500 with %q", recorder.Code, body, testCase.want)
+				}
+				if strings.Contains(body, "context canceled") || strings.Contains(body, "omc_plugin_source_enabled") {
+					t.Fatalf("response leaked the cause: %s", body)
+				}
+			})
+		}
+	})
+
+	t.Run("the after-save failure is logged", func(t *testing.T) {
+		var logs bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+		defer slog.SetDefault(previous)
+
+		recorder := httptest.NewRecorder()
+		writePluginSourceError(recorder, err, true)
+		if !strings.Contains(logs.String(), "could not be restored after a configuration save") {
+			t.Fatalf("log = %s, want the after-save failure", logs.String())
+		}
+		if !strings.Contains(logs.String(), "context canceled") {
+			t.Fatalf("log = %s, want the repository cause", logs.String())
+		}
+		if strings.Contains(recorder.Body.String(), "context canceled") {
+			t.Fatalf("response leaked the cause: %s", recorder.Body.String())
 		}
 	})
 }
