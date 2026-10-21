@@ -1,34 +1,20 @@
 import type { FormHeaderItem } from './managementProviders';
 
 /**
- * OpenCode identifies a conversation from the `x-opencode-session` request
- * header; without one, a request can be refused or lose the prompt-cache
- * affinity OpenCode pins per conversation. Its lanes differ only by base path
- * (`/zen/v1`, `/zen/go/v1`, `/inference/go/openai/v1`), so an endpoint is
- * recognized by host: a path list would be stale the next time OpenCode
- * publishes another lane.
+ * OpenCode identifies a conversation by the `x-opencode-session` request header;
+ * a request without one can be refused or lose the prompt-cache affinity pinned
+ * per conversation. Its lanes differ only by base path, so the endpoint is
+ * recognized by host and keeps working when OpenCode publishes another lane.
  *
- * CPA expands `$CPA-SESSION-ID` inside a credential's custom headers into the
- * session identifier of the request it is serving, which is the value OpenCode
- * asks for. That makes the fix one stored header entry on the provider, not
- * per-request code in this console.
+ * CPA expands `$CPA-SESSION-ID` in a credential's custom headers into the session
+ * id of the request it is serving, so the fix is one stored header entry.
  */
 export const OPENCODE_SESSION_HEADER = 'x-opencode-session';
 export const OPENCODE_SESSION_HEADER_VALUE = '$CPA-SESSION-ID';
 
 const OPENCODE_HOST = 'opencode.ai';
 
-/** Boundary on the dot, so a lookalike host such as `opencode.ai.example.test` is not OpenCode. */
-function isOpenCodeHost(hostname: string): boolean {
-  const host = hostname.replace(/\.$/, '');
-  return host === OPENCODE_HOST || host.endsWith(`.${OPENCODE_HOST}`);
-}
-
-/**
- * True when the endpoint names an OpenCode host over HTTPS, whichever lane its
- * path selects. Anything that is not an absolute HTTPS URL stays unrecognized:
- * a base URL the save refuses is not a place to build guidance on.
- */
+/** True for an absolute HTTPS URL on OpenCode's own host, whichever lane its path selects. */
 export function isOpenCodeEndpoint(baseURL: string): boolean {
   const trimmed = baseURL.trim();
   if (!trimmed) return false;
@@ -38,37 +24,56 @@ export function isOpenCodeEndpoint(baseURL: string): boolean {
   } catch {
     return false;
   }
-  return url.protocol === 'https:' && isOpenCodeHost(url.hostname.toLowerCase());
+  return url.protocol === 'https:' && url.hostname.toLowerCase().replace(/\.$/, '') === OPENCODE_HOST;
 }
 
 function isSessionHeader(row: { key: string }): boolean {
   return row.key.trim().toLowerCase() === OPENCODE_SESSION_HEADER;
 }
 
-/** Only a header carrying a value reaches OpenCode, so a blank row still counts as missing. */
-export function hasOpenCodeSessionHeader(headers: FormHeaderItem[]): boolean {
-  return headers.some((row) => isSessionHeader(row) && row.value.trim() !== '');
+/**
+ * What the header list currently says about the session header.
+ *
+ * The save writes one map entry per trimmed key and keeps the last row naming it,
+ * while HTTP reads the header case-insensitively. A blank row after a filled one
+ * therefore saves a blank value, and two spellings with different ids leave the
+ * value this console cannot state. Both are `missing` or `conflict` here rather
+ * than a mapping the editor pretends to see.
+ */
+export type OpenCodeSessionState = 'missing' | 'conflict' | 'mapped';
+
+export function openCodeSessionState(headers: FormHeaderItem[]): OpenCodeSessionState {
+  const values = new Set<string>();
+  let hasBlankRow = false;
+  for (const row of headers) {
+    if (!isSessionHeader(row)) continue;
+    const value = row.value.trim();
+    if (value === '') hasBlankRow = true;
+    else values.add(value);
+  }
+  if (values.size > 1) return 'conflict';
+  if (values.size === 0 || hasBlankRow) return 'missing';
+  return 'mapped';
 }
 
 /**
- * Adds the session header to a draft, filling a blank row the operator already
- * started instead of leaving a second one behind, and leaving every other entry
- * alone. Idempotent: a filled `x-opencode-session` is the operator's own mapping
- * and is never overwritten.
+ * Gives every session-header row the one value the request should carry: the
+ * operator's own id when they configured one, `$CPA-SESSION-ID` otherwise. A
+ * blank row therefore cannot win on save, and unrelated headers are untouched.
+ *
+ * Two different configured ids are left exactly as they are - choosing between
+ * them is the operator's decision, not this button's.
  */
 export function withOpenCodeSessionHeader(
   headers: FormHeaderItem[],
   newRowId: string,
 ): FormHeaderItem[] {
-  if (hasOpenCodeSessionHeader(headers)) return headers;
-  const blankIndex = headers.findIndex(isSessionHeader);
-  if (blankIndex >= 0) {
-    return headers.map((row, index) =>
-      index === blankIndex ? { ...row, value: OPENCODE_SESSION_HEADER_VALUE } : row,
-    );
+  const state = openCodeSessionState(headers);
+  if (state !== 'missing') return headers;
+  const configured = headers.find((row) => isSessionHeader(row) && row.value.trim() !== '')?.value.trim();
+  const value = configured ?? OPENCODE_SESSION_HEADER_VALUE;
+  if (!headers.some(isSessionHeader)) {
+    return [...headers, { id: newRowId, key: OPENCODE_SESSION_HEADER, value }];
   }
-  return [
-    ...headers,
-    { id: newRowId, key: OPENCODE_SESSION_HEADER, value: OPENCODE_SESSION_HEADER_VALUE },
-  ];
+  return headers.map((row) => (isSessionHeader(row) ? { ...row, value } : row));
 }

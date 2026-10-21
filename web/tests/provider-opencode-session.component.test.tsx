@@ -19,6 +19,7 @@ const OPENCODE_PROVIDER: ProviderItem = {
 const RELAY_PROVIDER: ProviderItem = {
   ...OPENCODE_PROVIDER, name: 'Relay', upstream_name: 'relay', base_url: 'https://relay.example.test/v1',
 };
+const NOTICE_TITLE = 'This OpenCode endpoint needs a session header';
 const toast: Toast = {
   success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), pending: () => () => {}, dismiss: vi.fn(),
 };
@@ -32,7 +33,7 @@ beforeEach(() => {
   }));
 });
 
-/** The real drawer and hook; `writeProviderIcon` records the preference write the save path makes. */
+/** The real drawer and hook, so the suggestion acts on the same draft the save serializes. */
 function Editor({ provider }: { provider: ProviderItem }) {
   const t = useT();
   const icons = useProviderIconOverrides();
@@ -70,30 +71,57 @@ function renderEditor(provider: ProviderItem) {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
     await screen.findByRole('combobox', { name: 'Driver / Protocol' });
   };
-  return { client, writes, view, openEditor };
+  const headersToggle = () => screen.getByRole('button', { name: /Custom Headers/ });
+  const save = () => writes.find((write) => write.path.endsWith('/management/providers/openai-compat-0'));
+  return { client, writes, view, openEditor, headersToggle, save };
 }
 
-it('offers the OpenCode session header once, and the save carries the exact pair', async () => {
-  const { client, writes, view, openEditor } = renderEditor(OPENCODE_PROVIDER);
+it('offers the OpenCode session header and reveals the row it adds', async () => {
+  const { client, writes, view, openEditor, headersToggle } = renderEditor(OPENCODE_PROVIDER);
   try {
     await openEditor();
-    expect(await screen.findByText('This OpenCode endpoint needs a session header')).toBeTruthy();
-    // The requirement has to name the header it adds, because the collapsed
-    // Custom Headers group is where the row is about to appear.
+    expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();
+    // The requirement names the header it adds, because the collapsed group is
+    // where the row is about to appear.
     expect(screen.getByText(/OpenCode identifies a conversation by x-opencode-session/)).toBeTruthy();
     expect(screen.getByText(/CPA expands \$CPA-SESSION-ID into the session identifier of this request/)).toBeTruthy();
+    expect(headersToggle().getAttribute('aria-expanded')).toBe('false');
 
     fireEvent.click(screen.getByRole('button', { name: 'Add x-opencode-session' }));
-    await waitFor(() => expect(screen.queryByText('This OpenCode endpoint needs a session header')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(NOTICE_TITLE)).toBeNull());
+    expect(headersToggle().getAttribute('aria-expanded')).toBe('true');
     expect((screen.getByDisplayValue('x-opencode-session') as HTMLInputElement).value).toBe('x-opencode-session');
     expect((screen.getByDisplayValue('$CPA-SESSION-ID') as HTMLInputElement).value).toBe('$CPA-SESSION-ID');
     // The click only edits the draft: nothing is written until the operator saves.
     expect(writes).toHaveLength(0);
+  } finally { view.unmount(); client.clear(); }
+});
+
+it('saves the pair the suggestion added', async () => {
+  const { client, view, openEditor, save } = renderEditor(OPENCODE_PROVIDER);
+  try {
+    await openEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add x-opencode-session' }));
+    await screen.findByDisplayValue('$CPA-SESSION-ID');
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes.some((write) => write.path.endsWith('/management/providers/openai-compat-0'))).toBe(true));
-    const save = writes.find((write) => write.path.endsWith('/management/providers/openai-compat-0'));
-    expect(save?.body.headers).toEqual({ 'x-opencode-session': '$CPA-SESSION-ID' });
+    await waitFor(() => expect(save()).toBeTruthy());
+    expect(save()?.body.headers).toEqual({ 'x-opencode-session': '$CPA-SESSION-ID' });
+  } finally { view.unmount(); client.clear(); }
+});
+
+it('writes nothing when the added header is abandoned, and reopening restores the stored draft', async () => {
+  const { client, writes, view, openEditor } = renderEditor(OPENCODE_PROVIDER);
+  try {
+    await openEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'Add x-opencode-session' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / Protocol' })).toBeNull());
+    expect(writes).toHaveLength(0);
+
+    await openEditor();
+    expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();
+    expect(screen.queryByDisplayValue('$CPA-SESSION-ID')).toBeNull();
   } finally { view.unmount(); client.clear(); }
 });
 
@@ -101,27 +129,51 @@ it('follows the endpoint in the draft rather than the provider it was opened fro
   const { client, view, openEditor } = renderEditor(RELAY_PROVIDER);
   try {
     await openEditor();
-    expect(screen.queryByText('This OpenCode endpoint needs a session header')).toBeNull();
+    expect(screen.queryByText(NOTICE_TITLE)).toBeNull();
     const baseURL = screen.getByPlaceholderText('e.g. https://api.deepseek.com/v1');
 
     fireEvent.change(baseURL, { target: { value: 'https://opencode.ai/zen/v1' } });
-    expect(await screen.findByText('This OpenCode endpoint needs a session header')).toBeTruthy();
+    expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();
 
     // A lookalike host or a path that merely spells opencode.ai is not OpenCode.
     fireEvent.change(baseURL, { target: { value: 'https://relay.example/opencode.ai/zen/v1' } });
-    await waitFor(() => expect(screen.queryByText('This OpenCode endpoint needs a session header')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(NOTICE_TITLE)).toBeNull());
   } finally { view.unmount(); client.clear(); }
 });
 
-it('leaves a provider that already maps its own session id quiet', async () => {
-  const { client, view, openEditor } = renderEditor({
+it('reports two configured ids instead of choosing one of them', async () => {
+  const { client, view, openEditor, headersToggle } = renderEditor({
     ...OPENCODE_PROVIDER,
-    headers: { 'X-OpenCode-Session': 'ses_operator_choice' },
+    headers: { 'x-opencode-session': 'ses_first', 'X-OpenCode-Session': 'ses_second' },
   });
   try {
     await openEditor();
-    // The draft already names a session id, so the guidance would be
-    // describing a header that is present.
-    expect(screen.queryByText('This OpenCode endpoint needs a session header')).toBeNull();
+    expect(await screen.findByText('This OpenCode endpoint has conflicting session headers')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add x-opencode-session' })).toBeNull();
+    expect(screen.getByText(/Custom Headers lists more than one value for x-opencode-session/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review headers' }));
+    await waitFor(() => expect(headersToggle().getAttribute('aria-expanded')).toBe('true'));
+  } finally { view.unmount(); client.clear(); }
+});
+
+it('fills a blank duplicate with the configured id, so the save cannot carry a blank value', async () => {
+  const { client, view, openEditor, save } = renderEditor({
+    ...OPENCODE_PROVIDER,
+    headers: { 'x-opencode-session': 'ses_operator', 'X-OpenCode-Session': '' },
+  });
+  try {
+    await openEditor();
+    // The blank row would be written after the filled one, so it wins on save.
+    expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add x-opencode-session' }));
+    await waitFor(() => expect(screen.getAllByDisplayValue('ses_operator')).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(save()).toBeTruthy());
+    expect(save()?.body.headers).toEqual({
+      'x-opencode-session': 'ses_operator',
+      'X-OpenCode-Session': 'ses_operator',
+    });
   } finally { view.unmount(); client.clear(); }
 });

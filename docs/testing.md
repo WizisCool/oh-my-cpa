@@ -92,10 +92,12 @@ retain drawer, picker, layout and page-level integration claims.
 
 `web/tests/provider-opencode-session.component.test.tsx` mounts the same editor for the
 OpenCode endpoint guidance: the suggestion follows the base URL typed into the draft rather
-than the provider the drawer was opened from, one click fills the collapsed Custom Headers
-group with the literal `x-opencode-session: $CPA-SESSION-ID`, a draft that already names its
-own session id stays quiet, and nothing is written before Save. The host-boundary detection
-and the idempotent merge beneath it belong to `scripts/test-provider-console.ts`.
+than the provider the drawer was opened from, one click reveals the collapsed Custom Headers
+group with the literal `x-opencode-session: $CPA-SESSION-ID`, abandoning the edit writes
+nothing and reopening restores the stored draft, and Save submits that pair. A draft holding
+two different ids is reported with a review action instead of being resolved, and a blank
+duplicate is filled with the configured id so the save cannot carry a blank value. The
+exact-host detection and that merge beneath it belong to `scripts/test-provider-console.ts`.
 
 ### Rendered component integration
 

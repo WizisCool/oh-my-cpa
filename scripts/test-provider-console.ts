@@ -24,10 +24,8 @@ import {
   totalProviderTraffic,
 } from '../web/src/components/providers/providerOverview.ts';
 import {
-  OPENCODE_SESSION_HEADER,
-  OPENCODE_SESSION_HEADER_VALUE,
-  hasOpenCodeSessionHeader,
   isOpenCodeEndpoint,
+  openCodeSessionState,
   withOpenCodeSessionHeader,
 } from '../web/src/components/providers/opencodeSession.ts';
 import type { FormHeaderItem } from '../web/src/components/providers/managementProviders.ts';
@@ -389,9 +387,8 @@ console.log('PASS provider overview: traffic joins by upstream name, attention a
 
 // OpenCode publishes one lane per base path and keeps adding them, so the lane is
 // recognized from the host rather than from a path list that goes stale. The host
-// is compared on a dot boundary: a relay whose *path* merely spells opencode.ai,
-// or a lookalike such as opencode.ai.example.test, is somebody else's endpoint and
-// must not be described as OpenCode.
+// is compared exactly: a relay whose *path* spells opencode.ai, a lookalike host
+// such as opencode.ai.example.test, and a subdomain are somebody else's endpoint.
 for (const lane of [
   'https://opencode.ai',
   'https://opencode.ai/',
@@ -399,8 +396,9 @@ for (const lane of [
   'https://opencode.ai/zen/go/v1',
   'https://opencode.ai/inference/go/openai/v1',
   'https://opencode.ai/lane-published-later/anthropic/v2',
-  'https://API.OpenCode.ai/zen/v1',
-  'https://opencode.ai.:443/zen/v1',
+  'https://OpenCode.AI/zen/v1',
+  'https://opencode.ai./zen/v1',
+  'https://opencode.ai:443/zen/v1',
   'https://opencode.ai/zen/v1?trace=1#models',
 ]) {
   assert.equal(isOpenCodeEndpoint(lane), true, `${lane} is an OpenCode endpoint`);
@@ -410,6 +408,7 @@ for (const notOpenCode of [
   '   ',
   'opencode.ai/zen/v1',
   'http://opencode.ai/zen/v1',
+  'https://api.opencode.ai/zen/v1',
   'https://opencode.ai.example.test/zen/v1',
   'https://notopencode.ai/zen/v1',
   'https://relay.example/opencode.ai/zen/v1',
@@ -419,37 +418,61 @@ for (const notOpenCode of [
   assert.equal(isOpenCodeEndpoint(notOpenCode), false, `${JSON.stringify(notOpenCode)} is not an OpenCode endpoint`);
 }
 
-// A blank entry is still missing: CPA would send an empty header, which is not the
-// session id OpenCode asks for. A filled entry is satisfied whatever its value,
-// because an operator's own mapping outranks this suggestion.
+// The header list is read the way the save reads it: one map entry per trimmed
+// key, the last row naming a key wins, and HTTP matches the name case-insensitively.
 const header = (key: string, value: string, id = 'hdr'): FormHeaderItem => ({ id, key, value });
-assert.equal(hasOpenCodeSessionHeader([]), false);
-assert.equal(hasOpenCodeSessionHeader([header('x-opencode-session', '  ')]), false);
-assert.equal(hasOpenCodeSessionHeader([header(' X-OpenCode-Session ', 'ses_operator')]), true);
-assert.equal(hasOpenCodeSessionHeader([header('X-Team', '$CPA-SESSION-ID')]), false);
+assert.equal(openCodeSessionState([]), 'missing');
+assert.equal(openCodeSessionState([header('X-Team', '$CPA-SESSION-ID')]), 'missing');
+assert.equal(openCodeSessionState([header('x-opencode-session', '  ')]), 'missing');
+assert.equal(openCodeSessionState([header(' X-OpenCode-Session ', 'ses_operator')]), 'mapped');
+assert.equal(
+  openCodeSessionState([header('x-opencode-session', '$CPA-SESSION-ID'), header('X-OpenCode-Session', '$CPA-SESSION-ID', 'hdr-2')]),
+  'mapped',
+  'the same id under two spellings is still one value',
+);
+// A filled row followed by a blank one saves the blank, so the guidance must stay.
+assert.equal(
+  openCodeSessionState([header('x-opencode-session', 'ses_operator'), header('x-opencode-session', '', 'hdr-2')]),
+  'missing',
+);
+assert.equal(
+  openCodeSessionState([header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')]),
+  'missing',
+);
+// Two different configured ids are the operator's decision, not the editor's.
+assert.equal(
+  openCodeSessionState([header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')]),
+  'conflict',
+);
 
 const teamHeader = header('X-Team', 'alpha', 'hdr-team');
 const appended = withOpenCodeSessionHeader([teamHeader], 'hdr-new');
 assert.deepEqual(appended, [
   teamHeader,
-  { id: 'hdr-new', key: OPENCODE_SESSION_HEADER, value: OPENCODE_SESSION_HEADER_VALUE },
+  { id: 'hdr-new', key: 'x-opencode-session', value: '$CPA-SESSION-ID' },
 ]);
 assert.equal(appended[1].value, '$CPA-SESSION-ID', 'the suggestion is the placeholder CPA expands');
 // A second click is not a second header, and the draft it returns is the same
 // reference so React can bail out of the update.
 assert.equal(withOpenCodeSessionHeader(appended, 'hdr-other'), appended);
-// The operator's own session mapping is never overwritten or duplicated.
-const operatorMapping = [header('X-OpenCode-Session', 'ses_operator')];
-assert.equal(withOpenCodeSessionHeader(operatorMapping, 'hdr-new'), operatorMapping);
-assert.equal(
-  withOpenCodeSessionHeader([header('x-opencode-session', ''), header('x-opencode-session', 'ses_operator', 'hdr-2')], 'hdr-new').length,
-  2,
-  'a filled entry satisfies the requirement even beside a blank one',
-);
-// A blank entry the operator started is the one that receives the value.
+// The operator's own id fills a blank row instead of being replaced by the placeholder.
 assert.deepEqual(
-  withOpenCodeSessionHeader([teamHeader, header('x-opencode-session', ' ', 'hdr-blank')], 'hdr-new'),
-  [teamHeader, { id: 'hdr-blank', key: 'x-opencode-session', value: '$CPA-SESSION-ID' }],
+  withOpenCodeSessionHeader(
+    [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', ' ', 'hdr-2')],
+    'hdr-new',
+  ),
+  [header('x-opencode-session', 'ses_operator'), header('x-opencode-session', 'ses_operator', 'hdr-2')],
 );
+// Every blank row is filled, because whichever one is last is the value the save keeps.
+assert.deepEqual(
+  withOpenCodeSessionHeader(
+    [header('x-opencode-session', '', 'hdr-1'), header('x-opencode-session', '', 'hdr-2')],
+    'hdr-new',
+  ),
+  [header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-1'), header('x-opencode-session', '$CPA-SESSION-ID', 'hdr-2')],
+);
+// Conflicting ids are left exactly as the operator wrote them.
+const conflicting = [header('x-opencode-session', 'ses_a', 'hdr-1'), header('X-OpenCode-Session', 'ses_b', 'hdr-2')];
+assert.equal(withOpenCodeSessionHeader(conflicting, 'hdr-new'), conflicting);
 
-console.log('PASS OpenCode guidance: the host selects the lane, and one filled session header is enough');
+console.log('PASS OpenCode guidance: the host selects the lane, and exactly one session id survives the save');
