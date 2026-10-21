@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
@@ -545,6 +546,13 @@ func pluginStoreCatalog() []storePluginEntry {
 			description: "Routes a caller key to a credential pool by team.",
 			repository:  "cpa-community/team-router", license: "BSD-3-Clause",
 			tags: []string{"routing"}, logo: fixtureLogo("TR", "#BE185D"), sourceID: "community"},
+		// Oh My CPA's own registry: the source the console manages itself, and the one
+		// whose entries it pins above every other registry's.
+		{id: "usage-digest", name: "Usage digest", version: "0.3.0", author: "oh-my-cpa",
+			description: "Posts a daily spend and request summary for this console to a webhook.",
+			repository:  "WizisCool/omc-plugin-usage-digest", license: "MIT",
+			tags: []string{"observability", "digest"}, logo: fixtureLogo("UD", "#0369A1"),
+			sourceID: pluginregistry.SourceID(pluginregistry.OMCSourceURL)},
 	}
 }
 
@@ -553,6 +561,8 @@ func pluginStoreSources() []map[string]any {
 	return []map[string]any{
 		{"id": "official", "name": "official", "url": "https://plugins.router-for-me.example/registry.json"},
 		{"id": "community", "name": "plugins.cpa-community.example", "url": "https://plugins.cpa-community.example/registry.json"},
+		// CPA names a custom source after its URL host; the console renames this one.
+		{"id": pluginregistry.SourceID(pluginregistry.OMCSourceURL), "name": "raw.githubusercontent.com", "url": pluginregistry.OMCSourceURL},
 	}
 }
 
@@ -565,9 +575,14 @@ func pluginsSection() map[string]any {
 		}
 	}
 	return map[string]any{
-		"enabled":       true,
-		"dir":           "plugins",
-		"store-sources": []string{"https://plugins.cpa-community.example/registry.json"},
+		"enabled": true,
+		"dir":     "plugins",
+		"store-sources": []string{
+			"https://plugins.cpa-community.example/registry.json",
+			// The console appends its own registry when it reconciles the list; the
+			// fixture starts from the state a running installation is in.
+			pluginregistry.OMCSourceURL,
+		},
 		"store-auth": []map[string]any{{
 			"match": "https://plugins.cpa-community.example/", "apply-to": []string{"registry", "artifact"},
 			"type": "bearer", "token-env": "CPA_COMMUNITY_PLUGIN_TOKEN",

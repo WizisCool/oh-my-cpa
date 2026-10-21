@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DownloadOutlined,
   LockOutlined,
+  PuzzleOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   SyncOutlined,
@@ -46,8 +47,9 @@ interface PluginStorePanelProps {
  *
  * Installing a plugin runs its code inside the gateway, so the card says where it comes
  * from before anything else: the built-in registry with a first-party repository is
- * marked official, and everything else is marked third-party and has to be confirmed by
- * typing the plugin's id.
+ * marked official, Oh My CPA's own registry says so and is pinned above the others, and
+ * everything else is marked third-party. An Oh My CPA entry still has to be confirmed by
+ * typing the plugin's id: the registry says who publishes it, not what its code does.
  */
 export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSettings }: PluginStorePanelProps) {
   const t = useT();
@@ -186,7 +188,9 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
       </div>
 
       <span className={styles.badges}>
-        {entry.is_official ? (
+        {entry.is_omc ? (
+          <span className={`${styles.badge} ${styles['badge-accent']}`}><PuzzleOutlined />{t('plugin.badge_omc')}</span>
+        ) : entry.is_official ? (
           <span className={styles.badge}><SafetyCertificateOutlined />{t('plugin.badge_official')}</span>
         ) : (
           <span className={`${styles.badge} ${styles['badge-warn']}`}><WarningOutlined />{t('plugin.badge_third_party')}</span>
@@ -221,7 +225,11 @@ function StoreCard({ entry, isExpanded, isDemo, onToggleDescription, onInstall, 
           version && <span className={styles['meta-strong']}>{version}</span>,
           entry.author && t('plugin.by_author', { author: entry.author }),
           entry.license,
-          entry.source_name && t('plugin.from_source', { source: entry.is_official || entry.source_id === 'official' ? t('plugin.source_official') : entry.source_name }),
+          entry.source_name && t('plugin.from_source', {
+            source: entry.is_omc
+              ? t('plugin.source_omc')
+              : entry.is_official || entry.source_id === 'official' ? t('plugin.source_official') : entry.source_name,
+          }),
         ]}
       />
 
@@ -353,7 +361,11 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
       <div className={styles['install-body']}>
         <PluginMeta
           items={[
-            t('plugin.from_source', { source: entry.source_id === 'official' ? t('plugin.source_official') : entry.source_name }),
+            t('plugin.from_source', {
+              source: entry.is_omc
+                ? t('plugin.source_omc')
+                : entry.source_id === 'official' ? t('plugin.source_official') : entry.source_name,
+            }),
             entry.install_type,
             entry.platforms.length > 0 && t('plugin.platforms', { platforms: entry.platforms.join(', ') }),
           ]}
@@ -381,10 +393,10 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
         {isThirdParty && (
           <Notice
             tone="warning"
-            title={t('plugin.third_party_title')}
+            title={entry.is_omc ? t('plugin.omc_plugin_title') : t('plugin.third_party_title')}
             description={(
               <div className={styles['install-body']}>
-                <span>{t('plugin.third_party_desc')}</span>
+                <span>{entry.is_omc ? t('plugin.omc_plugin_desc') : t('plugin.third_party_desc')}</span>
                 <label className={styles['rule-field']}>
                   <span className={styles['rule-field-label']}>{t('plugin.third_party_confirm', { token })}</span>
                   <Input

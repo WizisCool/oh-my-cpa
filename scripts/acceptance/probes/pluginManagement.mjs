@@ -61,10 +61,17 @@ const STORE = {
   sources: [
     { id: 'official', name: 'official', url: 'https://registry.example/plugins.json', is_official: true },
     { id: 'source-mirror', name: 'mirror.example', url: 'https://mirror.example/registry.json', is_official: false },
+    { id: 'source-omc', name: 'Oh My CPA', url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json', is_official: false },
   ],
   source_errors: [{ source_id: 'source-down', source_name: 'down.example', source_url: 'https://down.example/r.json', message: 'fetch registry: 503' }],
-  total: 3,
+  total: 4,
   plugins: [
+    {
+      store_id: 'source-omc/usage-digest', source_id: 'source-omc', source_name: 'Oh My CPA', id: 'usage-digest', name: 'Usage Digest',
+      description: 'Posts a daily spend and request summary.', author: 'oh-my-cpa', version: '0.3.0', repository_url: 'https://github.com/WizisCool/omc-plugin-usage-digest',
+      license: 'MIT', tags: ['digest'], platforms: [], is_official: false, is_omc: true,
+      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+    },
     {
       store_id: 'official/request-logger', source_id: 'official', source_name: 'official', id: 'request-logger', name: 'Request Logger',
       description: 'Logs request metadata.', author: 'router-for-me', version: '1.1.0', repository_url: 'https://github.com/router-for-me/request-logger',
@@ -90,6 +97,8 @@ const SETTINGS = {
   enabled: true,
   dir: 'plugins',
   store_sources: ['https://mirror.example/registry.json'],
+  omc_source_url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json',
+  omc_source_enabled: true,
   store_auth: [
     { match: 'https://mirror.example/', apply_to: ['registry', 'artifact'], type: 'bearer', token_env: 'MIRROR_TOKEN', allow_insecure: false },
   ],
@@ -168,9 +177,14 @@ export async function pluginManagement({ base, page, check, writes }) {
 
   // ── store cards ─────────────────────────────────────────────────────────────
   const cards = page.locator('[data-plugin-panel="store"] article[data-store-id]');
-  const cardsShown = await isTrue(async () => (await cards.count()) === 3, 'the store cards');
+  const cardsShown = await isTrue(async () => (await cards.count()) === 4, 'the store cards');
   check('the store renders one card per registry entry', cardsShown, String(await cards.count()));
   if (!cardsShown) return;
+
+  const omc = page.locator('article[data-store-id="source-omc/usage-digest"]');
+  check('the Oh My CPA registry is pinned above the other registries', (await cards.first().getAttribute('data-store-id')) === 'source-omc/usage-digest');
+  const omcText = await omc.innerText();
+  check('an Oh My CPA entry carries its own badge and source name', /Oh My CPA/.test(omcText) && !/Third-party|第三方/.test(omcText), omcText);
 
   const limiter = page.locator('article[data-store-id="official/rate-limiter"]');
   const limiterText = await limiter.innerText();
@@ -424,6 +438,10 @@ export async function pluginManagement({ base, page, check, writes }) {
   await page.goto(`${base}/plugins/settings`, { waitUntil: 'domcontentloaded' });
   const settings = page.locator('[data-plugin-panel="settings"]');
   await settings.waitFor({ timeout: 10000 });
+  const omcRow = settings.locator('[data-plugin-omc-source]');
+  check('the managed Oh My CPA source is a fixed row rather than an editable source',
+    (await omcRow.count()) === 1 && (await omcRow.locator('input').count()) === 0
+      && (await omcRow.innerText()).includes('Oh My CPA'));
   check('the store auth rule is shown as a form, not YAML', (await settings.locator('[data-plugin-auth-rule]').count()) === 1
     && (await settings.locator('input[value="MIRROR_TOKEN"]').count()) === 1);
   await settings.getByRole('button', { name: /添加源|Add source/ }).click();

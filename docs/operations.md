@@ -367,6 +367,20 @@ The server-stored `omc_tps_calculation_mode` preference (`exclude_ttft` /
 `include_ttft`) also supports Agent/MCP reads and writes; historical timing and usage
 remain unchanged.
 
+## Plugin store
+
+The plugin store reads CPA's built-in `official` registry plus the registries in
+`plugins.store-sources`. Oh My CPA's own registry
+(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json`)
+is a managed entry: the server adds it when the source is on (the default) and restores
+it after a configuration save that removed it, so the switch is **OMC Settings →
+Plugin store** (`omc_plugin_source_enabled`, ADR 0104), not the configuration editor
+and not the source list on the plugin settings tab. Turning it off removes the
+address on the next plugin read, install or plugin-settings save. Its entries are
+marked Oh My CPA and listed first; like every entry outside CPA's built-in registry,
+installing one requires typing the plugin id, because the confirmation is about
+running code inside the gateway.
+
 ## Plugin pages
 
 A trusted installed page loads through `<base>/api/v1/plugin-host/` behind the console

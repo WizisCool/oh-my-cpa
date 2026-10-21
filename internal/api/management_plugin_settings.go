@@ -10,6 +10,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 )
 
 /**
@@ -64,6 +65,12 @@ type PluginSettingsDTO struct {
 	Dir          string                   `json:"dir"`
 	StoreSources []string                 `json:"store_sources"`
 	StoreAuth    []PluginStoreAuthRuleDTO `json:"store_auth"`
+	// OMCSourceURL and OMCSourceEnabled describe the one source this console
+	// manages itself. It is not an entry of store_sources: the list holds what the
+	// operator configured, and the managed source is present exactly when its switch
+	// is on.
+	OMCSourceURL     string `json:"omc_source_url"`
+	OMCSourceEnabled bool   `json:"omc_source_enabled"`
 }
 
 type putPluginSettingsRequest struct {
@@ -73,13 +80,21 @@ type putPluginSettingsRequest struct {
 	StoreAuth    []PluginStoreAuthRuleDTO `json:"store_auth"`
 }
 
-func projectPluginSettings(revision string, settings configyaml.PluginSettings) PluginSettingsDTO {
+func projectPluginSettings(revision string, settings configyaml.PluginSettings, omcSourceEnabled bool) PluginSettingsDTO {
+	storeSources := make([]string, 0, len(settings.StoreSources))
+	for _, source := range boundedPluginList(settings.StoreSources) {
+		if !isOMCPluginStoreURL(source) {
+			storeSources = append(storeSources, source)
+		}
+	}
 	dto := PluginSettingsDTO{
-		Revision:     revision,
-		Enabled:      settings.Enabled,
-		Dir:          boundedText(settings.Dir, pluginTextLimit),
-		StoreSources: boundedPluginList(settings.StoreSources),
-		StoreAuth:    make([]PluginStoreAuthRuleDTO, 0, len(settings.StoreAuth)),
+		Revision:         revision,
+		Enabled:          settings.Enabled,
+		Dir:              boundedText(settings.Dir, pluginTextLimit),
+		StoreSources:     storeSources,
+		StoreAuth:        make([]PluginStoreAuthRuleDTO, 0, len(settings.StoreAuth)),
+		OMCSourceURL:     pluginregistry.OMCSourceURL,
+		OMCSourceEnabled: omcSourceEnabled,
 	}
 	if dto.Dir == "" {
 		dto.Dir = "plugins"
@@ -121,7 +136,12 @@ func (h *Handler) getPluginSettings(writer http.ResponseWriter, request *http.Re
 		writePluginSettingsUnreadable(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(rawYAML), settings))
+	omcSourceEnabled, err := h.omcPluginSourceEnabled(request.Context())
+	if err != nil {
+		h.pluginSourceReadError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(rawYAML), settings, omcSourceEnabled))
 }
 
 func writePluginSettingsUnreadable(writer http.ResponseWriter, err error) {
@@ -143,6 +163,12 @@ func validatePluginSettings(req putPluginSettingsRequest) (configyaml.PluginSett
 	for _, source := range req.StoreSources {
 		source = strings.TrimSpace(source)
 		if source == "" || seenSources[source] {
+			continue
+		}
+		// The managed registry is not a source the operator edits: it is present
+		// exactly when its switch is on, so a submitted copy is absorbed instead of
+		// being stored a second time.
+		if isOMCPluginStoreURL(source) {
 			continue
 		}
 		if !isRegistryURL(source) {
@@ -277,6 +303,15 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		writePluginSettingsUnreadable(writer, err)
 		return
 	}
+	// The managed registry is put back into the list this save writes, so the
+	// configuration and the switch cannot disagree after a save that never
+	// mentioned it.
+	omcSourceEnabled, err := h.omcPluginSourceEnabled(request.Context())
+	if err != nil {
+		h.pluginSourceReadError(writer, err)
+		return
+	}
+	settings.StoreSources = configyaml.StoreSourcesWith(settings.StoreSources, pluginregistry.OMCSourceURL, omcSourceEnabled)
 	set, remove, err := configyaml.PluginSettingsEdit(settings)
 	if err != nil {
 		writeError(writer, http.StatusUnprocessableEntity, "the configuration cannot be edited: "+err.Error())
@@ -313,12 +348,12 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 	if err != nil {
 		// The write landed; the answer is what was sent, without a revision, so
 		// the page reloads before its next save.
-		writeJSON(writer, http.StatusOK, projectPluginSettings("", settings))
+		writeJSON(writer, http.StatusOK, projectPluginSettings("", settings, omcSourceEnabled))
 		return
 	}
 	stored, err := configyaml.ReadPluginSettings(savedYAML)
 	if err != nil {
 		stored = settings
 	}
-	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(savedYAML), stored))
+	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(savedYAML), stored, omcSourceEnabled))
 }

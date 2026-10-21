@@ -23,7 +23,8 @@
     "playground_session",
     "agent_target",
     "update_dismissals",
-    "omc_quota_auto_refresh"
+    "omc_quota_auto_refresh",
+    "omc_plugin_source_enabled"
   ],
   "cases": [
     {
@@ -182,6 +183,17 @@
       "status": 400,
       "response": {
         "error": "invalid_quota_auto_refresh"
+      }
+    },
+    {
+      "id": "plugin-source-shape",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_plugin_source_enabled",
+      "body": "{\"enabled\":true}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "the plugin source preference must be true or false"
       }
     },
     {

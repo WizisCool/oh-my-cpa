@@ -76,6 +76,30 @@ func ReadPluginSettings(rawYAML string) (PluginSettings, error) {
 	return settings, nil
 }
 
+// StoreSourcesWith returns the store-source list with one registry URL present or
+// absent, leaving every other entry in the order the operator configured it. A URL
+// that is already listed keeps its position rather than moving to the end, so a
+// reconciliation that changes nothing about the order writes nothing new.
+func StoreSourcesWith(sources []string, registryURL string, present bool) []string {
+	registryURL = strings.TrimSpace(registryURL)
+	result := make([]string, 0, len(sources)+1)
+	isListed := false
+	for _, source := range sources {
+		if strings.TrimSpace(source) != registryURL {
+			result = append(result, source)
+			continue
+		}
+		if present && !isListed {
+			result = append(result, source)
+			isListed = true
+		}
+	}
+	if present && !isListed {
+		result = append(result, registryURL)
+	}
+	return result
+}
+
 // PluginSettingsEdit is the sparse write of the keys this file owns, as values
 // to set and keys to remove below `plugins`. An empty list is removed, which is
 // how CPA spells "none"; `plugins.dir` and `plugins.configs` are never named.

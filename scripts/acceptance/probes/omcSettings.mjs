@@ -84,6 +84,22 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   check('a reloaded settings page reads the saved quota refresh policy',
     await resetSwitch.getAttribute('aria-checked') === 'false' && (await intervalControl.innerText()).includes('Every 30 min'));
 
+  // The managed Oh My CPA plugin registry is the one server-read switch on this page that
+  // changes the gateway's configuration rather than this console's presentation: the store and
+  // the configuration readers consult the same boolean, so the row has to write it as a boolean
+  // and nothing else.
+  const pluginSourceSwitch = page.getByRole('switch', { name: 'Oh My CPA plugin registry', exact: true });
+  await until(() => pluginSourceSwitch.isEnabled(), { label: 'the plugin source switch after the preference read' });
+  check('the Oh My CPA plugin registry defaults to on', await pluginSourceSwitch.getAttribute('aria-checked') === 'true');
+  await pluginSourceSwitch.click();
+  await until(() => preferences.omc_plugin_source_enabled === false, { label: 'the plugin source write' });
+  check('the plugin source switch writes the boolean the server reconciles',
+    writes.some((write) => write.key === 'omc_plugin_source_enabled' && write.body === 'false'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => pluginSourceSwitch.isEnabled(), { label: 'the plugin source switch after reload' });
+  check('a reloaded settings page reads the saved plugin source switch',
+    await pluginSourceSwitch.getAttribute('aria-checked') === 'false');
+
   const timezone = page.getByRole('combobox', { name: 'Time zone', exact: true });
   const timezoneControl = page.locator('.ant-select').filter({ has: timezone });
   check('timezone defaults to the actual server zone with its UTC offset',
@@ -205,6 +221,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
     'Model icons in request list',
     'Scheduled quota refresh',
     'Refresh after a quota resets',
+    'Oh My CPA plugin registry',
     'Theme mode',
     'Light-mode palette',
     'Dark-mode palette',

@@ -422,6 +422,29 @@
   font-size: var(--text-sm);
 }
 
+.source-fixed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.source-fixed-url {
+  color: var(--meta);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.source-fixed-state {
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.source-fixed-action {
+  margin-left: auto;
+}
+
 .field-error {
   margin-top: 4px;
   color: var(--danger);

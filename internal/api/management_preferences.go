@@ -42,6 +42,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceAgentTarget:         true,
 	repository.PreferenceUpdateDismissals:    true,
 	repository.PreferenceQuotaAutoRefresh:    true,
+	repository.PreferenceOMCPluginSource:     true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.
@@ -108,6 +109,15 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	if key == repository.PreferenceQuotaAutoRefresh {
 		if _, err := quota.ParseAutoRefreshSettings(body); err != nil {
 			writeError(writer, http.StatusBadRequest, quota.ErrInvalidAutoRefreshSettings.Error())
+			return
+		}
+	}
+	// The plugin source preference is read by the server when it reconciles CPA's
+	// store sources, so it is a switch and nothing else.
+	if key == repository.PreferenceOMCPluginSource {
+		var enabled bool
+		if json.Unmarshal(body, &enabled) != nil {
+			writeError(writer, http.StatusBadRequest, "the plugin source preference must be true or false")
 			return
 		}
 	}

@@ -164,6 +164,20 @@ on their `plugins.*` paths (`configyaml.PluginSettingsEdit`), under the provider
 gate, the configuration mutex and the revision the page loaded, exactly like a
 configuration save.
 
+Oh My CPA's own registry is a managed entry of that list rather than a configured one
+(`internal/api/management_plugin_source.go`, ADR 0104). `internal/pluginregistry`
+compiles in the address published from `plugins/registry.json`; the server reads the
+`omc_plugin_source_enabled` preference (default on) and keeps `plugins.store-sources`
+in agreement with it. The store read, an install, a plugin-settings save and both
+configuration save paths add or remove the address under the gate and the mutex, and a
+configuration save that removed it is repaired inside the save's own lock scope so the
+revision it reports already contains it. A store read that cannot repair the file fails
+rather than serving a catalogue the operator did not configure. The store projection
+marks those entries `is_omc`, names the source `Oh My CPA` instead of CPA's URL host,
+and lists them first; they remain third-party for installation, because running code
+in the gateway is what the typed-id confirmation answers and the built-in registry plus
+a first-party repository is what the official mark answers.
+
 The facade preserves CPA's `supports_oauth` wire field. CPA derives it from the presence
 of an auth provider, so the installed-plugin badge names the **Auth provider** capability
 rather than claiming an OAuth login method. No plugin-specific classification is applied.

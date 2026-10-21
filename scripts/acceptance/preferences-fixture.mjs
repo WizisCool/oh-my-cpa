@@ -30,6 +30,7 @@ export function createPreferenceFixture({ serverTimezone = PREFERENCE_CONTRACT.s
       }
     }
     if (key === 'omc_quota_auto_refresh' && !isQuotaAutoRefreshDocument(value)) return respond(400, { error: 'invalid_quota_auto_refresh' });
+    if (key === 'omc_plugin_source_enabled' && typeof value !== 'boolean') return respond(400, { error: 'the plugin source preference must be true or false' });
     // Credential/custom-icon reference validation remains in Go and each relevant
     // scenario. This fixture models the JSON/timezone preference wire boundary,
     // not a second repository or an assertion that every valid JSON is admissible.

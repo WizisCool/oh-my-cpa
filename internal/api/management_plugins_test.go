@@ -423,7 +423,7 @@ func TestPluginsLifecycle(t *testing.T) {
 	assertDeclaredKeys(t, "store plugin", official, []string{
 		"store_id", "source_id", "source_name", "id", "name", "description", "author", "version",
 		"repository_url", "homepage", "license", "tags", "logo", "install_type", "platforms",
-		"is_official", "auth_required", "auth_configured", "installed", "installed_version",
+		"is_official", "is_omc", "auth_required", "auth_configured", "installed", "installed_version",
 		"install_source_status", "effective_enabled", "update_available",
 	})
 	if storeLogo, _ := official["logo"].(string); !strings.HasPrefix(storeLogo, "data:image/png;base64,") {
@@ -503,9 +503,10 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	writes := append([]string(nil), state.configWrites...)
 	state.mu.Unlock()
 	// One PATCH of the three keys the page owns: `dir` and `configs` are never
-	// written, only the variable the rule's type reads is sent, and the source
-	// list is de-duplicated.
-	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json"]}}`
+	// written, only the variable the rule's type reads is sent, the source list is
+	// de-duplicated, and the managed Oh My CPA registry is put back because its
+	// switch is on.
+	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json"]}}`
 	if len(writes) != 1 || writes[0] != want {
 		t.Fatalf("writes = %q\nwant %q", writes, want)
 	}

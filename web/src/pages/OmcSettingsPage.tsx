@@ -34,6 +34,7 @@ import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_QUOTA_AUTO_REFRESH,
   QUOTA_AUTO_REFRESH_INTERVALS,
@@ -205,6 +206,8 @@ export const OmcSettingsPage: React.FC = () => {
 
       <QuotaAutoRefreshGroup />
 
+      <PluginSourceGroup />
+
       <div className="settings-group omc-settings-group">
         <SectionHeading className="settings-group-head" title={t('omc.section_appearance')} />
         <SettingRow
@@ -278,6 +281,47 @@ export const OmcSettingsPage: React.FC = () => {
       </div>
 
       <SidebarNavSettings />
+    </div>
+  );
+};
+
+/**
+ * PluginSourceGroup is the one switch for Oh My CPA's own plugin registry.
+ *
+ * The registry's address is compiled in and the server's store and configuration reads keep it
+ * in place; this preference is what the server consults, so switching it off removes the address
+ * from `plugins.store-sources` on the next plugin read. The two plugin queries are invalidated
+ * here because the store they cached was read under the previous answer.
+ */
+const PLUGIN_SOURCE_PREFERENCE = 'omc_plugin_source_enabled';
+const parsePluginSourceEnabled = (raw: unknown) => (typeof raw === 'boolean' ? raw : undefined);
+
+const PluginSourceGroup: React.FC = () => {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const preference = usePreference<boolean>(PLUGIN_SOURCE_PREFERENCE, true, parsePluginSourceEnabled);
+  const setEnabled = (enabled: boolean) => {
+    void preference.set(enabled).then((outcome) => {
+      if (!outcome.ok) return;
+      void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-plugin-settings'] });
+    });
+  };
+  return (
+    <div className="settings-group omc-settings-group">
+      <SectionHeading className="settings-group-head" title={t('omc.section_plugin_source')} />
+      <SettingRow
+        label={t('omc.plugin_source')}
+        description={t('omc.plugin_source_desc')}
+        control={(
+          <Switch
+            checked={preference.value}
+            disabled={!preference.loaded}
+            onChange={setEnabled}
+            aria-label={t('omc.plugin_source')}
+          />
+        )}
+      />
     </div>
   );
 };

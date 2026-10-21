@@ -74,6 +74,14 @@ const (
 	// environment configuration because it is an operator's running decision about how often
 	// credentials are read, made from the console that shows the readings.
 	PreferenceQuotaAutoRefresh = "omc_quota_auto_refresh"
+
+	// PreferenceOMCPluginSource is whether Oh My CPA's own plugin registry is listed in
+	// the plugin store. The server reads it: the store reconciles CPA's
+	// `plugins.store-sources` with it, which is what keeps the registry present without
+	// anyone configuring it and removes it when the operator switches it off. A
+	// preference rather than configuration because the address is compiled in and only
+	// the running decision is the operator's.
+	PreferenceOMCPluginSource = "omc_plugin_source_enabled"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

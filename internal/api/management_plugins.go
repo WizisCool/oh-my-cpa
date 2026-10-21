@@ -319,10 +319,25 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	// Oh My CPA's own registry is part of what this console ships, so the source is
+	// put in place before CPA is asked: a source CPA does not list is a source whose
+	// entries cannot be installed.
+	isOMCSourceEnabled, err := h.reconcileOMCPluginSource(request.Context(), request, client)
+	if err != nil {
+		writePluginSourceError(writer, err, false)
+		return
+	}
+
 	store, err := client.PluginStore(request.Context())
 	if err != nil {
 		writePluginFacadeError(writer, err)
 		return
+	}
+	if !isOMCSourceEnabled {
+		// A demonstration serves a fixed dataset, and a configuration the repair could
+		// not reach may still list the registry: neither may show entries the
+		// operator switched off.
+		dropOMCPluginSource(&store)
 	}
 
 	h.pluginIdentities.remember(store.Plugins)
@@ -380,6 +395,14 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
+		return
+	}
+
+	// An install names a source, so the managed registry has to be in CPA's list
+	// before the request reaches it - including after a configuration edit that
+	// removed it.
+	if _, err := h.reconcileOMCPluginSource(request.Context(), request, client); err != nil {
+		writePluginSourceError(writer, err, false)
 		return
 	}
 

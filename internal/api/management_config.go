@@ -159,6 +159,14 @@ func (h *Handler) managementConfigPatch(writer http.ResponseWriter, request *htt
 		return
 	}
 	h.afterConfigWrite()
+	// The managed plugin source is a key of this document. A save that removed it is
+	// repaired here, inside the save's own lock scope, so the revision read below is
+	// the document the editor compares its next save against.
+	if _, reconcileErr := h.reconcileOMCPluginSourceLocked(request.Context(), request, client); reconcileErr != nil {
+		_ = h.recordAudit(request, "config.save_changes", "config", "config_changes", "success", map[string]any{"paths": paths})
+		writePluginSourceError(writer, reconcileErr, true)
+		return
+	}
 	// The write landed. CPA renders what it stored in its own layout, so the
 	// editor's next baseline is read back rather than assumed; when that read
 	// fails the answer carries no baseline and the editor reloads instead.
@@ -403,6 +411,13 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	}
 
 	h.afterConfigWrite()
+	// A whole-document save can drop the managed plugin source too; restore it inside
+	// the save's lock scope so the baseline returned here already contains it.
+	if _, reconcileErr := h.reconcileOMCPluginSourceLocked(request.Context(), request, client); reconcileErr != nil {
+		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"size_bytes": len(finalYAML)})
+		writePluginSourceError(writer, reconcileErr, true)
+		return
+	}
 	response := map[string]any{"status": "ok"}
 	auditDetail := map[string]any{"size_bytes": len(finalYAML)}
 	if savedYAML, err := client.ConfigYAML(request.Context()); err == nil {
