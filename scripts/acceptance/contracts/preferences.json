@@ -197,6 +197,17 @@
       }
     },
     {
+      "id": "plugin-source-null",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_plugin_source_enabled",
+      "body": "null",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "the plugin source preference must be true or false"
+      }
+    },
+    {
       "id": "quota-auto-refresh-write",
       "method": "PUT",
       "path": "/omc/api/v1/preferences/omc_quota_auto_refresh",

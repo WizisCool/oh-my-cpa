@@ -115,8 +115,8 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 	// The plugin source preference is read by the server when it reconciles CPA's
 	// store sources, so it is a switch and nothing else.
 	if key == repository.PreferenceOMCPluginSource {
-		var enabled bool
-		if json.Unmarshal(body, &enabled) != nil {
+		var enabled *bool
+		if json.Unmarshal(body, &enabled) != nil || enabled == nil {
 			writeError(writer, http.StatusBadRequest, "the plugin source preference must be true or false")
 			return
 		}

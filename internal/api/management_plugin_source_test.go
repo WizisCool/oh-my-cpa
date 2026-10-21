@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -428,5 +430,48 @@ func TestPluginStoreInADemonstrationFiltersTheSwitchedOffManagedSource(t *testin
 	}
 	if writes := gateway.recordedWrites(); len(writes) != 0 {
 		t.Fatalf("configuration writes = %q, want none in a demonstration", writes)
+	}
+}
+
+// A JSON null decodes into the zero value without an error, so it is not a "false"
+// the operator chose: it is a document this build cannot read, and the source's
+// default is on. The write path refuses it, but a value stored by an older build or
+// another writer still has to be read safely.
+func TestPluginStoreTreatsAStoredNullPreferenceAsOn(t *testing.T) {
+	gateway := &managedSourceCPA{}
+	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+	if err := repo.PutPreference(context.Background(), repository.PreferenceOMCPluginSource, "null"); err != nil {
+		t.Fatalf("store the null preference: %v", err)
+	}
+
+	store := readManagedStore(t, client, baseURL)
+	if !gateway.hasSource(pluginregistry.OMCSourceURL) {
+		t.Fatalf("a null preference removed the managed registry: %q", gateway.sourceList())
+	}
+	if len(store.Plugins) != 2 || !store.Plugins[0].IsOMC {
+		t.Fatalf("store entries = %#v, want the managed registry's entry", store.Plugins)
+	}
+}
+
+// A configuration save can leave a plugins section this build cannot read back. The
+// save has already landed at that point, so the refusal has to say so rather than read
+// as "nothing happened" and leave the editor's next save in a conflict it cannot explain.
+func TestPluginSourceReconcileErrorAfterASaveSaysTheSaveLanded(t *testing.T) {
+	unreadable := fmt.Errorf("%w: plugins: scalar", configyaml.ErrPluginSettingsUnreadable)
+
+	recorder := httptest.NewRecorder()
+	writePluginSourceError(recorder, unreadable, true)
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(body, "configuration was saved") ||
+		!strings.Contains(body, `"code":"plugin_settings_unreadable"`) {
+		t.Fatalf("after-save refusal = %d %s, want a saved statement with a stable code", recorder.Code, body)
+	}
+
+	recorder = httptest.NewRecorder()
+	writePluginSourceError(recorder, unreadable, false)
+	body = recorder.Body.String()
+	if recorder.Code != http.StatusUnprocessableEntity || strings.Contains(body, "configuration was saved") {
+		t.Fatalf("plain refusal = %d %s, want it to claim no save", recorder.Code, body)
 	}
 }

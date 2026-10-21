@@ -50,13 +50,14 @@ func (h *Handler) omcPluginSourceEnabled(ctx context.Context) (bool, error) {
 	if !found {
 		return true, nil
 	}
-	var enabled bool
-	if json.Unmarshal([]byte(raw), &enabled) != nil {
-		// A document this build cannot parse was not written by this build; the
+	var enabled *bool
+	if json.Unmarshal([]byte(raw), &enabled) != nil || enabled == nil {
+		// A document this build cannot parse - or a JSON null, which decodes into
+		// the zero value rather than failing - was not written by this build; the
 		// source's documented default is the state a fresh installation is in.
 		return true, nil
 	}
-	return enabled, nil
+	return *enabled, nil
 }
 
 // reconcileOMCPluginSource makes CPA's store-source list agree with the preference
@@ -142,6 +143,16 @@ func writePluginSourceError(writer http.ResponseWriter, err error, isAfterConfig
 		return
 	}
 	if errors.Is(err, configyaml.ErrPluginSettingsUnreadable) {
+		if isAfterConfigSave {
+			// The save landed before the repair read it back. Say so: the editor's
+			// next save meets the revision conflict, and a message that read as a
+			// plain refusal would make that follow-up inexplicable.
+			writeJSON(writer, http.StatusUnprocessableEntity, map[string]any{
+				"error": fmt.Sprintf("the configuration was saved, but its plugins section cannot be read: %v", err),
+				"code":  "plugin_settings_unreadable",
+			})
+			return
+		}
 		writePluginSettingsUnreadable(writer, err)
 		return
 	}
