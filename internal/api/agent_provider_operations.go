@@ -49,7 +49,7 @@ func (h *Handler) bindProviderOperations(service *operations.Service) {
 						req.Keys = append(req.Keys, SaveProviderKeyEntry{APIKey: key.APIKey, ProxyURL: key.ProxyURL, Weight: key.Weight})
 					}
 					for _, model := range item.ModelEntries {
-						req.ModelEntries = append(req.ModelEntries, SaveProviderModelEntry{Name: model.Name, Alias: model.Alias, Image: model.Image, Thinking: model.Thinking, Options: model.Options})
+						req.ModelEntries = append(req.ModelEntries, SaveProviderModelEntry(model))
 					}
 					break
 				}

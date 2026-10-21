@@ -7,7 +7,7 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
-### Vertex per-model OpenAPI policy
+## Vertex per-model OpenAPI policy
 
 The CPA source contract at `d44f8682bc1438ac0f06159207435bd997bca4c9`
 adds optional `openapi` booleans to Vertex API-key model entries and OAuth
@@ -32,7 +32,7 @@ remain independent. Agent/MCP uses the existing confirmed provider/alias/credent
 operations with these bounded settings, never raw metadata or inference calls.
 This contract is verified against source and hermetic fixtures, not a live Vertex account.
 
-### SIWC local status and use
+## SIWC local status and use
 
 The CPA source contract at `06fd5b8bc2807af5fceb6f39d2c5808c52e76034`
 adds `siwc_status: off|valid|invalid` to credential summaries. OMC reads this
@@ -53,7 +53,7 @@ or `auth_index`) is distinct from OMC's binding-session poll at
 `/management/oauth/siwc/status?state=...`; OMC does not call the dedicated query
 because its credential-list read already supplies the local summary.
 
-### Antigravity observation fingerprint
+## Antigravity observation fingerprint
 
 The reviewed CPA source baseline `02e9e85204052dfed9bf73b7075c7b414111a4b3`
 uses Hub 2.24.0 and its verified changelist 1000335682. OMC's fixed quota and
@@ -64,7 +64,7 @@ subscription POST omits `Accept`; quota-summary reads retain `Accept: applicatio
 Supplemental subscription failure keeps independent quota windows and an unknown plan.
 There is no dynamic vendor-version lookup or new outbound authority.
 
-### Credential-scoped SIWC binding
+## Credential-scoped SIWC binding
 
 CPA v8.0.35 adds `POST /v8/management/oauth/siwc/bind` and the Codex
 credential summaries `siwc_bind_supported`, `use_siwc`, `siwc_bound`, and
@@ -94,7 +94,7 @@ ten minutes for terminal reconciliation, without retaining callback values.
 
 Source: [CPA v8.0.35 management contract](https://github.com/router-for-me/CLIProxyAPI/blob/v8.0.35/docs/management-api-v8.md).
 
-### OAuth model-exclusion precedence
+## OAuth model-exclusion precedence
 
 CPA v8.0.33 is the first release containing
 [the credential exclusion priority change](https://github.com/router-for-me/CLIProxyAPI/commit/69d0ff8e295aea349966b16f20e2966421bfeb18).
@@ -107,7 +107,7 @@ boundary, not a change to OMC's v8.0.0 Management API baseline. The console and
 Agent/MCP guidance state the requirement, and CPA's per-credential model list
 remains authoritative. See [OAuth model rules](operations.md#oauth-model-rules).
 
-### Codex behavior path compatibility
+## Codex behavior path compatibility
 
 CPA moved the shared Codex, Claude and xAI provider behavior out of
 `oauth.providers.*` to `upstream.*` (the `v8SharedPaths` table in CPA's
@@ -155,7 +155,7 @@ The following measurements and mapping tables retain their CPA v8.0.2 baseline;
 the canonical `upstream.*` / `client.codex.*` paths above supersede the
 corresponding editor locations in that table.
 
-### Configuration option semantics
+## Configuration option semantics
 
 The visual editor uses CPA's runtime defaults for omitted YAML fields, not the
 values shown in its example configuration. In CPA v8.0.16, omitted

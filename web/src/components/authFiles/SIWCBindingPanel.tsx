@@ -35,10 +35,10 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     mutationFn: ({ source, useSIWC }: { source: ManagementAuthFile; bindingSummary: ManagementAuthFile; useSIWC: boolean }) => api.patchManagementAuthFileFields(source.name, { use_siwc: useSIWC }, source.auth_index),
     onSuccess: (response, variables) => {
       if (response.file) setSaved({ source: variables.source, bindingSummary: variables.bindingSummary, file: response.file });
-      void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
       toast.success(t('af.save_fields_success'));
     },
     onError: () => { toast.error(t('siwc.use_failed')); },
+    onSettled: () => { void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }); },
   });
   if ((file.provider || file.type)?.toLowerCase() !== 'codex') return null;
   const summary = saved?.source === file && saved.bindingSummary === bindingSummary ? saved.file : bindingSummary;

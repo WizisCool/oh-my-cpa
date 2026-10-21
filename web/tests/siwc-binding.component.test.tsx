@@ -1,9 +1,10 @@
 import React from 'react';
 import { App } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../src/i18n';
+import { api } from '../src/api/client';
 import { SIWCBindingPanel } from '../src/components/authFiles/SIWCBindingPanel';
 import { useSIWCBindings } from '../src/hooks/useSIWCBindings';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
@@ -227,6 +228,48 @@ it('shows CPA local status and verifies the use switch without binding or losing
     expect(control.getAttribute('aria-checked')).toBe('false');
     expect(requests[1]).toEqual({ name: FILE.name, auth_index: FILE.auth_index, use_siwc: true });
   } finally { fixture.dispose(); }
+});
+
+it('refreshes credential state after an unverified write without reporting it as saved', async () => {
+  let stored: ManagementAuthFile = { ...FILE, siwc_status: 'invalid', use_siwc: true, siwc_bound: true };
+  let listReads = 0;
+  const writes: Record<string, unknown>[] = [];
+  let resolveWrite: ((response: Response) => void) | undefined;
+  vi.stubGlobal('fetch', async (input: string, options: RequestInit) => {
+    const path = new URL(input, 'http://localhost').pathname;
+    if (path.endsWith('/management/auth-files') && options.method === 'GET') {
+      listReads++;
+      return new Response(JSON.stringify({ files: [stored] }), { status: 200 });
+    }
+    if (path.endsWith('/management/auth-files/fields') && options.method === 'PATCH') {
+      writes.push(JSON.parse(String(options.body)));
+      stored = { ...stored, use_siwc: false, siwc_status: 'off' };
+      return new Promise<Response>((resolve) => { resolveWrite = resolve; });
+    }
+    throw new Error(`Unexpected request: ${options.method} ${path}`);
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  function Harness() {
+    const bindings = useSIWCBindings();
+    const credentials = useQuery({ queryKey: ['management-auth-files'], queryFn: () => api.getManagementAuthFiles() });
+    const file = credentials.data?.files[0];
+    return file ? <SIWCBindingPanel file={file} canEdit bindings={bindings} /> : null;
+  }
+  const surface = render(<App><QueryClientProvider client={client}><I18nProvider><Harness /></I18nProvider></QueryClientProvider></App>);
+  try {
+    const control = await screen.findByRole('switch', { name: 'Use bound SIWC' });
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    await act(async () => { fireEvent.click(control); });
+    expect(writes).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    await act(async () => { resolveWrite?.(new Response(JSON.stringify({ error: 'field update could not be verified' }), { status: 502 })); });
+    await screen.findByText('Could not confirm the SIWC use setting. Refresh the credential before trying again.');
+    await waitFor(() => expect(listReads).toBe(2));
+    await screen.findByText('Off', { exact: true });
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByText('Auth file fields saved')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Rebind SIWC' })).toBeTruthy();
+  } finally { surface.unmount(); client.clear(); }
 });
 
 it('keeps missing local status unknown even with bound material and a future stored expiry', () => {
