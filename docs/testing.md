@@ -737,6 +737,22 @@ which is the only check that catches a readback falling back to the default.
 
 `internal/repository/config_backups_test.go` owns encryption at rest, deduplication against the newest copy, the separate pre-v8 retention, the operator's retention and its immediate pruning, and deletion. `internal/cpa/management/client_config_test.go` owns the pre-write hook: a copy before every write, the reason each write names (an outer operation's name winning), and refusal when a copy cannot be kept. `internal/api/management_config_backups_test.go` owns the routes: the server-side restore and its whole-document write, the pre-v8 `409`, the manual copy's `created` flag, retention bounds and deletion. The `config-backups` probe owns the dialog: reason labels, the withheld pre-v8 restore, the retention write, the restore confirmation stacking above the dialog, the restore request and the editor reload after it. The configuration page and `web/src/components/config/` planner rules select it, with a negative case for the schema.
 
+### Managed plugin source reconciliation coverage
+
+`internal/api/management_plugin_source_test.go` owns Oh My CPA's registry as a store
+source (ADR 0104): a store read adds the address, both configuration save paths restore
+it, the plugin settings save keeps it out of the editable list, an install adds it again
+before CPA is called, the switch removes it, and a demonstration filters its entries
+without writing its fixture. It also owns the repair's Tier-1 obligations - a
+`plugin_settings` backup before the write and a `plugin.source` audit record - plus the
+two preference edges: a stored JSON `null` reads as the default (on), and a save that
+leaves the plugins section unreadable says the configuration landed rather than reading
+as a plain refusal. `internal/cpa/configyaml/plugins_test.go` owns the order-preserving
+list edit and `internal/pluginregistry/registry_test.go` owns the published document's
+shape and the address-to-source-id pin. The configuration path and backup suites keep
+their claims about the operator's own save: their fixture starts in the managed steady
+state, so that save is the only write those tests observe.
+
 ### Configuration defaults and Payload disclosures
 
 `scripts/test-dirty.ts` covers omitted retry defaults, explicit example values,

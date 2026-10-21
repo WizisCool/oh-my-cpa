@@ -12,6 +12,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 )
 
 // configFixtureCPA is a v8 gateway's configuration endpoints: a JSON and a YAML
@@ -28,6 +29,17 @@ type configFixtureCPA struct {
 	rejectMessage string
 }
 
+// configFixtureManagedPlugins is the plugins section in the managed steady state: the
+// console has already put Oh My CPA's registry into store-sources. A suite about the
+// operator's own configuration save starts from it, so its save is the only write it
+// observes; the reconciliation's own write, backup and audit are owned by
+// management_plugin_source_test.go.
+const configFixtureManagedPlugins = `plugins:
+    enabled: true
+    store-sources:
+        - ` + pluginregistry.OMCSourceURL + "\n"
+
+// configFixtureYAML is a gateway's v8 configuration view.
 const configFixtureYAML = `server:
     host: 127.0.0.1
     port: 8317
@@ -36,7 +48,7 @@ management:
 observability:
     logs:
         debug: false
-config-version: 8
+` + configFixtureManagedPlugins + `config-version: 8
 `
 
 func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Request) {
@@ -302,13 +314,16 @@ func TestManagementConfigSourceGetAndPut(t *testing.T) {
 	}
 
 	// 8. PUT source with matching revision succeeds and returns new revision
+	// The document is the managed steady state, so the source save is the only write
+	// here; a document that omits the managed section is owned by
+	// management_plugin_source_test.go.
 	newYAML := `server:
     host: 0.0.0.0
     port: 8317
 observability:
     logs:
         debug: true
-`
+` + configFixtureManagedPlugins
 	putGood, _ := json.Marshal(map[string]string{"yaml": newYAML, "revision": srcRes.Revision})
 	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putGood))
 	if resp.StatusCode != http.StatusOK {
@@ -595,7 +610,7 @@ func TestManagementConfigSaveAuditFailure(t *testing.T) {
 				}
 				if mode == "source" {
 					method, path, baselineKey = http.MethodPut, "/management/config/source", "yaml"
-					body = map[string]any{"revision": body["revision"], "yaml": "server:\n  port: 8318\n"}
+					body = map[string]any{"revision": body["revision"], "yaml": "server:\n  port: 8318\n" + configFixtureManagedPlugins}
 				}
 				encoded, err := json.Marshal(body)
 				if err != nil {

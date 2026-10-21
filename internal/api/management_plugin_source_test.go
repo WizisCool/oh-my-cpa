@@ -197,12 +197,32 @@ func readManagedStore(t *testing.T, client *http.Client, baseURL string) managed
 // finds it without searching.
 func TestPluginStoreAddsTheManagedSource(t *testing.T) {
 	gateway := &managedSourceCPA{}
-	client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
+	client, baseURL, repo := startDashboardTestServerStoring(t, managedSourceStoredYAML, gateway.serve)
 
 	store := readManagedStore(t, client, baseURL)
 	writes := gateway.recordedWrites()
 	if len(writes) != 1 || !strings.Contains(writes[0], pluginregistry.OMCSourceURL) {
 		t.Fatalf("configuration writes = %q, want one write adding the registry", writes)
+	}
+	// The repair is an ordinary configuration write, so it keeps a copy first and
+	// records why it happened rather than changing the file silently.
+	backups := listConfigBackupsForTest(t, client, baseURL)
+	if len(backups.Backups) != 1 || backups.Backups[0].Reason != "plugin_settings" || backups.Backups[0].Layout != "v8" {
+		t.Fatalf("backups = %+v, want the pre-repair copy with the plugin-settings reason", backups.Backups)
+	}
+	events, err := repo.ListAuditEvents(context.Background(), 20)
+	if err != nil {
+		t.Fatalf("list audit events: %v", err)
+	}
+	isAudited := false
+	for _, event := range events {
+		if event.Action == "plugin.source" && event.Result == "success" && event.TargetID == "plugins.store-sources" {
+			isAudited = true
+			break
+		}
+	}
+	if !isAudited {
+		t.Fatalf("audit events = %+v, want a successful plugin.source record", events)
 	}
 	if len(store.Plugins) != 2 {
 		t.Fatalf("store entries = %#v, want the built-in and the managed registry's", store.Plugins)
