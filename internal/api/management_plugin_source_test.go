@@ -434,6 +434,25 @@ func TestPluginInstallReconcilesTheManagedSource(t *testing.T) {
 	}
 }
 
+// A demonstration's catalogue still goes through the same projection as a deployment's:
+// entries from the managed registry are marked and listed first, which is what the
+// fixture's per-entry source_url makes possible.
+func TestPluginStoreInADemonstrationMarksTheManagedSource(t *testing.T) {
+	gateway := &managedSourceCPA{sources: []string{pluginregistry.OMCSourceURL}}
+	handler := func(writer http.ResponseWriter, request *http.Request) { gateway.serve(writer, request) }
+	client, baseURL, _ := startDashboardTestServerStoring(t, managedSourceStoredYAML, handler, func(handler *Handler) {
+		handler.cfg.IsDemoMode = true
+	})
+
+	store := readManagedStore(t, client, baseURL)
+	if len(store.Plugins) != 2 || !store.Plugins[0].IsOMC || store.Plugins[0].SourceName != pluginregistry.OMCSourceName {
+		t.Fatalf("store entries = %#v, want the managed registry's entry marked and pinned first", store.Plugins)
+	}
+	if writes := gateway.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("configuration writes = %q, want none in a demonstration", writes)
+	}
+}
+
 // The demonstration serves a fixed catalogue and refuses configuration writes, so the
 // switch is answered by the store response itself rather than by a repair.
 func TestPluginStoreInADemonstrationFiltersTheSwitchedOffManagedSource(t *testing.T) {

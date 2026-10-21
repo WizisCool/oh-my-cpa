@@ -118,9 +118,10 @@ func (h *Handler) reconcileOMCPluginSourceLocked(ctx context.Context, request *h
 }
 
 // dropOMCPluginSource removes the managed registry and its entries from a store
-// document. It runs when the source is switched off but CPA still returned it: the
-// demonstration never writes its fixture, and a configuration the reconciliation
-// could not be reached for must not leak entries the operator switched off.
+// document. It runs when the switch is off but CPA still returned the source. Only a
+// demonstration reaches that state - it never writes its fixture, so its fixed
+// catalogue keeps listing the registry; a deployment's read repairs the file first and
+// fails instead of serving entries the switch turned off.
 func dropOMCPluginSource(store *management.PluginStore) {
 	store.Plugins = slices.DeleteFunc(store.Plugins, func(item management.StorePluginItem) bool {
 		return isOMCPluginStoreURL(item.SourceURL)

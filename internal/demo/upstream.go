@@ -232,8 +232,10 @@ func newUpstreamState(now time.Time) *upstreamState {
 		installed[plugin.id] = plugin
 	}
 	sourceNames := map[string]string{}
+	sourceURLs := map[string]string{}
 	for _, source := range pluginStoreSources() {
 		sourceNames[source["id"].(string)] = source["name"].(string)
+		sourceURLs[source["id"].(string)] = source["url"].(string)
 	}
 	storePlugins := make([]map[string]any, 0, len(pluginStoreCatalog()))
 	for _, plugin := range pluginStoreCatalog() {
@@ -242,6 +244,7 @@ func newUpstreamState(now time.Time) *upstreamState {
 			"store_id":          plugin.sourceID + "/" + plugin.id,
 			"source_id":         plugin.sourceID,
 			"source_name":       sourceNames[plugin.sourceID],
+			"source_url":        sourceURLs[plugin.sourceID],
 			"id":                plugin.id,
 			"name":              plugin.name,
 			"description":       plugin.description,

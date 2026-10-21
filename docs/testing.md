@@ -749,9 +749,12 @@ two preference edges: a stored JSON `null` reads as the default (on), and a save
 leaves the plugins section unreadable says the configuration landed rather than reading
 as a plain refusal. `internal/cpa/configyaml/plugins_test.go` owns the order-preserving
 list edit and `internal/pluginregistry/registry_test.go` owns the published document's
-shape and the address-to-source-id pin. The configuration path and backup suites keep
-their claims about the operator's own save: their fixture starts in the managed steady
-state, so that save is the only write those tests observe.
+shape and the address-to-source-id pin. `internal/demo/demo_test.go` owns the fixture's
+half of the same chain: every store entry names the URL of the registry it came from -
+the field the projection reads to mark, pin and withhold the managed entries - and the
+fixture's catalogue carries one. The configuration path and backup suites keep their
+claims about the operator's own save: their fixture starts in the managed steady state,
+so that save is the only write those tests observe.
 
 ### Configuration defaults and Payload disclosures
 

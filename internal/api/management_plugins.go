@@ -334,9 +334,11 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	if !isOMCSourceEnabled {
-		// A demonstration serves a fixed dataset, and a configuration the repair could
-		// not reach may still list the registry: neither may show entries the
-		// operator switched off.
+		// A demonstration cannot write its fixture, so its fixed catalogue still
+		// lists the registry after the switch is turned off; the response withholds it
+		// instead. A deployment does not reach this with entries to drop: the
+		// reconciliation either removed the source before CPA was read or failed the
+		// read.
 		dropOMCPluginSource(&store)
 	}
 

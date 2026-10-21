@@ -60,8 +60,8 @@ still someone else's code relative to the gateway.
   writes an audit row. A failure there fails the read rather than serving a store that
   is not the one the operator configured.
 - `plugins.store-sources` is no longer purely the operator's list: one entry is
-  managed. The settings page says so, and the store's source list drops the managed
-  entry when the switch is off even if the file could not be repaired.
+  managed, and the settings page says so. A deployment's store read either repairs the
+  file or fails; it never serves entries the switch turned off.
 - The published registry starts empty and an empty document is valid, so the source is
   present and healthy before the first Oh My CPA plugin exists.
 - The demonstration cannot write its fixture, so it answers the switch by filtering the

@@ -13,6 +13,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -668,6 +669,56 @@ func TestFixturePublishesNoPluginLogoURL(t *testing.T) {
 		if logo != "" && !strings.HasPrefix(logo, "data:image/svg+xml;base64,") {
 			t.Errorf("fixture logo %q is not inline artwork", logo)
 		}
+	}
+}
+
+// A store entry is joined to its registry by the entry's own source_url: the console
+// decides whether an entry belongs to Oh My CPA's managed registry from that field. A
+// fixture that omits it makes every entry look like it came from nowhere, so the managed
+// entries cannot be marked, pinned first, or withheld when the switch is off - the whole
+// feature would silently be a no-op in the demonstration.
+func TestFixturePluginStoreNamesEachEntrysRegistry(t *testing.T) {
+	upstream := startTestUpstream(t)
+	client := upstreamClient(upstream)
+
+	body := readBody(t, getWithClient(t, client, upstream.BaseURL()+managementPrefix+"/plugins/store"))
+	var store struct {
+		Sources []struct {
+			ID  string `json:"id"`
+			URL string `json:"url"`
+		} `json:"sources"`
+		Plugins []struct {
+			ID        string `json:"id"`
+			SourceID  string `json:"source_id"`
+			SourceURL string `json:"source_url"`
+		} `json:"plugins"`
+	}
+	if err := json.Unmarshal([]byte(body), &store); err != nil {
+		t.Fatalf("decode the fixture's store: %v", err)
+	}
+	sourceURLs := map[string]string{}
+	for _, source := range store.Sources {
+		sourceURLs[source.ID] = source.URL
+	}
+	if len(store.Plugins) == 0 {
+		t.Fatal("the fixture store lists no plugins")
+	}
+	managedEntries := 0
+	for _, plugin := range store.Plugins {
+		want, known := sourceURLs[plugin.SourceID]
+		if !known {
+			t.Errorf("plugin %q names source %q, which the store does not list", plugin.ID, plugin.SourceID)
+			continue
+		}
+		if plugin.SourceURL != want {
+			t.Errorf("plugin %q source_url = %q, want its registry's %q", plugin.ID, plugin.SourceURL, want)
+		}
+		if plugin.SourceURL == pluginregistry.OMCSourceURL {
+			managedEntries++
+		}
+	}
+	if managedEntries == 0 {
+		t.Errorf("no store entry names the managed registry %q", pluginregistry.OMCSourceURL)
 	}
 }
 
