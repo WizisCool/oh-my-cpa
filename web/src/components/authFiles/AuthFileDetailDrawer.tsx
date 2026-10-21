@@ -791,6 +791,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             <div className={styles['policy-desc']}>{t('af.policy_aliases_desc')}</div>
                             {safeFieldsReady && (
                               <CredentialModelAliasesEditor
+                                isVertex={isVertex}
                                 aliases={policy.modelAliases}
                                 onChange={(modelAliases) => handlePolicyChange({ ...policy, modelAliases })}
                               />

@@ -4,6 +4,17 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "vertex.openapi_default": "Vertex OpenAPI 預設路由",
+  "vertex.openapi_model": "模型 OpenAPI 路由",
+  "vertex.openapi_precedence": "模型或別名的明確覆寫優先於憑證預設值；繼承時先使用憑證設定，再由 CPA 根據模型名稱自動判斷。同一上游模型的不同別名可分別設定。",
+  "siwc.local_status": "SIWC 本機狀態",
+  "siwc.status_off": "未使用",
+  "siwc.status_valid": "本機有效",
+  "siwc.status_invalid": "本機無效",
+  "siwc.use": "使用已綁定的 SIWC",
+  "siwc.use_hint": "關閉僅停用 SIWC，保留綁定分區和普通 Codex 憑證。開啟使用現有綁定，不執行綁定或有效性檢查。",
+  "siwc.use_failed": "未能確認 SIWC 使用設定，請重新整理憑證後再試。",
+  "siwc.summary_hint": "本機狀態由 CPA 根據到期時間和已記錄的拒絕判斷，不更新權杖或請求上游驗證，也不代表即時健康檢查。舊版缺少狀態時顯示未知；綁定材料和儲存到期時間不能代替該狀態。",
   "siwc.unknown": "未知",
   "siwc.cancel_refused": "CPA 未取消此流程；綁定可能已完成，正在核對結果。",
   "siwc.title": "Sign in with ChatGPT（SIWC）",
@@ -15,7 +26,6 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "siwc.expiry": "儲存的到期時間",
   "siwc.yes": "是",
   "siwc.no": "否",
-  "siwc.summary_hint": "綁定資料齊全不代表目前授權有效；到期時間是已儲存的紀錄。",
   "siwc.unsupported_hint": "需要支援此功能的 CPA v8.0.35 或更新版本，以及本機檔案形式的 Codex OAuth 憑證。Home 模式及其他儲存後端不支援。",
   "siwc.bind": "綁定 SIWC",
   "siwc.rebind": "重新綁定 SIWC",

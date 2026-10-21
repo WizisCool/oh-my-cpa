@@ -1,5 +1,5 @@
 import React from 'react';
-import { Checkbox, InputNumber, Segmented } from 'antd';
+import { Checkbox, Input, InputNumber, Segmented } from 'antd';
 
 import { useT } from '../../i18n';
 import type { ProviderBehaviorSwitch, ProviderOverride } from '../../types/providers';
@@ -17,7 +17,7 @@ interface RuntimePolicySectionProps {
   showProblems: boolean;
 }
 
-const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking'>; labelKey: string; descKey: string }[] = [
+const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking' | 'openapi' | 'openapi_location'>; labelKey: string; descKey: string }[] = [
   { name: 'alpha_search', labelKey: 'policy.alpha_search', descKey: 'policy.alpha_search_desc' },
   { name: 'rebuild_mid_system_message', labelKey: 'policy.rebuild_mid_system', descKey: 'policy.rebuild_mid_system_desc' },
   { name: 'native_tool_search', labelKey: 'policy.native_tool_search', descKey: 'policy.native_tool_search_desc' },
@@ -91,6 +91,16 @@ export function RuntimePolicySection({
         </div>
       )}
 
+      {behaviorSwitches.includes('openapi') && <div className={styles['policy-field']}>
+        <div className={styles['item-field-label']} id="provider-openapi">{t('vertex.openapi_default')}</div>
+        <Segmented aria-labelledby="provider-openapi" value={behavior.openapi} options={overrideOptions}
+          onChange={(openapi) => onBehaviorChange((previous) => ({ ...previous, openapi }))} />
+        <div className={styles['policy-desc']}>{t('vertex.openapi_precedence')}</div>
+        <label className={styles['item-field-label']} htmlFor="provider-openapi-location">{t('af.vertex_openapi_location')}</label>
+        <Input id="provider-openapi-location" value={behavior.openapi_location} maxLength={64} placeholder="global"
+          onChange={(event) => onBehaviorChange((previous) => ({ ...previous, openapi_location: event.target.value }))} />
+        <div className={styles['policy-desc']}>{t('af.vertex_openapi_location_hint')}</div>
+      </div>}
       {BOOLEAN_SWITCHES.filter((item) => behaviorSwitches.includes(item.name)).map((item) => (
         <div key={item.name} className={styles['flag']}>
           <Checkbox

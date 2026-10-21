@@ -498,3 +498,29 @@ func TestApplyConfigChangesScrubsSecretsFromARefusal(t *testing.T) {
 		}
 	}
 }
+
+func TestVertexKeyGroupWritePreservesModelOpenAPIAndSiblingDefaults(t *testing.T) {
+	gateway := &groupsGateway{family: "vertex", stored: `[
+ {"name":"shared","future-group":"kept","models":[{"name":"partner/model","alias":"first","openapi":false},{"name":"partner/model","alias":"second","openapi":true}],"keys":[{"api-key":"SYNTHETIC-ONE","openapi":false,"openapi-location":"global"},{"api-key":"SYNTHETIC-TWO","openapi":true,"openapi-location":"us-central1"}]},
+ {"name":"other","keys":[{"api-key":"SYNTHETIC-OTHER","openapi":true}]}]`, runtime: `{"vertex-api-key":[{"api-key":"SYNTHETIC-ONE","auth-index":"one"},{"api-key":"SYNTHETIC-TWO","auth-index":"two"},{"api-key":"SYNTHETIC-OTHER","auth-index":"other"}]}`}
+	client := newGroupsClient(t, gateway)
+	entries, err := client.EditableConfigAPIKeys(context.Background(), ConfigFamilyVertex)
+	if err != nil || len(entries) != 3 {
+		t.Fatalf("editable Vertex groups: %+v %v", entries, err)
+	}
+	entries[0].Models = append([]ModelAlias{}, entries[0].Models...)
+	entries[0].Models[1].DisplayName = "Edited sibling"
+	if err = client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyVertex, entries); err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	defer gateway.mu.Unlock()
+	written := flattenKeyGroups(gateway.written)
+	if len(written) != 3 || written[0].fields["openapi"] != false || written[1].fields["openapi"] != true || written[1].fields["openapi-location"] != "us-central1" || written[2].fields["openapi"] != true {
+		t.Fatalf("key defaults lost: %#v", gateway.written)
+	}
+	models := written[0].fields["models"].([]any)
+	if models[0].(map[string]any)["openapi"] != false || models[1].(map[string]any)["openapi"] != true || models[1].(map[string]any)["display-name"] != "Edited sibling" || gateway.written[0]["future-group"] != "kept" || gateway.written[len(gateway.written)-1]["name"] != "other" {
+		t.Fatalf("group/model policy lost: %#v", gateway.written)
+	}
+}

@@ -1,3 +1,7 @@
+import React from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../../api/client';
+import { Switch } from '../common/Switch';
 import { App, Button, Input } from 'antd';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -23,9 +27,21 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
   const { modal } = App.useApp();
   const toast = useToast();
 
-  if ((file.provider || file.type)?.toLowerCase() !== 'codex') return null;
+  const queryClient = useQueryClient();
   const session = bindings.sessions[siwcTargetKey(file)];
-  const summary = session?.sourceFile === file && session.confirmedFile ? session.confirmedFile : file;
+  const bindingSummary = session?.sourceFile === file && session.confirmedFile ? session.confirmedFile : file;
+  const [saved, setSaved] = React.useState<{ source: ManagementAuthFile; bindingSummary: ManagementAuthFile; file: ManagementAuthFile }>();
+  const useMutationResult = useMutation({
+    mutationFn: ({ source, useSIWC }: { source: ManagementAuthFile; bindingSummary: ManagementAuthFile; useSIWC: boolean }) => api.patchManagementAuthFileFields(source.name, { use_siwc: useSIWC }, source.auth_index),
+    onSuccess: (response, variables) => {
+      if (response.file) setSaved({ source: variables.source, bindingSummary: variables.bindingSummary, file: response.file });
+      void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
+      toast.success(t('af.save_fields_success'));
+    },
+    onError: () => { toast.error(t('siwc.use_failed')); },
+  });
+  if ((file.provider || file.type)?.toLowerCase() !== 'codex') return null;
+  const summary = saved?.source === file && saved.bindingSummary === bindingSummary ? saved.file : bindingSummary;
   const isPending = isSIWCPending(session);
   const isSupported = summary.siwc_bind_supported === true && !file.runtime_only;
   const hasSummary = summary.siwc_bind_supported !== undefined;
@@ -39,11 +55,19 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     <SectionHeading title={t('siwc.title')} />
     <FactList emphasis="quiet" facts={[
       { key: 'support', label: t('siwc.eligibility'), value: t(isSupported ? 'siwc.supported' : 'siwc.unsupported') },
+      { key: 'status', label: t('siwc.local_status'), value: t(summary.siwc_status === 'off' ? 'siwc.status_off' : summary.siwc_status === 'valid' ? 'siwc.status_valid' : summary.siwc_status === 'invalid' ? 'siwc.status_invalid' : 'siwc.unknown') },
       { key: 'use', label: t('siwc.configured'), value: booleanLabel(summary.use_siwc) },
       { key: 'bound', label: t('siwc.material'), value: booleanLabel(summary.siwc_bound) },
       { key: 'expiry', label: t('siwc.expiry'), value: summary.siwc_expires_at || t('siwc.unknown') },
     ]} />
     <p className={styles['hint']}>{t('siwc.summary_hint')}</p>
+    <label className={styles['actions']}>
+      <Switch aria-label={t('siwc.use')} checked={Boolean(summary.use_siwc)} loading={useMutationResult.isPending}
+        disabled={!canEdit || file.runtime_only || isPending || isDemoMode() || summary.siwc_status === undefined || (!summary.use_siwc && summary.siwc_bound !== true)}
+        onChange={(isEnabled) => useMutationResult.mutate({ source: file, bindingSummary, useSIWC: isEnabled })} />
+      <span>{t('siwc.use')}</span>
+    </label>
+    <p className={styles['hint']}>{t('siwc.use_hint')}</p>
     {!isSupported && <Notice tone="info" description={t('siwc.unsupported_hint')} />}
     {session && <div role="status"><Notice tone={session.phase === 'success' ? 'success' : session.phase === 'error' ? 'warning' : 'info'} description={t(PHASE_KEYS[session.phase])} /></div>}
     {session?.wasCancelRefused && isPending && <Notice tone="info" description={t('siwc.cancel_refused')} />}
@@ -63,6 +87,6 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
         <Button disabled={session.isBusy} onClick={() => void bindings.cancel(file)}>{t('common.cancel')}</Button>
       </div>
     </>}
-    {!isPending && <Button disabled={!isSupported || !canEdit || isDemoMode()} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>}
+    {!isPending && <Button disabled={!isSupported || !canEdit || useMutationResult.isPending || isDemoMode()} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>}
   </section>;
 }

@@ -105,7 +105,7 @@ func (s *Service) readSubscriptionBody(ctx context.Context, authIndex, method, t
 }
 
 func (s *Service) fetchAntigravitySubscription(ctx context.Context, file management.AuthFile) *QuotaPlan {
-	headers := management.WithQuotaCredential(map[string]string{"Content-Type": "application/json", "Accept": "application/json", "User-Agent": AntigravityUserAgent})
+	headers := management.WithQuotaCredential(map[string]string{"Content-Type": "application/json", "User-Agent": AntigravityUserAgent})
 	raw := s.readSubscriptionBody(ctx, file.AuthIndex, http.MethodPost, AntigravitySubscriptionURL, headers, `{"metadata":{"ideType":"ANTIGRAVITY"}}`)
 	plan := ParseAntigravitySubscription(raw)
 	if plan != nil {

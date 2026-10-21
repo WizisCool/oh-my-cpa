@@ -18,6 +18,7 @@ export interface ManagementAuthFileModel {
 }
 
 export interface ManagementAuthFile {
+ siwc_status?: 'off' | 'valid' | 'invalid';
   siwc_bind_supported?: boolean;
   use_siwc?: boolean;
   siwc_bound?: boolean;
@@ -66,6 +67,8 @@ export interface ManagementAuthFileMutationResponse {
 }
 
 export interface ManagementAuthFileSafeFields {
+  /** Codex-only configured switch, not binding material or local validity. */
+  use_siwc?: boolean;
   name: string;
   priority?: number;
   weight?: number;

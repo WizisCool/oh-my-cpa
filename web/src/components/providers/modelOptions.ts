@@ -7,6 +7,7 @@ import type { ProviderModelOptionField, ProviderModelOptions } from '../../types
  * null when empty rather than zero: the form cannot offer a zero that would mean something.
  */
 export interface ModelOptionsDraft {
+ openapi: boolean | null;
   displayName: string;
   maxContextLength: number | null;
   forceMapping: boolean;
@@ -22,6 +23,7 @@ export interface ModelOptionsDraft {
 }
 
 export const EMPTY_MODEL_OPTIONS_DRAFT: ModelOptionsDraft = {
+ openapi: null,
   displayName: '',
   maxContextLength: null,
   forceMapping: false,
@@ -45,6 +47,7 @@ export function readModelOptionsDraft(options: ProviderModelOptions | undefined)
   if (!options) return EMPTY_MODEL_OPTIONS_DRAFT;
   return {
     displayName: options.display_name ?? '',
+ openapi: options.openapi ?? null,
     maxContextLength: options.max_context_length || null,
     forceMapping: options.force_mapping ?? false,
     isCompat: options.is_compat ?? false,
@@ -93,6 +96,7 @@ export function buildModelOptions(
   fields: readonly ProviderModelOptionField[],
 ): ProviderModelOptions {
   const options: ProviderModelOptions = {};
+ if (fields.includes('openapi') && draft.openapi !== null) options.openapi = draft.openapi;
   const displayName = draft.displayName.trim();
   if (displayName) options.display_name = displayName;
   if (draft.forceMapping) options.force_mapping = true;

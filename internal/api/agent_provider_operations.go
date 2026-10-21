@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 )
 
@@ -48,7 +49,7 @@ func (h *Handler) bindProviderOperations(service *operations.Service) {
 						req.Keys = append(req.Keys, SaveProviderKeyEntry{APIKey: key.APIKey, ProxyURL: key.ProxyURL, Weight: key.Weight})
 					}
 					for _, model := range item.ModelEntries {
-						req.ModelEntries = append(req.ModelEntries, SaveProviderModelEntry{Name: model.Name, Alias: model.Alias, Image: model.Image, Thinking: model.Thinking})
+						req.ModelEntries = append(req.ModelEntries, SaveProviderModelEntry{Name: model.Name, Alias: model.Alias, Image: model.Image, Thinking: model.Thinking, Options: model.Options})
 					}
 					break
 				}
@@ -70,10 +71,52 @@ func (h *Handler) bindProviderOperations(service *operations.Service) {
 		if input.Priority != nil {
 			req.Priority = input.Priority
 		}
+		if input.OpenAPI != "" || input.OpenAPILocation != nil {
+			if req.Family != "vertex" {
+				return operations.ProviderMutationResult{}, errors.New("invalid_parameters")
+			}
+			req.Behavior = &ProviderBehaviorDTO{OpenAPI: input.OpenAPI, OpenAPILocation: input.OpenAPILocation}
+		}
 		if input.Models != nil {
+			storedModels := req.ModelEntries
+			storedRoutes := make([]management.ModelAlias, len(storedModels))
+			requestedRoutes := make([]management.ModelAlias, len(*input.Models))
+			for index, model := range storedModels {
+				storedRoutes[index] = management.ModelAlias{Name: model.Name, Alias: model.Alias}
+			}
+			for index, model := range *input.Models {
+				requestedRoutes[index] = management.ModelAlias{Name: model.Name, Alias: model.Alias}
+			}
+			matches, err := matchProviderModelRoutes(storedRoutes, requestedRoutes)
+			if err != nil {
+				return operations.ProviderMutationResult{}, errors.New("invalid_parameters")
+			}
 			req.ModelEntries = []SaveProviderModelEntry{}
-			for _, model := range *input.Models {
-				req.ModelEntries = append(req.ModelEntries, SaveProviderModelEntry{Name: model.Name, Alias: model.Alias})
+			for position, model := range *input.Models {
+				entry := SaveProviderModelEntry{Name: model.Name, Alias: model.Alias}
+				var matched *SaveProviderModelEntry
+				if matches[position] >= 0 {
+					matched = &storedModels[matches[position]]
+					entry.Thinking, entry.Image = matched.Thinking, matched.Image
+				}
+				if model.OpenAPI != "" {
+					if req.Family != "vertex" {
+						return operations.ProviderMutationResult{}, errors.New("invalid_parameters")
+					}
+					options := ProviderModelOptionsDTO{}
+					if matched != nil && matched.Options != nil {
+						options = *matched.Options
+					}
+					options.OpenAPI = openAPIOverrideValue(model.OpenAPI)
+					entry.Options = &options
+				}
+				req.ModelEntries = append(req.ModelEntries, entry)
+			}
+		}
+		if input.Models == nil {
+			// An unrelated provider edit must not restate or revalidate advanced model options.
+			for index := range req.ModelEntries {
+				req.ModelEntries[index].Options = nil
 			}
 		}
 		var output map[string]any

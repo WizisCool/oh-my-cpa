@@ -361,6 +361,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     if (section === 'aliases') {
       return (
         <OAuthModelAliasPanel
+          isVertex={provider === 'vertex'}
           drafts={aliasDrafts}
           onChange={setAliasDrafts}
           catalog={catalog}

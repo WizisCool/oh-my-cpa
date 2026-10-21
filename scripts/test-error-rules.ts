@@ -133,3 +133,14 @@ test('the section count is the number of settings that depart from the defaults'
   const behavior = { ...EMPTY_BEHAVIOR_DRAFT, alpha_search: true, codex_cloaking: 'disabled' as const, support_prompt_cache_key: true };
   assert.equal(countPolicyOverrides(policy, behavior, ['alpha_search', 'codex_cloaking']), 6);
 });
+
+
+test('Vertex policy counts only explicit routing overrides and a non-empty location', () => {
+  const switches = ['interactions', 'openapi', 'openapi_location'] as const;
+  const count = (behavior: typeof EMPTY_BEHAVIOR_DRAFT) => countPolicyOverrides(EMPTY_RUNTIME_POLICY_DRAFT, behavior, [...switches]);
+  assert.equal(count(EMPTY_BEHAVIOR_DRAFT), 0);
+  assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi_location: '   ' }), 0);
+  assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi_location: 'global' }), 1);
+  assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'enabled' }), 1);
+  assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'disabled', openapi_location: 'global', interactions: true }), 3);
+});

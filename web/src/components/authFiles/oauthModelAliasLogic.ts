@@ -95,6 +95,7 @@ export function validateOAuthModelAliasDrafts(
     if (draft.fork) normalized.fork = true;
     if (displayName) normalized.display_name = displayName;
     if (draft.force_mapping) normalized.force_mapping = true;
+ if (draft.openapi != null) normalized.openapi = draft.openapi;
     aliases.push(normalized);
   }
   return { ok: true, provider, aliases };
@@ -108,6 +109,7 @@ function aliasSignature(aliases: ManagementOAuthModelAlias[]): string {
       entry.fork ? '1' : '0',
       (entry.display_name ?? '').trim(),
       entry.force_mapping ? '1' : '0',
+ entry.openapi == null ? 'inherit' : String(entry.openapi),
     ].join('\u0001'))
     .join('\u0002');
 }

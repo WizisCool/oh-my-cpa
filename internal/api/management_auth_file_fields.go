@@ -29,13 +29,16 @@ var errAuthFileIdentityStale = errors.New("auth file changed; reload and try aga
 // name reused by a replacement would otherwise be patched first and reported as a
 // mismatch afterwards.
 func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *management.Client, name, authIndex string, fields map[string]any) (map[string]any, error) {
-	if strings.TrimSpace(authIndex) != "" || hasVertexOpenAPIField(fields) {
+	if strings.TrimSpace(authIndex) != "" || hasVertexOpenAPIField(fields) || hasCredentialScopedPolicyField(fields) {
 		current, err := client.AuthFiles(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if _, ok := findManagementAuthFile(current.Files, name, authIndex); !ok && strings.TrimSpace(authIndex) != "" {
 			return nil, errAuthFileIdentityStale
+		}
+		if err := requireCredentialScopedPolicyTarget(current.Files, name, authIndex, fields); err != nil {
+			return nil, err
 		}
 		if err := requireVertexOpenAPITarget(current.Files, name, authIndex, fields); err != nil {
 			return nil, err
@@ -165,7 +168,7 @@ func managementAuthFileNeedsSafeReadback(fields map[string]any) bool {
 	for key := range fields {
 		switch key {
 		case "prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models",
-			"request_retry", "request_scoped_errors", "model_aliases", "openapi", "openapi_location", "openapi_models":
+			"request_retry", "request_scoped_errors", "model_aliases", "use_siwc", "openapi", "openapi_location", "openapi_models":
 			return true
 		}
 	}
@@ -184,6 +187,11 @@ func projectManagementAuthFileSafeFields(name string, data []byte) (managementAu
 		return managementAuthFileSafeFields{}, errors.New("auth file must contain one JSON object")
 	}
 	fields := managementAuthFileSafeFields{Name: name}
+	if strings.EqualFold(stringValue(source["type"]), "codex") {
+		if useSIWC, ok := source["use_siwc"].(bool); ok {
+			fields.UseSIWC = &useSIWC
+		}
+	}
 	if priority, ok := source["priority"]; ok {
 		parsed := intValue(priority)
 		fields.Priority = &parsed
@@ -229,6 +237,11 @@ func managementAuthFileFieldMismatch(requested map[string]any, file management.A
 		case "websockets":
 			if boolValue(raw) != safe.Websockets {
 				return "websockets"
+			}
+		case "use_siwc":
+			// CPA persists an explicit false. Missing metadata on older gateways cannot prove a write succeeded.
+			if safe.UseSIWC == nil || raw != *safe.UseSIWC || raw != file.UseSIWC {
+				return "use_siwc"
 			}
 		case "using_api":
 			if boolValue(raw) != safe.UsingAPI {
@@ -312,6 +325,7 @@ func normalizeManagementAuthFileFields(raw map[string]json.RawMessage) (map[stri
 		"disable-cooling": "disable_cooling",
 		"websockets":      "websockets",
 		"using_api":       "using_api",
+		"use_siwc":        "use_siwc",
 		"using-api":       "using_api",
 		"note":            "note",
 		"excluded_models": "excluded_models",
@@ -453,7 +467,7 @@ func validateManagementAuthFileField(name string, value any) error {
 		if _, err := credentialModelAliasesWire(value); err != nil {
 			return err
 		}
-	case "disable_cooling", "websockets", "using_api":
+	case "disable_cooling", "websockets", "using_api", "use_siwc":
 		if _, ok := value.(bool); !ok {
 			return fmt.Errorf("field %q must be boolean", name)
 		}
@@ -565,6 +579,9 @@ func credentialModelAliasesWire(value any) ([]any, error) {
 		}
 		seenAliases[aliasKey] = struct{}{}
 		item := map[string]any{"name": name, "alias": alias}
+		if entry.OpenAPI != nil {
+			item["openapi"] = *entry.OpenAPI
+		}
 		if entry.Fork {
 			item["fork"] = true
 		}
@@ -582,7 +599,13 @@ func credentialModelAliasesWire(value any) ([]any, error) {
 func projectCredentialModelAliases(source map[string]any) []managementOAuthModelAlias {
 	for _, key := range []string{"model_aliases", "model-aliases"} {
 		if value, ok := source[key]; ok {
-			return projectModelAliasList(value)
+			aliases := projectModelAliasList(value)
+			if !strings.EqualFold(stringValue(source["type"]), "vertex") {
+				for index := range aliases {
+					aliases[index].OpenAPI = nil
+				}
+			}
+			return aliases
 		}
 	}
 	return nil
@@ -610,7 +633,7 @@ func projectModelAliasList(value any) []managementOAuthModelAlias {
 			Alias:        boundedText(alias, managementAuthFileFieldLimit),
 			Fork:         boolValue(entry["fork"]),
 			DisplayName:  boundedText(strings.TrimSpace(stringValue(entry["display-name"])), managementAuthFileFieldLimit),
-			ForceMapping: boolValue(entry["force-mapping"]),
+			ForceMapping: boolValue(entry["force-mapping"]), OpenAPI: vertexOpenAPIBool(entry["openapi"]),
 		})
 		if len(aliases) == maxCredentialModelAliases {
 			break
@@ -623,15 +646,7 @@ func projectModelAliasList(value any) []managementOAuthModelAlias {
 }
 
 func equalCredentialModelAliases(left, right []managementOAuthModelAlias) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for position := range left {
-		if left[position] != right[position] {
-			return false
-		}
-	}
-	return true
+	return managementOAuthModelAliasesEqual(left, right)
 }
 
 func projectCredentialRequestRetry(source map[string]any) *int {

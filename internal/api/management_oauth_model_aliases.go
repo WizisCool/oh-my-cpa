@@ -19,6 +19,7 @@ const (
 // managementOAuthModelAlias is the browser-safe shape for one global OAuth
 // model mapping. It contains no credential material.
 type managementOAuthModelAlias struct {
+	OpenAPI      *bool  `json:"openapi,omitempty"`
 	Name         string `json:"name"`
 	Alias        string `json:"alias"`
 	Fork         bool   `json:"fork,omitempty"`
@@ -107,6 +108,10 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validateOAuthAliasFamily(provider, aliases); err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
@@ -170,7 +175,7 @@ func managementOAuthModelAliasesFromCPA(entries []management.OAuthModelAlias) []
 			Alias:        entry.Alias,
 			Fork:         entry.Fork,
 			DisplayName:  entry.DisplayName,
-			ForceMapping: entry.ForceMapping,
+			ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
 		})
 	}
 	return converted
@@ -228,7 +233,7 @@ func normalizeManagementOAuthModelAliases(entries []managementOAuthModelAlias) (
 			Alias:        alias,
 			Fork:         entry.Fork,
 			DisplayName:  displayName,
-			ForceMapping: entry.ForceMapping,
+			ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
 		})
 	}
 	return result, nil
@@ -242,7 +247,7 @@ func managementOAuthModelAliasesToCPA(entries []managementOAuthModelAlias) []man
 			Alias:        entry.Alias,
 			Fork:         entry.Fork,
 			DisplayName:  entry.DisplayName,
-			ForceMapping: entry.ForceMapping,
+			ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
 		})
 	}
 	return result
@@ -253,9 +258,27 @@ func managementOAuthModelAliasesEqual(left []managementOAuthModelAlias, right []
 		return false
 	}
 	for index := range left {
-		if left[index] != right[index] {
+		if !equalOptionalBool(left[index].OpenAPI, right[index].OpenAPI) {
+			return false
+		}
+		leftEntry, rightEntry := left[index], right[index]
+		leftEntry.OpenAPI, rightEntry.OpenAPI = nil, nil
+		if leftEntry != rightEntry {
 			return false
 		}
 	}
 	return true
+}
+
+func equalOptionalBool(left, right *bool) bool {
+	return (left == nil && right == nil) || (left != nil && right != nil && *left == *right)
+}
+
+func validateOAuthAliasFamily(provider string, aliases []managementOAuthModelAlias) error {
+	for _, alias := range aliases {
+		if alias.OpenAPI != nil && provider != "vertex" {
+			return errors.New("model alias openapi requires Vertex")
+		}
+	}
+	return nil
 }

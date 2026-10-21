@@ -56,17 +56,19 @@ var ConfigKeyFamilies = []ConfigKeyFamily{
 // carried through in extra rather than modelled: an edit made here must not
 // silently strip a setting the operator configured in config.yaml.
 type ConfigAPIKey struct {
-	APIKey         string            `json:"api-key"`
-	AuthIndex      string            `json:"auth-index,omitempty"`
-	BaseURL        string            `json:"base-url,omitempty"`
-	ProxyURL       string            `json:"proxy-url,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	Models         []ModelAlias      `json:"models,omitempty"`
-	ExcludedModels []string          `json:"excluded-models,omitempty"`
-	Priority       *int              `json:"priority,omitempty"`
-	Weight         *int              `json:"weight,omitempty"`
-	Prefix         string            `json:"prefix,omitempty"`
-	DisableCooling *bool             `json:"disable-cooling,omitempty"`
+	OpenAPI         *bool             `json:"openapi,omitempty"`
+	OpenAPILocation string            `json:"openapi-location,omitempty"`
+	APIKey          string            `json:"api-key"`
+	AuthIndex       string            `json:"auth-index,omitempty"`
+	BaseURL         string            `json:"base-url,omitempty"`
+	ProxyURL        string            `json:"proxy-url,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Models          []ModelAlias      `json:"models,omitempty"`
+	ExcludedModels  []string          `json:"excluded-models,omitempty"`
+	Priority        *int              `json:"priority,omitempty"`
+	Weight          *int              `json:"weight,omitempty"`
+	Prefix          string            `json:"prefix,omitempty"`
+	DisableCooling  *bool             `json:"disable-cooling,omitempty"`
 	// RequestRetry overrides the global retry count. CPA reads nil or a negative
 	// value as "use the global setting" and 0 as "no additional retry rounds".
 	RequestRetry        *int                     `json:"request-retry,omitempty"`

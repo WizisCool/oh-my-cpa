@@ -32,7 +32,7 @@ export const EMPTY_CREDENTIAL_POLICY_DRAFT: CredentialPolicyDraft = { requestRet
 /** The server's bound on one credential's alias list. */
 export const MAX_CREDENTIAL_MODEL_ALIASES = 100;
 
-/** The alias rules are the provider-wide ones; they only need a well-formed scope name to run. */
+/** Entry-shape validation is shared; the server validates the selected credential's family. */
 const ALIAS_VALIDATION_SCOPE = 'credential';
 
 /** The server's bound; it only keeps a mistyped number from multiplying every request. */

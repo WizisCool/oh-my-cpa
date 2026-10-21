@@ -1,5 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { AutoComplete, Button, Input, Table } from 'antd';
+import { VertexModelOpenAPI } from './VertexModelOpenAPI';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -14,6 +15,7 @@ import styles from './OAuthModelRulesDrawer.module.css';
 import { EmptyState } from '../common/EmptyState';
 
 interface OAuthModelAliasPanelProps {
+ isVertex?: boolean;
   drafts: ManagementOAuthModelAliasDraft[];
   onChange: (update: (current: ManagementOAuthModelAliasDraft[]) => ManagementOAuthModelAliasDraft[]) => void;
   catalog: ManagementOAuthProviderModel[];
@@ -25,6 +27,7 @@ interface OAuthModelAliasPanelProps {
 
 export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
   drafts,
+ isVertex,
   onChange,
   catalog,
   catalogState,
@@ -41,7 +44,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
       : model.id,
   })), [catalog]);
 
-  const updateDraft = (rowKey: string, field: keyof ManagementOAuthModelAlias, value: string | boolean) => {
+  const updateDraft = (rowKey: string, field: keyof ManagementOAuthModelAlias, value: string | boolean | null) => {
     onChange((current) => current.map((draft) => (
       draft.rowKey === rowKey ? { ...draft, [field]: value } : draft
     )));
@@ -59,6 +62,12 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
   // The fixed widths leave the upstream model the remainder, so the whole row
   // fits the drawer's content width without scrolling sideways.
   const columns = [
+    ...(isVertex ? [{
+      title: t('vertex.openapi_model'), key: 'openapi', width: 160,
+      render: (_value: unknown, row: ManagementOAuthModelAliasDraft) => <VertexModelOpenAPI value={row.openapi}
+        disabled={isDisabled} label={`${t('vertex.openapi_model')} ${row.alias || row.name}`}
+        onChange={(openapi) => updateDraft(row.rowKey, 'openapi', openapi)} />,
+    }] : []),
     {
       title: t('af.alias_col_name'),
       dataIndex: 'name',
@@ -171,6 +180,7 @@ export const OAuthModelAliasPanel: React.FC<OAuthModelAliasPanelProps> = ({
         {catalogState === 'ready' && t('af.alias_catalog_ready', { n: catalog.length })}
         {(catalogState === 'unavailable' || catalogState === 'error') && t('af.alias_catalog_unavailable')}
       </p>
+      {isVertex && <p className={styles['hint']}>{t('vertex.openapi_precedence')}</p>}
       {drafts.length === 0 ? (
         <EmptyState size="compact" title={t('af.alias_empty')}>
           <Button icon={<PlusOutlined />} disabled={isDisabled || drafts.length >= OAUTH_MODEL_ALIAS_ENTRY_LIMIT} onClick={addDraft}>

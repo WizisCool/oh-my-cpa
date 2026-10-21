@@ -159,6 +159,7 @@ func isOAuthCompletedStatus(status string) bool {
 // OAuthModelAlias is the non-secret global model mapping CPA applies to
 // OAuth/file-backed credentials.
 type OAuthModelAlias struct {
+	OpenAPI      *bool  `json:"openapi,omitempty"`
 	Name         string `json:"name"`
 	Alias        string `json:"alias"`
 	Fork         bool   `json:"fork,omitempty"`
@@ -210,7 +211,7 @@ func sanitizeOAuthModelAliases(stored map[string][]OAuthModelAlias) map[string][
 				Alias:        alias,
 				Fork:         entry.Fork,
 				DisplayName:  strings.TrimSpace(entry.DisplayName),
-				ForceMapping: entry.ForceMapping,
+				ForceMapping: entry.ForceMapping, OpenAPI: entry.OpenAPI,
 			})
 		}
 		if len(clean) > 0 {

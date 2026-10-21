@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button, Checkbox, Input } from 'antd';
 
+import { VertexModelOpenAPI } from './VertexModelOpenAPI';
 import { useT } from '../../i18n';
 import { DeleteOutlined, PlusOutlined } from '../icons';
 import {
@@ -11,6 +12,7 @@ import { MAX_CREDENTIAL_MODEL_ALIASES } from './credentialPolicy';
 import styles from './AuthFileDetailDrawer.module.css';
 
 interface CredentialModelAliasesEditorProps {
+ isVertex?: boolean;
   aliases: ManagementOAuthModelAliasDraft[];
   onChange: (aliases: ManagementOAuthModelAliasDraft[]) => void;
 }
@@ -21,7 +23,7 @@ interface CredentialModelAliasesEditorProps {
  * Entries rather than a table: the drawer is narrow, and each alias carries three names and two
  * switches that a table would have to scroll sideways to show.
  */
-export const CredentialModelAliasesEditor: React.FC<CredentialModelAliasesEditorProps> = ({ aliases, onChange }) => {
+export const CredentialModelAliasesEditor: React.FC<CredentialModelAliasesEditorProps> = ({ aliases, onChange, isVertex }) => {
   const t = useT();
   // Row keys only have to be unique among this credential's rows for as long as the editor is
   // mounted; the stored rows are keyed by their position at load.
@@ -57,6 +59,11 @@ export const CredentialModelAliasesEditor: React.FC<CredentialModelAliasesEditor
                   onChange={(event) => patchAlias(entry.rowKey, { display_name: event.target.value })}
                 />
               </div>
+              {isVertex && <>
+                <VertexModelOpenAPI value={entry.openapi} label={`${t('vertex.openapi_model')} ${position + 1}`}
+                  onChange={(openapi) => patchAlias(entry.rowKey, { openapi })} />
+                <div className={styles['policy-desc']}>{t('vertex.openapi_precedence')}</div>
+              </>}
               <div className={styles['alias-flags']}>
                 <Checkbox checked={Boolean(entry.fork)} onChange={(event) => patchAlias(entry.rowKey, { fork: event.target.checked })}>
                   {t('af.alias_col_fork')}

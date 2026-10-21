@@ -1319,3 +1319,29 @@ cancellation and read-failure/expiry outcomes. The existing
 `oauth-authorization-outcomes` probe owns real-browser detail-panel wiring and
 callback input persistence across close/reopen, pending-attempt navigation and
 unload protection, and removal of those guards after confirmed completion.
+
+### Vertex OpenAPI and SIWC local-policy contracts
+
+`internal/api/management_vertex_alias_overrides_test.go` owns provider-wide and
+credential alias explicit-false/true round trips, sibling edits, inheritance clearing,
+family refusals and failed readback. `management_provider_vertex_openapi_test.go`
+owns API-key/model projection, preservation of unmodelled fields and same-model
+aliases, default/location clearing and family validation. `agent_vertex_openapi_test.go`
+checks the real confirmed Agent/MCP adapter, revisioned provider edits,
+non-Vertex execution refusals and alias-rename preservation.
+`management_provider_model_matching_test.go` owns same-model route matching,
+reordered sibling renames, explicit inheritance and ambiguous-rename refusal.
+`management_siwc_status_test.go` owns the closed local-status enum, missing/unknown
+state, session/credential route separation, exact Codex-only switch writes,
+partition preservation, activation eligibility and disk/runtime readback. Existing SIWC lifecycle tests
+retain their authorization and audit claims; Agent and management-client suites
+also assert the safe summary.
+
+`web/tests/vertex-model-openapi.component.test.tsx` renders both alias editors and
+the real provider editor/hook/client, preserving explicit false through sibling edits
+and clearing to inheritance. `siwc-binding.component.test.tsx` additionally owns
+local-state copy, missing metadata, non-optimistic toggling and refused readback.
+Existing browser scenarios retain drawer, navigation and responsive-layout ownership.
+The quota subscription request-contract suite independently pins both User-Agents,
+the daily subscription endpoint, endpoint-specific Accept headers and independent
+quota windows on enrichment failure.

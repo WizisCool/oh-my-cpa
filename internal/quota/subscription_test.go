@@ -73,6 +73,9 @@ func TestSubscriptionRequestsAndIndependentFailures(t *testing.T) {
 					body := ""
 					switch request.URL {
 					case AntigravityQuotaURLDaily:
+						if request.Header["User-Agent"] != "antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)" || request.Header["Accept"] != "application/json" {
+							t.Fatalf("unexpected quota headers: %+v", request.Header)
+						}
 						body = `{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"five","remainingFraction":0.7,"window":"5h"}]}]}`
 					case XaiBillingWeeklyURL:
 						// The credits document is the subscription's own window, and it is the only one that
@@ -82,6 +85,12 @@ func TestSubscriptionRequestsAndIndependentFailures(t *testing.T) {
 					case XaiBillingMonthlyURL:
 						body = `{"config":{"monthlyLimit":{"val":10000},"used":{"val":3000}}}`
 					case AntigravitySubscriptionURL:
+						if request.URL != "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist" || request.Header["User-Agent"] != "antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)" || request.Header["Content-Type"] != "application/json" {
+							t.Fatalf("unexpected subscription fingerprint: %+v", request)
+						}
+						if _, exists := request.Header["Accept"]; exists {
+							t.Fatal("loadCodeAssist must omit Accept")
+						}
 						if request.Method != http.MethodPost || request.Data != `{"metadata":{"ideType":"ANTIGRAVITY"}}` {
 							t.Fatalf("unexpected subscription shape: %+v", request)
 						}

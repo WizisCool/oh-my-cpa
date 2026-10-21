@@ -4,6 +4,17 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "vertex.openapi_default": "Laluan lalai OpenAPI Vertex",
+  "vertex.openapi_model": "Laluan OpenAPI model",
+  "vertex.openapi_precedence": "Tetapan model atau alias mengatasi lalai kelayakan. Warisi menggunakan tetapan kelayakan, kemudian pengesanan nama model CPA. Alias model huluan yang sama boleh berbeza.",
+  "siwc.local_status": "Status SIWC setempat",
+  "siwc.status_off": "Dimatikan",
+  "siwc.status_valid": "Sah secara setempat",
+  "siwc.status_invalid": "Tidak sah secara setempat",
+  "siwc.use": "Gunakan SIWC terikat",
+  "siwc.use_hint": "Mematikan mengekalkan pengikatan SIWC dan kelayakan Codex biasa. Menghidupkan menggunakan pengikatan sedia ada; ia tidak mengikat atau menyemak kesahan.",
+  "siwc.use_failed": "Tetapan penggunaan SIWC tidak dapat disahkan. Muat semula kelayakan sebelum mencuba lagi.",
+  "siwc.summary_hint": "CPA menilai tamat tempoh setempat dan penolakan terdahulu tanpa memperbaharui token atau mengesahkan dengan huluan; ini bukan kesihatan langsung. Status tiada pada versi lama ialah tidak diketahui. Bahan pengikatan dan tamat tempoh tersimpan tidak membuktikan kesahan.",
   "siwc.unknown": "Tidak diketahui",
   "siwc.cancel_refused": "CPA tidak membatalkan aliran ini; pengikatan mungkin telah selesai. Menyemak hasilnya.",
   "siwc.title": "Sign in with ChatGPT (SIWC)",
@@ -15,7 +26,6 @@ export const MS: Readonly<Record<string, string>> = {
   "siwc.expiry": "Masa luput tersimpan",
   "siwc.yes": "Ya",
   "siwc.no": "Tidak",
-  "siwc.summary_hint": "Kehadiran bahan bukan semakan kesahan langsung. Masa luput ialah nilai tersimpan.",
   "siwc.unsupported_hint": "Memerlukan CPA v8.0.35 atau lebih baharu dengan keupayaan ini dan kredensial Codex OAuth berasaskan fail setempat. Mod Home dan storan lain tidak disokong.",
   "siwc.bind": "Ikat SIWC",
   "siwc.rebind": "Ikat semula SIWC",

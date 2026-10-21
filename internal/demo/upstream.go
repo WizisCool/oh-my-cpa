@@ -170,6 +170,11 @@ func newUpstreamState(now time.Time) *upstreamState {
 			"excluded_models": []string{},
 			"recent_requests": recentRequests(now, item.success, item.failed),
 		}
+		if item.provider == "codex" {
+			file["siwc_status"] = "off"
+			file["use_siwc"] = false
+			file["siwc_bound"] = false
+		}
 		if item.email != "" {
 			file["email"] = item.email
 		}

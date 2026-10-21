@@ -15,7 +15,7 @@ func TestSIWCClientProjectsSummariesAndPreservesCallbackConflict(t *testing.T) {
 	server := newV8Server(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v8/management/credentials":
-			fmt.Fprint(w, `{"files":[{"name":"codex.json","siwc_bind_supported":true,"use_siwc":true,"siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z"},{"name":"older.json"}]}`)
+			fmt.Fprint(w, `{"files":[{"name":"codex.json","siwc_bind_supported":true,"use_siwc":true,"siwc_status":"invalid","siwc_bound":true,"siwc_expires_at":"2026-10-21T00:00:00Z"},{"name":"older.json"}]}`)
 		case "/v8/management/oauth/siwc/bind":
 			if r.Method != "POST" {
 				t.Error("bind method")
@@ -47,7 +47,7 @@ func TestSIWCClientProjectsSummariesAndPreservesCallbackConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !files.Files[0].SIWCBindSupported || !files.Files[0].UseSIWC || !files.Files[0].SIWCBound || files.Files[0].SIWCExpiresAt == "" || files.Files[1].SIWCBindSupported {
+	if files.Files[0].SafeSIWCSummary().SIWCStatus != "invalid" || files.Files[1].SafeSIWCSummary().SIWCStatus != "" || !files.Files[0].SIWCBindSupported || !files.Files[0].UseSIWC || !files.Files[0].SIWCBound || files.Files[0].SIWCExpiresAt == "" || files.Files[1].SIWCBindSupported {
 		t.Fatalf("summaries: %#v", files)
 	}
 	result, err := client.BindSIWC(context.Background(), "managed-id")

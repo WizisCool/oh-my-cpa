@@ -7,15 +7,18 @@ import (
 )
 
 type Provider struct {
-	ID           string   `json:"id"`
-	Family       string   `json:"family"`
-	Index        int      `json:"index"`
-	Name         string   `json:"name"`
-	UpstreamName string   `json:"upstream_name"`
-	AuthIndex    string   `json:"auth_index"`
-	IsDisabled   bool     `json:"is_disabled"`
-	Models       []string `json:"models"`
-	Revision     string   `json:"revision"`
+	OpenAPI         string          `json:"openapi,omitempty"`
+	OpenAPILocation *string         `json:"openapi_location,omitempty"`
+	ModelEntries    []ProviderModel `json:"model_entries,omitempty"`
+	ID              string          `json:"id"`
+	Family          string          `json:"family"`
+	Index           int             `json:"index"`
+	Name            string          `json:"name"`
+	UpstreamName    string          `json:"upstream_name"`
+	AuthIndex       string          `json:"auth_index"`
+	IsDisabled      bool            `json:"is_disabled"`
+	Models          []string        `json:"models"`
+	Revision        string          `json:"revision"`
 }
 type ProviderStatus struct {
 	ID         string `json:"id"`

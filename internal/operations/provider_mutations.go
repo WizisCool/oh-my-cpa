@@ -10,23 +10,39 @@ import (
 )
 
 type ProviderModel struct {
-	Name  string `json:"name"`
-	Alias string `json:"alias,omitempty"`
+	OpenAPI string `json:"openapi,omitempty"`
+	Name    string `json:"name"`
+	Alias   string `json:"alias,omitempty"`
 }
 type ProviderMutation struct {
-	ID       string           `json:"id,omitempty"`
-	Family   string           `json:"family,omitempty"`
-	Name     *string          `json:"name,omitempty"`
-	BaseURL  *string          `json:"base_url,omitempty"`
-	Prefix   *string          `json:"prefix,omitempty"`
-	Models   *[]ProviderModel `json:"models,omitempty"`
-	Priority *int             `json:"priority,omitempty"`
+	OpenAPI         string           `json:"openapi,omitempty"`
+	OpenAPILocation *string          `json:"openapi_location,omitempty"`
+	ID              string           `json:"id,omitempty"`
+	Family          string           `json:"family,omitempty"`
+	Name            *string          `json:"name,omitempty"`
+	BaseURL         *string          `json:"base_url,omitempty"`
+	Prefix          *string          `json:"prefix,omitempty"`
+	Models          *[]ProviderModel `json:"models,omitempty"`
+	Priority        *int             `json:"priority,omitempty"`
 }
 type ProviderMutationResult struct {
 	ID string `json:"id"`
 }
 
 func (input ProviderMutation) Validate(isCreate bool) error {
+	if !validOpenAPIOverride(input.OpenAPI) {
+		return errors.New("invalid_parameters")
+	}
+	if input.OpenAPILocation != nil {
+		if len(*input.OpenAPILocation) > 64 {
+			return errors.New("invalid_parameters")
+		}
+		for _, char := range *input.OpenAPILocation {
+			if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+				return errors.New("invalid_parameters")
+			}
+		}
+	}
 	if isCreate && (input.ID != "" || input.Name == nil || strings.TrimSpace(*input.Name) == "" || input.BaseURL == nil) {
 		return errors.New("invalid_parameters")
 	}
@@ -44,7 +60,7 @@ func (input ProviderMutation) Validate(isCreate bool) error {
 			return errors.New("invalid_parameters")
 		}
 		for _, model := range *input.Models {
-			if model.Name == "" || len(model.Name) > 512 || len(model.Alias) > 512 {
+			if !validOpenAPIOverride(model.OpenAPI) || model.Name == "" || len(model.Name) > 512 || len(model.Alias) > 512 {
 				return errors.New("invalid_parameters")
 			}
 		}
@@ -62,11 +78,17 @@ func (s *Service) registerProviderMutations(registry *capability.Registry) error
 	metadata.HumanInput = "secret"
 	metadata.Invalidates = []string{"providers", "management-providers", "pricing"}
 	if err := capability.Register(registry, metadata, func(_ context.Context, input ProviderMutation) (capability.Preview, error) {
+		if !input.openapiApplicable(input.Family) {
+			return capability.Preview{}, errors.New("invalid_parameters")
+		}
 		if err := input.Validate(true); err != nil {
 			return capability.Preview{}, err
 		}
 		return capability.Preview{Target: input.Family, Revision: "create", Changes: input}, nil
 	}, func(ctx context.Context, input ProviderMutation, revision, secret string) (ProviderMutationResult, error) {
+		if !input.openapiApplicable(input.Family) {
+			return ProviderMutationResult{}, errors.New("invalid_parameters")
+		}
 		if err := input.Validate(true); err != nil {
 			return ProviderMutationResult{}, err
 		}
@@ -74,13 +96,16 @@ func (s *Service) registerProviderMutations(registry *capability.Registry) error
 	}); err != nil {
 		return err
 	}
-	metadata = Meta("providers_update", "Edit routing name, endpoint, prefix, priority or model mappings of one provider. Existing credentials are reused at the new endpoint.", "write", "high")
+	metadata = Meta("providers_update", "Edit routing name, endpoint, prefix, priority or model mappings of one provider, including Vertex-only openapi (inherit, enabled, disabled), openapi_location and per-model openapi overrides. Existing credentials are reused at the new endpoint.", "write", "high")
 	metadata.Invalidates = []string{"providers", "management-providers", "pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input ProviderMutation) (capability.Preview, error) {
 		if err := input.Validate(false); err != nil {
 			return capability.Preview{}, err
 		}
 		current, err := s.FindProvider(ctx, input.ID)
+		if err == nil && !input.openapiApplicable(current.Family) {
+			return capability.Preview{}, errors.New("invalid_parameters")
+		}
 		return capability.Preview{Target: input.ID, Revision: current.Revision, Changes: map[string]any{"changes": input, "reuses_existing_credentials": input.BaseURL != nil, "current_provider": current}}, err
 	}, func(ctx context.Context, input ProviderMutation, revision, _ string) (ProviderMutationResult, error) {
 		if err := input.Validate(false); err != nil {
@@ -118,4 +143,25 @@ func (s *Service) registerProviderMutations(registry *capability.Registry) error
 		err := s.RenameProvider(ctx, input.ID, input.Name, input.Revision)
 		return Done{err == nil}, err
 	})
+}
+
+func validOpenAPIOverride(value string) bool {
+	return value == "" || value == "inherit" || value == "enabled" || value == "disabled"
+}
+
+func (input ProviderMutation) openapiApplicable(family string) bool {
+	if family == "vertex" {
+		return true
+	}
+	if input.OpenAPI != "" || input.OpenAPILocation != nil {
+		return false
+	}
+	if input.Models != nil {
+		for _, model := range *input.Models {
+			if model.OpenAPI != "" {
+				return false
+			}
+		}
+	}
+	return true
 }

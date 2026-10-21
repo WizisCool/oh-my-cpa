@@ -180,6 +180,7 @@ type ThinkingSupport struct {
 }
 
 type ModelAlias struct {
+	OpenAPI          *bool            `json:"openapi,omitempty"`
 	Name             string           `json:"name"`
 	Alias            string           `json:"alias,omitempty"`
 	DisplayName      string           `json:"display-name,omitempty"`

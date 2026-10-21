@@ -143,12 +143,16 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 				break
 			}
 		}
+		movedModels, err := moveProviderModels(old.Models, models, family)
+		if err != nil {
+			return management.ProviderFamilyEntry{}, err
+		}
 		// Cross-protocol writes carry the common schema, not unknown fields of
 		// the old dialect. Replaying those fields would make CPA reject the file.
 		key := management.ConfigAPIKey{
 			APIKey: apiKey, BaseURL: strings.TrimSpace(req.BaseURL), ProxyURL: strings.TrimSpace(submitted.ProxyURL),
 			Weight: submitted.Weight, Prefix: strings.TrimSpace(req.Prefix), Priority: req.Priority,
-			Headers: req.Headers, Models: moveProviderModels(old.Models, models, family),
+			Headers: req.Headers, Models: movedModels,
 			ExcludedModels: management.SetExcludedAll(old.ExcludedModels, req.Disabled),
 			DisableCooling: old.DisableCooling, RequestRetry: old.RequestRetry,
 			RequestScopedErrors: old.RequestScopedErrors,
@@ -246,8 +250,12 @@ func commonProviderMoveKey(key management.ConfigAPIKey) management.ConfigAPIKey 
 	}
 }
 
-func moveProviderModels(stored []management.ModelAlias, edited []editedProviderModel, family string) []management.ModelAlias {
-	return supportedProviderMoveModels(mergeModelEdits(stored, edited), family)
+func moveProviderModels(stored []management.ModelAlias, edited []editedProviderModel, family string) ([]management.ModelAlias, error) {
+	merged, err := mergeModelEdits(stored, edited)
+	if err != nil {
+		return nil, err
+	}
+	return supportedProviderMoveModels(merged, family), nil
 }
 
 func supportedProviderMoveModels(models []management.ModelAlias, family string) []management.ModelAlias {
@@ -255,6 +263,9 @@ func supportedProviderMoveModels(models []management.ModelAlias, family string) 
 	for i, old := range models {
 		model := management.ModelAlias{Name: old.Name, Alias: old.Alias, Thinking: old.Thinking, Image: family == openAICompatibilityFamily && old.Image}
 		if options := providerModelOptionsDTO(old); options != nil {
+			if !fields.hasOpenAPI {
+				options.OpenAPI = nil
+			}
 			if !fields.hasMaxContextLength {
 				options.MaxContextLength = 0
 			}

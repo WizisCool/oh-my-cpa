@@ -1,7 +1,7 @@
 import React from 'react';
 import { App } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../src/i18n';
 import { SIWCBindingPanel } from '../src/components/authFiles/SIWCBindingPanel';
@@ -196,4 +196,63 @@ it('does not let a stale status response overwrite a confirmed cancellation', as
     expect(screen.getByText('Binding cancelled')).toBeTruthy();
     expect(screen.queryByText('SIWC bound; credential summary confirmed')).toBeNull();
   } finally { surface.dispose(); }
+});
+
+it('shows CPA local status and verifies the use switch without binding or losing the material summary', async () => {
+  const original = { ...FILE, siwc_status: 'invalid' as const, use_siwc: true, siwc_bound: true };
+  const fixture = mount(original);
+  const requests: Record<string, unknown>[] = [];
+  let resolveWrite: ((response: Response) => void) | undefined;
+  vi.stubGlobal('fetch', async (input: string, options: RequestInit) => {
+    expect(new URL(input, 'http://localhost').pathname).toMatch(/\/management\/auth-files\/fields$/);
+    expect(options.method).toBe('PATCH');
+    requests.push(JSON.parse(String(options.body)));
+    return new Promise<Response>((resolve) => { resolveWrite = resolve; });
+  });
+  try {
+    expect(screen.getByText('Locally invalid')).toBeTruthy();
+    const control = screen.getByRole('switch', { name: 'Use bound SIWC' });
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    await act(async () => { fireEvent.click(control); });
+    expect(requests).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(control.hasAttribute('disabled')).toBe(true));
+    await act(async () => { resolveWrite?.(new Response(JSON.stringify({ status: 'ok', file: { ...original, use_siwc: false, siwc_status: 'off' } }), { status: 200 })); });
+    await screen.findByText('Off', { exact: true });
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Rebind SIWC' })).toBeTruthy();
+    await act(async () => { fireEvent.click(control); });
+    await act(async () => { resolveWrite?.(new Response(JSON.stringify({ error: 'field update could not be verified' }), { status: 502 })); });
+    await screen.findByText('Could not confirm the SIWC use setting. Refresh the credential before trying again.');
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    expect(requests[1]).toEqual({ name: FILE.name, auth_index: FILE.auth_index, use_siwc: true });
+  } finally { fixture.dispose(); }
+});
+
+it('keeps missing local status unknown even with bound material and a future stored expiry', () => {
+  const fixture = mount({ ...FILE, siwc_bound: true, use_siwc: true, siwc_expires_at: '2099-01-01T00:00:00Z' });
+  try {
+    expect(screen.getByText('Unknown', { exact: true })).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Use bound SIWC' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText('Locally valid', { exact: true })).toBeNull();
+    expect(fixture.requests).toHaveLength(0);
+  } finally { fixture.dispose(); }
+});
+
+it('requires a bound partition before enabling SIWC', () => {
+  const fixture = mount({ ...FILE, siwc_status: 'off', siwc_bound: false, use_siwc: false });
+  try {
+    const control = screen.getByRole('switch', { name: 'Use bound SIWC' });
+    expect(control.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(control);
+    expect(fixture.requests).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Bind SIWC' }).hasAttribute('disabled')).toBe(false);
+  } finally { fixture.dispose(); }
+});
+
+it('lets the operator disable SIWC even when binding material is missing', () => {
+  const fixture = mount({ ...FILE, siwc_status: 'invalid', siwc_bound: false, use_siwc: true });
+  try {
+    expect(screen.getByRole('switch', { name: 'Use bound SIWC' }).hasAttribute('disabled')).toBe(false);
+  } finally { fixture.dispose(); }
 });

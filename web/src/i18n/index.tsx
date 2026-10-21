@@ -9,6 +9,17 @@ export type { Lang } from './language';
  * found fall through to the key itself so misses are visible in dev.
  */
 const DICT: Record<string, [string, string]> = {
+  'vertex.openapi_default': ["Vertex OpenAPI 默认路由", "Vertex OpenAPI default"],
+  'vertex.openapi_model': ["模型 OpenAPI 路由", "Model OpenAPI routing"],
+  'vertex.openapi_precedence': ["模型或别名的显式覆盖优先于凭证默认值；继承时先使用凭证设置，再由 CPA 根据模型名称自动判断。同一上游模型的不同别名可分别设置。", "Explicit model or alias overrides take precedence over credential defaults. Inherit uses the credential setting, then CPA model-name detection. Aliases of the same upstream model can differ."],
+  'siwc.local_status': ["SIWC 本地状态", "Local SIWC status"],
+  'siwc.status_off': ["未使用", "Off"],
+  'siwc.status_valid': ["本地有效", "Locally valid"],
+  'siwc.status_invalid': ["本地无效", "Locally invalid"],
+  'siwc.use': ["使用已绑定的 SIWC", "Use bound SIWC"],
+  'siwc.use_hint': ["关闭仅停用 SIWC，保留绑定分区和普通 Codex 凭证。开启使用已有绑定，不执行绑定或有效性检查。", "Turning off preserves the SIWC binding and ordinary Codex credentials. Turning on uses an existing binding; it neither binds nor checks validity."],
+  'siwc.use_failed': ["未能确认 SIWC 使用设置，请刷新凭证后重试。", "Could not confirm the SIWC use setting. Refresh the credential before trying again."],
+  'siwc.summary_hint': ["本地状态由 CPA 根据到期时间和已记录的拒绝判断，不刷新令牌或请求上游验证，也不代表实时健康检查。旧版缺少状态时显示未知；绑定材料和存储到期时间不能代替该状态。", "CPA evaluates local expiry and remembered rejection without token refresh or upstream verification; this is not live health. Missing status on older versions is unknown. Binding material and stored expiry do not establish validity."],
   'siwc.unknown': ['未知', 'Unknown'],
   'siwc.cancel_refused': ['CPA 未取消此流程；绑定可能已完成，正在核对结果。', 'CPA did not cancel this flow; binding may have completed. Checking the outcome.'],
   'siwc.title': ["Sign in with ChatGPT（SIWC）", "Sign in with ChatGPT (SIWC)"],
@@ -20,7 +31,6 @@ const DICT: Record<string, [string, string]> = {
   'siwc.expiry': ["存储的到期时间", "Stored expiry"],
   'siwc.yes': ["是", "Yes"],
   'siwc.no': ["否", "No"],
-  'siwc.summary_hint': ["绑定材料齐全不代表当前授权有效；到期时间是已存储的记录。", "Material presence is not a live authorization check. Expiry is the stored value."],
   'siwc.unsupported_hint': ["需要支持此功能的 CPA v8.0.35 或更新版本，以及本地文件形式的 Codex OAuth 凭证。Home 模式及其他存储后端不支持。", "Requires CPA v8.0.35 or later with this capability and a local file-backed Codex OAuth credential. Home mode and other storage backends are unsupported."],
   'siwc.bind': ["绑定 SIWC", "Bind SIWC"],
   'siwc.rebind': ["重新绑定 SIWC", "Rebind SIWC"],

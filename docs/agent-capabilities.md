@@ -654,7 +654,35 @@ uncertainty-aware idempotency; uncertain results must never be automatically rep
 ### SIWC credential summaries
 
 `oauth_credentials_list` includes `siwc_bind_supported`, `use_siwc`, `siwc_bound`,
-and optional `siwc_expires_at` for credential inspection. Missing support means
-unsupported. Material presence and stored expiry are not live validity checks.
+optional `siwc_expires_at`, and optional `siwc_status: off|valid|invalid` for
+credential inspection. Missing support means unsupported; missing/unknown status
+is unknown. CPA evaluates local expiry and remembered rejection without refreshing
+or contacting the provider; this is not live health. Material presence and stored
+expiry are not validity checks.
+
+`oauth_set_credential_fields` accepts Codex-only boolean `use_siwc` through the
+existing confirmed, audited, identity-checked field patch with verified readback.
+False preserves both partitions; true requires an existing binding and neither binds
+nor verifies it. Missing material prevents enabling but not disabling.
 The binding lifecycle remains operator-driven in credential detail: the agent
-and MCP do not receive a bind, callback, activation or unbind capability.
+and MCP do not receive a bind, callback or unbind capability.
+
+### Vertex per-model OpenAPI settings
+
+`providers_get` and `providers_list` project Vertex `openapi` defaults as
+`inherit|enabled|disabled`, `openapi_location`, and model entries with per-model
+`openapi` states. The existing `providers_create` / `providers_update` confirmation
+accepts those same settings, preserving unrelated model options and credentials.
+A model alias rename retains its stored settings when unchanged sibling routes
+identify the original row uniquely; ambiguous simultaneous renames are refused
+before any write. An omitted setting is untouched; an explicit `inherit` clears an override; empty
+location restores the default location. Non-Vertex targets are refused before
+confirmation and at execution. Provider writes retain revision and backup gates,
+and compare the stored OpenAPI policy before reporting success.
+
+`oauth_model_aliases_list` and confirmed `oauth_set_model_aliases` carry optional
+boolean `openapi` on Vertex aliases. Confirmed `oauth_set_credential_fields` accepts
+it within Vertex `model_aliases` as well. False and true are explicit overrides;
+omitted/null inherits. Model/alias overrides take precedence over credential defaults
+and CPA model-name detection; same-model aliases may differ. Replacing an alias list
+must carry forward each retained row's override. No routing execution moves into OMC.

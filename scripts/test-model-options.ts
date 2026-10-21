@@ -13,6 +13,7 @@ import { PROVIDER_FAMILIES } from '../web/src/types/providerFamilies.ts';
 import type { ProviderModelOptionField, ProviderModelOptions } from '../web/src/types/providers.ts';
 
 const ALL_FIELDS: ProviderModelOptionField[] = [
+  'openapi',
   'max_context_length',
   'is_compat',
   'support_configuration_update',
@@ -98,7 +99,7 @@ test('bounds must be positive whole numbers in order', () => {
 
 test('the family table matches the entries CPA declares', () => {
   const fieldsOf = (id: string) => PROVIDER_FAMILIES.find((family) => family.id === id)?.modelOptionFields ?? [];
-  assert.deepEqual(fieldsOf('vertex'), []);
+  assert.deepEqual(fieldsOf('vertex'), ['openapi']);
   assert.deepEqual(fieldsOf('claude'), ['max_context_length', 'is_compat']);
   for (const id of ['codex', 'xai', 'meta']) {
     assert.deepEqual(fieldsOf(id), ['max_context_length', 'is_compat', 'support_configuration_update'], id);
@@ -109,4 +110,16 @@ test('the family table matches the entries CPA declares', () => {
     'modalities',
     'use_max_completion_tokens',
   ]);
+});
+
+
+test('Vertex model routing preserves false, true and inheritance distinctly', () => {
+  for (const openapi of [false, true]) {
+    const draft = readModelOptionsDraft({ openapi });
+    assert.equal(draft.openapi, openapi);
+    assert.deepEqual(buildModelOptions(draft, ['openapi']), { openapi });
+    assert.equal(countModelOptions(draft, ['openapi']), 1);
+    assert.deepEqual(buildModelOptions(draft, []), {});
+    assert.deepEqual(buildModelOptions({ ...draft, openapi: null }, ['openapi']), {});
+  }
 });

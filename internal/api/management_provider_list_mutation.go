@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -50,7 +51,7 @@ func (h *Handler) appendConfigKeyProvider(
 			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
-			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+			return updateConfigKeysAndVerifyVertexPolicy(ctx, client, spec.Family, list)
 		},
 		func(list *[]management.ConfigAPIKey) error {
 			updated = append(append([]management.ConfigAPIKey{}, *list...), entry)
@@ -76,7 +77,7 @@ func (h *Handler) mutateConfigKeyProvider(
 			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
-			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+			return updateConfigKeysAndVerifyVertexPolicy(ctx, client, spec.Family, list)
 		},
 		func(list *[]management.ConfigAPIKey) error {
 			if index >= len(*list) {
@@ -100,7 +101,7 @@ func (h *Handler) deleteConfigKeyProvider(
 			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
-			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+			return updateConfigKeysAndVerifyVertexPolicy(ctx, client, spec.Family, list)
 		},
 		func(list *[]management.ConfigAPIKey) error {
 			if index >= len(*list) {
@@ -110,4 +111,35 @@ func (h *Handler) deleteConfigKeyProvider(
 			return nil
 		},
 		afterUpdate)
+}
+
+// Vertex routing policies retain explicit false and alias-specific inheritance.
+// Verify the stored configuration, not runtime inference or model-name detection.
+func updateConfigKeysAndVerifyVertexPolicy(ctx context.Context, client *management.Client, family management.ConfigKeyFamily, requested []management.ConfigAPIKey) error {
+	if err := client.UpdateConfigAPIKeys(ctx, family, requested); err != nil {
+		return err
+	}
+	if family != management.ConfigFamilyVertex {
+		return nil
+	}
+	current, err := client.EditableConfigAPIKeys(ctx, family)
+	failed := func() error {
+		return newProviderWriteError(http.StatusBadGateway, "Vertex OpenAPI settings could not be verified; reload before retrying")
+	}
+	if err != nil || len(current) != len(requested) {
+		return failed()
+	}
+	for index, expected := range requested {
+		actual := current[index]
+		if actual.APIKey != expected.APIKey || !equalOptionalBool(actual.OpenAPI, expected.OpenAPI) || strings.TrimSpace(actual.OpenAPILocation) != strings.TrimSpace(expected.OpenAPILocation) || len(actual.Models) != len(expected.Models) {
+			return failed()
+		}
+		for position, model := range expected.Models {
+			observed := actual.Models[position]
+			if observed.Name != model.Name || observed.Alias != model.Alias || !equalOptionalBool(observed.OpenAPI, model.OpenAPI) {
+				return failed()
+			}
+		}
+	}
+	return nil
 }

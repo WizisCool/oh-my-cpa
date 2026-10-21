@@ -7,6 +7,63 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+### Vertex per-model OpenAPI policy
+
+The CPA source contract at `d44f8682bc1438ac0f06159207435bd997bca4c9`
+adds optional `openapi` booleans to Vertex API-key model entries and OAuth
+aliases/settings, and `openapi` / `openapi-location` to Vertex API-key entries.
+OMC edits API-key defaults and model rows in AI Providers, provider-wide OAuth
+aliases in Model Rules, and credential aliases in credential detail. The facade
+keeps unset, explicit false and true distinct; model/alias overrides outrank
+credential defaults, which outrank CPA's automatic model-name detection. Two
+aliases of one upstream model can have different overrides. Clearing an override
+restores inheritance. Renaming one of several same-model aliases preserves its
+policy after unchanged sibling routes are matched; ambiguous simultaneous renames
+are refused before writing. CPA alone selects endpoints and executes requests.
+
+The provider behavior DTO uses `openapi: inherit|enabled|disabled` and optional
+`openapi_location` (empty clears); model options and alias DTOs use optional
+boolean `openapi` (omitted/null inherits). Provider model options state the whole
+model entry; other fields and groups retain their existing preservation contract.
+Writes reuse revision guards, encrypted backups and bounded stored-policy readback.
+OAuth alias replacements and credential-field patches also compare the override
+on readback. Non-Vertex overrides are refused. Existing service-account controls
+remain independent. Agent/MCP uses the existing confirmed provider/alias/credential
+operations with these bounded settings, never raw metadata or inference calls.
+This contract is verified against source and hermetic fixtures, not a live Vertex account.
+
+### SIWC local status and use
+
+The CPA source contract at `06fd5b8bc2807af5fceb6f39d2c5808c52e76034`
+adds `siwc_status: off|valid|invalid` to credential summaries. OMC reads this
+allowlisted enum from the credential list and existing Agent/MCP credential reads.
+Missing or unknown values remain unknown; neither stored expiry nor bound material
+implies validity. CPA evaluates expiry and remembered rejection locally without
+refresh, inference or upstream verification. This is not provider health.
+
+The Codex-only `use_siwc` switch uses the existing credential-field patch endpoint,
+with a unique selector, fail-closed attempt audit and disk/runtime readback. False
+changes only that switch and preserves both credential partitions. True uses an
+already-bound SIWC partition; enabling without bound material is refused, while
+disabling remains available. It neither binds nor establishes validity. Agent/MCP
+uses confirmed `oauth_set_credential_fields`, while authorization stays operator-driven.
+Older gateways without status metadata show unknown and no enabled switch control.
+CPA's credential-status query (`GET /v8/management/oauth/siwc/status?name=...`
+or `auth_index`) is distinct from OMC's binding-session poll at
+`/management/oauth/siwc/status?state=...`; OMC does not call the dedicated query
+because its credential-list read already supplies the local summary.
+
+### Antigravity observation fingerprint
+
+The reviewed CPA source baseline `02e9e85204052dfed9bf73b7075c7b414111a4b3`
+uses Hub 2.24.0 and its verified changelist 1000335682. OMC's fixed quota and
+subscription User-Agent is
+`antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)`.
+Update the version and verified changelist together. The daily `loadCodeAssist`
+subscription POST omits `Accept`; quota-summary reads retain `Accept: application/json`.
+Supplemental subscription failure keeps independent quota windows and an unknown plan.
+There is no dynamic vendor-version lookup or new outbound authority.
+
 ### Credential-scoped SIWC binding
 
 CPA v8.0.35 adds `POST /v8/management/oauth/siwc/bind` and the Codex

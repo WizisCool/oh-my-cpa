@@ -50,11 +50,13 @@ type ProviderRuntimePolicyDTO struct {
 // ProviderBehaviorDTO carries the request-behaviour switches a family has. A
 // field is present on a read only for a family that has it.
 type ProviderBehaviorDTO struct {
-	AlphaSearch             *bool  `json:"alpha_search,omitempty"`
-	CodexCloaking           string `json:"codex_cloaking,omitempty"`
-	RebuildMidSystemMessage *bool  `json:"rebuild_mid_system_message,omitempty"`
-	NativeToolSearch        *bool  `json:"native_tool_search,omitempty"`
-	SupportPromptCacheKey   *bool  `json:"support_prompt_cache_key,omitempty"`
+	OpenAPI                 string  `json:"openapi,omitempty"`
+	OpenAPILocation         *string `json:"openapi_location,omitempty"`
+	AlphaSearch             *bool   `json:"alpha_search,omitempty"`
+	CodexCloaking           string  `json:"codex_cloaking,omitempty"`
+	RebuildMidSystemMessage *bool   `json:"rebuild_mid_system_message,omitempty"`
+	NativeToolSearch        *bool   `json:"native_tool_search,omitempty"`
+	SupportPromptCacheKey   *bool   `json:"support_prompt_cache_key,omitempty"`
 	// Interactions is vertex-only: native Vertex Interactions API routing.
 	Interactions *bool `json:"interactions,omitempty"`
 }
@@ -155,6 +157,9 @@ func configKeyBehaviorDTO(entry management.ConfigAPIKey, capabilities providerPo
 	if capabilities.hasVertexInteractions {
 		isEnabled := entry.Interactions
 		behavior.Interactions = &isEnabled
+		behavior.OpenAPI = openAPIOverrideState(entry.OpenAPI)
+		location := entry.OpenAPILocation
+		behavior.OpenAPILocation = &location
 	}
 	if *behavior == (ProviderBehaviorDTO{}) {
 		return nil
@@ -200,8 +205,21 @@ func resolveProviderPolicyEdit(family string, req SaveProviderRequest) (provider
 			behavior.RebuildMidSystemMessage != nil && !capabilities.hasRebuildMidSystemMessage,
 			behavior.NativeToolSearch != nil && !capabilities.hasNativeToolSearch,
 			behavior.SupportPromptCacheKey != nil && !capabilities.hasPromptCacheKey,
-			behavior.Interactions != nil && !capabilities.hasVertexInteractions:
+			behavior.Interactions != nil && !capabilities.hasVertexInteractions,
+			(behavior.OpenAPI != "" || behavior.OpenAPILocation != nil) && !capabilities.hasVertexInteractions:
 			return refuse("behavior names a setting this provider family does not have")
+		}
+		if behavior.OpenAPI != "" {
+			if _, ok := overrideValue(behavior.OpenAPI); !ok {
+				return refuse("behavior.openapi must be inherit, enabled or disabled")
+			}
+		}
+		if behavior.OpenAPILocation != nil {
+			location := strings.TrimSpace(*behavior.OpenAPILocation)
+			if !isVertexLocation(location) {
+				return refuse("behavior.openapi_location must be a Vertex location")
+			}
+			behavior.OpenAPILocation = &location
 		}
 		if behavior.CodexCloaking != "" {
 			if _, ok := overrideValue(behavior.CodexCloaking); !ok {
@@ -328,6 +346,12 @@ func (e providerPolicyEdit) applyBehaviorToConfigKey(entry *management.ConfigAPI
 		if behavior.Interactions != nil {
 			entry.Interactions = *behavior.Interactions
 		}
+		if behavior.OpenAPI != "" {
+			entry.OpenAPI = openAPIOverrideValue(behavior.OpenAPI)
+		}
+		if behavior.OpenAPILocation != nil {
+			entry.OpenAPILocation = *behavior.OpenAPILocation
+		}
 	}
 }
 
@@ -349,4 +373,22 @@ func (e providerPolicyEdit) applyToOpenAICompatibility(entry *management.OpenAIC
 		entry.SupportPromptCacheKey = *e.behavior.SupportPromptCacheKey
 	}
 	return nil
+}
+
+func openAPIOverrideState(value *bool) string {
+	if value == nil {
+		return providerOverrideInherit
+	}
+	if *value {
+		return providerOverrideEnabled
+	}
+	return providerOverrideDisabled
+}
+
+func openAPIOverrideValue(state string) *bool {
+	if state == providerOverrideInherit {
+		return nil
+	}
+	isEnabled := state == providerOverrideEnabled
+	return &isEnabled
 }

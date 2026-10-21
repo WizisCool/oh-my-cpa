@@ -28,6 +28,7 @@ var errManagementAuthFileNotFound = errors.New("auth file not found")
 // shape. Account, path, token, metadata, and other credential-bearing fields
 // are not part of this DTO; downloads are a separate, explicit admin action.
 type managementAuthFileResponse struct {
+	SIWCStatus        string                                `json:"siwc_status,omitempty"`
 	SIWCBindSupported bool                                  `json:"siwc_bind_supported"`
 	UseSIWC           bool                                  `json:"use_siwc"`
 	SIWCBound         bool                                  `json:"siwc_bound"`
@@ -79,6 +80,7 @@ type managementAuthFilesResponse struct {
 // the edit drawer may read. The raw file is downloaded only inside the Go
 // process; credentials, tokens and free-form metadata never enter the response.
 type managementAuthFileSafeFields struct {
+	UseSIWC        *bool    `json:"use_siwc,omitempty"`
 	Name           string   `json:"name"`
 	Priority       *int     `json:"priority,omitempty"`
 	Weight         *int64   `json:"weight,omitempty"`

@@ -47,8 +47,9 @@ const (
 // versions follow the stable fallbacks CPA itself sends when it cannot reach the
 // vendors' update channels, so they move with each CPA baseline.
 const (
-	CodexUserAgent       = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
-	AntigravityUserAgent = "antigravity/hub/2.23.0 darwin/arm64"
+	CodexUserAgent = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
+	// The changelist was verified for Hub 2.24.0; update the release and CL together.
+	AntigravityUserAgent = "antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)"
 	XaiGrokClientVersion = "1.0.46"
 	XaiGrokUserAgent     = "grok-pager/" + XaiGrokClientVersion + " grok-shell/" + XaiGrokClientVersion + " (macos; aarch64)"
 	XaiPaidHealthModel   = "grok-4.5"

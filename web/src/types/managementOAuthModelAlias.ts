@@ -1,4 +1,5 @@
 export interface ManagementOAuthModelAlias {
+ openapi?: boolean | null;
   name: string;
   alias: string;
   fork?: boolean;
