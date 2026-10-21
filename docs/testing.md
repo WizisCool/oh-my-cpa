@@ -957,7 +957,11 @@ wire: a failing refresh leaves the overview reporting `error`/`stale` with `last
 and the previous observation's windows and observed time, an auth failure counts as
 attention, the next successful read clears it, and a credential with no stored observation
 reports its failed first read as `error`/reauth in both the overview and the credential
-detail - with no history row, because a failed read is not an observation. `scripts/test-quota-attempt.ts` owns
+detail - with no history row, because a failed read is not an observation.
+`internal/api/management_quota_attempt_order_test.go` owns the ordering of two overlapping
+reads of one credential: the first is held inside a gated gateway, the second completes, and
+the stored attempt must be the later *start* rather than the later response, because a slow
+read that began first may finish last. `scripts/test-quota-attempt.ts` owns
 the row's two lines (failed attempt versus outlived reset, and silence when neither
 applies), and `web/tests/credential-quota.component.test.tsx` renders the statement beside
 the retained numbers and the row's own refresh control.

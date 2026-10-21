@@ -76,8 +76,10 @@ stale read is never stored, the stored reading could not say that the console's 
 refreshes had stopped working: the operator saw a toast, and the page went on presenting a
 reading days old as the current answer. Migration 044 adds `quota_refresh_attempts` - one
 row per credential, holding when the last read was attempted, whether it produced a
-reading and the provider's redacted reason - written by the one helper every read path
-goes through, and served as `last_refresh` beside the reading. The status the console
+reading and the provider's redacted reason, stamped when the read starts so two
+overlapping reads are ordered by start rather than by which response landed last - written
+by the one helper every read path goes through, and served as `last_refresh` beside the
+reading. The status the console
 presents then follows `quota.ApplyReadingHealth`: a failed attempt newer than the reading
 outranks it (auth-like failures as `error` with the reauth recommendation, the rest as
 `stale` with the previous numbers standing, or as `error` when the credential holds no

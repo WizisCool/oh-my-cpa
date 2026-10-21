@@ -66,8 +66,13 @@ type QuotaRefreshAttemptDTO struct {
 // capability - so a failure the operator is shown in a toast is also the failure the page can
 // still report after the toast is gone.
 func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
+	// Stamped before the read, on the same clock the service stamps the reading with: two reads of
+	// one credential can overlap, and the stored attempt must answer "which read started last", not
+	// "which response landed last". A slow failing read that started first may finish after a newer
+	// successful one, and completion order would let it report the credential as broken.
+	attemptedAtMS := svc.Now().UnixMilli()
 	refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
-	h.recordQuotaReadAttempt(ctx, svc, file, refreshed, err)
+	h.recordQuotaReadAttempt(ctx, file, attemptedAtMS, refreshed, err)
 	return refreshed, err
 }
 
@@ -76,7 +81,7 @@ func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, f
 // Best effort in the way the observation write is not: the read already happened upstream, and a
 // storage failure must not turn a successful refresh into an error reply. It is logged, because
 // a page silently showing an older attempt is exactly the confusion this record exists to end.
-func (h *Handler) recordQuotaReadAttempt(ctx context.Context, svc *quota.Service, file management.AuthFile, reading *quota.NormalizedQuota, readErr error) {
+func (h *Handler) recordQuotaReadAttempt(ctx context.Context, file management.AuthFile, attemptedAtMS int64, reading *quota.NormalizedQuota, readErr error) {
 	index := strings.TrimSpace(file.AuthIndex)
 	// A disabled credential is never read upstream: its reading is the operator's own decision,
 	// and recording an attempt would invent a try the console never made.
@@ -85,10 +90,8 @@ func (h *Handler) recordQuotaReadAttempt(ctx context.Context, svc *quota.Service
 	}
 	isUsable, reason := quota.ReadOutcome(reading, readErr)
 	attempt := repository.QuotaRefreshAttemptRecord{
-		AuthIndex: index,
-		// The service's clock, so the attempt and the reading it failed to replace are ordered by
-		// one time base - the demonstration pins its own, and the two must not disagree.
-		AttemptedAtMS: svc.Now().UnixMilli(),
+		AuthIndex:     index,
+		AttemptedAtMS: attemptedAtMS,
 		Outcome:       repository.QuotaRefreshAttemptSucceeded,
 		Error:         reason,
 	}

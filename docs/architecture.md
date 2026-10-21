@@ -2320,10 +2320,10 @@ hour), and a scheduled read once the newer of the observation and the process's 
 attempt is `interval_minutes` old, less a thirty-second slack for the observation being
 stamped after its tick. Due credentials - reset-driven first,
 then oldest reading first, at most sixteen per round and four at a time - go through
-`RefreshCredentialQuota` and `persistNormalizedQuotaSnapshot`, exactly as a manual
-refresh does. Attempts are remembered in process memory because a failed read is not
-persisted, and a round failure is logged when it starts or changes rather than every
-minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`
+`Handler.refreshQuotaReading` and `persistNormalizedQuotaSnapshot`, exactly as a manual
+refresh does, so the attempt is recorded beside the reading it could not replace. Only the
+retry backoff is remembered in process memory, because a failed read is never stored as an
+observation; a round failure is logged when it starts or changes rather than every minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`
 claims and Meta (whose observation is an audited key exchange) are skipped. The
 preference API refuses any document for this key other than
 `{"interval_minutes": 0 | 5-1440, "refresh_on_reset": bool}` with

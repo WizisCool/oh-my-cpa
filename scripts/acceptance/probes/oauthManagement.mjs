@@ -253,8 +253,22 @@ export async function oauthManagement({ base, page, check }) {
     (await staleRow.innerText()).replace(/\n/g, ' | '));
   check('a current reading offers no refresh of its own',
     (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"] [data-testid="quota-stale-refresh"]').count()) === 0);
-  check('the out-of-date reading is counted apart from the healthy total',
-    (await page.getByTestId('oauth-summary-stale').count()) === 1);
+  // The fixture holds twelve credentials: eight whose reading is current, one whose provider has no
+  // live probe (still current), two on a gateway cooldown, and the one whose refresh failed. The
+  // exact numbers are the claim: a record counted in both the healthy total and the out-of-date
+  // count would still satisfy "a stale count exists".
+  const [totalText, healthyText, attentionText, staleText] = await Promise.all([
+    page.locator('[class*="summary-total"]').innerText(),
+    page.locator('[class*="summary-healthy"]').innerText(),
+    page.locator('[class*="summary-attention"]').innerText(),
+    page.getByTestId('oauth-summary-stale').innerText(),
+  ]);
+  check('the summary counts every credential once, with the out-of-date reading in neither taste of normal',
+    /(共 12 个|Total 12)/.test(totalText)
+      && /(正常 9 个|Active 9)/.test(healthyText)
+      && /(需要关注 2|Needs attention 2)/.test(attentionText)
+      && /(快照已过期 1|Stale 1)/.test(staleText),
+    [totalText, healthyText, attentionText, staleText].map((text) => text.replace(/\n/g, ' ')).join(' | '));
   await staleRow.getByRole('button', { name: /^(Details|详情):/i }).click();
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
   check('the quota drawer states the failed refresh beside the numbers it left standing',
