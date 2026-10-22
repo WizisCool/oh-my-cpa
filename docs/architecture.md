@@ -725,8 +725,9 @@ these credentials inside one provider object. For the seven config API-key famil
 `management_provider_keys.go` expands a save into one provider row per non-empty key,
 preserving each key's proxy and weight and applying the shared provider settings.
 A blank first key in an edit retains the stored secret; blank additional rows are
-ignored. An empty create or repeated submitted key is refused with `400`, and a
-credential already present at the same endpoint is refused with `409` before writing.
+ignored. An empty create or repeated submitted key is refused with `400`, and a key
+that matches a stored credential is refused with `409` when their base URLs are equal
+or either is blank, before writing.
 
 Create and same-family edit save all credentials in one backed-up, revision-guarded
 configuration write under the provider gate. Editing keeps the source row in place
