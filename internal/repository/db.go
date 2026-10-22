@@ -134,6 +134,18 @@ func Open(ctx context.Context, databasePath string, options ...OpenOption) (*DB,
 			return nil, fmt.Errorf("configure database: %w", err)
 		}
 	}
+	// SQLite stages table-rebuild work in a temporary directory; migration 046
+	// rebuilds usage_events. Containers run with a read-only root filesystem and one
+	// writable data volume, so the default /tmp cannot hold those files. SQLite
+	// consults SQLITE_TMPDIR before TMPDIR; keep an explicit operator setting.
+	if isFileDatabase(databasePath) {
+		if _, configured := os.LookupEnv("SQLITE_TMPDIR"); !configured {
+			if err := os.Setenv("SQLITE_TMPDIR", filepath.Dir(databasePath)); err != nil {
+				return nil, fmt.Errorf("set SQLite temporary directory: %w", err)
+			}
+		}
+	}
+
 	// busy_timeout and WAL are connection settings; the URI applies them to
 	// every pooled connection opened by modernc.org/sqlite. The pool is opened
 	// through this package's gated driver, which is what makes a maintenance job
