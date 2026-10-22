@@ -75,7 +75,12 @@ export async function filterPanelSection(context) {
     () => !filterSuffix().includes('model='),
     { detail: () => `url=${filterSuffix()}` },
   );
-  check('removing the only filter hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+  // React Router v7 commits search-param updates inside a transition, so the URL can
+  // change before the chip strip repaints. Wait for the rendered state this check names.
+  await checkEventually(
+    'removing the only filter hides the chip strip',
+    async () => (await page.locator('.req-filter-chip').count()) === 0,
+  );
   page.off('request', countFacetRead);
   check('a filter change does not re-read the facets', facetReads.length === 0, `facetReads=${facetReads.length}`);
 
@@ -151,7 +156,10 @@ export async function filterPanelSection(context) {
     () => new URL(page.url()).searchParams.toString().split('&').every((pair) => /^(preset|limit)=/.test(pair) || pair === ''),
     { detail: () => `url=${filterSuffix()}` },
   );
-  check('clear-all hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+  await checkEventually(
+    'clear-all hides the chip strip',
+    async () => (await page.locator('.req-filter-chip').count()) === 0,
+  );
   // Clear-all returns the list to the unfiltered page, not merely to a filterless
   // URL: the footer reports the page size the bare window would load. It is asserted
   // here rather than covered by the URL check above because a URL with no filter
@@ -182,7 +190,10 @@ export async function filterPanelSection(context) {
     () => filterSuffix().includes('result=failed'),
     { detail: () => `url=${filterSuffix()}` },
   );
-  check('a result-only filter still offers Reset', await page.locator('.req-reset-filters').isVisible());
+  await checkEventually(
+    'a result-only filter still offers Reset',
+    () => page.locator('.req-reset-filters').isVisible(),
+  );
 
   // A pending debounce must not resurrect a filter that was just cleared, and this
   // is the one such claim that cannot move to the pure layer: it depends on a real
