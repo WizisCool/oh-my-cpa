@@ -34,6 +34,7 @@ import { runObservabilityAcceptance } from './acceptance/observability.mjs';
 import { auditNativePluginHostResponse, isNativePluginHostResponse, settleNativeResponseAudits, runConfigurationPluginsAcceptance } from './acceptance/configuration-plugins.mjs';
 import { runThemeBrandAcceptance } from './acceptance/theme-brand.mjs';
 import { runOAuthFlowAcceptance } from './acceptance/oauth-flow.mjs';
+import { runPwaAcceptance } from './acceptance/pwa.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -491,6 +492,8 @@ try {
     });
 
     await runThemeBrandAcceptance({ appURL, page, check, until, measureStable, settleLayout });
+
+    await runPwaAcceptance({ appURL, context, page, check });
 
     await runOAuthFlowAcceptance({ appURL, page, check });
   }

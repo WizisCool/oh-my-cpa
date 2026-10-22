@@ -800,6 +800,20 @@ claims require Chromium. Built-artifact theme/brand acceptance waits for the
 rendered shell content (and the desktop wordmark) as well as theme hydration
 before measuring geometry and SVG fills, because the shell download can complete after theme hydration.
 
+### Installable web app coverage
+
+`internal/api/pwa_test.go` owns the served contract: the manifest's members (relative
+`start_url` and `scope`, no `id`, standalone display, the declared icon sizes), each icon
+decoding at the size it declares, `application/manifest+json` with `Cache-Control:
+no-cache`, HEAD parity, a missing icon answering 404 instead of the SPA shell, the same
+routes at the root, `/omc` and a nested base, and the demonstration's allow/refuse
+boundary around them. `scripts/acceptance/pwa.mjs` owns what only Chromium can
+establish: `Page.getAppManifest` parses the manifest deployed by the built binary with
+no errors, `Page.getInstallabilityErrors` is empty in a browser context that blocks service
+workers, so installation does not depend on one; the browser's processed identity is the mount's `start_url` (so the root
+and a nested mount cannot present themselves as one app), every icon the manifest names
+loads, and a deep link resolves the same manifest through the injected base element.
+
 ### Loading feedback regression coverage
 
 `scripts/test-load-progress.ts` owns task accounting and rough estimation (ADRs 0052 and 0054):

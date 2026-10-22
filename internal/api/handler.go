@@ -43,6 +43,12 @@ type Handler struct {
 	cipher          *appcrypto.Cipher
 	discoverer      *discovery.Discoverer
 	logger          *slog.Logger
+	// consoleRoot is the built console's root: the directory holding index.html,
+	// manifest.webmanifest and the icons that manifest names. Production points it at
+	// the embedded dist; a test points it at the committed web/public directory,
+	// because the embed is fixed at build time and the installable-app routes must be
+	// testable in a checkout that has not built the frontend.
+	consoleRoot fs.FS
 	// serviceLog is the bounded copy of this process's own log the console reads;
 	// nil when the logger was not built with the applog tee.
 	serviceLog *applog.Buffer
@@ -124,6 +130,7 @@ func (h *Handler) now() time.Time {
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	handler := &Handler{
 		playgroundSlots:  make(chan struct{}, 4),
+		consoleRoot:      consoleRootFiles(),
 		cfg:              cfg,
 		repo:             repo,
 		cipher:           cipher,
@@ -382,6 +389,13 @@ func (h *Handler) routes() chi.Router {
 		r.Head("/lobe-icons/*", h.asset)
 		r.Get("/favicon.svg", h.asset)
 		r.Head("/favicon.svg", h.asset)
+		// The installable-app surface. These do not go through asset(): their names are
+		// stable rather than content-hashed, so asset()'s immutable policy would pin an
+		// old manifest and icons in the browser. See pwa.go.
+		r.Get("/manifest.webmanifest", h.manifest)
+		r.Head("/manifest.webmanifest", h.manifest)
+		r.Get("/icons/*", h.appIcon)
+		r.Head("/icons/*", h.appIcon)
 		r.Get("/*", h.spa)
 		r.Head("/*", h.spa)
 		r.MethodNotAllowed(h.methodNotAllowed)

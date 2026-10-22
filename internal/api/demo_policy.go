@@ -353,6 +353,13 @@ var demoPolicyConsole = []demoPolicyRule{
 	{http.MethodHead, "/lobe-icons/*", demoAllow, ""},
 	{http.MethodGet, "/favicon.svg", demoAllow, ""},
 	{http.MethodHead, "/favicon.svg", demoAllow, ""},
+	// The installable-app surface is public build output, like the assets above: it
+	// carries no operator data and the manifest cannot be authenticated anyway, since
+	// the browser reads it while evaluating whether the app can be installed.
+	{http.MethodGet, "/manifest.webmanifest", demoAllow, ""},
+	{http.MethodHead, "/manifest.webmanifest", demoAllow, ""},
+	{http.MethodGet, "/icons/*", demoAllow, ""},
+	{http.MethodHead, "/icons/*", demoAllow, ""},
 	{http.MethodGet, "/*", demoAllow, ""},
 	{http.MethodHead, "/*", demoAllow, ""},
 }

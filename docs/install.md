@@ -442,6 +442,45 @@ curl -fsS https://example.com/omc/api/healthz
 With a different `OMCPA_BASE_PATH`, the same holds for that prefix. With `/` there is
 no bare path to handle.
 
+## Install as an app
+
+The console is an installable web app: Chrome and Edge on desktop and Chrome on Android
+install it from the served page, Samsung Internet does the same on Samsung devices, and
+iOS and iPadOS add it to the Home Screen. It then opens in its own window with the brand
+mark as its icon, instead of in a browser tab.
+
+Installation is a browser feature, not a console setting, so there is no install button
+to look for on a page:
+
+| Where | How |
+| --- | --- |
+| Chrome or Edge on a computer | The install icon in the address bar, or the browser menu → **Install page as app** / **Apps → Install this site as an app** |
+| Chrome on Android with Google Mobile Services | Menu → **Install app** (or **Add to Home screen**) |
+| Samsung Internet on a Samsung device | **Add to Home screen** |
+| Safari on iOS or iPadOS | Share → **Add to Home Screen**. There is no in-page install prompt, and the console cannot open the Share sheet for you. On iOS and iPadOS 16.4 or later, the Share menu of Chrome, Edge, Firefox and Orion installs it too |
+| Safari on macOS | **File → Add to Dock** (Safari 17 on macOS 14 or later) |
+
+Two conditions come from the browser rather than from OMC:
+
+- **Chromium's install criteria require a secure context.** Chrome and Edge treat the
+  console as installable only when it is served over `https://` through your reverse
+  proxy, or over `http://localhost` / `http://127.0.0.1` during local development. A
+  plain-HTTP deployment reached by a LAN IP or hostname does not meet that criterion,
+  even though the console itself works there. Do not expose the console over plain HTTP
+  on a network interface: the sign-in password is CPA's administrator key.
+- **The deployment stays reachable.** The PWA adds no service worker and no offline
+  cache of API responses or user content, so the installed app cannot load without a
+  connection. Existing session and caching rules are unchanged: the sign-in session
+  cookie and the hashed static assets keep the behavior they already have. Reinstalling
+  is not needed to pick up an update; every launch loads the current bundle from the
+  deployment.
+
+The mount point is part of the installed identity. `/`, `/omc` and a nested
+`OMCPA_BASE_PATH` are three different apps to the browser, so installing one does not
+replace another, and an app installed at a path that later changes has to be installed
+again. The manifest's URLs are relative and resolve against the manifest's own address,
+which is what keeps this working behind a proxy that preserves the prefix.
+
 ## Native executable
 
 [GitHub Releases](https://github.com/WizisCool/oh-my-cpa/releases) publish OMC for

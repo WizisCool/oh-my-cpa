@@ -3,6 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- Every URL in the manifest is relative, and start_url, scope and the icon sources resolve
+         against the MANIFEST's URL, so one committed file is correct at the site root, under /omc
+         and under a nested base path. The manifest deliberately carries no id: a relative id
+         resolves against start_url's ORIGIN, not the manifest URL, so "./" would collapse every
+         mount point onto one installed identity. Omitted, the identity IS the resolved start_url,
+         which already differs per mount. The Go service serves the manifest itself (see
+         internal/api/pwa.go) because a fallback to index.html is not a manifest. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="application-name" content="Oh My CPA" />
+    <!-- Current browsers take standalone display from the manifest. These two meta tags are
+         the legacy declarations: Chrome on Android read `mobile-web-app-capable` before it
+         honored `display`, and iOS before 16.4 reads only the prefixed form to launch without
+         Safari chrome. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- The browser UI tint follows the operating system's preference; the manifest's single
+         theme_color is the console's own dark surface, which is its shipped default. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)" />
     <!-- `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve on a notched phone.
          It is deliberately not paired with `maximum-scale` or `user-scalable`: pinch-zoom is an
          accessibility affordance, and the iOS focus zoom it would suppress is handled where it

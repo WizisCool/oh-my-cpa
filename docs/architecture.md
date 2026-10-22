@@ -30,6 +30,24 @@ The React bundle is built into `internal/web/dist` and embedded with
 browser can reach is a handwritten JSON endpoint; there is no generic pass
 through to CPA.
 
+The console is installable as a web app. The hand-written
+`web/public/manifest.webmanifest` is served at `<base>/manifest.webmanifest` as
+`application/manifest+json`, and the icons it names are served from `<base>/icons/`;
+those icons are renders of the brand mark in `web/public/favicon.svg`; re-render them
+from that drawing when it changes. Every URL inside
+the manifest is relative, and `start_url`, `scope` and the icon sources resolve against
+the manifest URL, so one committed file is correct at the site root, under `/omc` and
+under a nested base path, with no per-deployment generation. The manifest carries no
+`id`: a relative id resolves against `start_url`'s origin rather than the manifest URL,
+so `"./"` would give every mount point the same installed identity; omitted, the identity
+is the resolved `start_url`, which is mount-specific. The manifest and icons are served
+with `Cache-Control: no-cache` because their names are stable rather than content-hashed
+(see `internal/api/pwa.go`). No service worker is registered: the app adds no offline
+cache of API responses or user content, so a new bundle is never held behind an old one
+and the existing HTTP caching and session rules are unchanged. Installation therefore
+needs the deployment to be reachable, over HTTPS or localhost as the browser requires;
+`docs/install.md` covers the per-browser steps.
+
 ### Binary/image distribution and release flow
 
 `Dockerfile` builds the embedded frontend on the builder platform, cross-compiles Go
