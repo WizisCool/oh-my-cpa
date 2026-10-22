@@ -26,12 +26,6 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// queryer is satisfied by both *sql.Tx and *sql.DB, so the lock and the read-time
-// breakdown load versions through the same statements.
-type queryer interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 const priceVersionSelect = `SELECT id, available, effective_from_ms, model, prompt_price_per_1m, completion_price_per_1m,
  cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id, channel
  FROM model_price_versions`

@@ -63,6 +63,7 @@
     "verify:fuzz": "node scripts/maintenance-checks.mjs fuzz",
     "verify:advisories": "node scripts/maintenance-checks.mjs advisories",
     "verify:workflow:lint": "node scripts/lint-workflows.mjs",
+    "lint:go": "golangci-lint run ./...",
     "test:components": "node scripts/test-components.mjs",
     "type-check:tooling": "tsc --project tsconfig.tooling.json"
   },

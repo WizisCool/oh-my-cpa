@@ -742,21 +742,6 @@ func demoExportIsSeededInstant(item any) bool {
 	return ok && millis <= float64(demoExportReference.UnixMilli())
 }
 
-// demoExportShiftText moves an instant written as text by the delta, leaving anything
-// that is not an instant alone.
-func demoExportStampText(item any, referenceMS int64) any {
-	text, ok := item.(string)
-	if !ok {
-		return item
-	}
-	stamped := time.UnixMilli(referenceMS).UTC().Format(time.RFC3339)
-	if _, err := time.Parse(time.RFC3339, text); err == nil {
-		return stamped
-	}
-	// A log line carries its instants in prose, so they are rewritten in place.
-	return demoExportLogInstant.ReplaceAllString(text, stamped)
-}
-
 // demoExportDayBoundaryKeys are the heatmap's calendar-cell boundaries.
 //
 // They are left as the handler produced them, with one exception, and the reasoning is

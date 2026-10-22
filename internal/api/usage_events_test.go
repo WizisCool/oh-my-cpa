@@ -182,7 +182,7 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 
 	// Result filter.
-	response, payload = getJSON(t, client, listURL+"&result=failed")
+	_, payload = getJSON(t, client, listURL+"&result=failed")
 	if err := json.Unmarshal(payload, &page); err != nil {
 		t.Fatal(err)
 	}
@@ -191,14 +191,14 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 
 	// Model + auth index filters, and an impossible combination.
-	response, payload = getJSON(t, client, listURL+"&model=gemini-2.5-pro&auth_index=auth-1")
+	_, payload = getJSON(t, client, listURL+"&model=gemini-2.5-pro&auth_index=auth-1")
 	if err := json.Unmarshal(payload, &page); err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 3 {
 		t.Fatalf("matching filters dropped rows: %d", len(page.Items))
 	}
-	response, payload = getJSON(t, client, listURL+"&model=does-not-exist")
+	_, payload = getJSON(t, client, listURL+"&model=does-not-exist")
 	if err := json.Unmarshal(payload, &page); err != nil {
 		t.Fatal(err)
 	}
@@ -207,14 +207,14 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 
 	// Keyset pagination: limit 2 then follow the cursor.
-	response, payload = getJSON(t, client, listURL+"&limit=2")
+	_, payload = getJSON(t, client, listURL+"&limit=2")
 	if err := json.Unmarshal(payload, &page); err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 2 || !page.HasMore || page.NextCursor == "" {
 		t.Fatalf("first page wrong: %d hasMore=%v cursor=%q", len(page.Items), page.HasMore, page.NextCursor)
 	}
-	response, payload = getJSON(t, client, listURL+"&limit=2&cursor="+page.NextCursor)
+	_, payload = getJSON(t, client, listURL+"&limit=2&cursor="+page.NextCursor)
 	if err := json.Unmarshal(payload, &page); err != nil {
 		t.Fatal(err)
 	}

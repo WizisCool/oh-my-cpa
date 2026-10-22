@@ -142,75 +142,73 @@ func (c *providerKeyMaskCache) masks(
 	if c == nil {
 		return nil
 	}
-	for {
-		c.mu.Lock()
-		entry, found := c.entries[key]
-		if found && entry.refreshing == nil && time.Now().Before(entry.expiresAt) {
-			masks := entry.masks
-			c.mu.Unlock()
-			return masks
-		}
-		if found && entry.refreshing != nil {
-			waiting := entry.refreshing
-			c.mu.Unlock()
-			select {
-			case <-waiting:
-				// Answer from what that read stored. Asking again here would be a
-				// second read of a list this caller has already waited for once.
-				return c.cached(key)
-			case <-ctx.Done():
-				return nil
-			}
-		}
-		if !found && len(c.entries) >= maxProviderKeyMaskEntries {
-			// Dropping the whole cache is safe and simpler than an eviction order:
-			// every entry is a cached read, and each one is re-read on demand. This
-			// cannot loop, because the only key that can be asked for next is one
-			// this call is about to insert.
-			c.entries = make(map[string]providerKeyMaskEntry)
-		}
-		// Stored from an empty entry rather than from the expired one, so no stale
-		// mask can be observed while this read is in flight.
-		done := make(chan struct{})
-		entry = providerKeyMaskEntry{refreshing: done}
-		c.entries[key] = entry
+	c.mu.Lock()
+	entry, found := c.entries[key]
+	if found && entry.refreshing == nil && time.Now().Before(entry.expiresAt) {
+		masks := entry.masks
 		c.mu.Unlock()
-
-		masks, err := load(ctx)
-
-		c.mu.Lock()
-		// Written through the entry this call owns rather than through a fresh
-		// lookup: an invalidation during the read has replaced the map, and the
-		// answer belongs to the read that is finishing, not to the new state.
-		stored := providerKeyMaskEntry{expiresAt: time.Now().Add(providerKeyMaskTTL)}
-		if err != nil {
-			// No stale fallback. A list that cannot be read now is a list whose
-			// keys may have changed, and a mask that no longer matches the
-			// configuration is exactly the wrong answer this feature must not give.
-			stored.expiresAt = time.Now().Add(providerKeyMaskFailureTTL)
-		} else {
-			stored.masks = masks
-		}
-		current, stillOwned := c.entries[key]
-		if stillOwned && current.refreshing == done {
-			c.entries[key] = stored
-		}
-		c.mu.Unlock()
-		close(done)
-
-		// A write that landed while this read was in flight has invalidated every
-		// entry, which means the list this read saw was replaced underneath it. Its
-		// answer is therefore not known to still describe the configuration, so it is
-		// withheld as well as not stored: returning it would hand this request the
-		// very claim the invalidation exists to withdraw.
-		if !stillOwned || current.refreshing != done {
-			return nil
-		}
-		if err != nil {
-			return nil
-		}
 		return masks
 	}
+	if found && entry.refreshing != nil {
+		waiting := entry.refreshing
+		c.mu.Unlock()
+		select {
+		case <-waiting:
+			// Answer from what that read stored. Asking again here would be a
+			// second read of a list this caller has already waited for once.
+			return c.cached(key)
+		case <-ctx.Done():
+			return nil
+		}
+	}
+	if !found && len(c.entries) >= maxProviderKeyMaskEntries {
+		// Dropping the whole cache is safe and simpler than an eviction order:
+		// every entry is a cached read, and each one is re-read on demand. This
+		// cannot loop, because the only key that can be asked for next is one
+		// this call is about to insert.
+		c.entries = make(map[string]providerKeyMaskEntry)
+	}
+	// Stored from an empty entry rather than from the expired one, so no stale
+	// mask can be observed while this read is in flight.
+	done := make(chan struct{})
+	entry = providerKeyMaskEntry{refreshing: done}
+	c.entries[key] = entry
+	c.mu.Unlock()
+
+	masks, err := load(ctx)
+
+	c.mu.Lock()
+	// Written through the entry this call owns rather than through a fresh
+	// lookup: an invalidation during the read has replaced the map, and the
+	// answer belongs to the read that is finishing, not to the new state.
+	stored := providerKeyMaskEntry{expiresAt: time.Now().Add(providerKeyMaskTTL)}
+	if err != nil {
+		// No stale fallback. A list that cannot be read now is a list whose
+		// keys may have changed, and a mask that no longer matches the
+		// configuration is exactly the wrong answer this feature must not give.
+		stored.expiresAt = time.Now().Add(providerKeyMaskFailureTTL)
+	} else {
+		stored.masks = masks
+	}
+	current, stillOwned := c.entries[key]
+	if stillOwned && current.refreshing == done {
+		c.entries[key] = stored
+	}
+	c.mu.Unlock()
+	close(done)
+
+	// A write that landed while this read was in flight has invalidated every
+	// entry, which means the list this read saw was replaced underneath it. Its
+	// answer is therefore not known to still describe the configuration, so it is
+	// withheld as well as not stored: returning it would hand this request the
+	// very claim the invalidation exists to withdraw.
+	if !stillOwned || current.refreshing != done {
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	return masks
 }
 
 // cached returns a fresh entry's masks, or nothing when the entry is absent,

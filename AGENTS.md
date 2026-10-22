@@ -183,6 +183,7 @@ The complete script list is in `package.json`; these are the ones agents use mos
 | `pnpm readme:screenshots` | Regenerate README screenshots from demo mode (outside every gate) |
 | `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Weekly maintenance lanes, separate from the PR gates |
 | `UPDATE_GOLDEN=1 go test ./<pkg>` | Regenerate a package's golden files; review the diff before committing |
+| `pnpm lint:go` | golangci-lint with `.golangci.yml` (install `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`); CI runs it in the Go lane |
 
 ---
 

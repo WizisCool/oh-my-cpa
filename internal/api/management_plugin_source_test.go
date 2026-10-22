@@ -79,12 +79,6 @@ func (f *managedSourceCPA) revision() string {
 	return configyaml.ComputeRevision(f.render())
 }
 
-func (f *managedSourceCPA) setSources(sources []string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sources = append([]string(nil), sources...)
-}
-
 func (f *managedSourceCPA) recordedWrites() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

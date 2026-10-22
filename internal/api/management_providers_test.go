@@ -168,15 +168,15 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 			// The fields the console does not model are CPA settings an operator
 			// wrote in config.yaml; they are here so a round trip can prove they
 			// survive an edit.
-			"xai": &[]map[string]any{{
+			"xai": {{
 				"api-key":       "xai-test-token-1234",
 				"auth-index":    "xai-1",
 				"base-url":      "https://api.x.ai/v1",
 				"websockets":    true,
 				"request-retry": 2,
 			}},
-			"vertex":       &[]map[string]any{},
-			"interactions": &[]map[string]any{},
+			"vertex":       {},
+			"interactions": {},
 		},
 	}
 
@@ -342,7 +342,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 	}
 
 	// Read providers list and verify custom name and plaintext key in list
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	var providersResp struct {
 		Providers []ProviderItemDTO `json:"providers"`
 	}
@@ -378,7 +378,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("patch claude status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	_ = json.Unmarshal(payload, &providersResp)
 	for i := range providersResp.Providers {
 		if providersResp.Providers[i].ID == "claude-0" {
@@ -395,7 +395,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("create gemini provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	_ = json.Unmarshal(payload, &providersResp)
 	foundGemini := false
 	for _, p := range providersResp.Providers {

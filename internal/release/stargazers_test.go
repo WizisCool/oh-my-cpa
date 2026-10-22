@@ -65,9 +65,11 @@ func TestFetchStargazersReadsTheRepositoryDocument(t *testing.T) {
 func TestFetchStargazersRefusesAnAnswerWithoutACount(t *testing.T) {
 	cases := map[string]http.HandlerFunc{
 		"missing field": func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(`{}`)) },
-		"negative":      func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(`{"stargazers_count":-1}`)) },
-		"not json":      func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(`<html>`)) },
-		"not found":     func(writer http.ResponseWriter, _ *http.Request) { writer.WriteHeader(http.StatusNotFound) },
+		"negative": func(writer http.ResponseWriter, _ *http.Request) {
+			_, _ = writer.Write([]byte(`{"stargazers_count":-1}`))
+		},
+		"not json":  func(writer http.ResponseWriter, _ *http.Request) { _, _ = writer.Write([]byte(`<html>`)) },
+		"not found": func(writer http.ResponseWriter, _ *http.Request) { writer.WriteHeader(http.StatusNotFound) },
 	}
 	for name, handler := range cases {
 		t.Run(name, func(t *testing.T) {

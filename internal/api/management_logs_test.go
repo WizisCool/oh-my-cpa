@@ -21,7 +21,6 @@ type logsFixtureCPA struct {
 	queries  []string
 	methods  []string
 	logsBody string
-	logsHead int
 }
 
 func (f *logsFixtureCPA) serve(writer http.ResponseWriter, request *http.Request) {

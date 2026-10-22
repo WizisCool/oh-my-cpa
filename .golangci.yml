@@ -1,0 +1,30 @@
+# The Go lane's linters: the standard set, with the noise each one is known for
+# excluded rather than suppressed line by line.
+version: "2"
+linters:
+  default: standard
+  settings:
+    errcheck:
+      exclude-functions:
+        # A deferred rollback after a commit returns ErrTxDone by design.
+        - (*database/sql.Tx).Rollback
+    staticcheck:
+      # Correctness and simplification checks; the quick-fix and style suggestions
+      # (QF, ST) would rewrite working code and established wire messages.
+      checks: ["all", "-QF*", "-ST*", "-S1016"]
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+    rules:
+      # A test fails on what it asserts; an unchecked write in a fake upstream handler
+      # or an ignored decode shows up there.
+      - path: _test\.go
+        linters: [errcheck]
+      # The write gate wraps a driver, and the driver interfaces still require the
+      # pre-context methods it forwards.
+      - path: internal/repository/writegate\.go
+        text: SA1019
+formatters:
+  enable:
+    - gofmt

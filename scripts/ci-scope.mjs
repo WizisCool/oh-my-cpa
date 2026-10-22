@@ -15,7 +15,7 @@ import path from 'node:path';
 const SHARED = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/ci-scope\.mjs)$/;
 // Go tests also read a few files outside the module: the console's public assets, the
 // committed demonstration dataset and the shared API contract fixtures.
-const GO = /(?:\.go$|^go\.(?:mod|sum)$|^(?:internal|cmd|migrations)\/|^scripts\/fixture\/|^scripts\/fake-cpa\.mjs$|^scripts\/browser-acceptance\.mjs$|^web\/public\/|^web\/index\.html$|^deploy\/cloudflare\/data\/|^scripts\/acceptance\/contracts\/)/;
+const GO = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^(?:internal|cmd|migrations)\/|^scripts\/fixture\/|^scripts\/fake-cpa\.mjs$|^scripts\/browser-acceptance\.mjs$|^web\/public\/|^web\/index\.html$|^deploy\/cloudflare\/data\/|^scripts\/acceptance\/contracts\/)/;
 const WEB = /^(?:web\/|scripts\/acceptance\/|scripts\/testing\/|scripts\/test-[^/]+\.(?:ts|mjs)$|scripts\/check-ui|scripts\/browser-acceptance\.mjs$|deploy\/cloudflare\/)/;
 // Paths only the repository lane reads: prose, the plugin registry (validated there by its
 // own Go test), workflow and repository scripts. The repository lane runs on every event, so naming them here is what keeps a

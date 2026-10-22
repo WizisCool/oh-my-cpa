@@ -629,8 +629,7 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 	rawTo := strings.TrimSpace(query.Get("to"))
 
 	nowMS := now.UnixMilli()
-	fromMS := int64(0)
-	toMS := nowMS
+	var fromMS, toMS int64
 	openEnd := false
 
 	switch {

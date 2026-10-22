@@ -61,7 +61,7 @@ comparison seeds a year of history (about fifteen seconds), so it is skipped und
 | Lane | Pull request | Push to `next` | Push to `master`, nightly, `next → master`, label `full-ci` |
 | --- | --- | --- | --- |
 | `static-repository`: docs, i18n, CSS modules, design gates, script tests, workflow lint, secrets | always | always | always |
-| `static-go`: `go test ./...`, `go vet` | Go paths changed | Go paths changed | always |
+| `static-go`: `go test ./...`, golangci-lint (`.golangci.yml`) | Go paths changed | Go paths changed | always |
 | `static-frontend`: type check, logic, components, antd lint | web paths changed | web paths changed | always |
 | `browser`: build, bundle boundaries, built-artifact acceptance | smoke, when Go or web paths changed | smoke, when Go or web paths changed | full, plus demo acceptance |
 | `probes` | the scenarios the frontend change selects | the scenarios the frontend change selects | the whole catalog in three shards |

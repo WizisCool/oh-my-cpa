@@ -65,10 +65,13 @@ jobs:
         with:
           go-version: 1.27.3
           cache: true
-      - name: Test and vet
+      - name: Test
+        run: go test ./...
+      # golangci-lint's standard set includes vet; .golangci.yml says what it excludes.
+      - name: Lint
         run: |
-          go test ./...
-          go vet ./...
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          "$(go env GOPATH)/bin/golangci-lint" run ./...
       - name: Verify clean generated state
         run: test -z "$(git status --porcelain)"
 
