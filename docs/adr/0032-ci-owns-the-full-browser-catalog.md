@@ -1,6 +1,6 @@
 # ADR 0032: CI owns the full browser catalog; local verification is scoped to the change
 
-- Status: Accepted
+- Status: Superseded by ADR 0105
 - Date: 2026-09-28
 
 ## Context

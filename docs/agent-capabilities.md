@@ -356,9 +356,8 @@ When a new OMC feature suits an agent:
    and `agent.capability.<name>.description` (what the call does, for the operator) in
    `web/src/i18n/index.tsx` and every catalog under `web/src/i18n/locales/`. The registry's
    `Description` stays English and is written for the model; the console shows it only in an
-   expanded row. `scripts/capability-copy.test.mjs` fails when a registered capability has no copy
-   or copy names a capability that is gone, reading the registry from the regenerated demonstration
-   dataset.
+   expanded row. `pnpm check-i18n` fails when a registered capability has no copy or copy names a
+   capability that is gone.
 5. If the capability is intentionally not exposed, say so in the pull request.
 
 ## External agents (MCP)

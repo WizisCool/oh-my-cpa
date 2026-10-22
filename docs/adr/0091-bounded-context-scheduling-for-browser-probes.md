@@ -1,6 +1,6 @@
 # ADR 0091: Bounded context scheduling for browser probes
 
-- Status: Accepted
+- Status: Accepted; custom batch scheduling superseded by ADR 0105
 - Date: 2026-10-09
 
 Allow at most two scenario workers inside one owned Vite/Chromium batch. Each

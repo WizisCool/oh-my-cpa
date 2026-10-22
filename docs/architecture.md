@@ -84,8 +84,7 @@ The release job also signs `release-manifest.json` (version, image repository an
 pushed multi-platform digest) with the Ed25519 key in its `RELEASE_SIGNING_KEY` secret,
 after the native assets are verified and before anything is uploaded; the job fails when
 the key is absent or does not match `internal/updater/release_public_key.txt`, which is
-the key compiled into the binary. `scripts/release-workflow.mjs` holds that ordering and
-the secret's confinement to the release job as workflow invariants.
+the key compiled into the binary; the signing secret is referenced by the release job only.
 `docs/releasing.md` records the maintainer workflow
 and ADR 0056 the publication ordering and immutable version identity.
 
@@ -1091,8 +1090,6 @@ may name Playground turns without loading its state.
 Playground error vocabularies and duration presentation for the shared export hook.
 Page modules retain their public exports, while shared workspace runtime modules
 must not import page internals.
-The runtime-graph guard in `scripts/conversation-boundaries.test.mjs` prevents
-reversing these dependencies.
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message
@@ -2791,131 +2788,47 @@ that partial outcome rather than either success or failure.
 
 ## 12. Test layering
 
-Local browser impact analysis follows transpiled runtime imports, preserving eager
-and lazy edge kinds. The central `web/src/routePages.ts` registry is a boundary only
-for mapped literal lazy-page imports. Page identity is discovered from App's
-`createBrowserRouter` route elements through the registry's exported `React.lazy`
-components and their literal `createPageLoader` imports, not from directory or
-filename prefixes. Other registry imports, including helpers in page directories,
-registry changes and unrecognized wiring remain full-catalog changes. Real-tree
-planner tests independently require App to import the registry and the registry's
-proven page set to be nonempty. Full CI coverage does not depend on local selection.
-See `docs/plans/architecture-governance.md` for the measured audit and staged work.
+`docs/testing.md` is the working guide (where a new test goes, what CI runs when, how to
+reproduce a failure) and `AGENTS.md` §5 holds the rules; this section records why the
+suite has the shape it has.
 
-The suite is split by what each layer can actually prove, not by which runner is
-fashionable. `docs/testing.md` is the working guide (where a new test goes, how it is
-registered, what to run when); this section records why. The rule is **Browser Everything → Browser Only Where Browser
-Matters**: an assertion moves down a layer when a lower layer can make the same
-claim, and it stays in Chromium only when the claim is about the engine.
+A claim moves down a layer whenever a lower layer can fail for the same reason, and stays
+in Chromium only when it is about the engine: geometry, stacking, hit-testing, scroll,
+focus, Back, touch and paint. Each claim has one owner. The earlier suite asserted many
+claims in two or three layers at once and carried a self-test for nearly every repository
+script; that duplication cost every later change more than it caught, and was removed
+(ADR 0105).
 
 | Layer | Command | What it proves |
 | --- | --- | --- |
-| Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation, chip display mapping, refresh presentation. Runs under Node with no bundler, no HTTP server, no Go binary and no browser. Every `scripts/test-*.ts` is discovered; there is no suite list to register in. |
-| React component integration | `pnpm test:components` | Automatically discovered rendered hook/provider/component claims under jsdom with real QueryClient/API wiring, held responses, isolated files and explicit cleanup. Separate from Node pure logic and Chromium engine behavior (ADR 0089). |
-| API wire contract | `pnpm test:components` + `go test ./...` + `pnpm test:self` | A reviewed corpus is independently checked by real authenticated Go handlers/SQLite, the actual typed client in Vitest Node, and per-context Browser Mock dispatch. Reuse the integration runner without simulating DOM or changing API contracts (ADR 0090). |
-| Mechanical repository gates | `pnpm test:self` | Every `*.test.mjs` under `scripts/` and `deploy/cloudflare/`, discovered: path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, both planners, the probe shards, the workflow structure and the fixed-wait ratchet. |
-| **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. Like the full probe catalog, this runs `React.StrictMode` double-invocation checks that a production build cannot expose. |
-| Cross-stack smoke | `pnpm verify:browser:smoke` | A local quick check of the thin path: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
-| Focused local cross-stack acceptance | `pnpm verify:browser:p0` | An optional focused local lane: the smoke path and its checks, then the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
-| Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, and the unified OAuth management workspace. |
-| Browser-only probes | `pnpm verify:probes` | The full scenario catalog on the Vite dev server with mocked routes; this is not built-artifact coverage. CI runs it as three weight-balanced shards (`--shard i/3`) on every pull request and master push. Complete local catalogs reuse the three CI partitions sequentially. Playwright Test executes shared scenarios with at most two isolated workers (`--workers 1` for serial reproduction), then marked frame-timing scenarios alone; the native runner owns budgets, cleanup and reports, while project fixtures retain strict runtime/network fault checks and failure artifacts. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
-| Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler served in-process, or an explicit deployment URL. Every route must complete its initial reads and render its page heading and content, with no API, transport or script errors. |
-| Go demo smoke | `pnpm verify:demo:go` | Separate coverage of the binary's demo mode: isolated settings, read-only refusals and permitted non-durable edits. This opt-in command is not part of `verify:full`. |
+| Go tests and golden cases | `go test ./...` | Handlers, DTO allowlists, redaction, auth, repository queries, migrations, background loops. Parsers and projections are asserted by their whole output against `testdata/golden/` files through `internal/testkit`. |
+| Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation. Node only; every `scripts/test-*.ts` is discovered. |
+| Components and API contract | `pnpm test:components` | Rendered hook, provider and component wiring under jsdom with the real QueryClient and typed client, and the reviewed wire corpus the Go handlers also check (ADR 0089, ADR 0090). |
+| Repository scripts | `pnpm test:self` | Only scripts whose output ships: release planning, signing, the Worker, the embedded distribution, and the fixed-wait ratchet. |
+| UI fast path | `pnpm check:ui` | The scenarios a frontend change can affect, on the Vite dev server with mocked routes. It runs `React.StrictMode` double invocation, which a production build cannot expose. |
+| Probe catalog | `pnpm verify:probes` | Every scenario; CI runs it in three Playwright shards on full runs. |
+| Built-artifact acceptance | `pnpm verify:browser` (`:smoke`) | The built binary, the embedded SPA, the fake CPA and seeded SQLite together: auth, every route's render and secret boundary, keys, providers, live tail, OAuth management. |
+| Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler. |
 
-Pull requests and master run the whole cross-stack acceptance and the real-browser
-harness fault-injection gate (ADR 0068). Both then run the demo acceptance. The probe catalog is its
-own sharded job on both events, behind one aggregate `probes` check (ADR 0032).
+Neither probe lane substitutes for built-artifact acceptance: production path resolution,
+minification, chunk loading and the embedded Go surface are exercised only by
+`verify:browser` and `verify:demo`. The `search-dev-server` scenario guards a real
+controller-cleanup regression that left production checks green but stopped search
+commits on the dev server, which is why development coverage is kept.
 
-### 12.0 Development and built-artifact coverage
+Selection is coarse on purpose. `scripts/acceptance/check-ui-plan.mjs` maps a routed
+page's files to the scenarios that load it and runs every scenario for anything else; the
+full catalog runs on master, nightly and the integration pull request, so a narrow local
+plan is a speed-up, never the only check. `scripts/ci-scope.mjs` makes the same trade for
+CI lanes: an unrecognised path runs every lane.
 
-`check:ui` and `verify:probes` run the **same scenarios** from
-`scripts/acceptance/scenarios.mjs`, ordered under `scripts/acceptance/probes/`.
-Both delegate to Playwright Test through `scripts/testing/probes.ts`, with native
-Vite process ownership and context-local API fixtures from `scripts/acceptance/probe.mjs`. The difference is selection: `check:ui` selects affected scenarios
-(or an explicit scenario), while `verify:probes` runs the complete catalog.
+`scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser tests and
+Go tests: adding one fails, and removing one fails until its recorded count is lowered.
 
-Neither substitutes for built-artifact acceptance. Production path resolution,
-minification, chunk loading and the embedded Go surface are exercised by
-`verify:browser`; `verify:demo` also drives the production console. Conversely,
-production builds cannot expose `React.StrictMode` double invocation. The
-`search-dev-server` scenario guards a real controller-cleanup regression that
-left production checks green but stopped search commits on the dev server.
-Moving the full probe catalog to production artifacts would require retaining
-explicit development coverage; it is not how the harness currently runs.
-
-### 12.0.1 Three verification moments
-
-Verification is organised by *when it runs*, because what a developer pays is waiting
-and a gate that costs minutes gets routed around. The moments table and the rules that
-keep the gates honest live in `AGENTS.md` §5; `docs/testing.md` is the working guide.
-ADR 0032 records why the full catalog moved from a local pre-push duty to a required CI
-check: it used to be enforced only by local discipline and by master CI after merge,
-while every developer paid for it serially before each push.
-
-The rule that keeps this honest is that a *narrow* plan must never be **silent**.
-`scripts/affected-checks.mjs` and `scripts/acceptance/check-ui-plan.mjs` both widen
-rather than guess, and every rule that narrows has a negative case in its self-test.
-The UI planner narrows on evidence only:
-
-- **Runtime imports.** `scripts/acceptance/ui-impact.mjs` builds the reverse import
-  graph of `web/src` from TypeScript's `transpileModule` output, so imports used only
-  as types are not edges. A file's scenarios are those of every mapped module on the
-  chains that import it. A chain that reaches the shared layer, or a routed page
-  without a rule, selects everything; so does any unresolved local import, an asset
-  the graph cannot see (a CSS `url()`, `web/index.html`), a dependency or Vite change.
-  `scripts/ui-impact.test.mjs` separately requires the App-to-registry edge, nonempty
-  registry page discovery, every routed page's scenario rule and complete resolution
-  of the real tree. Directory helpers and incomplete route discovery are negative cases.
-- **Translation additions.** A catalog edit whose every pre-existing entry and every
-  line outside the catalog objects is unchanged selects nothing: a new entry is only
-  rendered by code that references it, which the planner places separately.
-- **Probe code.** `scripts/acceptance/probe-impact.mjs` attributes a probe module or
-  registry edit to the scenarios that use it. The runner (`probe.mjs` and the two entry
-  scripts) still selects everything; the planners select nothing, because they decide
-  which scenarios run, not what a scenario observes, and are pinned by self-tests.
-- **Manifests.** A `package.json` edit confined to `scripts` is not a runtime input.
-
-`test:fast` compares against `HEAD` by default. `--base <ref>` includes committed
-differences as well as staged, unstaged and untracked files; renames retain both
-source and destination paths. `--plan` only prints the selection. Each file contributes
-a conservative set of checks and the final plan is their union: a migration plus
-a Markdown edit must still run Go tests. Dependency inputs widen both the static
-and UI planners; TS/TSX references also select the CSS-module checker; a Go test edit
-also runs the self-tests, which include the fixed-wait ratchet. The frontend type
-check is incremental in `test:fast` only (build info under `tmp/tsc/`); `verify` and
-CI always run a fresh `tsc`.
-
-`scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser
-tests and Go tests: adding one fails, and removing one fails until its recorded count
-is lowered, so an improvement cannot be quietly undone.
-
-`test:self` discovers the Node test files in `scripts/` and `deploy/cloudflare/`,
-uses one Node invocation with test-file process isolation and concurrency two, and
-runs demo freshness checking alongside it. This removes repeated package-manager
-startup without reducing the test set. Shared fixtures must not write to the same
-paths across files; isolated temporary directories remain the convention.
-
-Two properties of this split are load bearing.
-
-**A browser assertion is never removed without a replacement.**
-`scripts/acceptance/MIGRATION.md` classifies every assertion in
-`scripts/browser-acceptance.mjs` once - `PURE`, `COMPONENT`, `BROWSER` or
-`CROSS-STACK` - and every assertion that left the browser names the test that
-replaced it. An assertion may move; it may not disappear silently.
-`scripts/browser-acceptance.mjs` is now the lifecycle/orchestration entrypoint.
-Release domains live in focused modules under `scripts/acceptance/`: OAuth
-management, key management, usage events and live-tail behavior, providers,
-observability, configuration and plugins, and theme and brand artwork. Each module
-receives the shared browser harness it needs and owns one product surface rather
-than becoming another catch-all script.
-
-**`pnpm test:fast` never pays for the browser.** No ordinary change may build the
-SPA, build a Go binary, start the product Vite HTTP listener, start Chromium or
-start the fake CPA. In-process Vite transforms used by frontend integration tests
-remain inside this boundary. The
-selection lives in `scripts/affected-checks.mjs` so it can be asserted directly,
-including that negative property, and a file the rules cannot place selects the
-broad gates rather than nothing.
+`scripts/browser-acceptance.mjs` is the lifecycle entrypoint; its domains live in focused
+modules under `scripts/acceptance/` (OAuth management, keys, usage events and live tail,
+providers, observability, configuration and plugins, theme and artwork), each owning one
+product surface.
 
 ### 12.1 Why some claims live where they do
 
@@ -2966,9 +2879,9 @@ feedback narrow and the full gates independent:
 | Local static work | Affected checks; incremental frontend types and strict tooling types |
 | Local UI work | Affected catalog scenarios on Vite with context-local API fixtures |
 | Full hosted static coverage | Separate Go, frontend and repository runners behind the fail-closed `static` aggregate |
-| Probe catalog | Playwright Test workers, fresh scenario contexts and invocation-owned Vite; three reviewed CI partitions |
+| Probe catalog | Playwright Test workers, fresh scenario contexts and invocation-owned Vite; three native shards on full runs |
 | Frame-level probes | One uncontended worker after the shared scenarios, within the same partition deadline |
-| Full local browser coverage | Harness, built acceptance, probes and demo run consecutively because they share the host's CPU |
+| Full local browser coverage | Built acceptance, probes and demo run consecutively because they share the host's CPU |
 | Embedded distribution | Build settles before static Go readers enumerate embedded paths |
 
 Hosted critical-path and runner-cost improvements require matched hosted runs; local
@@ -3060,7 +2973,6 @@ as a test failure rather than an environment one.
 The probe, not the download's exit status, is what decides. A download that reports
 success while the binary cannot start is precisely the state `--with-deps` exists to
 repair, so trusting the exit status would reintroduce the bug the flag prevents.
-`scripts/install-chromium.test.mjs` asserts both halves.
 
 Removing the apt cost then exposed what it had been hiding: the Go build became the
 floor of that measured step, about 60s locally with a cold build cache against 92s on the
@@ -3112,11 +3024,10 @@ production browser/demo evidence, but the final outcome-based verdict still fail
 the required `browser` job. The local `verify:full` and `verify:full:serial` share
 that verdict-preserving orchestration. Static/toolchain, secrets and build failures
 remain prerequisites; browser/probe failures still allow independent demo evidence.
-Standalone browser acceptance has no second bundle policy. Workflow and runner
-self-tests exercise missing, reordered and non-enforcing gates, plus serial/parallel
-failure paths. Probe structure remains shards `1..n` matching the denominator,
-no event filter or fail-fast, retained diagnostics, and an aggregate requiring every
-shard to succeed.
+Standalone browser acceptance has no second bundle policy. The `static`, `browser` and
+`probes` aggregates pass only when every lane they wait on succeeded or was skipped by
+scope, and they also wait on the scope job, so a failed scope decision cannot read as a
+pass.
 
 Probe shards need no build and no Go: each installs dependencies and Chromium and
 runs its part of the catalog on its own runner, so the scenarios' timing-sensitive

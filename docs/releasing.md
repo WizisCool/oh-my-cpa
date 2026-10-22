@@ -221,14 +221,14 @@ tag movement cannot be made atomic with GitHub/Docker publication; restrict tag
 movement at the repository level as well as retaining these fail-closed checks.
 
 The release verification DAG mirrors CI instead of serializing the entire local
-probe catalog inside one job. Local parity remains `pnpm verify:full`. Probe timings
-and failure diagnostics survive failed runs. `static`, `browser` and aggregate
+probe catalog inside one job. Local parity remains `pnpm verify:full`. Failure
+diagnostics survive failed runs. `static`, `browser` and aggregate
 `probes` remain the merge-check names. Action revisions are immutable, checkout
 credentials do not persist, and the native cache isolation policy is unchanged.
 
-`pnpm verify:workflow` checks semantic publication/gate invariants with negative
-mutation self-tests. CI also installs actionlint at the version pinned in
-`scripts/lint-workflows.mjs` and runs `pnpm verify:workflow:lint`. That adapter only
+`pnpm verify:workflow:lint` requires every action pinned to a commit, every checkout
+without persisted credentials and `RELEASE_SIGNING_KEY` confined to the release job,
+then runs actionlint at the version pinned in `scripts/lint-workflows.mjs`. It only
 normalizes the already-validated GitHub `concurrency.queue` extension for the pinned
 actionlint schema; shell/expression structure is still checked. Shellcheck integration
 is disabled explicitly rather than claiming shellcheck coverage.

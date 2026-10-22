@@ -1,6 +1,6 @@
 # ADR 0068: Fail-closed browser evidence and parallel release verification
 
-- Status: Accepted
+- Status: Accepted; decisions 1, 5 and 6 and the harness self-proof in 3 superseded by ADR 0105
 - Date: 2026-10-07
 - Baseline: dc2002c0bec2968a99c0361526734fd0742d09df
 - Refines: ADR 0032's CI coverage and ADR 0066's publication workflow

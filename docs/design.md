@@ -2150,8 +2150,7 @@ reading rather than decoration, or whose end the library waits for: the live rou
 (ADR 0102 records why the whole trip plays under the preference), and a dialog's entrance and exit,
 which rc-dialog finishes on `animationend` - it moves focus in when the entrance ends and unmounts the
 wrapper when the exit ends - so they cross-fade over `fast` instead of being removed.
-`scripts/check-motion.test.mjs`
-exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
+`pnpm check:motion` enforces every rule on the repository.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
 with a zoom under reduced motion as well, and the panel has to be pinned to its settled state rather
 than merely un-animated, because rc-motion holds the enter state inline until the animation ends.
