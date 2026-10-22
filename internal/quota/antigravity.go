@@ -132,18 +132,22 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 		// Keep each group's windows contiguous while ordering 5h before weekly.
 		buckets := make([]RawAntigravityBucket, len(group.Buckets))
 		copy(buckets, group.Buckets)
+		// Fallback identity follows source order, independently of window recognition.
+		for bucketIndex := range buckets {
+			bucket := &buckets[bucketIndex]
+			if bucket.BucketID == "" {
+				bucket.BucketID = bucket.BucketIDAlt
+			}
+			if bucket.BucketID == "" {
+				bucket.BucketID = fmt.Sprintf("bucket_%d_%d", groupIndex, bucketIndex)
+			}
+		}
 		sort.SliceStable(buckets, func(i, j int) bool {
 			return antigravityBucketWindowOrder(buckets[i]) < antigravityBucketWindowOrder(buckets[j])
 		})
 
-		for bucketIndex, bucket := range buckets {
+		for _, bucket := range buckets {
 			bucketID := bucket.BucketID
-			if bucketID == "" {
-				bucketID = bucket.BucketIDAlt
-			}
-			if bucketID == "" {
-				bucketID = fmt.Sprintf("bucket_%d_%d", groupIndex, bucketIndex)
-			}
 
 			bName := bucket.DisplayName
 			if bName == "" {

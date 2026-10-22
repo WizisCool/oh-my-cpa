@@ -112,6 +112,56 @@ func TestParseAntigravityUsageOrdersFiveHourFirst(t *testing.T) {
 	}
 }
 
+func TestParseAntigravityUsageKeepsOriginalBucketIDsWhenSorting(t *testing.T) {
+	const raw = `{"groups":[{"displayName":"Plugin","buckets":[
+		{"window":"monthly","remainingFraction":0.125},
+		{"window":"FIVE_WINDOW","remainingFraction":0.25},
+		{"bucketId":"upstream-week","bucket_id":"ignored","window":"WEEK_WINDOW","remainingFraction":0.375},
+		{"bucket_id":"upstream-day","window":"daily","remainingFraction":0.5},
+		{"window":"WEEK_WINDOW","remainingFraction":0.625},
+		{"window":"burst","remainingFraction":0.75}
+	]},{"displayName":"Other","buckets":[{"window":"monthly","remainingFraction":0.875}]}]}`
+	remainingByID := map[string]float64{
+		"ag_Plugin_bucket_0_0": 12.5, "ag_Plugin_bucket_0_1": 25,
+		"ag_Plugin_upstream-week": 37.5, "ag_Plugin_upstream-day": 50,
+		"ag_Plugin_bucket_0_4": 62.5, "ag_Plugin_bucket_0_5": 75,
+		"ag_Other_bucket_1_0": 87.5,
+	}
+	for _, scenario := range []struct {
+		name, fiveHour, weekly string
+		wantIDs                []string
+	}{
+		{"unrecognized", "unreported-five", "unreported-week", []string{
+			"ag_Plugin_bucket_0_0", "ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}},
+		{"canonical", "5h", "weekly", []string{
+			"ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_0", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}},
+		{"aliases", "FIVE-HOURS", "7_days", []string{
+			"ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_0", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			payload := strings.NewReplacer("FIVE_WINDOW", scenario.fiveHour, "WEEK_WINDOW", scenario.weekly).Replace(raw)
+			windows, err := ParseAntigravityUsage([]byte(payload), 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != len(scenario.wantIDs) {
+				t.Fatalf("windows = %d, want %d", len(windows), len(scenario.wantIDs))
+			}
+			for i, window := range windows {
+				if window.ID != scenario.wantIDs[i] {
+					t.Errorf("windows[%d].ID = %q, want %q", i, window.ID, scenario.wantIDs[i])
+				}
+				if window.RemainingPercent == nil || *window.RemainingPercent != remainingByID[scenario.wantIDs[i]] {
+					t.Errorf("windows[%d] lost the quota value associated with %q: %+v", i, scenario.wantIDs[i], window)
+				}
+			}
+		})
+	}
+}
+
 func TestAntigravityCapacityScopeAndUnknownPeriod(t *testing.T) {
 	windows, err := ParseAntigravityUsage([]byte(`{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"five","window":"5h","remainingFraction":0.8,"resetTime":"2026-01-01T17:00:00Z"}]},{"displayName":"Gemini and future models","buckets":[{"bucketId":"future","window":"unreported","remainingFraction":0.8,"resetTime":"2026-01-01T17:00:00Z"}]}]}`), 0, 0)
 	if err != nil {
