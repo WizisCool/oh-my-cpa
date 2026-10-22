@@ -747,8 +747,13 @@ export async function requestListInteractions({ base, page, check }) {
   await returnToLatest();
   const groupingControl = page.getByRole('combobox', { name: 'Group by', exact: true });
   const groupingSelect = page.locator('.request-toolbar .ant-select').filter({ has: groupingControl });
+  // With no configured providers or credentials, source identities retain these
+  // raw keys. Groups follow first occurrence; each group's records keep input order.
+  const lastRecordBySource = new Map(interactionRecords.map((record) => [
+    JSON.stringify([record.provider, record.auth_index]), record,
+  ]));
   for (const [label, lastRequestId] of [
-    ['By source', interactionRecords.filter((record) => record.provider === interactionRecords[2].provider).at(-1).request_id],
+    ['By source', [...lastRecordBySource.values()].at(-1).request_id],
     ['By client', interactionRecords.at(-1).request_id],
   ]) {
     await groupingSelect.click();
