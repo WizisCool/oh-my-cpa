@@ -19,17 +19,25 @@ import (
 )
 
 // quotaAutoRefreshFixture is a gateway listing one credential per scheduling case and
-// counting the usage reads it is asked to make, per credential.
+// counting the usage reads and cooldown resets it is asked to make, per credential.
 type quotaAutoRefreshFixture struct {
-	mu            sync.Mutex
-	reads         map[string]int
-	isUsageFailed bool
+	mu               sync.Mutex
+	reads            map[string]int
+	resets           map[string]int
+	isUsageFailed    bool
+	isUsageExhausted bool
 }
 
 func (f *quotaAutoRefreshFixture) usageReads(authIndex string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.reads[authIndex]
+}
+
+func (f *quotaAutoRefreshFixture) cooldownResets(authIndex string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resets[authIndex]
 }
 
 func newQuotaAutoRefreshHandler(t *testing.T, fixture *quotaAutoRefreshFixture) *Handler {
@@ -65,15 +73,31 @@ func newQuotaAutoRefreshHandler(t *testing.T, fixture *quotaAutoRefreshFixture) 
 			fixture.mu.Lock()
 			fixture.reads[payload.AuthIndex]++
 			isFailed := fixture.isUsageFailed
+			usedPercent := 3
+			if fixture.isUsageExhausted {
+				usedPercent = 100
+			}
 			fixture.mu.Unlock()
 			if isFailed {
 				_, _ = writer.Write([]byte(`{"status_code": 500, "body": {"message": "upstream unavailable"}}`))
 				return
 			}
-			_, _ = writer.Write([]byte(`{"status_code": 200, "body": {
+			_, _ = fmt.Fprintf(writer, `{"status_code": 200, "body": {
 				"plan_type": "pro",
-				"rate_limit": {"primary_window": {"used_percent": 3, "limit_window_seconds": 18000, "reset_after_seconds": 18000}}
-			}}`))
+				"rate_limit": {"primary_window": {"used_percent": %d, "limit_window_seconds": 18000, "reset_after_seconds": 18000}}
+			}}`, usedPercent)
+		case "/v8/management/routing/cooldown/reset":
+			var payload struct {
+				AuthIndex string `json:"auth_index"`
+			}
+			_ = json.NewDecoder(request.Body).Decode(&payload)
+			fixture.mu.Lock()
+			if fixture.resets == nil {
+				fixture.resets = map[string]int{}
+			}
+			fixture.resets[payload.AuthIndex]++
+			fixture.mu.Unlock()
+			_, _ = writer.Write([]byte(`{}`))
 		default:
 			writer.WriteHeader(http.StatusNotFound)
 		}
@@ -285,4 +309,153 @@ func TestQuotaAutoRefreshPreferenceIsValidatedOnWrite(t *testing.T) {
 	if err != nil || !isStored || stored != `{"interval_minutes":30,"refresh_on_reset":false}` {
 		t.Fatalf("stored=%q found=%t err=%v", stored, isStored, err)
 	}
+}
+
+func TestQuotaAutoRefreshClearsOnlyRecoveredCooldowns(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	hour := time.Hour.Milliseconds()
+	insertCooldown := func(eventKey, authIndex string, recoverAtMS int64) {
+		t.Helper()
+		insertAutoRefreshCooldown(t, handler, eventKey, authIndex, recoverAtMS, nowMS-24*hour)
+	}
+	// Recovered seven hours ago, outside the 6-hour lookback of the cooldown display.
+	insertCooldown("fresh-expired", "codex-fresh", nowMS-7*hour)
+	insertCooldown("unread-future", "codex-unread", nowMS+hour)
+	// An older cooldown has passed, but a newer one still blocks the credential.
+	insertCooldown("reset-past", "codex-reset", nowMS-7*hour)
+	insertCooldown("reset-future", "codex-reset", nowMS+hour)
+	// No stored readings and no schedule, so a cooldown is the only thing that can be due.
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":0,"refresh_on_reset":true}`)
+
+	round, err := handler.runQuotaAutoRefreshRound(ctx)
+	if err != nil || round.Due != 1 || round.CooldownsCleared != 1 || round.Failed != 0 || round.Refreshed != 0 {
+		t.Fatalf("round = %+v err=%v, want only the recovered cooldown cleared", round, err)
+	}
+	for authIndex, want := range map[string]int{"codex-fresh": 1, "codex-unread": 0, "codex-reset": 0} {
+		if got := fixture.cooldownResets(authIndex); got != want {
+			t.Errorf("%s reset %d times, want %d", authIndex, got, want)
+		}
+	}
+	var remaining int
+	if err := handler.repo.SQL().QueryRowContext(ctx, `SELECT COUNT(*) FROM error_events WHERE quota_exceeded = 1 AND auth_index = 'codex-fresh'`).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Fatalf("codex-fresh keeps %d rows of cooldown evidence, want 0", remaining)
+	}
+	if err := handler.repo.SQL().QueryRowContext(ctx, `SELECT COUNT(*) FROM error_events WHERE quota_exceeded = 1 AND auth_index IN ('codex-unread', 'codex-reset')`).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 3 {
+		t.Fatalf("still-blocked credentials keep %d rows of cooldown evidence, want 3", remaining)
+	}
+	if clears := automaticCooldownClears(t, handler); len(clears) != 1 || clears["codex-fresh"] != "recovery_time_passed" {
+		t.Fatalf("audited automatic clears = %v, want only codex-fresh after its recovery time", clears)
+	}
+
+	if round, err := handler.runQuotaAutoRefreshRound(ctx); err != nil || round.Due != 0 {
+		t.Fatalf("second round = %+v err=%v, want nothing due", round, err)
+	}
+}
+
+// insertAutoRefreshCooldown stores the quota_exceeded evidence CPA leaves after a usage-limit 429.
+func insertAutoRefreshCooldown(t *testing.T, handler *Handler, eventKey, authIndex string, recoverAtMS, timestampMS int64) {
+	t.Helper()
+	if _, err := handler.repo.SQL().ExecContext(context.Background(), `
+		INSERT INTO error_events (
+			instance_id, event_key, provider, model, auth_index, status_code, body,
+			retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+			quota_reason, next_recover_at_ms, timestamp_ms, created_at_ms
+		) VALUES (
+			'default', ?, 'codex', 'gpt-5', ?, 429, 'usage limit reached',
+			1, 'active', 0, 0, 1, 'usage_limit_reached', ?, ?, ?
+		)
+	`, eventKey, authIndex, recoverAtMS, timestampMS, timestampMS); err != nil {
+		t.Fatalf("insert %s failed: %v", eventKey, err)
+	}
+}
+
+func cooldownEvidenceRows(t *testing.T, handler *Handler, authIndex string) int {
+	t.Helper()
+	var rows int
+	if err := handler.repo.SQL().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM error_events WHERE quota_exceeded = 1 AND auth_index = ?`, authIndex).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
+func TestQuotaReadReleasesACooldownOnceCapacityIsBack(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	hour := time.Hour.Milliseconds()
+	// The provider reset the quota early: CPA still holds a recovery time days away.
+	insertAutoRefreshCooldown(t, handler, "unread-reset-early", "codex-unread", nowMS+96*hour, nowMS-hour)
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":60,"refresh_on_reset":false}`)
+
+	round, err := handler.runQuotaAutoRefreshRound(ctx)
+	if err != nil || round.Refreshed != 3 || round.Failed != 0 {
+		t.Fatalf("round = %+v err=%v, want the three unread credentials read", round, err)
+	}
+	for authIndex, want := range map[string]int{"codex-unread": 1, "codex-reset": 0, "codex-fresh": 0} {
+		if got := fixture.cooldownResets(authIndex); got != want {
+			t.Errorf("%s reset %d times, want %d", authIndex, got, want)
+		}
+	}
+	if rows := cooldownEvidenceRows(t, handler, "codex-unread"); rows != 0 {
+		t.Fatalf("codex-unread keeps %d rows of cooldown evidence, want 0", rows)
+	}
+	snapshots, err := handler.repo.GetLatestQuotaSnapshots(ctx, []string{"codex-unread"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status := snapshots["codex-unread"].Status; status != "healthy" {
+		t.Fatalf("stored reading status = %q, want healthy", status)
+	}
+	if clears := automaticCooldownClears(t, handler); len(clears) != 1 || clears["codex-unread"] != "capacity_restored" {
+		t.Fatalf("audited automatic clears = %v, want only codex-unread after its read", clears)
+	}
+}
+
+func TestQuotaReadKeepsTheCooldownWhileAWindowIsUsedUp(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}, isUsageExhausted: true}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	nowMS := time.Now().UnixMilli()
+	hour := time.Hour.Milliseconds()
+	insertAutoRefreshCooldown(t, handler, "unread-exhausted", "codex-unread", nowMS+hour, nowMS-hour)
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":60,"refresh_on_reset":false}`)
+
+	if round, err := handler.runQuotaAutoRefreshRound(ctx); err != nil || round.Refreshed != 3 {
+		t.Fatalf("round = %+v err=%v, want the three unread credentials read", round, err)
+	}
+	if got := fixture.cooldownResets("codex-unread"); got != 0 {
+		t.Fatalf("codex-unread reset %d times, want 0", got)
+	}
+	if rows := cooldownEvidenceRows(t, handler, "codex-unread"); rows != 1 {
+		t.Fatalf("codex-unread keeps %d rows of cooldown evidence, want 1", rows)
+	}
+	if clears := automaticCooldownClears(t, handler); len(clears) != 0 {
+		t.Fatalf("audited automatic clears = %v, want none", clears)
+	}
+}
+
+// automaticCooldownClears lists the audited automatic releases as auth_index -> reason.
+func automaticCooldownClears(t *testing.T, handler *Handler) map[string]string {
+	t.Helper()
+	events, err := handler.repo.ListAuditEvents(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clears := map[string]string{}
+	for _, event := range events {
+		if event.Action == "quota.clear_cooldown.automatic" && event.Result == "success" {
+			clears[event.TargetID], _ = event.Details["reason"].(string)
+		}
+	}
+	return clears
 }

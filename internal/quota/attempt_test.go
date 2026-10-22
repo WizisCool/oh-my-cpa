@@ -205,3 +205,39 @@ func TestApplyReadingHealthDoesNotOverrideExhaustionWithAge(t *testing.T) {
 		t.Fatalf("status = %q, want exhausted: it is what stops the credential", q.Status)
 	}
 }
+
+func TestHasRestoredCapacityNeedsAFreshReadWithRoomStatedInEveryWindow(t *testing.T) {
+	startedAtMS := time.Now().UnixMilli()
+	if !HasRestoredCapacity(readingWithReset(startedAtMS, startedAtMS+60*minuteMS), startedAtMS) {
+		t.Fatal("a fresh read with room left is restored capacity")
+	}
+	if HasRestoredCapacity(readingWithReset(startedAtMS-minuteMS, startedAtMS+60*minuteMS), startedAtMS) {
+		t.Fatal("a reading older than the read replays previous numbers")
+	}
+	exhausted := readingWithReset(startedAtMS, startedAtMS+60*minuteMS)
+	exhausted.Windows = append(exhausted.Windows, QuotaWindow{ID: "weekly", RemainingPercent: floatPtr(0)})
+	if HasRestoredCapacity(exhausted, startedAtMS) {
+		t.Fatal("one used-up window keeps the credential without capacity")
+	}
+	unstated := readingWithReset(startedAtMS, startedAtMS+60*minuteMS)
+	unstated.Windows = append(unstated.Windows, QuotaWindow{ID: "weekly"})
+	if HasRestoredCapacity(unstated, startedAtMS) {
+		t.Fatal("a window with no stated remainder could be the used-up one")
+	}
+	disabled := readingWithReset(startedAtMS, startedAtMS+60*minuteMS)
+	disabled.Disabled = true
+	if HasRestoredCapacity(disabled, startedAtMS) {
+		t.Fatal("a disabled credential is never read upstream")
+	}
+	stale := readingWithReset(startedAtMS, startedAtMS+60*minuteMS)
+	stale.Status, stale.Error = "stale", "HTTP 500: upstream"
+	if HasRestoredCapacity(stale, startedAtMS) {
+		t.Fatal("a failed read is not restored capacity")
+	}
+	if HasRestoredCapacity(&NormalizedQuota{Status: QuotaStatusUnpublished, ObservedAtMS: startedAtMS}, startedAtMS) {
+		t.Fatal("a read that published no window says nothing about capacity")
+	}
+	if HasRestoredCapacity(nil, startedAtMS) {
+		t.Fatal("no reading is not restored capacity")
+	}
+}

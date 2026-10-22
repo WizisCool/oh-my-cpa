@@ -138,9 +138,10 @@ func ResolveAutoRefreshSettings(raw string, isStored bool) AutoRefreshSettings {
 
 // Automatic refresh triggers, reported in the loop's summary.
 const (
-	AutoRefreshTriggerNone     = ""
-	AutoRefreshTriggerReset    = "reset"
-	AutoRefreshTriggerInterval = "interval"
+	AutoRefreshTriggerNone            = ""
+	AutoRefreshTriggerReset           = "reset"
+	AutoRefreshTriggerInterval        = "interval"
+	AutoRefreshTriggerCooldownExpired = "cooldown_expired"
 )
 
 // AutoRefreshCandidate is what the scheduler knows about one credential at a tick.
@@ -151,6 +152,10 @@ type AutoRefreshCandidate struct {
 	LastObservedAtMS int64 // zero when the credential has never been read
 	LastAttemptAtMS  int64 // zero when this process has not tried it
 	ResetAtMS        []int64
+	// ActiveCooldownExpiredAtMS is the latest recovery time of stored cooldown evidence once
+	// every one of them has passed, or zero. CPA keeps the credential blocked until that
+	// evidence is cleared, whatever the clock says.
+	ActiveCooldownExpiredAtMS int64
 }
 
 // IsAutoRefreshProvider reports whether the scheduler may read a provider on its own.
@@ -171,10 +176,14 @@ func IsAutoRefreshProvider(provider string) bool {
 // the newer of the observation and the attempt, so a failing scheduled read waits a
 // whole interval too.
 func AutoRefreshTrigger(settings AutoRefreshSettings, candidate AutoRefreshCandidate, nowMS int64) string {
-	if candidate.IsDisabled || !candidate.IsSupported || !IsAutoRefreshProvider(candidate.Provider) {
+	if candidate.IsDisabled {
 		return AutoRefreshTriggerNone
 	}
-	if settings.IsRefreshOnResetEnabled && candidate.LastObservedAtMS > 0 {
+	// Clearing a cooldown is not a read: it needs no probe and exchanges no key, so it
+	// applies to every enabled credential. A due reset read still goes first, because a
+	// read that finds capacity releases the cooldown as well.
+	isReadable := candidate.IsSupported && IsAutoRefreshProvider(candidate.Provider)
+	if isReadable && settings.IsRefreshOnResetEnabled && candidate.LastObservedAtMS > 0 {
 		graceMS := AUTO_REFRESH_RESET_GRACE.Milliseconds()
 		for _, resetAtMS := range candidate.ResetAtMS {
 			dueAtMS := resetAtMS + graceMS
@@ -190,7 +199,13 @@ func AutoRefreshTrigger(settings AutoRefreshSettings, candidate AutoRefreshCandi
 			}
 		}
 	}
-	if settings.IntervalMinutes > 0 {
+	// A clear that failed leaves the evidence in place, so it waits out the same backoff a
+	// failed reset read does instead of repeating every minute and filling the round.
+	isClearBackedOff := candidate.LastAttemptAtMS > 0 && nowMS-candidate.LastAttemptAtMS < AUTO_REFRESH_RESET_RETRY_BACKOFF.Milliseconds()
+	if candidate.ActiveCooldownExpiredAtMS > 0 && candidate.ActiveCooldownExpiredAtMS <= nowMS && !isClearBackedOff {
+		return AutoRefreshTriggerCooldownExpired
+	}
+	if isReadable && settings.IntervalMinutes > 0 {
 		lastMS := max(candidate.LastObservedAtMS, candidate.LastAttemptAtMS)
 		intervalMS := int64(settings.IntervalMinutes) * time.Minute.Milliseconds()
 		if lastMS == 0 || nowMS-lastMS+AUTO_REFRESH_INTERVAL_SLACK.Milliseconds() >= intervalMS {

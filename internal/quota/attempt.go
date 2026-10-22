@@ -34,6 +34,23 @@ func ReadOutcome(reading *NormalizedQuota, err error) (isUsable bool, reason str
 	return true, ""
 }
 
+// HasRestoredCapacity reports whether a read just taken shows the credential can serve again:
+// it is a usable reading observed no earlier than readStartedAtMS, and every window it publishes
+// states room left. A window with no stated remainder could be the one that is used up, so it
+// disqualifies the reading. A disabled credential's reading and a stale one replay older
+// numbers, so they never qualify.
+func HasRestoredCapacity(reading *NormalizedQuota, readStartedAtMS int64) bool {
+	if isUsable, _ := ReadOutcome(reading, nil); !isUsable || reading.Disabled || reading.ObservedAtMS < readStartedAtMS {
+		return false
+	}
+	for _, window := range reading.Windows {
+		if window.RemainingPercent == nil || *window.RemainingPercent <= 0 {
+			return false
+		}
+	}
+	return len(reading.Windows) > 0
+}
+
 // ApplyReadingHealth sets the status the console presents from a stored reading and the last
 // attempt to re-read it.
 //

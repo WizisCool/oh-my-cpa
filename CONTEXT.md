@@ -448,6 +448,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   interval. Disabled credentials, providers with no probe,
   an `auth_index` two credentials claim, and Meta credentials (whose read exchanges a
   key upstream and is an audited operator action) are never read automatically.
+  A read that shows room in every window releases a credential still held in a CPA
+  cooldown, and the loop releases one whose recorded recovery times have all passed.
 - **Estimated Window Capacity**: What a whole Quota Window is worth: usage this
   deployment recorded in the indicated cycle and metered model scope divided by
   the share upstream reports as used. It is capacity at 100%, not a forecast of

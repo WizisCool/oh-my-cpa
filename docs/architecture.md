@@ -2389,6 +2389,15 @@ preference API refuses any document for this key other than
 management workspace polls the stored overview every minute, as the dashboard's
 Credential Quota panel already does, so a background reading appears on an open page.
 
+A CPA cooldown is released automatically in two cases (ADR 0094). `refreshQuotaReading`
+releases a credential that still holds `quota_exceeded` evidence once a fresh, usable
+read shows room in every published window (`quota.HasRestoredCapacity`), and each loop
+round releases an enabled credential whose every stored `next_recover_at_ms` and
+`next_retry_after_ms` has passed (`Repository.BatchExpiredCooldowns`), whether or not its
+provider can be read. Either release calls CPA's `routing/cooldown/reset`, wipes the
+evidence through `Repository.ClearCooldownEvidence`, as the operator's Clear Cooldown
+does, logs the `auth_index` and records a `quota.clear_cooldown.automatic` audit event.
+
 Codex reset-credit redemption is offered in the credential Drawer's Quota tab and never
 from a list row, because it spends an irreversible entitlement; it is offered whenever the
 credential's available credit count is positive. Upstream's `applicable_available_count` is not the
@@ -2468,7 +2477,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers. `Run` returns only after every stage has stopped, and `app.Run` waits for it before the database closes, whichever loop ended first |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
-| Quota auto refresh | `app.Run` → `api.Handler.RunQuotaAutoRefresh` | Best effort; a round that cannot reach CPA leaves the stored readings as they were and the next minute tries again. Reads only what the `omc_quota_auto_refresh` policy makes due (§8, ADR 0094) |
+| Quota auto refresh | `app.Run` → `api.Handler.RunQuotaAutoRefresh` | Best effort; a round that cannot reach CPA leaves the stored readings and cooldown evidence as they were and the next minute tries again. Reads only what the `omc_quota_auto_refresh` policy makes due, and releases cooldowns whose recovery times have all passed through CPA's `routing/cooldown/reset` (§8, ADR 0094) |
 | Usage-fact fold + data lifecycle | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 | Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 

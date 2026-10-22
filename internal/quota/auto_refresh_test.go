@@ -139,6 +139,74 @@ func TestAutoRefreshTrigger(t *testing.T) {
 			c.LastAttemptAtMS = nowMS - 60*minute
 			return c
 		}(), AutoRefreshTriggerReset},
+		// Cooldown-expired trigger: a CPA cooldown whose RecoverAtMS is in the past fires
+		// regardless of the interval and reset settings, because the entitlement is intact
+		// but the gateway keeps the credential blocked until the evidence is cleared.
+		{"expired cooldown triggers clear even with all other triggers off", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 2*minute
+			c.IsSupported = true
+			c.Provider = "codex"
+			return c
+		}(), AutoRefreshTriggerCooldownExpired},
+		{"expired cooldown is checked before interval", intervalOnly, func() AutoRefreshCandidate {
+			c := read(60 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 5*minute
+			c.IsSupported = true
+			c.Provider = "claude"
+			return c
+		}(), AutoRefreshTriggerCooldownExpired},
+		{"cooldown not yet expired does not trigger", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS + 5*minute
+			c.IsSupported = true
+			c.Provider = "codex"
+			return c
+		}(), AutoRefreshTriggerNone},
+		{"zero ActiveCooldownExpiredAtMS does not trigger", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = 0
+			c.IsSupported = true
+			c.Provider = "codex"
+			return c
+		}(), AutoRefreshTriggerNone},
+		{"expired cooldown is cleared for a provider without a probe", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 2*minute
+			c.IsSupported = false
+			return c
+		}(), AutoRefreshTriggerCooldownExpired},
+		{"expired cooldown is cleared for meta, which is never read on its own", both, func() AutoRefreshCandidate {
+			c := read(31*minute, 2*minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 2*minute
+			c.Provider = "meta"
+			return c
+		}(), AutoRefreshTriggerCooldownExpired},
+		{"a due reset read goes before an expired cooldown", both, func() AutoRefreshCandidate {
+			c := read(31*minute, 2*minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 2*minute
+			return c
+		}(), AutoRefreshTriggerReset},
+		{"a failed clear waits out the retry backoff", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 20*minute
+			c.LastAttemptAtMS = nowMS - 5*minute
+			return c
+		}(), AutoRefreshTriggerNone},
+		{"a failed clear is retried after the backoff", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 20*minute
+			c.LastAttemptAtMS = nowMS - 15*minute
+			return c
+		}(), AutoRefreshTriggerCooldownExpired},
+		{"expired cooldown on disabled credential does not trigger", AutoRefreshSettings{}, func() AutoRefreshCandidate {
+			c := read(30 * minute)
+			c.ActiveCooldownExpiredAtMS = nowMS - 2*minute
+			c.IsDisabled = true
+			c.IsSupported = true
+			c.Provider = "codex"
+			return c
+		}(), AutoRefreshTriggerNone},
 	}
 	for _, tc := range cases {
 		if got := AutoRefreshTrigger(tc.settings, tc.candidate, nowMS); got != tc.want {

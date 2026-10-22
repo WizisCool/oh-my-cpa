@@ -73,7 +73,43 @@ func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, f
 	attemptedAtMS := svc.Now().UnixMilli()
 	refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
 	h.recordQuotaReadAttempt(ctx, file, attemptedAtMS, refreshed, err)
+	if err == nil && quota.HasRestoredCapacity(refreshed, attemptedAtMS) {
+		h.releaseRestoredCooldown(ctx, svc, refreshed)
+	}
 	return refreshed, err
+}
+
+// releaseRestoredCooldown lifts a CPA cooldown once a fresh read shows the credential has
+// capacity again. A provider can reset a quota before the recovery time CPA recorded, and
+// without this the credential stays blocked until that time even though it could serve.
+//
+// It runs for every read, so a manual refresh, the background loop and the warmup probe all
+// release the credential the same way. Best effort: the read itself already succeeded.
+func (h *Handler) releaseRestoredCooldown(ctx context.Context, svc *quota.Service, reading *quota.NormalizedQuota) {
+	authIndex := strings.TrimSpace(reading.AuthIndex)
+	if h.repo == nil || authIndex == "" {
+		return
+	}
+	hasEvidence, err := h.repo.HasCooldownEvidence(ctx, authIndex)
+	if err != nil || !hasEvidence {
+		return
+	}
+	clearErr := svc.ClearCPACooldown(ctx, authIndex)
+	var evidenceErr error
+	if clearErr == nil {
+		evidenceErr = h.repo.ClearCooldownEvidence(ctx, authIndex)
+	}
+	h.recordAutomaticCooldownClear(authIndex, "capacity_restored", clearErr, evidenceErr)
+	if clearErr != nil || evidenceErr != nil {
+		h.logCooldownClearFailure("quota restored but CPA cooldown release failed", authIndex, 0, clearErr, evidenceErr)
+		return
+	}
+	// The reading carried the prior cooldown forward; the response must show what it is now.
+	reading.ActiveCooldown = nil
+	quota.EvaluateStatusAndRecommendation(reading, svc.Now().UnixMilli())
+	if h.logger != nil {
+		h.logger.Info("CPA cooldown cleared after quota restored", "auth_index", authIndex, "status", reading.Status)
+	}
 }
 
 // recordQuotaReadAttempt stores what a read produced for the console's next question about it.

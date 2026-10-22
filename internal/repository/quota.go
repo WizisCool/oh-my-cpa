@@ -326,6 +326,18 @@ func (r *Repository) GetQuotaRefreshAttempts(ctx context.Context, authIndexes []
 	return result, rows.Err()
 }
 
+// HasCooldownEvidence reports whether an auth index still has stored quota_exceeded evidence.
+func (r *Repository) HasCooldownEvidence(ctx context.Context, authIndex string) (bool, error) {
+	if r == nil || r.SQL() == nil {
+		return false, errors.New("repository is not initialized")
+	}
+	var exists bool
+	err := r.SQL().QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM error_events WHERE auth_index = ? AND quota_exceeded = 1)
+	`, strings.TrimSpace(authIndex)).Scan(&exists)
+	return exists, err
+}
+
 // ClearCooldownEvidence durably resets local quota_exceeded flags in error_events when cooldown is cleared.
 func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string) error {
 	if r == nil || r.SQL() == nil {
@@ -500,6 +512,58 @@ func (r *Repository) QueryCredentialModelWindowUsage(ctx context.Context, authIn
 			return nil, fmt.Errorf("scan credential model window usage: %w", err)
 		}
 		result = append(result, group)
+	}
+	return result, rows.Err()
+}
+
+// BatchExpiredCooldowns returns, per auth index, the latest recovery time of its stored
+// quota_exceeded evidence, but only when every such recovery time and retry time has already
+// passed. It has no lookback window, so a cooldown that expired days ago and was never cleared is
+// still reported. Rows already cleared (quota_exceeded = 0) are never returned.
+func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string]int64, error) {
+	result := make(map[string]int64)
+	if r == nil || r.SQL() == nil || len(authIndexes) == 0 {
+		return result, nil
+	}
+	validIndexes := make([]string, 0, len(authIndexes))
+	for _, authIndex := range authIndexes {
+		if trimmed := strings.TrimSpace(authIndex); trimmed != "" {
+			validIndexes = append(validIndexes, trimmed)
+		}
+	}
+	if len(validIndexes) == 0 {
+		return result, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(validIndexes)), ",")
+	args := make([]any, 0, len(validIndexes)+1)
+	for _, authIndex := range validIndexes {
+		args = append(args, authIndex)
+	}
+	args = append(args, nowMS, nowMS)
+	// A newer cooldown that has not recovered yet keeps the credential blocked, even when an
+	// older one has already passed; so does a retry time still ahead.
+	query := fmt.Sprintf(`
+		SELECT auth_index, MAX(next_recover_at_ms)
+		FROM error_events
+		WHERE quota_exceeded = 1
+		  AND auth_index IN (%s)
+		GROUP BY auth_index
+		HAVING MAX(COALESCE(next_recover_at_ms, 0)) > 0
+		  AND MAX(COALESCE(next_recover_at_ms, 0)) <= ?
+		  AND MAX(COALESCE(next_retry_after_ms, 0)) <= ?
+	`, placeholders)
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return result, fmt.Errorf("query expired cooldowns: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var authIndex string
+		var recoverAtMS int64
+		if err := rows.Scan(&authIndex, &recoverAtMS); err != nil {
+			return result, fmt.Errorf("scan expired cooldown: %w", err)
+		}
+		result[authIndex] = recoverAtMS
 	}
 	return result, rows.Err()
 }
