@@ -25,6 +25,29 @@ Discovery is automatic everywhere except the probe catalog: a probe is an entry 
 `SCENARIO_PATHS` (`scripts/acceptance/check-ui-plan.mjs`) naming the scenarios that load
 it; without one, a change to the page runs every scenario.
 
+## Rendered tests and the in-memory OMC
+
+A component test renders the real component over the real typed client, and
+`web/tests/support/omcApi.ts` answers its requests from one in-memory state:
+preferences, providers, plugins, auth files and the health document are stateful, so a
+write is what the next read and the next mount see. A test seeds state, adds the
+endpoints its surface needs with `on`, serves a contract fixture from
+`scripts/acceptance/` with `serve`, holds a response with `hold`, and asserts on
+`requests`, `writes()` or the state itself. `renderWithOmc` (`web/tests/support/render.tsx`)
+mounts under the console's providers.
+
+```tsx
+const api = installOmcApi({ providers: [PROVIDER] });
+renderWithOmc(<Editor />);
+fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+await waitFor(() => expect(api.writes('/management/providers/openai-compat-0')).toHaveLength(1));
+```
+
+A request no route answers, or one sent without the session cookie, fails the test after
+it ends, so a component cannot pass by swallowing a rejected query. Files run in
+parallel, each in its own environment. The contract tests (`*.contract.test.ts`) stub
+`fetch` directly, because what they pin is the request the client forms.
+
 ## Golden cases
 
 A golden case is two files: `<case>.input.json`, holding why the case exists, the instant

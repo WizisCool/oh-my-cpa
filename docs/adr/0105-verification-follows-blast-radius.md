@@ -66,6 +66,10 @@ branches conflicted on it.
   The import-graph guard that kept shared conversation modules from importing page state
   went with the import-graph planner it was built on; that boundary is now a review rule
   in `docs/architecture.md`.
+- Component tests answer requests from one in-memory OMC (`web/tests/support/omcApi.ts`)
+  instead of a fetch stub per file, and fail on a request nothing answers. Their files run
+  in parallel; ADR 0089 began with one worker, and three parallel runs of the whole suite
+  showed no shared state between files.
 - The UI planner maps routed pages to scenarios and runs every scenario for anything
   else. It selects more than the old import-graph planner did; the cost is minutes
   locally, and CI runs the full catalog where it matters.

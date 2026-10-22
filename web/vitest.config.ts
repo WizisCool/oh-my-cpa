@@ -10,7 +10,8 @@ export default defineConfig({
     environment: 'jsdom',
     environmentOptions: { jsdom: { url: 'http://localhost/omc/' } },
     setupFiles: ['./tests/setup.ts'],
+    // Every file gets its own environment, so files run in parallel; within a file
+    // tests stay sequential and share nothing but what setup.ts resets.
     isolate: true,
-    maxWorkers: 1,
   },
 });

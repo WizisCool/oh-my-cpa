@@ -10,8 +10,6 @@ function hoverUntilSettled(control: HTMLElement) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  // jsdom has no layout; the tooltip only needs the observer to exist in order to open.
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterEach(() => { vi.useRealTimers(); });
 

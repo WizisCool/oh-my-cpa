@@ -87,7 +87,6 @@ function ConfigPayloadDraft() {
 }
 
 it('adding a raw rule updates the actual configuration draft and exposes its save action', async () => {
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r1', safe_yaml: 'requests: {}\n' });
   try {

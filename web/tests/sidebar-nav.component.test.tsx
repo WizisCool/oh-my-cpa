@@ -1,9 +1,7 @@
-import React from 'react';
-import { App as AntdApp } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { installOmcApi, type OmcApi } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 import { SidebarNavSettings } from '../src/components/settings/SidebarNavSettings';
 import { buildNavGroups } from '../src/components/common/navigation';
 import { LOCKED_NAV_KEYS, retainVisibleGroups } from '../src/types/sidebarNav';
@@ -18,28 +16,9 @@ import { LOCKED_NAV_KEYS, retainVisibleGroups } from '../src/types/sidebarNav';
  * shaped like the rest of the preferences, and the filter agreeing with the write.
  */
 
-const clients: QueryClient[] = [];
-let stored: Record<string, unknown>;
-let writes: { key: string; value: unknown }[];
+let api: OmcApi;
 
-const jsonResponse = (value: unknown, status = 200) =>
-  new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
-
-function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  clients.push(client);
-  return render(
-    <React.StrictMode>
-      <QueryClientProvider client={client}>
-        <I18nProvider>
-          <AntdApp>
-            <SidebarNavSettings />
-          </AntdApp>
-        </I18nProvider>
-      </QueryClientProvider>
-    </React.StrictMode>,
-  );
-}
+const mount = () => renderWithOmc(<SidebarNavSettings />, { isStrict: true });
 
 /**
  * Opens the panel. The list is a dialog rather than rows on the settings page, so every assertion
@@ -61,27 +40,7 @@ async function readySwitch(accessibilityName: string) {
 }
 
 beforeEach(() => {
-  window.localStorage.setItem('omc-lang', 'en');
-  stored = {};
-  writes = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: string, options: RequestInit = {}) => {
-    if (input === '/omc/api/v1/preferences' && options.method === 'GET') {
-      return jsonResponse({ preferences: stored, time_zone: { server_timezone: 'UTC' } });
-    }
-    if (input.startsWith('/omc/api/v1/preferences/') && options.method === 'PUT') {
-      const key = input.split('/').pop()!;
-      const value = JSON.parse(String(options.body));
-      writes.push({ key, value });
-      return jsonResponse({ key, value });
-    }
-    // The shell's health and plugin documents are not what this panel is about: unanswered, the
-    // panel lists the console's own entries, which is the deployment under test.
-    return jsonResponse({}, 404);
-  }));
-});
-
-afterEach(() => {
-  for (const client of clients.splice(0)) client.clear();
+  api = installOmcApi();
 });
 
 describe('sidebar visibility panel', () => {
@@ -117,8 +76,8 @@ describe('sidebar visibility panel', () => {
     const agent = await readySwitch('Agent');
     expect(agent.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(agent);
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toEqual({ key: 'omc_nav_hidden', value: ['/agent'] });
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({ key: 'omc_nav_hidden', value: ['/agent'] });
     expect(agent.getAttribute('aria-checked')).toBe('false');
     // The rail is built from this same set, so the entry the panel just hid is gone from it.
     const railKeys = retainVisibleGroups(buildNavGroups([]), new Set(['/agent']))
@@ -131,7 +90,7 @@ describe('sidebar visibility panel', () => {
   });
 
   it('reads a stored hidden set back, dropping anything the store should never have accepted', async () => {
-    stored.omc_nav_hidden = ['/agent', '/omc-settings', 'not-a-route', 42];
+    api.state.preferences.omc_nav_hidden = ['/agent', '/omc-settings', 'not-a-route', 42];
     mount();
     await openPanel();
     const agent = await readySwitch('Agent');
@@ -142,8 +101,8 @@ describe('sidebar visibility panel', () => {
     expect(LOCKED_NAV_KEYS.has('/omc-settings')).toBe(true);
     // Showing everything writes the empty set rather than re-sending anything that was dropped.
     fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toEqual({ key: 'omc_nav_hidden', value: [] });
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({ key: 'omc_nav_hidden', value: [] });
     expect(agent.getAttribute('aria-checked')).toBe('true');
   });
 
@@ -151,7 +110,7 @@ describe('sidebar visibility panel', () => {
     // The stored document is input, not state: a key whose destination is gone - a plugin page
     // whose plugin stopped - is not an entry out of the rail, so the row says as much and the
     // reset stays inert rather than offering to put back something that was never taken away.
-    stored.omc_nav_hidden = ['/plugin-pages/gone/0'];
+    api.state.preferences.omc_nav_hidden = ['/plugin-pages/gone/0'];
     const { container } = mount();
     expect(container.querySelector('[data-testid="sidebar-nav-settings"] .settings-toggle-desc')?.textContent)
       .toBe('Every entry is shown');
