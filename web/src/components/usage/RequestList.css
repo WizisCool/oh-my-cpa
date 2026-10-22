@@ -572,12 +572,6 @@
 .req-col-cache {
   justify-content: center;
 }
-.req-cache-hit {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
 .req-cache-pill {
   --cache-rate-hue: color-mix(
     in oklch,
@@ -603,11 +597,6 @@
   height: 6px;
   border-radius: 999px;
   background: var(--cache-rate-hue);
-}
-.req-cache-count {
-  font-size: var(--text-xs);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 /* Column 9: Key (caller key / group label) */
 .req-col-key {

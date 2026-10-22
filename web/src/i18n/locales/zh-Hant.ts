@@ -2509,7 +2509,6 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.cache_read_tokens": "快取讀取",
   "events.cache_creation_tokens": "快取建立",
   "events.cache_rate_tooltip": "快取命中率 {rate}（命中 {count} 快取 Tokens）",
-  "events.cache_hit_count": "{count} 命中",
   "events.cache_no_data": "無快取記錄",
   "events.correlated_errors": "關聯異常與憑據狀態",
   "events.download_log": "下載請求日誌",

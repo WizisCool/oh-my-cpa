@@ -496,7 +496,7 @@ export async function requestListInteractions({ base, page, check }) {
     await timestampHandle.evaluate((element) => element === document.querySelector('.req-time-text')),
     JSON.stringify(tooltipAnchor));
 
-  const cacheCell = page.locator('.request-row .req-cache-hit').first();
+  const cacheCell = page.locator('.request-row .req-cache-pill').first();
   await cacheCell.hover();
   const cacheTitle = await cacheCell.getAttribute('data-request-tooltip');
   await until(async () => (await cellPopup.innerText()) === cacheTitle, { label: 'shared cache tooltip' });

@@ -2837,7 +2837,6 @@ const DICT: Record<string, [string, string]> = {
   'events.cache_read_tokens': ['缓存读取', 'Cache Read'],
   'events.cache_creation_tokens': ['缓存创建', 'Cache Creation'],
   'events.cache_rate_tooltip': ['缓存命中率 {rate}（命中 {count} 缓存 Tokens）', 'Cache hit rate {rate} ({count} cached tokens)'],
-  'events.cache_hit_count': ['{count} 命中', '{count} hit'],
   'events.cache_no_data': ['无缓存记录', 'No cache data'],
   'events.correlated_errors': ['关联异常与凭据状态', 'Correlated Errors & Credential Status'],
   'events.download_log': ['下载请求日志', 'Download Request Log'],

@@ -321,9 +321,6 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
               ? { kind: 'dot', text: formatCacheRate(cache.rate), tone: 'success', cacheRate: cache.rate }
               : { kind: 'dot', text: '—', tone: 'muted' },
           ],
-          ...(cache.hasData
-            ? [[text(t('events.cache_hit_count', { count: cache.cached.toLocaleString() }), 'muted', 11)]]
-            : []),
         ],
       },
       key: { lines: [[text(eventKeyLabel(event), 'fg2', 12, 500)]] },

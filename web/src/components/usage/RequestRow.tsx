@@ -462,23 +462,18 @@ export const RequestRow = React.memo<RequestRowProps>(
                 : t('events.cache_no_data')
             }
           >
-            <div className="req-cache-hit">
-              {/* One badge for every reading: 0% keeps the pill, the dot and the
-                  count line — it is a real value, not a missing one. Only the
-                  no-data case drops to the neutral stop. */}
-              <span
-                className={`req-cache-pill${cache.hasData ? '' : ' is-empty'}`}
-                style={cacheScaleStyle}
-              >
-                <i className="req-cache-bullet" />
-                {cacheLabel}
-              </span>
-              {cache.hasData && (
-                <span className="req-cache-count">
-                  {t('events.cache_hit_count', { count: cache.cached.toLocaleString() })}
-                </span>
-              )}
-            </div>
+            {/* One badge for every reading: 0% keeps the pill and the dot — it
+                is a real value, not a missing one. Only the no-data case drops
+                to the neutral stop. The cached count lives in the tooltip: as a
+                second line here it wrapped at six-digit volumes and pushed the
+                row taller. */}
+            <span
+              className={`req-cache-pill${cache.hasData ? '' : ' is-empty'}`}
+              style={cacheScaleStyle}
+            >
+              <i className="req-cache-bullet" />
+              {cacheLabel}
+            </span>
           </RequestTooltip>
         </div>
 
