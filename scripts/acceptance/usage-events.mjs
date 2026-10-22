@@ -194,6 +194,29 @@ async function runUsageEventsFlow({ auditPage, appURL, page, check, checkEventua
   const autoRefreshSwitch = page.locator('#req-auto-refresh');
 
   /**
+   * Opens a facet and returns the first option in the listbox that facet owns.
+   * A closing dropdown stays in the DOM through its leave animation, while the
+   * next facet opens, so a global `:visible` option can still name the previous
+   * facet's selected row. `aria-controls` makes the clicked combobox choose its
+   * own list and keeps the assertion tied to the dimension it is editing.
+   */
+  const openFirstFacetOption = async (facet, label) => {
+    await facet.click();
+    const combobox = facet.locator('input[role="combobox"]');
+    const listId = await until(() => combobox.getAttribute('aria-controls'), {
+      label: `${label} to expose its listbox`,
+    });
+    return page
+      .locator('.ant-select-dropdown')
+      .filter({ has: page.locator(`[id=${JSON.stringify(listId)}]`) })
+      .locator('.ant-select-item-option')
+      .first();
+  };
+  const chooseFirstFacetOption = async (facet, label) => {
+    await (await openFirstFacetOption(facet, label)).click();
+  };
+
+  /**
    * The flow's shared vocabulary.
    *
    * `clickSettled` and the locators below are the parts every section reaches for,
@@ -226,6 +249,8 @@ async function runUsageEventsFlow({ auditPage, appURL, page, check, checkEventua
     filterSuffix,
     modelFacet,
     providerFacet,
+    openFirstFacetOption,
+    chooseFirstFacetOption,
     autoRefreshSwitch,
     releaseArrival,
   };

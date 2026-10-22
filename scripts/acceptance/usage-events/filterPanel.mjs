@@ -20,6 +20,7 @@ export async function filterPanelSection(context) {
     clickSettled,
     filterSuffix,
     modelFacet,
+    openFirstFacetOption,
   } = context;
 
 
@@ -52,8 +53,7 @@ export async function filterPanelSection(context) {
   };
   page.on('request', countFacetRead);
 
-  await modelFacet.click();
-  const firstModelOption = page.locator('.ant-select-dropdown:visible .ant-select-item-option').first();
+  const firstModelOption = await openFirstFacetOption(modelFacet, 'the model facet');
   const firstModel = (await firstModelOption.innerText()).replace(/\s*\(\d+\)\s*$/, '').trim();
   await firstModelOption.click();
   await page.keyboard.press('Escape');
@@ -190,8 +190,7 @@ export async function filterPanelSection(context) {
   // A committed facet is seeded first: without one the chip strip is absent, so
   // clicking "clear all" would have no target and the check could pass vacuously
   // while the debounce wrote `q` back afterwards.
-  await modelFacet.click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await (await openFirstFacetOption(modelFacet, 'the model facet')).click();
   await page.keyboard.press('Escape');
   await checkEventually(
     'a facet is committed before the debounce race',
@@ -216,8 +215,7 @@ export async function filterPanelSection(context) {
 
   // A filter change must drop the pagination position rather than reusing a
   // cursor that was minted against a different result set.
-  await modelFacet.click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await (await openFirstFacetOption(modelFacet, 'the model facet')).click();
   await page.keyboard.press('Escape');
   // The facet commit is the URL write this claim is about, so it is awaited
   // rather than slept through: without it the "no cursor" assertion could be

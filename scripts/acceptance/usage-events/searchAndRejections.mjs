@@ -17,6 +17,7 @@ export async function searchAndRejectionsSection(context) {
     filterSuffix,
     modelFacet,
     providerFacet,
+    chooseFirstFacetOption,
   } = context;
 
 
@@ -25,8 +26,7 @@ export async function searchAndRejectionsSection(context) {
   // when it was scheduled. The controller's half of this is pinned by the policy
   // suite; what is left here is that the *page's* commit reads the current URL
   // rather than the render it was created in, which is a React-closure property.
-  await modelFacet.click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await chooseFirstFacetOption(modelFacet, 'the model facet');
   await page.keyboard.press('Escape');
   await until(() => filterSuffix().includes('model='), {
     label: 'the committed facet the queued keystroke has to survive',
@@ -38,8 +38,7 @@ export async function searchAndRejectionsSection(context) {
   // there cannot silently move this test outside the window it needs to be in.
   await sleep(EVENT_SEARCH_DEBOUNCE_MS / 4);
   // Change an unrelated dimension inside the debounce window.
-  await providerFacet.click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await chooseFirstFacetOption(providerFacet, 'the provider facet');
   await page.keyboard.press('Escape');
   // Waiting for the queued commit to land is both faster and stronger than the
   // flat window this replaces: it stops as soon as the debounce fires, and it
