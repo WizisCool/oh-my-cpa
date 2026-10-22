@@ -1,0 +1,13 @@
+{
+  "why": "A Pro account's profile names its plan.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": true,
+      "has_claude_max": false
+    },
+    "organization": {
+      "rate_limit_tier": "scale"
+    }
+  }
+}

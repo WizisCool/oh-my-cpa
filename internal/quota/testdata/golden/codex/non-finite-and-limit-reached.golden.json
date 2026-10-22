@@ -1,0 +1,27 @@
+{
+  "plan": {
+    "plan_type": "pro",
+    "plan_label": "Pro 200",
+    "tier": "elite"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时用量上限 (5-Hour)",
+      "kind": "five_hour",
+      "scope": "standard",
+      "period_hours": 5,
+      "reset_accuracy": "approximate"
+    },
+    {
+      "id": "code_review_5h",
+      "label": "代码审查 5小时配额",
+      "kind": "custom",
+      "scope": "code_review",
+      "used_percent": 100,
+      "remaining_percent": 0,
+      "period_hours": 5,
+      "reset_accuracy": "approximate"
+    }
+  ]
+}

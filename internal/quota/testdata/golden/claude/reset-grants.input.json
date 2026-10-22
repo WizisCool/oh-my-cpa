@@ -1,0 +1,36 @@
+{
+  "why": "Reset grants are read with their counts and expiry; windows a grant clears that the console does not know are dropped, not rejected.",
+  "now_ms": 1735689600000,
+  "body": {
+    "cedar_ember": {
+      "eligible": true,
+      "at_limit": false,
+      "grants": [
+        {
+          "id": "grant-1",
+          "label": "Weekly Reset",
+          "resets_total": 2,
+          "resets_left": 1,
+          "starts_at": "2026-10-01T00:00:00Z",
+          "ends_at": "2026-10-08T00:00:00Z",
+          "clears": [
+            "five_hour",
+            "seven_day"
+          ],
+          "paused": false,
+          "usable_now": true,
+          "use_requires_limit": true
+        },
+        {
+          "id": "grant-2",
+          "resets_total": 1,
+          "resets_left": 0,
+          "ends_at": null,
+          "clears": [
+            "future_window"
+          ]
+        }
+      ]
+    }
+  }
+}

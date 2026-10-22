@@ -1,0 +1,16 @@
+{
+  "why": "A free plan's primary window is monthly: it is named and keyed by its own period, not the slot's five-hour name.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "free",
+    "rate_limit": {
+      "allowed": true,
+      "limit_reached": false,
+      "primary_window": {
+        "used_percent": 0,
+        "limit_window_seconds": 2592000,
+        "reset_at": 1793180280
+      }
+    }
+  }
+}

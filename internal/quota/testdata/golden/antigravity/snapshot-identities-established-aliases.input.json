@@ -1,0 +1,49 @@
+{
+  "why": "Persisted window identities: padded, mixed-case established aliases read as canonical.",
+  "now_ms": 0,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Plugin",
+        "buckets": [
+          {
+            "window": "monthly",
+            "remainingFraction": 0.125
+          },
+          {
+            "window": " FIVE-HOUR ",
+            "remainingFraction": 0.25
+          },
+          {
+            "bucketId": "upstream-week",
+            "bucket_id": "ignored",
+            "window": " 7 DaYs ",
+            "remainingFraction": 0.375
+          },
+          {
+            "bucket_id": "upstream-day",
+            "window": "daily",
+            "remainingFraction": 0.5
+          },
+          {
+            "window": " 7 DaYs ",
+            "remainingFraction": 0.625
+          },
+          {
+            "window": "burst",
+            "remainingFraction": 0.75
+          }
+        ]
+      },
+      {
+        "displayName": "Other",
+        "buckets": [
+          {
+            "window": "monthly",
+            "remainingFraction": 0.875
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "plan": {
+    "plan_type": "devin",
+    "plan_label": "Devin Pro",
+    "tier": "standard",
+    "expires_at_ms": 1701388800000,
+    "expires_label": "12-01 00:00 (16天1小时后恢复)"
+  },
+  "windows": [
+    {
+      "id": "devin_daily",
+      "label": "daily",
+      "kind": "daily",
+      "scope": "standard",
+      "used_percent": 37.5,
+      "remaining_percent": 62.5,
+      "reset_at_ms": 1700003600000,
+      "period_hours": 24,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "devin_weekly",
+      "label": "weekly",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 90,
+      "remaining_percent": 10,
+      "reset_at_ms": 1700600000000,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

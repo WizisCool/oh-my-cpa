@@ -1,0 +1,17 @@
+{
+  "why": "With rounded usage below 100, the most used window is the one pinned to 100.",
+  "now_ms": 1735689600000,
+  "body": {
+    "rate_limit": {
+      "limit_reached": true,
+      "primary_window": {
+        "used_percent": 20,
+        "limit_window_seconds": 18000
+      },
+      "secondary_window": {
+        "used_percent": 99,
+        "limit_window_seconds": 604800
+      }
+    }
+  }
+}

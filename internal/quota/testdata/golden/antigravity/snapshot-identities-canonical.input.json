@@ -1,0 +1,49 @@
+{
+  "why": "Persisted window identities: canonical five-hour and weekly windows sort first and keep the ids history was stored under.",
+  "now_ms": 0,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Plugin",
+        "buckets": [
+          {
+            "window": "monthly",
+            "remainingFraction": 0.125
+          },
+          {
+            "window": "5h",
+            "remainingFraction": 0.25
+          },
+          {
+            "bucketId": "upstream-week",
+            "bucket_id": "ignored",
+            "window": "weekly",
+            "remainingFraction": 0.375
+          },
+          {
+            "bucket_id": "upstream-day",
+            "window": "daily",
+            "remainingFraction": 0.5
+          },
+          {
+            "window": "weekly",
+            "remainingFraction": 0.625
+          },
+          {
+            "window": "burst",
+            "remainingFraction": 0.75
+          }
+        ]
+      },
+      {
+        "displayName": "Other",
+        "buckets": [
+          {
+            "window": "monthly",
+            "remainingFraction": 0.875
+          }
+        ]
+      }
+    ]
+  }
+}

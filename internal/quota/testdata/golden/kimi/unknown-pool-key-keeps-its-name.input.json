@@ -1,0 +1,11 @@
+{
+  "why": "A key naming no known period keeps its own name and no period.",
+  "now_ms": 1735689600000,
+  "body": {
+    "usages": {
+      "limit_second": {
+        "used_ratio": 0.5
+      }
+    }
+  }
+}

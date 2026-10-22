@@ -1,0 +1,62 @@
+{
+  "windows": [
+    {
+      "id": "ag_Gemini Models_gem-5h",
+      "label": "Gemini Models · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1767286800000,
+      "reset_label": "01-01 17:00 (365天17小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "gemini"
+      ]
+    },
+    {
+      "id": "ag_Gemini Models_gem-week",
+      "label": "Gemini Models · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 49,
+      "remaining_percent": 51,
+      "reset_at_ms": 1767844800000,
+      "reset_label": "01-08 04:00 (372天4小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "gemini"
+      ]
+    },
+    {
+      "id": "ag_Claude and GPT models_ag-5h",
+      "label": "Claude and GPT models · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1767286800000,
+      "reset_label": "01-01 17:00 (365天17小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "claude",
+        "gpt"
+      ]
+    },
+    {
+      "id": "ag_Claude and GPT models_ag-week",
+      "label": "Claude and GPT models · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1767931200000,
+      "reset_label": "01-09 04:00 (373天4小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "claude",
+        "gpt"
+      ]
+    }
+  ]
+}

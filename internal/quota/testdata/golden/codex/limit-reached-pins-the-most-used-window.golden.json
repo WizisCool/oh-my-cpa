@@ -1,0 +1,29 @@
+{
+  "plan": {
+    "plan_type": "",
+    "plan_label": "未知套餐",
+    "tier": "unknown"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时用量上限 (5-Hour)",
+      "kind": "five_hour",
+      "scope": "standard",
+      "used_percent": 20,
+      "remaining_percent": 80,
+      "period_hours": 5,
+      "reset_accuracy": "approximate"
+    },
+    {
+      "id": "weekly",
+      "label": "每周用量上限 (Weekly)",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 100,
+      "remaining_percent": 0,
+      "period_hours": 168,
+      "reset_accuracy": "approximate"
+    }
+  ]
+}

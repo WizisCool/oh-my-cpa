@@ -1,0 +1,21 @@
+{
+  "why": "The metered ledger: the credit window, extra usage from the cap, and products as a breakdown.",
+  "now_ms": 1735689600000,
+  "body": {
+    "credits": null,
+    "monthly": {
+      "config": {
+        "credit_usage_percent": 34.5,
+        "monthly_limit": 10000,
+        "used": 3450,
+        "billing_period_end": "2026-02-01T00:00:00Z",
+        "product_usage": [
+          {
+            "product": "grok-2",
+            "usage_percent": 20.0
+          }
+        ]
+      }
+    }
+  }
+}

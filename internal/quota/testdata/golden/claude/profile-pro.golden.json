@@ -1,0 +1,8 @@
+{
+  "plan": {
+    "plan_type": "pro",
+    "plan_label": "Claude Pro",
+    "tier": "premium"
+  },
+  "status": "idle"
+}

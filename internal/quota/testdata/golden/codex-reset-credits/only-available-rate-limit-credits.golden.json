@@ -1,0 +1,20 @@
+{
+  "reset_credits": {
+    "available_count": 3,
+    "applicable_available_count": 1,
+    "credits": [
+      {
+        "id": "credit-1",
+        "status": "available",
+        "granted_at_ms": 1790000000000,
+        "expires_at_ms": 1810000000000
+      },
+      {
+        "id": "credit-4",
+        "status": "available",
+        "granted_at_ms": 1790000000000,
+        "expires_at_ms": 1830000000000
+      }
+    ]
+  }
+}

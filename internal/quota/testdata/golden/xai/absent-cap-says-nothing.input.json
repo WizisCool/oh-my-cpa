@@ -1,0 +1,12 @@
+{
+  "why": "A document without a cap makes no extra-usage claim.",
+  "now_ms": 1789873200000,
+  "body": {
+    "credits": null,
+    "monthly": {
+      "config": {
+        "credit_usage_percent": 5
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "why": "A date string where unix seconds belong would be three orders of magnitude off, so it yields no reset.",
+  "now_ms": 1700000000000,
+  "body": {
+    "userStatus": {
+      "planStatus": {
+        "dailyQuotaResetAtUnix": "2024-01-05T00:00:00Z"
+      }
+    }
+  }
+}

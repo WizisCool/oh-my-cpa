@@ -1,0 +1,22 @@
+{
+  "why": "Only quota fields are projected: the key and the email in the payload never reach the reading.",
+  "now_ms": 1700000000000,
+  "body": {
+    "api_key": "synthetic-llm-key",
+    "email": "private@example.invalid",
+    "subs_tier_name": "Muse Pro",
+    "is_subs_active": false,
+    "subs_usage": {
+      "tier": "ignored",
+      "window": {
+        "used_percent": "25",
+        "window_duration_mins": 300,
+        "resets_at": 1800000000
+      },
+      "weekly": {
+        "used_percent": 80,
+        "resets_at": 1800100000
+      }
+    }
+  }
+}

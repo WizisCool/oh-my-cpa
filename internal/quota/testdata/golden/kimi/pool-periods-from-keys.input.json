@@ -1,0 +1,17 @@
+{
+  "why": "Pool keys name the period they meter, so each window carries its period hours.",
+  "now_ms": 1735689600000,
+  "body": {
+    "usages": {
+      "limit_day": {
+        "used_ratio": 0.5
+      },
+      "limit_5h": {
+        "used_ratio": 0.25
+      },
+      "limit_week": {
+        "used_ratio": 0.1
+      }
+    }
+  }
+}

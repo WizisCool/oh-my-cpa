@@ -1,0 +1,50 @@
+{
+  "plan": {
+    "plan_type": "free",
+    "plan_label": "Free",
+    "tier": "free"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时滚动用量 (5-Hour)",
+      "scope": "standard",
+      "used_percent": 25.5,
+      "remaining_percent": 74.5,
+      "reset_at_ms": 1785146400000,
+      "reset_label": "07-27 10:00 (572天10小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "seven_day",
+      "label": "每周总用量上限 (Weekly)",
+      "scope": "standard",
+      "used_percent": 80,
+      "remaining_percent": 20,
+      "reset_at_ms": 1785146400000,
+      "reset_label": "07-27 10:00 (572天10小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "seven_day_fable",
+      "label": "Fable 每周用量",
+      "scope": "model",
+      "model": "fable",
+      "used_percent": 64,
+      "remaining_percent": 36,
+      "reset_at_ms": 1785146400000,
+      "reset_label": "07-27 10:00 (572天10小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "extra_usage": {
+    "is_enabled": true,
+    "monthly_limit_cents": 5000,
+    "used_credits_cents": 2500,
+    "utilization_percent": 50
+  },
+  "status": "healthy"
+}

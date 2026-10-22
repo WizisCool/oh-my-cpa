@@ -1,0 +1,12 @@
+{
+  "why": "A window that is not a whole number of hours is named in minutes.",
+  "now_ms": 0,
+  "body": {
+    "subs_usage": {
+      "window": {
+        "used_percent": 10,
+        "window_duration_mins": 90
+      }
+    }
+  }
+}

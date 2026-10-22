@@ -1,0 +1,36 @@
+{
+  "why": "The calendar-month spelling 'month' reads as the same monthly limit.",
+  "now_ms": 0,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Cline Pass",
+        "buckets": [
+          {
+            "window": "5h",
+            "remainingFraction": 1
+          },
+          {
+            "window": "7d",
+            "remainingFraction": 0.41
+          },
+          {
+            "window": "month",
+            "remainingFraction": 0.25,
+            "resetTime": "2026-10-26T00:11:00Z"
+          },
+          {
+            "displayName": "Burst budget",
+            "window": "burst",
+            "remainingFraction": 0.5
+          },
+          {
+            "displayName": "Image credits",
+            "window": "images",
+            "remainingFraction": 0.75
+          }
+        ]
+      }
+    ]
+  }
+}

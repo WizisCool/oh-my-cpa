@@ -1,0 +1,25 @@
+{
+  "why": "A product's share is part of the credit usage, not a limit: 96% on one product leaves the credential healthy at 10% used, and unreadable shares are listed without one.",
+  "now_ms": 1789873200000,
+  "body": {
+    "credits": null,
+    "monthly": {
+      "config": {
+        "credit_usage_percent": 10,
+        "product_usage": [
+          {
+            "product": "grok-4",
+            "usage_percent": 96
+          },
+          {
+            "product": "grok-4-fast"
+          },
+          {
+            "product": "grok-3",
+            "usage_percent": "not-a-number"
+          }
+        ]
+      }
+    }
+  }
+}

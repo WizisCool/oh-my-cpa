@@ -1,0 +1,7 @@
+{
+  "why": "Without a usable end the reading is absent, so the caller keeps its previous source instead of writing zero.",
+  "now_ms": 1735689600000,
+  "body": {
+    "active_until": null
+  }
+}

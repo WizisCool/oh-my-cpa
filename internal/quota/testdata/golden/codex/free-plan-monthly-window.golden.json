@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "plan_type": "free",
+    "plan_label": "Free",
+    "tier": "free"
+  },
+  "windows": [
+    {
+      "id": "monthly",
+      "label": "月度用量上限 (Monthly)",
+      "kind": "monthly",
+      "scope": "standard",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1793180280000,
+      "reset_label": "10-28 09:38 (665天9小时后恢复)",
+      "period_hours": 720,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

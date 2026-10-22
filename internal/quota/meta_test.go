@@ -19,43 +19,6 @@ func (client *metaQuotaClient) DownloadAuthFile(ctx context.Context, name string
 	return client.download(ctx, name)
 }
 
-func TestParseMetaQuotaProjectsOnlyQuotaFields(t *testing.T) {
-	raw := []byte(`{"api_key":"synthetic-llm-key","email":"private@example.invalid","subs_tier_name":"Muse Pro","is_subs_active":false,"subs_usage":{"tier":"ignored","window":{"used_percent":"25","window_duration_mins":300,"resets_at":1800000000},"weekly":{"used_percent":80,"resets_at":1800100000}}}`)
-	plan, windows, err := ParseMetaUsage(raw, 1700000000000)
-	if err != nil || plan == nil || plan.PlanLabel != "Muse Pro" || plan.IsSubscriptionActive == nil || *plan.IsSubscriptionActive {
-		t.Fatalf("plan = %+v, err = %v", plan, err)
-	}
-	if len(windows) != 2 || windows[0].Kind != "" || *windows[0].UsedPercent != 25 || *windows[0].RemainingPercent != 75 || *windows[0].PeriodHours != 5 || *windows[0].ResetAtMS != 1800000000000 || *windows[1].PeriodHours != 168 {
-		t.Fatalf("windows = %+v", windows)
-	}
-	encoded, _ := json.Marshal(struct {
-		Plan    *QuotaPlan
-		Windows []QuotaWindow
-	}{plan, windows})
-	if strings.Contains(string(encoded), "synthetic-llm-key") || strings.Contains(string(encoded), "private@example") {
-		t.Fatal("raw Meta fields escaped projection")
-	}
-}
-
-func TestParseMetaQuotaUnknownIsNotZero(t *testing.T) {
-	for _, payload := range []string{`{}`, `{"subs_usage":null}`, `{"subs_usage":{"window":{"used_percent":"NaN","window_duration_mins":-5},"weekly":{"used_percent":null}}}`} {
-		_, windows, err := ParseMetaUsage([]byte(payload), 1700000000000)
-		if err != nil || len(windows) != 2 {
-			t.Fatalf("unknown observation refused: %+v %v", windows, err)
-		}
-		for _, window := range windows {
-			if window.UsedPercent != nil || window.RemainingPercent != nil {
-				t.Fatalf("unknown converted to zero: %+v", window)
-			}
-		}
-	}
-	for _, payload := range []string{`null`, `[]`, `not-json`} {
-		if _, _, err := ParseMetaUsage([]byte(payload), 0); err == nil {
-			t.Fatalf("invalid root accepted: %s", payload)
-		}
-	}
-}
-
 func TestMetaQuotaUsesOnlyPersistedDcaAndRedactsFailures(t *testing.T) {
 	for _, scenario := range []string{"success", "missing-dca", "invalid-token", "download-error", "request-error", "http-error", "parse-error", "runtime-only", "disabled"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -117,17 +80,5 @@ func TestMetaQuotaUsesOnlyPersistedDcaAndRedactsFailures(t *testing.T) {
 				t.Fatal("called Meta without verified DCA")
 			}
 		})
-	}
-}
-
-// A window the console cannot name by period keeps its length in the label,
-// in whole hours when it is one.
-func TestParseMetaQuotaNamesTheWindowLength(t *testing.T) {
-	for minutes, want := range map[string]string{"120": "2-hour window", "90": "90-minute window"} {
-		raw := []byte(`{"subs_usage":{"window":{"used_percent":10,"window_duration_mins":` + minutes + `}}}`)
-		_, windows, err := ParseMetaUsage(raw, 0)
-		if err != nil || windows[0].Label != want {
-			t.Errorf("%s minutes: label = %q, %v; want %q", minutes, windows[0].Label, err, want)
-		}
 	}
 }

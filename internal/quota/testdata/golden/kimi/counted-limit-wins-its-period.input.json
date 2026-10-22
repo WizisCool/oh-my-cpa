@@ -1,0 +1,26 @@
+{
+  "why": "A counted five-hour limit stands; a pool for the same period does not become a second, contradicting window.",
+  "now_ms": 1735689600000,
+  "body": {
+    "limits": [
+      {
+        "window": {
+          "duration": 300,
+          "timeUnit": "TIME_UNIT_MINUTE"
+        },
+        "detail": {
+          "limit": "200",
+          "used": "139"
+        }
+      }
+    ],
+    "usages": {
+      "limit_5h": {
+        "used_ratio": 0.9
+      },
+      "limit_week": {
+        "used_ratio": 0.4
+      }
+    }
+  }
+}

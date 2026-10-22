@@ -1,0 +1,34 @@
+{
+  "windows": [
+    {
+      "id": "kimi_ratio_limit_5h",
+      "label": "limit_5h",
+      "kind": "five_hour",
+      "scope": "standard",
+      "used_percent": 25,
+      "remaining_percent": 75,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "kimi_ratio_limit_day",
+      "label": "limit_day",
+      "kind": "daily",
+      "scope": "standard",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "period_hours": 24,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "kimi_ratio_limit_week",
+      "label": "limit_week",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 10,
+      "remaining_percent": 90,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

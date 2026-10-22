@@ -1,0 +1,31 @@
+{
+  "plan": {
+    "plan_type": "paid",
+    "plan_label": "xAI Paid / API",
+    "tier": "standard",
+    "usage_breakdown": [
+      {
+        "name": "grok-4",
+        "share_percent": 96
+      },
+      {
+        "name": "grok-4-fast"
+      },
+      {
+        "name": "grok-3"
+      }
+    ]
+  },
+  "windows": [
+    {
+      "id": "xai_credit_usage",
+      "label": "额度总使用率 (Credit Usage)",
+      "scope": "standard",
+      "used_percent": 10,
+      "remaining_percent": 90,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "status": "healthy"
+}

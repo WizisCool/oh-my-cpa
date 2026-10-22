@@ -1,0 +1,38 @@
+{
+  "why": "iguana_necktie carrying dollars is the cloud session credit pool: a balance, never the Fable window, so an empty pool does not exhaust the plan. A disabled extra-usage block is still a reading.",
+  "now_ms": 1792108800000,
+  "body": {
+    "five_hour": {
+      "utilization": 10,
+      "resets_at": "2026-10-16T12:00:00Z"
+    },
+    "iguana_necktie": {
+      "utilization": 100,
+      "limit_dollars": 50,
+      "used_dollars": 50,
+      "remaining_dollars": 0,
+      "resets_at": "2026-11-01T00:00:00Z"
+    },
+    "code_review_credits": {
+      "utilization": 25,
+      "limit_dollars": 20,
+      "used_dollars": 5,
+      "remaining_dollars": 15,
+      "resets_at": null
+    },
+    "seven_day_cowork": {
+      "utilization": 5,
+      "resets_at": "2026-10-20T00:00:00Z"
+    },
+    "extra_usage": {
+      "is_enabled": false,
+      "monthly_limit": 0,
+      "used_credits": 0,
+      "utilization": null,
+      "currency": "eur",
+      "disabled_reason": "org_policy",
+      "user_disabled": true,
+      "spend_limit_reached": false
+    }
+  }
+}

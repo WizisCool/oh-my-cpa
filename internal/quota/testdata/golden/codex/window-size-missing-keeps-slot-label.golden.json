@@ -1,0 +1,37 @@
+{
+  "plan": {
+    "plan_type": "plus",
+    "plan_label": "Plus",
+    "tier": "standard"
+  },
+  "windows": [
+    {
+      "id": "code_review_5h",
+      "label": "代码审查 5小时配额",
+      "kind": "custom",
+      "scope": "code_review",
+      "used_percent": 5,
+      "remaining_percent": 95,
+      "reset_accuracy": "approximate"
+    },
+    {
+      "id": "code_review_weekly",
+      "label": "代码审查 每周配额",
+      "kind": "custom",
+      "scope": "code_review",
+      "used_percent": 9,
+      "remaining_percent": 91,
+      "reset_accuracy": "approximate"
+    },
+    {
+      "id": "addl_0_p",
+      "label": "o-series",
+      "kind": "model_scoped",
+      "scope": "model",
+      "model": "o-series",
+      "used_percent": 3,
+      "remaining_percent": 97,
+      "reset_accuracy": "approximate"
+    }
+  ]
+}

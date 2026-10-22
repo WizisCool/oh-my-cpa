@@ -1,0 +1,13 @@
+{
+  "why": "A document stating no period keeps the weekly window the CLI assumes, so either document alone yields a window.",
+  "now_ms": 1735689600000,
+  "body": {
+    "credits": null,
+    "monthly": {
+      "config": {
+        "credit_usage_percent": 42,
+        "billing_period_end": "2026-10-01T00:00:00Z"
+      }
+    }
+  }
+}

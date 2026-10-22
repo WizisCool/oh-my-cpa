@@ -1,0 +1,12 @@
+{
+  "windows": [
+    {
+      "id": "kimi_ratio_limit_second",
+      "label": "limit_second",
+      "scope": "standard",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

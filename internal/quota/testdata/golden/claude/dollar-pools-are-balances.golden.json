@@ -1,0 +1,57 @@
+{
+  "plan": {
+    "plan_type": "free",
+    "plan_label": "Free",
+    "tier": "free"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时滚动用量 (5-Hour)",
+      "scope": "standard",
+      "used_percent": 10,
+      "remaining_percent": 90,
+      "reset_at_ms": 1792152000000,
+      "reset_label": "12:00 (12小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "seven_day_cowork",
+      "label": "Cowork 协作每周用量",
+      "scope": "standard",
+      "used_percent": 5,
+      "remaining_percent": 95,
+      "reset_at_ms": 1792454400000,
+      "reset_label": "10-20 00:00 (4天后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "extra_usage": {
+    "is_enabled": false,
+    "monthly_limit_cents": 0,
+    "used_credits_cents": 0,
+    "currency": "EUR",
+    "disabled_reason": "org_policy",
+    "user_disabled": true
+  },
+  "balances": [
+    {
+      "id": "code_review_credits",
+      "limit_usd": 20,
+      "used_usd": 5,
+      "remaining_usd": 15,
+      "utilization_percent": 25
+    },
+    {
+      "id": "iguana_necktie",
+      "limit_usd": 50,
+      "used_usd": 50,
+      "remaining_usd": 0,
+      "utilization_percent": 100,
+      "reset_at_ms": 1793491200000
+    }
+  ],
+  "status": "healthy"
+}

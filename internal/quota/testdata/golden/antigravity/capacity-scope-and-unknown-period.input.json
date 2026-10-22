@@ -1,0 +1,30 @@
+{
+  "why": "A group's model family scopes its capacity only when the name states it, and an unreported window gets no guessed period.",
+  "now_ms": 0,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Gemini models",
+        "buckets": [
+          {
+            "bucketId": "five",
+            "window": "5h",
+            "remainingFraction": 0.8,
+            "resetTime": "2026-01-01T17:00:00Z"
+          }
+        ]
+      },
+      {
+        "displayName": "Gemini and future models",
+        "buckets": [
+          {
+            "bucketId": "future",
+            "window": "unreported",
+            "remainingFraction": 0.8,
+            "resetTime": "2026-01-01T17:00:00Z"
+          }
+        ]
+      }
+    ]
+  }
+}
