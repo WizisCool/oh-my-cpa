@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { auditNativePluginHostResponse, settleNativeResponseAudits, hasPluginHostProtectedSecret, isNativePluginHostResponse } from './acceptance/configuration-plugins.mjs';
+import { auditNativePluginHostResponse, settleNativeResponseAudits, hasPluginHostProtectedSecret, isNativePluginHostResponse } from './acceptance/plugin-host.mjs';
 
 test('secret-bearing evidence exception is limited to exact native host API surfaces', () => {
   for (const basePath of ['', '/omc', '/console/custom']) {

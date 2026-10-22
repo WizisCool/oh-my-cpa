@@ -166,7 +166,7 @@ The complete script list is in `package.json`; these are the ones agents use mos
 | `pnpm check:ui` | Affected browser scenarios on the dev server with mocked API (`--list` / `--plan` inspect without launching a browser) |
 | `pnpm verify` | Toolchain check, full static gates, worktree secret scan |
 | `pnpm verify:probes` | The whole dev-server probe catalog (`--shard i/n`, `--port PORT`, `--workers 1`) |
-| `pnpm verify:browser` | Built-SPA browser acceptance against the fake CPA (also `:smoke`, `:p0`) |
+| `pnpm verify:browser` | Built-SPA smoke paths against the fake CPA: sign-in, secret sweep, request list, MCP, add provider, plugin host (`:smoke` for the first four) |
 | `pnpm verify:demo` | Browser acceptance for the public demonstration; `OMCPA_DEMO_URL` checks a deployment |
 | `pnpm verify:full` | Everything CI runs, locally (`:serial` for resource-constrained hosts) |
 | `pnpm verify:e2e` | Build and loading boundaries, then browser acceptance and probes |

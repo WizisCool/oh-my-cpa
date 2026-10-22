@@ -16,7 +16,7 @@ change pays.
 | A pure frontend function: URL/state derivation, formatting, sorting, validation | Logic suite | `scripts/test-<topic>.ts`, importing from `web/src` | `pnpm test:logic` |
 | Rendered React wiring and the typed API client | Component and contract tests (Vitest + jsdom) | `web/tests/**/*.component.test.tsx`, `web/tests/**/*.contract.test.ts` | `pnpm test:components` |
 | What only a browser engine shows: geometry, stacking, hit-testing, scroll, focus, Back, touch, paint | Probe scenario | a module under `scripts/acceptance/probes/`, registered in `scripts/acceptance/scenarios.mjs` | `pnpm check:ui`, CI |
-| The built binary, embedded SPA, fake CPA and seeded SQLite together | Built-artifact acceptance | `scripts/browser-acceptance.mjs` and its domain modules | `pnpm verify:browser` (`:smoke` on pull requests) |
+| The built binary, embedded SPA, fake CPA and seeded SQLite together | Built-artifact acceptance | `scripts/browser-acceptance.mjs` and the steps it runs from `scripts/acceptance/` | `pnpm verify:browser` (`:smoke` on pull requests) |
 | The public demonstration | Demo acceptance | `scripts/demo-readiness.mjs` | `pnpm verify:demo` |
 | A repository script whose output ships: release planning, signing, the Worker, the embedded distribution | Script test | `scripts/*.test.mjs`, `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
 
@@ -95,6 +95,16 @@ path the scope script does not recognise runs every lane. Branch protection requ
 
 Weekly maintenance (`.github/workflows/maintenance.yml`) runs the race detector, fuzzing
 and the advisory scan.
+
+## Built-artifact acceptance
+
+`pnpm verify:browser` is a handful of paths through the shipped binary, not a second copy
+of the suites below it: sign-in; the secret sweep, which renders every console route and
+requires that no DOM, browser storage or response carries the management key or OAuth
+material; the request list over the seeded database; an external agent over MCP; adding a
+provider through to the gateway; copying without the Clipboard API; the production YAML
+worker; and the trusted plugin host. `:smoke` stops before the last four. A claim about how a page behaves belongs in a
+component test or a probe; a step here earns its place by needing the built binary.
 
 ## When CI fails
 

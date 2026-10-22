@@ -70,6 +70,15 @@ branches conflicted on it.
   instead of a fetch stub per file, and fail on a request nothing answers. Their files run
   in parallel; ADR 0089 began with one worker, and three parallel runs of the whole suite
   showed no shared state between files.
+- Built-artifact acceptance is the paths that need the shipped binary: sign-in, a secret
+  sweep over every console route (five routes it had never visited are now in it), the
+  request list over the seeded database, MCP, adding a provider, the clipboard fallback,
+  the production YAML worker and the plugin host. About 4,000 lines of domain flows
+  left it: their behaviour claims are owned by probes, component and logic tests, and
+  Go tests, and the cosmetic ones (brand ink, icon choice, removed-strip absences) by
+  nothing, on purpose. The full run takes about 45 seconds and the smoke run 35. A
+  three-second render budget on the pricing table went with them; a timing assertion
+  on a shared runner is not a gate this suite should carry.
 - The UI planner maps routed pages to scenarios and runs every scenario for anything
   else. It selects more than the old import-graph planner did; the cost is minutes
   locally, and CI runs the full catalog where it matters.

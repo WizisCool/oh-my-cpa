@@ -56,8 +56,6 @@ const BASELINE = {
   'scripts/acceptance/probes/systemInformation.mjs': 2,
   'scripts/acceptance/probes/touchErgonomics.mjs': 3,
   'scripts/acceptance/probes/usageRecords.mjs': 3,
-  'scripts/acceptance/usage-events/filterPanel.mjs': 1,
-  'scripts/acceptance/usage-events/searchAndRejections.mjs': 1,
   'scripts/browser-acceptance.mjs': 1,
   'scripts/browser-live-smoke.mjs': 22,
   // Browser test code that the scan set did not reach until the pattern widened: it drives

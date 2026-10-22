@@ -38,7 +38,6 @@
     "type-check:incremental": "pnpm --dir web exec tsc --noEmit --incremental --tsBuildInfoFile ../tmp/tsc/web.tsbuildinfo && pnpm type-check:tooling",
     "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets:worktree",
     "verify:browser": "node --import tsx scripts/browser-acceptance.mjs",
-    "verify:browser:p0": "node --import tsx scripts/browser-acceptance.mjs --p0",
     "verify:browser:smoke": "node --import tsx scripts/browser-acceptance.mjs --smoke",
     "verify:build": "pnpm type-check && pnpm build && pnpm check:bundle",
     "verify:demo": "node scripts/verify-demo.mjs",

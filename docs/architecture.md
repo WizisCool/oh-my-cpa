@@ -493,27 +493,16 @@ Long conversations therefore grow database, memory and request costs; see `docs/
 
 ### Known coverage gaps
 
-- The browser suite had a history of timing-sensitive flakes in the usage-events
-  filter section, unrelated to the provider write path: `the list is back to the
-  unfiltered page` and `the queued search still lands` each failed once in repeated
-  runs before the request-view policies were lifted out of the page. They were fixed
-  rather than tolerated - see §12.3 - and the diagnosis was confirmed by reproducing
-  them on the unmodified baseline commit, two runs in three, under a 2-CPU
-  constraint. The suite now passes eight consecutive trials in the configuration the
-  baseline failed, including with the probes running concurrently.
-- The lost-update regression is the Go test, not the browser check. The interleaving
-  that loses a write depends on two requests overlapping at CPA, and a browser run
-  cannot force that: removing the gate still produced a green browser run, because
-  the first write happened to land before the second read. The browser check
-  therefore asserts only the operator-visible outcome, and
-  `TestConcurrentProviderTogglesDoNotLoseAWrite` (which controls the ordering at
-  the fake gateway) is the check that fails when the gate is removed.
+- The lost-update regression is a Go test. The interleaving that loses a write depends
+  on two requests overlapping at CPA, which a browser run cannot force: removing the
+  gate once still produced a green browser run. `TestConcurrentProviderTogglesDoNotLoseAWrite`
+  controls the ordering at the fake gateway and fails when the gate is removed; the
+  console's coalescing of a rapid burst is `scripts/test-provider-toggle-queue.ts`.
 - The stale-list-read guard (a read issued before a confirmation is discarded
   rather than published over it) is reasoned and implemented but has no automated
   check: the console's list read and a toggle's internal read are the same CPA
   endpoint, so a fixture cannot delay one without delaying the other, and the
-  ordering cannot be produced deterministically yet. The browser suite therefore
-  covers the concurrent-toggle and rapid-burst paths, not this one.
+  ordering cannot be produced deterministically yet.
 - The `503 write_busy` refusal is covered where it is decided (the gate test in
   `internal/api`, and the retry-classification test for the controller), but not
   end to end: producing it in the browser needs the gate held open from outside
@@ -2807,7 +2796,7 @@ script; that duplication cost every later change more than it caught, and was re
 | Repository scripts | `pnpm test:self` | Only scripts whose output ships: release planning, signing, the Worker, the embedded distribution, and the fixed-wait ratchet. |
 | UI fast path | `pnpm check:ui` | The scenarios a frontend change can affect, on the Vite dev server with mocked routes. It runs `React.StrictMode` double invocation, which a production build cannot expose. |
 | Probe catalog | `pnpm verify:probes` | Every scenario; CI runs it in three Playwright shards on full runs. |
-| Built-artifact acceptance | `pnpm verify:browser` (`:smoke`) | The built binary, the embedded SPA, the fake CPA and seeded SQLite together: auth, every route's render and secret boundary, keys, providers, live tail, OAuth management. |
+| Built-artifact acceptance | `pnpm verify:browser` (`:smoke`) | The built binary, the embedded SPA, the fake CPA and seeded SQLite together: sign-in, every route's render and secret boundary, the request list, MCP, adding a provider, the production YAML worker and the plugin host. |
 | Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler. |
 
 Neither probe lane substitutes for built-artifact acceptance: production path resolution,
@@ -2825,10 +2814,10 @@ CI lanes: an unrecognised path runs every lane.
 `scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser tests and
 Go tests: adding one fails, and removing one fails until its recorded count is lowered.
 
-`scripts/browser-acceptance.mjs` is the lifecycle entrypoint; its domains live in focused
-modules under `scripts/acceptance/` (OAuth management, keys, usage events and live tail,
-providers, observability, configuration and plugins, theme and artwork), each owning one
-product surface.
+`scripts/browser-acceptance.mjs` is the lifecycle entrypoint, and each step it runs is a
+module under `scripts/acceptance/` that needs the built binary to make its claim: the
+secret sweep, the request list, MCP, adding a provider, the clipboard fallback, the
+production YAML worker and the plugin host.
 
 ### 12.1 Why some claims live where they do
 
@@ -2842,15 +2831,6 @@ product surface.
   and a back-to-top gesture landing exactly on the top are rendering behaviours.
   The scroll *schedule* is a pure function and is tested as one
   (`scripts/test-scroll-intent.ts`); its effect on a real list is not.
-- **Some browser waits are irreducible, and one was investigated rather than
-  assumed.** The live-tail block waits out the app's ten-second auto-refresh
-  cadence. Driving it with `page.clock` works - the interval fires early, 11s of app
-  time in about 900ms - but the same mock covers `requestAnimationFrame` and
-  `performance.now`, which is what `smoothScroll`'s gesture schedule is built from:
-  with the clock installed the back-to-top gesture landed at 37px instead of the
-  top, with no page error, breaking the assertion the block exists for. Isolating
-  the interval from the frame clock is not expressible through that API, so the
-  wait stays and the rationale is recorded at the call site.
 - **The debounce is split rather than moved.** `createSearchDebounce` carries the
   policy and is tested directly. The one claim that stays in the browser is that a
   real pending timer survives a real clear-all, because it depends on a React state
@@ -2863,10 +2843,10 @@ product surface.
   is a decision over stubbed globals (`scripts/test-clipboard.ts`), including where a
   dialog's focus trap requires the scratch element to be attached. Whether that
   selection path puts the text on the clipboard is not: it needs a real document, so
-  the acceptance pastes the value back out of the browser's own paste pipeline from
-  inside a dialog and from a drawer, which are the containers that trap focus. That
-  context is granted no clipboard permission on purpose - granting it would stop the
-  acceptance from exercising the fallback at all.
+  built-artifact acceptance pastes the value back out of the browser's own paste
+  pipeline (`scripts/acceptance/copy-fallback.mjs`). That context is granted no
+  clipboard permission on purpose - granting it would stop the step from exercising
+  the fallback at all.
 
 ### 12.2 Execution cost and isolation
 
@@ -2896,15 +2876,6 @@ Every probe now prints its own elapsed duration, including failed scenarios.
 
 The numerical observations in this section describe earlier profiling, not current
 runtime guarantees. Re-profile the current catalog before setting a speed budget.
-Two other levers were previously evaluated:
-
-**Clock-driven polling.** `page.clock` does make the ten-second interval fire early
-(11s of app time in about 900ms), but the same mock covers `requestAnimationFrame`
-and `performance.now`, which is what `smoothScroll`'s gesture schedule is built
-from: with the clock installed the back-to-top gesture landed at 37px instead of
-the top, with no page error, breaking the assertion the block exists for. Isolating
-the interval from the frame clock is not expressible through that API, so the wait
-stays.
 
 **`tsc --incremental`.** Adopted for `test:fast` only. The build info records a
 hash of every program file and the compiler options, so a changed file, a deleted
@@ -2914,44 +2885,24 @@ cold, 6s with nothing changed, 9s after editing a widely imported utility.
 
 ### 12.3 The flakes were real, and they were in the assertions
 
-The suite carried a recorded history of intermittent failures in the filter
-section. Running the same suite under a 2-CPU constraint on the **unmodified
-baseline commit** reproduced them two runs in three, which settled the question of
-whether they were caused by the refactor: they were not.
+The suite's recorded intermittent failures reproduced on an unmodified baseline under a
+2-CPU constraint, and each had the same shape: a read taken immediately after a state
+change, with no wait for the event that makes the read meaningful - a footer read racing
+the refetch a URL write starts, a poll wait sized at three intervals rather than derived
+from the cadence, a row count read one render after a notice. Each was fixed at its
+assertion, which is the rule `AGENTS.md` §5 states: a flake is a wrong claim about when
+a state exists, never a reason for a retry or a longer wait.
 
-The shared shape is a read taken immediately after a state change, with no wait for
-the event that makes the read meaningful:
-
-- **A footer read racing the refetch.** `the list is back to the unfiltered page`
-  read the pagination footer immediately after a URL write. A filterless URL and a
-  list that has re-issued its request are different states, and the read could see
-  the previous filter's page size.
-- **A poll wait with three intervals of headroom.** The live-tail block waited 30s
-  for a 10s cadence. That is not three intervals of margin under contention; it is
-  three intervals before giving up, and it expired on a page that was merely slow.
-  It is now derived from `EVENT_AUTO_REFRESH_MS` with six intervals, and a longer
-  bound costs nothing on a healthy machine because the wait returns as soon as the
-  pill appears.
-- **A row count read before the rows could arrive.** `the list still runs on the
-  usable filters` read the row count one render after the notice.
-
-A negative claim still cannot be waited on: `a clean URL shows no notice` stays a
-plain `check`, because waiting for the absence of a notice would pass on the first
-poll whether or not the page had rendered. What makes it meaningful is the await
-before it - the rows being visible is the evidence that the page rendered, and it
-rendered without a notice.
-
-After the fixes, the suite passes eight consecutive trials under the strictest
-configuration available here (2 CPUs, with the probes running concurrently), which
-is the configuration the baseline failed.
+A negative claim cannot be waited on: waiting for the absence of a notice passes on the
+first poll whether or not the page has rendered. What makes it meaningful is an await
+before it that proves the page rendered.
 
 Segmented preferences have a separate animation-state boundary. The dashboard
 model-view probe read antd's selected CSS class as the grouping value, but the
 component suppresses that class while its thumb moves, independently of the native
-radio's checked state. A rapid reversal can leave the probe waiting on animation
-completion instead of testing the preference. The probe reads checked radios and
-holds the rejected model-view write until the optimistic selection is observed,
-then releases the refusal and asserts rollback.
+radio's checked state. The probe reads checked radios and holds the rejected
+model-view write until the optimistic selection is observed, then releases the
+refusal and asserts rollback.
 
 ### 12.4 CI preparation and fail-early artifact gates
 
