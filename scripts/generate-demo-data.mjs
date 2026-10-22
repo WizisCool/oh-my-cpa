@@ -13,8 +13,9 @@
  * changed response shape is noticed before it reaches the demonstration.
  *
  *   pnpm demo:generate            write the dataset
- *   pnpm demo:generate --check    regenerate to a temporary directory and compare,
- *                                 exiting non-zero when the committed data is stale
+ *
+ * Freshness is checked by `go test ./internal/api`: the same export runs there and
+ * fails when the committed copy differs from what the handlers now answer.
  *
  * The isolation matters more than it looks. The run must not inherit the repository's
  * `.env`: an earlier un-isolated run of the demo binary read it, contacted a real
@@ -23,11 +24,7 @@
  * can reach the network or the worktree.
  */
 import { execFile } from 'node:child_process';
-import { INPUTS as demoInputs } from './demo-inputs.mjs';
-import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -37,26 +34,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Where the generated dataset is tracked. */
 const DATA_DIR = join(root, 'deploy', 'cloudflare', 'data');
-const DATASET = join(DATA_DIR, 'responses.json');
-const PROVENANCE = join(DATA_DIR, 'provenance.json');
 
-// The digest inputs live in one module so this generator and the check cannot drift.
-const INPUTS = demoInputs;
-
-
-/** The digest of the inputs the dataset was generated from. */
-async function digestOfInputs() {
-  const hash = createHash('sha256');
-  for (const name of INPUTS) {
-    hash.update(name);
-    hash.update('\0');
-    hash.update(await readFile(join(root, name), 'utf8'));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
-
-/** The export's own test, which is skipped unless it is given an output directory. */
+/** The export's own test, which writes the dataset when it is given an output directory. */
 const EXPORT_TEST = 'TestExportDemoDataset';
 
 const GENERATE_TIMEOUT_MS = 300_000;
@@ -83,57 +62,10 @@ async function generateInto(directory) {
 }
 
 async function main() {
-  const check = process.argv.includes('--check');
-
-  if (!check) {
-    const generated = await generateInto(DATA_DIR);
-    const raw = await readFile(generated, 'utf8');
-    // The provenance record is what the freshness check compares against, so it is
-    // written by the same run that writes the data it describes.
-    const decoded = JSON.parse(raw);
-    await writeFile(
-      PROVENANCE,
-      `${JSON.stringify(
-        {
-          inputs_digest: await digestOfInputs(),
-          response_count: Object.keys(decoded.responses ?? {}).length,
-          reference_ms: decoded.reference_ms,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    console.log(`wrote ${generated} (${(raw.length / 1024).toFixed(1)} KB)`);
-    console.log(`wrote ${PROVENANCE}`);
-    console.log('review the diff before committing: it is where a changed response shape shows up');
-    return;
-  }
-
-  // A dry run still regenerates: comparing against the committed file is the only way
-  // to tell "the dataset matches the code" from "nobody has regenerated it".
-  const scratch = await mkdtemp(join(tmpdir(), 'omc-demo-check-'));
-  try {
-    const generated = await generateInto(scratch);
-    if (!existsSync(DATASET)) {
-      throw new Error(`no committed dataset at ${DATASET}; run pnpm demo:generate`);
-    }
-    const [fresh, committed] = await Promise.all([
-      readFile(generated, 'utf8'),
-      readFile(DATASET, 'utf8'),
-    ]);
-    if (fresh === committed) {
-      console.log('the committed demonstration dataset matches the current code');
-      return;
-    }
-    await writeFile(join(scratch, 'expected.json'), committed);
-    console.error('the committed demonstration dataset is stale; run pnpm demo:generate');
-    console.error(`  regenerated: ${generated}`);
-    console.error(`  committed  : ${DATASET}`);
-    console.error(`  fresh copy : ${join(scratch, 'expected.json')}`);
-    process.exitCode = 1;
-  } finally {
-    if (process.exitCode !== 1) await rm(scratch, { recursive: true, force: true });
-  }
+  const generated = await generateInto(DATA_DIR);
+  const raw = await readFile(generated, 'utf8');
+  console.log(`wrote ${generated} (${(raw.length / 1024).toFixed(1)} KB)`);
+  console.log('review the diff before committing: it is where a changed response shape shows up');
 }
 
 try {

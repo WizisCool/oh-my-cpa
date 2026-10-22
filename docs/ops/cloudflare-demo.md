@@ -30,8 +30,8 @@ than relying on a pattern that could also match a console route.
 
 ```
 pnpm demo:generate          # regenerate, then review the diff
-pnpm demo:generate --check  # fail when the committed copy is stale
-pnpm check:demo             # coverage, freshness and privacy
+go test ./internal/api      # fails when the committed copy is stale
+pnpm check:demo             # coverage and privacy
 ```
 
 `internal/api/demo_export_test.go` starts the real handler over a seeded repository and
@@ -40,13 +40,13 @@ value of generating rather than authoring is that every response has been throug
 same DTO projection a self-hosted install produces, so the demonstration cannot show a
 shape the product never emits. The Model Square response captures CPA-advertised IDs, safe routing provenance and
 bundled models.dev reference facts. Its Worker route maps to the generated `model-square`
-dataset entry; `scripts/demo-inputs.mjs` includes the metadata snapshot so updates invalidate
-the capture. External model lookup links are explicit navigation, not Worker forwarding.
+dataset entry, so a metadata snapshot update changes the capture. External model lookup links are explicit navigation, not Worker forwarding.
 The captured Agent session is the same console DTO: it
 excludes private model history, queued model calls and raw database-query results.
 
 The export is reproducible: two runs over unchanged code are byte-identical, on any
-machine and at any time. That is what makes `--check` meaningful: the following
+machine and at any time. That is what makes the freshness comparison in
+`TestExportDemoDataset` meaningful: the following
 invariants must hold rather than approximately hold.
 
 - **The window is closed, on a fixed instant in the past.** A `preset` resolves against
@@ -134,12 +134,11 @@ in a way nobody notices: the page renders, showing what the API said last month.
 - a console route has no declared reads, so a new page cannot be added without a dataset
   entry;
 - a declared read has no captured response;
-- a file the dataset is derived from has changed since it was generated;
 - the dataset contains an operator identifier, a credential shape or a deployment
   hostname. The dataset is downloadable by anyone, so this is a leak rather than a defect.
 
-`scripts/check-demo.test.ts` covers the gate itself, because a check that cannot fail is
-worse than no check.
+Staleness is `go test`'s verdict: `TestExportDemoDataset` regenerates the dataset and
+requires the committed copy to be byte-identical.
 
 **When you change a console page or its API shape:** regenerate with
 `pnpm demo:generate`, read the diff - it is where a changed shape shows up - and commit
@@ -300,8 +299,8 @@ fix is an export case in `internal/api/demo_export_test.go` and a regeneration.
 instant rules in `time.mjs` rather than extending the list of captured fields: the
 convention is `*_at_ms`, and a field that does not follow it is worth renaming.
 
-**`pnpm demo:generate --check` fails immediately after a merge.** Someone changed a source
-file the dataset derives from. Regenerate, read the diff, and commit the data with the
+**`TestExportDemoDataset` fails immediately after a merge.** Someone changed what a
+handler answers. Regenerate, read the diff, and commit the data with the
 change - which is exactly what the gate is for. A diff that touches only timestamps or
 runtime facts is not a source change: it means a new field escaped the export's
 determinism rules, and the fix is a rule in `internal/api/demo_export_test.go`, not a
@@ -366,7 +365,6 @@ allowlisted Antigravity Gemini group through `internal/demo/quota.go`. A second 
 credential has a low current five-hour reading and an adjacent prior-cycle observation,
 so the real handlers can show a historical capacity reference from seeded request costs.
 Claude family windows select only their own models; amounts are never hand-authored.
-The freshness digest covers quota parsing, scope/history rules and repository joins.
 The Worker rebases `from_ms`, `to_ms`, `observed_at_ms` and `reset_at_ms` together for
 current usage and previous-cycle references, leaving their amounts and `basis` unchanged.
 
@@ -380,7 +378,7 @@ Runtime numeric measurements are pinned with either JSON decoder mode, using the
 owner shape to preserve seeded request latency and source-file sizes. Runtime text
 stamps use the same minute precision as rebased millisecond stamps; quota observations
 and creation/update metadata on the seeded clock retain their original precision.
-A second generation must match the committed dataset byte for byte (`pnpm demo:generate --check`).
+A second generation must match the committed dataset byte for byte (`TestExportDemoDataset`).
 
 ### OAuth model rules dataset
 
@@ -434,7 +432,7 @@ page lifetime; reload/reset clears it. Public writes remain refused. ADR 0092 is
 traffic, quieter weekends and occasional idle days. The recent-traffic protection compares UTC
 calendar dates, so every hour of the same date stays active through seven days of age; older
 dates may be idle regardless of the reference time of day. `pnpm demo:generate` captures the real
-handler responses; review and commit the responses/provenance diff. Recordings also pass
+handler responses; review and commit the dataset diff. Recordings also pass
 `pnpm check:demo` privacy checks. `pnpm verify:demo` sends both examples in the built console:
 the Agent must settle its generated interface, while the Playground must settle its answer
 content. Agent acceptance uses English copy and locale-independent action selectors; the

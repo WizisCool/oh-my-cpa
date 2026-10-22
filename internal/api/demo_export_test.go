@@ -30,6 +30,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 )
 
 // The public demo is served from a static host, so its API responses have to exist
@@ -40,8 +41,10 @@ import (
 // the fixtures instead would duplicate the response shapes, which is the most
 // expensive thing in the repository to keep correct.
 //
-// It is a test rather than a command so it can use the existing test seams, and it
-// writes nothing unless explicitly asked. Run it with:
+// It is a test rather than a command so it can use the existing test seams. In the
+// ordinary suite it regenerates the dataset in memory and compares it with the
+// committed copy, so a change that moves a served response fails `go test` until
+// `pnpm demo:generate` is run and the diff reviewed. It writes only when asked:
 //
 //	OMCPA_DEMO_EXPORT_DIR=<dir> go test ./internal/api -run TestExportDemoDataset -count=1
 //
@@ -317,15 +320,22 @@ func demoExportWindow(preset string) string {
 		"&to=" + strconv.FormatInt(to.UnixMilli(), 10)
 }
 
-// TestExportDemoDataset writes the dataset the public demo is served from.
-//
-// It is skipped unless an output directory is given, because writing files from a
-// test that runs by default would make the ordinary suite mutate the worktree.
+// committedDemoDataset is the dataset the public demonstration serves.
+const committedDemoDataset = "../../deploy/cloudflare/data/responses.json"
+
+// TestExportDemoDataset regenerates the dataset the public demo is served from. It
+// writes it when an output directory is given and otherwise requires the committed
+// copy to be byte-identical: the comparison is the freshness gate, so no list of
+// source files has to predict which edits can move a response.
 func TestExportDemoDataset(t *testing.T) {
 	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
-	if outDir == "" {
-		t.Skip("set OMCPA_DEMO_EXPORT_DIR to export the demo dataset")
+	if outDir == "" && testing.Short() {
+		// Seeding a year of history takes most of a minute; CI runs the comparison.
+		t.Skip("the dataset comparison runs without -short")
 	}
+	// Day grids fold on the deployment's zone; a comparison on a non-UTC machine would
+	// otherwise report drift that is only the clock's.
+	testkit.PinUTC(t)
 
 	router, seededAt := demoExportRouter(t)
 	server := httptest.NewServer(router)
@@ -394,13 +404,29 @@ func TestExportDemoDataset(t *testing.T) {
 
 	assertDemoQuotaCapacityExamples(t, normalised, seededAt.UnixMilli())
 
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatalf("create export directory: %v", err)
-	}
-	writeDemoExportJSON(t, filepath.Join(outDir, "responses.json"), demoExportResponses{
+	encoded, err := encodeDemoExport(demoExportResponses{
 		ReferenceMS: seededAt.UnixMilli(),
 		Responses:   normalised,
 	})
+	if err != nil {
+		t.Fatalf("encode dataset: %v", err)
+	}
+	if outDir == "" {
+		committed, err := os.ReadFile(committedDemoDataset)
+		if err != nil {
+			t.Fatalf("read committed dataset: %v", err)
+		}
+		if string(committed) != string(encoded) {
+			t.Fatal("the committed demonstration dataset is stale; run pnpm demo:generate and review the diff")
+		}
+		return
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("create export directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "responses.json"), encoded, 0o644); err != nil {
+		t.Fatalf("write dataset: %v", err)
+	}
 }
 
 // demoExportResponse is one exported response, kept as the bytes the handler wrote
@@ -951,18 +977,29 @@ func demoExportFetch(t *testing.T, baseURL string, one demoExportCase) demoExpor
 	}
 }
 
-// writeDemoExportJSON writes sorted, indented JSON so two exports of the same
-// history compare byte for byte.
-func writeDemoExportJSON(t *testing.T, path string, payload any) {
-	t.Helper()
-
+// encodeDemoExport renders sorted, indented JSON so two exports of the same history
+// compare byte for byte.
+func encodeDemoExport(payload demoExportResponses) ([]byte, error) {
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		t.Fatalf("encode %s: %v", filepath.Base(path), err)
+		return nil, err
 	}
-	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
-		t.Fatalf("write %s: %v", filepath.Base(path), err)
+	return append(encoded, '\n'), nil
+}
+
+// readCommittedDemoDataset decodes the committed dataset, which TestExportDemoDataset
+// keeps identical to a fresh export.
+func readCommittedDemoDataset(t *testing.T) demoExportResponses {
+	t.Helper()
+	raw, err := os.ReadFile(committedDemoDataset)
+	if err != nil {
+		t.Fatalf("read committed dataset: %v", err)
 	}
+	var exported demoExportResponses
+	if err := json.Unmarshal(raw, &exported); err != nil {
+		t.Fatalf("decode committed dataset: %v", err)
+	}
+	return exported
 }
 
 // TestDemoExportCoversEveryReadableRoute is the contract that keeps the exported
@@ -1065,18 +1102,7 @@ func demoExportPatternMatches(route, pattern string) bool {
 // is invisible from the console, which simply keeps the full response, which is why it is asserted
 // on the dataset rather than left to the demo smoke.
 func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
-	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
-	if outDir == "" {
-		t.Skip("set OMCPA_DEMO_EXPORT_DIR to check the exported dataset")
-	}
-	raw, err := os.ReadFile(filepath.Join(outDir, "responses.json"))
-	if err != nil {
-		t.Fatalf("read exported dataset: %v", err)
-	}
-	var exported demoExportResponses
-	if err := json.Unmarshal(raw, &exported); err != nil {
-		t.Fatalf("decode exported dataset: %v", err)
-	}
+	exported := readCommittedDemoDataset(t)
 
 	// Named rather than pattern-matched: a substring test for "tail" also matches
 	// `usage-event-detail`, and a test that decides which responses it is about by accident is how
@@ -1132,18 +1158,7 @@ func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
 }
 
 func TestDemoExportKeepsSeriesAndDayGridsIntact(t *testing.T) {
-	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
-	if outDir == "" {
-		t.Skip("set OMCPA_DEMO_EXPORT_DIR to check the exported dataset")
-	}
-	raw, err := os.ReadFile(filepath.Join(outDir, "responses.json"))
-	if err != nil {
-		t.Fatalf("read exported dataset: %v", err)
-	}
-	var exported demoExportResponses
-	if err := json.Unmarshal(raw, &exported); err != nil {
-		t.Fatalf("decode exported dataset: %v", err)
-	}
+	exported := readCommittedDemoDataset(t)
 
 	// A plotted series has to advance. One distinct `t` across a whole window is a vertical
 	// line on the dashboard's token trend, which is what the demonstration drew.
@@ -1233,18 +1248,7 @@ func TestDemoExportKeepsSeriesAndDayGridsIntact(t *testing.T) {
 // The exported response must never carry an error, because an error captured at
 // export time would be served to every visitor as if it were data.
 func TestDemoExportCasesAllSucceed(t *testing.T) {
-	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
-	if outDir == "" {
-		t.Skip("set OMCPA_DEMO_EXPORT_DIR to check the exported dataset")
-	}
-	raw, err := os.ReadFile(filepath.Join(outDir, "responses.json"))
-	if err != nil {
-		t.Fatalf("read exported dataset: %v", err)
-	}
-	var exported demoExportResponses
-	if err := json.Unmarshal(raw, &exported); err != nil {
-		t.Fatalf("decode exported dataset: %v", err)
-	}
+	exported := readCommittedDemoDataset(t)
 	if exported.ReferenceMS == 0 {
 		t.Fatal("exported dataset has no reference instant")
 	}
@@ -1256,12 +1260,13 @@ func TestDemoExportCasesAllSucceed(t *testing.T) {
 	sort.Strings(names)
 	for _, name := range names {
 		response := exported.Responses[name]
-		if response.Status != http.StatusOK {
+		// A 204 is an answer too: the live feed has nothing to stream in a static demo.
+		if response.Status >= http.StatusMultipleChoices {
 			failed = append(failed, fmt.Sprintf("%s -> %d", name, response.Status))
 		}
 	}
 	if len(failed) > 0 {
-		t.Fatalf("exported responses that are not 200:\n  %s", strings.Join(failed, "\n  "))
+		t.Fatalf("exported responses that are not successes:\n  %s", strings.Join(failed, "\n  "))
 	}
 	assertDemoQuotaCapacityExamples(t, exported.Responses, exported.ReferenceMS)
 }

@@ -7,33 +7,23 @@
  * page renders, it simply renders what the API said last month. This is the gate that
  * makes keeping it current an obligation rather than a habit.
  *
- * It checks three things, and each covers a way the dataset can go quietly wrong:
+ * It checks two things, and each covers a way the dataset can go quietly wrong:
  *
  * 1. **Every read the console makes has somewhere to come from.** The routes the Worker
  *    answers are compared with the routes the console requests, so a new page fails
  *    here rather than in front of a visitor.
- * 2. **The committed dataset matches the code that generates it.** A digest over the
- *    inputs - the export, the fixture, the frontend's API client and types - fails when
- *    one of them changes and the dataset has not been regenerated. It proves
- *    acknowledgement, not correctness; the coverage check and the browser run are what
- *    prove the latter.
- * 3. **Nothing private is in it.** The dataset is public, so an operator identifier,
+ * 2. **Nothing private is in it.** The dataset is public, so an operator identifier,
  *    a credential shape or a deployment hostname is a leak rather than a defect.
  *
- * Run `pnpm demo:generate` to accept an intended change.
+ * That the committed dataset matches the handlers is `TestExportDemoDataset`'s claim:
+ * it regenerates the dataset and compares it byte for byte.
  */
-import { createHash } from 'node:crypto';
-import { INPUTS as demoInputs } from './demo-inputs.mjs';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-// The digest inputs live in one module so the generator and this check cannot drift.
-const INPUTS = demoInputs;
-
 
 /**
  * The console's routes, which the browser check drives. Duplicated from App.tsx for the
@@ -104,27 +94,11 @@ const RECORDING_FORBIDDEN = [
   { pattern: /hmac:[0-9a-f]{16,}/, why: 'a client key fingerprint' },
 ];
 
-async function digestOfInputs(root: string) {
-  const hash = createHash('sha256');
-  for (const name of INPUTS) {
-    // A listed file that has been renamed is a broken contract, not a smaller digest:
-    // silently skipping it would stop the digest covering the thing it exists to
-    // protect.
-    const content = await readFile(join(root, name), 'utf8');
-    hash.update(name);
-    hash.update('\0');
-    hash.update(content);
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
-
 export async function checkDemo(root = ROOT, {
   consoleRoutes = CONSOLE_ROUTES,
   routeReads = ROUTE_READS,
 }: { consoleRoutes?: string[]; routeReads?: Record<string, string[]> } = {}) {
   const DATASET = join(root, 'deploy', 'cloudflare', 'data', 'responses.json');
-  const PROVENANCE = join(root, 'deploy', 'cloudflare', 'data', 'provenance.json');
   const failures: string[] = [];
 
   if (!existsSync(DATASET)) {
@@ -149,25 +123,7 @@ export async function checkDemo(root = ROOT, {
     }
   }
 
-  // 2. Freshness: the dataset must acknowledge the code it was generated from.
-  const digest = await digestOfInputs(root);
-  if (!existsSync(PROVENANCE)) {
-    failures.push('no provenance.json; run pnpm demo:generate');
-  } else {
-    const provenance = JSON.parse(await readFile(PROVENANCE, 'utf8'));
-    if (provenance.inputs_digest !== digest) {
-      failures.push(
-        'the dataset was generated from different sources; run pnpm demo:generate and review the diff',
-      );
-    }
-    if (provenance.response_count !== responses.size) {
-      failures.push(
-        `provenance records ${provenance.response_count} responses but the dataset has ${responses.size}`,
-      );
-    }
-  }
-
-  // 3. Privacy: the dataset is served to anyone who opens the link.
+  // 2. Privacy: the dataset is served to anyone who opens the link.
   const body = JSON.stringify(dataset);
   for (const { pattern, why } of FORBIDDEN) {
     if (pattern.test(body)) {
