@@ -1,0 +1,17 @@
+{
+  "why": "A stated zero cap says pay-as-you-go is off.",
+  "now_ms": 1789873200000,
+  "body": {
+    "credits": null,
+    "monthly": {
+      "config": {
+        "monthly_limit": {
+          "val": 0
+        },
+        "used": {
+          "val": 0
+        }
+      }
+    }
+  }
+}

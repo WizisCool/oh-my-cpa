@@ -1,0 +1,13 @@
+{
+  "plan": {
+    "plan_type": "paid",
+    "plan_label": "xAI Paid / API",
+    "tier": "standard",
+    "extra_usage": {
+      "is_enabled": false,
+      "monthly_limit_cents": 0,
+      "used_credits_cents": 0
+    }
+  },
+  "status": "idle"
+}

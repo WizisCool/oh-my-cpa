@@ -306,21 +306,6 @@ func normalizeDriver(value string) string {
 
 func publicURL(value string) string { return security.PublicURL(value) }
 
-func normalizeURL(value string) string {
-	value = publicURL(value)
-	if value == "" {
-		return ""
-	}
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return strings.TrimRight(strings.ToLower(value), "/")
-	}
-	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	parsed.Host = strings.ToLower(parsed.Host)
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	return strings.TrimRight(parsed.String(), "/")
-}
-
 var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9.-]+`)
 
 func sourceSuggestion(name, baseURL string) string {

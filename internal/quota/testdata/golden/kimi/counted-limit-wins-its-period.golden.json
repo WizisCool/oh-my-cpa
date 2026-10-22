@@ -1,0 +1,26 @@
+{
+  "windows": [
+    {
+      "id": "kimi_0",
+      "label": "限制项 1",
+      "kind": "custom",
+      "scope": "standard",
+      "used": 139,
+      "limit": 200,
+      "used_percent": 69.5,
+      "remaining_percent": 30.5,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "kimi_ratio_limit_week",
+      "label": "limit_week",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 40,
+      "remaining_percent": 60,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

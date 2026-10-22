@@ -1,0 +1,46 @@
+{
+  "why": "Within a group the five-hour window leads the weekly one, while group blocks stay contiguous.",
+  "now_ms": 1735689600000,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Gemini Models",
+        "buckets": [
+          {
+            "bucketId": "gem-week",
+            "displayName": "Weekly Limit",
+            "window": "weekly",
+            "remainingFraction": 0.51,
+            "resetTime": "2026-01-08T04:00:00Z"
+          },
+          {
+            "bucketId": "gem-5h",
+            "displayName": "Five Hour Limit",
+            "window": "5h",
+            "remainingFraction": 1.0,
+            "resetTime": "2026-01-01T17:00:00Z"
+          }
+        ]
+      },
+      {
+        "displayName": "Claude and GPT models",
+        "buckets": [
+          {
+            "bucketId": "ag-week",
+            "displayName": "Weekly Limit",
+            "window": "weekly",
+            "remainingFraction": 1.0,
+            "resetTime": "2026-01-09T04:00:00Z"
+          },
+          {
+            "bucketId": "ag-5h",
+            "displayName": "Five Hour Limit",
+            "window": "5h",
+            "remainingFraction": 1.0,
+            "resetTime": "2026-01-01T17:00:00Z"
+          }
+        ]
+      }
+    ]
+  }
+}

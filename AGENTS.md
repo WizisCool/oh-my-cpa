@@ -30,7 +30,7 @@ Not every rule weighs the same. Know which tier you are working in.
 
 ### Tier 2 — contracts. Change deliberately, verify before and after, and say what changed.
 
-- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (`[zh, en]` pairs in `web/src/i18n/index.tsx` plus every catalog under `web/src/i18n/locales/`).
+- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (`[zh, en]` pairs in `web/src/i18n/messages/` plus every catalog under `web/src/i18n/locales/`).
 - Release and publication integrity: version identity, image tags and aliases, release gates, pinned workflow actions.
 
 ### Tier 3 — engineering preferences. Change freely.
@@ -51,7 +51,7 @@ You are authorized — and expected — to:
 
 Prefer making a bad state unrepresentable over a guard that silently absorbs it: do not add fallbacks, swallowed errors, or compatibility shims for a contract that does not exist.
 
-Two conditions. Behavior in Tier 1 or Tier 2 is verified before and after the change. And coverage moves rather than disappears: if you delete a test, say where its claim now lives, or why the claim itself is obsolete.
+One condition: behavior in Tier 1 or Tier 2 is verified before and after the change. Deleting tests is part of that work, under the rules in §5.
 
 ---
 
@@ -65,24 +65,35 @@ An ADR (`docs/adr/`) records a consequential decision and its context at a point
 
 ---
 
-## 5. Verification
+## 5. Verification and delivery
 
-Match verification effort to the blast radius of the change:
+### How work lands
+
+- **Maintainer and agent work may land directly on `main`.** Run `pnpm test:fast` before pushing. Do not open a pull request per small change. Agents commit or push only when the user asks.
+- **Every push to `main`**, the nightly run, a manual run and any pull request labelled `full-ci` run the full catalog: static gates, built-artifact acceptance, the demonstration and every probe.
+- **External contributions** open a pull request against `main`. CI runs the static lanes their paths reach, a built-artifact smoke run and the probe scenarios their frontend change selects.
+- A release tag goes only on a commit whose `main` CI run is green.
+
+### What to run
 
 | Moment | What to run |
 | --- | --- |
-| While editing | `pnpm test:fast` — only the checks the changed files need; add `pnpm check:ui` when the change touches UI interactions, layout, or browser lifecycle |
-| Feature complete / before pushing | `pnpm verify`; add `pnpm check:ui` when the change touches the UI — the full static gates, the worktree secret scan, and the affected browser scenarios |
-| Pull request | CI runs the full browser catalog, the whole probe catalog in three shards, and demo acceptance; branch protection requires its `static`, `browser`, and `probes` checks |
-| Build, embedded distribution, browser harness, or workflow changes | `pnpm verify:full` (also for reproducing a CI failure) |
+| While editing and before pushing | `pnpm test:fast`: the checks the changed files need, Go with `-short`. Add `pnpm check:ui` in the background when the change moves layout, interaction or browser lifecycle |
+| Build, embedded distribution, probe harness or workflow changes | `pnpm verify:full` (also for reproducing a CI failure) |
+| Everything else | CI. Do not run `verify`, `verify:browser` or the probe catalog locally to prove a routine change |
 
-Do not run `verify` or `check:ui` after every file edit — a feature is complete when it is independently verifiable, not when a reply ends. Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. A documentation-only change is verified by `pnpm test:fast`, which selects the docs check; it needs no browser scenario. `pnpm test:fast --plan` shows the selection before you run it, and `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification, or chunk boundaries.
+Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. `pnpm test:fast --plan` shows the selection. `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification or chunk boundaries.
 
-Rules that keep the gates honest:
+### Tests: few, owned, proven
 
-- **Never add a skip switch, a retry, or a longer wait to make a run pass or go faster.** Fix the assertion, or add a planner rule with a self-test.
-- **Write the check that catches the defect, not one that asserts the absence of trouble.** A test that cannot fail against a broken implementation, or that exists to cover the author rather than the code, is removed rather than kept.
-- New tests go at the lowest layer that can fail for the right reason; no fixed waits; discovery is automatic, so do not add registration lists. `docs/testing.md` has the layer map and the current claim ownership.
+- **A fix comes with one test that fails without it.** Put the old code back, watch the test fail for the reason its name gives, restore the fix. The commit body says what it failed with.
+- **Add a case, not a file.** A one-line or mapping fix adds a row to an existing table-driven test or an input file to a golden directory. It does not add a `*_test.go` file, a probe, a step in `scripts/browser-acceptance.mjs`, or a self-test for a script.
+- **Assert the output, not its parts.** A parser, projection or response is compared whole with a golden file (`internal/testkit`: `testkit.Cases` over `testdata/golden/<name>/*.input.json`; `UPDATE_GOLDEN=1 go test ./<pkg>` regenerates, and the diff is the review).
+- **One layer per claim, the lowest that can fail for the right reason:** Go for server behaviour; the logic suite for pure frontend functions; component tests (Vitest + jsdom) for rendered wiring; a probe only for what only a browser engine shows; built-artifact acceptance only for its smoke paths.
+- **Do not test** copy or translations, CSS class names, `package.json` or workflow YAML shape, document contents, the test tooling itself, exact log text, or defensive branches for states the types already exclude.
+- **Tier 1 keeps hard tests:** secrets in responses, logs and storage; DTO allowlists; migrations; CPA writes and their backups; the update boundary; offline embedding.
+- **Never add a skip switch, a retry, a fixed sleep or a longer wait to get a run green.** `-short` is for cost, never for flakiness: a test skipped under it still runs in CI.
+- Deleting a test is ordinary work when its claim is obsolete, duplicated, or of a kind listed above. When the claim still matters, the commit names the test that now makes it.
 - Release and security gates — secret scans, image smoke, publication checks — are never optional.
 
 ---
@@ -106,7 +117,7 @@ Rules that keep the gates honest:
 
 - Booleans carry a state prefix (`isActive`, `hasPermission`, `canEdit`, `shouldRetry`); functions are verb-noun phrases.
 - External contract names keep their required spelling: `json:` tags, CPA native fields, DB columns, query parameters, and third-party component props. CSS-module classes are read as `styles['kebab-case']` (`pnpm check-css-modules` enforces that).
-- User-visible copy is never hardcoded: add `[zh, en]` pairs to `web/src/i18n/index.tsx` and to every catalog under `web/src/i18n/locales/` (`pnpm check-i18n` finds gaps).
+- User-visible copy is never hardcoded: add `[zh, en]` pairs to the `web/src/i18n/messages/` file named by the key's prefix and to every catalog under `web/src/i18n/locales/` (`pnpm check-i18n` finds gaps).
 
 ---
 
@@ -128,13 +139,13 @@ Where things live, when you need to check or update them:
 | `docs/ops/sqlite-operations.md` | Backup, restore, master-key governance, migration gates |
 | `docs/ops/cloudflare-demo.md` | Deployment runbook for the public demonstration |
 | `docs/releasing.md` | Distribution, tag publishing, version identity |
-| `docs/testing.md` | Test placement, the layer map, current claim ownership |
+| `docs/testing.md` | Test layers, the golden runner, the CI lanes and how to reproduce them |
 | `docs/agent-capabilities.md` | Agent capability contract and the MCP bridge |
 | `docs/cpa-v8-compat.md` / `docs/cpamc-parity.md` | CPA v8 baseline and relocation; CPAMC parity matrix |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations |
 | `docs/adr/` | Decision records (§4) |
 | `docs/images/readme/` | README screenshots: regenerate with `pnpm build && pnpm readme:screenshots` when a pictured page changes how it looks |
-| `deploy/cloudflare/data/` | The demo dataset: regenerate with `pnpm demo:generate` and commit the diff when a console read or response shape changes (`pnpm check:demo` fails otherwise) |
+| `deploy/cloudflare/data/` | The demo dataset: regenerate with `pnpm demo:generate` and commit the diff when a console read or response shape changes (`TestExportDemoDataset` fails otherwise) |
 
 All context and technical documentation is written in English; `README.zh-CN.md` and localized UI copy are the intentional exceptions.
 
@@ -150,19 +161,19 @@ The complete script list is in `package.json`; these are the ones agents use mos
 | `pnpm dev:api` / `pnpm dev:web` | Go/Air only, or Vite only |
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build the frontend and sync it to `internal/web/dist` |
-| `pnpm test:fast` | Affected checks for the worktree diff (`--base <ref>` includes committed changes, `--plan` prints the selection) |
+| `pnpm test:fast` | Affected checks for the worktree diff, Go with `-short` (`--base <ref>` includes committed changes, `--plan` prints the selection) |
 | `pnpm test:logic` / `pnpm test:components` / `pnpm test:self` | Pure-logic suites / rendered React and typed API contracts / repository and Worker Node self-tests |
 | `pnpm check:ui` | Affected browser scenarios on the dev server with mocked API (`--list` / `--plan` inspect without launching a browser) |
 | `pnpm verify` | Toolchain check, full static gates, worktree secret scan |
 | `pnpm verify:probes` | The whole dev-server probe catalog (`--shard i/n`, `--port PORT`, `--workers 1`) |
-| `pnpm verify:browser` | Built-SPA browser acceptance against the fake CPA (also `:smoke`, `:p0`, `:harness`) |
+| `pnpm verify:browser` | Built-SPA smoke paths against the fake CPA: sign-in, secret sweep, request list, MCP, add provider, plugin host (`:smoke` for the first four) |
 | `pnpm verify:demo` | Browser acceptance for the public demonstration; `OMCPA_DEMO_URL` checks a deployment |
 | `pnpm verify:full` | Everything CI runs, locally (`:serial` for resource-constrained hosts) |
 | `pnpm verify:e2e` | Build and loading boundaries, then browser acceptance and probes |
 | `pnpm verify:secrets` | Scan the worktree for secrets (`:history` scans history) |
 | `pnpm check:bundle` | Production loading boundaries and anomaly ceilings, with size reports |
-| `pnpm demo:generate` | Regenerate the demonstration dataset from the real handlers (`--check` fails when stale) |
-| `pnpm check:demo` | The demonstration's coverage, freshness and privacy contract |
+| `pnpm demo:generate` | Regenerate the demonstration dataset from the real handlers |
+| `pnpm check:demo` | The demonstration's route coverage and privacy contract |
 | `pnpm icons:generate` | Regenerate the Lucide icon data after the package changes |
 | `pnpm check-docs` | Documentation path, retired-reference and line-number gate |
 | `pnpm check-i18n` | Translation keys referenced in code but missing from the dictionary |
@@ -171,6 +182,8 @@ The complete script list is in `package.json`; these are the ones agents use mos
 | `pnpm lint:antd` | antd usage and accessibility rules |
 | `pnpm readme:screenshots` | Regenerate README screenshots from demo mode (outside every gate) |
 | `pnpm verify:race` / `pnpm verify:fuzz` / `pnpm verify:advisories` | Weekly maintenance lanes, separate from the PR gates |
+| `UPDATE_GOLDEN=1 go test ./<pkg>` | Regenerate a package's golden files; review the diff before committing |
+| `pnpm lint:go` | golangci-lint with `.golangci.yml` (install `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`); CI runs it in the Go lane |
 
 ---
 
@@ -191,4 +204,4 @@ Write for a reader who was not in the session. Rejected alternatives, intermedia
 - Do not fake feature completion because an endpoint can be probed; placeholder pages are marked as placeholders.
 - Do not reference deleted files, retired pages, renamed identifiers, or deprecated external contracts in prose or comments.
 - Do not introduce frontend resources requiring a CDN, and do not hardcode the root path.
-- Do not treat a passing run as coverage: an assertion may move to a cheaper layer, but it must not disappear without a replacement that makes the same claim.
+- Do not treat a passing run as coverage: a test that cannot fail against a broken implementation proves nothing and is removed.

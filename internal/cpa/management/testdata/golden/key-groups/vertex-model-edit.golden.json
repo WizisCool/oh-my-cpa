@@ -1,0 +1,99 @@
+{
+  "read": [
+    {
+      "api-key": "SYNTHETIC-ONE",
+      "auth-index": "one",
+      "future-group": "kept",
+      "models": [
+        {
+          "openapi": false,
+          "name": "partner/model",
+          "alias": "first"
+        },
+        {
+          "openapi": true,
+          "name": "partner/model",
+          "alias": "second"
+        }
+      ],
+      "openapi": false,
+      "openapi-location": "global"
+    },
+    {
+      "api-key": "SYNTHETIC-TWO",
+      "auth-index": "two",
+      "future-group": "kept",
+      "models": [
+        {
+          "openapi": false,
+          "name": "partner/model",
+          "alias": "first"
+        },
+        {
+          "openapi": true,
+          "name": "partner/model",
+          "alias": "second"
+        }
+      ],
+      "openapi": true,
+      "openapi-location": "us-central1"
+    },
+    {
+      "openapi": true,
+      "api-key": "SYNTHETIC-OTHER",
+      "auth-index": "other"
+    }
+  ],
+  "written": [
+    {
+      "future-group": "kept",
+      "keys": [
+        {
+          "api-key": "SYNTHETIC-ONE",
+          "models": [
+            {
+              "alias": "first",
+              "name": "partner/model",
+              "openapi": false
+            },
+            {
+              "alias": "second",
+              "display-name": "Edited sibling",
+              "name": "partner/model",
+              "openapi": true
+            }
+          ],
+          "openapi": false,
+          "openapi-location": "global"
+        },
+        {
+          "api-key": "SYNTHETIC-TWO",
+          "openapi": true,
+          "openapi-location": "us-central1"
+        }
+      ],
+      "models": [
+        {
+          "alias": "first",
+          "name": "partner/model",
+          "openapi": false
+        },
+        {
+          "alias": "second",
+          "name": "partner/model",
+          "openapi": true
+        }
+      ],
+      "name": "shared"
+    },
+    {
+      "keys": [
+        {
+          "api-key": "SYNTHETIC-OTHER",
+          "openapi": true
+        }
+      ],
+      "name": "other"
+    }
+  ]
+}

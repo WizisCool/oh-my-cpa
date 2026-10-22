@@ -1,0 +1,29 @@
+{
+  "why": "Buckets that normalize to the same period keep their source order, and their identities follow the source index.",
+  "now_ms": 0,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Plugin",
+        "buckets": [
+          {
+            "window": "five-hours",
+            "remainingFraction": 0.125
+          },
+          {
+            "window": "5h",
+            "remainingFraction": 0.25
+          },
+          {
+            "window": "7-days",
+            "remainingFraction": 0.375
+          },
+          {
+            "window": "weekly",
+            "remainingFraction": 0.5
+          }
+        ]
+      }
+    ]
+  }
+}

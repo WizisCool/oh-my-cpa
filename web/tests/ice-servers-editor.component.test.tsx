@@ -1,17 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi, beforeAll } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { IceServersEditor, ICE_UNCHANGED_SENTINEL } from '../src/components/config/IceServersEditor';
 import { ALL_CONFIG_FIELDS } from '../src/types/configSchema';
-
-beforeAll(() => {
-  // antd's auto-sizing textarea observes its own size; jsdom has no layout.
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  });
-});
 
 const stubT = ((key: string) => key) as never;
 

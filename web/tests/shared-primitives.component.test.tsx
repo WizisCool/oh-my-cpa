@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDrawer } from '../src/components/common/AppDrawer';
 import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
@@ -152,12 +152,6 @@ describe('Tag', () => {
 });
 
 describe('ConfirmAction', () => {
-  beforeEach(() => {
-    window.localStorage.setItem('omc-lang', 'en');
-    // The anchored overlay measures its trigger, which jsdom has no observer for.
-    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  });
-  afterEach(() => { vi.unstubAllGlobals(); });
 
   it('fixes the cancel label, names the confirming button and colours a destructive one', () => {
     const onConfirm = vi.fn();
@@ -269,13 +263,6 @@ describe('Meter', () => {
 });
 
 describe('Pager', () => {
-  // antd's pagination subscribes to breakpoints, which jsdom does not implement.
-  beforeEach(() => {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
-    }));
-  });
-  afterEach(() => { vi.unstubAllGlobals(); });
 
   it('renders nothing when the list fits on one page', () => {
     const { container } = render(<Pager page={1} pageSize={20} total={20} onChange={() => undefined} />);

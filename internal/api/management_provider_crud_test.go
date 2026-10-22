@@ -58,7 +58,7 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 		t.Fatalf("create multi-key provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	var providersResp struct {
 		Providers []ProviderItemDTO `json:"providers"`
 	}
@@ -94,7 +94,7 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 		t.Fatalf("create reasoning provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	if err := json.Unmarshal(payload, &providersResp); err != nil {
 		t.Fatal(err)
 	}

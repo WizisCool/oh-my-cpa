@@ -1,49 +1,42 @@
 import React from 'react';
-import { App } from 'antd';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { useQuery } from '@tanstack/react-query';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
 import { SIWCBindingPanel } from '../src/components/authFiles/SIWCBindingPanel';
 import { useSIWCBindings } from '../src/hooks/useSIWCBindings';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
+import { installOmcApi, json } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 
 const FILE: ManagementAuthFile = { name: 'codex.json', auth_index: 'idx-1', provider: 'codex', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, siwc_bind_supported: true, use_siwc: false, siwc_bound: false };
 const OTHER: ManagementAuthFile = { ...FILE, name: 'other.json', auth_index: 'idx-2' };
 const CALLBACK = 'http://127.0.0.1:1455/auth/callback?state=state-idx-1&code=SYNTHETIC-CODE&client_id=issued&extra=a%2Bb';
 
-beforeEach(() => {
-  window.localStorage.setItem('omc-lang', 'en');
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
-});
 afterEach(() => { vi.useRealTimers(); });
 
 function mount(file = FILE) {
-  const requests: { path: string; method?: string; body: Record<string, unknown>; state: string | null }[] = [];
   let status: object = { status: 'wait' };
   let callbackStatus = 200;
   let readStatus = 200;
   let isCancelled = false;
   let resolveRead: ((response: Response) => void) | undefined;
   let shouldHoldRead = false;
-  vi.stubGlobal('fetch', async (input: string, options: RequestInit) => {
-    const url = new URL(input, 'http://localhost');
-    const body = JSON.parse((options.body as string) || '{}');
-    requests.push({ path: url.pathname, method: options.method, body, state: url.searchParams.get('state') });
-    let result: object;
-    let code = 200;
-    if (url.pathname.endsWith('/siwc/bind')) result = { url: 'https://auth.openai.com/api/accounts/authorize', state: `state-${body.auth_index}`, flow: 'siwc_bind', expires_in: 300 };
-    else if (url.pathname.endsWith('/siwc/status')) {
-      if (shouldHoldRead) return new Promise<Response>((resolve) => { resolveRead = resolve; });
-      result = status; code = readStatus;
-    } else if (url.pathname.endsWith('/siwc/callback')) { result = { status: 'ok' }; code = callbackStatus; }
-    else if (url.pathname.endsWith('/siwc/session')) result = { cancelled: isCancelled };
-    else throw new Error(`Unexpected request: ${url.pathname}`);
-    return new Response(JSON.stringify(result), { status: code });
-  });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // The binding flow is CPA's: a bind issues a state, the status read reports the
+  // flow, a pasted callback completes it, and a session read says whether it was
+  // cancelled.
+  const omc = installOmcApi();
+  omc.on('POST', '/management/oauth/siwc/bind', request => ({
+    url: 'https://auth.openai.com/api/accounts/authorize', state: `state-${(request.body as { auth_index: string }).auth_index}`, flow: 'siwc_bind', expires_in: 300,
+  }));
+  omc.on('GET', '/management/oauth/siwc/status', () => shouldHoldRead
+    ? new Promise<Response>(resolve => { resolveRead = resolve; })
+    : json(status, readStatus));
+  omc.on('POST', '/management/oauth/siwc/callback', () => json({ status: 'ok' }, callbackStatus));
+  omc.on('DELETE', '/management/oauth/siwc/session', () => ({ cancelled: isCancelled }));
+  const requests = () => omc.requests.map(request => ({
+    path: request.path, method: request.method, body: (request.body ?? {}) as Record<string, unknown>, state: request.query.get('state'),
+  }));
   function Harness() {
     const bindings = useSIWCBindings();
     const [selected, setSelected] = React.useState<ManagementAuthFile | null>(file);
@@ -54,16 +47,17 @@ function mount(file = FILE) {
       {selected && <SIWCBindingPanel file={selected} canEdit bindings={bindings} />}
     </>;
   }
-  const surface = render(<App><QueryClientProvider client={client}><I18nProvider><Harness /></I18nProvider></QueryClientProvider></App>);
+  const surface = renderWithOmc(<Harness />);
   return {
-    ...surface, requests,
+    ...surface, omc,
+    get requests() { return requests(); },
     setStatus: (value: object) => { status = value; },
     setCallbackStatus: (value: number) => { callbackStatus = value; },
     setReadStatus: (value: number) => { readStatus = value; },
     allowCancel: () => { isCancelled = true; },
     holdRead: () => { shouldHoldRead = true; },
     releaseRead: (value: object) => { shouldHoldRead = false; resolveRead?.(new Response(JSON.stringify(value), { status: 200 })); },
-    dispose: () => { surface.unmount(); client.clear(); },
+    dispose: () => { surface.unmount(); },
   };
 }
 async function click(name: string) { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); }
@@ -202,20 +196,15 @@ it('does not let a stale status response overwrite a confirmed cancellation', as
 it('shows CPA local status and verifies the use switch without binding or losing the material summary', async () => {
   const original = { ...FILE, siwc_status: 'invalid' as const, use_siwc: true, siwc_bound: true };
   const fixture = mount(original);
-  const requests: Record<string, unknown>[] = [];
   let resolveWrite: ((response: Response) => void) | undefined;
-  vi.stubGlobal('fetch', async (input: string, options: RequestInit) => {
-    expect(new URL(input, 'http://localhost').pathname).toMatch(/\/management\/auth-files\/fields$/);
-    expect(options.method).toBe('PATCH');
-    requests.push(JSON.parse(String(options.body)));
-    return new Promise<Response>((resolve) => { resolveWrite = resolve; });
-  });
+  fixture.omc.on('PATCH', '/management/auth-files/fields', () => new Promise<Response>(resolve => { resolveWrite = resolve; }));
+  const requests = () => fixture.omc.writes('/management/auth-files/fields').map(request => request.body);
   try {
     expect(screen.getByText('Locally invalid')).toBeTruthy();
     const control = screen.getByRole('switch', { name: 'Use bound SIWC' });
     expect(control.getAttribute('aria-checked')).toBe('true');
     await act(async () => { fireEvent.click(control); });
-    expect(requests).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
+    expect(requests()).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
     expect(control.getAttribute('aria-checked')).toBe('true');
     await waitFor(() => expect(control.hasAttribute('disabled')).toBe(true));
     await act(async () => { resolveWrite?.(new Response(JSON.stringify({ status: 'ok', file: { ...original, use_siwc: false, siwc_status: 'off' } }), { status: 200 })); });
@@ -226,50 +215,42 @@ it('shows CPA local status and verifies the use switch without binding or losing
     await act(async () => { resolveWrite?.(new Response(JSON.stringify({ error: 'field update could not be verified' }), { status: 502 })); });
     await screen.findByText('Could not confirm the SIWC use setting. Refresh the credential before trying again.');
     expect(control.getAttribute('aria-checked')).toBe('false');
-    expect(requests[1]).toEqual({ name: FILE.name, auth_index: FILE.auth_index, use_siwc: true });
+    expect(requests()[1]).toEqual({ name: FILE.name, auth_index: FILE.auth_index, use_siwc: true });
   } finally { fixture.dispose(); }
 });
 
 it('refreshes credential state after an unverified write without reporting it as saved', async () => {
-  let stored: ManagementAuthFile = { ...FILE, siwc_status: 'invalid', use_siwc: true, siwc_bound: true };
-  let listReads = 0;
-  const writes: Record<string, unknown>[] = [];
+  const omc = installOmcApi({ authFiles: [{ file: { ...FILE, siwc_status: 'invalid', use_siwc: true, siwc_bound: true }, fields: {} }] });
   let resolveWrite: ((response: Response) => void) | undefined;
-  vi.stubGlobal('fetch', async (input: string, options: RequestInit) => {
-    const path = new URL(input, 'http://localhost').pathname;
-    if (path.endsWith('/management/auth-files') && options.method === 'GET') {
-      listReads++;
-      return new Response(JSON.stringify({ files: [stored] }), { status: 200 });
-    }
-    if (path.endsWith('/management/auth-files/fields') && options.method === 'PATCH') {
-      writes.push(JSON.parse(String(options.body)));
-      stored = { ...stored, use_siwc: false, siwc_status: 'off' };
-      return new Promise<Response>((resolve) => { resolveWrite = resolve; });
-    }
-    throw new Error(`Unexpected request: ${options.method} ${path}`);
+  // The write lands upstream but cannot be verified: the stored credential changes while
+  // the console is told the outcome is unknown.
+  omc.on('PATCH', '/management/auth-files/fields', () => {
+    omc.state.authFiles[0].file = { ...omc.state.authFiles[0].file, use_siwc: false, siwc_status: 'off' };
+    return new Promise<Response>(resolve => { resolveWrite = resolve; });
   });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const writes = () => omc.writes('/management/auth-files/fields').map(request => request.body);
+  const listReads = () => omc.requests.filter(request => request.method === 'GET' && request.path === '/management/auth-files').length;
   function Harness() {
     const bindings = useSIWCBindings();
     const credentials = useQuery({ queryKey: ['management-auth-files'], queryFn: () => api.getManagementAuthFiles() });
     const file = credentials.data?.files[0];
     return file ? <SIWCBindingPanel file={file} canEdit bindings={bindings} /> : null;
   }
-  const surface = render(<App><QueryClientProvider client={client}><I18nProvider><Harness /></I18nProvider></QueryClientProvider></App>);
+  const surface = renderWithOmc(<Harness />);
   try {
     const control = await screen.findByRole('switch', { name: 'Use bound SIWC' });
     expect(control.getAttribute('aria-checked')).toBe('true');
     await act(async () => { fireEvent.click(control); });
-    expect(writes).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
+    expect(writes()).toEqual([{ name: FILE.name, auth_index: FILE.auth_index, use_siwc: false }]);
     expect(control.getAttribute('aria-checked')).toBe('true');
     await act(async () => { resolveWrite?.(new Response(JSON.stringify({ error: 'field update could not be verified' }), { status: 502 })); });
     await screen.findByText('Could not confirm the SIWC use setting. Refresh the credential before trying again.');
-    await waitFor(() => expect(listReads).toBe(2));
+    await waitFor(() => expect(listReads()).toBe(2));
     await screen.findByText('Off', { exact: true });
     expect(control.getAttribute('aria-checked')).toBe('false');
     expect(screen.queryByText('Auth file fields saved')).toBeNull();
     expect(screen.getByRole('button', { name: 'Rebind SIWC' })).toBeTruthy();
-  } finally { surface.unmount(); client.clear(); }
+  } finally { surface.unmount(); }
 });
 
 it('keeps missing local status unknown even with bound material and a future stored expiry', () => {

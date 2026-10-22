@@ -235,7 +235,7 @@ func TestValidateRegistryRefusesWhatTheGatewayRefuses(t *testing.T) {
 // which registry CPA thinks a saved install came from. Pinning it makes that a
 // deliberate edit to this value rather than an accident in a constant.
 func TestSourceIDPinsThePublishedRegistry(t *testing.T) {
-	if got := SourceID(OMCSourceURL); got != "source-91d6a8a15335" {
+	if got := SourceID(OMCSourceURL); got != "source-a72c6723a965" {
 		t.Fatalf("SourceID(%q) = %q; a new registry address means a new source id, so update this value with the URL", OMCSourceURL, got)
 	}
 	if got := SourceID("  https://example.test/registry.json  "); got != SourceID("https://example.test/registry.json") {

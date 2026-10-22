@@ -1,0 +1,32 @@
+{
+  "windows": [
+    {
+      "id": "ag_Gemini models_five_hour",
+      "label": "Gemini models · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 15,
+      "remaining_percent": 85,
+      "reset_at_ms": 1767268800000,
+      "reset_label": "01-01 12:00 (365天12小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "gemini"
+      ]
+    },
+    {
+      "id": "ag_Gemini models_daily",
+      "label": "Gemini models · 每日限制 (Daily)",
+      "scope": "group",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "reset_at_ms": 1767312000000,
+      "reset_label": "01-02 00:00 (366天后恢复)",
+      "period_hours": 24,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "gemini"
+      ]
+    }
+  ]
+}

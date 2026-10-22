@@ -1,12 +1,10 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -104,16 +102,7 @@ func startReleaseTestServer(t *testing.T) (*http.Client, string, *repository.Rep
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("new cookie jar: %v", err)
-	}
-	client := &http.Client{Jar: jar}
-	loginResp, err := client.Post(appServer.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
-	if err != nil || loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("login failed: %v (status %v)", err, loginResp)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
 
 	return client, appServer.URL + "/omc/api/v1", repo, feed
 }

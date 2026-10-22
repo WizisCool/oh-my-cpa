@@ -116,16 +116,16 @@ the [v0.3.9 release notes](releases/v0.3.9.md).
    install guides download from `releases/latest/download/` and Compose defaults to
    the `latest` image, so neither needs a version bump. Keep lockfile metadata
    consistent if a package update requires it.
-2. Run `pnpm test:fast`, `pnpm verify` and `pnpm check:ui`; run `pnpm verify:full`
-   for build/workflow changes. Review secrets and changes, then merge through the
-   normal protected pull-request checks. Title the pull request
-   `chore(release): prepare vX.Y.Z`: `.coderabbit.yaml` skips the automated review
-   for that prefix, because the changes a release describes were reviewed when they
-   merged.
-3. From a clean checkout of the verified merged commit, create and push the tag:
+2. Run `pnpm test:fast`; add `pnpm check:ui` in the background for UI changes and
+   `pnpm verify:full` for build/workflow changes. Review secrets and changes, then land
+   the preparation on `main` and wait for that commit's full CI run to pass. If using
+   a pull request, title it `chore(release): prepare vX.Y.Z`: `.coderabbit.yaml` skips
+   the automated review for that prefix, because the changes a release describes were
+   reviewed when they landed.
+3. From a clean checkout of that verified `main` commit, create and push the tag:
 
    ```bash
-   git switch master
+   git switch main
    git pull --ff-only
    test -z "$(git status --porcelain)"
    git tag -a v0.3.9 -m "Oh My CPA v0.3.9"
@@ -208,7 +208,7 @@ are not persisted. GitHub release commands receive their job-scoped token explic
 The browser and probe verification runners install and launch-probe Chromium after
 package installation, using the same provisioner as CI. If a runner-only
 workflow repair is needed before publication, merge the repair and dispatch from
-`master` with the original tag. This changes orchestration, not the tagged image
+`main` with the original tag. This changes orchestration, not the tagged image
 source; application changes still require a new version.
 
 ## Publication identity and verification evidence
@@ -221,14 +221,14 @@ tag movement cannot be made atomic with GitHub/Docker publication; restrict tag
 movement at the repository level as well as retaining these fail-closed checks.
 
 The release verification DAG mirrors CI instead of serializing the entire local
-probe catalog inside one job. Local parity remains `pnpm verify:full`. Probe timings
-and failure diagnostics survive failed runs. `static`, `browser` and aggregate
+probe catalog inside one job. Local parity remains `pnpm verify:full`. Failure
+diagnostics survive failed runs. `static`, `browser` and aggregate
 `probes` remain the merge-check names. Action revisions are immutable, checkout
 credentials do not persist, and the native cache isolation policy is unchanged.
 
-`pnpm verify:workflow` checks semantic publication/gate invariants with negative
-mutation self-tests. CI also installs actionlint at the version pinned in
-`scripts/lint-workflows.mjs` and runs `pnpm verify:workflow:lint`. That adapter only
+`pnpm verify:workflow:lint` requires every action pinned to a commit, every checkout
+without persisted credentials and `RELEASE_SIGNING_KEY` confined to the release job,
+then runs actionlint at the version pinned in `scripts/lint-workflows.mjs`. It only
 normalizes the already-validated GitHub `concurrency.queue` extension for the pinned
 actionlint schema; shell/expression structure is still checked. Shellcheck integration
 is disabled explicitly rather than claiming shellcheck coverage.
@@ -236,5 +236,5 @@ is disabled explicitly rather than claiming shellcheck coverage.
 Release bundle verification explicitly leaves the exact comparison base empty until
 a previous release baseline is resolved. It reports growth as unavailable rather
 than comparing a candidate to itself; loading boundaries and anomaly ceilings still
-produce mandatory verdicts. An omitted local comparison base may use `origin/master`,
+produce mandatory verdicts. An omitted local comparison base may use `origin/main`,
 but the candidate itself is never a valid growth baseline.

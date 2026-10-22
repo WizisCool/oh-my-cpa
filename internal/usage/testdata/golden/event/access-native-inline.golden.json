@@ -1,0 +1,11 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "AccessProvider": "config-inline",
+  "EventKey": "req-ap",
+  "Generate": true,
+  "InstanceID": "default",
+  "IsNativeKey": true,
+  "Model": "unknown",
+  "RequestID": "req-ap"
+}

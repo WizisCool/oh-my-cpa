@@ -1,13 +1,11 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -272,16 +270,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("new cookie jar: %v", err)
-	}
-	client := &http.Client{Jar: jar}
-
-	loginResp, err := client.Post(appServer.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
-	if err != nil || loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("login failed: %v", err)
-	}
+	client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
 
 	return client, appServer.URL, repo, state
 }
@@ -506,7 +495,7 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	// written, only the variable the rule's type reads is sent, the source list is
 	// de-duplicated, and the managed Oh My CPA registry is put back because its
 	// switch is on.
-	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json"]}}`
+	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"]}}`
 	if len(writes) != 1 || writes[0] != want {
 		t.Fatalf("writes = %q\nwant %q", writes, want)
 	}

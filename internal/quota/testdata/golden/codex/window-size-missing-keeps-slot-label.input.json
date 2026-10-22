@@ -1,0 +1,25 @@
+{
+  "why": "A window without its size cannot be named from its period, so the slot's label stands and a model limit keeps the model name alone.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "plus",
+    "code_review_rate_limit": {
+      "primary_window": {
+        "used_percent": 5
+      },
+      "secondary_window": {
+        "used_percent": 9
+      }
+    },
+    "additional_rate_limits": [
+      {
+        "limit_name": "o-series",
+        "rate_limit": {
+          "primary_window": {
+            "used_percent": 3
+          }
+        }
+      }
+    ]
+  }
+}

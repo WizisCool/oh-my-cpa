@@ -145,7 +145,7 @@ func TestTimezonePreferenceControlsCalendarAndMetadata(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("%d %s", response.StatusCode, payload)
 	}
-	response, payload = getJSON(t, client, endpoint)
+	_, payload = getJSON(t, client, endpoint)
 	var body struct {
 		TimeZone repository.TimezoneInfo `json:"time_zone"`
 	}

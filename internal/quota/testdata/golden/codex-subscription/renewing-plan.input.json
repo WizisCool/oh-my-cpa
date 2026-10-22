@@ -1,0 +1,10 @@
+{
+  "why": "A well-formed subscription states when it ends and whether it renews.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "plus",
+    "active_start": "2026-08-29T14:02:31Z",
+    "active_until": "2026-09-29T14:02:31Z",
+    "will_renew": true
+  }
+}

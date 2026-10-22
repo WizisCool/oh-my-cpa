@@ -1,0 +1,33 @@
+{
+  "plan": {
+    "plan_type": "paid",
+    "plan_label": "xAI Paid / API",
+    "tier": "standard",
+    "extra_usage": {
+      "is_enabled": true,
+      "monthly_limit_cents": 20000,
+      "used_credits_cents": 5700,
+      "utilization_percent": 28.499999999999996
+    },
+    "usage_breakdown": [
+      {
+        "name": "grok-4",
+        "share_percent": 31.2
+      }
+    ]
+  },
+  "windows": [
+    {
+      "id": "xai_credit_usage",
+      "label": "额度总使用率 (Credit Usage)",
+      "scope": "standard",
+      "used_percent": 28.5,
+      "remaining_percent": 71.5,
+      "reset_at_ms": 1790256762093,
+      "reset_label": "09-24 13:32 (4天10小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "status": "healthy"
+}

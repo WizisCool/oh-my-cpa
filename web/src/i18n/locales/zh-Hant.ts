@@ -1,7 +1,7 @@
 /**
  * Traditional Chinese copy for the console.
  *
- * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
+ * Keys mirror the base dictionary in ../messages/. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.outbound_tier": "出站檔位",

@@ -283,16 +283,7 @@ func TestProtectedMutationRequiresSameOrigin(t *testing.T) {
 	handler := testHandler(t, "/omc")
 	server := httptest.NewServer(handler.Router())
 	defer server.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
+	client := signedInClient(t, server.URL+"/omc/api/auth/login", "management-secret")
 	request, err := http.NewRequest(http.MethodPost, server.URL+"/omc/api/v1/instances/default/discover", nil)
 	if err != nil {
 		t.Fatal(err)

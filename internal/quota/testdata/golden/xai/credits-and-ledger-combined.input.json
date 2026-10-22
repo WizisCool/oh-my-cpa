@@ -1,0 +1,32 @@
+{
+  "why": "SuperGrok publishes its window in the credits document and nothing in the ledger; the pair yields the credits window and keeps the ledger's figures as extra usage. Fractional-second instants with an offset keep their reset.",
+  "now_ms": 1789873200000,
+  "body": {
+    "credits": {
+      "config": {
+        "credit_usage_percent": 28.5,
+        "current_period": {
+          "type": "USAGE_PERIOD_TYPE_WEEKLY",
+          "start": "2026-09-17T13:32:42.093205+00:00",
+          "end": "2026-09-24T13:32:42.093205+00:00"
+        },
+        "product_usage": [
+          {
+            "product": "grok-4",
+            "usage_percent": 31.2
+          }
+        ]
+      }
+    },
+    "monthly": {
+      "config": {
+        "monthly_limit": {
+          "val": 20000
+        },
+        "used": {
+          "val": 5700
+        }
+      }
+    }
+  }
+}

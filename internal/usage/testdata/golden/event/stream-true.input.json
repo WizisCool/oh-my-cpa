@@ -1,0 +1,12 @@
+{
+  "why": "The stream flag is stored as sent.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-stream",
+      "stream": true,
+      "provider": "openai",
+      "model": "gpt-4o"
+    }
+  }
+}

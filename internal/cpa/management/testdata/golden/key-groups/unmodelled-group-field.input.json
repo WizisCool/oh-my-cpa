@@ -1,0 +1,38 @@
+{
+  "why": "A group field OMC does not model stays on the group.",
+  "now_ms": 0,
+  "body": {
+    "family": "codex",
+    "stored": [
+      {
+        "name": "team",
+        "base-url": "https://a.test",
+        "websockets": true,
+        "keys": [
+          {
+            "api-key": "k1"
+          },
+          {
+            "api-key": "k2"
+          }
+        ]
+      }
+    ],
+    "runtime": {
+      "codex-api-key": [
+        {
+          "api-key": "k1",
+          "base-url": "https://a.test",
+          "websockets": true,
+          "auth-index": "i1"
+        },
+        {
+          "api-key": "k2",
+          "base-url": "https://a.test",
+          "websockets": true,
+          "auth-index": "i2"
+        }
+      ]
+    }
+  }
+}

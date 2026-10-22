@@ -26,7 +26,7 @@ still someone else's code relative to the gateway.
 ## Decision
 
 1. **The registry is a file in this repository.** `plugins/registry.json` is published
-   over HTTPS from the `master` branch and compiled in as
+   over HTTPS from the `main` branch and compiled in as
    `pluginregistry.OMCSourceURL`. It is neither an operator setting nor an environment
    variable: every installation has the same registry, and publishing a plugin is a
    change to that file.

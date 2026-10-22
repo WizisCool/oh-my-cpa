@@ -1,0 +1,57 @@
+{
+  "plan": {
+    "plan_type": "plus",
+    "plan_label": "Plus",
+    "tier": "standard"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时用量上限 (5-Hour)",
+      "kind": "five_hour",
+      "scope": "standard",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1735693200000,
+      "reset_label": "01:00 (1小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "derived"
+    },
+    {
+      "id": "code_review_5h",
+      "label": "代码审查 5小时配额",
+      "kind": "custom",
+      "scope": "code_review",
+      "used_percent": 5,
+      "remaining_percent": 95,
+      "period_hours": 5,
+      "reset_accuracy": "approximate"
+    },
+    {
+      "id": "addl_0_p",
+      "label": "gpt-reserve 每周配额",
+      "kind": "model_scoped",
+      "scope": "model",
+      "model": "gpt-reserve",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1735776000000,
+      "reset_label": "01-02 00:00 (1天后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "derived"
+    },
+    {
+      "id": "addl_1_p",
+      "label": "o-series 5小时配额",
+      "kind": "model_scoped",
+      "scope": "model",
+      "model": "o-series",
+      "used_percent": 10,
+      "remaining_percent": 90,
+      "reset_at_ms": 1735693200000,
+      "reset_label": "01:00 (1小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "derived"
+    }
+  ]
+}

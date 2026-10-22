@@ -1,0 +1,40 @@
+{
+  "windows": [
+    {
+      "id": "ag_Plugin_bucket_0_2",
+      "label": "Plugin · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 87.5,
+      "remaining_percent": 12.5,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_0",
+      "label": "Plugin · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 75,
+      "remaining_percent": 25,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_3",
+      "label": "Plugin · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 62.5,
+      "remaining_percent": 37.5,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_1",
+      "label": "Plugin · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

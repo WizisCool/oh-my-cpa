@@ -4,11 +4,11 @@ Oh My CPA takes the security of credentials, proxy configurations, and administr
 
 ## Supported Versions
 
-Only the latest commit on the `master` branch and the most recent release tag receive security patches.
+Only the latest commit on the `main` branch and the most recent release tag receive security patches.
 
 | Version / Branch | Supported |
 | --- | --- |
-| `master` | Yes |
+| `main` | Yes |
 | Older releases | No (please upgrade to latest) |
 
 ## Reporting a Vulnerability

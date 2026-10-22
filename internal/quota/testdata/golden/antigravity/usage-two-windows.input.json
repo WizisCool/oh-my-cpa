@@ -1,0 +1,27 @@
+{
+  "why": "Bucket fractions become remaining and used percentages, with each window's period.",
+  "now_ms": 1735689600000,
+  "body": {
+    "groups": [
+      {
+        "displayName": "Gemini models",
+        "buckets": [
+          {
+            "bucketId": "five_hour",
+            "displayName": "5 hour limit",
+            "window": "5h",
+            "remainingFraction": 0.85,
+            "resetTime": "2026-01-01T12:00:00Z"
+          },
+          {
+            "bucketId": "daily",
+            "displayName": "Daily limit",
+            "window": "24h",
+            "remainingFraction": 0.5,
+            "resetTime": "2026-01-02T00:00:00Z"
+          }
+        ]
+      }
+    ]
+  }
+}

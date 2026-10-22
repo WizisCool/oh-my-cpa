@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -152,18 +151,7 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-
-	// Login
-	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"app-admin-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "app-admin-secret")
 
 	// Endpoints to check
 	endpoints := []string{

@@ -1,47 +1,24 @@
-import React from 'react';
-import { App } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
 import { OAuthModelRulesDrawer } from '../src/components/authFiles/OAuthModelRulesDrawer';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
+import { installOmcApi } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 
 const FILE: ManagementAuthFile = { name: 'codex.json', auth_index: 'codex-override', provider: 'codex', type: 'codex', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0 };
 
-beforeEach(() => {
-  window.localStorage.setItem('omc-lang', 'en');
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
-});
-
 function mountGuidance(section: 'provider' | 'credential') {
-  const writes: unknown[] = [];
   const onSaved = vi.fn();
-  let fields = { name: FILE.name, excluded_models: ['model-b'], model_aliases: [] };
-  vi.stubGlobal('fetch', async (path: string, options: RequestInit) => {
-    const url = new URL(path, 'http://localhost');
-    let result: unknown;
-    if (url.pathname.endsWith('/auth-files/model-aliases')) result = { aliases: { codex: [{ name: 'model-a', alias: 'public-a' }] } };
-    else if (url.pathname.endsWith('/auth-files/excluded-models')) result = { excluded_models: { codex: ['*'] } };
-    else if (url.pathname.endsWith('/auth-files/provider-models')) result = { available: true, models: [{ id: 'model-a' }, { id: 'model-b' }] };
-    else if (url.pathname.endsWith('/auth-files/safe-fields')) result = fields;
-    else if (url.pathname.endsWith('/auth-files/fields')) {
-      const body = JSON.parse(options.body as string);
-      writes.push(body);
-      fields = { ...fields, ...body };
-      result = { status: 'ok', file: FILE, fields };
-    } else throw new Error(`Unexpected exclusion guidance request: ${url.pathname}`);
-    return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const surface = render(<React.StrictMode><App><QueryClientProvider client={client}><I18nProvider>
-    {section === 'provider'
-      ? <OAuthModelRulesDrawer open providerOptions={['codex']} onClose={() => {}} onSaved={() => {}} />
-      : <AuthFileDetailDrawer open file={FILE} canEdit initialSection="overview" onClose={() => {}} onSaved={onSaved} onDownload={() => {}} />}
-  </I18nProvider></QueryClientProvider></App></React.StrictMode>);
-  return { ...surface, client, writes, onSaved };
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields: { excluded_models: ['model-b'], model_aliases: [] } }] });
+  // The provider-wide rules every credential of the family inherits.
+  api.on('GET', '/management/auth-files/model-aliases', () => ({ aliases: { codex: [{ name: 'model-a', alias: 'public-a' }] } }));
+  api.on('GET', '/management/auth-files/excluded-models', () => ({ excluded_models: { codex: ['*'] } }));
+  api.on('GET', '/management/auth-files/provider-models', () => ({ available: true, models: [{ id: 'model-a' }, { id: 'model-b' }] }));
+  const surface = renderWithOmc(section === 'provider'
+    ? <OAuthModelRulesDrawer open providerOptions={['codex']} onClose={() => {}} onSaved={() => {}} />
+    : <AuthFileDetailDrawer open file={FILE} canEdit initialSection="overview" onClose={() => {}} onSaved={onSaved} onDownload={() => {}} />, { isStrict: true });
+  return { ...surface, onSaved, get writes() { return api.writes('/management/auth-files/fields').map(request => request.body); } };
 }
 
 it('scopes a provider catch-all and alias warning to inheriting credentials, including deletion guidance', async () => {
@@ -60,7 +37,7 @@ it('scopes a provider catch-all and alias warning to inheriting credentials, inc
     fireEvent.click(screen.getByTestId('oauth-model-rules-clear'));
     expect(await screen.findByText('This deletes the provider exclusion defaults for codex. Credentials with a non-empty own list are unchanged; CPA determines which models are available.')).toBeTruthy();
   } finally {
-    surface.unmount(); surface.client.clear();
+    surface.unmount();
   }
 });
 
@@ -80,6 +57,6 @@ it('clears a non-empty credential override with an empty array and explains rest
     expect((input as HTMLTextAreaElement).value).toBe('');
     expect(screen.getByText(/Clearing this list restores inheritance of the current provider rules, not unrestricted access\./)).toBeTruthy();
   } finally {
-    surface.unmount(); surface.client.clear();
+    surface.unmount();
   }
 });

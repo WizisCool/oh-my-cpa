@@ -14,8 +14,7 @@
  *    independent processes, so they run concurrently. Report elapsed time per
  *    check instead of assuming a fixed cost as the repository grows.
  *
- * The selection lives in `affected-checks.mjs` so it can be asserted directly,
- * including the negative property above.
+ * The selection lives in `affected-checks.mjs`.
  */
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -45,16 +44,18 @@ export const CHECK_COMMANDS = {
   // info file under `tmp/`, while `verify` and CI keep the fresh `type-check`.
   'type-check': { label: 'frontend type check (incremental)', command: 'pnpm', args: ['type-check:incremental'] },
   logic: { label: 'frontend logic tests', command: 'pnpm', args: ['test:logic'] },
-  components: { label: 'frontend component and API integration tests', command: 'pnpm', args: ['test:components'] },
+  // Exclusive: its jsdom renders are CPU-bound against a five-second test budget, so it
+  // runs after the other checks with every core rather than beside them.
+  components: { label: 'frontend component and API integration tests', command: 'pnpm', args: ['test:components'], isExclusive: true },
   i18n: { label: 'frontend translation keys', command: 'pnpm', args: ['check-i18n'] },
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },
   motion: { label: 'motion budget', command: 'pnpm', args: ['check:motion'] },
   'style-tokens': { label: 'style tokens', command: 'pnpm', args: ['check:style-tokens'] },
   feedback: { label: 'feedback surfaces', command: 'pnpm', args: ['check:feedback'] },
-  go: { label: 'Go tests', command: 'go', args: ['test', './...'] },
+  // -short skips the few tests that cost tens of seconds; CI runs them.
+  go: { label: 'Go tests', command: 'go', args: ['test', '-short', './...'] },
   docs: { label: 'documentation references', command: 'pnpm', args: ['check-docs'] },
-  workflow: { label: 'GitHub workflow syntax', command: 'pnpm', args: ['verify:workflow'] },
   toolchain: { label: 'pinned toolchain', command: 'pnpm', args: ['verify:toolchain'] },
   'self-tests': { label: 'repository self-tests', command: 'pnpm', args: ['test:self'] },
 };
@@ -90,7 +91,6 @@ export async function runFastChecks(argv) {
     console.log(`[fast] changes relative to ${options.base}:`);
     for (const file of files) console.log(`  ${file}`);
     for (const id of selected) console.log(`  [${id}] ${CHECK_COMMANDS[id].label}`);
-    if (selected.includes('logic')) execFileSync(process.execPath, ['--import', 'tsx', 'scripts/testing/logic.ts', '--files', JSON.stringify(files), '--plan'], {cwd:root, stdio:'inherit'});
     return true;
   }
 
@@ -102,7 +102,8 @@ export async function runFastChecks(argv) {
     selected.map((id) => ({
       label: CHECK_COMMANDS[id].label,
       command: CHECK_COMMANDS[id].command,
-      args: id === 'logic' ? [...CHECK_COMMANDS[id].args, '--files', JSON.stringify(files)] : CHECK_COMMANDS[id].args,
+      args: CHECK_COMMANDS[id].args,
+      isExclusive: CHECK_COMMANDS[id].isExclusive,
     })),
     { quiet: true },
   );

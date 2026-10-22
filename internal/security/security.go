@@ -163,17 +163,51 @@ func RedactText(value string, knownSecrets ...string) string {
 			value = strings.ReplaceAll(value, secret, RedactedValue)
 		}
 	}
-	value = headerSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
-	value = bearerPattern.ReplaceAllString(value, "Bearer "+RedactedValue)
-	value = keyValueSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
-	value = apiKeyPrefixPattern.ReplaceAllString(value, RedactedValue)
-	value = urlTokenPattern.ReplaceAllStringFunc(value, func(raw string) string {
-		if safe := PublicURL(raw); safe != "" {
-			return safe
-		}
-		return RedactedValue
-	})
+	// Each pattern below needs a literal its input usually lacks, and the regexp engine
+	// scans the whole string before it can say so. Testing for the literal first keeps
+	// short identifiers, which are most of what passes through here, off the regexps
+	// without changing what any of them matches.
+	if strings.IndexByte(value, ':') >= 0 {
+		value = headerSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
+	}
+	if containsASCIIFold(value, "bearer") {
+		value = bearerPattern.ReplaceAllString(value, "Bearer "+RedactedValue)
+	}
+	if strings.ContainsAny(value, ":=") {
+		value = keyValueSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
+	}
+	if strings.ContainsAny(value, "-_") {
+		value = apiKeyPrefixPattern.ReplaceAllString(value, RedactedValue)
+	}
+	if strings.Contains(value, "://") {
+		value = urlTokenPattern.ReplaceAllStringFunc(value, func(raw string) string {
+			if safe := PublicURL(raw); safe != "" {
+				return safe
+			}
+			return RedactedValue
+		})
+	}
 	return stripControl(value)
+}
+
+// containsASCIIFold reports whether value contains word, which must be lower-case ASCII
+// letters, ignoring ASCII case. That equals the regexp's (?i) match only for letters whose
+// Unicode case-fold orbit is ASCII: k and s fold to the Kelvin sign and the long s, so a
+// word containing either must not be tested this way.
+func containsASCIIFold(value, word string) bool {
+	for start := 0; start+len(word) <= len(value); start++ {
+		matched := true
+		for offset := 0; offset < len(word); offset++ {
+			if value[start+offset]|0x20 != word[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
 
 // RedactJSON preserves JSON shape while replacing values under sensitive keys.

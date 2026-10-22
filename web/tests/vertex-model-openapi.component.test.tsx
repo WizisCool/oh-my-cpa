@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { App } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { I18nProvider, useT } from '../src/i18n';
 import { CredentialModelAliasesEditor } from '../src/components/authFiles/CredentialModelAliasesEditor';
 import { OAuthModelAliasPanel } from '../src/components/authFiles/OAuthModelAliasPanel';
@@ -11,12 +9,8 @@ import { ProviderEditorDrawer } from '../src/components/providers/ProviderEditor
 import { useProviderManagement } from '../src/components/providers/useProviderManagement';
 import type { ProviderItem } from '../src/types/providers';
 import type { Toast } from '../src/components/feedback';
-
-beforeEach(() => {
-  window.localStorage.setItem('omc-lang', 'en');
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; } }));
-});
+import { installOmcApi } from './support/omcApi';
+import { createTestQueryClient, renderWithOmc } from './support/render';
 
 const ALIASES = [
   { name: 'partner/model', alias: 'first', openapi: false },
@@ -69,26 +63,19 @@ function Editor() {
 }
 
 it('saves the real provider editor with credential defaults and alias-specific model overrides intact', async () => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const client = createTestQueryClient();
   client.setQueryData(['management-plugins'], { plugins: [] });
-  const writes: Record<string, unknown>[] = [];
-  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
-    const path = new URL(String(input), 'http://localhost').pathname;
-    if (init?.method === 'PUT' && path.endsWith('/management/providers/vertex-0')) {
-      writes.push(JSON.parse(String(init.body)));
-      return new Response(JSON.stringify({ status: 'ok', id: 'vertex-0' }), { status: 200 });
-    }
-    throw new Error(`Unexpected request ${path}`);
-  });
-  const view = render(<QueryClientProvider client={client}><I18nProvider><App><Editor /></App></I18nProvider></QueryClientProvider>);
+  const api = installOmcApi({ providers: [PROVIDER] });
+  const writes = () => api.writes('/management/providers/vertex-0').map(request => request.body);
+  const view = renderWithOmc(<Editor />, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Vertex' }));
     await screen.findByRole('combobox', { name: 'Driver / Protocol' });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toMatchObject({
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0]).toMatchObject({
       family: 'vertex', behavior: { openapi: 'disabled', openapi_location: 'global' },
       model_entries: [{ name: 'partner/model', alias: 'first', options: { openapi: false } }, { name: 'partner/model', alias: 'second', options: { openapi: true } }],
     });
-  } finally { view.unmount(); client.clear(); }
+  } finally { view.unmount(); }
 });

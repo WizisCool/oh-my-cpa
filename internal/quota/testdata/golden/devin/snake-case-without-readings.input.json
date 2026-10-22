@@ -1,0 +1,9 @@
+{
+  "why": "With no readings the two windows still exist, empty, so the card can say the numbers did not arrive; nothing describes a plan.",
+  "now_ms": 1700000000000,
+  "body": {
+    "user_status": {
+      "plan_status": {}
+    }
+  }
+}

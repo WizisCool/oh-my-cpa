@@ -259,6 +259,12 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 		}
 		channels = append(channels, channel)
 	}
+	// The upsert stamps the wall clock, which the export would then have to move onto the
+	// reference by however long seeding took; stamped from the seed's own clock, the
+	// edit time is the same on every run.
+	if _, err := repo.SQL().ExecContext(ctx, `UPDATE pricing_channels SET updated_at_ms = ?`, syncedAt); err != nil {
+		return 0, fmt.Errorf("stamp seeded channel multipliers: %w", err)
+	}
 	if err := repo.SeedChannelHistoryBackfill(ctx, channels, historyStart.UnixMilli()); err != nil {
 		return 0, fmt.Errorf("seed channel history: %w", err)
 	}
@@ -638,7 +644,6 @@ func drawRequestCount(random *deterministic, mean float64) int {
 	if mean <= 0 {
 		return 0
 	}
-	drawn := mean
 	// One hour in eight carries several times its share, which is what an agent run, a
 	// deploy or a batch job looks like. The rest is divided by the expected excess so the
 	// mean survives the skew: scaling only the bursts up would quietly raise the rate, and
@@ -648,6 +653,7 @@ func drawRequestCount(random *deterministic, mean float64) int {
 	// The mean multiplier a burst carries, so the correction below is a subtraction of the
 	// same number: using half of it here left the whole curve 22% above its anchor.
 	const burstMean = 3.5
+	var drawn float64
 	if random.nextFloat() < burstShare {
 		drawn = mean * burstMean * 2 * random.nextFloat()
 	} else {

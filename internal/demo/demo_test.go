@@ -77,23 +77,6 @@ func seededDatabase(t *testing.T) (*repository.Repository, time.Time, SeedStats)
 	return seededRepo, seededAt, seededStat
 }
 
-func testRepository(t *testing.T) *repository.Repository {
-	t.Helper()
-	cipher, err := crypto.New(testMasterKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := repository.Open(context.Background(),
-		filepath.Join(t.TempDir(), "demo.db"),
-		repository.WithCipher(cipher),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	return repository.New(db)
-}
-
 // A demo that opens empty is not a demo. This asserts the fixture has the shape the
 // pages need: history that reaches back across the windows the dashboard offers
 // including the fifteen-minute one, prices that make the cost column mean something,

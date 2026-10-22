@@ -1,0 +1,37 @@
+{
+  "why": "Only available codex_rate_limits credits are redeemable; a credit without a reset type counts, and camelCase instants are read.",
+  "now_ms": 1735689600000,
+  "body": {
+    "available_count": 3,
+    "applicable_available_count": 1,
+    "credits": [
+      {
+        "id": "credit-1",
+        "status": "available",
+        "reset_type": "codex_rate_limits",
+        "granted_at": "1790000000",
+        "expires_at": "1810000000"
+      },
+      {
+        "id": "credit-2",
+        "status": "used",
+        "reset_type": "codex_rate_limits",
+        "granted_at": "1790000000",
+        "expires_at": "1805000000"
+      },
+      {
+        "id": "credit-3",
+        "status": "available",
+        "reset_type": "sponsor_perk",
+        "granted_at": "1790000000",
+        "expires_at": "1820000000"
+      },
+      {
+        "id": "credit-4",
+        "status": "available",
+        "grantedAt": "1790000000",
+        "expiresAt": "1830000000"
+      }
+    ]
+  }
+}

@@ -82,7 +82,7 @@ OMC 是单个 Go 二进制文件，内嵌 React 控制台，数据存放在本�
 
 ```text
 按照这份指南帮我安装 Oh My CPA：
-https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/docs/install-for-agents.md
 ```
 
 ### 通过 Docker Compose 安装

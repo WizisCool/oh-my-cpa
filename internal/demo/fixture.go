@@ -776,38 +776,6 @@ func oauthExcludedModels() map[string]any {
 	}
 }
 
-// usageBucketsPerProvider feeds the overview panel: a rolling history of
-// successes and failures per credential pool.
-func usageBucketsPerProvider(now time.Time) map[string]map[string]map[string]any {
-	series := func(successPerHour, failedPerHour int64) map[string]any {
-		buckets := make([]map[string]any, 0, 12)
-		var success, failed int64
-		for hour := 11; hour >= 0; hour-- {
-			bucket := map[string]any{
-				"time":    now.Add(-time.Duration(hour) * time.Hour).UTC().Format("2006-01-02T15:04:05Z"),
-				"success": successPerHour,
-				"failed":  failedPerHour,
-			}
-			buckets = append(buckets, bucket)
-			success += successPerHour
-			failed += failedPerHour
-		}
-		return map[string]any{"success": success, "failed": failed, "recent_requests": buckets}
-	}
-	return map[string]map[string]map[string]any{
-		"codex":  {"auth-codex-01": series(38, 1), "auth-codex-02": series(14, 1)},
-		"claude": {"auth-claude-01": series(26, 1)},
-		"gemini": {"auth-gemini-01": series(11, 0)},
-		"kimi":   {"auth-kimi-01": series(5, 0)},
-		"xai":    {"auth-xai-01": series(3, 0)},
-		"deepseek": {
-			"auth-key-deepseek-01": series(9, 0),
-			"auth-key-deepseek-02": series(4, 0),
-		},
-		"qwen": {"auth-key-dashscope-01": series(2, 0)},
-	}
-}
-
 // quotaPayloads answers the quota page's upstream reads. The quota service calls
 // these provider URLs through CPA's api-call proxy; the fixture answers them
 // locally, which is what keeps a deployed demo from reaching chatgpt.com or

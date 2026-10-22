@@ -1,0 +1,12 @@
+{
+  "why": "A window the console cannot name by period keeps its length in the label, in whole hours when it is one.",
+  "now_ms": 0,
+  "body": {
+    "subs_usage": {
+      "window": {
+        "used_percent": 10,
+        "window_duration_mins": 120
+      }
+    }
+  }
+}

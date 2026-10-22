@@ -2,9 +2,8 @@ import { test, prepareScenario } from '../../testing/probe-fixtures.ts';
 import { SCENARIOS } from '../scenarios.mjs';
 
 const ids = new Set<string>(JSON.parse(process.env.OMC_PROBE_IDS ?? '[]'));
-const isExclusive = process.env.OMC_PROBE_PHASE === 'exclusive';
 for (const scenario of SCENARIOS) {
-  if (!ids.has(scenario.id) || Boolean(scenario.shouldRunAlone) !== isExclusive) continue;
+  if (!ids.has(scenario.id)) continue;
   test.describe(scenario.id, () => {
     test.use({
       viewport: scenario.options?.viewport ?? { width: 1440, height: 1000 },

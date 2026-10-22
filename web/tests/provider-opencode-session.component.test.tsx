@@ -1,13 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { App as AntdApp } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { I18nProvider, useT } from '../src/i18n';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import { useT } from '../src/i18n';
 import { ProviderEditorDrawer } from '../src/components/providers/ProviderEditorDrawer';
 import { useProviderManagement } from '../src/components/providers/useProviderManagement';
 import { useProviderIconOverrides } from '../src/components/providers/useProviderIconOverrides';
 import type { Toast } from '../src/components/feedback';
 import type { ProviderItem } from '../src/types/providers';
+import { installOmcApi } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 
 const OPENCODE_PROVIDER: ProviderItem = {
   id: 'openai-compat-0', family: 'openai-compatibility', name: 'OpenCode Go', upstream_name: 'opencode-go',
@@ -24,15 +24,6 @@ const toast: Toast = {
   success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), pending: () => () => {}, dismiss: vi.fn(),
 };
 
-beforeEach(() => {
-  window.localStorage.setItem('omc-lang', 'en');
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: false, media: query, addListener() {}, removeListener() {},
-    addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
-  }));
-});
-
 /** The real drawer and hook, so the suggestion acts on the same draft the save serializes. */
 function Editor({ provider }: { provider: ProviderItem }) {
   const t = useT();
@@ -45,39 +36,19 @@ function Editor({ provider }: { provider: ProviderItem }) {
 }
 
 function renderEditor(provider: ProviderItem) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const writes: { path: string; body: Record<string, unknown> }[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(String(input), 'http://localhost').pathname;
-    if (init?.method === 'PUT' || init?.method === 'POST') {
-      writes.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
-      if (path.endsWith('/management/providers/openai-compat-0')) {
-        return new Response(JSON.stringify({ status: 'ok', id: 'openai-compat-0', ids: ['openai-compat-0'] }), { status: 200 });
-      }
-      if (path.endsWith('/preferences/provider_icons')) return new Response('{}', { status: 200 });
-    }
-    if (path.endsWith('/preferences')) {
-      return new Response(JSON.stringify({ preferences: {} }), { status: 200 });
-    }
-    if (path.endsWith('/management/plugins')) return new Response(JSON.stringify({ plugins: [] }), { status: 200 });
-    throw new Error(`Unexpected fixture request ${init?.method ?? 'GET'} ${path}`);
-  }));
-  const view = render(
-    <QueryClientProvider client={client}>
-      <I18nProvider><AntdApp><Editor provider={provider} /></AntdApp></I18nProvider>
-    </QueryClientProvider>,
-  );
+  const api = installOmcApi({ providers: [provider] });
+  const view = renderWithOmc(<Editor provider={provider} />);
   const openEditor = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
     await screen.findByRole('combobox', { name: 'Driver / Protocol' });
   };
   const headersToggle = () => screen.getByRole('button', { name: /Custom Headers/ });
-  const save = () => writes.find((write) => write.path.endsWith('/management/providers/openai-compat-0'));
-  return { client, writes, view, openEditor, headersToggle, save };
+  const save = () => api.writes('/management/providers/openai-compat-0')[0] as { body: Record<string, unknown> } | undefined;
+  return { client: view.client, api, view, openEditor, headersToggle, save };
 }
 
 it('offers the OpenCode session header and reveals the row it adds', async () => {
-  const { client, writes, view, openEditor, headersToggle } = renderEditor(OPENCODE_PROVIDER);
+  const { client, api, view, openEditor, headersToggle } = renderEditor(OPENCODE_PROVIDER);
   try {
     await openEditor();
     expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();
@@ -93,7 +64,7 @@ it('offers the OpenCode session header and reveals the row it adds', async () =>
     expect((screen.getByDisplayValue('x-opencode-session') as HTMLInputElement).value).toBe('x-opencode-session');
     expect((screen.getByDisplayValue('$CPA-SESSION-ID') as HTMLInputElement).value).toBe('$CPA-SESSION-ID');
     // The click only edits the draft: nothing is written until the operator saves.
-    expect(writes).toHaveLength(0);
+    expect(api.writes()).toHaveLength(0);
   } finally { view.unmount(); client.clear(); }
 });
 
@@ -111,13 +82,13 @@ it('saves the pair the suggestion added', async () => {
 });
 
 it('writes nothing when the added header is abandoned, and reopening restores the stored draft', async () => {
-  const { client, writes, view, openEditor } = renderEditor(OPENCODE_PROVIDER);
+  const { client, api, view, openEditor } = renderEditor(OPENCODE_PROVIDER);
   try {
     await openEditor();
     fireEvent.click(screen.getByRole('button', { name: 'Add x-opencode-session' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / Protocol' })).toBeNull());
-    expect(writes).toHaveLength(0);
+    expect(api.writes()).toHaveLength(0);
 
     await openEditor();
     expect(await screen.findByText(NOTICE_TITLE)).toBeTruthy();

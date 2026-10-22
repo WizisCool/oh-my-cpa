@@ -1,0 +1,15 @@
+{
+  "why": "NaN, a negative duration and null usage are unknown, not zero.",
+  "now_ms": 1700000000000,
+  "body": {
+    "subs_usage": {
+      "window": {
+        "used_percent": "NaN",
+        "window_duration_mins": -5
+      },
+      "weekly": {
+        "used_percent": null
+      }
+    }
+  }
+}

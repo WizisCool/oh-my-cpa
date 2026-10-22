@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LogFileViewer } from '../src/components/logs/LogFileViewer';
 import { I18nProvider } from '../src/i18n';
 import { MAX_LOG_PREVIEW_BYTES, type LogViewerTarget } from '../src/types/logs';
+import { installOmcApi } from './support/omcApi';
 
 const REFUSED_LOG = '=== REQUEST INFO ===\nURL: /v1/messages\n\n=== RESPONSE ===\nStatus: 503\nauth_unavailable: no auth available\n';
 
@@ -22,10 +23,10 @@ function Surface({ target, onClose = () => {} }: { target: LogViewerTarget | nul
 /** Answers every read with one response and records the paths that were asked for. */
 function stubLogRead(respond: () => Response): string[] {
   const paths: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    paths.push(new URL(String(input), 'http://console.test').pathname);
+  installOmcApi().on('GET', /^\/management\/request(-error)?-logs\//, request => {
+    paths.push(`/omc/api/v1${request.path}`);
     return respond();
-  }));
+  });
   return paths;
 }
 

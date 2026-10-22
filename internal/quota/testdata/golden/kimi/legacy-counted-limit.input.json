@@ -1,0 +1,18 @@
+{
+  "why": "The older flat limit shape: title, model scope, counts and a reset given in seconds.",
+  "now_ms": 1735689600000,
+  "body": {
+    "limits": [
+      {
+        "name": "daily_limit",
+        "title": "每日限额",
+        "scope": "moonshot-v1-8k",
+        "used": 150,
+        "limit": 1000,
+        "duration": 24,
+        "timeUnit": "hours",
+        "resetIn": 3600
+      }
+    ]
+  }
+}

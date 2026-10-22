@@ -21,10 +21,9 @@ type lockedPrice struct {
 	serviceTierSource string
 }
 
-// queryer is satisfied by both *sql.Tx and *sql.DB, so the lock and the read-time
-// breakdown load versions through the same statements.
-type queryer interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+// rowScanner is a single row or the current row of a result set.
+type rowScanner interface {
+	Scan(dest ...any) error
 }
 
 const priceVersionSelect = `SELECT id, available, effective_from_ms, model, prompt_price_per_1m, completion_price_per_1m,
@@ -54,7 +53,7 @@ type VersionPrice struct {
 // prices as invalid rather than failing the insert.
 var errCorruptTiers = errors.New("stored price tiers are unreadable")
 
-func scanPriceVersion(row *sql.Row) (PriceVersion, error) {
+func scanPriceVersion(row rowScanner) (PriceVersion, error) {
 	var version PriceVersion
 	var tiers string
 	p := &version.Price
@@ -78,7 +77,7 @@ type ChannelVersion struct {
 	Multiplier      float64 `json:"multiplier"`
 }
 
-func scanChannelVersion(row *sql.Row) (ChannelVersion, error) {
+func scanChannelVersion(row rowScanner) (ChannelVersion, error) {
 	var version ChannelVersion
 	err := row.Scan(&version.ID, &version.Channel, &version.Available, &version.EffectiveFromMS, &version.Multiplier)
 	return version, err
@@ -86,24 +85,107 @@ func scanChannelVersion(row *sql.Row) (ChannelVersion, error) {
 
 const channelVersionSelect = `SELECT id, channel, available, effective_from_ms, multiplier FROM pricing_channel_versions`
 
+// priceBook answers the price lookups of one insert transaction. modernc's SQLite
+// parses a statement on every execution, prepared or not, so three lookups per event
+// cost more than the insert itself; the book reads each (channel, model) history and
+// each channel's multipliers once and chooses by request time in memory. The insert
+// transaction writes no versions, so the history it read stays the one in effect.
+type priceBook struct {
+	tx       *sql.Tx
+	prices   map[[2]string][]bookedPrice
+	channels map[string][]ChannelVersion
+}
+
+// bookedPrice keeps a row whose tier list cannot be read: it still decides the
+// lookup, as an invalid price, exactly as a direct read of that row would.
+type bookedPrice struct {
+	version PriceVersion
+	err     error
+}
+
+func newPriceBook(tx *sql.Tx) *priceBook {
+	return &priceBook{tx: tx, prices: map[[2]string][]bookedPrice{}, channels: map[string][]ChannelVersion{}}
+}
+
+// price is the version of model on channel in effect at atMS: the latest
+// effective_from_ms not after it, the highest id among equals. It returns
+// sql.ErrNoRows when there is none.
+func (book *priceBook) price(ctx context.Context, channel, model string, atMS int64) (PriceVersion, error) {
+	key := [2]string{channel, model}
+	history, ok := book.prices[key]
+	if !ok {
+		rows, err := book.tx.QueryContext(ctx, priceVersionSelect+`
+ WHERE channel = ? AND model = ? ORDER BY effective_from_ms DESC, id DESC`, channel, model)
+		if err != nil {
+			return PriceVersion{}, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			version, errScan := scanPriceVersion(rows)
+			if errScan != nil && !errors.Is(errScan, errCorruptTiers) {
+				return PriceVersion{}, errScan
+			}
+			history = append(history, bookedPrice{version: version, err: errScan})
+		}
+		if err := rows.Err(); err != nil {
+			return PriceVersion{}, err
+		}
+		book.prices[key] = history
+	}
+	for _, entry := range history {
+		if entry.version.EffectiveFromMS <= atMS {
+			return entry.version, entry.err
+		}
+	}
+	return PriceVersion{}, sql.ErrNoRows
+}
+
+// channel is the multiplier version of channel in effect at atMS, by the same rule.
+func (book *priceBook) channel(ctx context.Context, channel string, atMS int64) (ChannelVersion, error) {
+	history, ok := book.channels[channel]
+	if !ok {
+		rows, err := book.tx.QueryContext(ctx, channelVersionSelect+`
+ WHERE channel = ? ORDER BY effective_from_ms DESC, id DESC`, channel)
+		if err != nil {
+			return ChannelVersion{}, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			version, errScan := scanChannelVersion(rows)
+			if errScan != nil {
+				return ChannelVersion{}, errScan
+			}
+			history = append(history, version)
+		}
+		if err := rows.Err(); err != nil {
+			return ChannelVersion{}, err
+		}
+		book.channels[channel] = history
+	}
+	for _, version := range history {
+		if version.EffectiveFromMS <= atMS {
+			return version, nil
+		}
+	}
+	return ChannelVersion{}, sql.ErrNoRows
+}
+
 // lockUsagePrice runs inside the event insert transaction. Both the price and
 // the channel multiplier are selected by request time, not ingestion time, so
 // delayed queue delivery cannot reprice an older request. A tombstone stops a
 // removed price from leaking forward; a missing or tombstoned channel is 1x.
-func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedPrice, error) {
+func lockUsagePrice(ctx context.Context, book *priceBook, event usage.Event) (lockedPrice, error) {
 	serviceTier, source := pricing.ResolveServiceTier(event.Provider, event.ExecutorType, event.ResponseServiceTier, event.ServiceTier, event.EffectiveServiceTier)
-	locked, err := lockUsageCost(ctx, tx, event, serviceTier)
+	locked, err := lockUsageCost(ctx, book, event, serviceTier)
 	locked.serviceTier, locked.serviceTierSource = serviceTier, source
 	return locked, err
 }
 
-func lockUsageCost(ctx context.Context, tx *sql.Tx, event usage.Event, serviceTier string) (lockedPrice, error) {
-	version, err := scanPriceVersion(tx.QueryRowContext(ctx, priceVersionSelect+`
- WHERE channel = ? AND model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Provider, event.Model, event.TimestampMS))
+func lockUsageCost(ctx context.Context, book *priceBook, event usage.Event, serviceTier string) (lockedPrice, error) {
+	version, err := book.price(ctx, event.Provider, event.Model, event.TimestampMS)
 	// A channel tombstone restores the shared price effective at the request time.
 	if event.Provider != "" && (errors.Is(err, sql.ErrNoRows) || err == nil && !version.Available) {
-		version, err = scanPriceVersion(tx.QueryRowContext(ctx, priceVersionSelect+`
- WHERE channel = '' AND model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Model, event.TimestampMS))
+		version, err = book.price(ctx, "", event.Model, event.TimestampMS)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedPrice{status: "unpriced"}, nil
@@ -121,8 +203,7 @@ func lockUsageCost(ctx context.Context, tx *sql.Tx, event usage.Event, serviceTi
 	locked := lockedPrice{version: &version.ID}
 	multiplier := 1.0
 	if event.Provider != "" {
-		channel, err := scanChannelVersion(tx.QueryRowContext(ctx, channelVersionSelect+`
- WHERE channel = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Provider, event.TimestampMS))
+		channel, err := book.channel(ctx, event.Provider, event.TimestampMS)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:

@@ -1,0 +1,10 @@
+{
+  "why": "Neither document carries a config: nothing but an error.",
+  "now_ms": 1735689600000,
+  "body": {
+    "credits": {},
+    "monthly": {
+      "config": null
+    }
+  }
+}

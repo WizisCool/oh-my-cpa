@@ -1,23 +1,14 @@
 import type { ReactNode } from 'react';
-import { App as AntdApp } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { screen } from '@testing-library/react';
+import { expect, it } from 'vitest';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
 import { CostBreakdownView } from '../src/components/pricing/CostBreakdownView';
 import type { RequestCostBreakdown } from '../src/types/pricing';
 import { RequestRow } from '../src/components/usage/RequestRow';
 import { TokenDisplayProvider } from '../src/types/tokenDisplayContext';
 import type { UsageEvent } from '../src/types/usageEvents';
-
-beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
-});
-
-const clients: QueryClient[] = [];
-afterEach(() => clients.splice(0).forEach(client => client.clear()));
+import { installOmcApi } from './support/omcApi';
+import { createTestQueryClient, renderWithOmc } from './support/render';
 
 function renderTier(overrides: Partial<UsageEvent>, renderContent?: (event: UsageEvent) => ReactNode) {
   const event: UsageEvent = {
@@ -28,14 +19,16 @@ function renderTier(overrides: Partial<UsageEvent>, renderContent?: (event: Usag
     tokens: { input: 100, output: 10, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 110 },
     ...overrides,
   };
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } });
-  clients.push(client);
+  const preferences = { omc_models_view: 'model', omc_request_model_icons: false };
+  installOmcApi({ preferences: { ...preferences } });
+  // Seeded and never stale, so the row and the drawer render the record on the first pass.
+  const client = createTestQueryClient();
+  client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity, staleTime: Infinity } });
   client.setQueryData(['usage-event', event.id], { event, related_errors: [] });
-  client.setQueryData(['preferences'], { omc_models_view: 'model', omc_request_model_icons: false });
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } })));
-  return render(<QueryClientProvider client={client}><I18nProvider><AntdApp><TokenDisplayProvider>
+  client.setQueryData(['preferences'], preferences);
+  return renderWithOmc(<TokenDisplayProvider>
     {renderContent ? renderContent(event) : <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />}
-  </TokenDisplayProvider></AntdApp></I18nProvider></QueryClientProvider>);
+  </TokenDisplayProvider>, { client });
 }
 
 it('marks Codex priority with a request-based hint even when the response says default', () => {

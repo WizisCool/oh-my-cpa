@@ -1,0 +1,8 @@
+{
+  "plan": {
+    "plan_type": "max",
+    "plan_label": "Claude Max",
+    "tier": "elite"
+  },
+  "status": "idle"
+}

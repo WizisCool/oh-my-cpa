@@ -255,28 +255,6 @@ func (r *CaptureRequest) complete(outcome CaptureOutcome) {
 	}
 }
 
-// outcome reads the answer without consuming the chance to answer again: the
-// collector both reports it to the caller and uses it for its own retry policy.
-func (r *CaptureRequest) outcome() CaptureOutcome {
-	select {
-	case outcome := <-r.result:
-		r.result <- outcome
-		return outcome
-	default:
-		return CaptureOutcome{}
-	}
-}
-
-// hasOutcome reports whether the pass already answered this request.
-func (r *CaptureRequest) hasOutcome() bool {
-	select {
-	case <-r.result:
-		return true
-	default:
-		return false
-	}
-}
-
 // maxSubscribeFailures bounds repeated subscription attempts before auto mode
 // degrades to batch pulling.
 const maxSubscribeFailures = 3
@@ -1054,16 +1032,6 @@ func sleepContext(ctx context.Context, delay time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
-}
-
-// parseMode reads the transport name the collect pass returned back as a Mode.
-// An empty name means nothing answered the probe, and the configured mode is
-// then the honest label because nothing else was used.
-func parseMode(name string, fallback Mode) Mode {
-	if name == "" {
-		return fallback
-	}
-	return Mode(name)
 }
 
 // pullPacer saves empty-queue work without throttling backlog drainage. A full

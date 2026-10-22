@@ -1,0 +1,67 @@
+{
+  "windows": [
+    {
+      "id": "ag_Plugin_bucket_0_3",
+      "label": "Plugin · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 75,
+      "remaining_percent": 25,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_upstream-week",
+      "label": "Plugin · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 62.5,
+      "remaining_percent": 37.5,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_1",
+      "label": "Plugin · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 37.5,
+      "remaining_percent": 62.5,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_2",
+      "label": "Plugin · 每月限制 (Monthly)",
+      "scope": "group",
+      "used_percent": 87.5,
+      "remaining_percent": 12.5,
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_upstream-day",
+      "label": "Plugin · 每日限制 (Daily)",
+      "scope": "group",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "period_hours": 24,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Plugin_bucket_0_5",
+      "label": "Plugin · bucket_0_5",
+      "scope": "group",
+      "used_percent": 25,
+      "remaining_percent": 75,
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Other_bucket_1_0",
+      "label": "Other · 每月限制 (Monthly)",
+      "scope": "group",
+      "used_percent": 12.5,
+      "remaining_percent": 87.5,
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

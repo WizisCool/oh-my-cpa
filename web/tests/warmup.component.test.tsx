@@ -1,29 +1,18 @@
 import React from 'react';
-import { App } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import { installOmcApi, json } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 import { CredentialWarmup, WarmupSettingsDrawer } from '../src/components/authFiles/CredentialWarmup';
 import { createWarmupFixture } from '../../scripts/acceptance/warmup-fixture.mjs';
 import { canSaveWarmupPolicy, DEFAULT_WARMUP_POLICY, type WarmupCredential } from '../src/types/warmup';
 
-beforeEach(() => { window.localStorage.setItem('omc-lang', 'en');
- vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
- vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
-});
 function mount(children: React.ReactNode, { isSettingsFailing = false } = {}) {
-  const requests: { method: string; path: string; body: Record<string, unknown> }[] = [];
-  const fixture = createWarmupFixture();
-  vi.stubGlobal('fetch', async (path: string, options: RequestInit) => {
-    requests.push({ method: options.method ?? 'GET', path, body: options.body ? JSON.parse(options.body as string) : {} });
-    if (isSettingsFailing && path.endsWith('/warmup/settings')) return new Response(JSON.stringify({ code: 'warmup_unavailable', error: 'warmup_unavailable' }), { status: 500 });
-    const result = fixture(new URL(path, 'http://127.0.0.1'), options.method ?? 'GET', options.body as string);
-    return new Response(JSON.stringify('json' in result ? result.json : result), { status: 'status' in result ? result.status : 200 });
-  });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const surface = render(<React.StrictMode><App><QueryClientProvider client={client}><I18nProvider>{children}</I18nProvider></QueryClientProvider></App></React.StrictMode>);
-  return { requests, client, ...surface };
+  const omc = installOmcApi();
+  omc.serve(/\/warmup(\/|$)/, createWarmupFixture());
+  if (isSettingsFailing) omc.on('*', /\/warmup\/settings$/, () => json({ code: 'warmup_unavailable', error: 'warmup_unavailable' }, 500));
+  const surface = renderWithOmc(children, { isStrict: true });
+  return { ...surface, get requests() { return omc.requests; } };
 }
 it('uses safe defaults and requires a model before automatic activation', () => {
   expect(DEFAULT_WARMUP_POLICY.daily_time).toBe('06:00');
@@ -44,7 +33,7 @@ it('reads an inherited policy as plain rules and reports credential-local draft 
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   expect(surface.requests.every(entry => entry.method === 'GET')).toBe(true);
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });
 it('keeps provider changes disabled while its default draft is unsaved', async () => {
   const surface = mount(<WarmupSettingsDrawer open onClose={vi.fn()} />);
@@ -54,7 +43,7 @@ it('keeps provider changes disabled while its default draft is unsaved', async (
   expect(screen.getByRole('tab', { name: 'Claude' }).getAttribute('aria-disabled')).toBe('true');
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
   expect(surface.requests.every(entry => entry.method === 'GET')).toBe(true);
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });
 
 it('leads with what the automation is doing and why it is paused', async () => {
@@ -69,7 +58,7 @@ it('leads with what the automation is doing and why it is paused', async () => {
   expect(within(status).getByText('Paid overage is off; only a little subscription quota is used')).toBeTruthy();
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, policy: { ...DEFAULT_WARMUP_POLICY, model: 'claude-haiku-test' } } : previous));
   await within(status).findByText('Automatic warmup is off');
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });
 
 it.each(['secure', 'http', 'without-crypto'])('confirms a manual run on %s and keeps its durable result', async origin => {
@@ -91,13 +80,13 @@ it.each(['secure', 'http', 'without-crypto'])('confirms a manual run on %s and k
   const runs = surface.requests.filter(request => request.method === 'POST');
   expect(runs).toHaveLength(1);
   expect(runs[0].body).toEqual({ confirmed: true, request_id: expect.any(String), revision: 'wire-revision' });
-  expect((runs[0].body.request_id as string).length).toBeGreaterThanOrEqual(8);
+  expect(((runs[0].body as { request_id: string }).request_id).length).toBeGreaterThanOrEqual(8);
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous && previous.state.last_result ? { ...previous, state: { ...previous.state, last_result: { ...previous.state.last_result, request_id: 'later-automatic-run', trigger: 'reset', status: 'failed', reason: 'rate_limited' } } } : previous));
   await within(last).findByText('Warmup failed');
   expect(within(last).getByText('The provider refused the request because of rate or quota limits.')).toBeTruthy();
   expect(within(last).queryByText('Quota window started')).toBeNull();
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });
 
 it('refuses to save a switch to the default it could not read', async () => {
@@ -110,7 +99,7 @@ it('refuses to save a switch to the default it could not read', async () => {
   expect((await screen.findAllByText('Could not read warmup settings')).length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: /Retry/ })).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });
 
 it('names the time zone of an inherited daily rule', async () => {
@@ -119,5 +108,5 @@ it('names the time zone of an inherited daily rule', async () => {
   const key = ['quota-warmup-credential', 'exact-claude'];
   act(() => surface.client.setQueryData<WarmupCredential>(key, previous => previous ? { ...previous, timezone: 'Asia/Kuala_Lumpur', policy: { ...previous.policy, daily_enabled: true } } : previous));
   await screen.findByText('Daily at 06:00 (Asia/Kuala_Lumpur)');
-  surface.unmount(); surface.client.clear();
+  surface.unmount();
 });

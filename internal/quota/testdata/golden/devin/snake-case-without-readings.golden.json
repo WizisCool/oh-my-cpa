@@ -1,0 +1,20 @@
+{
+  "windows": [
+    {
+      "id": "devin_daily",
+      "label": "daily",
+      "kind": "daily",
+      "scope": "standard",
+      "period_hours": 24,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "devin_weekly",
+      "label": "weekly",
+      "kind": "weekly",
+      "scope": "standard",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

@@ -132,10 +132,7 @@ func matchCandidates(identity string) []string {
 			break
 		}
 	}
-	candidates := []string{}
-	for _, form := range forms {
-		candidates = append(candidates, form)
-	}
+	candidates := append([]string{}, forms...)
 	// Namespaces are removed only after every whole form has failed: a prefix is weaker evidence
 	// than the name the gateway actually sends.
 	for _, form := range forms {

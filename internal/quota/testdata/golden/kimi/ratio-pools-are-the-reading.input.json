@@ -1,0 +1,25 @@
+{
+  "why": "A plan without a weekly limit reports only ratio pools; a pool states a share, so it carries no invented counts.",
+  "now_ms": 4094496000000,
+  "body": {
+    "limits": [
+      {
+        "window": {
+          "duration": 300,
+          "timeUnit": "TIME_UNIT_MINUTE"
+        },
+        "detail": {
+          "limit": "200",
+          "used": "139",
+          "resetTime": "2099-09-27T00:30:34Z"
+        }
+      }
+    ],
+    "usages": {
+      "limit_month_total": {
+        "used_ratio": 0.2529,
+        "reset_time": "2099-10-22T00:00:00Z"
+      }
+    }
+  }
+}

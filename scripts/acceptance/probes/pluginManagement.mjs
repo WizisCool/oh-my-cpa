@@ -61,7 +61,7 @@ const STORE = {
   sources: [
     { id: 'official', name: 'official', url: 'https://registry.example/plugins.json', is_official: true },
     { id: 'source-mirror', name: 'mirror.example', url: 'https://mirror.example/registry.json', is_official: false },
-    { id: 'source-omc', name: 'Oh My CPA', url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json', is_official: false },
+    { id: 'source-omc', name: 'Oh My CPA', url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json', is_official: false },
   ],
   source_errors: [{ source_id: 'source-down', source_name: 'down.example', source_url: 'https://down.example/r.json', message: 'fetch registry: 503' }],
   total: 4,
@@ -97,7 +97,7 @@ const SETTINGS = {
   enabled: true,
   dir: 'plugins',
   store_sources: ['https://mirror.example/registry.json'],
-  omc_source_url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json',
+  omc_source_url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json',
   omc_source_enabled: true,
   store_auth: [
     { match: 'https://mirror.example/', apply_to: ['registry', 'artifact'], type: 'bearer', token_env: 'MIRROR_TOKEN', allow_insecure: false },

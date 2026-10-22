@@ -1,0 +1,38 @@
+{
+  "plan": {
+    "plan_type": "pro",
+    "plan_label": "Pro 200",
+    "tier": "elite"
+  },
+  "windows": [
+    {
+      "id": "weekly",
+      "label": "每周用量上限 (Weekly)",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 1,
+      "remaining_percent": 99,
+      "reset_at_ms": 1785902974000,
+      "reset_label": "08-05 04:09 (581天4小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "addl_0_p",
+      "label": "GPT-5.3-Codex-Spark 每周配额",
+      "kind": "model_scoped",
+      "scope": "model",
+      "model": "GPT-5.3-Codex-Spark",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "reset_at_ms": 1785903197000,
+      "reset_label": "08-05 04:13 (581天4小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "reset_credits": {
+    "available_count": 1,
+    "applicable_available_count": 0
+  }
+}

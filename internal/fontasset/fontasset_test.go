@@ -54,9 +54,9 @@ func TestDescribeFallsBackToTheFileNameForWOFF2(t *testing.T) {
 	content := append([]byte("wOF2"), make([]byte, 60)...)
 	cases := map[string]Description{
 		"JetBrains_Mono-SemiBoldItalic.woff2": {Family: "JetBrains Mono", WeightMin: 600, WeightMax: 600, Italic: true},
-		"Inter-Regular.woff2":                {Family: "Inter", WeightMin: 400, WeightMax: 400},
-		"Recursive[wght].woff2":              {Family: "Recursive", WeightMin: 100, WeightMax: 900},
-		"MiSans-ExtraBold.woff2":             {Family: "MiSans", WeightMin: 800, WeightMax: 800},
+		"Inter-Regular.woff2":                 {Family: "Inter", WeightMin: 400, WeightMax: 400},
+		"Recursive[wght].woff2":               {Family: "Recursive", WeightMin: 100, WeightMax: 900},
+		"MiSans-ExtraBold.woff2":              {Family: "MiSans", WeightMin: 800, WeightMax: 800},
 	}
 	for name, want := range cases {
 		got, err := Describe(content, name)

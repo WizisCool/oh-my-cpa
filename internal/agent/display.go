@@ -332,10 +332,6 @@ func viewIcon(icon string) (string, error) {
 	return icon, nil
 }
 
-func viewText(text string) string {
-	return strings.Join(strings.Fields(text), " ")
-}
-
 func viewTitle(title string) (string, error) {
 	title = strings.TrimSpace(title)
 	if title == "" || utf8.RuneCountInString(title) > MAX_VIEW_TITLE_CHARS {

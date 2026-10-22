@@ -1,0 +1,9 @@
+{
+  "why": "A blank request id is as unattributable as a missing one.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "   "
+    }
+  }
+}

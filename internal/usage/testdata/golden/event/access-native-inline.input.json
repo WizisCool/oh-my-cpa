@@ -1,0 +1,11 @@
+{
+  "why": "The caller-authentication provider and native-key flag are stored as sent.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-ap",
+      "access_provider": "config-inline",
+      "is_native_key": true
+    }
+  }
+}

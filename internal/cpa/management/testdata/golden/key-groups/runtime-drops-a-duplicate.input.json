@@ -1,0 +1,47 @@
+{
+  "why": "CPA's runtime drops a duplicate key, and the console's positions are the runtime's, so the stored duplicate is not matched to one; the stored prefix is read rather than the runtime's normalised one.",
+  "now_ms": 0,
+  "body": {
+    "family": "gemini",
+    "stored": [
+      {
+        "name": "g-1",
+        "keys": [
+          {
+            "api-key": "dup"
+          }
+        ]
+      },
+      {
+        "name": "g-2",
+        "keys": [
+          {
+            "api-key": "dup"
+          }
+        ]
+      },
+      {
+        "name": "g-3",
+        "keys": [
+          {
+            "api-key": "other",
+            "prefix": " Team "
+          }
+        ]
+      }
+    ],
+    "runtime": {
+      "gemini-api-key": [
+        {
+          "api-key": "dup",
+          "auth-index": "a"
+        },
+        {
+          "api-key": "other",
+          "prefix": "team",
+          "auth-index": "b"
+        }
+      ]
+    }
+  }
+}

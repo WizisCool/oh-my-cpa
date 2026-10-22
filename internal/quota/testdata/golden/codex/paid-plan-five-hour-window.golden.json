@@ -1,0 +1,19 @@
+{
+  "plan": {
+    "plan_type": "plus",
+    "plan_label": "Plus",
+    "tier": "standard"
+  },
+  "windows": [
+    {
+      "id": "five_hour",
+      "label": "5小时用量上限 (5-Hour)",
+      "kind": "five_hour",
+      "scope": "standard",
+      "used_percent": 12,
+      "remaining_percent": 88,
+      "period_hours": 5,
+      "reset_accuracy": "approximate"
+    }
+  ]
+}

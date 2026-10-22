@@ -1,0 +1,13 @@
+{
+  "why": "An explicit generate=false is kept even with tokens.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r1",
+      "generate": false,
+      "tokens": {
+        "output_tokens": 9
+      }
+    }
+  }
+}

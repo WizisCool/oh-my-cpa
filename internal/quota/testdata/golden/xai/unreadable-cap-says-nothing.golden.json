@@ -1,0 +1,8 @@
+{
+  "plan": {
+    "plan_type": "paid",
+    "plan_label": "xAI Paid / API",
+    "tier": "standard"
+  },
+  "status": "idle"
+}

@@ -1,6 +1,6 @@
 # ADR 0068: Fail-closed browser evidence and parallel release verification
 
-- Status: Accepted
+- Status: Accepted; decisions 1, 5 and 6 and the harness self-proof in 3 superseded by ADR 0105
 - Date: 2026-10-07
 - Baseline: dc2002c0bec2968a99c0361526734fd0742d09df
 - Refines: ADR 0032's CI coverage and ADR 0066's publication workflow
@@ -18,7 +18,7 @@ finished.
 ## Decision
 
 1. Keep required `static`, `browser` and aggregate `probes` merge checks. Run full
-   built acceptance on both PR and master, alongside the full three-shard development
+   built acceptance on both PR and `main`, alongside the full three-shard development
    catalog and production demo coverage. P0/smoke commands remain optional local tools.
 2. Resolve release identity once, fan out read-only static/browser/probe verification,
    and aggregate every verdict before packaging/publication. Downstream checkouts use

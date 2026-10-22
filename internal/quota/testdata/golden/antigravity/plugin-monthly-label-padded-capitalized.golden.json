@@ -1,0 +1,51 @@
+{
+  "windows": [
+    {
+      "id": "ag_Cline Pass_bucket_0_0",
+      "label": "Cline Pass · 5小时限制 (5-Hour)",
+      "scope": "group",
+      "used_percent": 0,
+      "remaining_percent": 100,
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Cline Pass_bucket_0_1",
+      "label": "Cline Pass · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 59,
+      "remaining_percent": 41,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Cline Pass_bucket_0_2",
+      "label": "Cline Pass · 每月限制 (Monthly)",
+      "scope": "group",
+      "used_percent": 75,
+      "remaining_percent": 25,
+      "reset_at_ms": 1792973460000,
+      "reset_label": "10-26 00:11 (20752天后恢复)",
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Cline Pass_bucket_0_3",
+      "label": "Cline Pass · Burst budget",
+      "scope": "group",
+      "used_percent": 50,
+      "remaining_percent": 50,
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Cline Pass_bucket_0_4",
+      "label": "Cline Pass · Image credits",
+      "scope": "group",
+      "used_percent": 25,
+      "remaining_percent": 75,
+      "period_hours": 0,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

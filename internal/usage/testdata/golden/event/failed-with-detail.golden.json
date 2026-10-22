@@ -1,0 +1,12 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "EventKey": "req-fail",
+  "FailBody": "{\"error\":{\"code\":\"server_is_overloaded\",\"key\":\"[redacted]\"}}",
+  "FailStatusCode": 502,
+  "Failed": true,
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "RequestID": "req-fail"
+}

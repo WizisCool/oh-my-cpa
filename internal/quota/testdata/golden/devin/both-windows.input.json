@@ -1,0 +1,19 @@
+{
+  "why": "Daily and weekly shares arrive as numbers or numeric strings depending on the build; both normalize the same way, and the plan's end is read.",
+  "now_ms": 1700000000000,
+  "body": {
+    "userStatus": {
+      "planStatus": {
+        "planInfo": {
+          "planName": "Devin Pro"
+        },
+        "dailyQuotaRemainingPercent": 62.5,
+        "dailyQuotaResetAtUnix": 1700003600,
+        "weeklyQuotaRemainingPercent": "10",
+        "weeklyQuotaResetAtUnix": "1700600000",
+        "planStart": "2023-11-01T00:00:00Z",
+        "planEnd": "2023-12-01T00:00:00Z"
+      }
+    }
+  }
+}

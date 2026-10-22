@@ -1,0 +1,9 @@
+{
+  "why": "Only a request id: the model and group read as unknown.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r1"
+    }
+  }
+}

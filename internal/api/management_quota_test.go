@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -183,18 +182,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-
-	// Login
-	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "management-secret")
 
 	// 1. GET /api/v1/management/quota
 	quotaResp, err := client.Get(appServer.URL + "/api/v1/management/quota")
@@ -456,16 +444,7 @@ func TestQuotaOverviewAdvertisesPluginRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "management-secret")
 
 	quotaResp, err := client.Get(appServer.URL + "/api/v1/management/quota")
 	if err != nil {

@@ -1,0 +1,10 @@
+{
+  "why": "Without a quota block nothing reads as exceeded, and a missing timestamp takes the pop time.",
+  "now_ms": 1788163200000,
+  "body": {
+    "record": {
+      "status_code": 500,
+      "body": "boom"
+    }
+  }
+}

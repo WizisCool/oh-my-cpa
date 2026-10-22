@@ -1,0 +1,14 @@
+{
+  "why": "camelCase keys are read, and usage past 100% is clamped; a reset given only as seconds-after is marked derived.",
+  "now_ms": 1735689600000,
+  "body": {
+    "planType": "plus",
+    "rateLimit": {
+      "primaryWindow": {
+        "usedPercent": 140,
+        "limitWindowSeconds": 18000,
+        "resetAfterSeconds": 120
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "plan": {
+    "subscription_active": false,
+    "plan_type": "meta",
+    "plan_label": "Muse Pro",
+    "tier": "unknown"
+  },
+  "windows": [
+    {
+      "id": "meta_window",
+      "label": "5-hour window",
+      "scope": "standard",
+      "used_percent": 25,
+      "remaining_percent": 75,
+      "reset_at_ms": 1800000000000,
+      "reset_label": "01-15 08:00 (1157天9小时后恢复)",
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "meta_weekly",
+      "label": "Weekly",
+      "kind": "weekly",
+      "scope": "standard",
+      "used_percent": 80,
+      "remaining_percent": 20,
+      "reset_at_ms": 1800100000000,
+      "reset_label": "01-16 11:46 (1158天13小时后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

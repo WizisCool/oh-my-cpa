@@ -1,0 +1,12 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "EffectiveServiceTier": "auto",
+  "EventKey": "outbound-test",
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "RequestID": "outbound-test",
+  "ResponseServiceTier": "default",
+  "ServiceTier": "auto"
+}

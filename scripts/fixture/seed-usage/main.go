@@ -223,15 +223,6 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 	callerKey.APIKeyMask = security.MaskSecret(fixtureClientKey)
 	callerKey.Source = "fixture-caller"
 	events = append(events, callerKey)
-	// The browser fixture gates this newest, last-ingested row until Hold is
-	// established. Its timestamp is already in the window so release does not
-	// depend on application startup speed or a second database writer.
-	events = append(events, fixtureEvent(
-		"fixture-future-arrival",
-		now.Add(-time.Second),
-		shortLatencyMS+50,
-		false,
-	))
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return fmt.Errorf("seed list scenario: %w", err)

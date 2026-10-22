@@ -1,0 +1,10 @@
+{
+  "why": "A keyless record has no mask and groups by provider.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r2",
+      "provider": "openai"
+    }
+  }
+}

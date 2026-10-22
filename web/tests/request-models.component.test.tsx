@@ -1,15 +1,10 @@
-import React from 'react';
-import { App as AntdApp } from 'antd';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from '../src/i18n';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { expect, it } from 'vitest';
 import { RequestRow } from '../src/components/usage/RequestRow';
 import { TokenDisplayProvider, useTokenDisplayStyle } from '../src/types/tokenDisplayContext';
 import type { UsageEvent } from '../src/types/usageEvents';
-
-const clients: QueryClient[] = [];
-afterEach(() => clients.splice(0).forEach(client => client.clear()));
+import { installOmcApi } from './support/omcApi';
+import { createTestQueryClient, renderWithOmc } from './support/render';
 
 const event: UsageEvent = {
   id: 183, event_key: 'oauth-alias', timestamp_ms: 1_800_000_000_000,
@@ -25,17 +20,15 @@ function ModelViewControl() {
 }
 
 function renderRow(overrides: Partial<UsageEvent> = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } });
-  clients.push(client);
-  client.setQueryData(['preferences'], { omc_models_view: 'call', omc_request_model_icons: false });
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ key: 'omc_models_view', value: 'model' }), {
-    headers: { 'Content-Type': 'application/json' },
-  })));
-  return render(<React.StrictMode><QueryClientProvider client={client}><I18nProvider><AntdApp>
-    <TokenDisplayProvider><ModelViewControl /><RequestRow event={{ ...event, ...overrides }}
-      credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
-    </TokenDisplayProvider>
-  </AntdApp></I18nProvider></QueryClientProvider></React.StrictMode>);
+  const preferences = { omc_models_view: 'call', omc_request_model_icons: false };
+  installOmcApi({ preferences: { ...preferences } });
+  // Seeded and never stale, so the row renders its stored view on the first pass.
+  const client = createTestQueryClient();
+  client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity, staleTime: Infinity } });
+  client.setQueryData(['preferences'], preferences);
+  return renderWithOmc(<TokenDisplayProvider><ModelViewControl /><RequestRow event={{ ...event, ...overrides }}
+    credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
+  </TokenDisplayProvider>, { client, isStrict: true });
 }
 
 it('leads with the caller alias and shows its billable upstream as secondary information', () => {

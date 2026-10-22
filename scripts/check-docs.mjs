@@ -28,8 +28,6 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
  * plan-time figures and cite paths that existed at their baseline. Everything
  * else under docs/ is maintained and must resolve against the current tree. */
 export const ARCHIVAL_DOCUMENTS = new Set([
-  'docs/plans/architecture-governance.md',
-  'docs/plans/ci-testing-optimization.md',
   'docs/performance.md',
 ]);
 
@@ -55,12 +53,6 @@ export function discoverDocuments(projectRoot = DEFAULT_ROOT) {
   }));
 }
 export const DOCUMENTS = discoverDocuments();
-
-// Accepted decisions retain paths that existed at their frozen baseline, not today's topology.
-const ARCHIVAL_RETIRED_PATHS = new Set([
-  'docs/ops/vercel-demo.md',
-  'internal/cpa/configyaml/layout_rules.go',
-]);
 
 /** References that have already gone stale at least once. Each entry is
  * evidence for a future reviewer: the reason explains what replaced it. */
@@ -227,7 +219,8 @@ export function checkDocument({ file, archival = false }, { projectRoot = DEFAUL
     const classified = classifyPath(span);
     if (!classified) continue;
     if (!resolvePath(classified.path)) {
-      if (isExpectedAbsent(classified.path) || (archival && ARCHIVAL_RETIRED_PATHS.has(classified.path))) continue;
+      // A decision record or release note describes the tree at its own date.
+      if (isExpectedAbsent(classified.path) || archival) continue;
       const key = `missing:${classified.path}`;
       if (alreadyReported.has(key)) continue;
       alreadyReported.add(key);

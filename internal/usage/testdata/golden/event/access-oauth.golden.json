@@ -1,0 +1,10 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "AccessProvider": "codex",
+  "EventKey": "req-ap-oauth",
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "RequestID": "req-ap-oauth"
+}

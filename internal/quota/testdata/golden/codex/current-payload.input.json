@@ -1,0 +1,40 @@
+{
+  "why": "The live shape: a weekly primary window, a model-scoped additional limit and reset credits.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "pro",
+    "rate_limit": {
+      "allowed": true,
+      "limit_reached": false,
+      "primary_window": {
+        "used_percent": 1,
+        "limit_window_seconds": 604800,
+        "reset_after_seconds": 601888,
+        "reset_at": 1785902974
+      },
+      "secondary_window": null
+    },
+    "code_review_rate_limit": null,
+    "additional_rate_limits": [
+      {
+        "limit_name": "GPT-5.3-Codex-Spark",
+        "metered_feature": "codex_bengalfox",
+        "rate_limit": {
+          "allowed": true,
+          "limit_reached": false,
+          "primary_window": {
+            "used_percent": 0,
+            "limit_window_seconds": 604800,
+            "reset_after_seconds": 602111,
+            "reset_at": 1785903197
+          },
+          "secondary_window": null
+        }
+      }
+    ],
+    "rate_limit_reset_credits": {
+      "available_count": 1,
+      "applicable_available_count": 0
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "why": "Only diagnostic headers are kept, joined and sorted by name; content, cookie, session and authorization headers and credential-shaped values are dropped.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-headers",
+      "failed": true,
+      "fail": {
+        "status_code": 502,
+        "body": "overloaded"
+      },
+      "response_headers": {
+        "Cf-Ray": [
+          "a4838167fd32d5c8-NRT"
+        ],
+        "X-Request-Id": [
+          "req_upstream_1"
+        ],
+        "Retry-After": [
+          "30"
+        ],
+        "X-Ratelimit-Remaining-Requests": [
+          "12",
+          "11"
+        ],
+        "Server": [
+          "cloudflare"
+        ],
+        "Content-Type": [
+          "application/json"
+        ],
+        "Date": [
+          "Sat, 10 Oct 2026 06:18:02 GMT"
+        ],
+        "Set-Cookie": [
+          "__cf_bm=abcdef; path=/"
+        ],
+        "X-Session-Token": [
+          "opaque"
+        ],
+        "Authorization": [
+          "Bearer abc"
+        ],
+        "X-Echo": [
+          "sk-abcdefghijklmnopqrstuvwxyz123456"
+        ]
+      }
+    },
+    "secrets": [
+      "sk-abcdefghijklmnopqrstuvwxyz123456",
+      "__cf_bm",
+      "Bearer abc",
+      "opaque"
+    ]
+  }
+}

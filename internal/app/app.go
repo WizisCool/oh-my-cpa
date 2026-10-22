@@ -493,7 +493,12 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	if !hasPipelineReturned {
 		select {
-		case <-pipelineErrors:
+		case err := <-pipelineErrors:
+			// The run is already ending, so a pipeline failure here changes nothing
+			// but is still worth the operator's log.
+			if err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn("usage pipeline stopped with an error during shutdown", "error", err)
+			}
 		case <-shutdownContext.Done():
 			a.logger.Warn("usage pipeline did not stop before the shutdown deadline")
 		}

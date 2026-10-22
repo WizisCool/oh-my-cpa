@@ -139,7 +139,7 @@ func TestProviderWebsiteRemovedWithProvider(t *testing.T) {
 		t.Fatalf("delete status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
 	var res struct {
 		Providers []ProviderItemDTO `json:"providers"`
 	}

@@ -1,0 +1,10 @@
+{
+  "why": "A record without a timestamp takes the pop time; otherwise every windowed dashboard query would miss it.",
+  "now_ms": 1788172200000,
+  "body": {
+    "record": {
+      "request_id": "r1",
+      "model": "m"
+    }
+  }
+}

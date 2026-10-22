@@ -1,0 +1,34 @@
+{
+  "why": "Five-hour and seven-day windows, a Fable weekly limit from the scoped limits list, and enabled extra usage.",
+  "now_ms": 1735689600000,
+  "body": {
+    "five_hour": {
+      "utilization": 25.5,
+      "resets_at": "2026-07-27T10:00:00.000Z"
+    },
+    "seven_day": {
+      "utilization": 80.0,
+      "resets_at": "2026-07-27T10:00:00.000Z"
+    },
+    "limits": [
+      {
+        "kind": "weekly_scoped",
+        "percent": 64,
+        "resets_at": "2026-07-27T10:00:00.000Z",
+        "is_active": true,
+        "scope": {
+          "model": {
+            "id": null,
+            "display_name": "Fable"
+          }
+        }
+      }
+    ],
+    "extra_usage": {
+      "is_enabled": true,
+      "monthly_limit": 5000,
+      "used_credits": 2500,
+      "utilization": 50.0
+    }
+  }
+}

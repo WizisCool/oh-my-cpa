@@ -1,0 +1,13 @@
+{
+  "why": "A percentage-only iguana_necktie is still the legacy Fable window, and an extra-usage block without a readable state is no claim.",
+  "now_ms": 1792108800000,
+  "body": {
+    "iguana_necktie": {
+      "utilization": 40,
+      "resets_at": "2026-10-20T00:00:00Z"
+    },
+    "extra_usage": {
+      "monthly_limit": 100
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "why": "A record that cannot be attributed to a request is rejected.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "model": "x"
+    }
+  }
+}

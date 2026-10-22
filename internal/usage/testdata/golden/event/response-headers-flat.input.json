@@ -1,0 +1,12 @@
+{
+  "why": "A flat header map from another gateway is read as single values.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-flat",
+      "response_headers": {
+        "cf-ray": "abc"
+      }
+    }
+  }
+}

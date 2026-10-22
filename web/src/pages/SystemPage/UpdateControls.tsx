@@ -14,7 +14,7 @@ import styles from '../SystemPage.module.css';
 
 /** Run on the Docker host; `-u 0` because the socket it mounts belongs to root. */
 export const UPDATER_INSTALL_COMMAND = 'docker run --rm --pull always -u 0 -v /var/run/docker.sock:/var/run/docker.sock wiziscool/oh-my-cpa:latest updater install';
-const UPDATER_GUIDE_URL = 'https://github.com/WizisCool/oh-my-cpa/blob/master/docs/install.md#upgrading';
+const UPDATER_GUIDE_URL = 'https://github.com/WizisCool/oh-my-cpa/blob/main/docs/install.md#upgrading';
 
 interface UpdateActionProps {
   version: SystemProductVersion;

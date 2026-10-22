@@ -1,0 +1,13 @@
+{
+  "why": "Without total_tokens the total is input plus output.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r1",
+      "tokens": {
+        "input_tokens": 60,
+        "output_tokens": 15
+      }
+    }
+  }
+}

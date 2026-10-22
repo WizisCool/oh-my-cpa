@@ -1,0 +1,30 @@
+{
+  "windows": [
+    {
+      "id": "kimi_0",
+      "label": "限制项 1",
+      "kind": "custom",
+      "scope": "standard",
+      "used": 139,
+      "limit": 200,
+      "used_percent": 69.5,
+      "remaining_percent": 30.5,
+      "reset_at_ms": 4094152234000,
+      "reset_label": "已恢复",
+      "period_hours": 5,
+      "reset_accuracy": "exact"
+    },
+    {
+      "id": "kimi_ratio_limit_month_total",
+      "label": "limit_month_total",
+      "kind": "monthly",
+      "scope": "standard",
+      "used_percent": 25.290000000000003,
+      "remaining_percent": 74.71,
+      "reset_at_ms": 4096310400000,
+      "reset_label": "10-22 00:00 (21天后恢复)",
+      "period_hours": 720,
+      "reset_accuracy": "exact"
+    }
+  ]
+}

@@ -34,15 +34,11 @@
  *   pnpm check:ui --base <ref>          plan against <ref>..worktree instead of HEAD
  */
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runProbeCatalog } from './testing/probes.ts';
-import { parseProbeWorkers } from './acceptance/probe-options.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
-import { buildImporterGraph, isCatalogAdditionOnly, isManifestScriptsOnly, readAtRef } from './acceptance/ui-impact.mjs';
-import { planProbeChange } from './acceptance/probe-impact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -60,7 +56,7 @@ function parseArgs(argv: string[]) {
     else if (arg === '--list') options.list = true;
     else if (arg === '--plan') options.plan = true;
     else if (arg === '--scenario') options.scenario = argv[++index];
-    else if (arg === '--workers' && !hasWorkers) { options.workers = parseProbeWorkers(argv[++index]); hasWorkers = true; }
+    else if (arg === '--workers' && !hasWorkers && /^[1-9]$/.test(argv[index + 1] ?? '')) { options.workers = Number(argv[++index]); hasWorkers = true; }
     else if (arg === '--base') options.base = argv[++index];
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -114,25 +110,7 @@ if (options.scenario !== undefined && !ids.includes(options.scenario)) {
 }
 
 const files = changedFiles(options.base);
-// The import graph costs a few seconds of transpiling, so it is built only when the
-// selection is actually being planned.
-const readCurrent = (file: string) => (fs.existsSync(path.join(root, file)) ? fs.readFileSync(path.join(root, file), 'utf8') : undefined);
-const readBase = (file: string) => readAtRef(options.base, file);
-const needsImpact = !options.all && options.scenario === undefined && files.length > 0;
-const impact = needsImpact
-  ? {
-    ...buildImporterGraph(),
-    isAdditionOnly: (file: string) => isCatalogAdditionOnly(file, readBase(file), readCurrent(file)),
-    isManifestScriptsOnly: (file: string) => isManifestScriptsOnly(file, readBase(file), readCurrent(file)),
-    probeChange: (changed: string[]) => planProbeChange(changed, {
-      readBase,
-      readCurrent,
-      acceptanceFiles: execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance', 'scripts/testing'], { cwd: root, encoding: 'utf8' })
-        .split('\n').filter((file) => /\.(?:mjs|ts)$/.test(file)),
-    }),
-  }
-  : undefined;
-const plan = planScenarios(files, ids, impact);
+const plan = planScenarios(files, ids);
 
 const selectedIds = options.all
   ? ids
@@ -151,9 +129,6 @@ if (options.plan) {
   console.log(`Changed files: ${files.length === 0 ? '(none)' : files.join(', ')}`);
   for (const file of files) console.log(`  - ${file}`);
   console.log(`\nPlan: ${plan.reason}`);
-  for (const entry of plan.reasons) {
-    if (entry.kind === 'map' || entry.kind === 'skip') console.log(`  ${entry.detail}`);
-  }
   console.log(
     selectedIds.length === 0
       ? '\nNo scenario would run.'

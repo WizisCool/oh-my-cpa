@@ -1,0 +1,15 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "EventKey": "req-flat",
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "RequestID": "req-flat",
+  "ResponseHeaders": [
+    {
+      "name": "cf-ray",
+      "value": "abc"
+    }
+  ]
+}

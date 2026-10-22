@@ -1,0 +1,22 @@
+{
+  "why": "A non-finite used_percent is omitted rather than trusted, and a refused code-review limit reads as fully used.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "pro",
+    "rate_limit": {
+      "allowed": true,
+      "limit_reached": false,
+      "primary_window": {
+        "used_percent": "NaN",
+        "limit_window_seconds": 18000
+      }
+    },
+    "code_review_rate_limit": {
+      "allowed": false,
+      "primary_window": {
+        "used_percent": 10,
+        "limit_window_seconds": 18000
+      }
+    }
+  }
+}

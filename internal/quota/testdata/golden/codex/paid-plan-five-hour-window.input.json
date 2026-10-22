@@ -1,0 +1,13 @@
+{
+  "why": "The paid shape keeps the five-hour identity.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "plus",
+    "rate_limit": {
+      "primary_window": {
+        "used_percent": 12,
+        "limit_window_seconds": 18000
+      }
+    }
+  }
+}

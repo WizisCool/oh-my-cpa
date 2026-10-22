@@ -121,7 +121,7 @@ altogether by removing the thing worth demonstrating.
 
 ## Consequences
 
-- The demonstration deploys from `master` through Cloudflare's Git integration, which
+- The demonstration deploys from `main` through Cloudflare's Git integration, which
   manages its own build token, so no repository secret is required - one of the
   grievances that made the previous platform unattractive.
 - Every change to a console page's data now carries an obligation: regenerate the

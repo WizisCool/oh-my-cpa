@@ -1,0 +1,45 @@
+{
+  "why": "Every mapped field of a successful record: trimmed ids and alias, the normalised auth type, a redacted caller key and source without a fingerprinter, and a blank forwarded-for stored as unknown.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "timestamp": "2026-08-31T12:00:00.5Z",
+      "latency_ms": 1234,
+      "ttft_ms": 87,
+      "source": "sk-local",
+      "auth_index": "auth-1",
+      "client_ip": "10.0.0.5",
+      "x_forwarded_for": "",
+      "user_agent": "codex-cli/0.46",
+      "tokens": {
+        "input_tokens": 100,
+        "output_tokens": 40,
+        "reasoning_tokens": 12,
+        "cached_tokens": 0,
+        "cache_read_tokens": 8,
+        "cache_read_tokens_present": true,
+        "cache_creation_tokens": 3,
+        "total_tokens": 150
+      },
+      "failed": false,
+      "generate": true,
+      "provider": "gemini",
+      "executor_type": "GeminiExecutor",
+      "model": "gemini-2.5-pro",
+      "alias": "  pro  ",
+      "endpoint": "",
+      "auth_type": "api_key",
+      "api_key": "sk-secret",
+      "request_id": "  req-123  ",
+      "reasoning_effort": "high",
+      "service_tier": "priority",
+      "brand_new_field": {
+        "a": 1
+      }
+    },
+    "secrets": [
+      "sk-secret",
+      "sk-local"
+    ]
+  }
+}

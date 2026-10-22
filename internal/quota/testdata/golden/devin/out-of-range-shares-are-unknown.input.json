@@ -1,0 +1,12 @@
+{
+  "why": "An out-of-range share means the field is not what it is believed to be; showing 0% remaining would fabricate exhaustion.",
+  "now_ms": 1700000000000,
+  "body": {
+    "userStatus": {
+      "planStatus": {
+        "dailyQuotaRemainingPercent": -5,
+        "weeklyQuotaRemainingPercent": 250
+      }
+    }
+  }
+}

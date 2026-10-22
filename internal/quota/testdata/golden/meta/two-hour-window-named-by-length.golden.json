@@ -1,0 +1,24 @@
+{
+  "plan": {
+    "plan_type": "meta",
+    "plan_label": "Meta Muse",
+    "tier": "unknown"
+  },
+  "windows": [
+    {
+      "id": "meta_window",
+      "label": "2-hour window",
+      "scope": "standard",
+      "used_percent": 10,
+      "remaining_percent": 90,
+      "period_hours": 2
+    },
+    {
+      "id": "meta_weekly",
+      "label": "Weekly",
+      "kind": "weekly",
+      "scope": "standard",
+      "period_hours": 168
+    }
+  ]
+}

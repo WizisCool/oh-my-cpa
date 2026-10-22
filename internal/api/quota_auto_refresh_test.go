@@ -1,12 +1,10 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -269,16 +267,7 @@ func TestQuotaAutoRefreshPreferenceIsValidatedOnWrite(t *testing.T) {
 	handler := testHandler(t, "")
 	server := httptest.NewServer(handler.Router())
 	defer server.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
+	client := signedInClient(t, server.URL+"/api/auth/login", "management-secret")
 
 	put := func(body string) (int, string) {
 		t.Helper()

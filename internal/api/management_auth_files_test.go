@@ -8,7 +8,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -114,19 +113,7 @@ func startAuthFilesTestServer(t *testing.T, managementKey string, handler func(h
 	server := httptest.NewServer(appHandler.Router())
 	t.Cleanup(server.Close)
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
-	if login.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d", login.StatusCode)
-	}
+	client := signedInClient(t, server.URL+"/omc/api/auth/login", "management-secret-value")
 	return client, server.URL, recorder
 }
 
@@ -561,16 +548,7 @@ func TestManagementAuthFilesFacadeGuardrails(t *testing.T) {
 	emptyHandler := NewHandler(config.Config{BasePath: "/omc", Version: "test", RequestTimeout: time.Second}, repository.New(db), cipher, nil, authManager)
 	emptyServer := httptest.NewServer(emptyHandler.Router())
 	defer emptyServer.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	emptyClient := &http.Client{Jar: jar}
-	login, err := emptyClient.Post(emptyServer.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
+	emptyClient := signedInClient(t, emptyServer.URL+"/omc/api/auth/login", "management-secret-value")
 	unconfigured, raw := doJSON(t, emptyClient, http.MethodGet, emptyServer.URL+"/omc/api/v1/management/auth-files", "")
 	if unconfigured.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("unconfigured status = %d body = %s", unconfigured.StatusCode, raw)

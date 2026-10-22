@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -88,16 +87,7 @@ func TestQuotaRefreshFailureStaysOnThePage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "management-secret")
 
 	refresh := func() quota.NormalizedQuota {
 		t.Helper()
@@ -303,16 +293,7 @@ func TestQuotaRefreshFailureWithoutAReading(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	loginResp, err := client.Post(appServer.URL+"/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginResp.Body.Close()
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "management-secret")
 
 	refreshResp, err := client.Post(appServer.URL+"/api/v1/management/quota/refresh", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
 	if err != nil {

@@ -1,0 +1,19 @@
+{
+  "plan": {
+    "plan_type": "paid",
+    "plan_label": "xAI Paid / API",
+    "tier": "standard"
+  },
+  "windows": [
+    {
+      "id": "xai_credit_usage",
+      "label": "额度总使用率 (Credit Usage)",
+      "scope": "standard",
+      "used_percent": 5,
+      "remaining_percent": 95,
+      "period_hours": 168,
+      "reset_accuracy": "exact"
+    }
+  ],
+  "status": "healthy"
+}

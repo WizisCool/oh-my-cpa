@@ -1,0 +1,21 @@
+{
+  "why": "limit_reached covers the rate limit, so only the exhausted five-hour window reads as spent; the weekly window keeps its own 37%.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "plus",
+    "rate_limit": {
+      "allowed": false,
+      "limit_reached": true,
+      "primary_window": {
+        "used_percent": 100,
+        "limit_window_seconds": 18000,
+        "reset_after_seconds": 10000
+      },
+      "secondary_window": {
+        "used_percent": 37,
+        "limit_window_seconds": 604800,
+        "reset_after_seconds": 400000
+      }
+    }
+  }
+}

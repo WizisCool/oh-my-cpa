@@ -4,12 +4,29 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export function collectDefinedKeys(dictionaryFile) {
-  const content = fs.readFileSync(dictionaryFile, 'utf8');
-  const keys = new Set();
+/** The base dictionary's message files: every module under `messages/` but the aggregator and its type. */
+function dictionaryFiles(directory) {
+  return fs.readdirSync(directory)
+    .filter((name) => name.endsWith('.ts') && name !== 'index.ts' && name !== 'types.ts')
+    .sort()
+    .map((name) => path.join(directory, name));
+}
+
+/**
+ * Every key the dictionary defines, and each key defined more than once. The files are
+ * spread into one object, so a key repeated in a second file would replace the first
+ * file's copy without an error from the compiler.
+ */
+export function collectDefinedKeys(files) {
+  const owners = new Map();
   const expression = /'([a-zA-Z0-9_.]+)':\s*\[/g;
-  for (const match of content.matchAll(expression)) keys.add(match[1]);
-  return keys;
+  for (const file of files) {
+    for (const match of fs.readFileSync(file, 'utf8').matchAll(expression)) {
+      owners.set(match[1], [...(owners.get(match[1]) ?? []), file]);
+    }
+  }
+  const duplicates = [...owners].filter(([, where]) => where.length > 1);
+  return { keys: new Set(owners.keys()), duplicates };
 }
 
 export function collectCatalogKeys(catalogFile) {
@@ -28,8 +45,8 @@ export function collectCatalogEntries(catalogFile) {
   return entries;
 }
 
-function collectBasePlaceholders(dictionaryFile) {
-  const content = fs.readFileSync(dictionaryFile, 'utf8');
+function collectBasePlaceholders(files) {
+  const content = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   const placeholders = new Map();
   const expression = /'([a-zA-Z0-9_.]+)':\s*\[\s*'(?:[^'\\]|\\.)*'\s*,\s*'((?:[^'\\]|\\.)*)'\s*,?\s*\]/gs;
   const placeholderExpression = /\{[A-Za-z0-9_]+\}/g;
@@ -49,14 +66,13 @@ function sourceFiles(directory) {
     }
     if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
     if (entry.name.includes('.test.')) continue;
-    if (entry.name === 'index.tsx' && path.basename(directory) === 'i18n') continue;
+    if (path.basename(directory) === 'messages' && path.basename(path.dirname(directory)) === 'i18n') continue;
     files.push(fullPath);
   }
   return files;
 }
 
-export function findMissingKeys({ dictionaryFile, sourceDirectory }) {
-  const definedKeys = collectDefinedKeys(dictionaryFile);
+export function findMissingKeys({ definedKeys, sourceDirectory }) {
   const missing = [];
   const expression = /\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]/g;
 
@@ -69,12 +85,11 @@ export function findMissingKeys({ dictionaryFile, sourceDirectory }) {
     }
   }
 
-  return { definedKeys, missing };
+  return missing;
 }
 
-export function findCatalogGaps({ dictionaryFile, catalogFiles }) {
-  const definedKeys = collectDefinedKeys(dictionaryFile);
-  const basePlaceholders = collectBasePlaceholders(dictionaryFile);
+export function findCatalogGaps({ definedKeys, files, catalogFiles }) {
+  const basePlaceholders = collectBasePlaceholders(files);
   return catalogFiles.map(({ id, file }) => {
     const catalogEntries = collectCatalogEntries(file);
     const catalogKeys = new Set(catalogEntries.keys());
@@ -96,8 +111,26 @@ export function findCatalogGaps({ dictionaryFile, catalogFiles }) {
   });
 }
 
+const CAPABILITY_PREFIX = 'agent.capability.';
+
+/**
+ * Capability copy is looked up by a computed key, so the reference scan above cannot see it.
+ * The console falls back to the registry's identifier when copy is missing, which would let a
+ * new capability ship untranslated unnoticed. The registry is read from the demonstration
+ * dataset, which the real handlers generate and TestExportDemoDataset keeps fresh.
+ */
+function findCapabilityGaps(definedKeys) {
+  const dataset = JSON.parse(fs.readFileSync(path.join(root, 'deploy', 'cloudflare', 'data', 'responses.json'), 'utf8'));
+  const names = new Set(JSON.parse(dataset.responses.capabilities.body).capabilities.map((capability) => capability.name));
+  const missing = [...names].flatMap((name) => [`${CAPABILITY_PREFIX}${name}`, `${CAPABILITY_PREFIX}${name}.description`])
+    .filter((key) => !definedKeys.has(key));
+  const stale = [...definedKeys]
+    .filter((key) => key.startsWith(CAPABILITY_PREFIX) && !names.has(key.slice(CAPABILITY_PREFIX.length).replace(/\.description$/, '')));
+  return { missing, stale };
+}
+
 export function runCheck({
-  dictionaryFile = path.join(root, 'web', 'src', 'i18n', 'index.tsx'),
+  dictionaryDirectory = path.join(root, 'web', 'src', 'i18n', 'messages'),
   sourceDirectory = path.join(root, 'web', 'src'),
   catalogFiles = [
     { id: 'zh-Hant', file: path.join(root, 'web', 'src', 'i18n', 'locales', 'zh-Hant.ts') },
@@ -105,12 +138,17 @@ export function runCheck({
   ],
   output = console,
 } = {}) {
-  const { definedKeys, missing } = findMissingKeys({ dictionaryFile, sourceDirectory });
-  output.log(`Total defined keys in DICT: ${definedKeys.size}`);
+  const files = dictionaryFiles(dictionaryDirectory);
+  const { keys: definedKeys, duplicates } = collectDefinedKeys(files);
+  const missing = findMissingKeys({ definedKeys, sourceDirectory });
+  output.log(`Total defined keys in the base dictionary: ${definedKeys.size}`);
+  for (const [key, where] of duplicates) {
+    output.error(`DUPLICATE KEY: "${key}" in ${where.map((file) => path.relative(root, file)).join(', ')}`);
+  }
   for (const item of missing) {
     output.error(`MISSING KEY: "${item.key}" in ${path.relative(root, item.file)}`);
   }
-  const catalogGaps = findCatalogGaps({ dictionaryFile, catalogFiles });
+  const catalogGaps = findCatalogGaps({ definedKeys, files, catalogFiles });
   for (const gap of catalogGaps) {
     for (const key of gap.missing) {
       output.error(`MISSING ${gap.id} TRANSLATION: "${key}" in ${path.relative(root, gap.file)}`);
@@ -124,8 +162,14 @@ export function runCheck({
       );
     }
   }
+  const capabilityGaps = findCapabilityGaps(definedKeys);
+  for (const key of capabilityGaps.missing) output.error(`MISSING CAPABILITY COPY: "${key}"`);
+  for (const key of capabilityGaps.stale) output.error(`STALE CAPABILITY COPY: "${key}" names no registered capability`);
   if (
     missing.length > 0
+    || duplicates.length > 0
+    || capabilityGaps.missing.length > 0
+    || capabilityGaps.stale.length > 0
     || catalogGaps.some((gap) => gap.missing.length > 0 || gap.extra.length > 0 || gap.placeholderMismatches.length > 0)
   ) {
     process.exitCode = 1;
@@ -134,15 +178,5 @@ export function runCheck({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const option = (name, fallback) => {
-    const index = process.argv.indexOf(name);
-    return index >= 0 ? path.resolve(process.argv[index + 1]) : fallback;
-  };
-  runCheck({
-    dictionaryFile: option('--dictionary', path.join(root, 'web', 'src', 'i18n', 'index.tsx')),
-    sourceDirectory: option('--source', path.join(root, 'web', 'src')),
-    // A fixture dictionary has no matching catalogs; the catalog contract is
-    // checked against the repository dictionary, where the files actually live.
-    catalogFiles: process.argv.includes('--dictionary') ? [] : undefined,
-  });
+  runCheck();
 }

@@ -173,8 +173,6 @@ jobs:
           git diff --check
           git status --short
           test -z "$(git status --porcelain)"
-      - name: Verify browser harness fault detection
-        run: pnpm verify:browser:harness
       - name: Run full built-artifact acceptance on every event
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
@@ -199,7 +197,6 @@ jobs:
           name: browser-acceptance-failure
           path: |
             tmp/browser-acceptance-failure/
-            tmp/browser-harness-failure/
           if-no-files-found: ignore
           retention-days: 7
       - name: Verify clean generated state
@@ -247,14 +244,6 @@ jobs:
         run: node scripts/install-chromium.mjs
       - name: Run the probe shard
         run: pnpm verify:probes --shard ${{ matrix.shard }}/3
-      - name: Upload probe timings
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: probe-timings-${{ matrix.shard }}
-          path: tmp/probe-timings/
-          if-no-files-found: error
-          retention-days: 30
       - name: Upload probe failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
