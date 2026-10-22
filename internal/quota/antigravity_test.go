@@ -112,7 +112,7 @@ func TestParseAntigravityUsageOrdersFiveHourFirst(t *testing.T) {
 	}
 }
 
-func TestParseAntigravityUsageKeepsOriginalBucketIDsWhenSorting(t *testing.T) {
+func TestParseAntigravityUsageKeepsSnapshotBucketIdentities(t *testing.T) {
 	const raw = `{"groups":[{"displayName":"Plugin","buckets":[
 		{"window":"monthly","remainingFraction":0.125},
 		{"window":"FIVE_WINDOW","remainingFraction":0.25},
@@ -121,25 +121,27 @@ func TestParseAntigravityUsageKeepsOriginalBucketIDsWhenSorting(t *testing.T) {
 		{"window":"WEEK_WINDOW","remainingFraction":0.625},
 		{"window":"burst","remainingFraction":0.75}
 	]},{"displayName":"Other","buckets":[{"window":"monthly","remainingFraction":0.875}]}]}`
-	remainingByID := map[string]float64{
-		"ag_Plugin_bucket_0_0": 12.5, "ag_Plugin_bucket_0_1": 25,
-		"ag_Plugin_upstream-week": 37.5, "ag_Plugin_upstream-day": 50,
-		"ag_Plugin_bucket_0_4": 62.5, "ag_Plugin_bucket_0_5": 75,
-		"ag_Other_bucket_1_0": 87.5,
-	}
+	sourceRemaining := []float64{12.5, 25, 37.5, 50, 62.5, 75, 87.5}
 	for _, scenario := range []struct {
 		name, fiveHour, weekly string
 		wantIDs                []string
+		sourceOrder            []int
 	}{
 		{"unrecognized", "unreported-five", "unreported-week", []string{
 			"ag_Plugin_bucket_0_0", "ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
-		}},
+		}, []int{0, 1, 2, 3, 4, 5, 6}},
 		{"canonical", "5h", "weekly", []string{
-			"ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_0", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
-		}},
+			"ag_Plugin_bucket_0_0", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_2", "ag_Plugin_bucket_0_3", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}, []int{1, 2, 4, 0, 3, 5, 6}},
+		{"established aliases", " FIVE-HOUR ", " 7 DaYs ", []string{
+			"ag_Plugin_bucket_0_0", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_2", "ag_Plugin_bucket_0_3", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}, []int{1, 2, 4, 0, 3, 5, 6}},
 		{"aliases", "FIVE-HOURS", "7_days", []string{
 			"ag_Plugin_bucket_0_1", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_4", "ag_Plugin_bucket_0_0", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
-		}},
+		}, []int{1, 2, 4, 0, 3, 5, 6}},
+		{"mixed", "FIVE-HOURS", "weekly", []string{
+			"ag_Plugin_bucket_0_3", "ag_Plugin_upstream-week", "ag_Plugin_bucket_0_1", "ag_Plugin_bucket_0_2", "ag_Plugin_upstream-day", "ag_Plugin_bucket_0_5", "ag_Other_bucket_1_0",
+		}, []int{1, 2, 4, 0, 3, 5, 6}},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			payload := strings.NewReplacer("FIVE_WINDOW", scenario.fiveHour, "WEEK_WINDOW", scenario.weekly).Replace(raw)
@@ -150,15 +152,36 @@ func TestParseAntigravityUsageKeepsOriginalBucketIDsWhenSorting(t *testing.T) {
 			if len(windows) != len(scenario.wantIDs) {
 				t.Fatalf("windows = %d, want %d", len(windows), len(scenario.wantIDs))
 			}
-			for i, window := range windows {
-				if window.ID != scenario.wantIDs[i] {
-					t.Errorf("windows[%d].ID = %q, want %q", i, window.ID, scenario.wantIDs[i])
+			for windowIndex, window := range windows {
+				if window.ID != scenario.wantIDs[windowIndex] {
+					t.Errorf("windows[%d].ID = %q, want the persisted identity %q", windowIndex, window.ID, scenario.wantIDs[windowIndex])
 				}
-				if window.RemainingPercent == nil || *window.RemainingPercent != remainingByID[scenario.wantIDs[i]] {
-					t.Errorf("windows[%d] lost the quota value associated with %q: %+v", i, scenario.wantIDs[i], window)
+				if window.RemainingPercent == nil || *window.RemainingPercent != sourceRemaining[scenario.sourceOrder[windowIndex]] {
+					t.Errorf("windows[%d] lost its source bucket's quota value: %+v", windowIndex, window)
 				}
 			}
 		})
+	}
+}
+
+func TestParseAntigravityUsageKeepsSourceOrderWithinNormalizedPeriods(t *testing.T) {
+	windows, err := ParseAntigravityUsage([]byte(`{"groups":[{"displayName":"Plugin","buckets":[
+		{"window":"five-hours","remainingFraction":0.125},
+		{"window":"5h","remainingFraction":0.25},
+		{"window":"7-days","remainingFraction":0.375},
+		{"window":"weekly","remainingFraction":0.5}
+	]}]}`), 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{"ag_Plugin_bucket_0_2", "ag_Plugin_bucket_0_0", "ag_Plugin_bucket_0_3", "ag_Plugin_bucket_0_1"}
+	if len(windows) != len(wantIDs) {
+		t.Fatalf("windows = %d, want %d", len(windows), len(wantIDs))
+	}
+	for windowIndex, window := range windows {
+		if window.ID != wantIDs[windowIndex] || window.RemainingPercent == nil || *window.RemainingPercent != float64(windowIndex+1)*12.5 {
+			t.Errorf("windows[%d] changed display order or identity: %+v", windowIndex, window)
+		}
 	}
 }
 

@@ -111,6 +111,20 @@ func antigravityBucketWindowOrder(bucket RawAntigravityBucket) int {
 	}
 }
 
+// Snapshot IDs were allocated after the original five-hour/weekly sort. Its
+// exact identifiers are fixed: expanding display aliases must not assign an
+// existing snapshot ID to a different source bucket.
+func antigravityBucketIdentityOrder(window string) int {
+	switch strings.ToLower(strings.TrimSpace(window)) {
+	case "5h", "5 hour", "5 hours", "five_hour", "five-hour":
+		return 0
+	case "7d", "7 days", "1w", "week", "weekly":
+		return 1
+	default:
+		return 2
+	}
+}
+
 // ParseAntigravityUsage parses Antigravity quota response and returns normalized windows.
 func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]QuotaWindow, error) {
 	var payload RawAntigravityPayload
@@ -132,14 +146,21 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 		// Keep each group's windows contiguous while ordering 5h before weekly.
 		buckets := make([]RawAntigravityBucket, len(group.Buckets))
 		copy(buckets, group.Buckets)
-		// Fallback identity follows source order, independently of window recognition.
+		var identityCounts [3]int
+		for _, bucket := range buckets {
+			identityCounts[antigravityBucketIdentityOrder(bucket.Window)]++
+		}
+		identityPositions := [3]int{0, identityCounts[0], identityCounts[0] + identityCounts[1]}
 		for bucketIndex := range buckets {
 			bucket := &buckets[bucketIndex]
+			identityOrder := antigravityBucketIdentityOrder(bucket.Window)
+			identityIndex := identityPositions[identityOrder]
+			identityPositions[identityOrder]++
 			if bucket.BucketID == "" {
 				bucket.BucketID = bucket.BucketIDAlt
 			}
 			if bucket.BucketID == "" {
-				bucket.BucketID = fmt.Sprintf("bucket_%d_%d", groupIndex, bucketIndex)
+				bucket.BucketID = fmt.Sprintf("bucket_%d_%d", groupIndex, identityIndex)
 			}
 		}
 		sort.SliceStable(buckets, func(i, j int) bool {

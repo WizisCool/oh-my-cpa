@@ -981,6 +981,12 @@ owns which copy a credential with no window carries, and `scripts/test-oauth-wor
 owns its triage bucket. The rendering of those readings stays with the existing
 `oauth-management` probe.
 
+`internal/quota/antigravity_test.go` owns period aliases, calendar-month versus
+fixed-duration semantics, display ordering and persisted bucket identities, including
+mixed explicit and fallback IDs. `internal/quota/antigravity_history_test.go` matches
+fresh readings against pre-upgrade snapshot IDs so resets and evidence gaps cannot
+cross quota windows when period recognition changes.
+
 A failed read is a separate fact from a reading, and the split is covered at the layer
 that can fail for the right reason. `internal/repository/quota_test.go` owns the attempt
 record: the upsert, the batch read, a later success clearing the reason it followed, and

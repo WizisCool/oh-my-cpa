@@ -488,7 +488,7 @@ Browser ──▶ Direct listener / existing HTTPS ingress ──▶ Oh My CPA (
 
 ## Contributing
 
-Issues and pull requests are welcome. Development needs Go 1.25+, Node.js 22+ and
+Issues and pull requests are welcome. Development needs Go 1.26+, Node.js 22+ and
 pnpm 11+:
 
 ```bash
