@@ -2572,6 +2572,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.filter_chip_model_alias": "呼叫模型: {val}",
   "events.filter_chip_reasoning": "推理強度: {val}",
   "events.filter_chip_service_tier": "服務等級: {val}",
+  "events.filter_chip_resolved_service_tier": "判定服務等級: {val}",
   "events.filter_chip_ua": "客戶端 UA: {val}",
   "events.filter_chip_endpoint": "端點: {val}",
   "events.filter_chip_request_id": "Request ID: {val}",

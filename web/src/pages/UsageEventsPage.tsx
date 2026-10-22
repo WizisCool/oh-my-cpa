@@ -369,6 +369,7 @@ export const UsageEventsPage: React.FC = () => {
     auth_type: 'events.filter_chip_auth_type',
     reasoning: 'events.filter_chip_reasoning',
     service_tier: 'events.filter_chip_service_tier',
+    resolved_service_tier: 'events.filter_chip_resolved_service_tier',
     source: 'events.filter_chip_source',
     api_key: 'events.filter_chip_caller',
     executor: 'events.filter_chip_executor',

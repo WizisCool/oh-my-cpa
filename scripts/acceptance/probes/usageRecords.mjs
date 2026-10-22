@@ -460,6 +460,20 @@ export async function requestListInteractions({ base, page, check }) {
   check('the initial request mount is bounded by row geometry rather than generic list items',
     mountWindow.peak > 0 && mountWindow.peak <= mountWindow.allowedRows, JSON.stringify(mountWindow));
 
+  // A selected resolved tier must name itself and remove its exact query dimension.
+  await page.getByRole('button', { name: 'More filters', exact: true }).click();
+  const resolvedTierControl = page.getByRole('combobox', { name: 'Resolved service tier', exact: true });
+  await resolvedTierControl.click();
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')
+    .filter({ hasText: 'priority' }).click();
+  await page.locator('label[for="req-multi-resolved_service_tier"]').click();
+  await page.getByTestId('req-filter-apply').click();
+  await expect(page.locator('.req-filter-chip-text')).toHaveText('Resolved service tier: priority');
+  await expect(page).toHaveURL(/resolved_service_tier=priority/);
+  await page.getByRole('button', { name: 'Remove filter: Resolved service tier: priority', exact: true }).click();
+  await expect(page.locator('.req-filter-chip')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/resolved_service_tier=/);
+
   check('request cells mount without dormant popup instances',
     await page.locator('.request-cell-tooltip').count() === 0);
   const timestampCell = page.locator('.request-row .req-time-text').first();

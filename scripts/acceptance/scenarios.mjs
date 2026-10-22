@@ -723,7 +723,10 @@ export const SCENARIOS = [
     options: {
       routes: [
         ...systemFixtures(),
-        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.endsWith('/usage/facets'), () => ({ facets: {
+          ...alignmentFacets,
+          resolved_service_tiers: [{ value: 'priority', requests: 125 }],
+        } })],
         [
           (url) => /\/usage\/events\/\d+$/.test(url.pathname),
           (url) => interactionRecordDetail(Number(url.pathname.split('/').pop())),

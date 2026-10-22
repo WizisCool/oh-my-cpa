@@ -43,7 +43,9 @@ filter semantics). `scripts/test-usage-event-view.ts` and
 `scripts/test-request-export.ts` cover the shared Fast marker, source-specific
 hints and masked exports. Rendered request-row coverage lives in
 `web/tests/request-service-tier.component.test.tsx`; the request-list interaction
-probe wires a Codex priority request with a default response into the browser.
+probe wires a Codex priority request with a default response into the browser and
+selects its resolved-tier facet, checks the translated active chip, and removes
+the chip and its URL filter.
 
 Rules that keep the suite fast and honest:
 

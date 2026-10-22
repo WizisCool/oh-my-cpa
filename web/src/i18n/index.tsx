@@ -2906,6 +2906,7 @@ const DICT: Record<string, [string, string]> = {
   'events.filter_chip_model_alias': ['调用模型: {val}', 'Call model: {val}'],
   'events.filter_chip_reasoning': ['推理强度: {val}', 'Reasoning effort: {val}'],
   'events.filter_chip_service_tier': ['服务等级: {val}', 'Service tier: {val}'],
+  'events.filter_chip_resolved_service_tier': ['判定服务等级: {val}', 'Resolved service tier: {val}'],
   'events.filter_chip_ua': ['客户端 UA: {val}', 'User agent: {val}'],
   'events.filter_chip_endpoint': ['端点: {val}', 'Endpoint: {val}'],
   'events.filter_chip_request_id': ['Request ID: {val}', 'Request ID: {val}'],

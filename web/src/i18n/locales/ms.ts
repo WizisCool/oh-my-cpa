@@ -2572,6 +2572,7 @@ export const MS: Readonly<Record<string, string>> = {
   "events.filter_chip_model_alias": "Model panggilan: {val}",
   "events.filter_chip_reasoning": "Usaha penaakulan: {val}",
   "events.filter_chip_service_tier": "Peringkat perkhidmatan: {val}",
+  "events.filter_chip_resolved_service_tier": "Peringkat perkhidmatan ditentukan: {val}",
   "events.filter_chip_ua": "Ejen pengguna: {val}",
   "events.filter_chip_endpoint": "Titik akhir: {val}",
   "events.filter_chip_request_id": "ID Permintaan: {val}",
