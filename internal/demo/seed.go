@@ -259,6 +259,12 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 		}
 		channels = append(channels, channel)
 	}
+	// The upsert stamps the wall clock, which the export would then have to move onto the
+	// reference by however long seeding took; stamped from the seed's own clock, the
+	// edit time is the same on every run.
+	if _, err := repo.SQL().ExecContext(ctx, `UPDATE pricing_channels SET updated_at_ms = ?`, syncedAt); err != nil {
+		return 0, fmt.Errorf("stamp seeded channel multipliers: %w", err)
+	}
 	if err := repo.SeedChannelHistoryBackfill(ctx, channels, historyStart.UnixMilli()); err != nil {
 		return 0, fmt.Errorf("seed channel history: %w", err)
 	}

@@ -331,6 +331,35 @@ func TestRedactTextCatchesBareVendorPrefixes(t *testing.T) {
 	}
 }
 
+// RedactText skips a pattern when its input lacks the literal the pattern needs. The
+// skip must never change the result, so the output is compared with every pattern
+// applied unconditionally, including the case-fold spellings a byte check could miss.
+func FuzzRedactTextSkipsOnlyPatternsThatCannotMatch(f *testing.F) {
+	for _, value := range []string{
+		"x-request-id", "BEARER abc.def", "bEaReR\ttoken", "token=abc", "api_key: \"v\"", "ghp_abcdefghijk",
+		"sk-abcdefghijk", "https://user:pass@example.test/?q=1", "Authorization: Basic abc", "ſecret=1", "toKen=1",
+		"retry after 3s",
+	} {
+		f.Add(value)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		want := headerSecretPattern.ReplaceAllString(value, `${1}`+RedactedValue)
+		want = bearerPattern.ReplaceAllString(want, "Bearer "+RedactedValue)
+		want = keyValueSecretPattern.ReplaceAllString(want, `${1}`+RedactedValue)
+		want = apiKeyPrefixPattern.ReplaceAllString(want, RedactedValue)
+		want = urlTokenPattern.ReplaceAllStringFunc(want, func(raw string) string {
+			if safe := PublicURL(raw); safe != "" {
+				return safe
+			}
+			return RedactedValue
+		})
+		want = stripControl(want)
+		if got := RedactText(value); got != want {
+			t.Fatalf("RedactText(%q) = %q, want %q", value, got, want)
+		}
+	})
+}
+
 func FuzzPublicURLRemovesAuthoritySecrets(f *testing.F) {
 	for _, value := range []string{"HTTPS://user:pass@example.test/v1?token=secret#fragment", "//host/path", "mailto:secret@example.test", "https://example.test/%2F"} {
 		f.Add(value)

@@ -330,13 +330,15 @@ const committedDemoDataset = "../../deploy/cloudflare/data/responses.json"
 func TestExportDemoDataset(t *testing.T) {
 	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
 	if outDir == "" && testing.Short() {
-		// Seeding a year of history takes most of a minute; CI runs the comparison.
+		// Seeding a year of history takes about fifteen seconds; CI runs the comparison.
 		t.Skip("the dataset comparison runs without -short")
 	}
 	// Day grids fold on the deployment's zone; a comparison on a non-UTC machine would
 	// otherwise report drift that is only the clock's.
 	testkit.PinUTC(t)
 
+	demoExportRunWindow.startMS = time.Now().UnixMilli()
+	t.Cleanup(func() { demoExportRunWindow.startMS, demoExportRunWindow.endMS = 0, 0 })
 	router, seededAt := demoExportRouter(t)
 	server := httptest.NewServer(router)
 	defer server.Close()
@@ -359,6 +361,7 @@ func TestExportDemoDataset(t *testing.T) {
 		}
 		responses[one.Name] = demoExportFetch(t, server.URL, one)
 	}
+	demoExportRunWindow.endMS = time.Now().UnixMilli()
 
 	// Runtime-stamped fields move onto the reference instant. Seeded quota
 	// observations already use the injected reference clock and remain unchanged.
@@ -682,6 +685,13 @@ func demoExportMirrorTailAsOfMS(decoded any) any {
 	return decoded
 }
 
+// demoExportRunWindow is the wall-clock span of the export run in progress: from before
+// seeding to after the last capture. An instant stamped inside it - a price the seed
+// applied, an audit row a read wrote - means "now", so it becomes the reference itself.
+// Shifting it instead would keep how long the run had taken, and a seed that crossed
+// half a minute on a slower machine moved every such stamp into the previous minute.
+var demoExportRunWindow struct{ startMS, endMS int64 }
+
 func demoExportShiftMillis(item any, deltaMS int64) any {
 	millis, ok := demoExportNumericMillis(item)
 	// Zero is "never happened" (an unconfigured channel has no update time), not the
@@ -689,6 +699,19 @@ func demoExportShiftMillis(item any, deltaMS int64) any {
 	// wall clock, so every regeneration differed.
 	if !ok || millis == 0 {
 		return item
+	}
+	if window := demoExportRunWindow; window.startMS != 0 {
+		inSeconds := math.Abs(millis) < 1e11
+		atMS := millis
+		if inSeconds {
+			atMS = millis * 1000
+		}
+		if atMS >= float64(window.startMS) && atMS <= float64(window.endMS) {
+			if inSeconds {
+				return float64(demoExportReference.Unix())
+			}
+			return float64(demoExportReference.UnixMilli())
+		}
 	}
 	// A field reported in seconds rather than milliseconds is one whose magnitude is
 	// three orders smaller, so it takes the delta in its own unit.
