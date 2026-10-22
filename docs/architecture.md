@@ -727,7 +727,11 @@ preserving each key's proxy and weight and applying the shared provider settings
 A blank first key in an edit retains the stored secret; blank additional rows are
 ignored. An empty create or repeated submitted key is refused with `400`, and a key
 that matches a stored credential is refused with `409` when their base URLs are equal
-or either is blank, before writing.
+or either is blank, before writing. Each refusal carries a stable `code`
+(`provider_key_required`, `provider_duplicate_key`, `provider_credential_exists`, and
+`provider_stale_identity` for an edit whose observed identity moved), so the editor
+names the problem in the operator's language; the English `error` message stays for
+logs and agent clients.
 
 Create and same-family edit save all credentials in one backed-up, revision-guarded
 configuration write under the provider gate. Editing keeps the source row in place

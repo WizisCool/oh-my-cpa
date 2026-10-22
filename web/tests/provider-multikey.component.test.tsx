@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { App as AntdApp } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nProvider, useT } from '../src/i18n';
 import { ProviderEditorDrawer } from '../src/components/providers/ProviderEditorDrawer';
@@ -39,6 +39,9 @@ function Editor({ isCreate }: { isCreate: boolean }) {
   </>;
 }
 
+// The panel's exit motion is a real timer under jsdom, so the drawer would close
+// a second after the click and the assertion below would race the animation. The
+// motion itself is not this test's claim, so the provider tree disables it.
 it.each([true, false])('saves every Codex key and assigns the selected icon to every returned row (create=%s)', async (isCreate) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   client.setQueryData(['management-plugins'], { plugins: [] });
@@ -54,7 +57,7 @@ it.each([true, false])('saves every Codex key and assigns the selected icon to e
     }
     throw new Error(`Unexpected request ${init?.method ?? 'GET'} ${path}`);
   }));
-  const view = render(<QueryClientProvider client={client}><I18nProvider><AntdApp><Editor isCreate={isCreate} /></AntdApp></I18nProvider></QueryClientProvider>);
+  const view = render(<QueryClientProvider client={client}><I18nProvider><ConfigProvider theme={{ token: { motion: false } }}><AntdApp><Editor isCreate={isCreate} /></AntdApp></ConfigProvider></I18nProvider></QueryClientProvider>);
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Load multi-key draft' }));
     expect(await screen.findByText('Each API key is saved as a separate provider with the same shared settings.')).toBeTruthy();
@@ -67,5 +70,23 @@ it.each([true, false])('saves every Codex key and assigns the selected icon to e
     ] });
     expect(writes[2].body).toEqual({ 'codex-1': 'Anthropic', [ids[0]]: 'DeepSeek', [ids[1]]: 'DeepSeek' });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).toBeNull());
+  } finally { view.unmount(); client.clear(); }
+});
+
+it('names a coded refusal in the console language', async () => {
+  vi.clearAllMocks();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(['management-plugins'], { plugins: [] });
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    JSON.stringify({ error: 'this provider credential already exists', code: 'provider_credential_exists' }),
+    { status: 409 },
+  )));
+  const view = render(<QueryClientProvider client={client}><I18nProvider><ConfigProvider theme={{ token: { motion: false } }}><AntdApp><Editor isCreate={true} /></AntdApp></ConfigProvider></I18nProvider></QueryClientProvider>);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Load multi-key draft' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    // The facade's English message is only the fallback: the toast must come from
+    // the dictionary the rest of the console reads.
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('This provider credential already exists; change the key or the endpoint'));
   } finally { view.unmount(); client.clear(); }
 });

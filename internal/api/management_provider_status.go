@@ -40,9 +40,10 @@ func (req patchProviderStatusRequest) verifyAuthIndex(actual string) error {
 		return nil
 	}
 	if strings.TrimSpace(actual) != expected {
-		return newProviderWriteError(
+		return newProviderWriteErrorWithCode(
 			http.StatusConflict,
 			"the provider at this position changed since it was read; refresh and try again",
+			providerStaleIdentityCode,
 		)
 	}
 	return nil
@@ -56,9 +57,10 @@ func (req patchProviderStatusRequest) verifyName(actual string) error {
 		return nil
 	}
 	if strings.TrimSpace(actual) != expected {
-		return newProviderWriteError(
+		return newProviderWriteErrorWithCode(
 			http.StatusConflict,
 			"the provider at this position changed since it was read; refresh and try again",
+			providerStaleIdentityCode,
 		)
 	}
 	return nil

@@ -154,13 +154,14 @@ func TestConfigProviderKeyValidationAndBlankRows(t *testing.T) {
 	for _, test := range []struct {
 		name, method, keys    string
 		wantStatus, wantCount int
+		wantCode              string
 	}{
-		{"create skips blank rows", http.MethodPost, `[{"api_key":" "},{"api_key":"fixture-new"},{"api_key":""}]`, http.StatusOK, 2},
-		{"edit keeps masked first key and adds another", http.MethodPut, `[{"api_key":""},{"api_key":"fixture-new"},{"api_key":" "}]`, http.StatusOK, 2},
-		{"create refuses an empty credential list", http.MethodPost, `[{"api_key":" "}]`, http.StatusBadRequest, 1},
-		{"create refuses duplicate keys", http.MethodPost, `[{"api_key":"fixture-new"},{"api_key":" fixture-new "}]`, http.StatusBadRequest, 1},
-		{"edit refuses duplicate keys", http.MethodPut, `[{"api_key":""},{"api_key":"sk-codex-secret-key-9999"}]`, http.StatusBadRequest, 1},
-		{"create refuses an existing identity", http.MethodPost, `[{"api_key":"fixture-new"},{"api_key":"sk-codex-secret-key-9999"}]`, http.StatusConflict, 1},
+		{"create skips blank rows", http.MethodPost, `[{"api_key":" "},{"api_key":"fixture-new"},{"api_key":""}]`, http.StatusOK, 2, ""},
+		{"edit keeps masked first key and adds another", http.MethodPut, `[{"api_key":""},{"api_key":"fixture-new"},{"api_key":" "}]`, http.StatusOK, 2, ""},
+		{"create refuses an empty credential list", http.MethodPost, `[{"api_key":" "}]`, http.StatusBadRequest, 1, providerKeyRequiredCode},
+		{"create refuses duplicate keys", http.MethodPost, `[{"api_key":"fixture-new"},{"api_key":" fixture-new "}]`, http.StatusBadRequest, 1, providerDuplicateKeyCode},
+		{"edit refuses duplicate keys", http.MethodPut, `[{"api_key":""},{"api_key":"sk-codex-secret-key-9999"}]`, http.StatusBadRequest, 1, providerDuplicateKeyCode},
+		{"create refuses an existing identity", http.MethodPost, `[{"api_key":"fixture-new"},{"api_key":"sk-codex-secret-key-9999"}]`, http.StatusConflict, 1, providerCredentialExistsCode},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newProviderTestFixture(t)
@@ -169,9 +170,20 @@ func TestConfigProviderKeyValidationAndBlankRows(t *testing.T) {
 				path += "/codex-0"
 			}
 			body := `{"family":"codex","base_url":"https://api.openai.com","keys":` + test.keys + `}`
-			response, _ := doJSON(t, fixture.client, test.method, fixture.baseURL+path, body)
+			response, payload := doJSON(t, fixture.client, test.method, fixture.baseURL+path, body)
 			if response.StatusCode != test.wantStatus {
 				t.Errorf("status=%d, want %d", response.StatusCode, test.wantStatus)
+			}
+			// The console translates these refusals, so the code is the contract and
+			// the English message is only the fallback.
+			var refusal struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(payload, &refusal); err != nil {
+				t.Fatalf("decode refusal: %v", err)
+			}
+			if refusal.Code != test.wantCode {
+				t.Errorf("code=%q, want %q", refusal.Code, test.wantCode)
 			}
 			fixture.state.mu.Lock()
 			defer fixture.state.mu.Unlock()
@@ -210,9 +222,12 @@ func TestConfigProviderMultiKeySaveSafety(t *testing.T) {
 	})
 	t.Run("stale identity", func(t *testing.T) {
 		fixture := newProviderTestFixture(t)
-		response, _ := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", `{"family":"codex","expected_auth_index":"stale-index","base_url":"https://relay.test","keys":[{"api_key":"fixture-one"},{"api_key":"fixture-two"}]}`)
+		response, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/codex-0", `{"family":"codex","expected_auth_index":"stale-index","base_url":"https://relay.test","keys":[{"api_key":"fixture-one"},{"api_key":"fixture-two"}]}`)
 		if response.StatusCode != http.StatusConflict {
 			t.Fatalf("stale identity status=%d", response.StatusCode)
+		}
+		if !strings.Contains(string(payload), providerStaleIdentityCode) {
+			t.Fatalf("stale identity refusal lacks %q: %s", providerStaleIdentityCode, payload)
 		}
 		fixture.state.mu.Lock()
 		defer fixture.state.mu.Unlock()

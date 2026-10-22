@@ -32,7 +32,7 @@ func editedConfigProviderKeys(req SaveProviderRequest, original management.Confi
 			continue
 		}
 		if seen[apiKey] {
-			return nil, newProviderWriteError(http.StatusBadRequest, "duplicate API keys are not allowed")
+			return nil, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate API keys are not allowed", providerDuplicateKeyCode)
 		}
 		seen[apiKey] = true
 		entry := original
@@ -55,7 +55,7 @@ func editedConfigProviderKeys(req SaveProviderRequest, original management.Confi
 		keys = append(keys, entry)
 	}
 	if len(keys) == 0 {
-		return nil, newProviderWriteError(http.StatusBadRequest, "an API key is required")
+		return nil, newProviderWriteErrorWithCode(http.StatusBadRequest, "an API key is required", providerKeyRequiredCode)
 	}
 	return keys, nil
 }
@@ -73,7 +73,7 @@ func verifyConfigProviderKeys(existing, submitted []management.ConfigAPIKey, edi
 			}
 			storedURL, newURL := strings.TrimSpace(entry.BaseURL), strings.TrimSpace(key.BaseURL)
 			if storedURL == "" || newURL == "" || storedURL == newURL {
-				return newProviderWriteError(http.StatusConflict, "this provider credential already exists")
+				return newProviderWriteErrorWithCode(http.StatusConflict, "this provider credential already exists", providerCredentialExistsCode)
 			}
 		}
 	}

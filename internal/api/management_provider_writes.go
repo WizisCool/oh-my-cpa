@@ -53,6 +53,14 @@ const (
 	// write but the local overlay could not be stored. The operation is not safe
 	// to retry blindly, because a create may already have added its row.
 	providerPartialCommitCode = "provider_commit_partial"
+	// The codes below label the refusals a provider save can answer before CPA is
+	// written. They exist so the editor can name the problem in the operator's
+	// language; the English message stays for logs, agent clients and older
+	// consoles. Each code names one thing the operator has to change.
+	providerKeyRequiredCode      = "provider_key_required"
+	providerDuplicateKeyCode     = "provider_duplicate_key"
+	providerCredentialExistsCode = "provider_credential_exists"
+	providerStaleIdentityCode    = "provider_stale_identity"
 	// providerPartialCommitMessage is the stable user-facing refusal for that
 	// state, shared by the response and its regression coverage.
 	providerPartialCommitMessage = "provider configuration changed, but local metadata could not be saved; reload before retrying"
@@ -113,12 +121,22 @@ func (g *providerWriteGate) release() {
 type providerWriteError struct {
 	status  int
 	message string
+	// code is set only for refusals the console explains in its own words.
+	// A refusal without one keeps the facade's message-only shape.
+	code string
 }
 
 func (e *providerWriteError) Error() string { return e.message }
 
 func newProviderWriteError(status int, message string) error {
 	return &providerWriteError{status: status, message: message}
+}
+
+// newProviderWriteErrorWithCode answers a refusal the client can act on without
+// reading English prose. The message is still the human-readable fallback for
+// logs, agents and consoles that predate the code.
+func newProviderWriteErrorWithCode(status int, message, code string) error {
+	return &providerWriteError{status: status, message: message, code: code}
 }
 
 // providerPartialCommitError marks the narrow window where CPA has accepted a
@@ -147,6 +165,13 @@ func writeProviderWriteError(writer http.ResponseWriter, err error) {
 	}
 	var writeErr *providerWriteError
 	if errors.As(err, &writeErr) {
+		if writeErr.code != "" {
+			writeJSON(writer, writeErr.status, map[string]string{
+				"error": writeErr.message,
+				"code":  writeErr.code,
+			})
+			return
+		}
 		writeError(writer, writeErr.status, writeErr.message)
 		return
 	}
