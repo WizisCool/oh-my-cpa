@@ -73,7 +73,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
       {/* The billed tier only explains a price that has service-tier lanes; elsewhere it decides nothing. */}
       {breakdown.service_tier && version?.price.tiers?.some((tier) => tier.service_tiers?.length) && (
         <p className={styles['breakdown-tier']} data-testid="cost-service-tier">
-          {t(breakdown.service_tier_source === 'request' ? 'cost.service_tier_requested' : 'cost.service_tier', { tier: breakdown.service_tier })}
+          {t(breakdown.service_tier_source === 'outbound' ? 'cost.service_tier_outbound' : breakdown.service_tier_source === 'request' ? 'cost.service_tier_requested' : 'cost.service_tier', { tier: breakdown.service_tier })}
         </p>
       )}
       {quote && (

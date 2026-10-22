@@ -1289,6 +1289,7 @@ for (const tier of ['default', 'auto', 'flex', 'scale', '', undefined]) {
 assert.equal(isFastTierEvent({ provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority' } as Partial<UsageEvent>), true);
 assert.equal(isFastTierEvent({ provider: 'openai', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'default' } as Partial<UsageEvent>), false);
 assert.equal(fastTierHintKey({ resolved_service_tier_source: 'request' }), 'events.fast_tier_requested_hint');
+assert.equal(fastTierHintKey({ resolved_service_tier_source: 'outbound' }), 'events.fast_tier_outbound_hint');
 assert.equal(fastTierHintKey({ resolved_service_tier_source: 'response' }), 'events.fast_tier_hint');
 assert.equal(isFastTierEvent(undefined), false);
 

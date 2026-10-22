@@ -232,9 +232,9 @@ export interface RequestCostBreakdown {
   status: 'priced' | 'unpriced' | 'legacy_unpriced' | 'invalid_price';
   stored_nanos?: number;
   stored_tier?: number;
-  /** The service tier the request was billed on, and whether the response or the request named it. */
+  /** The service tier the request was billed on, and whether the outbound request, client request or response named it. */
   service_tier?: string;
-  service_tier_source?: 'response' | 'request';
+  service_tier_source?: 'request' | 'response' | 'outbound';
   price_version?: PriceVersion;
   channel?: ChannelVersion;
   quote?: CostQuote;

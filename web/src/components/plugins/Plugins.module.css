@@ -422,27 +422,22 @@
   font-size: var(--text-sm);
 }
 
-.source-fixed-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* The row is one line: the label gives way when the panel narrows, the glyph and the
+   link keep their box. */
+.source-fixed > :global(.anticon) {
+  flex: none;
+}
+
+.source-fixed-label {
   min-width: 0;
-}
-
-.source-fixed-url {
-  color: var(--meta);
-  font-size: var(--text-xs);
-  word-break: break-all;
-}
-
-.source-fixed-state {
-  color: var(--fg-2);
-  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .source-fixed-action {
   margin-left: auto;
+  flex: none;
 }
 
 .field-error {

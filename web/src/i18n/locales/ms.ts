@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "events.outbound_tier": "Peringkat keluar",
+  "events.fast_tier_outbound_hint": "Mod Fast · peringkat perkhidmatan keluar {tier}",
+  "events.resolved_tier_outbound": "{tier} (berdasarkan permintaan keluar)",
+  "cost.service_tier_outbound": "Peringkat perkhidmatan: {tier} (harga mengikut permintaan keluar)",
+
   "events.resolved_tier_response": "{tier} (berdasarkan respons)",
   "events.resolved_tier_request": "{tier} (berdasarkan permintaan)",
   "events.resolved_tier": "Peringkat perkhidmatan ditentukan",
@@ -760,7 +765,7 @@ export const MS: Readonly<Record<string, string>> = {
   "omc.section_quota": "Kuota",
   "omc.section_plugin_source": "Kedai pemalam",
   "omc.plugin_source": "Pendaftaran pemalam Oh My CPA",
-  "omc.plugin_source_desc": "Menawarkan pemalam Oh My CPA sendiri dalam kedai dan memastikan pendaftaran itu dihidupkan. Mematikannya membuang pendaftaran itu daripada konfigurasi get laluan.",
+  "omc.plugin_source_desc": "Menyenaraikan pemalam yang diselenggara oleh Oh My CPA dalam kedai pemalam dan memastikan sumber itu dihidupkan.",
   "omc.quota_auto_refresh_interval": "Penyegaran kuota berjadual",
   "omc.quota_auto_refresh_interval_desc": "Menyegarkan kuota setiap kelayakan di latar belakang pada selang ini. Kelayakan Meta hanya disegarkan secara manual.",
   "omc.quota_auto_refresh_off": "Mati",
@@ -3331,8 +3336,6 @@ export const MS: Readonly<Record<string, string>> = {
   "plugin.settings_sources_desc": "Pendaftaran kedai yang dibaca selain yang rasmi (plugins.store-sources).",
   "plugin.settings_official_source": "Pendaftaran rasmi CLIProxyAPI (sentiasa disertakan)",
   "plugin.settings_omc_source": "Pendaftaran pemalam Oh My CPA",
-  "plugin.settings_omc_source_on": "Hidup",
-  "plugin.settings_omc_source_off": "Mati",
   "plugin.settings_omc_source_open": "Urus dalam tetapan OMC",
   "plugin.settings_add_source": "Tambah sumber",
   "plugin.settings_source_label": "Sumber {n}",

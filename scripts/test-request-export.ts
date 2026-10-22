@@ -231,4 +231,14 @@ assert.equal(redactedDocument.requests[0].auth_index, 'oauth-a', 'requests still
 assert.equal(redactedDocument.requests[1].source, 'relay', 'a key provider keeps its source');
 assert.deepEqual(redactedDocument.requests[0].tokens, { total: 200, input: 150, output: 50, reasoning: 0 });
 
+
+const outboundEvent: UsageEvent = { ...events[1], service_tier: 'auto', effective_service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'outbound' };
+const outboundExport = buildRequestExport({ rows: [outboundEvent], masks: effectiveMasks([], []), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
+assert.equal(outboundExport.effective_service_tier, 'priority');
+assert.equal(outboundExport.service_tier, 'auto');
+assert.equal(outboundExport.response_service_tier, 'default');
+assert.equal(outboundExport.resolved_service_tier_source, 'outbound');
+const hiddenOutboundExport = buildRequestExport({ rows: [outboundEvent], masks: effectiveMasks([], ['mode']), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
+assert.ok(!('effective_service_tier' in hiddenOutboundExport));
+
 console.log('PASS request export: selection ranges, page-scoped select-all, row cap, canvas ceiling, redaction leaves values out of the sheet and the JSON document');

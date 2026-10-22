@@ -128,6 +128,7 @@ export function isFastTierEvent(event?: Partial<Pick<UsageEvent, 'resolved_servi
 }
 
 export function fastTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): string {
+  if (event.resolved_service_tier_source === 'outbound') return 'events.fast_tier_outbound_hint';
   return event.resolved_service_tier_source === 'request'
     ? 'events.fast_tier_requested_hint'
     : 'events.fast_tier_hint';
@@ -215,4 +216,11 @@ export function eventTokensPerSecond(
   const durationMs = basis === 'exclude_ttft' ? latency - Number(event.ttft_ms) : latency;
   const tps = (output * 1000) / durationMs;
   return { tps, formatted: `${tps.toFixed(2)} t/s`, basis };
+}
+
+export function resolvedTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): string {
+  if (event.resolved_service_tier_source === 'outbound') return 'events.resolved_tier_outbound';
+  return event.resolved_service_tier_source === 'request'
+    ? 'events.resolved_tier_request'
+    : 'events.resolved_tier_response';
 }

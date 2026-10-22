@@ -519,3 +519,24 @@ func TestDecodeEventToleratesUnexpectedResponseHeaderShapes(t *testing.T) {
 		t.Fatalf("bounds not applied: %d headers, value %d runes", len(bounded), len([]rune(bounded[0].Value)))
 	}
 }
+
+func TestDecodeEffectiveServiceTier(t *testing.T) {
+	for _, test := range []struct{ name, metadata, tier string }{
+		{"old gateway", "", ""},
+		{"null outbound", `,"effective_service_tier":null`, ""},
+		{"omitted outbound", `,"effective_service_tier":""`, ""},
+		{"outbound priority", `,"effective_service_tier":"priority"`, "priority"},
+		{"outbound default", `,"effective_service_tier":"default"`, "default"},
+		{"explicit auto", `,"effective_service_tier":"auto"`, "auto"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			event, err := DecodeEvent(`{"request_id":"outbound-test","service_tier":"auto","response_service_tier":"default"`+test.metadata+`}`, "default", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if event.EffectiveServiceTier != test.tier || event.ServiceTier != "auto" || event.ResponseServiceTier != "default" {
+				t.Fatalf("tier evidence: %+v", event)
+			}
+		})
+	}
+}

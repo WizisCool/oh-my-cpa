@@ -2203,10 +2203,12 @@ operator ──▶ channel_model_prices ──triggers──▶ model_price_vers
 timestamp, the price version id, the channel version id (absent means 1×), the
 index of the tier the request qualified for, and integer USD nanos computed by
 `pricing.Quote`. `pricing.ResolveServiceTier` interprets the recorded evidence:
-Codex uses the requested tier even when its response says `default`/`auto`, while
-other providers prefer a non-`auto` response and fall back to the request. A
-missing Codex request tier may use the response; an explicit `auto` selects no
-lane. Provider identity or a concrete Codex executor identifies this policy,
+Codex first uses a nonempty final outbound `effective_service_tier`, captured by
+CPA v8.0.39 after translation and payload rules. Outbound `auto` selects no lane
+and does not fall back to the client choice. Without this evidence, Codex keeps
+its requested-tier policy even when its response says `default`/`auto`: a missing
+client tier may use the response, while explicit client `auto` selects no lane.
+Other providers remain response-first with request fallback. Provider identity or a concrete Codex executor identifies this policy,
 never a model name or provider display label.
 
 Migration 045 locks the selected `billed_service_tier` and its
@@ -2216,8 +2218,13 @@ the original response-first policy. The API exposes the current interpretation
 as `resolved_service_tier`/`resolved_service_tier_source` for mode indicators and
 exports; a deterministic SQLite function calls the same resolver for filters and
 facets, including historical rows. The cost breakdown instead explains the
-selection originally locked. CPA does not yet expose the final outbound tier
-after payload rules, so request-derived evidence cannot detect server overrides.
+selection originally locked. Migration 046 preserves all request fields, indexes,
+immutability triggers and the request-id high-water mark while adding
+`effective_service_tier` and allowing the `outbound` snapshot source. Missing
+telemetry keeps the existing per-record policy, including for older CPA, mixed
+queues and CPA downgrades. CPA omits empty outbound tiers, so a missing field
+cannot distinguish an older publisher from a payload rule that removed the tier;
+OMC does not infer that fact from gateway version, configuration or latency.
 Historical totals never join the mutable tables, so a later edit
 cannot rewrite an invoice. A request with no effective price version is stored
 with pricing status `unpriced` (`legacy_unpriced` for rows that predate migration

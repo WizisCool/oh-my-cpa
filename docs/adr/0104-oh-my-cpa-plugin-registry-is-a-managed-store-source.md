@@ -48,10 +48,10 @@ still someone else's code relative to the gateway.
    repository is (ADR 0029), and installing one still requires typing the plugin id.
 
 4. **The switch lives on the OMC settings page.** The plugin settings tab shows the
-   source as a fixed row — its address, whether it is on, and a link to the switch — and
-   never includes it in the editable source list. A plugin-settings save that omits it
-   keeps it exactly as the preference says, and one that submits it does not store a
-   second copy.
+   source as one fixed line — its name, drawn with the same glyph CPA's own official
+   source uses, and a link to the switch — and never includes it in the editable source
+   list. A plugin-settings save that omits it keeps it exactly as the preference says,
+   and one that submits it does not store a second copy.
 
 ## Consequences
 

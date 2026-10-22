@@ -857,6 +857,10 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 		event.ServiceTier, event.ResponseServiceTier = "priority", "priority"
 		if event.Provider == "codex" {
 			event.ResponseServiceTier = "default"
+			if latency%12 == 0 {
+				event.EffectiveServiceTier = "priority"
+				event.ServiceTier = "auto"
+			}
 		}
 	} else if !failed {
 		event.ResponseServiceTier = "default"

@@ -98,6 +98,7 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
     if (!masks.has('mode')) {
       put('reasoning_effort', event.reasoning_effort);
       put('service_tier', event.service_tier);
+      put('effective_service_tier', event.effective_service_tier);
       put('response_service_tier', event.response_service_tier);
       put('resolved_service_tier', event.resolved_service_tier);
       put('resolved_service_tier_source', event.resolved_service_tier_source);

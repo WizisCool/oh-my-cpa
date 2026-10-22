@@ -110,7 +110,7 @@ func TestResolveServiceTier(t *testing.T) {
 		{"no tier", "codex", "", "", "auto", "", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			tier, source := ResolveServiceTier(test.provider, test.executor, test.response, test.requested)
+			tier, source := ResolveServiceTier(test.provider, test.executor, test.response, test.requested, "")
 			if tier != test.tier || source != test.source {
 				t.Fatalf("resolved %q from %q, want %q from %q", tier, source, test.tier, test.source)
 			}
@@ -144,5 +144,28 @@ func TestServiceTierValidationAndEncoding(t *testing.T) {
 	plain, _ := EncodeTiers([]PriceTier{{UTCStart: ptr(1600), UTCEnd: ptr(0), PromptPricePer1M: ptr(0.5)}, {MinPromptTokens: 200_000}})
 	if plain != `[{"utc_start":1600,"utc_end":0,"prompt_price_per_1m":0.5},{"min_prompt_tokens":200000}]` {
 		t.Fatalf("plain tiers respelled: %s", plain)
+	}
+}
+
+func TestResolveOutboundServiceTier(t *testing.T) {
+	for _, test := range []struct{ name, provider, executor, requested, response, effective, tier, source string }{
+		{"server upgrade", "codex", "", "auto", "default", "priority", "priority", "outbound"},
+		{"server downgrade", "codex", "", "priority", "default", "default", "default", "outbound"},
+		{"server auto", "codex", "", "priority", "priority", "auto", "", "outbound"},
+		{"normalized outbound", " CoDeX ", "", "auto", "default", " Priority\t", "priority", "outbound"},
+		{"HTTP executor", "custom", "CodexExecutor", "auto", "default", "priority", "priority", "outbound"},
+		{"websocket executor", "custom", "CodexWebsocketsExecutor", "priority", "priority", "default", "default", "outbound"},
+		{"unreported", "codex", "", "priority", "default", "", "priority", "request"},
+		{"blank outbound", "codex", "", "priority", "default", " \t", "priority", "request"},
+		{"unreported client metadata", "codex", "", "", "priority", "", "priority", "response"},
+		{"other provider", "openai", "OpenAIExecutor", "priority", "default", "priority", "default", "response"},
+		{"future tier", "codex", "", "priority", "default", "flex", "flex", "outbound"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tier, source := ResolveServiceTier(test.provider, test.executor, test.response, test.requested, test.effective)
+			if tier != test.tier || source != test.source {
+				t.Fatalf("resolved %q from %q, want %q from %q", tier, source, test.tier, test.source)
+			}
+		})
 	}
 }

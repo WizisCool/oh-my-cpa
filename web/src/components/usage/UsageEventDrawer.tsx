@@ -33,6 +33,7 @@ import {
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
+  resolvedTierHintKey,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
@@ -414,11 +415,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         ],
                         [t('events.reasoning_effort'), value(displayEffortName(event.reasoning_effort))],
                         [t('events.service_tier'), value(event.service_tier)],
+                        [t('events.outbound_tier'), value(event.effective_service_tier)],
                         [t('events.response_tier'), value(event.response_service_tier)],
                         [
                           t('events.resolved_tier'),
-                          event.resolved_service_tier
-                            ? t(event.resolved_service_tier_source === 'request' ? 'events.resolved_tier_request' : 'events.resolved_tier_response', { tier: event.resolved_service_tier })
+                          event.resolved_service_tier || event.resolved_service_tier_source === 'outbound'
+                            ? t(resolvedTierHintKey(event), { tier: event.resolved_service_tier || '—' })
                             : value(undefined),
                         ],
                         [

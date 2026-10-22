@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "events.outbound_tier": "出站檔位",
+  "events.fast_tier_outbound_hint": "Fast 模式 · 出站服務等級 {tier}",
+  "events.resolved_tier_outbound": "{tier}（按出站判斷）",
+  "cost.service_tier_outbound": "服務等級：{tier}（按出站檔位計價）",
+
   "events.resolved_tier_response": "{tier}（按回應判斷）",
   "events.resolved_tier_request": "{tier}（按請求判斷）",
   "events.resolved_tier": "判定服務等級",
@@ -760,7 +765,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "omc.section_quota": "額度",
   "omc.section_plugin_source": "外掛商店",
   "omc.plugin_source": "Oh My CPA 外掛來源",
-  "omc.plugin_source_desc": "在商店中提供 Oh My CPA 維護的外掛，並保持該來源啟用。關閉會從閘道設定中移除此來源。",
+  "omc.plugin_source_desc": "在外掛商店中顯示 Oh My CPA 維護的外掛清單，並保持該來源啟用。",
   "omc.quota_auto_refresh_interval": "定時重新整理額度",
   "omc.quota_auto_refresh_interval_desc": "背景依所選間隔重新整理所有憑證的額度；Meta 憑證僅支援手動重新整理。",
   "omc.quota_auto_refresh_off": "關閉",
@@ -3331,8 +3336,6 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "plugin.settings_sources_desc": "在官方來源之外追加外掛商店 registry 位址（plugins.store-sources）。",
   "plugin.settings_official_source": "CLIProxyAPI 官方來源（始終啟用）",
   "plugin.settings_omc_source": "Oh My CPA 外掛來源",
-  "plugin.settings_omc_source_on": "已啟用",
-  "plugin.settings_omc_source_off": "已關閉",
   "plugin.settings_omc_source_open": "在 OMC 設定中管理",
   "plugin.settings_add_source": "新增來源",
   "plugin.settings_source_label": "外掛來源 {n}",

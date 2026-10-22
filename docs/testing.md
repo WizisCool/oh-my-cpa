@@ -35,9 +35,11 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | A repository script or gate itself | Script self-test (`node:test` + tsx) | `scripts/<name>.test.ts` (existing `.test.mjs` remains discoverable) or `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
 
 Service-tier evidence is covered by `internal/pricing/service_tier_test.go`
-(provider/executor identity and requested/response precedence),
+(provider/executor identity, outbound precedence, explicit auto and legacy fallback),
 `internal/repository/usage_service_tier_test.go` (both ingestion paths, immutable
-selections, migration 045 preserving historical explanations, filters and facets),
+selections, migrations 045/046 preserving historical explanations, filters and facets),
+`internal/repository/usage_outbound_migration_test.go` (all historical columns,
+indexes, immutability triggers, foreign keys and retained-id sequence across 046),
 and `internal/api/usage_service_tier_test.go` (raw versus resolved wire fields and
 filter semantics). `scripts/test-usage-event-view.ts` and
 `scripts/test-request-export.ts` cover the shared Fast marker, source-specific
