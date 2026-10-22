@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -39,16 +38,7 @@ func TestManagementOverviewUnconfiguredReportsNullCounts(t *testing.T) {
 	handler := testHandler(t, "/omc")
 	server := httptest.NewServer(handler.Router())
 	defer server.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
+	client := signedInClient(t, server.URL+"/omc/api/auth/login", "management-secret")
 	response, err := client.Get(server.URL + "/omc/api/v1/management/overview")
 	if err != nil {
 		t.Fatal(err)
@@ -135,19 +125,7 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 	handler := NewHandler(config.Config{BasePath: "/omc", Version: "test-version", RequestTimeout: time.Second}, repo, cipher, nil, authManager)
 	server := httptest.NewServer(handler.Router())
 	defer server.Close()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	login.Body.Close()
-	if login.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d", login.StatusCode)
-	}
+	client := signedInClient(t, server.URL+"/omc/api/auth/login", "management-secret")
 	response, err := client.Get(server.URL + "/omc/api/v1/management/overview")
 	if err != nil {
 		t.Fatal(err)

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -133,14 +132,7 @@ func TestAuditEventsEndpoints(t *testing.T) {
 	ts := httptest.NewServer(h.Router())
 	defer ts.Close()
 
-	jar, _ := cookiejar.New(nil)
-	cli := &http.Client{Jar: jar}
-
-	// Login
-	loginResp, err := cli.Post(ts.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"test-key"}`))
-	if err != nil || loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("login failed: %v", err)
-	}
+	cli := signedInClient(t, ts.URL+"/omc/api/auth/login", "test-key")
 
 	// 1. List audit events
 	listResp, err := cli.Get(ts.URL + "/omc/api/v1/management/audit/events")

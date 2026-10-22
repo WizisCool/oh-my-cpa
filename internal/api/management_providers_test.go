@@ -1,12 +1,10 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -268,15 +266,7 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	loginResp, err := client.Post(appServer.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
-	if err != nil || loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("login failed: %v", err)
-	}
+	client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
 
 	return providerTestFixture{client: client, baseURL: appServer.URL, state: state, handler: handler}
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -104,20 +105,30 @@ func startDashboardTestServerStoring(t *testing.T, storedYAML string, handler fu
 	server := httptest.NewServer(appHandler.Router())
 	t.Cleanup(server.Close)
 
+	return signedInClient(t, server.URL+"/omc/api/auth/login", "management-secret-value"), server.URL, repo
+}
+
+// signedInClient signs in at loginURL and returns a client carrying the session cookie.
+func signedInClient(t *testing.T, loginURL, password string) *http.Client {
+	t.Helper()
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret-value"}`))
+	body, err := json.Marshal(map[string]string{"password": password})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login, err := client.Post(loginURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d", login.StatusCode)
+		t.Fatalf("sign-in at %s: status %d", loginURL, login.StatusCode)
 	}
-	return client, server.URL, repo
+	return client
 }
 
 func getJSON(t *testing.T, client *http.Client, url string) (*http.Response, []byte) {
