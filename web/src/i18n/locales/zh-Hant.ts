@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "events.outbound_tier": "出站檔位",
+  "events.fast_tier_outbound_hint": "Fast 模式 · 出站服務等級 {tier}",
+  "events.resolved_tier_outbound": "{tier}（按出站判斷）",
+  "cost.service_tier_outbound": "服務等級：{tier}（按出站檔位計價）",
+
   "events.resolved_tier_response": "{tier}（按回應判斷）",
   "events.resolved_tier_request": "{tier}（按請求判斷）",
   "events.resolved_tier": "判定服務等級",

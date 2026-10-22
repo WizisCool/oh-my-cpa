@@ -23,18 +23,23 @@ func TestCodexServiceTierSnapshot(t *testing.T) {
 			}
 			at := time.Now()
 			cases := []struct {
-				name, provider, executor, requested, response, tier, source string
-				nanos                                                       int64
+				name, provider, executor, requested, response, effective, tier, source string
+				nanos                                                                  int64
 			}{
-				{"codex", "codex", "", "priority", "default", "priority", "request", 6_000_000},
-				{"websocket", "custom", "CodexWebsocketsExecutor", "fast", "default", "fast", "request", 6_000_000},
-				{"openai", "openai", "", "priority", "default", "default", "response", 3_000_000},
-				{"unknown-outbound", "codex", "", "auto", "default", "", "request", 3_000_000},
+				{"codex", "codex", "", "priority", "default", "", "priority", "request", 6_000_000},
+				{"websocket", "custom", "CodexWebsocketsExecutor", "fast", "default", "", "fast", "request", 6_000_000},
+				{"openai", "openai", "", "priority", "default", "", "default", "response", 3_000_000},
+				{"outbound-priority", "codex", "", "auto", "default", "priority", "priority", "outbound", 6_000_000},
+				{"outbound-default", "codex", "", "priority", "default", "default", "default", "outbound", 3_000_000},
+				{"outbound-auto", "codex", "", "priority", "priority", "auto", "", "outbound", 3_000_000},
+				{"outbound-websocket", "custom", "CodexWebsocketsExecutor", "auto", "default", "fast", "fast", "outbound", 6_000_000},
+				{"other-outbound", "openai", "", "auto", "default", "priority", "default", "response", 3_000_000},
+				{"unknown-outbound", "codex", "", "auto", "default", "", "", "request", 3_000_000},
 			}
 			for _, test := range cases {
 				event := usage.Event{InstanceID: "default", EventKey: test.name, RequestID: test.name, Model: "m", Provider: test.provider,
 					ExecutorType: test.executor, TimestampMS: at.UnixMilli(), InputTokens: 1000, OutputTokens: 100,
-					ServiceTier: test.requested, ResponseServiceTier: test.response}
+					ServiceTier: test.requested, EffectiveServiceTier: test.effective, ResponseServiceTier: test.response}
 				if path == "inbox" {
 					if _, err := repo.AppendUsageInbox(ctx, "default", "http_pull", []string{fmt.Sprintf(`{"request_id":%q}`, test.name)}, at); err != nil {
 						t.Fatal(err)
@@ -58,7 +63,7 @@ func TestCodexServiceTierSnapshot(t *testing.T) {
 					t.Fatalf("%s: %+v %v", test.name, breakdown, err)
 				}
 				row, err := repo.GetUsageEvent(ctx, id)
-				if err != nil || row.ServiceTier != test.requested || row.ResponseServiceTier != test.response {
+				if err != nil || row.ServiceTier != test.requested || row.ResponseServiceTier != test.response || row.EffectiveServiceTier != test.effective {
 					t.Fatalf("raw evidence changed: %+v %v", row, err)
 				}
 				for _, statement := range []string{
@@ -138,13 +143,13 @@ func TestResolvedServiceTierFilterAndFacets(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()
 	at := time.Now().UnixMilli()
-	for _, test := range []struct{ key, provider, executor, requested, response string }{
-		{"fast", "codex", "", "priority", "default"},
-		{"ws", "custom", "CodexWebsocketsExecutor", " Priority ", "default"},
-		{"standard", "openai", "", "priority", "default"},
-		{"unknown", "codex", "", "auto", "default"},
+	for _, test := range []struct{ key, provider, executor, requested, response, effective string }{
+		{"fast", "codex", "", "priority", "default", ""},
+		{"ws", "custom", "CodexWebsocketsExecutor", " Priority ", "default", ""},
+		{"standard", "openai", "", "priority", "default", ""},
+		{"unknown", "codex", "", "auto", "default", ""},
 	} {
-		if _, err := repo.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: test.key, Provider: test.provider, ExecutorType: test.executor, TimestampMS: at, ServiceTier: test.requested, ResponseServiceTier: test.response}}); err != nil {
+		if _, err := repo.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: test.key, Provider: test.provider, ExecutorType: test.executor, TimestampMS: at, ServiceTier: test.requested, EffectiveServiceTier: test.effective, ResponseServiceTier: test.response}}); err != nil {
 			t.Fatal(err)
 		}
 	}

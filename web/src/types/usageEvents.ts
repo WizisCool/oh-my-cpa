@@ -56,10 +56,11 @@ export interface UsageEvent {
   model_alias?: string;
   reasoning_effort?: string;
   service_tier?: string;
+  effective_service_tier?: string;
   response_service_tier?: string;
   /** Provider-aware mode evidence, not a claim about the final outbound request. */
   resolved_service_tier?: string;
-  resolved_service_tier_source?: 'request' | 'response';
+  resolved_service_tier_source?: 'request' | 'response' | 'outbound';
   /** The model the upstream reported having served. Absent when it reported
    *  none or the record predates the field, which is "unknown" and never a claim
    *  that the requested model ran. */

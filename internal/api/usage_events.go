@@ -64,6 +64,7 @@ type usageEventResponse struct {
 	ModelAlias                string `json:"model_alias,omitempty"`
 	ReasoningEffort           string `json:"reasoning_effort,omitempty"`
 	ServiceTier               string `json:"service_tier,omitempty"`
+	EffectiveServiceTier      string `json:"effective_service_tier,omitempty"`
 	ResponseServiceTier       string `json:"response_service_tier,omitempty"`
 	ResolvedServiceTier       string `json:"resolved_service_tier,omitempty"`
 	ResolvedServiceTierSource string `json:"resolved_service_tier_source,omitempty"`
@@ -118,8 +119,9 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.Model = row.Model
 	item.ReasoningEffort = row.ReasoningEffort
 	item.ServiceTier = row.ServiceTier
+	item.EffectiveServiceTier = row.EffectiveServiceTier
 	item.ResponseServiceTier = row.ResponseServiceTier
-	item.ResolvedServiceTier, item.ResolvedServiceTierSource = pricing.ResolveServiceTier(row.Provider, row.ExecutorType, row.ResponseServiceTier, row.ServiceTier)
+	item.ResolvedServiceTier, item.ResolvedServiceTierSource = pricing.ResolveServiceTier(row.Provider, row.ExecutorType, row.ResponseServiceTier, row.ServiceTier, row.EffectiveServiceTier)
 	item.ResponseModel = row.ResponseModel
 	item.ModelSubstituted = row.ModelSubstituted
 	item.Failed = row.Failed
@@ -635,6 +637,7 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"model_alias":                  item.ModelAlias,
 		"reasoning_effort":             item.ReasoningEffort,
 		"service_tier":                 item.ServiceTier,
+		"effective_service_tier":       item.EffectiveServiceTier,
 		"response_service_tier":        item.ResponseServiceTier,
 		"resolved_service_tier":        item.ResolvedServiceTier,
 		"resolved_service_tier_source": item.ResolvedServiceTierSource,

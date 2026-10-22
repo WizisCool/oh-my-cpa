@@ -171,13 +171,14 @@ type UsageEventRow struct {
 	// APIKeyMask is the display-only mask of the client key. It is empty for
 	// records ingested before the mask column existed: the request record keeps
 	// only the fingerprint, which cannot be turned back into a readable mask.
-	APIKeyMask          string  `json:"api_key_mask,omitempty"`
-	Source              string  `json:"source"`
-	Model               string  `json:"model"`
-	ModelAlias          *string `json:"model_alias,omitempty"`
-	ReasoningEffort     string  `json:"reasoning_effort,omitempty"`
-	ServiceTier         string  `json:"service_tier,omitempty"`
-	ResponseServiceTier string  `json:"response_service_tier,omitempty"`
+	APIKeyMask           string  `json:"api_key_mask,omitempty"`
+	Source               string  `json:"source"`
+	Model                string  `json:"model"`
+	ModelAlias           *string `json:"model_alias,omitempty"`
+	ReasoningEffort      string  `json:"reasoning_effort,omitempty"`
+	ServiceTier          string  `json:"service_tier,omitempty"`
+	EffectiveServiceTier string  `json:"effective_service_tier,omitempty"`
+	ResponseServiceTier  string  `json:"response_service_tier,omitempty"`
 	// ResponseModel is the model the upstream reported having served; empty when
 	// it reported none or the record predates the column.
 	ResponseModel    string `json:"response_model,omitempty"`
@@ -350,7 +351,7 @@ func usageEventListSelect(from string) string {
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
-		       e.service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
+		       e.service_tier, e.effective_service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
@@ -388,7 +389,7 @@ func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 			&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
-			&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
+			&row.ServiceTier, &row.EffectiveServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
@@ -440,7 +441,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
-		       e.service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
+		       e.service_tier, e.effective_service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
@@ -461,7 +462,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 		&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
-		&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
+		&row.ServiceTier, &row.EffectiveServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,

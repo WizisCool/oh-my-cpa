@@ -9,6 +9,7 @@ import (
 const (
 	ServiceTierFromResponse = "response"
 	ServiceTierFromRequest  = "request"
+	ServiceTierFromOutbound = "outbound"
 )
 
 // serviceTierAuto is the caller's "let the upstream decide": it names no tier,
@@ -39,13 +40,19 @@ func BilledServiceTier(response, requested string) (tier, source string) {
 
 // ResolveServiceTier keeps provider-specific evidence separate from the raw
 // request and response. Codex reports default/auto even for Fast requests, so
-// its client choice is the best available evidence until CPA reports the final
-// outbound tier. An explicit auto must not fall through to a response lane.
-func ResolveServiceTier(provider, executor, response, requested string) (tier, source string) {
+// the final outbound tier takes precedence over its client choice. Missing
+// outbound evidence retains the prior policy; explicit auto never falls through.
+func ResolveServiceTier(provider, executor, response, requested, effective string) (tier, source string) {
 	isCodex := NormalizeServiceTier(provider) == "codex"
 	switch NormalizeServiceTier(executor) {
 	case "codexexecutor", "codexwebsocketsexecutor":
 		isCodex = true
+	}
+	if tier = NormalizeServiceTier(effective); isCodex && tier != "" {
+		if tier == serviceTierAuto {
+			tier = ""
+		}
+		return tier, ServiceTierFromOutbound
 	}
 	if tier = NormalizeServiceTier(requested); isCodex && tier != "" {
 		if tier == serviceTierAuto {

@@ -4,6 +4,11 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "events.outbound_tier": "Peringkat keluar",
+  "events.fast_tier_outbound_hint": "Mod Fast · peringkat perkhidmatan keluar {tier}",
+  "events.resolved_tier_outbound": "{tier} (berdasarkan permintaan keluar)",
+  "cost.service_tier_outbound": "Peringkat perkhidmatan: {tier} (harga mengikut permintaan keluar)",
+
   "events.resolved_tier_response": "{tier} (berdasarkan respons)",
   "events.resolved_tier_request": "{tier} (berdasarkan permintaan)",
   "events.resolved_tier": "Peringkat perkhidmatan ditentukan",

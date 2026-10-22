@@ -369,11 +369,12 @@ export const interactionRecords = (() => {
     timestamp_ms: now - index * 1000,
     provider: index % 4 === 1 ? 'codex' : ['openai', 'claude', 'gemini'][index % 3],
     model: index % 4 === 1 ? 'gpt-5.4' : ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
-    // Codex Fast keeps a default response while the recorded request selects priority.
-    service_tier: index % 4 === 1 ? 'priority' : 'auto',
+    // Both client-requested and server-injected Codex Fast retain a default response.
+    service_tier: index % 8 === 5 ? 'auto' : index % 4 === 1 ? 'priority' : 'auto',
+    ...(index % 8 === 5 ? { effective_service_tier: 'priority' } : {}),
     response_service_tier: 'default',
     resolved_service_tier: index % 4 === 1 ? 'priority' : 'default',
-    resolved_service_tier_source: index % 4 === 1 ? 'request' : 'response',
+    resolved_service_tier_source: index % 8 === 5 ? 'outbound' : index % 4 === 1 ? 'request' : 'response',
     ...(index % 4 === 1 ? { reasoning_effort: 'high' } : {}),
     source: `hmac:source-fingerprint-${index % 3}`,
     auth_index: `credential-${index % 3}`,
@@ -584,7 +585,9 @@ export async function requestListInteractions({ base, page, check }) {
   check('the mode column carries the effort and the fast-lane mark, and the model cell neither',
     fastCells.length > 0 && fastCells.length < modeCells.length &&
     modeCells.every((cell) => !cell.hasEffortInModel && cell.isFast === (cell.effort === 'high')) &&
-    fastCells.every((cell) => cell.fastName.includes('priority')),
+    fastCells.every((cell) => cell.fastName.includes('priority')) &&
+    fastCells.some((cell) => /outbound|出站/.test(cell.fastName)) &&
+    fastCells.some((cell) => /requested|请求/.test(cell.fastName)),
     JSON.stringify(modeCells.slice(0, 4)));
   check('every request row is the same height', new Set(modeCells.map((cell) => Math.round(cell.height))).size === 1,
     JSON.stringify([...new Set(modeCells.map((cell) => cell.height))]));

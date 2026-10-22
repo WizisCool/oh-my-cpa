@@ -64,8 +64,10 @@ write), a model multiplier, and an optional list of **tiers**:
   Time Zone, which only decides how the console displays time (ADR 0063);
 - a **service-tier tier** (`service_tiers`, such as `["priority","fast"]`)
   applies when the request was billed on one of the named upstream service
-  tiers. For Codex, the requested `service_tier` governs: its response can
-  report `default` or `auto` even for Fast. Other providers prefer a non-`auto`
+  tiers. For Codex, the final outbound `effective_service_tier` governs when
+  nonempty; otherwise the client `service_tier` remains the evidence. Its response
+  can report `default` or `auto` even for Fast. Explicit outbound `auto` selects
+  no lane. Other providers prefer a non-`auto`
   `response_service_tier`, falling back to the request. A missing Codex request
   field can fall back to the response; an explicit `auto` names no lane and
   does not fall through. `auto` and empty never match. Names are compared
@@ -96,19 +98,23 @@ Both multipliers are applied as exact fractions before a single half-up
 rounding to nanos, so a request with no tiers and a 1× channel costs exactly
 what the pre-tier formula charged (`FuzzQuoteLegacyParity`).
 
-The resolved service tier and its request/response source are saved with new
+The resolved service tier and its outbound/request/response source are saved with new
 request costs (migration 045). Historical records without that selection retain
 the original response-first policy when their locked cost is explained. Neither
 amounts nor price versions are rewritten. Mode indicators and the
 `resolved_service_tier` filter use the current provider-aware interpretation;
 `service_tier` continues to filter the original client request.
 
-CPA currently records the original client tier, not the final outbound tier after
-payload rules or request normalization. An `auto`/`default` Codex record therefore
-cannot distinguish a request overridden to Fast from one sent without Fast. OMC
-does not infer that missing fact from the current gateway configuration or request
-latency. Final outbound telemetry is an upstream dependency; the request-derived
-selection is explicitly identified as such.
+CPA v8.0.39 adds optional `effective_service_tier` telemetry from the final outbound
+request after translation and payload rules. Codex prefers this evidence, including
+explicit `default` downgrades; outbound `auto` selects no service-tier price and
+never revives the original client priority. Missing or empty outbound evidence
+retains the existing request-aware resolver, without a gateway-version gate.
+Other providers retain response-first pricing. Migration 046 adds the raw field
+and extends the immutable snapshot source with `outbound`, preserving old rows,
+amounts and explanations. CPA omits an empty outbound tier, so an old publisher
+and a payload rule that removed the tier are indistinguishable. OMC does not
+infer missing evidence from current configuration or request latency.
 
 ## Decoding OpenRouter
 

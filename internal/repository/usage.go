@@ -250,14 +250,14 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 		INSERT INTO usage_events (
 			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
-			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
+			service_tier, effective_service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
 			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
 			billed_service_tier, billed_service_tier_source
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -284,7 +284,7 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 			event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
-			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
+			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier, event.EffectiveServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
@@ -473,14 +473,14 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 		INSERT INTO usage_events (
 			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
-			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
+			service_tier, effective_service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
 			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
 			billed_service_tier, billed_service_tier_source
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -498,7 +498,7 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 			event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
-			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
+			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier, event.EffectiveServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
@@ -627,6 +627,7 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	event.ModelAlias = persistedPointer(event.ModelAlias, 256)
 	event.ReasoningEffort = persistedText(event.ReasoningEffort, 128)
 	event.ServiceTier = persistedText(event.ServiceTier, 128)
+	event.EffectiveServiceTier = persistedText(event.EffectiveServiceTier, 128)
 	event.ResponseServiceTier = persistedText(event.ResponseServiceTier, 128)
 	event.ResponseModel = persistedText(event.ResponseModel, 256)
 	// Redaction can blank the served model; a verdict about a name the record no

@@ -91,7 +91,7 @@ const channelVersionSelect = `SELECT id, channel, available, effective_from_ms, 
 // delayed queue delivery cannot reprice an older request. A tombstone stops a
 // removed price from leaking forward; a missing or tombstoned channel is 1x.
 func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedPrice, error) {
-	serviceTier, source := pricing.ResolveServiceTier(event.Provider, event.ExecutorType, event.ResponseServiceTier, event.ServiceTier)
+	serviceTier, source := pricing.ResolveServiceTier(event.Provider, event.ExecutorType, event.ResponseServiceTier, event.ServiceTier, event.EffectiveServiceTier)
 	locked, err := lockUsageCost(ctx, tx, event, serviceTier)
 	locked.serviceTier, locked.serviceTierSource = serviceTier, source
 	return locked, err
