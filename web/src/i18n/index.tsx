@@ -942,7 +942,7 @@ const DICT: Record<string, [string, string]> = {
   'omc.section_quota': ['额度', 'Quota'],
   'omc.section_plugin_source': ['插件商店', 'Plugin store'],
   'omc.plugin_source': ['Oh My CPA 插件源', 'Oh My CPA plugin registry'],
-  'omc.plugin_source_desc': ['在插件商店中提供 Oh My CPA 维护的插件，并保持该源启用。关闭会从网关配置中移除该源。', 'Offers Oh My CPA\'s own plugins in the store and keeps the source enabled. Turning it off removes it from the gateway configuration.'],
+  'omc.plugin_source_desc': ['在插件商店中显示 Oh My CPA 维护的插件列表，并保持该源启用。', 'Lists the plugins Oh My CPA maintains in the store and keeps the source enabled.'],
   // Both rows say what the process will do on its own, because each automatic read is a
   // request to the provider made with the credential itself.
   'omc.quota_auto_refresh_interval': ['定时刷新额度', 'Scheduled quota refresh'],
@@ -3471,8 +3471,6 @@ const DICT: Record<string, [string, string]> = {
   'plugin.settings_sources_desc': ['在官方源之外追加插件商店 registry 地址（plugins.store-sources）。', 'Store registries read in addition to the official one (plugins.store-sources).'],
   'plugin.settings_official_source': ['CLIProxyAPI 官方源（始终启用）', 'CLIProxyAPI official registry (always included)'],
   'plugin.settings_omc_source': ['Oh My CPA 插件源', 'Oh My CPA registry'],
-  'plugin.settings_omc_source_on': ['已启用', 'On'],
-  'plugin.settings_omc_source_off': ['已关闭', 'Off'],
   'plugin.settings_omc_source_open': ['在 OMC 设置中管理', 'Manage in OMC settings'],
   'plugin.settings_add_source': ['添加源', 'Add source'],
   'plugin.settings_source_label': ['插件源 {n}', 'Source {n}'],
