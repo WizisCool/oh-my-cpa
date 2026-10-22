@@ -69,7 +69,11 @@ branches conflicted on it.
 - Component tests answer requests from one in-memory OMC (`web/tests/support/omcApi.ts`)
   instead of a fetch stub per file, and fail on a request nothing answers. Their files run
   in parallel; ADR 0089 began with one worker, and three parallel runs of the whole suite
-  showed no shared state between files.
+  showed no shared state between files. Their heavier renders take two to three seconds
+  of CPU against a five-second budget, so `pnpm test:fast` runs the suite after its other
+  checks rather than beside them, and a runner that starts checks together sets
+  `OMC_SHARED_CPU`, which keeps the suite to one worker (`pnpm verify` runs three gates
+  at once).
 - Built-artifact acceptance is the paths that need the shipped binary: sign-in, a secret
   sweep over every console route (five routes it had never visited are now in it), the
   request list over the seeded database, MCP, adding a provider, the clipboard fallback,

@@ -44,7 +44,9 @@ export const CHECK_COMMANDS = {
   // info file under `tmp/`, while `verify` and CI keep the fresh `type-check`.
   'type-check': { label: 'frontend type check (incremental)', command: 'pnpm', args: ['type-check:incremental'] },
   logic: { label: 'frontend logic tests', command: 'pnpm', args: ['test:logic'] },
-  components: { label: 'frontend component and API integration tests', command: 'pnpm', args: ['test:components'] },
+  // Exclusive: its jsdom renders are CPU-bound against a five-second test budget, so it
+  // runs after the other checks with every core rather than beside them.
+  components: { label: 'frontend component and API integration tests', command: 'pnpm', args: ['test:components'], isExclusive: true },
   i18n: { label: 'frontend translation keys', command: 'pnpm', args: ['check-i18n'] },
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },
@@ -101,6 +103,7 @@ export async function runFastChecks(argv) {
       label: CHECK_COMMANDS[id].label,
       command: CHECK_COMMANDS[id].command,
       args: CHECK_COMMANDS[id].args,
+      isExclusive: CHECK_COMMANDS[id].isExclusive,
     })),
     { quiet: true },
   );

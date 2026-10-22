@@ -44,13 +44,13 @@ function resolveCommand(command, args) {
   return { command, args };
 }
 
-function runCheck({ label, command, args = [] }, signal) {
+function runCheck({ label, command, args = [] }, signal, env) {
   const startedAt = Date.now();
   const resolved = resolveCommand(command, args);
   return new Promise((resolve) => {
     const child = spawn(resolved.command, resolved.args, {
       cwd: root,
-      env: process.env,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
       detached: process.platform !== 'win32',
@@ -104,10 +104,15 @@ export async function runChecks(checks, { quiet = false, signal } = {}) {
   let results;
   try {
   console.log(`\n[parallel] starting ${checks.length} check(s): ${checks.map((check) => check.label).join(', ')}`);
-  results = await Promise.all(checks.map(async check => {
-    const result = await runCheck(check, controller.signal);
+  // Checks started together share the machine, and so does everything they start in
+  // turn: a suite that sizes its own worker pool reads OMC_SHARED_CPU and keeps to one
+  // worker beside its siblings. An exclusive check runs after them, on its own, so it
+  // can use every core; it still inherits the flag when an outer runner set it.
+  const concurrent = checks.filter((check) => !check.isExclusive);
+  const exclusive = checks.filter((check) => check.isExclusive);
+  const sharedEnv = concurrent.length > 1 ? { ...process.env, OMC_SHARED_CPU: '1' } : process.env;
+  const report = (result) => {
     const seconds = (result.durationMs / 1000).toFixed(2);
-
     console[result.code === 0 ? 'log' : 'error'](`\n[parallel] ${result.code === 0 ? 'PASS' : 'FAIL'} ${result.label} (${seconds}s)`);
     // A passing check under `quiet` contributes its one line and nothing else; a
     // failing one contributes everything it captured.
@@ -115,7 +120,12 @@ export async function runChecks(checks, { quiet = false, signal } = {}) {
     formatOutput(result.label, 'log', fs.readFileSync(result.stdoutFile, 'utf8'));
     formatOutput(result.label, 'error', fs.readFileSync(result.stderrFile, 'utf8'));
     return result;
-  }));
+  };
+  results = await Promise.all(concurrent.map(async (check) => report(await runCheck(check, controller.signal, sharedEnv))));
+  for (const check of exclusive) {
+    if (controller.signal.aborted) break;
+    results.push(report(await runCheck(check, controller.signal, process.env)));
+  }
   } finally {
     signal?.removeEventListener('abort', abort);
     process.removeListener('SIGTERM', abort);
