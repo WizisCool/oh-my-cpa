@@ -134,19 +134,31 @@ func TestProviderProtocolChangePreservesEveryKeyAndMovesMetadata(t *testing.T) {
 
 func TestProviderProtocolChangeRefusesInvalidTargetsAndStaleIdentity(t *testing.T) {
 	for _, test := range []struct {
-		body   string
-		status int
+		body     string
+		status   int
+		wantCode string
 	}{
-		{`{"family":"unknown"}`, 400},
-		{`{"family":"codex","base_url":""}`, 400},
-		{`{"family":"claude","expected_name":"stale"}`, 409},
-		{`{"family":"claude","website":"javascript:bad"}`, 400},
+		{`{"family":"unknown"}`, 400, ""},
+		{`{"family":"codex","base_url":""}`, 400, ""},
+		{`{"family":"claude","expected_name":"stale"}`, 409, providerStaleIdentityCode},
+		{`{"family":"claude","website":"javascript:bad"}`, 400, ""},
+		{`{"family":"codex","base_url":"https://relay.test","keys":[{"api_key":"fixture-one"},{"api_key":"fixture-one"}]}`, 400, providerDuplicateKeyCode},
+		{`{"family":"codex","base_url":"https://relay.test","keys":[{"api_key":"fixture-one"},{"api_key":" "}]}`, 400, providerKeyRequiredCode},
 	} {
 		t.Run(test.body, func(t *testing.T) {
 			fixture := newProviderTestFixture(t)
 			resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+"/omc/api/v1/management/providers/openai-compat-0", test.body)
 			if resp.StatusCode != test.status {
 				t.Fatalf("status %d: %s", resp.StatusCode, payload)
+			}
+			var refusal struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(payload, &refusal); err != nil {
+				t.Fatalf("decode refusal: %v", err)
+			}
+			if refusal.Code != test.wantCode {
+				t.Errorf("code=%q, want %q", refusal.Code, test.wantCode)
 			}
 			fixture.state.mu.Lock()
 			defer fixture.state.mu.Unlock()

@@ -37,12 +37,12 @@ func (h *Handler) appendOpenAICompatibilityGated(
 // console's provider write window. They are family-agnostic on purpose: the
 // family is a runtime value, so a new credential list needs no new code path.
 
-// appendConfigKeyProvider adds one credential to the family list.
-func (h *Handler) appendConfigKeyProvider(
+// appendConfigKeyProviders saves every submitted credential in one write window.
+func (h *Handler) appendConfigKeyProviders(
 	ctx context.Context,
 	client *management.Client,
 	spec providerConfigFamilySpec,
-	entry management.ConfigAPIKey,
+	entries []management.ConfigAPIKey,
 	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
 ) ([]management.ConfigAPIKey, error) {
 	var updated []management.ConfigAPIKey
@@ -54,7 +54,10 @@ func (h *Handler) appendConfigKeyProvider(
 			return updateConfigKeysAndVerifyVertexPolicy(ctx, client, spec.Family, list)
 		},
 		func(list *[]management.ConfigAPIKey) error {
-			updated = append(append([]management.ConfigAPIKey{}, *list...), entry)
+			if err := verifyConfigProviderKeys(*list, entries, -1); err != nil {
+				return err
+			}
+			updated = append(append([]management.ConfigAPIKey{}, *list...), entries...)
 			*list = updated
 			return nil
 		},
@@ -62,16 +65,17 @@ func (h *Handler) appendConfigKeyProvider(
 	return updated, err
 }
 
-// mutateConfigKeyProvider edits one credential at index. The list is read inside
-// the write window, so the edit cannot be applied to a stale snapshot.
-func (h *Handler) mutateConfigKeyProvider(
+// mutateConfigKeyProviders keeps the edited row's position and appends its new
+// credentials. Appending leaves every neighbouring positional identity intact.
+func (h *Handler) mutateConfigKeyProviders(
 	ctx context.Context,
 	client *management.Client,
 	spec providerConfigFamilySpec,
 	index int,
-	apply func(*management.ConfigAPIKey) error,
-	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
+	apply func(management.ConfigAPIKey) ([]management.ConfigAPIKey, error),
+	afterUpdate func(context.Context, []management.ConfigAPIKey, int) error,
 ) error {
+	added := 0
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
 			return client.EditableConfigAPIKeys(ctx, spec.Family)
@@ -83,9 +87,19 @@ func (h *Handler) mutateConfigKeyProvider(
 			if index >= len(*list) {
 				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 			}
-			return apply(&(*list)[index])
+			entries, err := apply((*list)[index])
+			if err != nil {
+				return err
+			}
+			if err := verifyConfigProviderKeys(*list, entries, index); err != nil {
+				return err
+			}
+			(*list)[index] = entries[0]
+			*list = append(*list, entries[1:]...)
+			added = len(entries) - 1
+			return nil
 		},
-		afterUpdate)
+		func(ctx context.Context, list []management.ConfigAPIKey) error { return afterUpdate(ctx, list, added) })
 }
 
 // deleteConfigKeyProvider removes one credential at index.

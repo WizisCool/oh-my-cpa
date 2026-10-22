@@ -495,7 +495,7 @@ the worktree clean. The final catalog retains every baseline scenario and assert
 Full local elapsed time is slightly higher; it has not been optimized away. Shared
 framework/bootstrap, static work and real-browser catalog costs remain. One run per
 revision is not evidence of a statistical regression or improvement; there is no
-large full-suite speedup claim. The strict host toolchain is Node 22.23.2, Go 1.27.1,
+large full-suite speedup claim. The strict host toolchain is Node 22.23.4, Go 1.27.3,
 pnpm 11.19.0 and Chromium 151.0.7922.34 (revision 1234). The performance wins demonstrated
 here are scoped selection, ownership isolation and OAuth comparator CPU cost.
 

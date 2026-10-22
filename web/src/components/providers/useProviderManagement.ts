@@ -429,6 +429,21 @@ export function useProviderManagement({
    * then the console does need to know what the gateway actually holds.
    */
 
+  // Provider write refusals carry stable codes, so the toast names the problem
+  // in the console's language instead of showing the facade's English prose.
+  // Every code names one thing the operator has to change.
+  const providerWriteMessage = (err: unknown): string => {
+    switch (apiErrorCode(err)) {
+      case 'provider_key_required': return t('pro.error_key_required');
+      case 'provider_duplicate_key': return t('pro.error_duplicate_key');
+      case 'provider_credential_exists': return t('pro.error_credential_exists');
+      case 'provider_stale_identity': return t('pro.error_stale_identity');
+      case 'write_busy': return t('pro.status_update_busy');
+      case 'provider_commit_partial': return t('pro.error_partial_commit');
+      default: return describeError(err);
+    }
+  };
+
   const statusQueue = useLastIntentQueue<boolean>({
     // The queued value is the enabled state the switch shows, not the field the
     // endpoint takes. Inverting it once here, through the named helper, is what
@@ -465,16 +480,10 @@ export function useProviderManagement({
       // A timeout is reported differently from a refusal on purpose: abandoning a
       // request proves only that this console stopped waiting, not that the
       // gateway did not commit, so claiming the update failed would be as
-      // misleading as claiming it succeeded. The busy refusal is named too: its
-      // message arrives from the server in English, and a user-visible string must
-      // come from the dictionary like every other one.
+      // misleading as claiming it succeeded.
       const msg = err instanceof LastIntentTimeoutError
         ? t('pro.status_update_timeout')
-        : apiErrorCode(err) === 'write_busy'
-          ? t('pro.status_update_busy')
-          : err instanceof ApiError
-            ? err.message
-            : String(err);
+        : providerWriteMessage(err);
       toast.error(t('pro.status_update_failed', { msg }));
       // The write did not confirm, so the row's displayed state is unknown rather
       // than merely stale: the list is re-read so the switch shows what the
@@ -492,15 +501,16 @@ export function useProviderManagement({
     // key before a name key, so an override stored under the display name alone
     // could be shadowed by whatever id the new row landed on.
     onSuccess: async (data, variables) => {
-      const result = await writeProviderIcon(data.id, variables.icon);
-      if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      for (const id of data.ids ?? [data.id]) {
+        const result = await writeProviderIcon(id, variables.icon);
+        if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      }
       toast.success(t('pro.provider_created'));
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
-      const msg = describeError(err);
-      toast.error(msg);
+      toast.error(providerWriteMessage(err));
     },
   });
 
@@ -529,13 +539,11 @@ export function useProviderManagement({
         void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
         void queryClient.invalidateQueries({ queryKey: ['preferences'] });
       }
-      const msg = describeError(err);
-      toast.error(msg);
+      toast.error(providerWriteMessage(err));
     },
   });
 
-  const deleteProviderMutation = useMutation({
-    mutationFn: (id: string) => api.deleteManagementProvider(id),
+  const deleteProviderMutation = useMutation({    mutationFn: (id: string) => api.deleteManagementProvider(id),
     onSuccess: (_data, id) => {
       toast.success(t('pro.provider_deleted'));
       shiftCachedProviderIcons(id);
@@ -543,8 +551,7 @@ export function useProviderManagement({
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
-      const msg = describeError(err);
-      toast.error(msg);
+      toast.error(providerWriteMessage(err));
     },
   });
 

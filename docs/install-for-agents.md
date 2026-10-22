@@ -211,7 +211,7 @@ requested, retaining the working directory and data path.
 
 ### D. From source
 
-Needs Go 1.25+, Node.js 22+ and pnpm 11+.
+Needs Go 1.26+, Node.js 22+ and pnpm 11+.
 
 ```bash
 git clone https://github.com/WizisCool/oh-my-cpa.git && cd oh-my-cpa

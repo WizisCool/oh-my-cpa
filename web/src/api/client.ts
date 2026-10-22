@@ -690,8 +690,8 @@ export const api = {
    * The create response names the row it added: positions are assigned
    * server-side, so the console cannot key a per-row override without it.
    */
-  async createManagementProvider(payload: SaveProviderPayload): Promise<{ status: string; family: string; id: string }> {
-    return request<{ status: string; family: string; id: string }>('/management/providers', {
+  async createManagementProvider(payload: SaveProviderPayload): Promise<{ status: string; family: string; id: string; ids?: string[] }> {
+    return request<{ status: string; family: string; id: string; ids?: string[] }>('/management/providers', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

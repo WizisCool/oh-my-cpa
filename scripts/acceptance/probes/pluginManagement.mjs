@@ -162,7 +162,11 @@ export async function pluginManagement({ base, page, check, writes }) {
   // ── the navigation lists the store and the pages plugins registered ─────────
   const storeEntry = page.locator('.app-menu [data-route-path="/plugins/store"]').first();
   check('the store is a navigation entry of its own', await storeEntry.isVisible());
-  check('the store entry is the selected one on the store tab', /ant-menu-item-selected/.test((await storeEntry.getAttribute('class')) ?? ''));
+  const storeSelected = await isTrue(
+    async () => /ant-menu-item-selected/.test((await storeEntry.getAttribute('class')) ?? ''),
+    'the store navigation selection',
+  );
+  check('the store entry is the selected one on the store tab', storeSelected);
   const pageEntry = page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first();
   const pageListed = await isTrue(async () => pageEntry.isVisible(), 'the plugin page entry');
   check('a running plugin\'s page is a navigation entry under its registered label', pageListed && (await pageEntry.innerText()).includes('Logger Console'));
@@ -382,7 +386,11 @@ export async function pluginManagement({ base, page, check, writes }) {
     const box = await page.locator('[data-plugin-page-frame]').boundingBox();
     const viewport = page.viewportSize();
     check('the frame fills the content area below its heading', Boolean(box) && box.height > viewport.height * 0.6, JSON.stringify(box));
-    check('the plugin page is the selected navigation entry', /ant-menu-item-selected/.test((await page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first().getAttribute('class')) ?? ''));
+    const pageSelected = await isTrue(
+      async () => /ant-menu-item-selected/.test((await page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first().getAttribute('class')) ?? ''),
+      'the plugin page navigation selection',
+    );
+    check('the plugin page is the selected navigation entry', pageSelected);
     const selectedEntry = page.locator('.app-menu [data-route-path="/plugin-pages/request-logger/0"]').first();
     const readInk = () => selectedEntry.locator('[data-plugin-logo="svg"]').evaluate((glyph) => {
       const style = getComputedStyle(glyph);

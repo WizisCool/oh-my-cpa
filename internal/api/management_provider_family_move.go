@@ -130,10 +130,10 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 			apiKey = original[position].APIKey
 		}
 		if apiKey == "" {
-			return management.ProviderFamilyEntry{}, newProviderWriteError(http.StatusBadRequest, "every credential needs an API key when changing protocol")
+			return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "every credential needs an API key when changing protocol", providerKeyRequiredCode)
 		}
 		if seen[apiKey] {
-			return management.ProviderFamilyEntry{}, newProviderWriteError(http.StatusBadRequest, "duplicate API keys cannot be moved to another protocol")
+			return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "duplicate API keys cannot be moved to another protocol", providerDuplicateKeyCode)
 		}
 		seen[apiKey] = true
 		old := defaults
@@ -201,7 +201,7 @@ func convertProviderFamily(source management.ProviderFamilyEntry, family string,
 		converted = append(converted, key)
 	}
 	if len(converted) == 0 {
-		return management.ProviderFamilyEntry{}, newProviderWriteError(http.StatusBadRequest, "an API key is required when changing protocol")
+		return management.ProviderFamilyEntry{}, newProviderWriteErrorWithCode(http.StatusBadRequest, "an API key is required when changing protocol", providerKeyRequiredCode)
 	}
 	if family != openAICompatibilityFamily {
 		return management.ProviderFamilyEntry{Keys: converted}, nil
