@@ -1,0 +1,72 @@
+{
+  "why": "Editing one Vertex model keeps each key's openapi defaults and location, the sibling model's openapi flag, an unmodelled group field and the following group.",
+  "now_ms": 0,
+  "body": {
+    "family": "vertex",
+    "stored": [
+      {
+        "name": "shared",
+        "future-group": "kept",
+        "models": [
+          {
+            "name": "partner/model",
+            "alias": "first",
+            "openapi": false
+          },
+          {
+            "name": "partner/model",
+            "alias": "second",
+            "openapi": true
+          }
+        ],
+        "keys": [
+          {
+            "api-key": "SYNTHETIC-ONE",
+            "openapi": false,
+            "openapi-location": "global"
+          },
+          {
+            "api-key": "SYNTHETIC-TWO",
+            "openapi": true,
+            "openapi-location": "us-central1"
+          }
+        ]
+      },
+      {
+        "name": "other",
+        "keys": [
+          {
+            "api-key": "SYNTHETIC-OTHER",
+            "openapi": true
+          }
+        ]
+      }
+    ],
+    "runtime": {
+      "vertex-api-key": [
+        {
+          "api-key": "SYNTHETIC-ONE",
+          "auth-index": "one"
+        },
+        {
+          "api-key": "SYNTHETIC-TWO",
+          "auth-index": "two"
+        },
+        {
+          "api-key": "SYNTHETIC-OTHER",
+          "auth-index": "other"
+        }
+      ]
+    },
+    "edits": {
+      "0": {
+        "models": [
+          {},
+          {
+            "display-name": "Edited sibling"
+          }
+        ]
+      }
+    }
+  }
+}

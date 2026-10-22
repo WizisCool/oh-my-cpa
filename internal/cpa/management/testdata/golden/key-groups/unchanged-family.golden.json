@@ -1,0 +1,86 @@
+{
+  "read": [
+    {
+      "api-key": "k1",
+      "auth-index": "i1",
+      "base-url": "https://a.test",
+      "models": [
+        {
+          "name": "m1",
+          "alias": "x"
+        }
+      ],
+      "priority": 3,
+      "disable-cooling": true
+    },
+    {
+      "api-key": "k2",
+      "auth-index": "i2",
+      "base-url": "https://a.test",
+      "models": [
+        {
+          "name": "m1",
+          "alias": "x"
+        }
+      ],
+      "priority": 3,
+      "weight": 2,
+      "disable-cooling": true
+    },
+    {
+      "api-key": "k3",
+      "auth-index": "i3",
+      "base-url": "https://a.test",
+      "models": [
+        {
+          "name": "m1",
+          "alias": "x"
+        }
+      ],
+      "priority": 3,
+      "disable-cooling": true
+    },
+    {
+      "api-key": "k9",
+      "auth-index": "i9",
+      "base-url": "https://b.test",
+      "proxy-url": "http://proxy.test"
+    }
+  ],
+  "written": [
+    {
+      "base-url": "https://a.test",
+      "disable-cooling": true,
+      "keys": [
+        {
+          "api-key": "k1"
+        },
+        {
+          "api-key": "k2",
+          "weight": 2
+        },
+        {
+          "api-key": "k3"
+        }
+      ],
+      "models": [
+        {
+          "alias": "x",
+          "name": "m1"
+        }
+      ],
+      "name": "team",
+      "priority": 3
+    },
+    {
+      "base-url": "https://b.test",
+      "keys": [
+        {
+          "api-key": "k9",
+          "proxy-url": "http://proxy.test"
+        }
+      ],
+      "name": "solo"
+    }
+  ]
+}

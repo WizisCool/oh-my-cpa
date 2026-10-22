@@ -1,0 +1,32 @@
+{
+  "read": [
+    {
+      "api-key": "dup",
+      "auth-index": "a"
+    },
+    {
+      "api-key": "other",
+      "auth-index": "b",
+      "prefix": " Team "
+    }
+  ],
+  "written": [
+    {
+      "keys": [
+        {
+          "api-key": "dup"
+        }
+      ],
+      "name": "g-1"
+    },
+    {
+      "keys": [
+        {
+          "api-key": "other",
+          "prefix": " Team "
+        }
+      ],
+      "name": "g-3"
+    }
+  ]
+}

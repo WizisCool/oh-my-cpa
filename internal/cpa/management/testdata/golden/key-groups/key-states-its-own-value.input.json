@@ -1,0 +1,108 @@
+{
+  "why": "A key that excludes every model or clears the group's models and priority states that on itself and stays in its group; clearing is the zero value.",
+  "now_ms": 0,
+  "body": {
+    "family": "claude",
+    "stored": [
+      {
+        "name": "team",
+        "base-url": "https://a.test",
+        "priority": 3,
+        "models": [
+          {
+            "name": "m1",
+            "alias": "x"
+          }
+        ],
+        "disable-cooling": true,
+        "keys": [
+          {
+            "api-key": "k1"
+          },
+          {
+            "api-key": "k2",
+            "weight": 2
+          },
+          {
+            "api-key": "k3"
+          }
+        ]
+      },
+      {
+        "name": "solo",
+        "base-url": "https://b.test",
+        "keys": [
+          {
+            "api-key": "k9",
+            "proxy-url": "http://proxy.test"
+          }
+        ]
+      }
+    ],
+    "runtime": {
+      "claude-api-key": [
+        {
+          "api-key": "k1",
+          "base-url": "https://a.test",
+          "priority": 3,
+          "proxy-url": "",
+          "models": [
+            {
+              "name": "m1",
+              "alias": "x"
+            }
+          ],
+          "disable-cooling": true,
+          "auth-index": "i1"
+        },
+        {
+          "api-key": "k2",
+          "base-url": "https://a.test",
+          "priority": 3,
+          "proxy-url": "",
+          "weight": 2,
+          "models": [
+            {
+              "name": "m1",
+              "alias": "x"
+            }
+          ],
+          "disable-cooling": true,
+          "auth-index": "i2"
+        },
+        {
+          "api-key": "k3",
+          "base-url": "https://a.test",
+          "priority": 3,
+          "proxy-url": "",
+          "models": [
+            {
+              "name": "m1",
+              "alias": "x"
+            }
+          ],
+          "disable-cooling": true,
+          "auth-index": "i3"
+        },
+        {
+          "api-key": "k9",
+          "base-url": "https://b.test",
+          "proxy-url": "http://proxy.test",
+          "models": [],
+          "auth-index": "i9"
+        }
+      ]
+    },
+    "edits": {
+      "1": {
+        "excluded-models": [
+          "*"
+        ]
+      },
+      "2": {
+        "models": null,
+        "priority": null
+      }
+    }
+  }
+}

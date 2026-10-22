@@ -1,0 +1,31 @@
+{
+  "read": [
+    {
+      "api-key": "k1",
+      "auth-index": "i1",
+      "base-url": "https://a.test",
+      "websockets": true
+    },
+    {
+      "api-key": "k2",
+      "auth-index": "i2",
+      "base-url": "https://a.test",
+      "websockets": true
+    }
+  ],
+  "written": [
+    {
+      "base-url": "https://a.test",
+      "keys": [
+        {
+          "api-key": "k1"
+        },
+        {
+          "api-key": "k2"
+        }
+      ],
+      "name": "team",
+      "websockets": true
+    }
+  ]
+}
