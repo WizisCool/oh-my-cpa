@@ -50,6 +50,10 @@ export function useUsageEventViewState() {
 
   const [params, setParams] = useSearchParams();
   const signature = params.toString();
+  // Router state updates are transitions in v7. A second write can therefore run
+  // before the first one has rendered; compose it onto the latest intent so the
+  // later commit cannot recreate the pre-transition URL.
+  const latestParamsRef = React.useRef(params);
   const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
 
   const { value: viewPref, ready: prefReady, set: setViewPref } = usePreference<UsageEventsViewPreference>(
@@ -90,16 +94,22 @@ export function useUsageEventViewState() {
   const selfWrittenSignatureRef = React.useRef<string | null>(null);
   const writeParams = React.useCallback(
     (next: URLSearchParams) => {
+      latestParamsRef.current = new URLSearchParams(next);
       selfWrittenSignatureRef.current = next.toString();
       setParams(next, { replace: true });
     },
     [setParams],
+  );
+  const readLatestFilterParams = React.useCallback(
+    () => readFilterParams(latestParamsRef.current),
+    [],
   );
 
   React.useEffect(() => {
     if (selfWrittenSignatureRef.current === signature) return;
     // A URL this page did not write: history navigation, a drill-down link, or a
     // pasted address. A pending keystroke belongs to the view that was just left.
+    latestParamsRef.current = new URLSearchParams(signature);
     setSearchResetToken((value) => value + 1);
   }, [signature]);
 
@@ -181,36 +191,36 @@ export function useUsageEventViewState() {
       // The rewrite is defined in `usageEventViewActions`: every filter dimension is
       // replaced wholesale so a removal is expressible, while the window, page size
       // and cursor are left alone.
-      const nextParams = replaceFilters(params, values, { result: options?.result });
+      const nextParams = replaceFilters(latestParamsRef.current, values, { result: options?.result });
       writeParams(nextParams);
       persistView(nextParams, { grouping });
     },
-    [grouping, params, persistView, writeParams],
+    [grouping, persistView, writeParams],
   );
 
   /** setFilter replaces one dimension wholesale. An empty list clears it. */
   const setFilter = React.useCallback(
     (key: EventFilterKey, values: string[]) => {
-      commit(mergeFilters(committedParams, key, values));
+      commit(mergeFilters(readLatestFilterParams(), key, values));
     },
-    [commit, committedParams],
+    [commit, readLatestFilterParams],
   );
 
   const removeFilterValue = React.useCallback(
     (key: EventFilterKey, value?: string) => {
-      const current = committedParams[key] ?? [];
+      const current = readLatestFilterParams()[key] ?? [];
       // Removing the search chip removes the whole filter, so a keystroke still
       // queued behind the debounce must be dropped with it.
       if (key === 'q') setSearchResetToken((token) => token + 1);
       setFilter(key, value === undefined ? [] : current.filter((entry) => entry !== value));
     },
-    [committedParams, setFilter],
+    [readLatestFilterParams, setFilter],
   );
 
   const clearFilters = React.useCallback(() => {
     // Filters and the verdict go; the window, page size and cursor stay. Reset the
     // window too and the reader is silently moved to a different hour.
-    const windowOnly = clearAllFilters(params);
+    const windowOnly = clearAllFilters(latestParamsRef.current);
     writeParams(windowOnly);
     // Cancels any queued keystroke. The search box's committed value is already
     // empty during a clear, so nothing else would signal that its pending timer
@@ -220,15 +230,15 @@ export function useUsageEventViewState() {
     // defaults here instead is what reset the operator's window and page size in
     // storage while the URL kept them, so a later reload silently moved them.
     persistView(windowOnly, { grouping });
-  }, [grouping, params, persistView, writeParams]);
+  }, [grouping, persistView, writeParams]);
 
   const setTimeWindow = React.useCallback(
     (window: { preset?: string; from?: number; to?: number }) => {
-      const nextParams = applyTimeWindow(params, window);
+      const nextParams = applyTimeWindow(latestParamsRef.current, window);
       writeParams(nextParams);
       persistView(nextParams, { grouping });
     },
-    [grouping, params, persistView, writeParams],
+    [grouping, persistView, writeParams],
   );
 
   const [search, setSearch] = useDebouncedSearch(
@@ -249,9 +259,9 @@ export function useUsageEventViewState() {
    */
   const setResult = React.useCallback(
     (result: UsageResultFilter) => {
-      commit(committedParams, { result });
+      commit(readLatestFilterParams(), { result });
     },
-    [commit, committedParams],
+    [commit, readLatestFilterParams],
   );
 
   /**
@@ -265,21 +275,21 @@ export function useUsageEventViewState() {
    */
   const setPageSize = React.useCallback(
     (nextLimit: number) => {
-      const nextParams = new URLSearchParams(params);
+      const nextParams = new URLSearchParams(latestParamsRef.current);
       if (nextLimit === 100) nextParams.delete('limit');
       else nextParams.set('limit', String(nextLimit));
       writeParams(nextParams);
       persistView(nextParams, { grouping });
     },
-    [grouping, params, persistView, writeParams],
+    [grouping, persistView, writeParams],
   );
 
   /** The grouping is a layout choice the saved view carries; see `persistView`. */
   const changeGrouping = React.useCallback(
     (next: EventGrouping) => {
-      persistView(params, { grouping: next });
+      persistView(latestParamsRef.current, { grouping: next });
     },
-    [params, persistView],
+    [persistView],
   );
 
   /**
@@ -292,9 +302,9 @@ export function useUsageEventViewState() {
   }, []);
   const toggleAutoRefresh = React.useCallback(
     (next: boolean) => {
-      persistView(params, { grouping, autoRefresh: next });
+      persistView(latestParamsRef.current, { grouping, autoRefresh: next });
     },
-    [grouping, params, persistView],
+    [grouping, persistView],
   );
 
   return {

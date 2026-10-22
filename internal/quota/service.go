@@ -48,6 +48,11 @@ const (
 // vendors' update channels, so they move with each CPA baseline.
 const (
 	CodexUserAgent = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
+	// Anthropic's reset-grant program answers by client: a request without a
+	// Claude Code identity gets eligible=false ("surface"), and one below the
+	// version floor gets "cli_version", each with an empty grant list. Keep this
+	// at or above the current Claude Code release.
+	ClaudeCLIUserAgent = "claude-cli/2.1.308 (external, cli)"
 	// The changelist was verified for Hub 2.24.0; update the release and CL together.
 	AntigravityUserAgent = "antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)"
 	XaiGrokClientVersion = "1.0.46"
@@ -660,6 +665,8 @@ func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.Au
 		"Accept":         "application/json",
 		"Content-Type":   "application/json",
 		"anthropic-beta": "oauth-2025-04-20",
+		"x-app":          "cli",
+		"User-Agent":     ClaudeCLIUserAgent,
 	})
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL+"?cedar_ember=1&skip_spend=1", headers, "")
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {

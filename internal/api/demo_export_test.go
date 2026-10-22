@@ -502,7 +502,7 @@ var demoExportMeasuredKeys = map[string]bool{
 // (which the Dockerfile's builder image also pins) and the release image's default
 // platform. `TestDemoExportHostKeysFollowThePinnedToolchain` keeps the version in step.
 var demoExportHostKeys = map[string]string{
-	"go_version": "go1.27.1",
+	"go_version": "go1.27.3",
 	"os_arch":    "linux/amd64",
 }
 
@@ -1473,7 +1473,7 @@ func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
 func TestDemoExportPreservesSeededLatencyAndSourceSize(t *testing.T) {
 	for _, shouldUseNumber := range []bool{false, true} {
 		t.Run(fmt.Sprintf("use-number=%t", shouldUseNumber), func(t *testing.T) {
-			decoder := json.NewDecoder(strings.NewReader(`{"event":{"latency_ms":1423,"timestamp_ms":1767225000000},"config":{"size_bytes":4580,"revision":"seed"},"cpa":{"endpoint_masked":"http://127.0.0.1:0","status":"ok","latency_ms":2},"runtime":{"go_version":"go1.27.1","pid":7123,"num_goroutines":17}}`))
+			decoder := json.NewDecoder(strings.NewReader(`{"event":{"latency_ms":1423,"timestamp_ms":1767225000000},"config":{"size_bytes":4580,"revision":"seed"},"cpa":{"endpoint_masked":"http://127.0.0.1:0","status":"ok","latency_ms":2},"runtime":{"go_version":"go1.27.3","pid":7123,"num_goroutines":17}}`))
 			if shouldUseNumber {
 				decoder.UseNumber()
 			}

@@ -48,9 +48,16 @@ export async function searchAndRejectionsSection(context) {
     () => filterSuffix().includes('q=gpt'),
     { detail: () => `url=${filterSuffix()}` },
   );
+  await checkEventually(
+    'the provider chosen during the debounce survives',
+    () => {
+      const race = new URL(page.url()).searchParams;
+      return race.get('q') === 'gpt' && race.get('provider') !== null;
+    },
+    { detail: () => `url=${filterSuffix()}` },
+  );
   const afterRace = new URL(page.url()).searchParams;
   check('a queued search does not erase a filter chosen during the debounce', afterRace.get('model') === committedModel, `url=${filterSuffix()}`);
-  check('the provider chosen during the debounce survives', afterRace.get('provider') !== null, `url=${filterSuffix()}`);
   await page.locator('.req-clear-all-chips').click();
   await checkEventually(
     'the race left the view clearable',

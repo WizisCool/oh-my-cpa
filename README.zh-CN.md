@@ -456,7 +456,7 @@ bearer_token_env_var = "OMCPA_CPA_MANAGEMENT_KEY"
 
 ## 参与贡献
 
-欢迎提交 Issue 与 Pull Request。开发环境需要 Go 1.25+、Node.js 22+ 与 pnpm 11+：
+欢迎提交 Issue 与 Pull Request。开发环境需要 Go 1.26+、Node.js 22+ 与 pnpm 11+：
 
 ```bash
 pnpm install --frozen-lockfile

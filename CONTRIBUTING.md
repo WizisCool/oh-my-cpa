@@ -18,8 +18,8 @@ Bug reports and feature requests go through the issue forms under [`.github/ISSU
 
 ### Prerequisites
 
-- **Go**: 1.25+ (pinned to `1.27.1` in CI)
-- **Node.js**: 22+ (pinned to `22.23.2`)
+- **Go**: 1.26+ (pinned to `1.27.3` in CI)
+- **Node.js**: 22+ (pinned to `22.23.4`)
 - **pnpm**: 11+ (pinned to `11.19.0`)
 - **Air**: (optional, for Go hot reloading): `go install github.com/air-verse/air@latest`
 

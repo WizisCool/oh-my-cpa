@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM node:22.23.2-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22.23.4-alpine AS web
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/package.json
@@ -8,7 +8,7 @@ COPY web/ ./web/
 COPY scripts/ ./scripts/
 RUN pnpm --dir web run build
 
-FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS server
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS server
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

@@ -1,4 +1,5 @@
 import { fulfillFixture } from '../browser-guard.mjs';
+import { until } from '../harness.mjs';
 /**
  * Probes for the dashboard's token-activity grid: its day geometry and ramp, the
  * phone layout, the failure state of one panel, and the grid over pruned history.
@@ -878,6 +879,13 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   await openLink.waitFor({ state: 'visible', timeout: 5000 });
   await openLink.click();
   await page.waitForFunction(() => location.pathname.endsWith('/usage/events'), null, { timeout: 10_000 });
+  // React Router v7 commits navigation inside a transition, so the outgoing dashboard can
+  // remain mounted for a beat after the URL changes. Wait for the portal to leave before
+  // asserting its absence rather than racing the transition.
+  await until(
+    async () => await page.locator('.heatmap-tooltip-anchor, .heatmap-tip-popper').count() === 0,
+    { label: 'the dashboard tooltip portal to leave with its route' },
+  );
   check('leaving the dashboard removes its popup portal and anchor',
     await page.locator('.heatmap-tooltip-anchor, .heatmap-tip-popper').count() === 0);
   const query = await page.evaluate(() => Object.fromEntries(new URLSearchParams(location.search).entries()));
