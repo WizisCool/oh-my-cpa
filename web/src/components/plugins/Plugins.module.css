@@ -422,8 +422,22 @@
   font-size: var(--text-sm);
 }
 
+/* The row is one line: the label gives way when the panel narrows, the glyph and the
+   link keep their box. */
+.source-fixed > :global(.anticon) {
+  flex: none;
+}
+
+.source-fixed-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .source-fixed-action {
   margin-left: auto;
+  flex: none;
 }
 
 .field-error {

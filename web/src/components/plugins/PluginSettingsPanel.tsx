@@ -229,11 +229,11 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
           <div className={styles['source-list']}>
             <div className={styles['source-fixed']} data-plugin-official-source>
               <SafetyCertificateOutlined />
-              {t('plugin.settings_official_source')}
+              <span className={styles['source-fixed-label']}>{t('plugin.settings_official_source')}</span>
             </div>
             <div className={styles['source-fixed']} data-plugin-omc-source>
               <SafetyCertificateOutlined />
-              <span>{t('plugin.settings_omc_source')}</span>
+              <span className={styles['source-fixed-label']}>{t('plugin.settings_omc_source')}</span>
               <Button type="link" size="small" className={styles['source-fixed-action']} onClick={() => navigate('/omc-settings')}>
                 {t('plugin.settings_omc_source_open')}
               </Button>

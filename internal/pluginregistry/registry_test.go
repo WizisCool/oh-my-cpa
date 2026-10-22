@@ -28,7 +28,10 @@ type registryPlugin struct {
 	} `json:"install"`
 }
 
-const installTypeGitHubRelease = "github-release"
+const (
+	installTypeGitHubRelease = "github-release"
+	installTypeDirect        = "direct"
+)
 
 var (
 	pluginIDPattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -55,25 +58,36 @@ func validateRegistry(raw []byte) (registryDocument, error) {
 	}
 	seen := make(map[string]struct{}, len(document.Plugins))
 	for index, plugin := range document.Plugins {
+		if document.SchemaVersion == 1 && pluginInstallType(plugin) == installTypeDirect {
+			return document, fmt.Errorf("plugins[%d]: direct install requires schema_version 2", index)
+		}
 		if errPlugin := validatePlugin(plugin); errPlugin != nil {
 			return document, fmt.Errorf("plugins[%d]: %w", index, errPlugin)
 		}
-		if _, exists := seen[plugin.ID]; exists {
-			return document, fmt.Errorf("plugins[%d]: duplicate plugin id %q", index, plugin.ID)
+		id := strings.TrimSpace(plugin.ID)
+		if _, exists := seen[id]; exists {
+			return document, fmt.Errorf("plugins[%d]: duplicate plugin id %q", index, id)
 		}
-		seen[plugin.ID] = struct{}{}
+		seen[id] = struct{}{}
 	}
 	return document, nil
 }
 
+// pluginInstallType is the type CPA resolves for an entry: one that names none is
+// installed from its repository's releases.
+func pluginInstallType(plugin registryPlugin) string {
+	if installType := strings.ToLower(strings.TrimSpace(plugin.Install.Type)); installType != "" {
+		return installType
+	}
+	return installTypeGitHubRelease
+}
+
 func validatePlugin(plugin registryPlugin) error {
-	// An entry naming no install type is installed from its repository's releases.
-	installType := strings.ToLower(strings.TrimSpace(plugin.Install.Type))
-	isGitHubRelease := installType == "" || installType == installTypeGitHubRelease
+	installType := pluginInstallType(plugin)
 	required := map[string]string{
 		"id": plugin.ID, "name": plugin.Name, "description": plugin.Description, "author": plugin.Author,
 	}
-	if isGitHubRelease {
+	if installType == installTypeGitHubRelease {
 		required["repository"] = plugin.Repository
 	}
 	for field, value := range required {
@@ -92,9 +106,9 @@ func validatePlugin(plugin registryPlugin) error {
 		}
 	}
 	switch installType {
-	case "", installTypeGitHubRelease:
+	case installTypeGitHubRelease:
 		return validateRepository(plugin.Repository)
-	case "direct":
+	case installTypeDirect:
 		// The artifact rules of a direct entry are not mirrored yet; nothing publishes
 		// this shape, so the gate checks its fields and stops there.
 		return nil
@@ -183,6 +197,16 @@ func TestValidateRegistryRefusesWhatTheGatewayRefuses(t *testing.T) {
 			name:    "a duplicate id",
 			raw:     document(2, validPlugin+","+validPlugin),
 			wantErr: "duplicate plugin id",
+		},
+		{
+			name:    "an id duplicated after trimming",
+			raw:     document(2, validPlugin+","+strings.Replace(validPlugin, `"id":"sample"`, `"id":" sample "`, 1)),
+			wantErr: "duplicate plugin id",
+		},
+		{
+			name:    "a direct install under schema_version 1",
+			raw:     []byte(`{"schema_version":1,"plugins":[{"id":"sample","name":"Sample","description":"Sample.","author":"a","version":"1.0.0","install":{"type":"direct"}}]}`),
+			wantErr: "direct install requires schema_version 2",
 		},
 		{
 			name:    "an unknown schema_version",
