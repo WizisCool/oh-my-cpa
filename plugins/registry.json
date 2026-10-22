@@ -1,4 +1,23 @@
 {
   "schema_version": 2,
-  "plugins": []
+  "plugins": [
+    {
+      "id": "omcpa-codex-candy-eval",
+      "name": "降智测试",
+      "description": "OMC-adapted Codex evaluation plugin with candy reasoning tests, model fingerprint detection, and pelican rendering tests.",
+      "author": "Yorick-Ryu / haowang02",
+      "repository": "Yorick-Ryu/cpa-plugin-codex-candy-eval",
+      "version": "0.4.0-omc.4",
+      "homepage": "https://github.com/Yorick-Ryu/cpa-plugin-codex-candy-eval",
+      "license": "MIT",
+      "tags": [
+        "codex",
+        "evaluation",
+        "omc"
+      ],
+      "install": {
+        "type": "github-release"
+      }
+    }
+  ]
 }
