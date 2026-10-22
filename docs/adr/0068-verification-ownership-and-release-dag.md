@@ -18,7 +18,7 @@ finished.
 ## Decision
 
 1. Keep required `static`, `browser` and aggregate `probes` merge checks. Run full
-   built acceptance on both PR and master, alongside the full three-shard development
+   built acceptance on both PR and `main`, alongside the full three-shard development
    catalog and production demo coverage. P0/smoke commands remain optional local tools.
 2. Resolve release identity once, fan out read-only static/browser/probe verification,
    and aggregate every verdict before packaging/publication. Downstream checkouts use

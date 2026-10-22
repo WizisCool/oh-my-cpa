@@ -2807,8 +2807,8 @@ commits on the dev server, which is why development coverage is kept.
 
 Selection is coarse on purpose. `scripts/acceptance/check-ui-plan.mjs` maps a routed
 page's files to the scenarios that load it and runs every scenario for anything else; the
-full catalog runs on master, nightly and the integration pull request, so a narrow local
-plan is a speed-up, never the only check. `scripts/ci-scope.mjs` makes the same trade for
+full catalog runs on pushes to `main`, nightly, on demand and under the `full-ci` label,
+so a narrow local plan is a speed-up, never the only check. `scripts/ci-scope.mjs` makes the same trade for
 CI lanes: an unrecognised path runs every lane.
 
 `scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser tests and
@@ -2966,7 +2966,7 @@ when its revision matches. Without a valid artifact, the report explicitly marks
 comparison unavailable; ownership checks and anomaly ceilings still execute.
 CI compares PRs with their base SHA and pushes with their preceding SHA, publishes
 `tmp/bundle/report.json` and `tmp/bundle/summary.md` for 30 days and appends the table
-to the job summary. Local runs default to `origin/master`; they do not contact GitHub
+to the job summary. Local runs default to `origin/main`; they do not contact GitHub
 without the repository and token environment.
 
 CI builds the embedded app independently of the bundle verdict and checks generated

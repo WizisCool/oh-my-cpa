@@ -1,11 +1,11 @@
 # Oh My CPA plugin registry
 
 This directory publishes Oh My CPA's own plugin registry, which the console keeps
-configured as a plugin-store source. CPA reads it over HTTPS from the `master`
+configured as a plugin-store source. CPA reads it over HTTPS from the `main`
 branch:
 
 ```
-https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json
 ```
 
 The address is compiled into the binary (`internal/pluginregistry`), not configured

@@ -371,7 +371,7 @@ remain unchanged.
 
 The plugin store reads CPA's built-in `official` registry plus the registries in
 `plugins.store-sources`. Oh My CPA's own registry
-(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json`)
+(`https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json`)
 is a managed entry: the server adds it when the source is on (the default) and restores
 it after a configuration save that removed it, so the switch is **OMC Settings →
 Plugin store** (`omc_plugin_source_enabled`, ADR 0104), not the configuration editor

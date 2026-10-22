@@ -2,15 +2,14 @@ name: ci
 
 # A pull request runs the lanes its paths reach: the static gates, a browser smoke run
 # and the probe scenarios its frontend change selects. The full catalog (built-artifact
-# acceptance, the demonstration and every probe) runs on a push to master, on the
-# integration pull request from `next`, nightly, on demand, and on a pull request
-# labelled `full-ci`. A skipped job reports success, so the required `static`,
-# `browser` and `probes` checks stay satisfiable either way.
+# acceptance, the demonstration and every probe) runs on a push to main, nightly,
+# on demand, and on a pull request labelled `full-ci`. A skipped job reports success,
+# so the required `static`, `browser` and `probes` checks stay satisfiable either way.
 on:
   push:
-    branches: [master, next]
+    branches: [main]
   pull_request:
-    branches: [master, next]
+    branches: [main]
     # `labeled` lets adding `full-ci` start the full run without a new commit.
     types: [opened, synchronize, reopened, labeled]
   schedule:
@@ -22,7 +21,7 @@ permissions:
   actions: read
 
 concurrency:
-  # The event name keeps the nightly run and a push to master from cancelling each other.
+  # The event name keeps the nightly run and a push to main from cancelling each other.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -45,7 +44,6 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          HEAD_REF: ${{ github.head_ref }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"

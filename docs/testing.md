@@ -23,7 +23,8 @@ change pays.
 Discovery is automatic everywhere except the probe catalog: a probe is an entry in
 `scripts/acceptance/scenarios.mjs`. A new console page also needs a rule in
 `SCENARIO_PATHS` (`scripts/acceptance/check-ui-plan.mjs`) naming the scenarios that load
-it; without one, a change to the page runs every scenario.
+it; without one, a change to the page runs every scenario. Shared dependency, build
+configuration and public-asset changes also select the whole catalog.
 
 ## Rendered tests and the in-memory OMC
 
@@ -93,13 +94,13 @@ comparison seeds a year of history (about fifteen seconds), so it is skipped und
 
 `scripts/ci-scope.mjs` reads the changed paths and decides the lanes.
 
-| Lane | Pull request | Push to `next` | Push to `master`, nightly, `next → master`, label `full-ci` |
-| --- | --- | --- | --- |
-| `static-repository`: docs, i18n, CSS modules, design gates, script tests, workflow lint, secrets | always | always | always |
-| `static-go`: `go test ./...`, golangci-lint (`.golangci.yml`) | Go paths changed | Go paths changed | always |
-| `static-frontend`: type check, logic, components, antd lint | web paths changed | web paths changed | always |
-| `browser`: build, bundle boundaries, built-artifact acceptance | smoke, when Go or web paths changed | smoke, when Go or web paths changed | full, plus demo acceptance |
-| `probes` | the scenarios the frontend change selects | the scenarios the frontend change selects | the whole catalog in three shards |
+| Lane | Pull request against `main` | Push to `main`, nightly, manual run, label `full-ci` |
+| --- | --- | --- |
+| `static-repository`: docs, i18n, CSS modules, design gates, script tests, workflow lint, secrets | always | always |
+| `static-go`: `go test ./...`, golangci-lint (`.golangci.yml`) | Go paths changed | always |
+| `static-frontend`: type check, logic, components, antd lint | web paths changed | always |
+| `browser`: build, bundle boundaries, built-artifact acceptance | smoke, when Go or web paths changed | full, plus demo acceptance |
+| `probes` | the scenarios the frontend change selects | the whole catalog in three shards |
 
 A change to a shared input (`package.json`, the lockfile, `ci.yml`, `ci-scope.mjs`) or a
 path the scope script does not recognise runs every lane. Branch protection requires
@@ -120,7 +121,8 @@ component test or a probe; a step here earns its place by needing the built bina
 
 ## When CI fails
 
-- Probe jobs upload `tmp/probe-failure/`: the screenshot, DOM, URL, page errors and console
+- Probe jobs upload `tmp/probe-failure/`, with separate directories per port and phase
+  so the exclusive run retains shared-run failures: the screenshot, DOM, URL, page errors and console
   of each failed scenario. Reproduce with `pnpm check:ui --scenario <id>`.
 - Built-artifact acceptance uploads `tmp/browser-acceptance-failure/`. Reproduce with
   `pnpm build && pnpm verify:browser`.

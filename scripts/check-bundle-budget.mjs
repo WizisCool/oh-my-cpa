@@ -22,7 +22,7 @@ export function runBundleVerification({ root, environment = process.env,
     const report = analyzeBundle(path.join(root, 'web/dist'), graph, revision);
     let baseRevision = environment.BUNDLE_BASE_SHA;
     if (baseRevision === undefined) {
-      try { baseRevision = resolveRevision('origin/master'); } catch { /* The comparison is optional; the gate is not. */ }
+      try { baseRevision = resolveRevision('origin/main'); } catch { /* The comparison is optional; the gate is not. */ }
     }
     if (baseRevision === revision) {
       warn('Bundle reference unavailable: the candidate cannot be its own baseline. Growth comparison not performed.');

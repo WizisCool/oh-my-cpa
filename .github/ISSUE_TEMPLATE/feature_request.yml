@@ -7,7 +7,7 @@ body:
       value: |
         Requests in English or 中文 are both welcome.
 
-        Oh My CPA owns identity, naming, organization, the management facade and usage observability above CLIProxyAPI. Protocol adaptation, credential execution and request proxying belong to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) itself; [PRODUCT.md](https://github.com/WizisCool/oh-my-cpa/blob/master/PRODUCT.md) describes the boundary.
+        Oh My CPA owns identity, naming, organization, the management facade and usage observability above CLIProxyAPI. Protocol adaptation, credential execution and request proxying belong to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) itself; [PRODUCT.md](https://github.com/WizisCool/oh-my-cpa/blob/main/PRODUCT.md) describes the boundary.
   - type: checkboxes
     id: preflight
     attributes:

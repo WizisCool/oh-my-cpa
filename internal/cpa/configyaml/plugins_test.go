@@ -58,7 +58,7 @@ func TestPluginSettingsRefuseAShapeCPAWouldNotRead(t *testing.T) {
 // reordering the operator's own sources: an address already present keeps its
 // place, a new one is appended, and removing drops every copy.
 func TestStoreSourcesWithKeepsTheOperatorsOrder(t *testing.T) {
-	const managed = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json"
+	const managed = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"
 	cases := []struct {
 		name    string
 		sources []string

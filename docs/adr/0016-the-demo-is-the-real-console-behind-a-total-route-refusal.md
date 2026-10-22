@@ -18,7 +18,7 @@
 Oh My CPA needs a demonstration that can be linked from the README: reachable by
 anyone, showing the real console rather than screenshots, requiring no CPA
 management key, no provider key and no OAuth credential, and deploying itself from
-`master`. The pressure this creates is toward a second artefact - a mocked frontend,
+`main`. The pressure this creates is toward a second artefact - a mocked frontend,
 a demo branch, a separate fixture service - and the cost of that is a console that
 diverges from the one operators run, silently, until somebody notices.
 

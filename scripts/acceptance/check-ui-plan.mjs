@@ -1,3 +1,5 @@
+import { SHARED_INPUTS } from '../ci-scope.mjs';
+
 /**
  * Which probe scenarios a working-tree change can affect.
  *
@@ -420,7 +422,8 @@ const PROBE_INFRASTRUCTURE = ['scripts/acceptance/', 'scripts/testing/', 'script
 export function planScenarios(files, allIds) {
   const selected = new Set();
   for (const file of files) {
-    const isFrontend = file.startsWith('web/src/') || file === 'web/index.html';
+    if (SHARED_INPUTS.test(file)) return { ids: allIds, reason: `${file} is shared by every scenario` };
+    const isFrontend = file.startsWith('web/');
     const isProbe = PROBE_INFRASTRUCTURE.some(prefix => file.startsWith(prefix));
     if (!isFrontend && !isProbe) continue;
     if (isProbe || SHELL_PATHS.some(prefix => file.startsWith(prefix))) return { ids: allIds, reason: `${file} is shared by every scenario` };

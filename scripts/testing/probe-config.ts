@@ -25,7 +25,7 @@ export default defineConfig({
   forbidOnly: true,
   timeout: 120_000,
   expect: { timeout: 10_000 },
-  outputDir: join(ROOT, 'tmp/probe-failure', String(port)),
+  outputDir: join(ROOT, 'tmp/probe-failure', String(port), process.env.OMC_PROBE_PHASE ?? 'shared'),
   reporter: 'list',
   use: {
     browserName: 'chromium',

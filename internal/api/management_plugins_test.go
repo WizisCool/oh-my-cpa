@@ -495,7 +495,7 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	// written, only the variable the rule's type reads is sent, the source list is
 	// de-duplicated, and the managed Oh My CPA registry is put back because its
 	// switch is on.
-	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json"]}}`
+	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json","https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"]}}`
 	if len(writes) != 1 || writes[0] != want {
 		t.Fatalf("writes = %q\nwant %q", writes, want)
 	}

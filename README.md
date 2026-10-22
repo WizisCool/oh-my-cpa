@@ -86,7 +86,7 @@ inspects the machine, picks the matching method and installs it:
 
 ```text
 Install Oh My CPA for me by following
-https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/docs/install-for-agents.md
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/docs/install-for-agents.md
 ```
 
 ### Install with Docker Compose

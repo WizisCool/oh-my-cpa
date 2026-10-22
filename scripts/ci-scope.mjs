@@ -1,10 +1,9 @@
 /**
  * Decides which CI lanes a run needs, from the files it changes.
  *
- * A pull request runs the lanes its paths reach; a push to master, the nightly run, a
- * manual run, and the integration pull request from `next` run everything. Anything this
- * file does not recognise reaches both the Go and the web lanes, so an unfamiliar path
- * costs a slower run rather than an unchecked one.
+ * A pull request runs the lanes its paths reach; pushes to main, nightly runs and manual
+ * runs check everything. Anything this file does not recognise reaches both the Go and
+ * the web lanes, so an unfamiliar path costs a slower run rather than an unchecked one.
  *
  * Prints `go=`, `web=` and `full=` lines for `$GITHUB_OUTPUT`.
  */
@@ -12,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const SHARED = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/ci-scope\.mjs)$/;
+export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/ci-scope\.mjs)$/;
 // Go tests also read a few files outside the module: the console's public assets, the
 // committed demonstration dataset and the shared API contract fixtures.
 const GO = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^(?:internal|cmd|migrations)\/|^scripts\/fixture\/|^scripts\/fake-cpa\.mjs$|^scripts\/browser-acceptance\.mjs$|^web\/public\/|^web\/index\.html$|^deploy\/cloudflare\/data\/|^scripts\/acceptance\/contracts\/)/;
@@ -26,7 +25,7 @@ export function scopeOf(files) {
   let isGo = false;
   let isWeb = false;
   for (const file of files) {
-    if (SHARED.test(file)) return { go: true, web: true };
+    if (SHARED_INPUTS.test(file)) return { go: true, web: true };
     const isGoFile = GO.test(file);
     const isWebFile = WEB.test(file);
     if (isGoFile) isGo = true;
@@ -38,8 +37,7 @@ export function scopeOf(files) {
 
 function isFullRun(env) {
   if (env.EVENT !== 'pull_request' && env.EVENT !== 'push') return true;
-  if (env.EVENT === 'push' && env.REF === 'refs/heads/master') return true;
-  if (env.EVENT === 'pull_request' && env.HEAD_REF === 'next') return true;
+  if (env.EVENT === 'push' && env.REF === 'refs/heads/main') return true;
   return JSON.parse(env.LABELS || '[]').includes('full-ci');
 }
 

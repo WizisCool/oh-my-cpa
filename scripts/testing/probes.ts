@@ -37,6 +37,7 @@ export async function runProbeCatalog({ port, workers, ids, shard }: ProbeOption
     const selected = SCENARIOS.filter(scenario => ids.includes(scenario.id) && Boolean(scenario.shouldRunAlone) === (phase === 'exclusive'));
     if (!selected.length) continue;
     const code = await runPlaywright({
+      OMC_PROBE_PHASE: phase,
       OMC_PROBE_PORT: String(port),
       OMC_PROBE_WORKERS: String(phase === 'exclusive' ? 1 : workers),
       OMC_PROBE_IDS: JSON.stringify(selected.map(scenario => scenario.id)),

@@ -69,10 +69,10 @@ An ADR (`docs/adr/`) records a consequential decision and its context at a point
 
 ### How work lands
 
-- **Your own work, and the agents you direct, goes to the integration branch `next`.** Commit, run `pnpm test:fast`, push. CI on `next` runs only the lanes the push reaches. Do not open a pull request per small change.
-- **`next` reaches `master` through one integration pull request** when a feature is complete or before a release. That pull request, every push to `master`, the nightly run and any pull request labelled `full-ci` run the full catalog: built-artifact acceptance, the demonstration and every probe.
-- **External contributions** open a pull request against `master`. CI runs the static lanes their paths reach, a built-artifact smoke run and the probe scenarios their frontend change selects.
-- A release tag goes only on a commit whose `master` CI run is green.
+- **Maintainer and agent work may land directly on `main`.** Run `pnpm test:fast` before pushing. Do not open a pull request per small change. Agents commit or push only when the user asks.
+- **Every push to `main`**, the nightly run, a manual run and any pull request labelled `full-ci` run the full catalog: static gates, built-artifact acceptance, the demonstration and every probe.
+- **External contributions** open a pull request against `main`. CI runs the static lanes their paths reach, a built-artifact smoke run and the probe scenarios their frontend change selects.
+- A release tag goes only on a commit whose `main` CI run is green.
 
 ### What to run
 

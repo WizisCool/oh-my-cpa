@@ -1,4 +1,4 @@
-# ADR 0105: Verification follows blast radius, and work lands through an integration branch
+# ADR 0105: Verification follows blast radius
 
 - Status: Accepted
 - Date: 2026-10-23
@@ -10,7 +10,7 @@
 Every pull request ran the same nine jobs whatever it changed: a one-line edit to
 `plugins/registry.json` paid for a production build, the whole built-artifact
 acceptance, the demo acceptance and three probe shards. Branch protection required the
-branch to be up to date with `master`, so each merge invalidated every other open pull
+branch to be up to date with `main`, so each merge invalidated every other open pull
 request's run, and the cost of a day's work grew with the square of its pull requests.
 Typical waits were thirty to sixty minutes per merge.
 
@@ -29,15 +29,13 @@ branches conflicted on it.
   runs on every event. The Go and frontend lanes run when their paths change. A pull
   request gets built-artifact smoke and the probe scenarios its frontend change selects.
   The full built-artifact acceptance, the demo acceptance and the whole probe catalog in
-  three shards run on pushes to `master`, nightly, on the `next → master` pull request
-  and under the `full-ci` label. An unrecognised path runs every lane. The required
-  checks keep their names (`static`, `browser`, `probes`); each is an aggregate that
+  three shards run on pushes to `main`, nightly, on demand and under the `full-ci` label.
+  An unrecognised path runs every lane. The required checks keep their names (`static`, `browser`, `probes`); each is an aggregate that
   passes only when every lane it waits on succeeded or was skipped by scope, and that
   also waits on the scope decision.
-- **Own work lands on `next`.** Maintainer and agent changes merge into `next` after
-  `pnpm test:fast`; one `next → master` pull request per feature or release runs the
-  full catalog. External contributions open pull requests against `master` and run the
-  scoped lanes.
+- **Own work may land directly on `main`.** Maintainer and agent changes run
+  `pnpm test:fast` before pushing; agents commit or push only when the user asks.
+  External contributions open pull requests against `main` and run the scoped lanes.
 - **One owner per claim, and outputs asserted whole.** A parser or projection is tested
   by golden files under `internal/<pkg>/testdata/golden/`, run by `internal/testkit`
   and regenerated with `UPDATE_GOLDEN=1`; a fix adds a case rather than a test file.
@@ -53,13 +51,9 @@ branches conflicted on it.
 ## Consequences
 
 - A documentation or registry pull request runs the repository lane only, and a Go-only
-  pull request runs no browser. The full catalog no longer gates every external pull
-  request before merge; a regression it alone catches is found on `next → master`, on
-  the push to `master`, or nightly, and is fixed forward. Release tags are cut only from
-  a green `master`.
-- The repository is user-owned, so a merge queue is unavailable. Turning off "require
-  branches to be up to date" in branch protection removes the rebase cascade; the full
-  run on `master` is what catches a semantic conflict between two scoped pull requests.
+  pull request runs no frontend lane or UI probes. The full catalog no longer gates every
+  external pull request before merge; a regression it alone catches is found on the push to `main`
+  or nightly and is fixed forward. Release tags are cut only from a green `main`.
 - About 60 script self-tests and their tooling were deleted. Two claims they held that
   are product guarantees moved rather than disappeared: capability copy completeness is
   part of `pnpm check-i18n`, and demonstration freshness is `TestExportDemoDataset`.

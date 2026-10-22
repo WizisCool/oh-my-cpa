@@ -2,7 +2,7 @@
 // plugin store.
 //
 // The registry document itself lives in this repository (`plugins/registry.json`) and
-// is served from the `master` branch, so the address is a compile-time fact rather
+// is served from the `main` branch, so the address is a compile-time fact rather
 // than an operator setting: every installation has the source, and the console is
 // what switches it off when the operator asks.
 package pluginregistry
@@ -15,7 +15,7 @@ import (
 
 const (
 	// OMCSourceURL is where CPA reads Oh My CPA's plugin registry.
-	OMCSourceURL = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/master/plugins/registry.json"
+	OMCSourceURL = "https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json"
 	// OMCSourceName is what the console calls the registry. CPA derives a source's
 	// name from the URL's host, which for a raw GitHub address says nothing about
 	// who publishes it.

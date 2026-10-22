@@ -177,7 +177,7 @@ config rather than configured once in the console, which means a deploy from a f
 reproduces the deployed state instead of quietly re-enabling the address that was turned
 off deliberately.
 
-The demonstration deploys from `master` through Cloudflare's Git integration (Workers
+The demonstration deploys from `main` through Cloudflare's Git integration (Workers
 Builds), which builds and deploys on push. **No repository secret is needed**: Cloudflare
 generates and manages the build's API token, which is what made this preferable to a
 GitHub Actions deployment holding a long-lived credential.
@@ -186,7 +186,7 @@ One-time setup, in the Cloudflare console:
 
 1. Install the Cloudflare GitHub integration and grant it access to this repository only.
 2. Create the Worker `oh-my-cpa-demo`, connect it to this repository, and set the
-   production branch to `master`.
+   production branch to `main`.
 3. **Turn off preview builds**, so a pull request deploys nothing. Uncheck **Enable
    Preview Builds** under Settings → Build → Branch control.
 
@@ -199,7 +199,7 @@ One-time setup, in the Cloudflare console:
    `wrangler versions upload` that looks like it should have produced one:
 
    ```
-   echo "Preview builds are disabled for this Worker; it deploys from master only."
+   echo "Preview builds are disabled for this Worker; it deploys from main only."
    ```
 
    Preview URLs are separately guarded by `workers_dev: false`, which disables them by
@@ -238,7 +238,7 @@ plan, whose bundle limit is 64 MiB uncompressed, and it is why the dataset being
 committed costs nothing to serve.
 
 **Rollback:** Cloudflare keeps previous versions, and rolling back restores the Worker and
-its assets together. The corresponding source change should be reverted on `master` too,
+its assets together. The corresponding source change should be reverted on `main` too,
 or the next push will deploy it again. There is no database to roll back, because there
 is none.
 

@@ -48,21 +48,20 @@ Bug reports and feature requests go through the issue forms under [`.github/ISSU
 
 ## Verification Gates
 
-Verification is structured around three moments — while editing, when a feature is
-complete, and on the pull request. [`AGENTS.md`](AGENTS.md) §5 has the moments table and
-the rules that keep the gates honest; [`docs/testing.md`](docs/testing.md) says which
-layer a claim belongs in and how a new test is registered. In short:
+Run `pnpm test:fast` while editing and before pushing: it selects only the checks the
+changed files need. Add `pnpm check:ui` in the background when the change moves layout,
+interaction or browser lifecycle. Build, embedded distribution, browser harness and
+workflow changes also need `pnpm verify:full`.
 
-```bash
-pnpm test:fast    # while editing: only the checks the changed files need
-pnpm verify       # feature complete, and before pushing
-pnpm check:ui     # the browser scenarios the change can reach
-```
+Pull requests run the CI lanes their paths reach. Every push to `main`, the nightly run,
+a manual run and the `full-ci` label run the full catalog, including the production SPA
+and embedded Go binary build, browser and demo acceptance, and every probe. Release tags
+are cut only from a commit whose `main` CI run is green.
 
-Do not rerun a gate after each edit. When a check fails, rerun that check first. Both
-UI probe commands use the dev server; production-artifact coverage comes from browser
-and demo acceptance. The full command list is in [`AGENTS.md`](AGENTS.md) §8 and
-[`package.json`](package.json).
+Do not rerun a gate after each edit. When a check fails, rerun that check first.
+[`AGENTS.md`](AGENTS.md) §5 defines the verification rules; [`docs/testing.md`](docs/testing.md)
+says which layer owns a claim. The full command list is in [`AGENTS.md`](AGENTS.md) §8
+and [`package.json`](package.json).
 
 ---
 
@@ -80,19 +79,21 @@ User-facing strings must never be hardcoded in backend responses or React compon
 
 ---
 
-## Submitting a Pull Request
+## Contribution Workflow
 
-1. Create a descriptive feature branch from `master`:
+Maintainers may push tested changes directly to `main`. Agents commit or push only when
+the user asks. External contributors use a feature branch and open a pull request against
+`main`:
+
+1. Create a descriptive feature branch from `main`:
    ```bash
-   git checkout -b feat/your-feature-name
+   git fetch origin main
+   git switch -c feat/your-feature-name origin/main
    ```
 2. Commit your changes with concise, conventional commit messages (`feat: ...`, `fix: ...`, `docs: ...`, `test: ...`).
-3. Run the feature-completion gates before pushing (CI runs the full browser catalog):
-   ```bash
-   pnpm verify
-   pnpm check:ui
-   ```
-4. Push your branch to your fork and open a Pull Request against `master`.
+3. Run `pnpm test:fast` and the additional checks the change needs, as described under
+   [Verification Gates](#verification-gates).
+4. Push your branch to your fork and open a Pull Request against `main`.
 5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md). A non-draft pull request is reviewed once, when it opens; comment `@coderabbitai review` to request a later review. A release preparation pull request, titled `chore(release): prepare vX.Y.Z`, is exempt: the changes it describes were reviewed when they merged.
 6. Fill in the pull request template ([`.github/pull_request_template.md`](.github/pull_request_template.md)): the problem and the solution, the context documents updated, and the gates that were run. Title the pull request `type(scope): lowercase subject`.
 7. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.
