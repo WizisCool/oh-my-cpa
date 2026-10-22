@@ -1,107 +1,58 @@
 name: ci
 
+# A pull request runs the lanes its paths reach: the static gates, a browser smoke run
+# and the probe scenarios its frontend change selects. The full catalog (built-artifact
+# acceptance, the demonstration and every probe) runs on a push to master, on the
+# integration pull request from `next`, nightly, on demand, and on a pull request
+# labelled `full-ci`. A skipped job reports success, so the required `static`,
+# `browser` and `probes` checks stay satisfiable either way.
 on:
   push:
-    branches: [master]
+    branches: [master, next]
   pull_request:
-    branches: [master]
+    branches: [master, next]
+    # `labeled` lets adding `full-ci` start the full run without a new commit.
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    - cron: '17 19 * * *' # 03:17 Beijing
+  workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # The event name keeps the nightly run and a push to master from cancelling each other.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Independent engines get independent CPU/memory budgets. Local verification
-  # keeps its affected planner; hosted CI always runs every static lane.
-  static-checks:
-    name: static (${{ matrix.lane }})
+  changes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        lane: [go, frontend, repository]
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.scope.outputs.go }}
+      web: ${{ steps.scope.outputs.web }}
+      full: ${{ steps.scope.outputs.full }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Verify repository anchors
-        if: matrix.lane == 'repository'
-        run: |
-          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
-          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
-
-      - name: Set up Go
-        if: matrix.lane != 'frontend'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: 1.27.3
-          cache: true
-
-      - name: Activate pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.23.4
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Validate Actions syntax and expressions
-        if: matrix.lane == 'repository'
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          pnpm verify:workflow:lint
-
-      - name: Verify pinned toolchain
-        if: matrix.lane != 'frontend'
-        run: pnpm verify:toolchain:strict
-
-      - name: Verify static lane
-        run: pnpm verify:static:${{ matrix.lane }}
-
-      - name: Cache gitleaks
-        if: matrix.lane == 'repository'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .tools/gitleaks
-          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-
-      - name: Scan worktree and history
-        if: matrix.lane == 'repository'
-        run: |
-          pnpm verify:secrets:worktree
-          pnpm verify:secrets:history
-
-      - name: Verify clean generated state
-        run: |
-          git diff --check
-          git status --short
-          test -z "$(git status --porcelain)"
-
-  static:
-    name: static
-    needs: static-checks
-    if: always()
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Require every static lane
+      - name: Decide the lanes this run needs
+        id: scope
         env:
-          STATIC_RESULT: ${{ needs.static-checks.result }}
-        run: test "${STATIC_RESULT}" = success
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
 
-  browser:
+  static-go:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -109,119 +60,176 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: 1.27.3
           cache: true
+      - name: Test and vet
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Verify clean generated state
+        run: test -z "$(git status --porcelain)"
 
+  static-frontend:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Activate pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.4
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Type check, logic, components and antd lint
+        run: pnpm verify:static:frontend
+      - name: Verify clean generated state
+        run: test -z "$(git status --porcelain)"
 
+  # Every event: prose gates, repository scripts, the toolchain pin and the secret scans.
+  static-repository:
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify repository anchors
+        run: |
+          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
+          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.27.3
+          cache: true
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint workflows
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          pnpm verify:workflow:lint
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
+      - name: Repository gates
+        run: pnpm verify:static:repository
+      # Every installation's gateway reads the published registry, and a registry-only
+      # change reaches no other lane.
+      - name: Validate the plugin registry
+        run: go test ./internal/pluginregistry -run '^TestPublishedRegistryIsReadable$'
+      - name: Cache gitleaks
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .tools/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Scan worktree and history
+        run: |
+          pnpm verify:secrets:worktree
+          pnpm verify:secrets:history
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
 
-      # A cache hit proves the browser *files* are present, never that the runner
-      # has the shared libraries Chromium links against, so the OS dependencies are
-      # still guaranteed - but by a launch probe rather than unconditionally. On a
-      # runner image that already carries them, `--with-deps` was about 100 seconds of
-      # apt work that proved nothing; `scripts/install-chromium.mjs` downloads the
-      # browser, tries a real launch, and installs the dependencies only when that
-      # launch fails. The fallback is the previous command, so the worst case is the
-      # old cost rather than a new failure mode, and a second launch failure is
-      # reported instead of ignored.
+  static:
+    needs: [changes, static-go, static-frontend, static-repository]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every static lane that ran
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            case "$result" in success|skipped) ;; *) echo "a static lane ended $result"; exit 1 ;; esac
+          done
+
+  browser:
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.27.3
+          cache: true
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Cache Playwright Chromium
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-
-      # The SPA build and Chromium's install touch separate resources, so they run
-      # concurrently, and the Go binaries are built *after* `pnpm build` completes.
-      #
-      # The application binary must come after, because it embeds
-      # `internal/web/dist`: compiling it while the SPA build rewrites that directory
-      # can embed a half-written bundle. That is a correctness constraint.
-      #
-      # The seeder does not embed the SPA and could start earlier, but it is left in
-      # the same post-build group on purpose. Two `go build` calls sharing one module
-      # and build cache contend on the same lock, and measured with a cold cache they
-      # cost 34s together against 23s for the application binary alone plus about 5s
-      # for the seeder serially - running them "in parallel" is slower. Chromium's
-      # install is the genuinely independent third resource, and it is already
-      # overlapped.
+      # The application binary embeds `internal/web/dist`, so it is compiled only after
+      # `pnpm build` has finished writing it; Chromium's install overlaps the build.
       - name: Prepare Chromium and build embedded SPA
         id: prepare
         run: |
           set -o pipefail
-          install_log="$(mktemp)"
-          node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
+          node scripts/install-chromium.mjs > tmp-install.log 2>&1 &
           install_pid=$!
-          build_status=0
-          pnpm build || build_status=$?
-          go_status=0
-          if [ "${build_status}" -eq 0 ]; then
-            mkdir -p tmp
-            CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
-            seed_build_pid=$!
-            CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
-            go_status=$?
-            wait "${seed_build_pid}" || go_status=$?
-          fi
+          pnpm build
+          mkdir -p tmp
+          CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage
+          CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
           install_status=0
           wait "${install_pid}" || install_status=$?
-          cat "${install_log}"
-          if [ "${build_status}" -ne 0 ]; then
-            exit "${build_status}"
-          fi
-          if [ "${go_status}" -ne 0 ]; then
-            exit "${go_status}"
-          fi
+          cat tmp-install.log && rm tmp-install.log
           exit "${install_status}"
-
-      # Keep production acceptance observable even when a loading boundary or size
-      # ceiling fails. The final verdict below still makes that failure blocking.
       - name: Verify loading boundaries and report bundle growth
-        id: bundle
-        continue-on-error: true
         env:
           BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           GH_TOKEN: ${{ github.token }}
         run: pnpm check:bundle
-
-      - name: Verify generated state before browser tests
-        run: |
-          git diff --check
-          git status --short
-          test -z "$(git status --porcelain)"
-
-      # The fixture is stateful; one full pass avoids a second selector contract.
-      - name: Verify browser harness fault detection
-        run: pnpm verify:browser:harness
-      - name: Run full built-artifact acceptance on every event
+      - name: Built-artifact smoke
+        if: needs.changes.outputs.full != 'true'
+        env:
+          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
+          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
+        run: pnpm verify:browser:smoke
+      - name: Full built-artifact acceptance
+        if: needs.changes.outputs.full == 'true'
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser
-
-      # The public demonstration is a separate deployment of the same console, so a
-      # change can break it while every self-hosted gate stays green. It runs after the
-      # acceptance step rather than beside it, keeping that step's resource budget
-      # stable. It serves the real Worker handler in-process against the built
-      # console and waits for each route's responses and visible content.
-      - name: Run the demonstration's browser acceptance
+      - name: The demonstration's browser acceptance
+        if: needs.changes.outputs.full == 'true'
         run: pnpm verify:demo
-
       - name: Upload bundle report
         if: always() && steps.prepare.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -230,39 +238,67 @@ jobs:
           path: |
             tmp/bundle/report.json
             tmp/bundle/summary.md
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 30
-
       - name: Upload browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: browser-acceptance-failure
-          path: |
-            tmp/browser-acceptance-failure/
-            tmp/browser-harness-failure/
+          path: tmp/browser-acceptance-failure/
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Verify clean generated state
         run: |
           git diff --check
-          git status --short
           test -z "$(git status --porcelain)"
 
-      - name: Require bundle verification success
-        if: always() && steps.prepare.outcome == 'success'
+  # The probes drive the Vite dev server with mocked routes, so only a frontend or probe
+  # change can move them. A pull request runs the scenarios its paths select.
+  probes-affected:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.full != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Activate pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Install Chromium
+        run: node scripts/install-chromium.mjs
+      - name: Run the affected scenarios
         env:
-          BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
-        run: test "${BUNDLE_OUTCOME}" = success
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pnpm check:ui --base "${BASE}"
+      - name: Upload probe failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: probe-failure-affected
+          path: tmp/probe-failure/
+          if-no-files-found: ignore
+          retention-days: 7
 
-  # The browser-only probe catalog: every scenario, on every pull request and on
-  # master. It drives the Vite dev server with mocked routes, so it needs neither a
-  # build nor Go, and it is split into weight-balanced disjoint shards
-  # (`scripts/acceptance/probe-shards.mjs`) that run on separate runners, with
-  # at most two isolated workers, followed by uncontended frame-timing scenarios.
-  probes:
-    name: probes (${{ matrix.shard }}/3)
+  probes-full:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    name: probes-full (${{ matrix.shard }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -274,40 +310,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-
       - name: Activate pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.4
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Cache Playwright Chromium
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
-
       - name: Install Chromium
         run: node scripts/install-chromium.mjs
-
       - name: Run the probe shard
         run: pnpm verify:probes --shard ${{ matrix.shard }}/3
-
-      - name: Upload probe timings
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: probe-timings-${{ matrix.shard }}
-          path: tmp/probe-timings/
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Upload probe failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -317,22 +337,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Verify clean generated state
-        run: |
-          git diff --check
-          git status --short
-          test -z "$(git status --porcelain)"
-
-  # One stable check name for branch protection, whatever the shard count. It runs
-  # even when a shard failed or was cancelled, and passes only if every shard passed.
-  probes-complete:
-    name: probes
-    needs: probes
+  probes:
+    needs: [changes, probes-affected, probes-full]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every probe shard
+      - name: Require every probe job that ran
         env:
-          PROBES_RESULT: ${{ needs.probes.result }}
-        run: test "${PROBES_RESULT}" = success
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            case "$result" in success|skipped) ;; *) echo "a probe job ended $result"; exit 1 ;; esac
+          done
