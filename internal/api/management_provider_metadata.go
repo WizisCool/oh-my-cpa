@@ -23,41 +23,57 @@ func (h *Handler) loadProviderNamesStrict(ctx context.Context) (map[string]strin
 	return h.loadStringPreference(ctx, repository.PreferenceProviderNames)
 }
 
-// applyProviderMetadata persists the name and website overlays for one provider
-// change in one transaction. They describe the same accepted write, so a failed
-// website write must not leave the name from a newer revision beside the old
-// website.
+// applyProviderMetadata persists the name and website overlays atomically after
+// CPA accepted the write.
 func (h *Handler) applyProviderMetadata(ctx context.Context, id, name, website string, isWebsiteProvided bool) error {
 	if id == "" || (name == "" && !isWebsiteProvided) {
 		return nil
 	}
-	updates := make(map[string]map[string]string, 2)
-	if name != "" {
-		if h.beforeProviderNamesSave != nil {
-			h.beforeProviderNamesSave()
-		}
-		names, err := h.loadProviderNamesStrict(ctx)
-		if err != nil {
-			return fmt.Errorf("read provider names for metadata update: %w", err)
-		}
-		if names[id] != name {
-			names[id] = name
-			updates[repository.PreferenceProviderNames] = names
-		}
-	}
-	if isWebsiteProvided {
-		websites, err := h.loadProviderWebsitesStrict(ctx)
-		if err != nil {
-			return fmt.Errorf("read provider websites for metadata update: %w", err)
-		}
-		if website == "" {
-			if _, present := websites[id]; present {
-				delete(websites, id)
-				updates[repository.PreferenceProviderWebsites] = websites
+	return h.applyProviderMetadataForIDs(ctx, "", []string{id}, name, website, isWebsiteProvided)
+}
+
+// Appended credential rows inherit the edited row's identity without re-keying
+// any neighbour. All overlays describe the same accepted CPA write and commit in
+// one local transaction, including inherited icons when a save expands a row.
+func (h *Handler) applyProviderMetadataForIDs(ctx context.Context, sourceID string, ids []string, name, website string, isWebsiteProvided bool) error {
+	updates := make(map[string]map[string]string, 3)
+	for _, preference := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites, repository.PreferenceProviderIcons} {
+		if preference == repository.PreferenceProviderNames {
+			if name == "" && sourceID == "" {
+				continue
 			}
-		} else if websites[id] != website {
-			websites[id] = website
-			updates[repository.PreferenceProviderWebsites] = websites
+			if name != "" && h.beforeProviderNamesSave != nil {
+				h.beforeProviderNamesSave()
+			}
+		}
+		if preference == repository.PreferenceProviderWebsites && !isWebsiteProvided && sourceID == "" {
+			continue
+		}
+		if preference == repository.PreferenceProviderIcons && (sourceID == "" || len(ids) < 2) {
+			continue
+		}
+		values, err := h.loadStringPreference(ctx, preference)
+		if err != nil {
+			return fmt.Errorf("read provider metadata: %w", err)
+		}
+		value := values[sourceID]
+		if preference == repository.PreferenceProviderNames && name != "" {
+			value = name
+		}
+		if preference == repository.PreferenceProviderWebsites && isWebsiteProvided {
+			value = website
+		}
+		for _, id := range ids {
+			previous, hasValue := values[id]
+			if value == "" {
+				if hasValue {
+					delete(values, id)
+					updates[preference] = values
+				}
+			} else if previous != value {
+				values[id] = value
+				updates[preference] = values
+			}
 		}
 	}
 	if err := h.saveStringPreferences(ctx, updates); err != nil {

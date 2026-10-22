@@ -718,6 +718,30 @@ because the v8 API refuses its field names. The configuration page's backup dial
 (`web/src/components/config/ConfigBackupsButton.tsx`) withholds restore while the editor
 is dirty and reloads the editor's baseline afterwards.
 
+### Saving multiple provider credentials
+
+The editor submits every API-key row in `keys`. OpenAI-compatible providers keep
+these credentials inside one provider object. For the seven config API-key families,
+`management_provider_keys.go` expands a save into one provider row per non-empty key,
+preserving each key's proxy and weight and applying the shared provider settings.
+A blank first key in an edit retains the stored secret; blank additional rows are
+ignored. An empty create or repeated submitted key is refused with `400`, and a key
+that matches a stored credential is refused with `409` when their base URLs are equal
+or either is blank, before writing. Each refusal carries a stable `code`
+(`provider_key_required`, `provider_duplicate_key`, `provider_credential_exists`, and
+`provider_stale_identity` for an edit whose observed identity moved), so the editor
+names the problem in the operator's language; the English `error` message stays for
+logs and agent clients.
+
+Create and same-family edit save all credentials in one backed-up, revision-guarded
+configuration write under the provider gate. Editing keeps the source row in place
+and appends additional credentials, so neighbouring positional ids and their metadata
+stay unchanged. The response retains the primary `id` and includes `ids` when multiple
+rows were saved. Names and websites are committed for all saved rows in one local
+transaction; added rows inherit the edited row's existing icon. The browser assigns
+the selected icon to every returned id. Each config-family row remains independently
+editable after saving.
+
 ### Editing a provider's protocol driver
 
 The provider editor can change an existing row's family. `PUT /management/providers/{id}`
