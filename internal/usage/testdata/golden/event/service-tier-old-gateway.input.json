@@ -1,0 +1,11 @@
+{
+  "why": "A gateway that predates the outbound tier publishes none.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "outbound-test",
+      "service_tier": "auto",
+      "response_service_tier": "default"
+    }
+  }
+}

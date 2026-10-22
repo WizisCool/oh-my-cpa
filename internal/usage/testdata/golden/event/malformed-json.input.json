@@ -1,0 +1,7 @@
+{
+  "why": "A truncated record is rejected rather than stored half-read.",
+  "now_ms": 0,
+  "body": {
+    "record": "{not json"
+  }
+}

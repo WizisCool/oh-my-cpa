@@ -1,0 +1,38 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "EventKey": "req-headers",
+  "FailBody": "overloaded",
+  "FailStatusCode": 502,
+  "Failed": true,
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "RequestID": "req-headers",
+  "ResponseHeaders": [
+    {
+      "name": "cf-ray",
+      "value": "a4838167fd32d5c8-NRT"
+    },
+    {
+      "name": "retry-after",
+      "value": "30"
+    },
+    {
+      "name": "server",
+      "value": "cloudflare"
+    },
+    {
+      "name": "x-echo",
+      "value": "[redacted]"
+    },
+    {
+      "name": "x-ratelimit-remaining-requests",
+      "value": "12, 11"
+    },
+    {
+      "name": "x-request-id",
+      "value": "req_upstream_1"
+    }
+  ]
+}

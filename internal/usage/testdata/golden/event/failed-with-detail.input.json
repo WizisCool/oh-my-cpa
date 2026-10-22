@@ -1,0 +1,17 @@
+{
+  "why": "A failed record keeps its status and trimmed upstream body, with credential-shaped values redacted.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-fail",
+      "failed": true,
+      "fail": {
+        "status_code": 502,
+        "body": " {\"error\":{\"code\":\"server_is_overloaded\",\"key\":\"sk-abcdefghijklmnopqrstuvwxyz123456\"}} "
+      }
+    },
+    "secrets": [
+      "sk-abcdefghijklmnopqrstuvwxyz123456"
+    ]
+  }
+}

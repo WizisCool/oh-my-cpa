@@ -1,0 +1,12 @@
+{
+  "why": "A false stream flag is stored as false, not as unknown.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-stream",
+      "stream": false,
+      "provider": "openai",
+      "model": "gpt-4o"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "why": "A caller authenticated by an OAuth access provider.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-ap-oauth",
+      "access_provider": "codex",
+      "is_native_key": false
+    }
+  }
+}

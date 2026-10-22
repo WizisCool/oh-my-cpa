@@ -1,0 +1,11 @@
+{
+  "APIGroupKey": "openai",
+  "APIGroupLabel": "provider",
+  "EventKey": "req-stream",
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "gpt-4o",
+  "Provider": "openai",
+  "RequestID": "req-stream",
+  "Stream": false
+}

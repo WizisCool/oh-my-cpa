@@ -1,0 +1,14 @@
+{
+  "why": "CPA stamps status 200 on every success; that is not a recorded failure.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-ok",
+      "failed": false,
+      "fail": {
+        "status_code": 200,
+        "body": ""
+      }
+    }
+  }
+}

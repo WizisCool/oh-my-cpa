@@ -29,3 +29,14 @@ id = "generic-api-key"
   paths = ['''web/src/types/configSchema\.ts''']
   regexTarget = "secret"
   regexes = ['''^Asia/Singapore$''']
+
+  # An error event's key is `err-` plus a truncated SHA-256 of the record, so re-delivery
+  # lands on the same row. The usage golden files record it under the field name
+  # `EventKey`, which this rule reads as a key assignment. A digest of a fixture record
+  # is no credential; allowed by rule + path + value shape.
+  [[rules.allowlists]]
+  description = "Hashed error-event keys in the usage decode golden files"
+  condition = "AND"
+  paths = ['''internal/usage/testdata/golden/error/[^/]+\.golden\.json''']
+  regexTarget = "secret"
+  regexes = ['''^err-[0-9a-f]{24}$''']

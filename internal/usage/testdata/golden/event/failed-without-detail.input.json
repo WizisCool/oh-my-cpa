@@ -1,0 +1,10 @@
+{
+  "why": "An older CPA publishes no fail block: the failure stays known, its cause unknown.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-old",
+      "failed": true
+    }
+  }
+}

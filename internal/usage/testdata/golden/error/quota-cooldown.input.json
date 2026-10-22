@@ -1,0 +1,30 @@
+{
+  "why": "A 429 with a quota block: retry and recovery instants, backoff level, and an event key hashed from the record so re-delivery cannot add a row.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "timestamp": "2026-08-31T09:00:00Z",
+      "provider": "gemini",
+      "model": "gemini-2.5-pro",
+      "auth_id": "a1",
+      "auth_index": "auth-9",
+      "status_code": 429,
+      "body": "resource exhausted",
+      "code": "rate_limit",
+      "retryable": true,
+      "auth_status": {
+        "status": 3,
+        "status_message": "cooldown",
+        "disabled": false,
+        "unavailable": true,
+        "next_retry_after": "2026-08-31T09:05:00Z",
+        "quota": {
+          "exceeded": true,
+          "reason": "daily",
+          "next_recover_at": "2026-08-31T16:00:00Z",
+          "backoff_level": 2
+        }
+      }
+    }
+  }
+}

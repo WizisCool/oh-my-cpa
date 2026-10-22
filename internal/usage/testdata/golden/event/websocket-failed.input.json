@@ -1,0 +1,11 @@
+{
+  "why": "A failed websocket call is not a warm-up.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r3",
+      "executor_type": "CodexWebsocketsExecutor",
+      "failed": true
+    }
+  }
+}

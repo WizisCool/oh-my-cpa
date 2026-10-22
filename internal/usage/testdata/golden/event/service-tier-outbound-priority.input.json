@@ -1,0 +1,12 @@
+{
+  "why": "The outbound tier is stored beside the requested and responded ones.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "outbound-test",
+      "service_tier": "auto",
+      "response_service_tier": "default",
+      "effective_service_tier": "priority"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "APIGroupKey": "openai",
+  "APIGroupLabel": "provider",
+  "EventKey": "r2",
+  "Generate": true,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "Provider": "openai",
+  "RequestID": "r2"
+}

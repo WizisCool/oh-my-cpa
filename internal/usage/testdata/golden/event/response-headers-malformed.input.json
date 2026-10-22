@@ -1,0 +1,14 @@
+{
+  "why": "A malformed header snapshot is dropped without rejecting the record.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "req-odd",
+      "response_headers": [
+        "not",
+        "a",
+        "map"
+      ]
+    }
+  }
+}

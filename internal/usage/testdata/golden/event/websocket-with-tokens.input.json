@@ -1,0 +1,13 @@
+{
+  "why": "The same executor producing tokens is a real generation.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "r2",
+      "executor_type": "CodexWebsocketsExecutor",
+      "tokens": {
+        "output_tokens": 5
+      }
+    }
+  }
+}
