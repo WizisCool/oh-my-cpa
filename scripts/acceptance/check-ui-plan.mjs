@@ -33,6 +33,7 @@ const SHELL_PATHS = [
   'web/src/index.css',
   'web/src/api/client.ts',
   'web/src/i18n/index.tsx',
+  'web/src/i18n/messages/',
   'web/src/components/common/',
   'web/src/theme/',
 ];

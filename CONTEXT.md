@@ -302,7 +302,8 @@ unaudited.
 ## i18n
 
 Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
-dictionary lives in `web/src/i18n/index.tsx` as `[zh, en]` pairs, while
+dictionary lives in `web/src/i18n/messages/` as `[zh, en]` pairs, one file per
+key prefix group (`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`), while
 `web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts` carry the
 additional catalogs. All four are accessed through `t(key, vars)`; language
 persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every

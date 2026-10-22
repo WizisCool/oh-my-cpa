@@ -69,7 +69,7 @@ and demo acceptance. The full command list is in [`AGENTS.md`](AGENTS.md) §8 an
 ## Development Guidelines
 
 ### 1. Localization
-User-facing strings must never be hardcoded in backend responses or React components. Add all new strings as `[zh, en]` pairs to `web/src/i18n/index.tsx`, add the corresponding entries to `web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts`, and verify with `pnpm check-i18n`.
+User-facing strings must never be hardcoded in backend responses or React components. Add all new strings as `[zh, en]` pairs to the `web/src/i18n/messages/` file named by the key's prefix, add the corresponding entries to `web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts`, and verify with `pnpm check-i18n`.
 
 ### 2. Styling & Theme Tokens
 - Never hardcode color hex values in components. Read the resolved palette from `web/src/theme/palette.ts` or use the CSS variables from `docs/design.md`; the eighteen derived tokens are computed, so reach for the relationship rather than re-deriving one.
