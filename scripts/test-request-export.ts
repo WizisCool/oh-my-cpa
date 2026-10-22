@@ -157,11 +157,24 @@ assert.deepEqual(
   'a request with nothing to mark draws a dash, not an empty cell',
 );
 const fastSheet = buildRequestSheet({
-  rows: [{ ...events[1], response_service_tier: 'priority' }] as UsageEvent[],
+  rows: [{ ...events[1], provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }] as UsageEvent[],
   masks: effectiveMasks([], []), colWidths: {}, caption: '', t: (key) => key, tokenStyle: 'en-compact', tpsMode: 'exclude_ttft', credentials,
 });
 assert.deepEqual(fastSheet.rows[0].cells.mode.lines, [[{ kind: 'glyph', glyph: 'fast', tone: 'accent', isBoxed: true, isFilled: true }]],
-  'a request served on the fast lane draws the lightning mark');
+  'a Codex request resolved as priority draws the lightning mark despite its default response');
+const tierExport = buildRequestExport({
+  rows: [{ ...events[1], provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }],
+  masks: effectiveMasks([], []), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials,
+}).requests[0];
+assert.equal(tierExport.service_tier, 'priority');
+assert.equal(tierExport.response_service_tier, 'default');
+assert.equal(tierExport.resolved_service_tier, 'priority');
+assert.equal(tierExport.resolved_service_tier_source, 'request');
+const hiddenTierExport = buildRequestExport({
+  rows: [{ ...events[1], resolved_service_tier: 'priority', resolved_service_tier_source: 'request' }],
+  masks: effectiveMasks([], ['mode']), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials,
+}).requests[0];
+assert.ok(!('resolved_service_tier' in hiddenTierExport) && !('resolved_service_tier_source' in hiddenTierExport));
 const modeHidden = sheetStrings(modeSheet(effectiveMasks([], ['mode'])));
 assert.ok(!modeHidden.includes('XHigh') && modeHidden.includes('gpt-5'), 'hiding the mode column keeps the model');
 const modeJson = (columns: Parameters<typeof effectiveMasks>[1]) =>

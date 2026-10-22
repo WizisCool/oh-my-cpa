@@ -4,6 +4,10 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "events.resolved_tier_response": "{tier} (berdasarkan respons)",
+  "events.resolved_tier_request": "{tier} (berdasarkan permintaan)",
+  "events.resolved_tier": "Peringkat perkhidmatan ditentukan",
+  "events.fast_tier_requested_hint": "Mod Fast · peringkat perkhidmatan diminta {tier}",
   "vertex.openapi_default": "Laluan lalai OpenAPI Vertex",
   "vertex.openapi_model": "Laluan OpenAPI model",
   "vertex.openapi_precedence": "Tetapan model atau alias mengatasi lalai kelayakan. Warisi menggunakan tetapan kelayakan, kemudian pengesanan nama model CPA. Alias model huluan yang sama boleh berbeza.",
@@ -3087,7 +3091,7 @@ export const MS: Readonly<Record<string, string>> = {
   "pricing.editor.tier_error_service": "Namakan satu hingga lapan peringkat perkhidmatan (huruf, digit, . _ -, bukan auto); setiap nama hanya milik satu harga peringkat",
   "pricing.editor.preview_service_tier": "Dibilkan pada",
   "cost.service_tier": "Peringkat perkhidmatan: {tier} (dilaporkan oleh huluan)",
-  "cost.service_tier_requested": "Peringkat perkhidmatan: {tier} (diminta; huluan tidak melaporkan)",
+  "cost.service_tier_requested": "Peringkat perkhidmatan: {tier} (harga berdasarkan permintaan)",
   "pricing.editor.tier_limit": "Sehingga {n} peringkat bagi setiap model",
   "pricing.editor.context_title": "Harga konteks panjang",
   "pricing.editor.context_hint": "Apabila input permintaan (termasuk token cache) mencapai ambang, keseluruhan permintaan dikenakan kadar peringkat itu - untuk model yang mengenakan lebih selepas panjang seperti 200K.",

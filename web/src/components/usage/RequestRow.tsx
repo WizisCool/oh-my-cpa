@@ -25,6 +25,7 @@ import {
   formatEventDuration,
   hasMeasurableTTFT,
   isFastTierEvent,
+  fastTierHintKey,
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import {
@@ -337,11 +338,11 @@ export const RequestRow = React.memo<RequestRowProps>(
                 </RequestTooltip>
               )}
               {isFastTier && (
-                <RequestTooltip title={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}>
+                <RequestTooltip title={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}>
                   <span
                     className="req-mode-mark req-fast-icon"
                     role="img"
-                    aria-label={t('events.fast_tier_hint', { tier: event.response_service_tier ?? '' })}
+                    aria-label={t(fastTierHintKey(event), { tier: event.resolved_service_tier ?? '' })}
                     data-testid="request-fast-tier"
                   >
                     <ThunderboltFilled />

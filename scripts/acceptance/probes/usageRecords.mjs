@@ -37,6 +37,8 @@ export const alignmentRecords = (() => {
     generate: true,
     service_tier: 'auto',
     response_service_tier: 'default',
+    resolved_service_tier: 'default',
+    resolved_service_tier_source: 'response',
     source: 'hmac:source-fingerprint',
     auth_index: 'credential-1',
     auth_type: 'api_key',
@@ -60,6 +62,7 @@ export const alignmentFacets = {
   auth_types: [],
   reasoning_efforts: [],
   service_tiers: [],
+  resolved_service_tiers: [],
 };
 
 /**
@@ -364,11 +367,13 @@ export const interactionRecords = (() => {
     event_key: `event-${index}`,
     request_id: `req_interaction_${String(index).padStart(4, '0')}`,
     timestamp_ms: now - index * 1000,
-    provider: ['openai', 'claude', 'gemini'][index % 3],
-    model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
-    service_tier: 'auto',
-    // One record in four was served on the upstream's fast lane, and thought about it.
-    response_service_tier: index % 4 === 1 ? 'priority' : 'default',
+    provider: index % 4 === 1 ? 'codex' : ['openai', 'claude', 'gemini'][index % 3],
+    model: index % 4 === 1 ? 'gpt-5.4' : ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
+    // Codex Fast keeps a default response while the recorded request selects priority.
+    service_tier: index % 4 === 1 ? 'priority' : 'auto',
+    response_service_tier: 'default',
+    resolved_service_tier: index % 4 === 1 ? 'priority' : 'default',
+    resolved_service_tier_source: index % 4 === 1 ? 'request' : 'response',
     ...(index % 4 === 1 ? { reasoning_effort: 'high' } : {}),
     source: `hmac:source-fingerprint-${index % 3}`,
     auth_index: `credential-${index % 3}`,
@@ -553,7 +558,7 @@ export async function requestListInteractions({ base, page, check }) {
   check('the failure popup is a panel on the theme surface, not the inverse tooltip block',
     failureSurface.fill === failureSurface.elevated && failureSurface.ink === failureSurface.fg, JSON.stringify(failureSurface));
   // How a request was made lives in its own column: the model cell is the name, and the
-  // fast-lane mark appears exactly on the records the upstream reported as served there.
+  // Fast mark follows the resolved Codex request evidence despite its default response.
   const modeCells = await page.evaluate(() => [...document.querySelectorAll('.request-row')].map((row) => ({
     hasEffortInModel: row.querySelector('.req-col-model .req-effort-badge') !== null,
     effort: row.querySelector('.req-col-mode .req-effort-badge')?.textContent ?? '',
@@ -954,6 +959,7 @@ export function refreshRecords() {
         return fulfill({
           window: { from: now - 3600000, to: now },
           facets: {
+            ...alignmentFacets,
             models: [{ value: 'gpt-5-codex', requests: 25 }],
             providers: [{ value: 'openai', requests: 25 }],
             sources: [],

@@ -44,6 +44,7 @@ import {
   eventTokensPerSecond,
   hasMeasurableTTFT,
   isFastTierEvent,
+  fastTierHintKey,
   isNonStreamingEvent,
   MIN_STREAMING_GENERATION_WINDOW_MS,
 } from '../web/src/types/usageEventMetrics.ts';
@@ -148,13 +149,15 @@ assert.equal(read('model=&provider=').filters, undefined);
 // reload would silently drop part of the operator's filter.
 const everyFilter = [
   'model=gpt-5&provider=openai&auth_index=auth-a&source=src&api_key=key&executor=codex',
-  'auth_type=oauth&reasoning=high&service_tier=flex&model_alias=fast',
+  'auth_type=oauth&reasoning=high&service_tier=flex&resolved_service_tier=priority&model_alias=fast',
   'q=codex&ua=codex-cli&endpoint=%2Fv1%2Fresponses&request_id=req-1',
   'latency_min=100&latency_max=60000&tokens_min=0&tokens_max=500000',
   'cost_min=0.000001&cost_max=12.5&cost=unpriced&served=substituted',
 ].join('&');
 const everyQuery = read(everyFilter);
+assert.deepEqual(everyQuery.filters?.resolved_service_tier, ['priority']);
 const everyParams = new URLSearchParams(usageEventParams(everyQuery));
+assert.deepEqual(everyParams.getAll('resolved_service_tier'), ['priority']);
 const everyAgain = read(everyParams.toString());
 assert.deepEqual(everyAgain, everyQuery);
 assert.equal(everyAgain.ranges?.tokens?.min, 0, 'a bound of zero is a bound, not an absent one');
@@ -1276,15 +1279,17 @@ assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); 
 assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
 assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
 
-// The fast-lane mark reads the tier the response reported, under either vendor's name for it.
-assert.equal(isFastTierEvent({ response_service_tier: 'priority' }), true);
-assert.equal(isFastTierEvent({ response_service_tier: 'fast' }), true);
-assert.equal(isFastTierEvent({ response_service_tier: ' Priority ' }), true);
+// The mark consumes the backend's provider-aware evidence, not the response alone.
+assert.equal(isFastTierEvent({ resolved_service_tier: 'priority' }), true);
+assert.equal(isFastTierEvent({ resolved_service_tier: 'fast' }), true);
+assert.equal(isFastTierEvent({ resolved_service_tier: ' Priority ' }), true);
 for (const tier of ['default', 'auto', 'flex', 'scale', '', undefined]) {
-  assert.equal(isFastTierEvent({ response_service_tier: tier }), false, `${String(tier)} is not the fast lane`);
+  assert.equal(isFastTierEvent({ resolved_service_tier: tier }), false, `${String(tier)} is not the fast lane`);
 }
-// Asking for the fast lane is not being served on it.
-assert.equal(isFastTierEvent({ service_tier: 'priority', response_service_tier: 'default' } as Partial<UsageEvent>), false);
+assert.equal(isFastTierEvent({ provider: 'codex', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'priority' } as Partial<UsageEvent>), true);
+assert.equal(isFastTierEvent({ provider: 'openai', service_tier: 'priority', response_service_tier: 'default', resolved_service_tier: 'default' } as Partial<UsageEvent>), false);
+assert.equal(fastTierHintKey({ resolved_service_tier_source: 'request' }), 'events.fast_tier_requested_hint');
+assert.equal(fastTierHintKey({ resolved_service_tier_source: 'response' }), 'events.fast_tier_hint');
 assert.equal(isFastTierEvent(undefined), false);
 
 console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-to-end average, edge boundaries');

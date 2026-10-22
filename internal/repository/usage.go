@@ -255,8 +255,9 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
-			fail_status_code, fail_body, response_headers, access_provider, is_native_key
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
+			billed_service_tier, billed_service_tier_source
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -290,7 +291,8 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
 			event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
 			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
-			event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey)); errExec != nil {
+			event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
+			locked.serviceTier, locked.serviceTierSource); errExec != nil {
 			return 0, fmt.Errorf("insert usage event %s: %w", event.EventKey, errExec)
 		}
 		if _, errExec := mark.ExecContext(ctx, event.EventKey, createdMS, item.InboxID); errExec != nil {
@@ -476,8 +478,9 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
-			fail_status_code, fail_body, response_headers, access_provider, is_native_key
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
+			billed_service_tier, billed_service_tier_source
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -502,7 +505,8 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
 			event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
 			locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
-			event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey))
+			event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
+			locked.serviceTier, locked.serviceTierSource)
 		if errExec != nil {
 			return lastID, fmt.Errorf("insert usage event: %w", errExec)
 		}

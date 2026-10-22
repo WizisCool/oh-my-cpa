@@ -4,6 +4,10 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "events.resolved_tier_response": "{tier}（按回應判斷）",
+  "events.resolved_tier_request": "{tier}（按請求判斷）",
+  "events.resolved_tier": "判定服務等級",
+  "events.fast_tier_requested_hint": "Fast 模式 · 請求服務等級 {tier}",
   "vertex.openapi_default": "Vertex OpenAPI 預設路由",
   "vertex.openapi_model": "模型 OpenAPI 路由",
   "vertex.openapi_precedence": "模型或別名的明確覆寫優先於憑證預設值；繼承時先使用憑證設定，再由 CPA 根據模型名稱自動判斷。同一上游模型的不同別名可分別設定。",
@@ -3087,7 +3091,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "pricing.editor.tier_error_service": "請填寫 1 到 8 個服務等級名稱（字母、數字、. _ -，不能是 auto），且每個名稱只能屬於一組價格",
   "pricing.editor.preview_service_tier": "依服務等級",
   "cost.service_tier": "服務等級：{tier}（上游回應）",
-  "cost.service_tier_requested": "服務等級：{tier}（請求指定，上游未回報）",
+  "cost.service_tier_requested": "服務等級：{tier}（按請求檔位計價）",
   "pricing.editor.tier_limit": "每個模型最多 {n} 級",
   "pricing.editor.context_title": "上下文分段計費",
   "pricing.editor.context_hint": "請求的輸入（含快取命中的 tokens）達到門檻後，整次請求改按該級計價。適用於超過 200K 等長度後加價的模型。",

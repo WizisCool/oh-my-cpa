@@ -34,6 +34,17 @@ gives**. Move a claim up a layer only when the lower one cannot observe it.
 | The Go binary's own demonstration mode: isolated settings, read-only refusals, permitted non-durable edits | Go demo smoke | `scripts/demo-smoke.mjs` | `pnpm verify:demo:go` (opt-in; not part of CI or `verify:full`) |
 | A repository script or gate itself | Script self-test (`node:test` + tsx) | `scripts/<name>.test.ts` (existing `.test.mjs` remains discoverable) or `deploy/cloudflare/*.test.mjs` | `pnpm test:self` |
 
+Service-tier evidence is covered by `internal/pricing/service_tier_test.go`
+(provider/executor identity and requested/response precedence),
+`internal/repository/usage_service_tier_test.go` (both ingestion paths, immutable
+selections, migration 045 preserving historical explanations, filters and facets),
+and `internal/api/usage_service_tier_test.go` (raw versus resolved wire fields and
+filter semantics). `scripts/test-usage-event-view.ts` and
+`scripts/test-request-export.ts` cover the shared Fast marker, source-specific
+hints and masked exports. Rendered request-row coverage lives in
+`web/tests/request-service-tier.component.test.tsx`; the request-list interaction
+probe wires a Codex priority request with a default response into the browser.
+
 Rules that keep the suite fast and honest:
 
 - **Default to Go or a logic suite.** Most feature logic is a function of its inputs.

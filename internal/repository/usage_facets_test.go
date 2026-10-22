@@ -13,16 +13,17 @@ import (
 // The independent grouped queries are the equivalence oracle for the combined read.
 func readFacetsIndividually(r *Repository, ctx context.Context, instanceID string, fromMS, toMS int64) (UsageFacets, error) {
 	facets := UsageFacets{
-		Models:           []UsageFacetValue{},
-		Providers:        []UsageFacetValue{},
-		APIGroupKey:      []UsageFacetValue{},
-		AuthIndexes:      []UsageFacetValue{},
-		Sources:          []UsageFacetValue{},
-		Executors:        []UsageFacetValue{},
-		ModelAliases:     []UsageFacetValue{},
-		AuthTypes:        []UsageFacetValue{},
-		ReasoningEfforts: []UsageFacetValue{},
-		ServiceTiers:     []UsageFacetValue{},
+		Models:               []UsageFacetValue{},
+		Providers:            []UsageFacetValue{},
+		APIGroupKey:          []UsageFacetValue{},
+		AuthIndexes:          []UsageFacetValue{},
+		Sources:              []UsageFacetValue{},
+		Executors:            []UsageFacetValue{},
+		ModelAliases:         []UsageFacetValue{},
+		AuthTypes:            []UsageFacetValue{},
+		ReasoningEfforts:     []UsageFacetValue{},
+		ServiceTiers:         []UsageFacetValue{},
+		ResolvedServiceTiers: []UsageFacetValue{},
 	}
 	if r == nil || r.SQL() == nil {
 		return facets, errors.New("repository is not initialized")
@@ -45,6 +46,7 @@ func readFacetsIndividually(r *Repository, ctx context.Context, instanceID strin
 		{column: "auth_type", target: &facets.AuthTypes},
 		{column: "reasoning_effort", target: &facets.ReasoningEfforts},
 		{column: "service_tier", target: &facets.ServiceTiers},
+		{column: RESOLVED_SERVICE_TIER_SQL, target: &facets.ResolvedServiceTiers},
 	}
 	for _, entry := range columns {
 		if strings.TrimSpace(entry.column) == "" {
@@ -56,7 +58,7 @@ func readFacetsIndividually(r *Repository, ctx context.Context, instanceID strin
 		}
 		rows, err := r.SQL().QueryContext(ctx, `
 			SELECT `+entry.column+`, COUNT(1), `+maskExpression+`
-			FROM usage_events
+			FROM usage_events e
 			WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ? AND `+entry.column+` <> ''
 			GROUP BY `+entry.column+`
 			ORDER BY COUNT(1) DESC, `+entry.column+` ASC

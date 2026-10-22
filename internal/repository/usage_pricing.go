@@ -12,11 +12,13 @@ import (
 
 // lockedPrice is what the insert transaction stores beside a usage event.
 type lockedPrice struct {
-	cost           *int64
-	version        *int64
-	channelVersion *int64
-	tier           *int64
-	status         string
+	cost              *int64
+	version           *int64
+	channelVersion    *int64
+	tier              *int64
+	status            string
+	serviceTier       string
+	serviceTierSource string
 }
 
 // queryer is satisfied by both *sql.Tx and *sql.DB, so the lock and the read-time
@@ -89,6 +91,13 @@ const channelVersionSelect = `SELECT id, channel, available, effective_from_ms, 
 // delayed queue delivery cannot reprice an older request. A tombstone stops a
 // removed price from leaking forward; a missing or tombstoned channel is 1x.
 func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedPrice, error) {
+	serviceTier, source := pricing.ResolveServiceTier(event.Provider, event.ExecutorType, event.ResponseServiceTier, event.ServiceTier)
+	locked, err := lockUsageCost(ctx, tx, event, serviceTier)
+	locked.serviceTier, locked.serviceTierSource = serviceTier, source
+	return locked, err
+}
+
+func lockUsageCost(ctx context.Context, tx *sql.Tx, event usage.Event, serviceTier string) (lockedPrice, error) {
 	version, err := scanPriceVersion(tx.QueryRowContext(ctx, priceVersionSelect+`
  WHERE channel = ? AND model = ? AND effective_from_ms <= ? ORDER BY effective_from_ms DESC, id DESC LIMIT 1`, event.Provider, event.Model, event.TimestampMS))
 	// A channel tombstone restores the shared price effective at the request time.
@@ -123,7 +132,6 @@ func lockUsagePrice(ctx context.Context, tx *sql.Tx, event usage.Event) (lockedP
 			locked.channelVersion = &channel.ID
 		}
 	}
-	serviceTier, _ := pricing.BilledServiceTier(event.ResponseServiceTier, event.ServiceTier)
 	breakdown, err := pricing.Quote(version.Price.ModelPrice, multiplier, eventTokens(event.InputTokens, event.OutputTokens, event.CacheReadTokens, event.CacheCreationTokens), event.TimestampMS, serviceTier)
 	// Invalid or overflowing prices must not lose usage telemetry or look free.
 	if err != nil {
@@ -173,11 +181,12 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 	var timestampMS int64
 	var input, output, cacheRead, cacheWrite int64
 	var requestedTier, responseTier string
+	var billedTier, billedTierSource sql.NullString
 	err := r.SQL().QueryRowContext(ctx, `SELECT pricing_status, cost_nanos, price_version_id, channel_version_id, price_tier,
- timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, service_tier, response_service_tier
+ timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, service_tier, response_service_tier, billed_service_tier, billed_service_tier_source
  FROM usage_events WHERE id = ?`, id).Scan(
 		&result.Status, &storedNanos, &versionID, &channelID, &storedTier, &timestampMS, &input, &output, &cacheRead, &cacheWrite,
-		&requestedTier, &responseTier)
+		&requestedTier, &responseTier, &billedTier, &billedTierSource)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -190,9 +199,14 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 	if storedTier.Valid {
 		result.StoredTier = &storedTier.Int64
 	}
-	// Both tier columns are stored with the event and never change, so the tier
-	// the lock matched is re-derived rather than stored a second time.
-	result.ServiceTier, result.ServiceTierSource = pricing.BilledServiceTier(responseTier, requestedTier)
+	// NULL marks records predating the selection snapshot. Their explanation
+	// retains the original policy, even when current observability resolves a
+	// Codex request differently. Empty non-NULL is a recorded selection of none.
+	if billedTier.Valid {
+		result.ServiceTier, result.ServiceTierSource = billedTier.String, billedTierSource.String
+	} else {
+		result.ServiceTier, result.ServiceTierSource = pricing.BilledServiceTier(responseTier, requestedTier)
+	}
 	if !versionID.Valid {
 		return result, nil
 	}

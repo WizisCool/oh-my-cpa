@@ -855,6 +855,9 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 	// the latency already drawn, so every other generated value stays where it was.
 	if !failed && latency%6 == 0 {
 		event.ServiceTier, event.ResponseServiceTier = "priority", "priority"
+		if event.Provider == "codex" {
+			event.ResponseServiceTier = "default"
+		}
 	} else if !failed {
 		event.ResponseServiceTier = "default"
 	}

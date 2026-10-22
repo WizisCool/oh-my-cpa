@@ -62,13 +62,14 @@ interface FacetSpec {
 /**
  * Facets are grouped the way an operator reasons about a request rather than the
  * way the database is shaped: what was asked, how it was routed, and what it
- * cost. One flat list of eleven dropdowns is technically complete and
+ * cost. One flat list of dropdowns is technically complete and
  * practically unusable, because finding a field means reading all of them.
  */
 const REQUEST_FACETS: FacetSpec[] = [
   { key: 'auth_type', facet: 'auth_types', labelKey: 'events.auth_type' },
   { key: 'reasoning', facet: 'reasoning_efforts', labelKey: 'events.reasoning_effort' },
   { key: 'service_tier', facet: 'service_tiers', labelKey: 'events.service_tier' },
+  { key: 'resolved_service_tier', facet: 'resolved_service_tiers', labelKey: 'events.resolved_tier' },
 ];
 
 const ROUTING_FACETS: FacetSpec[] = [

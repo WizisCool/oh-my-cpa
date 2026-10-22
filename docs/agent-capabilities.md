@@ -462,7 +462,9 @@ a page, and none returns a secret.
 - `requests_cost_breakdown` (`id`): a recorded request's pricing status, stored nanos,
   locked price and channel versions, tier, the billed `service_tier` with its
   `service_tier_source` (`response` or `request`) and per-bucket rates; `resource_missing` for
-  an unknown id.
+  an unknown id. New Codex costs use request-tier evidence; other providers keep
+  response precedence. The selected tier/source are locked with the amount, and
+  historical explanations retain their original policy.
 
 A time-of-day tier's `utc_start`/`utc_end` are HHMM on the clock named by `time_zone`,
 UTC when omitted (ADR 0063). An agent given a vendor's price page enters the published

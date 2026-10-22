@@ -309,6 +309,8 @@ function requestOfSlot(slot, rests, callers) {
       reasoning_effort: spec.reasoningEffort,
       service_tier: 'default',
       response_service_tier: isFailed ? undefined : 'default',
+      resolved_service_tier: 'default',
+      resolved_service_tier_source: credential.provider === 'codex' || isFailed ? 'request' : 'response',
       failed: isFailed,
       fail_status_code: isFailed ? step.status : undefined,
       generate: true,

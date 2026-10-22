@@ -427,16 +427,18 @@ func TestUsageFacetsCoverEveryDropdownDimension(t *testing.T) {
 	}
 	var body struct {
 		Facets struct {
-			AuthTypes        []repository.UsageFacetValue `json:"auth_types"`
-			ReasoningEfforts []repository.UsageFacetValue `json:"reasoning_efforts"`
-			ServiceTiers     []repository.UsageFacetValue `json:"service_tiers"`
+			AuthTypes            []repository.UsageFacetValue `json:"auth_types"`
+			ReasoningEfforts     []repository.UsageFacetValue `json:"reasoning_efforts"`
+			ServiceTiers         []repository.UsageFacetValue `json:"service_tiers"`
+			ResolvedServiceTiers []repository.UsageFacetValue `json:"resolved_service_tiers"`
 		} `json:"facets"`
 	}
 	decodeFilterJSON(t, payload, &body)
 	for name, values := range map[string][]repository.UsageFacetValue{
-		"auth_types":        body.Facets.AuthTypes,
-		"reasoning_efforts": body.Facets.ReasoningEfforts,
-		"service_tiers":     body.Facets.ServiceTiers,
+		"auth_types":             body.Facets.AuthTypes,
+		"reasoning_efforts":      body.Facets.ReasoningEfforts,
+		"service_tiers":          body.Facets.ServiceTiers,
+		"resolved_service_tiers": body.Facets.ResolvedServiceTiers,
 	} {
 		if len(values) == 0 {
 			t.Fatalf("facet %s reported no values for a record that has one", name)

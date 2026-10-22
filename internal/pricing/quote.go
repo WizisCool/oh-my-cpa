@@ -143,7 +143,7 @@ func (p ModelPrice) effectiveRates(tier *PriceTier) (prompt, completion, cacheRe
 }
 
 // Quote prices one request at the given price and channel multiplier, on the
-// service tier BilledServiceTier names (empty for none). Decimal
+// resolved service tier (empty for none). Decimal
 // rates are accumulated exactly, both multipliers are applied as exact fractions,
 // and the total is rounded half-up to USD nanos once — so a request with no
 // tiers and a 1x channel costs exactly what the pre-tier formula charged.

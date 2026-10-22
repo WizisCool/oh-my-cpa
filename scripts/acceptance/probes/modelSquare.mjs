@@ -45,7 +45,7 @@ const PRICE_BOOK = {
 const RECENT_REQUESTS = {
   window: { from: 0, to: 0, bucket_ms: 0 },
   facets: {
-    models: [], providers: [], api_group_keys: [], auth_indexes: [], sources: [], executors: [], auth_types: [], reasoning_efforts: [], service_tiers: [],
+    models: [], providers: [], api_group_keys: [], auth_indexes: [], sources: [], executors: [], auth_types: [], reasoning_efforts: [], service_tiers: [], resolved_service_tiers: [],
     model_aliases: [{ value: 'gpt-5', requests: 1234 }, { value: 'team/fast', requests: 12 }],
   },
 };

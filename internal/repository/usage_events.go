@@ -98,11 +98,12 @@ type UsageEventFilter struct {
 	// AuthIndexes select credentials on the CPA instance.
 	AuthIndexes []string
 	// Sources are CPA's client-facing API key labels.
-	Sources          []string
-	AuthTypes        []string
-	ExecutorTypes    []string
-	ReasoningEfforts []string
-	ServiceTiers     []string
+	Sources              []string
+	AuthTypes            []string
+	ExecutorTypes        []string
+	ReasoningEfforts     []string
+	ServiceTiers         []string
+	ResolvedServiceTiers []string
 
 	// Endpoint and UserAgent are substring matches. Both are long,
 	// high-cardinality values that a console filters by typing rather than by
@@ -577,10 +578,11 @@ type UsageFacets struct {
 	// deliberately absent: both are long free-form values where a typed substring
 	// beats a 200-row list, and the endpoint URL must never be handed to the
 	// browser (the list projection drops it for the same reason).
-	ModelAliases     []UsageFacetValue `json:"model_aliases"`
-	AuthTypes        []UsageFacetValue `json:"auth_types"`
-	ReasoningEfforts []UsageFacetValue `json:"reasoning_efforts"`
-	ServiceTiers     []UsageFacetValue `json:"service_tiers"`
+	ModelAliases         []UsageFacetValue `json:"model_aliases"`
+	AuthTypes            []UsageFacetValue `json:"auth_types"`
+	ReasoningEfforts     []UsageFacetValue `json:"reasoning_efforts"`
+	ServiceTiers         []UsageFacetValue `json:"service_tiers"`
+	ResolvedServiceTiers []UsageFacetValue `json:"resolved_service_tiers"`
 }
 
 // UsageFacetValue is one distinct value plus how often it occurred. Mask carries
@@ -658,21 +660,22 @@ func (r *Repository) ClientKeyUsage(ctx context.Context, instanceID string, from
 // GetUsageFacets enumerates filter options within a time window.
 func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, fromMS, toMS int64) (UsageFacets, error) {
 	facets := UsageFacets{
-		Models:           []UsageFacetValue{},
-		Providers:        []UsageFacetValue{},
-		APIGroupKey:      []UsageFacetValue{},
-		AuthIndexes:      []UsageFacetValue{},
-		Sources:          []UsageFacetValue{},
-		Executors:        []UsageFacetValue{},
-		ModelAliases:     []UsageFacetValue{},
-		AuthTypes:        []UsageFacetValue{},
-		ReasoningEfforts: []UsageFacetValue{},
-		ServiceTiers:     []UsageFacetValue{},
+		Models:               []UsageFacetValue{},
+		Providers:            []UsageFacetValue{},
+		APIGroupKey:          []UsageFacetValue{},
+		AuthIndexes:          []UsageFacetValue{},
+		Sources:              []UsageFacetValue{},
+		Executors:            []UsageFacetValue{},
+		ModelAliases:         []UsageFacetValue{},
+		AuthTypes:            []UsageFacetValue{},
+		ReasoningEfforts:     []UsageFacetValue{},
+		ServiceTiers:         []UsageFacetValue{},
+		ResolvedServiceTiers: []UsageFacetValue{},
 	}
 	if r == nil || r.SQL() == nil {
 		return facets, errors.New("repository is not initialized")
 	}
-	// Materialize only the facet columns once: ten indexed detail-table walks otherwise
+	// Materialize only the facet columns once: separate indexed detail-table walks otherwise
 	// hold the single SQLite connection much longer than grouping this narrow window.
 	columns := []struct {
 		column     string
@@ -689,12 +692,14 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 		{column: "auth_type", target: &facets.AuthTypes},
 		{column: "reasoning_effort", target: &facets.ReasoningEfforts},
 		{column: "service_tier", target: &facets.ServiceTiers},
+		{column: "resolved_service_tier", target: &facets.ResolvedServiceTiers},
 	}
 	var query strings.Builder
 	query.WriteString(`WITH facet_window AS MATERIALIZED (
 		SELECT model, provider, api_group_key, api_key_mask, auth_index, source,
-		       executor_type, model_alias, auth_type, reasoning_effort, service_tier
-		FROM usage_events WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?
+		       executor_type, model_alias, auth_type, reasoning_effort, service_tier,
+		       ` + RESOLVED_SERVICE_TIER_SQL + ` AS resolved_service_tier
+		FROM usage_events e WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?
 	) `)
 	for i, entry := range columns {
 		if i > 0 {
@@ -844,6 +849,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		{"e.executor_type", filter.ExecutorTypes},
 		{"e.reasoning_effort", filter.ReasoningEfforts},
 		{"e.service_tier", filter.ServiceTiers},
+		{RESOLVED_SERVICE_TIER_SQL, filter.ResolvedServiceTiers},
 	}
 	for _, dimension := range dimensions {
 		clause, clauseArgs, err := usageEventInClause(dimension.column, dimension.values)

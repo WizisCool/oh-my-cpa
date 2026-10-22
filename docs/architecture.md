@@ -2022,6 +2022,7 @@ drill-down links written before multi-select existed working unchanged.
 | Dimension | Wire parameter | Match |
 | --- | --- | --- |
 | Model / alias / provider / caller key / auth index / source / auth type / executor / reasoning effort / service tier | same name, repeatable | exact, OR within the dimension |
+| Resolved service tier | `resolved_service_tier`, repeatable | provider-aware mode evidence; original request tier remains `service_tier` |
 | Identity search | `q` | literal substring across the columns in `usageEventSearchColumns` |
 | Endpoint, user agent | `endpoint`, `ua` | literal substring |
 | Request id | `request_id` | exact |
@@ -2177,9 +2178,23 @@ operator ──▶ channel_model_prices ──triggers──▶ model_price_vers
 `usage_events` stores, in the event's own insert transaction and by the request
 timestamp, the price version id, the channel version id (absent means 1×), the
 index of the tier the request qualified for, and integer USD nanos computed by
-`pricing.Quote`. The tier is selected on the request's billed service tier (the
-reported response tier, else the requested one), which is re-derived from the
-event's own immutable tier columns when the breakdown is explained. Historical totals never join the mutable tables, so a later edit
+`pricing.Quote`. `pricing.ResolveServiceTier` interprets the recorded evidence:
+Codex uses the requested tier even when its response says `default`/`auto`, while
+other providers prefer a non-`auto` response and fall back to the request. A
+missing Codex request tier may use the response; an explicit `auto` selects no
+lane. Provider identity or a concrete Codex executor identifies this policy,
+never a model name or provider display label.
+
+Migration 045 locks the selected `billed_service_tier` and its
+`billed_service_tier_source` beside the amount, including an empty selection.
+Both are immutable. NULL identifies historical snapshots, whose breakdown keeps
+the original response-first policy. The API exposes the current interpretation
+as `resolved_service_tier`/`resolved_service_tier_source` for mode indicators and
+exports; a deterministic SQLite function calls the same resolver for filters and
+facets, including historical rows. The cost breakdown instead explains the
+selection originally locked. CPA does not yet expose the final outbound tier
+after payload rules, so request-derived evidence cannot detect server overrides.
+Historical totals never join the mutable tables, so a later edit
 cannot rewrite an invoice. A request with no effective price version is stored
 with pricing status `unpriced` (`legacy_unpriced` for rows that predate migration
 019), cost absent, and is never backfilled. The request detail recomputes a

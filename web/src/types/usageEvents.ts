@@ -57,6 +57,9 @@ export interface UsageEvent {
   reasoning_effort?: string;
   service_tier?: string;
   response_service_tier?: string;
+  /** Provider-aware mode evidence, not a claim about the final outbound request. */
+  resolved_service_tier?: string;
+  resolved_service_tier_source?: 'request' | 'response';
   /** The model the upstream reported having served. Absent when it reported
    *  none or the record predates the field, which is "unknown" and never a claim
    *  that the requested model ran. */
@@ -170,6 +173,7 @@ export interface UsageFacets {
   auth_types: UsageFacetValue[];
   reasoning_efforts: UsageFacetValue[];
   service_tiers: UsageFacetValue[];
+  resolved_service_tiers: UsageFacetValue[];
 }
 
 export const USAGE_FACET_KEYS = [
@@ -183,6 +187,7 @@ export const USAGE_FACET_KEYS = [
   'auth_types',
   'reasoning_efforts',
   'service_tiers',
+  'resolved_service_tiers',
 ] as const;
 
 /**
@@ -287,6 +292,7 @@ export const USAGE_MULTI_FILTER_KEYS = [
   'auth_type',
   'reasoning',
   'service_tier',
+  'resolved_service_tier',
 ] as const;
 export type UsageMultiFilterKey = (typeof USAGE_MULTI_FILTER_KEYS)[number];
 

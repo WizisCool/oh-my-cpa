@@ -91,6 +91,33 @@ func TestBilledServiceTier(t *testing.T) {
 	}
 }
 
+func TestResolveServiceTier(t *testing.T) {
+	for _, test := range []struct {
+		name, provider, executor, requested, response, tier, source string
+	}{
+		{"codex priority", "codex", "", "priority", "default", "priority", ServiceTierFromRequest},
+		{"codex fast", "codex", "", "fast", "auto", "fast", ServiceTierFromRequest},
+		{"normalized identity", " CoDeX\t", "", " Priority ", "default", "priority", ServiceTierFromRequest},
+		{"codex HTTP executor", "custom", "CodexExecutor", "priority", "default", "priority", ServiceTierFromRequest},
+		{"codex websocket executor", "custom", "CodexWebsocketsExecutor", "priority", "default", "priority", ServiceTierFromRequest},
+		{"explicit default", "codex", "", "default", "priority", "default", ServiceTierFromRequest},
+		{"auto is not fast evidence", "codex", "", "auto", "priority", "", ServiceTierFromRequest},
+		{"no outbound evidence", "codex", "", "auto", "default", "", ServiceTierFromRequest},
+		{"missing client metadata", "codex", "", "", "priority", "priority", ServiceTierFromResponse},
+		{"other provider downgrade", "openai", "OpenAIExecutor", "priority", "default", "default", ServiceTierFromResponse},
+		{"provider display name", "my-codex", "", "priority", "default", "default", ServiceTierFromResponse},
+		{"other provider unreported", "claude", "", "fast", "auto", "fast", ServiceTierFromRequest},
+		{"no tier", "codex", "", "", "auto", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tier, source := ResolveServiceTier(test.provider, test.executor, test.response, test.requested)
+			if tier != test.tier || source != test.source {
+				t.Fatalf("resolved %q from %q, want %q from %q", tier, source, test.tier, test.source)
+			}
+		})
+	}
+}
+
 func TestServiceTierValidationAndEncoding(t *testing.T) {
 	for name, tiers := range map[string][]PriceTier{
 		"auto":       {{ServiceTiers: []string{"auto"}}},

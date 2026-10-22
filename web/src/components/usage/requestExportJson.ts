@@ -99,6 +99,8 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       put('reasoning_effort', event.reasoning_effort);
       put('service_tier', event.service_tier);
       put('response_service_tier', event.response_service_tier);
+      put('resolved_service_tier', event.resolved_service_tier);
+      put('resolved_service_tier_source', event.resolved_service_tier_source);
       put('stream', event.stream);
     }
     if (!masks.has('latency')) {
