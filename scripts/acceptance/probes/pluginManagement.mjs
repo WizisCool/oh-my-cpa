@@ -450,6 +450,13 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('the managed Oh My CPA source is a fixed row rather than an editable source',
     (await omcRow.count()) === 1 && (await omcRow.locator('input').count()) === 0
       && (await omcRow.innerText()).includes('Oh My CPA'));
+  const omcRowText = await omcRow.innerText();
+  check('the managed source row is one compact line: no registry address and no state label',
+    !/https?:\/\//.test(omcRowText) && !/(已启用|已关闭|\bOn\b|\bOff\b)/.test(omcRowText), omcRowText);
+  const glyphOf = (row) => row.locator('svg').first().evaluate((node) => node.outerHTML);
+  const omcGlyph = await glyphOf(omcRow);
+  check('the managed source row draws the official source\'s glyph',
+    omcGlyph === (await glyphOf(settings.locator('[data-plugin-official-source]'))), omcGlyph.slice(0, 120));
   check('the store auth rule is shown as a form, not YAML', (await settings.locator('[data-plugin-auth-rule]').count()) === 1
     && (await settings.locator('input[value="MIRROR_TOKEN"]').count()) === 1);
   await settings.getByRole('button', { name: /添加源|Add source/ }).click();
@@ -469,6 +476,9 @@ export async function pluginManagement({ base, page, check, writes }) {
       && settingsWrite.body.store_auth[0].token_env === 'MIRROR_TOKEN',
     JSON.stringify(settingsWrite),
   );
+  await omcRow.getByRole('button', { name: /在 OMC 设置中管理|Manage in OMC settings/ }).click();
+  check('the managed source row links to the OMC settings switch',
+    await isTrue(async () => new URL(page.url()).pathname.endsWith('/omc-settings'), 'the OMC settings page'));
 
   await page.goto(`${base}/plugins`, { waitUntil: 'domcontentloaded' });
   const removable = page.locator('article[data-plugin-id="quota-notifier"]');

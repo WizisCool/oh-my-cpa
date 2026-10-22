@@ -25,12 +25,16 @@ declares the fields CPA validates:
 | `name` | yes | Shown on the store card |
 | `description` | yes | One sentence is enough |
 | `author` | yes | |
-| `repository` | yes for `github-release` | `owner/repo` or a GitHub URL; releases carry the artifacts |
-| `version` | optional | Display fallback; the latest release is authoritative |
+| `repository` | yes for `github-release` | `https://github.com/{owner}/{repo}` exactly: the store builds release URLs from it and refuses an `owner/repo` shorthand, a `.git` suffix, or any other host |
+| `version` | optional | Display fallback; the latest release is authoritative. No leading `v` (that belongs to the tag) |
 | `homepage`, `license`, `tags`, `logo` | optional | `logo` is a URL the console inlines |
 
 An empty `plugins` list is valid: the registry is published before the first plugin
-exists, so the store has a working source rather than a failing one.
+exists, so the store has a working source rather than a failing one. One malformed
+entry is not: CPA refuses the whole document, so every installation shows an empty
+Oh My CPA registry and only the gateway's error line. The Go tests in
+`internal/pluginregistry` validate the published file (`pnpm test:fast` runs them when
+the registry changes) for that reason.
 
 Entries are curated here, not discovered. A plugin installed from this registry
 still needs its id typed in the install dialog: the confirmation is about running

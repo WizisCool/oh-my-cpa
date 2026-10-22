@@ -4,7 +4,7 @@ import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { AppstoreOutlined, DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
+import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { PluginSettings, PluginStoreAuthRule, PluginStoreAuthTarget, PluginStoreAuthType } from '../../types/plugin';
@@ -227,19 +227,13 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
             )}
           />
           <div className={styles['source-list']}>
-            <div className={styles['source-fixed']}>
+            <div className={styles['source-fixed']} data-plugin-official-source>
               <SafetyCertificateOutlined />
-              {t('plugin.settings_official_source')}
+              <span className={styles['source-fixed-label']}>{t('plugin.settings_official_source')}</span>
             </div>
-            <div className={styles['source-fixed']} data-plugin-omc-source data-state={settingsQuery.data?.omc_source_enabled ? 'on' : 'off'}>
-              <AppstoreOutlined />
-              <div className={styles['source-fixed-body']}>
-                <span>{t('plugin.settings_omc_source')}</span>
-                <code className={styles['source-fixed-url']}>{settingsQuery.data?.omc_source_url}</code>
-              </div>
-              <span className={styles['source-fixed-state']}>
-                {settingsQuery.data?.omc_source_enabled ? t('plugin.settings_omc_source_on') : t('plugin.settings_omc_source_off')}
-              </span>
+            <div className={styles['source-fixed']} data-plugin-omc-source>
+              <SafetyCertificateOutlined />
+              <span className={styles['source-fixed-label']}>{t('plugin.settings_omc_source')}</span>
               <Button type="link" size="small" className={styles['source-fixed-action']} onClick={() => navigate('/omc-settings')}>
                 {t('plugin.settings_omc_source_open')}
               </Button>
