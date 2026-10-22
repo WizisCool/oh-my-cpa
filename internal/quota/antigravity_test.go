@@ -123,7 +123,7 @@ func TestAntigravityCapacityScopeAndUnknownPeriod(t *testing.T) {
 }
 
 func TestAntigravityPeriodsRequireCompleteFixedDuration(t *testing.T) {
-	for _, label := range []string{"15h", "25 hours", "biweekly", "2 weeks", "monthly", "1m", "month", "unknown"} {
+	for _, label := range []string{"15h", "25 hours", "biweekly", "2 weeks", "bimonthly", "quarterly", "monthly", "1m", "1mo", "1 month", "calendar_month", "month", "unknown"} {
 		if hours := parseAntigravityWindowHours(label); hours != 0 {
 			t.Errorf("unreviewed period %q guessed as %v hours", label, hours)
 		}
@@ -131,6 +131,31 @@ func TestAntigravityPeriodsRequireCompleteFixedDuration(t *testing.T) {
 	for label, expected := range map[string]float64{"5h": 5, "daily": 24, "weekly": 168, "30d": 720} {
 		if hours := parseAntigravityWindowHours(label); hours != expected {
 			t.Errorf("period %q=%v, want %v", label, hours, expected)
+		}
+	}
+}
+
+func TestAntigravityCommonWindowIdentifiers(t *testing.T) {
+	for _, scenario := range []struct {
+		identifiers []string
+		label       string
+		hours       float64
+	}{
+		{[]string{"5h", "5hour", "5hours", "5 hour", "5_hours", "5-hours", "five_hour", "five-hours", " FIVE  HOURS "}, "5小时限制 (5-Hour)", 5},
+		{[]string{"24h", "24hour", "24_hours", "24-hour", "1d", "day", "DAILY"}, "每日限制 (Daily)", 24},
+		{[]string{"7d", "7days", "7_days", "7-day", "1w", "week", "WEEKLY"}, "每周限制 (Weekly)", 168},
+		{[]string{"30d", "30days", "30_days", "30-day"}, "每月限制 (Monthly)", 720},
+		{[]string{"month", "MONTHLY", "1mo", "1month", "1_month", "calendar-month"}, "每月限制 (Monthly)", 0},
+	} {
+		for _, identifier := range scenario.identifiers {
+			t.Run(identifier, func(t *testing.T) {
+				if got := translateAntigravityBucketLabel("Plugin", "bucket_0_4", identifier); got != "Plugin · "+scenario.label {
+					t.Errorf("label = %q, want %q", got, "Plugin · "+scenario.label)
+				}
+				if got := parseAntigravityWindowHours(identifier); got != scenario.hours {
+					t.Errorf("period = %v, want %v", got, scenario.hours)
+				}
+			})
 		}
 	}
 }
@@ -143,9 +168,44 @@ func TestAntigravityBucketLabelsFollowRenamedBuckets(t *testing.T) {
 		{"Weekly Limit - Remaining", "weekly", "Gemini Models · 每周限制 (Weekly)"},
 		{"Quota", "5h", "Gemini Models · 5小时限制 (5-Hour)"},
 		{"Burst Remaining", "unreported", "Gemini Models · Burst"},
+		{"Quota", "bimonthly", "Gemini Models · Quota"},
 	} {
 		if got := translateAntigravityBucketLabel("Gemini Models", scenario.name, scenario.window); got != scenario.want {
 			t.Errorf("label(%q, %q) = %q, want %q", scenario.name, scenario.window, got, scenario.want)
 		}
+	}
+}
+
+func TestParsePluginMonthlyQuotaLabelWithoutBucketMetadata(t *testing.T) {
+	for _, window := range []string{"monthly", "month", " Monthly "} {
+		t.Run(window, func(t *testing.T) {
+			raw := []byte(`{"groups":[{"displayName":"Cline Pass","buckets":[
+				{"window":"5h","remainingFraction":1},
+				{"window":"7d","remainingFraction":0.41},
+				{"window":"` + window + `","remainingFraction":0.25,"resetTime":"2026-10-26T00:11:00Z"},
+				{"displayName":"Burst budget","window":"burst","remainingFraction":0.5},
+				{"displayName":"Image credits","window":"images","remainingFraction":0.75}
+			]}]}`)
+			windows, err := ParseAntigravityUsage(raw, 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != 5 {
+				t.Fatalf("windows = %+v, want all five quota windows", windows)
+			}
+			monthly := windows[2]
+			if monthly.Label != "Cline Pass · 每月限制 (Monthly)" {
+				t.Errorf("monthly label = %q, want the named monthly limit", monthly.Label)
+			}
+			if monthly.PeriodHours == nil || *monthly.PeriodHours != 0 {
+				t.Errorf("calendar month acquired a fixed duration: %v", monthly.PeriodHours)
+			}
+			if monthly.RemainingPercent == nil || *monthly.RemainingPercent != 25 || monthly.ResetAtMS == nil || *monthly.ResetAtMS != time.Date(2026, 10, 26, 0, 11, 0, 0, time.UTC).UnixMilli() {
+				t.Fatalf("monthly quota values changed: %+v", monthly)
+			}
+			if windows[3].Label != "Cline Pass · Burst budget" || windows[4].Label != "Cline Pass · Image credits" {
+				t.Fatalf("later custom window names changed: %q, %q", windows[3].Label, windows[4].Label)
+			}
+		})
 	}
 }

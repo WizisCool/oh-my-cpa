@@ -33,17 +33,22 @@ type RawAntigravityPayload struct {
 	Groups []RawAntigravityGroup `json:"groups"`
 }
 
+func normalizeAntigravityWindow(window string) string {
+	window = strings.ReplaceAll(strings.ReplaceAll(window, "_", " "), "-", " ")
+	return strings.ToLower(strings.Join(strings.Fields(window), " "))
+}
+
 func parseAntigravityWindowHours(window string) float64 {
 	// A substring such as "week" also matches "biweekly"; guessing a shorter
 	// period would mix unrelated traffic into the new capacity numerator.
-	switch strings.ToLower(strings.TrimSpace(window)) {
-	case "5h", "5 hour", "5 hours", "five_hour", "five-hour":
+	switch normalizeAntigravityWindow(window) {
+	case "5h", "5hour", "5hours", "5 hour", "5 hours", "five hour", "five hours":
 		return 5
-	case "24h", "24 hours", "1d", "day", "daily":
+	case "24h", "24hour", "24hours", "24 hour", "24 hours", "1d", "day", "daily":
 		return 24
-	case "7d", "7 days", "1w", "week", "weekly":
+	case "7d", "7day", "7days", "7 day", "7 days", "1w", "week", "weekly":
 		return 168
-	case "30d", "30 days":
+	case "30d", "30day", "30days", "30 day", "30 days":
 		return 720
 	default:
 		// A calendar month is not a fixed 30-day duration.
@@ -62,12 +67,16 @@ func translateAntigravityBucketLabel(groupName, bucketName, window string) strin
 	windowLabel := strings.TrimSpace(antigravityRemainingSuffix.ReplaceAllString(bucketName, ""))
 	switch {
 	case (strings.Contains(b, "5") || strings.Contains(b, "five")) && strings.Contains(b, "hour"):
-		windowLabel = "5小时限制 (5-Hour)"
+		window = "5h"
 	case strings.Contains(b, "daily") || strings.Contains(b, "day"):
-		windowLabel = "每日限制 (Daily)"
+		window = "daily"
 	case strings.Contains(b, "week"):
-		windowLabel = "每周限制 (Weekly)"
+		window = "weekly"
 	case strings.Contains(b, "month"):
+		window = "monthly"
+	}
+	switch normalizeAntigravityWindow(window) {
+	case "month", "monthly", "1mo", "1month", "1 month", "calendar month":
 		windowLabel = "每月限制 (Monthly)"
 	default:
 		switch parseAntigravityWindowHours(window) {
@@ -77,6 +86,8 @@ func translateAntigravityBucketLabel(groupName, bucketName, window string) strin
 			windowLabel = "每日限制 (Daily)"
 		case 168:
 			windowLabel = "每周限制 (Weekly)"
+		case 720:
+			windowLabel = "每月限制 (Monthly)"
 		}
 	}
 
