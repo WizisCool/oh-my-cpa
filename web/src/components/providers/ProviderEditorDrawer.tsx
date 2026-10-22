@@ -537,6 +537,10 @@ export function ProviderEditorDrawer({
                   </Button>
                 </div>
 
+                {formFamily !== 'openai-compatibility' && formKeys.length > 1 && (
+                  <div className={styles['section-note']}>{t('pro.keys_split_hint')}</div>
+                )}
+
                 {/* Key Cards List */}
                 <div className={styles['item-list']}>
                   {formKeys.map((k, idx) => {

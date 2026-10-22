@@ -492,8 +492,10 @@ export function useProviderManagement({
     // key before a name key, so an override stored under the display name alone
     // could be shadowed by whatever id the new row landed on.
     onSuccess: async (data, variables) => {
-      const result = await writeProviderIcon(data.id, variables.icon);
-      if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      for (const id of data.ids ?? [data.id]) {
+        const result = await writeProviderIcon(id, variables.icon);
+        if (!result.ok) { handleCloseProviderDrawer(); void queryClient.invalidateQueries({ queryKey: ['management-providers'] }); return; }
+      }
       toast.success(t('pro.provider_created'));
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });

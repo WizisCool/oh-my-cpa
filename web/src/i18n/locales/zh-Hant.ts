@@ -2171,6 +2171,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "policy.rule_problem_no_match": "至少需要一個比對條件，否則閘道不會執行這條規則",
   "policy.rule_problem_empty_match": "比對條件不能為空",
   "pro.field_disabled_desc": "停用後不會被閘道使用",
+  "pro.keys_split_hint": "每個 API 金鑰將儲存為獨立提供商，並使用相同的通用設定。",
   "pro.section_keys": "API 金鑰條目",
   "pro.add_key_entry": "新增金鑰條目",
   "pro.section_headers": "請求頭",

@@ -2468,6 +2468,7 @@ const DICT: Record<string, [string, string]> = {
   'policy.rule_problem_no_match': ['至少需要一个匹配条件，否则网关不会执行这条规则', 'Add at least one pattern, or the gateway never runs this rule'],
   'policy.rule_problem_empty_match': ['匹配条件不能为空', 'A pattern cannot be empty'],
   'pro.field_disabled_desc': ['停用后不会被网关使用', 'Disabled items will not be used by the gateway'],
+  'pro.keys_split_hint': ['每个 API 密钥将保存为独立提供商，并使用相同的通用配置。', 'Each API key is saved as a separate provider with the same shared settings.'],
   'pro.section_keys': ['API 密钥条目', 'API Keys'],
   'pro.add_key_entry': ['添加密钥条目', 'Add Key Entry'],
   'pro.section_headers': ['请求头', 'Custom Headers'],

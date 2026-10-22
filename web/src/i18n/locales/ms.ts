@@ -2171,6 +2171,7 @@ export const MS: Readonly<Record<string, string>> = {
   "policy.rule_problem_no_match": "Tambah sekurang-kurangnya satu corak, jika tidak gateway tidak akan menjalankan peraturan ini",
   "policy.rule_problem_empty_match": "Corak tidak boleh kosong",
   "pro.field_disabled_desc": "Item yang dilumpuhkan tidak akan digunakan oleh get laluan",
+  "pro.keys_split_hint": "Setiap kunci API disimpan sebagai penyedia berasingan dengan tetapan umum yang sama.",
   "pro.section_keys": "Kunci API",
   "pro.add_key_entry": "Tambah Entri Kunci",
   "pro.section_headers": "Tajuk Tersuai",

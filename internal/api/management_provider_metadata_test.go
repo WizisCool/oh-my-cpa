@@ -101,7 +101,7 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 	// The create response names the row it added; without that id a client can
 	// only key an override by display name, which the row's own id key shadows.
 	for index, name := range []string{"Codex Two", "Codex Three"} {
-		body := fmt.Sprintf(`{"family":"codex","name":%q,"base_url":"https://api.openai.com","api_key":"sk-codex-extra"}`, name)
+		body := fmt.Sprintf(`{"family":"codex","name":%q,"base_url":"https://api.openai.com","api_key":"fixture-codex-extra-%d"}`, name, index)
 		resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", body)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("create codex provider status = %d body %s", resp.StatusCode, payload)

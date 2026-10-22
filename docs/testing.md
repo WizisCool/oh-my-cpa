@@ -89,6 +89,17 @@ Rules that keep the suite fast and honest:
   than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
   with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
+### Provider multi-key saves
+
+`internal/api/management_provider_multikey_test.go` owns new and same-family edited
+multi-key saves across every registered config API-key family: complete credential
+and per-key proxy/weight round trips, one CPA write, shared and unmodelled setting
+preservation, returned ids, metadata propagation and stable neighbouring positions.
+It also owns blank-row handling and empty/duplicate/colliding credential refusals
+before any CPA write. `web/tests/provider-multikey.component.test.tsx` mounts the real
+editor, hook and API client to assert complete multi-key payloads, the split-row hint
+and icon writes for every returned row on both create and edit.
+
 ### Provider protocol changes
 
 `internal/api/management_provider_family_move_test.go` owns the complete protocol-pair
