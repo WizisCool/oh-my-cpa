@@ -545,7 +545,7 @@ older executable requires restoring the corresponding data backup.
 
 ## From source
 
-Needs Go 1.25+, Node.js 22+, pnpm 11+ and a running CPA.
+Needs Go 1.26+, Node.js 22+, pnpm 11+ and a running CPA.
 
 ```bash
 git clone https://github.com/WizisCool/oh-my-cpa.git
