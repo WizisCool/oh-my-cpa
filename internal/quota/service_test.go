@@ -325,11 +325,13 @@ func TestRefreshCredentialQuotaAttachesClaudeResetGrants(t *testing.T) {
 	// on the same usage endpoint, and its failure must not fail the refresh.
 	// No test here spends anything; the claim path does not exist.
 	var grantsURL string
+	var grantsHeaders map[string]string
 	client := &mockCPAClient{
 		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
 			switch {
 			case strings.Contains(req.URL, "cedar_ember"):
 				grantsURL = req.URL
+				grantsHeaders = req.Header
 				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(
 					`{"cedar_ember":{"eligible":true,"grants":[{"id":"grant-9","label":"Weekly","resets_total":3,"resets_left":2,"ends_at":"2026-10-09T00:00:00Z"}]}}`)}, nil
 			case strings.Contains(req.URL, "oauth/usage"):
@@ -351,6 +353,11 @@ func TestRefreshCredentialQuotaAttachesClaudeResetGrants(t *testing.T) {
 	}
 	if !strings.Contains(grantsURL, "cedar_ember=1") || !strings.Contains(grantsURL, "skip_spend=1") {
 		t.Fatalf("grants URL = %q, want the grant program query", grantsURL)
+	}
+	// Without a Claude Code identity the program reports every account as
+	// ineligible with no grants, so the display would stay empty.
+	if grantsHeaders["User-Agent"] != ClaudeCLIUserAgent || grantsHeaders["x-app"] != "cli" {
+		t.Fatalf("grants headers = %v, want the Claude Code client identity", grantsHeaders)
 	}
 	if len(result.ResetGrants) != 1 || result.ResetGrants[0].ID != "grant-9" || result.ResetGrants[0].ResetsLeft != 2 {
 		t.Fatalf("reset grants = %+v, want the weekly grant", result.ResetGrants)
