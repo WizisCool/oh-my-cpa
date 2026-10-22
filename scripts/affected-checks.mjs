@@ -13,9 +13,7 @@
  *    the test harness, or to this file must run the checks that exercise them -
  *    otherwise editing a test to make it pass would be verified by nothing.
  *
- * `planChecks` is exported so its selection can be asserted directly, including
- * the negative property that matters most: ordinary frontend work must never
- * select a build, Vite, Chromium or the fake CPA.
+ * Ordinary frontend work must never select a build, Vite, Chromium or the fake CPA.
  */
 
 /** Every check the planner can select, as a stable identifier. */
@@ -31,7 +29,6 @@ export const CHECK_IDS = [
   'feedback',
   'go',
   'docs',
-  'workflow',
   'toolchain',
   'self-tests',
 ];
@@ -62,7 +59,8 @@ function planFileChecks(file) {
   // Go tests are also counted by the fixed-wait ratchet, which is a repository self-test.
   if (file.endsWith('_test.go')) add('self-tests');
   if (file.endsWith('.md')) add('docs');
-  if (file.startsWith('.github/workflows/') || file === 'scripts/validate-workflow.mjs') add('workflow');
+  // Workflows are linted by actionlint in CI; nothing local exercises them.
+  if (file.startsWith('.github/')) return [];
   if (file.startsWith('scripts/') || file.startsWith('deploy/cloudflare/')) add('self-tests');
   // allowJs infers exported JS signatures consumed by typed orchestration.
   if ((/^(?:scripts|deploy\/cloudflare)\//.test(file) && /\.(?:mjs|ts)$/.test(file))

@@ -96,6 +96,24 @@ export function findCatalogGaps({ dictionaryFile, catalogFiles }) {
   });
 }
 
+const CAPABILITY_PREFIX = 'agent.capability.';
+
+/**
+ * Capability copy is looked up by a computed key, so the reference scan above cannot see it.
+ * The console falls back to the registry's identifier when copy is missing, which would let a
+ * new capability ship untranslated unnoticed. The registry is read from the demonstration
+ * dataset, which the real handlers generate and TestExportDemoDataset keeps fresh.
+ */
+function findCapabilityGaps(definedKeys) {
+  const dataset = JSON.parse(fs.readFileSync(path.join(root, 'deploy', 'cloudflare', 'data', 'responses.json'), 'utf8'));
+  const names = new Set(JSON.parse(dataset.responses.capabilities.body).capabilities.map((capability) => capability.name));
+  const missing = [...names].flatMap((name) => [`${CAPABILITY_PREFIX}${name}`, `${CAPABILITY_PREFIX}${name}.description`])
+    .filter((key) => !definedKeys.has(key));
+  const stale = [...definedKeys]
+    .filter((key) => key.startsWith(CAPABILITY_PREFIX) && !names.has(key.slice(CAPABILITY_PREFIX.length).replace(/\.description$/, '')));
+  return { missing, stale };
+}
+
 export function runCheck({
   dictionaryFile = path.join(root, 'web', 'src', 'i18n', 'index.tsx'),
   sourceDirectory = path.join(root, 'web', 'src'),
@@ -124,8 +142,13 @@ export function runCheck({
       );
     }
   }
+  const capabilityGaps = findCapabilityGaps(definedKeys);
+  for (const key of capabilityGaps.missing) output.error(`MISSING CAPABILITY COPY: "${key}"`);
+  for (const key of capabilityGaps.stale) output.error(`STALE CAPABILITY COPY: "${key}" names no registered capability`);
   if (
     missing.length > 0
+    || capabilityGaps.missing.length > 0
+    || capabilityGaps.stale.length > 0
     || catalogGaps.some((gap) => gap.missing.length > 0 || gap.extra.length > 0 || gap.placeholderMismatches.length > 0)
   ) {
     process.exitCode = 1;
@@ -134,15 +157,5 @@ export function runCheck({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const option = (name, fallback) => {
-    const index = process.argv.indexOf(name);
-    return index >= 0 ? path.resolve(process.argv[index + 1]) : fallback;
-  };
-  runCheck({
-    dictionaryFile: option('--dictionary', path.join(root, 'web', 'src', 'i18n', 'index.tsx')),
-    sourceDirectory: option('--source', path.join(root, 'web', 'src')),
-    // A fixture dictionary has no matching catalogs; the catalog contract is
-    // checked against the repository dictionary, where the files actually live.
-    catalogFiles: process.argv.includes('--dictionary') ? [] : undefined,
-  });
+  runCheck();
 }

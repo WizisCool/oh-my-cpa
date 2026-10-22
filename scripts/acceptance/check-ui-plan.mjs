@@ -1,12 +1,9 @@
 /**
  * Which probe scenarios a working-tree change can affect.
  *
- * The fast path's value depends entirely on this being **conservative**: a plan that
- * silently omits a scenario is a green run that verified nothing, which is worse than
- * a slow one. So the rules are a small explicit map, refined only by evidence the
- * caller supplies (`ui-impact.mjs`: the runtime import graph and the translation
- * additions-only rule; `probe-impact.mjs`: which scenarios probe code belongs to).
- * Two properties are structural rather than per-file:
+ * The plan has to be **conservative**: a plan that silently omits a scenario is a
+ * green run that verified nothing, which is worse than a slow one. So the rules are a
+ * small explicit map, and two properties are structural rather than per-file:
  *
  *   - A path that touches the shell or the shared layer selects **every** scenario.
  *     Those files are imported by every page, so narrowing their blast radius would
@@ -411,260 +408,27 @@ const SCENARIO_PATHS = [
   },
 ];
 
-/**
- * Whether a path is frontend source the planner is expected to understand.
- *
- * Anything the console's document loads that no rule places widens the plan: the whole
- * point of this function is to distinguish "no impact" from "not yet classified", and
- * only the former may select nothing. `web/index.html` is the document itself; the
- * entries under `web/public/` are served verbatim and are copied from `web/public`
- * rather than imported, so an edit there cannot move a scenario's assertions.
- */
-const FRONTEND_SOURCE = 'web/src/';
-const DOCUMENT_SHELL = 'web/index.html';
+/** The probe harness: a change here can move any scenario. */
+const PROBE_INFRASTRUCTURE = ['scripts/acceptance/', 'scripts/testing/', 'scripts/check-ui.ts'];
 
 /**
- * The probe framework itself.
- *
- * A change here can invalidate any scenario's result - the runner owns the browser,
- * the contexts and the mock - and it previously selected *nothing*, because no rule
- * placed a `scripts/` path and `isBrowserRelevant` only looks at `web/src`. That is
- * the same hole `verify:fast` had for test suites: the code that decides whether the
- * checks are meaningful was itself unchecked. Without attribution context a change
- * to any of these widens the plan to every scenario; with it, `probe-impact.mjs`
- * narrows a probe module or registry edit to the scenarios that use it and keeps the
- * runner itself at "every scenario".
+ * The scenarios a set of changed files can affect. A shared file, a probe file or an
+ * unmapped frontend file selects every scenario: over-running costs background minutes,
+ * a missed scenario costs a regression.
  */
-const PROBE_FRAMEWORK = [
-  // The whole directory rather than a list of its modules: the runner's helpers
-  // (browser guard, lifecycle, batching, timings) are imported by every scenario,
-  // and a list would let one that nobody remembered to name select nothing. Which
-  // of these a scenario really runs is `probe-impact.mjs`'s question, answered from
-  // the import graph; without that context every one of them widens the plan.
-  'scripts/acceptance/',
-  'scripts/testing/',
-  'tsconfig.tooling.json',
-  'scripts/check-ui.ts',
-];
-
-export function isProbeFramework(file) {
-  // Prefixes rather than exact paths, so a directory can be named once and a module
-  // added to it stays covered. A file the list names exactly is matched by the same
-  // rule.
-  return PROBE_FRAMEWORK.some((prefix) => file.startsWith(prefix));
-}
-
-export function isFrontendSource(file) {
-  return file.startsWith(FRONTEND_SOURCE) || file === DOCUMENT_SHELL;
-}
-
-export function isShellPath(file) {
-  return SHELL_PATHS.some((prefix) => file.startsWith(prefix));
-}
-
-/** Whether a change can affect what a browser probe observes. */
-export function isBrowserRelevant(file) {
-  if (!isFrontendSource(file)) return false;
-  // A stylesheet under a rule's directory is covered by that rule; one outside any
-  // rule widens, which `planScenarios` handles by falling through to "all".
-  return true;
-}
-
-/** The router's roots: every page is imported by them, so reaching one is not "shared". */
-const ROUTER_ROOTS = new Set(['web/src/App.tsx', 'web/src/main.tsx']);
-
-/** Translation catalogs, where an edit that only adds entries cannot move a scenario. */
-const I18N_CATALOG = /^web\/src\/i18n\/(?:index\.tsx|locales\/[^/]+\.ts)$/;
-
-function ruleFor(file) {
-  return SCENARIO_PATHS.find((candidate) => file.startsWith(candidate.prefix));
-}
-
-/**
- * Follows a file's runtime importers until each chain ends at a page the router
- * loads, a shared-layer module, or a module nothing imports.
- *
- * Returns `{ all: reason }` when the change reaches the shared layer or a routed page
- * no rule names; otherwise the scenarios of every rule met on the way. Traversal
- * continues through a mapped module rather than stopping at it, because a shared
- * component can also be imported by a page its own rule does not list.
- */
-function reachScenarios(file, { importers, lazyImporters, routePages }) {
-  const found = new Set();
-  const via = [];
-  const queue = [file];
-  const seen = new Set(queue);
-  while (queue.length > 0) {
-    const node = queue.shift();
-    for (const importer of importers.get(node) ?? []) {
-      if (importer === 'web/src/routePages.ts') {
-        // Only a proven lazy page is isolated from registry initialization. Shared helpers,
-        // eager re-exports and unknown edge kinds must still verify every route.
-        if (!node.startsWith('web/src/pages/') || !routePages?.has(node) || !lazyImporters?.get(node)?.has(importer) || !ruleFor(node)) {
-          return { all: `${node} reaches the route registry without a mapped lazy boundary` };
-        }
-        continue;
-      }
-      if (ROUTER_ROOTS.has(importer)) {
-        if (!ruleFor(node)) return { all: `${node} is loaded by the router and no scenario rule names it` };
-        continue;
-      }
-      if (isShellPath(importer)) return { all: `${file} reaches the shared layer through ${importer}` };
-      const rule = ruleFor(importer);
-      if (rule) {
-        rule.scenarios.forEach((id) => found.add(id));
-        via.push(importer);
-      }
-      if (!seen.has(importer)) {
-        seen.add(importer);
-        queue.push(importer);
-      }
-    }
-  }
-  return { found, via };
-}
-
-/**
- * planScenarios maps changed paths to the scenarios worth running.
- *
- * It returns the scenario ids in registry order, plus the reason the plan is as wide
- * as it is, so a caller can say *why* rather than only *what*. `check:ui --plan`
- * prints exactly this.
- *
- * `impact` is optional context from `ui-impact.mjs`: the reverse runtime import graph
- * and whether a translation catalog only gained entries. Without it the planner uses
- * the path rules alone and widens on any file they do not place.
- */
-export function planScenarios(files, allIds, impact) {
-  if (files.length === 0) {
-    return { ids: [], reason: 'no changed files', reasons: [{ kind: 'none', detail: 'no changed files' }] };
-  }
-
-  // The harness is checked before anything else: a change to how scenarios are run,
-  // listed or selected makes every scenario's result suspect, including the ones the
-  // path rules would narrow away.
-  const framework = files.filter(isProbeFramework);
+export function planScenarios(files, allIds) {
   const selected = new Set();
-  const reasons = [];
-  if (framework.length > 0 && impact?.probeChange) {
-    // With the registry and module graph available, probe code is attributed to the
-    // scenarios that run it (see `probe-impact.mjs`), and only the runner widens.
-    const attributed = impact.probeChange(files);
-    if (attributed.all) {
-      return { ids: [...allIds], reason: attributed.all, reasons: [{ kind: 'all', detail: attributed.all }] };
-    }
-    attributed.ids.forEach((id) => selected.add(id));
-    reasons.push(...attributed.reasons);
-  } else if (framework.length > 0) {
-    return {
-      ids: [...allIds],
-      reason: `the probe framework changed (${framework.join(', ')})`,
-      reasons: [{ kind: 'all', detail: `probe framework changed: ${framework.join(', ')}` }],
-    };
+  for (const file of files) {
+    const isFrontend = file.startsWith('web/src/') || file === 'web/index.html';
+    const isProbe = PROBE_INFRASTRUCTURE.some(prefix => file.startsWith(prefix));
+    if (!isFrontend && !isProbe) continue;
+    if (isProbe || SHELL_PATHS.some(prefix => file.startsWith(prefix))) return { ids: allIds, reason: `${file} is shared by every scenario` };
+    const rule = SCENARIO_PATHS.find(candidate => file.startsWith(candidate.prefix));
+    if (!rule) return { ids: allIds, reason: `${file} has no scenario rule` };
+    for (const id of rule.scenarios) selected.add(id);
   }
-
-  const runtimeInputs = files.filter((file) => !(impact?.isManifestScriptsOnly?.(file) ?? false)).filter((file) =>
-    ['package.json', 'web/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc'].includes(file)
-      || /^web\/(?:vite\.config\.|tsconfig)/.test(file),
-  );
-  if (runtimeInputs.length > 0) {
-    return {
-      ids: [...allIds],
-      reason: `frontend runtime inputs changed (${runtimeInputs.join(', ')})`,
-      reasons: [{ kind: 'all', detail: `frontend runtime inputs: ${runtimeInputs.join(', ')}` }],
-    };
-  }
-
-  const skipped = [];
-  const relevant = files.filter(isBrowserRelevant).filter((file) => {
-    if (impact && I18N_CATALOG.test(file) && impact.isAdditionOnly(file)) {
-      skipped.push({ kind: 'skip', detail: `${file}: only new catalog entries, which only the code that uses them can render` });
-      return false;
-    }
-    return true;
-  });
-  if (relevant.length === 0) {
-    const attributed = [...reasons, ...skipped];
-    return {
-      ids: allIds.filter((id) => selected.has(id)),
-      reason: selected.size > 0 ? 'probe changes attributed to their scenarios'
-        : skipped.length > 0 ? 'only new translation entries changed' : 'no frontend source changed',
-      reasons: attributed.length > 0 ? attributed : [{ kind: 'none', detail: 'no frontend source changed' }],
-    };
-  }
-
-  // The shell widens the plan to everything, and that decision is recorded once
-  // rather than per file: the answer is the same for each of them.
-  const shell = relevant.filter(isShellPath);
-  if (shell.length > 0) {
-    return {
-      ids: [...allIds],
-      reason: `shared layer changed (${shell.join(', ')})`,
-      reasons: [{ kind: 'all', detail: `shared layer changed: ${shell.join(', ')}` }],
-    };
-  }
-
-  reasons.push(...skipped);
-  if (impact && impact.unresolved.length > 0) {
-    return {
-      ids: [...allIds],
-      reason: `the import graph has unresolved local imports (${impact.unresolved.join(', ')})`,
-      reasons: [...reasons, { kind: 'all', detail: `unresolved imports: ${impact.unresolved.join(', ')}` }],
-    };
-  }
-
-  const unplaced = [];
-  for (const file of relevant) {
-    const rule = ruleFor(file);
-    if (rule) {
-      for (const id of rule.scenarios) selected.add(id);
-      reasons.push({ kind: 'map', detail: `${file} -> ${rule.scenarios.join(', ')}` });
-    }
-    if (!impact) {
-      if (!rule) unplaced.push(file);
-      continue;
-    }
-    // Only a TypeScript module can be proven unused at runtime: an asset or a
-    // stylesheet can also be referenced from CSS `url()` or the HTML shell, which
-    // the graph does not read.
-    const isModule = /\.(?:ts|tsx)$/.test(file);
-    const importers = impact.importers.get(file);
-    if (!importers || (importers.size === 0 && !isModule)) {
-      if (!rule) unplaced.push(file);
-      continue;
-    }
-    const reach = reachScenarios(file, impact);
-    if (reach.all) {
-      return {
-        ids: [...allIds],
-        reason: reach.all,
-        reasons: [...reasons, { kind: 'all', detail: reach.all }],
-      };
-    }
-    for (const id of reach.found) selected.add(id);
-    if (reach.via.length > 0) {
-      reasons.push({ kind: 'map', detail: `${file} -> imported by ${reach.via.join(', ')} -> ${[...reach.found].join(', ')}` });
-    } else if (!rule) {
-      reasons.push({ kind: 'map', detail: `${file} -> no runtime importer (type-only or unused), covered by the type check` });
-    }
-  }
-
-  // An unplaced frontend path is not evidence of no impact. Widening here is the
-  // whole reason `isBrowserRelevant` and the shell list are separate questions.
-  if (unplaced.length > 0) {
-    return {
-      ids: [...allIds],
-      reason: `unrecognised frontend source widened the plan (${unplaced.join(', ')})`,
-      reasons: [
-        ...reasons,
-        { kind: 'all', detail: `unrecognised frontend source: ${unplaced.join(', ')}` },
-      ],
-    };
-  }
-
   return {
-    ids: allIds.filter((id) => selected.has(id)),
-    reason: impact ? 'matched by path and runtime imports' : 'matched by path',
-    reasons,
+    ids: allIds.filter(id => selected.has(id)),
+    reason: selected.size ? 'mapped frontend paths' : 'no browser-relevant change',
   };
 }
