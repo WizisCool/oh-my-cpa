@@ -302,28 +302,17 @@ func resolveCodexAccountID(file management.AuthFile) string {
 }
 
 // RefreshCredentialQuota performs a live upstream query using full AuthFile metadata.
-func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.AuthFile, prior *NormalizedQuota) (*NormalizedQuota, error) {
-	// A service is shared by concurrent batch reads; evidence belongs to one reading.
-	s = &Service{client: s.client, now: s.now}
-	if s.now == nil {
-		s.now = time.Now
-	}
-	nowMS := s.now().UnixMilli()
-	s.warmupEvidence = nil
-	authIndex := strings.TrimSpace(file.AuthIndex)
-	stdProvider := DetectProvider(file.Type, file.Provider)
-	caps := CapabilitiesForFile(file)
-
+// newReading starts a reading of file from what the prior one carried forward.
+func newReading(file management.AuthFile, prior *NormalizedQuota, nowMS int64) *NormalizedQuota {
 	result := &NormalizedQuota{
-		AuthIndex:    authIndex,
+		AuthIndex:    strings.TrimSpace(file.AuthIndex),
 		Name:         file.Name,
 		Type:         file.Type,
-		Provider:     stdProvider,
+		Provider:     DetectProvider(file.Type, file.Provider),
 		Disabled:     file.Disabled,
 		ObservedAtMS: nowMS,
-		Capabilities: caps,
+		Capabilities: CapabilitiesForFile(file),
 	}
-
 	if prior != nil {
 		result.RawSignals = prior.RawSignals
 		result.ActiveCooldown = prior.ActiveCooldown
@@ -331,6 +320,45 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 		result.Windows = prior.Windows
 		result.ResetCredits = prior.ResetCredits
 	}
+	return result
+}
+
+// applyReadFailure turns a reading whose read failed into the previous numbers marked stale,
+// or an error when there are none to show.
+func applyReadFailure(result, prior *NormalizedQuota, readErr error) {
+	// The text is a provider's own, relayed through CPA, which substitutes the
+	// credential into the request: an upstream that echoes its input would
+	// otherwise put that token in a stored and displayed reading.
+	result.Error = security.RedactText(readErr.Error())
+	result.RateLimit = RateLimitOfError(readErr)
+	if prior != nil && len(prior.Windows) > 0 {
+		result.Status = "stale"
+		result.ObservedAtMS = prior.ObservedAtMS
+		result.Windows = prior.Windows
+		result.Plan = prior.Plan
+		result.ResetCredits = prior.ResetCredits
+	} else {
+		result.Status = "error"
+	}
+}
+
+func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.AuthFile, prior *NormalizedQuota) (*NormalizedQuota, error) {
+	return s.RefreshCredentialQuotaWith(ctx, file, prior, ReadOptions{})
+}
+
+// RefreshCredentialQuotaWith is RefreshCredentialQuota with the supplementary reads the caller
+// already holds fresh answers for left out.
+func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file management.AuthFile, prior *NormalizedQuota, options ReadOptions) (*NormalizedQuota, error) {
+	// A service is shared by concurrent batch reads; evidence belongs to one reading.
+	s = &Service{client: s.client, now: s.now}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	nowMS := s.now().UnixMilli()
+	s.warmupEvidence = nil
+	result := newReading(file, prior, nowMS)
+	authIndex := result.AuthIndex
+	stdProvider := result.Provider
 
 	if file.Disabled {
 		if prior != nil {
@@ -369,7 +397,11 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 			}
 
 		case "claude":
-			plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS)
+			var priorPlan *QuotaPlan
+			if options.IsClaudeProfileFresh && prior != nil {
+				priorPlan = prior.Plan
+			}
+			plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS, priorPlan)
 			if err != nil {
 				fetchErr = err
 			} else {
@@ -378,9 +410,13 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 					result.Plan = plan
 				}
 				result.Windows = windows
-				// Grant listing is supplementary: a failed or malformed
+				// Grant listing is supplementary: a failed, refused or malformed
 				// grants read leaves the quota itself untouched.
-				result.ResetGrants = s.fetchClaudeResetGrants(ctx, file)
+				if options.IsClaudeResetGrantsFresh && prior != nil {
+					result.ResetGrants = prior.ResetGrants
+				} else {
+					result.ResetGrants = s.fetchClaudeResetGrants(ctx, file)
+				}
 			}
 
 		case "antigravity":
@@ -436,19 +472,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 	}
 
 	if fetchErr != nil {
-		// The text is a provider's own, relayed through CPA, which substitutes the
-		// credential into the request: an upstream that echoes its input would
-		// otherwise put that token in a stored and displayed reading.
-		result.Error = security.RedactText(fetchErr.Error())
-		if prior != nil && len(prior.Windows) > 0 {
-			result.Status = "stale"
-			result.ObservedAtMS = prior.ObservedAtMS
-			result.Windows = prior.Windows
-			result.Plan = prior.Plan
-			result.ResetCredits = prior.ResetCredits
-		} else {
-			result.Status = "error"
-		}
+		applyReadFailure(result, prior, fetchErr)
 	} else if len(result.Windows) == 0 {
 		// The read succeeded and the provider published no window. Recording that separately is
 		// what keeps the console from reporting the credential as one nobody has read and asking
@@ -611,7 +635,10 @@ func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.Au
 	return merged
 }
 
-func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
+// fetchClaudeQuota reads the usage windows, and the profile for the plan unless priorPlan is
+// given: the plan changes with a subscription, not between two usage reads, and every request
+// spent on it counts against the same host-wide rate limit as the usage read.
+func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64, priorPlan *QuotaPlan) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept":         "application/json",
 		"Content-Type":   "application/json",
@@ -619,10 +646,23 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	})
 
 	var plan *QuotaPlan
-	profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
-	if profErr == nil && profResp.StatusCode == 200 {
-		if normProf, err := profResp.NormalizedBody(); err == nil {
-			plan = ParseClaudeProfile(normProf)
+	if priorPlan != nil {
+		// A copy, because balances and extra usage below are this reading's own.
+		reused := *priorPlan
+		plan = &reused
+	} else {
+		profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
+		// A 429 on the profile read means this host is being paced; the usage read sent right
+		// after it would most likely draw the same answer and only deepen the limit.
+		if profErr == nil {
+			if rateLimitedErr := rateLimitedErrorOf(profResp, s.now()); rateLimitedErr != nil {
+				return nil, nil, nil, rateLimitedErr
+			}
+		}
+		if profErr == nil && profResp.StatusCode == 200 {
+			if normProf, err := profResp.NormalizedBody(); err == nil {
+				plan = ParseClaudeProfile(normProf)
+			}
 		}
 	}
 
@@ -633,6 +673,9 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	normUsage, err := usageResp.NormalizedBody()
 	if err != nil {
 		return plan, nil, nil, err
+	}
+	if rateLimitedErr := rateLimitedErrorOf(usageResp, s.now()); rateLimitedErr != nil {
+		return plan, nil, nil, rateLimitedErr
 	}
 	if usageResp.StatusCode < 200 || usageResp.StatusCode >= 300 {
 		return plan, nil, nil, errors.New(sanitizeError(usageResp.StatusCode, normUsage))

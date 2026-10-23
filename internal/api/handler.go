@@ -100,7 +100,9 @@ type Handler struct {
 	trustedProxies []*net.IPNet
 	// quotaAutoRefresh is the background quota refresh's memory of its own attempts.
 	quotaAutoRefresh quotaAutoRefreshState
-	warmupRuntime    warmupRuntime
+	// quotaReadGates paces the providers that rate-limit quota reads; see quota_read_gate.go.
+	quotaReadGates quotaReadGates
+	warmupRuntime  warmupRuntime
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate

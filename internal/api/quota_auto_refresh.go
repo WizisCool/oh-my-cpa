@@ -48,6 +48,8 @@ type quotaAutoRefreshRound struct {
 	Failed           int
 	ByReset          int
 	CooldownsCleared int
+	// Deferred reads were skipped because the provider asked to wait; they stay due.
+	Deferred int
 }
 
 // RunQuotaAutoRefresh reads due credentials' quotas in the background until ctx ends.
@@ -71,7 +73,7 @@ func (h *Handler) RunQuotaAutoRefresh(ctx context.Context) error {
 			if round.Due > 0 && h.logger != nil {
 				h.logger.Info("automatic quota refresh round",
 					"due", round.Due, "refreshed", round.Refreshed, "failed", round.Failed,
-					"after_reset", round.ByReset, "cooldowns_cleared", round.CooldownsCleared)
+					"after_reset", round.ByReset, "cooldowns_cleared", round.CooldownsCleared, "deferred", round.Deferred)
 			}
 		}
 	}
@@ -173,6 +175,9 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 		if recoverAtMS, ok := expiredCooldowns[authIndex]; ok {
 			candidate.ActiveCooldownExpiredAtMS = recoverAtMS
 		}
+		if gate := h.quotaReadGates.forFile(file); gate != nil {
+			candidate.ReadBackoffUntilMS = gate.scheduledReadAt(authIndex)
+		}
 		if trigger := quota.AutoRefreshTrigger(settings, candidate, nowMS); trigger != quota.AutoRefreshTriggerNone {
 			due = append(due, dueCredential{file: file, prior: prior, trigger: trigger, observedMS: candidate.LastObservedAtMS, cooldownRecoverAtMS: expiredCooldowns[authIndex]})
 		}
@@ -199,12 +204,15 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 	sem := make(chan struct{}, QUOTA_AUTO_REFRESH_CONCURRENCY)
 	for _, credential := range due {
 		authIndex := strings.TrimSpace(credential.file.AuthIndex)
+		previousAttemptMS := lastAttempts[authIndex]
 		h.quotaAutoRefresh.recordAttempt(authIndex, nowMS)
 		wg.Add(1)
 		go func(file management.AuthFile, prior *quota.NormalizedQuota, trigger string, recoverAtMS int64) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			if trigger == quota.AutoRefreshTriggerCooldownExpired || h.holdsCallerSlot(file) {
+				sem <- struct{}{}
+				defer func() { <-sem }()
+			}
 
 			// An expired cooldown needs a clear, not a read: the same CPA reset and evidence
 			// wipe the operator's Clear Cooldown performs.
@@ -228,6 +236,15 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 			}
 
 			refreshed, err := h.refreshQuotaReading(ctx, svc, file, prior)
+			if err == nil && refreshed != nil && refreshed.IsDeferred {
+				// Nothing was sent, so the attempt this round recorded is taken back: the read
+				// stays due as it was and goes out once the provider's pause has passed.
+				h.quotaAutoRefresh.restoreAttempt(authIndex, previousAttemptMS)
+				countMu.Lock()
+				round.Deferred++
+				countMu.Unlock()
+				return
+			}
 			// The same persistence rule as a manual refresh: a failed or stale read
 			// never replaces the last good observation.
 			isRefreshed := err == nil && refreshed != nil
@@ -252,6 +269,7 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 	}
 	wg.Wait()
 	h.quotaAutoRefresh.forgetExcept(filesByIndex)
+	h.quotaReadGates.forgetExcept(filesByIndex)
 	return round, nil
 }
 
@@ -287,6 +305,17 @@ func (s *quotaAutoRefreshState) recordAttempt(authIndex string, nowMS int64) {
 		s.lastAttemptsMS = make(map[string]int64)
 	}
 	s.lastAttemptsMS[authIndex] = nowMS
+}
+
+// restoreAttempt puts back the attempt a round recorded for a read it did not send.
+func (s *quotaAutoRefreshState) restoreAttempt(authIndex string, previousMS int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if previousMS == 0 {
+		delete(s.lastAttemptsMS, authIndex)
+		return
+	}
+	s.lastAttemptsMS[authIndex] = previousMS
 }
 
 // forgetExcept drops attempts for credentials CPA no longer lists, so the map is bounded

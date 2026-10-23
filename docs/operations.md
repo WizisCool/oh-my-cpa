@@ -532,7 +532,14 @@ older than the interval - six hours by default, adjustable from 5 minutes to 24 
 or off - including credentials nobody has read, so the first minutes after an upgrade
 read every such credential. Each automatic read is a provider request made with the credential through CPA
 (`api-call`, or the plugin's quota endpoint for a plugin credential), at most sixteen per
-minute; a failed reset-driven read is retried every ten minutes for an hour. Meta credentials are only read on a manual
+minute; a failed reset-driven read is retried every ten minutes for an hour. Claude quota reads go one at a time
+on every path, because Anthropic answers a burst of usage reads with HTTP 429 for every credential in it. After a
+429, OMC sends no Claude quota read for the `Retry-After` the provider named, or at least two minutes, including a
+manual refresh, which shows the last good reading marked stale with the 429 as its reason. The refused credential
+is not read automatically again for 5 minutes, doubling with each consecutive 429 up to 30 minutes, and its next
+successful read ends the backoff. A Claude re-read sends only the usage request: the plan is
+re-read every six hours and the reset grants every hour, and a refused grants listing waits its
+hour without holding back the usage reads. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
 refresh, because that read exchanges a key upstream. Turning both off restores
 operator-only reads. A demonstration never runs it.
 
