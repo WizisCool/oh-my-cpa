@@ -99,11 +99,12 @@ export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateRes
   return { rate, cached, hasData: true };
 }
 
-export type TpsCalculationBasis = TpsCalculationMode | 'fallback_total';
+export type TpsCalculationBasis = TpsCalculationMode | 'fallback_total' | 'fallback_buffered';
 
 export function tpsCalculationHintKey(basis: TpsCalculationBasis) {
   return basis === 'exclude_ttft' ? 'events.tps_hint_ttft'
-    : basis === 'include_ttft' ? 'events.tps_hint_total' : 'events.tps_hint_fallback';
+    : basis === 'include_ttft' ? 'events.tps_hint_total'
+    : basis === 'fallback_buffered' ? 'events.tps_hint_buffered' : 'events.tps_hint_fallback';
 }
 
 export interface EventTokensPerSecondResult {
@@ -119,6 +120,11 @@ export interface EventTokensPerSecondResult {
  * response in a single chunk rather than a progressive first-token arrival).
  */
 export const MIN_STREAMING_GENERATION_WINDOW_MS = 50;
+
+// Usage records have no output-chunk timing to distinguish progressive generation from
+// buffered delivery. Above this heuristic rate, the tail alone is not a reliable denominator.
+// This guards TTFT subtraction, not the end-to-end rate or the recorded TTFT boundary.
+const MAX_TTFT_EXCLUDED_TOKENS_PER_SECOND = 500;
 
 const FAST_SERVICE_TIERS = new Set(['fast', 'priority']);
 
@@ -192,6 +198,9 @@ export function isNonStreamingEvent(
  * A collapsed first-token boundary cannot support subtraction, so exclusion falls back to
  * total latency. The residual may include server-side tools; it is not pure generation time.
  * Client streaming intent does not establish whether the observed boundary is measurable.
+ * Even a measurable tail can be a buffered tool-argument burst with no reasoning tokens.
+ * Exclusion therefore also requires a token-scaled window (at most 500 t/s); a shorter
+ * window falls back to the end-to-end average without claiming to detect tool calls.
  *
  * Reported reasoning tokens also rule the subtraction out. Hidden reasoning (OpenAI and Codex
  * encrypted reasoning, Gemini thoughts) is generated before the first visible token, so the
@@ -211,9 +220,13 @@ export function eventTokensPerSecond(
     return { tps: null, formatted: '—', basis: null };
   }
 
-  const basis: TpsCalculationBasis = mode === 'include_ttft' ? 'include_ttft'
+  let basis: TpsCalculationBasis = mode === 'include_ttft' ? 'include_ttft'
     : hasMeasurableTTFT(event) && !(Number(event.tokens?.reasoning) > 0) ? 'exclude_ttft' : 'fallback_total';
-  const durationMs = basis === 'exclude_ttft' ? latency - Number(event.ttft_ms) : latency;
+  const generationWindowMs = latency - Number(event.ttft_ms);
+  if (basis === 'exclude_ttft' && generationWindowMs < output * 1000 / MAX_TTFT_EXCLUDED_TOKENS_PER_SECOND) {
+    basis = 'fallback_buffered';
+  }
+  const durationMs = basis === 'exclude_ttft' ? generationWindowMs : latency;
   const tps = (output * 1000) / durationMs;
   return { tps, formatted: `${tps.toFixed(2)} t/s`, basis };
 }

@@ -46,7 +46,6 @@ import {
   isFastTierEvent,
   fastTierHintKey,
   isNonStreamingEvent,
-  MIN_STREAMING_GENERATION_WINDOW_MS,
 } from '../web/src/types/usageEventMetrics.ts';
 import {
   eventProviderIdentity,
@@ -1190,19 +1189,13 @@ const tpsNoTTFT = eventTokensPerSecond({
 assert.equal(tpsNoTTFT.formatted, '200.00 t/s');
 assert.equal(tpsNoTTFT.basis, 'fallback_total');
 
-// The 50ms generation-window floor, asserted on both sides of the boundary. This is the rule
-// that stops a collapsed first-token measurement from being divided into: at 49ms the residual
-// is not a measurable residual window and the end-to-end average is reported instead, at 50ms it is.
-// The reported 4913 tok/s defect lived exactly here, so the boundary is pinned rather than
-// left to whichever value a fixture happened to use.
-const boundaryTokens = { total: 200, input: 100, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 };
+// Both timing and token-scaled windows must support subtraction. At 25 output tokens,
+// the 50 ms timing floor coincides with the 500 t/s buffered-delivery guard.
+const boundaryTokens = { total: 125, input: 100, output: 25, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 };
 const belowFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1049, ttft_ms: 1000, tokens: boundaryTokens });
-assert.equal(belowFloor.basis, 'fallback_total', 'a 49ms residual does not support subtraction');
-assert.equal(belowFloor.formatted, '95.33 t/s', 'the end-to-end average: 100 * 1000 / 1049');
+assert.deepEqual(belowFloor, { tps: 25_000 / 1049, formatted: '23.83 t/s', basis: 'fallback_total' });
 const atFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1050, ttft_ms: 1000, tokens: boundaryTokens });
-assert.equal(atFloor.basis, 'exclude_ttft', 'a 50ms residual supports subtraction');
-assert.equal(atFloor.formatted, '2000.00 t/s', 'the first-token-excluded rate: 100 * 1000 / 50');
-assert.equal(MIN_STREAMING_GENERATION_WINDOW_MS, 50, 'the floor the cases above assume');
+assert.deepEqual(atFloor, { tps: 500, formatted: '500.00 t/s', basis: 'exclude_ttft' });
 
 // Invalid TTFT (ttft >= latency) falls back safely to total latency rather than division by zero / negative
 const tpsInvalidTTFT = eventTokensPerSecond({
