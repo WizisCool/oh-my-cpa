@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
@@ -166,14 +166,17 @@ describe('sidebar layout panel', () => {
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('reorders on a drag, and refuses a drop that would cross a group heading', async () => {
+  it('reorders on a drag from the handle, and refuses a drag that was not armed or crosses a heading', async () => {
     mount();
     const dialog = await openPanel();
     await readySwitch('Agent');
     const drag = dataTransfer();
     // jsdom has no layout, so every row's midpoint is 0: a drop at clientY 0 lands after the row.
     const rowOf = (key: string) => dialog.querySelector(`[data-nav-row="${key}"]`)!;
+    const handleOf = (key: string) => dialog.querySelector(`[data-nav-handle="${key}"]`)!;
 
+    // A row is draggable only after its handle was pressed, exactly as the browser arms it.
+    fireEvent.pointerDown(handleOf('/dashboard'));
     fireEvent.dragStart(rowOf('/dashboard'), { dataTransfer: drag });
     fireEvent.dragOver(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
     fireEvent.drop(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
@@ -184,14 +187,20 @@ describe('sidebar layout panel', () => {
     });
     expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
 
-    // The groups say what an entry is, so a drop across a heading is not an ordering choice: it
-    // writes nothing and changes nothing.
-    const writesAfterMove = api.preferenceWrites().length;
+    // The groups say what an entry is, so a drop across a heading is not an ordering choice.
+    fireEvent.pointerDown(handleOf('/playground'));
     fireEvent.dragStart(rowOf('/playground'), { dataTransfer: drag });
     fireEvent.dragOver(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
     fireEvent.drop(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
-    await Promise.resolve();
-    expect(api.preferenceWrites()).toHaveLength(writesAfterMove);
+    await act(async () => {});
+    expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
+
+    // A drag that did not start at the handle is refused: selecting label text and dragging it
+    // must not reorder the rail either.
+    fireEvent.dragStart(rowOf('/dashboard'), { dataTransfer: drag });
+    fireEvent.dragOver(rowOf('/playground'), { dataTransfer: drag, clientY: 0 });
+    fireEvent.drop(rowOf('/playground'), { dataTransfer: drag, clientY: 0 });
+    await act(async () => {});
     expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
   });
 

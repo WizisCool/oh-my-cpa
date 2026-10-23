@@ -191,6 +191,13 @@ const SidebarNavPanel: React.FC<{
                   data-drop={drop?.side}
                   draggable={canWrite && armedKey === entry.key}
                   onDragStart={(event) => {
+                    // A drag can also start from selected label text, and that one bubbles here too;
+                    // only a handle press arms the row, so anything else is refused rather than
+                    // reordering the rail from a gesture that never touched the handle.
+                    if (armedKey !== entry.key) {
+                      event.preventDefault();
+                      return;
+                    }
                     event.dataTransfer.effectAllowed = 'move';
                     event.dataTransfer.setData('text/plain', entry.key);
                     setDragged({ key: entry.key, groupKey: group.key });
