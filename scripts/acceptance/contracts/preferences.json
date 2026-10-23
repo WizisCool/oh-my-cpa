@@ -18,6 +18,7 @@
     "omc_theme",
     "omc_scroll_smoothing",
     "omc_nav_hidden",
+    "omc_nav_order",
     "omc_dashboard_layout",
     "omc_fonts",
     "playground_session",
@@ -330,6 +331,64 @@
             "refresh_on_reset": false
           },
           "omc_timezone": ""
+        },
+        "time_zone": {
+          "timezone": "",
+          "server_timezone": "UTC",
+          "effective_timezone": "UTC"
+        }
+      }
+    },
+    {
+      "id": "nav-order-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_nav_order",
+      "body": "{\"operate\":[\"/agent\",\"/dashboard\"]}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_nav_order",
+        "value": {
+          "operate": [
+            "/agent",
+            "/dashboard"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nav-order-readback",
+      "method": "GET",
+      "path": "/omc/api/v1/preferences",
+      "body": null,
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "preferences": {
+          "omc_tps_calculation_mode": "future-mode",
+          "provider_names": null,
+          "playground_session": {
+            "names": [
+              "OpenAI",
+              "Claude"
+            ],
+            "empty": null,
+            "enabled": false,
+            "nested": {
+              "count": 0
+            }
+          },
+          "omc_quota_auto_refresh": {
+            "interval_minutes": 30,
+            "refresh_on_reset": false
+          },
+          "omc_timezone": "",
+          "omc_nav_order": {
+            "operate": [
+              "/agent",
+              "/dashboard"
+            ]
+          }
         },
         "time_zone": {
           "timezone": "",

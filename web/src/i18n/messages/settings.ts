@@ -40,9 +40,14 @@ export const SETTINGS_MESSAGES: Messages = {
   'omc.section_sidebar': ['侧边栏', 'Sidebar'],
 
   // The rail's own rows. "Show all" puts every entry back; the OMC settings entry cannot be
-  // hidden, and its row states why rather than only looking switched off and inert.
+  // hidden, and its row states why rather than only looking switched off and inert. Reordering is
+  // inside a group, and the panel's two resets are separate: neither silently undoes the other.
   'omc.sidebar_show_all': ['全部显示', 'Show all'],
   'omc.sidebar_locked': ['该入口用于管理侧边栏，始终显示。', 'This entry manages the sidebar, so it always shows.'],
+  'omc.sidebar_reset_order': ['恢复默认顺序', 'Reset order'],
+  'omc.sidebar_drag': ['拖动排序', 'Drag to reorder'],
+  'omc.sidebar_move_earlier': ['上移', 'Move earlier'],
+  'omc.sidebar_move_later': ['下移', 'Move later'],
 
   // The one row the settings page carries. The list itself is a dialog, so the row states what
   // the dialog holds - how many entries are out of the rail - rather than repeating the section

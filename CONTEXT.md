@@ -487,26 +487,31 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   the model display view (`omc_models_view`), request list model brand icons
   (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), scroll smoothing
   (`omc_scroll_smoothing`), the typeface roles (`omc_fonts`), the rail entries the
-  console hides (`omc_nav_hidden`) and the dashboard's widget arrangement
-  (`omc_dashboard_layout`).
+  console hides (`omc_nav_hidden`) and the order it puts them in (`omc_nav_order`), and the
+  dashboard's widget arrangement (`omc_dashboard_layout`).
 - **Dashboard Arrangement**: The order, width and visibility of the dashboard's widgets, stored as
   the `omc_dashboard_layout` preference - every widget the console knows, in reading order, with its
   width in columns of four and whether it is hidden. A widget a later release adds is missing from an
   older document and is placed where the default order puts it, visible. It is edited in an
   arrangement mode on the dashboard itself and stored only when the operator chooses Done. Like the
-  rail visibility it is console state: it changes what the dashboard draws, never what is served or
+  rail layout it is console state: it changes what the dashboard draws, never what is served or
   read for another page. See [[Preference]].
-- **Sidebar Visibility**: Which of the rail's entries this console shows, stored as the
-  `omc_nav_hidden` preference - the set of *hidden* route keys, so a destination a later release
-  adds arrives already visible rather than waiting to be re-enabled. The entries are turned off
-  in a panel that a single row on OMC Settings opens - the panel lists the same model the rail
-  draws, so a plugin's page or a later release's destination appears there without a second list
-  to maintain - and the row states how many entries are out of the rail, so the page reads without
-  opening it. It is console state rather
+- **Sidebar Layout**: Which of the rail's entries this console shows and where inside its group
+  each one sits. Two preferences: `omc_nav_hidden`, the set of *hidden* route keys, so a
+  destination a later release adds arrives already visible rather than waiting to be re-enabled;
+  and `omc_nav_order`, each group key mapped to its route keys in the operator's order, so a group
+  the document does not name keeps the console's own order and an entry it does not name is
+  appended at the end of its group. Both are set in a panel that a single row on OMC Settings
+  opens - the panel lists the same model the rail draws, so a plugin's page or a later release's
+  destination appears there without a second list to maintain - and the row states how many
+  entries are out of the rail, so the page reads without opening it. It is console state rather
   than a deployment capability: it changes nothing about what the gateway serves, the pages it
-  hides stay reachable by URL, the filter applies to the expanded rail, the collapsed rail and
+  hides stay reachable by URL, the layout applies to the expanded rail, the collapsed rail and
   the phone sheet from one model, and OMC Settings - the page that owns the choice - cannot be
-  hidden. See [[Preference]].
+  hidden. Ordering stays inside a group: a group says what an entry is, so dragging one
+  across a heading would reclassify it rather than arrange it, and the move is refused. Hidden
+  entries keep their place in the order, which is where they return when shown again. See
+  [[Preference]].
 - **Font Library**: The deployment's installed typefaces, from which the two
   **Font Roles** are chosen: `ui` (the interface) and `mono` (code, identifiers and
   aligned figures), stored as `omc_fonts` (`builtin:<id>` or `font:<library id>`; a

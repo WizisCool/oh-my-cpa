@@ -20,11 +20,19 @@ import { until } from '../harness.mjs';
  * away, Show all puts everything back, and the phone sheet - at that width the rail's only
  * rendering - draws the same set.
  *
+ * Ordering is the second half of the same panel: a drag by the handle is a real HTML5 drag through
+ * Playwright's mouse, so the handle arming its row is part of the claim, and the step buttons write
+ * the same document for the keyboards and touch screens a native drag does not reach. A move is
+ * stored per group, the rail follows it, a reload keeps it, a drop across a group heading writes
+ * nothing, and Reset order puts the model's own order back without touching what is hidden.
+ *
  * Two readings this probe has to get right rather than assume. The rail uppercases its group
  * headings through the stylesheet, so the rendered text is `OPERATE` while the copy says `Operate`;
- * the comparisons normalise case and say so. And the phone half comes last, and closes the panel
- * before it narrows the viewport, because reaching the rail there means opening a sheet - a scenario
- * that leaves an overlay for the next step to close is measuring the overlay instead of the rail.
+ * the comparisons normalise case and say so. And the phone half closes the panel before it narrows
+ * the viewport, because reaching the rail there means opening a sheet - a scenario that leaves an
+ * overlay for the next step to close is measuring the overlay instead of the rail. The panel is then
+ * opened once more at that width in the longest translated language, where its two header actions and
+ * three controls per row have to fit the dialog rather than be clipped by it.
  */
 export async function sidebarNavCustomization({ base, page, check }) {
   const preferences = {};
@@ -53,7 +61,7 @@ export async function sidebarNavCustomization({ base, page, check }) {
     await panel().waitFor({ timeout: 20_000 });
   };
   const closePanel = async () => {
-    await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Sidebar' }).getByRole('button', { name: 'Close' }).click();
     await panel().waitFor({ state: 'hidden', timeout: 20_000 });
   };
   const settingsPage = async () => {
@@ -168,6 +176,75 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('showing everything writes the empty hidden set',
     bodyOf(hiddenWrites()[hiddenWrites().length - 1]) === '[]', bodyOf(hiddenWrites()[hiddenWrites().length - 1]));
 
+  // Ordering. The rail lists its entries in the same DOM order it draws them, so the order is read
+  // from the attribute the shell already uses to preload a route.
+  const navRow = (route) => page.locator('[data-nav-row=' + JSON.stringify(route) + ']');
+  const railRoutes = () => page.locator('.app-menu [data-route-path]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-route-path')));
+  const operateRoutes = ['/dashboard', '/agent', '/playground', '/model-square'];
+  const operateOrder = async () => (await railRoutes()).filter((route) => operateRoutes.includes(route)).join(',');
+  const orderWrites = () => writes.filter((write) => write.key === 'omc_nav_order');
+  check('the rail starts in the model order',
+    await operateOrder() === '/dashboard,/agent,/playground,/model-square', await operateOrder());
+
+  // A drag is a drag: the handle arms its row, and the drop lands on the side the pointer is on.
+  // The target position is the row's lower half, so the entry lands after it.
+  const agentBox = await navRow('/agent').boundingBox();
+  await page.locator('[data-nav-handle="/dashboard"]').dragTo(navRow('/agent'), { targetPosition: { x: 40, y: agentBox.height - 4 } });
+  await until(async () => await operateOrder() === '/agent,/dashboard,/playground,/model-square',
+    { label: 'the dashboard entry to be dragged after the agent' });
+  check('a drag places the entry where it is dropped',
+    await operateOrder() === '/agent,/dashboard,/playground,/model-square', await operateOrder());
+  await until(() => orderWrites().length === 1, { label: 'the order write to arrive' });
+  const draggedOrder = JSON.parse(orderWrites()[0].body);
+  check('the move is stored as its group\'s order',
+    bodyOf(orderWrites()[0]) === JSON.stringify({ operate: ['/agent', '/dashboard', '/playground', '/model-square'] }),
+    JSON.stringify(draggedOrder));
+
+  // A drop across a group heading is not an ordering choice. It is proved by the next write: if the
+  // refused drop had stored anything, the step that follows would carry it, and it does not.
+  const orderWritesBeforeCrossGroup = orderWrites().length;
+  await page.locator('[data-nav-handle="/playground"]').dragTo(navRow('/ai-providers'), { targetPosition: { x: 40, y: 20 } });
+  await page.getByRole('button', { name: 'Move earlier · Playground' }).click();
+  await until(() => orderWrites().length > orderWritesBeforeCrossGroup, { label: 'the step write to arrive' });
+  check('a drop across a group heading writes nothing',
+    orderWrites().length === orderWritesBeforeCrossGroup + 1, orderWrites().length + ' order writes');
+  check('the step buttons write the same group order',
+    bodyOf(orderWrites()[orderWrites().length - 1]).includes(JSON.stringify(['/agent', '/playground', '/dashboard', '/model-square'])),
+    bodyOf(orderWrites()[orderWrites().length - 1]));
+  await until(async () => await operateOrder() === '/agent,/playground,/dashboard,/model-square',
+    { label: 'the stepped order in the rail' });
+  check('the step buttons move the entry in the rail too',
+    await operateOrder() === '/agent,/playground,/dashboard,/model-square', await operateOrder());
+
+  // The stored document is what the next page load reads, not a draft kept on this page.
+  await closePanel();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(async () => await operateOrder() === '/agent,/playground,/dashboard,/model-square',
+    { label: 'the stored order after a reload' });
+  check('a reloaded console keeps the order',
+    await operateOrder() === '/agent,/playground,/dashboard,/model-square', await operateOrder());
+  await openPanel();
+
+  const orderWritesBeforeOrderReset = orderWrites().length;
+  await page.getByRole('button', { name: 'Reset order' }).click();
+  await until(() => orderWrites().length > orderWritesBeforeOrderReset, { label: 'the order reset write' });
+  check('Reset order writes the empty document',
+    bodyOf(orderWrites()[orderWrites().length - 1]) === '{}', bodyOf(orderWrites()[orderWrites().length - 1]));
+  await until(async () => await operateOrder() === '/dashboard,/agent,/playground,/model-square',
+    { label: 'the model order back in the rail' });
+  check('Reset order puts the model order back',
+    await operateOrder() === '/dashboard,/agent,/playground,/model-square', await operateOrder());
+  check('Reset order leaves visibility alone',
+    await page.locator('[data-nav-toggle] button[aria-checked=true]').count() === 16,
+    await page.locator('[data-nav-toggle] button[aria-checked=true]').count() + ' shown');
+
+  // A non-default order has to reach the phone sheet too: at that width the sheet is the rail's
+  // only rendering, and it is built from the same ordered model rather than a fresh copy.
+  await page.getByRole('button', { name: 'Move earlier · Playground' }).click();
+  await until(async () => await operateOrder() === '/dashboard,/playground,/agent,/model-square',
+    { label: 'the reordered entries in the rail before the phone check' });
+
   // At a phone width the rail exists only in the sheet, so what the sheet draws is what the
   // operator has. The choice is made while the panel is still laid out for the width it was opened
   // at; the panel then closes, and the sheet is opened on the page underneath.
@@ -184,4 +261,21 @@ export async function sidebarNavCustomization({ base, page, check }) {
       + await railEntry('/audit').count() + ' audit');
   check('the phone sheet leaves out the group its hidden entries emptied',
     hasGroup(sheetGroups, 'Operate') && hasGroup(sheetGroups, 'Observe') === false, sheetGroups.join(' | '));
+  check('the phone sheet draws the order the operator arranged',
+    await operateOrder() === '/dashboard,/playground,/agent,/model-square', await operateOrder());
+
+  // The panel itself at a phone width, in the longest language the console ships: two header
+  // actions and three controls per row have to fit the dialog rather than being clipped by it.
+  // The language is the browser's stored preference, so seeding it and reloading is the same path
+  // the operator's own switch takes; the reload also proves the panel reads the stored order.
+  await page.evaluate(() => window.localStorage.setItem('omc-lang', 'ms'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Urus entri' }).click();
+  await panel().waitFor({ timeout: 20_000 });
+  const malayOverflow = await panel().evaluate((node) => node.scrollWidth - node.clientWidth);
+  check('the phone dialog fits the long Malay labels', malayOverflow <= 0, 'overflow ' + malayOverflow + 'px');
+  check('both header actions stay usable in the phone dialog',
+    await page.getByRole('button', { name: 'Tetapkan semula susunan' }).isVisible()
+      && await page.getByRole('button', { name: 'Tunjuk semua' }).isVisible());
 }

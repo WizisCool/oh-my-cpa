@@ -218,9 +218,10 @@ export const SCENARIOS = [
     // The rail is the shell's, and this scenario drives it from the settings page inside that
     // shell: the panel that lists the entries, the rail it redraws, the group headings it must
     // not leave empty and the phone sheet are four renderings of one choice, and no single
-    // component test can see them agree.
+    // component test can see them agree. The same panel arranges the entries inside their groups,
+    // which is a second claim about the shell rather than about the dialog.
     id: 'sidebar-customization',
-    name: 'the rail shows only the entries the operator keeps, and every page stays reachable',
+    name: 'the rail shows the entries the operator keeps, in the order they arranged, and every page stays reachable',
     // The rail is driven from the settings page, and one of the claims opens a hidden destination
     // directly: the logs page's own reads are declared so that navigation is a page rather than a
     // fixture the harness has to report.
