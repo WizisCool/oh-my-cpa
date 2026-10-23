@@ -156,6 +156,10 @@ type AutoRefreshCandidate struct {
 	// every one of them has passed, or zero. CPA keeps the credential blocked until that
 	// evidence is cleared, whatever the clock says.
 	ActiveCooldownExpiredAtMS int64
+	// ReadBackoffUntilMS is when the provider's rate limit lets this credential be read again,
+	// or zero. Until then no read trigger fires, so a refused credential neither repeats the
+	// request every tick nor spends the attempt its reset-driven retry depends on.
+	ReadBackoffUntilMS int64
 }
 
 // IsAutoRefreshProvider reports whether the scheduler may read a provider on its own.
@@ -182,7 +186,7 @@ func AutoRefreshTrigger(settings AutoRefreshSettings, candidate AutoRefreshCandi
 	// Clearing a cooldown is not a read: it needs no probe and exchanges no key, so it
 	// applies to every enabled credential. A due reset read still goes first, because a
 	// read that finds capacity releases the cooldown as well.
-	isReadable := candidate.IsSupported && IsAutoRefreshProvider(candidate.Provider)
+	isReadable := candidate.IsSupported && IsAutoRefreshProvider(candidate.Provider) && candidate.ReadBackoffUntilMS <= nowMS
 	if isReadable && settings.IsRefreshOnResetEnabled && candidate.LastObservedAtMS > 0 {
 		graceMS := AUTO_REFRESH_RESET_GRACE.Milliseconds()
 		for _, resetAtMS := range candidate.ResetAtMS {
