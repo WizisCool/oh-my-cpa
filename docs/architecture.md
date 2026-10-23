@@ -2389,7 +2389,8 @@ backoff (5 to 30 minutes) that `AutoRefreshCandidate.ReadBackoffUntilMS` keeps o
 schedule, and a usable read clears it. A Claude read is three requests against the same
 limit (profile, usage, reset grants); the gate passes `quota.ReadOptions` so a re-read sends
 only the usage request and carries the prior plan for six hours and the prior grants for an
-hour. Batch callers do not hold their shared slot while
+hour. The grants listing is display-only and refuses more readily than usage, so a failed or
+refused listing neither pauses the provider nor is retried before its hour. Batch callers do not hold their shared slot while
 waiting for the gate, so other providers keep their concurrency. The retry backoff, the
 Claude pause and the Claude backoffs are remembered in process memory only, because a failed
 read is never stored as an observation; a round failure is logged when it starts or changes rather than every minute. `app.Run` joins the loop before returning, as it does the pipeline. Disabled credentials, providers without a probe, duplicated `auth_index`

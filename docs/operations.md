@@ -538,7 +538,8 @@ on every path, because Anthropic answers a burst of usage reads with HTTP 429 fo
 manual refresh, which shows the last good reading marked stale with the 429 as its reason. The refused credential
 is not read automatically again for 5 minutes, doubling with each consecutive 429 up to 30 minutes, and its next
 successful read ends the backoff. A Claude re-read sends only the usage request: the plan is
-re-read every six hours and the reset grants every hour. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
+re-read every six hours and the reset grants every hour, and a refused grants listing waits its
+hour without holding back the usage reads. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
 refresh, because that read exchanges a key upstream. Turning both off restores
 operator-only reads. A demonstration never runs it.
 

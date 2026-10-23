@@ -26,6 +26,7 @@ type claudeRateLimitFixture struct {
 	claudeURLs       map[string]int
 	codexReads       map[string]int
 	isRateLimited    bool
+	isGrantsRefused  bool
 	retryAfterSecond int
 }
 
@@ -85,6 +86,7 @@ func newClaudeRateLimitHandler(t *testing.T, fixture *claudeRateLimitFixture) *H
 					fixture.claudeURLs[payload.URL]++
 				}
 				isRateLimited, retryAfter := fixture.isRateLimited, fixture.retryAfterSecond
+				isRateLimited = isRateLimited || (fixture.isGrantsRefused && strings.Contains(payload.URL, "cedar_ember"))
 				fixture.mu.Unlock()
 				switch {
 				case isRateLimited:
@@ -335,5 +337,44 @@ func TestClaudeQuotaRereadSendsOnlyTheUsageRequest(t *testing.T) {
 	defer fixture.mu.Unlock()
 	if urls[quota.ClaudeProfileURL] != 1 || urls[grantsURL] != 2 || urls[quota.ClaudeUsageURL] != 3 {
 		t.Fatalf("Claude requests by URL after an hour = %v, want the grants listed again and the profile not", urls)
+	}
+}
+
+// The grants endpoint refuses more readily than usage. A refused listing is display-only: it must
+// not pause the other credentials' reads, nor be retried on every read of its own credential.
+func TestClaudeRefusedGrantsListingNeitherPausesNorRepeats(t *testing.T) {
+	ctx := context.Background()
+	fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, claudeURLs: map[string]int{}, codexReads: map[string]int{}, isGrantsRefused: true, retryAfterSecond: 60}
+	handler := newClaudeRateLimitHandler(t, fixture)
+	instance, err := handler.repo.GetInstance(ctx, defaultInstanceID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := handler.clientForInstance(ctx, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(authIndex string) *quota.NormalizedQuota {
+		t.Helper()
+		file := management.AuthFile{AuthIndex: authIndex, Name: authIndex + ".json", Type: "claude", Provider: "claude"}
+		reading, err := handler.refreshQuotaReading(ctx, quota.NewService(client), file, handler.loadPriorNormalizedQuota(ctx, authIndex))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := handler.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
+			t.Fatal(err)
+		}
+		return reading
+	}
+
+	for _, authIndex := range []string{"claude-1", "claude-2", "claude-1"} {
+		if reading := read(authIndex); reading.IsDeferred || reading.Status != "healthy" {
+			t.Fatalf("%s read = status %q deferred %v error %q, want a healthy reading", authIndex, reading.Status, reading.IsDeferred, reading.Error)
+		}
+	}
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	if got := fixture.claudeURLs[quota.ClaudeUsageURL+"?cedar_ember=1&skip_spend=1"]; got != 2 {
+		t.Fatalf("grants listed %d times, want once per credential", got)
 	}
 }

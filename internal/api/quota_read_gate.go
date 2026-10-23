@@ -130,8 +130,9 @@ func (g *quotaProviderGate) readOptions(authIndex string, prior *quota.Normalize
 	}
 }
 
-// recordSupplementary stamps the supplementary reads a usable reading just made. A refused grants
-// read leaves its stamp alone, so the grants are listed again on the next read.
+// recordSupplementary stamps the supplementary reads a usable reading just made. A grants listing
+// that failed is stamped too: the grants are display-only, and the grants endpoint refuses more
+// readily than usage, so retrying it on every read would spend requests the usage reads need.
 func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
 	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
 		return
@@ -142,7 +143,7 @@ func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.
 	if !options.IsClaudeProfileFresh {
 		reads.profileAtMS = nowMS
 	}
-	if !options.IsClaudeResetGrantsFresh && reading.RateLimit == nil {
+	if !options.IsClaudeResetGrantsFresh {
 		reads.resetGrantsAtMS = nowMS
 	}
 	g.supplementary[authIndex] = reads
@@ -157,21 +158,16 @@ func (g *quotaProviderGate) observe(authIndex string, reading *quota.NormalizedQ
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	isUsable, _ := quota.ReadOutcome(reading, nil)
 	if reading.RateLimit != nil {
 		retryAfterMS := reading.RateLimit.RetryAfter.Milliseconds()
 		g.pausedUntilMS = max(g.pausedUntilMS, nowMS+max(retryAfterMS, QUOTA_RATE_LIMIT_PROVIDER_PAUSE.Milliseconds()))
-		// A refused grants read rides on a usable reading: the provider is pacing us, but the
-		// credential answered, so its own backoff ends as for any success.
-		if !isUsable {
-			backoff := g.backoffs[authIndex]
-			backoff.consecutive++
-			backoff.untilMS = nowMS + max(retryAfterMS, quotaRateLimitBackoff(backoff.consecutive).Milliseconds())
-			g.backoffs[authIndex] = backoff
-			return
-		}
+		backoff := g.backoffs[authIndex]
+		backoff.consecutive++
+		backoff.untilMS = nowMS + max(retryAfterMS, quotaRateLimitBackoff(backoff.consecutive).Milliseconds())
+		g.backoffs[authIndex] = backoff
+		return
 	}
-	if isUsable {
+	if isUsable, _ := quota.ReadOutcome(reading, nil); isUsable {
 		delete(g.backoffs, authIndex)
 	}
 }

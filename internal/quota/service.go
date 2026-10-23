@@ -410,13 +410,12 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 					result.Plan = plan
 				}
 				result.Windows = windows
-				// Grant listing is supplementary: a failed or malformed
-				// grants read leaves the quota itself untouched. A refused one
-				// still tells the caller to slow the next reads down.
+				// Grant listing is supplementary: a failed, refused or malformed
+				// grants read leaves the quota itself untouched.
 				if options.IsClaudeResetGrantsFresh && prior != nil {
 					result.ResetGrants = prior.ResetGrants
 				} else {
-					result.ResetGrants, result.RateLimit = s.fetchClaudeResetGrants(ctx, file)
+					result.ResetGrants = s.fetchClaudeResetGrants(ctx, file)
 				}
 			}
 
@@ -704,7 +703,7 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 // read of the same usage endpoint with the grant program's query parameters,
 // and it never claims anything: spending an entitlement is out of scope.
 // Any failure yields no grants rather than failing the quota refresh.
-func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.AuthFile) ([]ClaudeResetGrant, *RateLimitSignal) {
+func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.AuthFile) []ClaudeResetGrant {
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept":         "application/json",
 		"Content-Type":   "application/json",
@@ -713,17 +712,14 @@ func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.Au
 		"User-Agent":     ClaudeCLIUserAgent,
 	})
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL+"?cedar_ember=1&skip_spend=1", headers, "")
-	if err != nil {
-		return nil, nil
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, rateLimitOf(resp, s.now())
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil
 	}
 	normBody, err := resp.NormalizedBody()
 	if err != nil {
-		return nil, nil
+		return nil
 	}
-	return ParseClaudeResetGrants(normBody), nil
+	return ParseClaudeResetGrants(normBody)
 }
 
 func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {

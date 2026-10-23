@@ -192,7 +192,7 @@ type NormalizedQuota struct {
 	Capabilities   QuotaCapabilities   `json:"capabilities"`
 	RawSignals     map[string]string   `json:"raw_signals,omitempty"`
 	Error          string              `json:"error,omitempty"`
-	// RateLimit is set when the provider refused a read for asking too often. It schedules the
+	// RateLimit is set when the provider refused the read for asking too often. It schedules the
 	// next read and never leaves the process: the reading's Error already tells the operator.
 	RateLimit *RateLimitSignal `json:"-"`
 	// IsDeferred marks a reading answered without a read; see Service.DeferredReading.
