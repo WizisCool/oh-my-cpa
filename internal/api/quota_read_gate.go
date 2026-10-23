@@ -25,6 +25,11 @@ const (
 	// window, so a read after a window reset is delayed rather than abandoned.
 	QUOTA_RATE_LIMIT_BACKOFF_BASE = 5 * time.Minute
 	QUOTA_RATE_LIMIT_BACKOFF_MAX  = 30 * time.Minute
+	// A Claude read is three requests - profile, usage and reset grants - and all three count
+	// against the same limit. Only usage changes between reads, so the plan is re-read every
+	// six hours and the grants every hour, and a steady refresh costs one request.
+	QUOTA_CLAUDE_PROFILE_MAX_AGE      = 6 * time.Hour
+	QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE = time.Hour
 )
 
 // quotaReadGates holds the pacing of every provider that needs one. The zero value is ready.
@@ -59,6 +64,14 @@ type quotaProviderGate struct {
 	mu            sync.Mutex
 	pausedUntilMS int64
 	backoffs      map[string]quotaCredentialBackoff
+	// supplementary remembers when each credential's profile and grants were last read. A
+	// restart forgets it, and the first read after it reads all three again.
+	supplementary map[string]quotaSupplementaryReads
+}
+
+type quotaSupplementaryReads struct {
+	profileAtMS     int64
+	resetGrantsAtMS int64
 }
 
 type quotaCredentialBackoff struct {
@@ -67,7 +80,11 @@ type quotaCredentialBackoff struct {
 }
 
 func newQuotaProviderGate(concurrency int) *quotaProviderGate {
-	return &quotaProviderGate{slots: make(chan struct{}, concurrency), backoffs: make(map[string]quotaCredentialBackoff)}
+	return &quotaProviderGate{
+		slots:         make(chan struct{}, concurrency),
+		backoffs:      make(map[string]quotaCredentialBackoff),
+		supplementary: make(map[string]quotaSupplementaryReads),
+	}
 }
 
 // acquire waits for a read slot, or for ctx to end.
@@ -96,6 +113,39 @@ func (g *quotaProviderGate) scheduledReadAt(authIndex string) int64 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return max(g.pausedUntilMS, g.backoffs[authIndex].untilMS)
+}
+
+// readOptions leaves out the supplementary reads whose last answer is recent and still carried
+// by prior. A prior plan with no type came from a failed profile read and is read again.
+func (g *quotaProviderGate) readOptions(authIndex string, prior *quota.NormalizedQuota, nowMS int64) quota.ReadOptions {
+	if prior == nil {
+		return quota.ReadOptions{}
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	reads := g.supplementary[authIndex]
+	return quota.ReadOptions{
+		IsClaudeProfileFresh:     prior.Plan != nil && prior.Plan.PlanType != "" && reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds(),
+		IsClaudeResetGrantsFresh: reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds(),
+	}
+}
+
+// recordSupplementary stamps the supplementary reads a usable reading just made. A refused grants
+// read leaves its stamp alone, so the grants are listed again on the next read.
+func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
+	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	reads := g.supplementary[authIndex]
+	if !options.IsClaudeProfileFresh {
+		reads.profileAtMS = nowMS
+	}
+	if !options.IsClaudeResetGrantsFresh && reading.RateLimit == nil {
+		reads.resetGrantsAtMS = nowMS
+	}
+	g.supplementary[authIndex] = reads
 }
 
 // observe updates the pacing from one read's outcome. A refused read pauses the provider and
@@ -147,15 +197,20 @@ func (g *quotaProviderGate) forgetExcept(current map[string]management.AuthFile)
 			delete(g.backoffs, authIndex)
 		}
 	}
+	for authIndex := range g.supplementary {
+		if _, ok := current[authIndex]; !ok {
+			delete(g.supplementary, authIndex)
+		}
+	}
 }
 
 // readThroughGate runs read under file's provider gate. While the provider is paused it sends
 // nothing and answers with the previous reading marked stale, so a manual click inside a
 // Retry-After cannot spend the request the provider asked us to hold.
-func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, read func() (*quota.NormalizedQuota, error)) (*quota.NormalizedQuota, error) {
+func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, read func(quota.ReadOptions) (*quota.NormalizedQuota, error)) (*quota.NormalizedQuota, error) {
 	gate := h.quotaReadGates.forFile(file)
 	if gate == nil {
-		return read()
+		return read(quota.ReadOptions{})
 	}
 	if untilMS := gate.pausedUntil(h.now().UnixMilli()); untilMS > 0 {
 		return svc.DeferredReading(file, prior, time.UnixMilli(untilMS)), nil
@@ -169,9 +224,13 @@ func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file 
 	if untilMS := gate.pausedUntil(h.now().UnixMilli()); untilMS > 0 {
 		return svc.DeferredReading(file, prior, time.UnixMilli(untilMS)), nil
 	}
-	reading, err := read()
+	authIndex := strings.TrimSpace(file.AuthIndex)
+	options := gate.readOptions(authIndex, prior, h.now().UnixMilli())
+	reading, err := read(options)
 	if err == nil {
-		gate.observe(strings.TrimSpace(file.AuthIndex), reading, h.now().UnixMilli())
+		nowMS := h.now().UnixMilli()
+		gate.observe(authIndex, reading, nowMS)
+		gate.recordSupplementary(authIndex, options, reading, nowMS)
 	}
 	return reading, err
 }

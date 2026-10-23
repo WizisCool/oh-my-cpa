@@ -71,8 +71,8 @@ func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, f
 	// "which response landed last". A slow failing read that started first may finish after a newer
 	// successful one, and completion order would let it report the credential as broken.
 	attemptedAtMS := svc.Now().UnixMilli()
-	refreshed, err := h.readThroughGate(ctx, svc, file, prior, func() (*quota.NormalizedQuota, error) {
-		return svc.RefreshCredentialQuota(ctx, file, prior)
+	refreshed, err := h.readThroughGate(ctx, svc, file, prior, func(options quota.ReadOptions) (*quota.NormalizedQuota, error) {
+		return svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
 	})
 	if refreshed != nil && refreshed.IsDeferred {
 		return refreshed, err

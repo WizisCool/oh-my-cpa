@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
@@ -22,6 +23,7 @@ import (
 type claudeRateLimitFixture struct {
 	mu               sync.Mutex
 	claudeRequests   map[string]int
+	claudeURLs       map[string]int
 	codexReads       map[string]int
 	isRateLimited    bool
 	retryAfterSecond int
@@ -79,6 +81,9 @@ func newClaudeRateLimitHandler(t *testing.T, fixture *claudeRateLimitFixture) *H
 			case strings.HasPrefix(payload.URL, quota.ClaudeUsageURL) || payload.URL == quota.ClaudeProfileURL:
 				fixture.mu.Lock()
 				fixture.claudeRequests[payload.AuthIndex]++
+				if fixture.claudeURLs != nil {
+					fixture.claudeURLs[payload.URL]++
+				}
 				isRateLimited, retryAfter := fixture.isRateLimited, fixture.retryAfterSecond
 				fixture.mu.Unlock()
 				switch {
@@ -86,6 +91,8 @@ func newClaudeRateLimitHandler(t *testing.T, fixture *claudeRateLimitFixture) *H
 					_, _ = fmt.Fprintf(writer, `{"status_code": 429, "header": {"retry-after": ["%d"]}, "body": {"type": "error", "error": {"type": "rate_limit_error", "message": "Rate limited"}}}`, retryAfter)
 				case payload.URL == quota.ClaudeProfileURL:
 					_, _ = writer.Write([]byte(`{"status_code": 200, "body": {"account": {"has_claude_max": true}}}`))
+				case strings.Contains(payload.URL, "cedar_ember"):
+					_, _ = writer.Write([]byte(`{"status_code": 200, "body": {"cedar_ember": {"eligible": true, "grants": [{"id": "grant-1", "resets_total": 2, "resets_left": 1, "clears": ["five_hour"]}]}}}`))
 				default:
 					_, _ = fmt.Fprintf(writer, `{"status_code": 200, "body": {"five_hour": {"utilization": 10, "resets_at": %q}}}`, resetsAt)
 				}
@@ -280,5 +287,53 @@ func TestQuotaRateLimitBackoffDoublesToItsCap(t *testing.T) {
 		if got := quotaRateLimitBackoff(consecutive); got != want {
 			t.Errorf("backoff after %d consecutive 429s = %s, want %s", consecutive, got, want)
 		}
+	}
+}
+
+func TestClaudeQuotaRereadSendsOnlyTheUsageRequest(t *testing.T) {
+	ctx := context.Background()
+	fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, claudeURLs: map[string]int{}, codexReads: map[string]int{}}
+	handler := newClaudeRateLimitHandler(t, fixture)
+	instance, err := handler.repo.GetInstance(ctx, defaultInstanceID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := handler.clientForInstance(ctx, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := management.AuthFile{AuthIndex: "claude-1", Name: "claude-1.json", Type: "claude", Provider: "claude"}
+	read := func() *quota.NormalizedQuota {
+		t.Helper()
+		reading, err := handler.refreshQuotaReading(ctx, quota.NewService(client), file, handler.loadPriorNormalizedQuota(ctx, "claude-1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := handler.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
+			t.Fatal(err)
+		}
+		return reading
+	}
+
+	first := read()
+	second := read()
+	fixture.mu.Lock()
+	urls := fixture.claudeURLs
+	fixture.mu.Unlock()
+	grantsURL := quota.ClaudeUsageURL + "?cedar_ember=1&skip_spend=1"
+	if urls[quota.ClaudeProfileURL] != 1 || urls[grantsURL] != 1 || urls[quota.ClaudeUsageURL] != 2 {
+		t.Fatalf("Claude requests by URL = %v, want profile and grants once and usage on both reads", urls)
+	}
+	if second.Plan == nil || second.Plan.PlanType != first.Plan.PlanType || len(second.ResetGrants) != 1 {
+		t.Fatalf("second read plan %+v grants %+v, want the first read's plan and grants carried", second.Plan, second.ResetGrants)
+	}
+
+	// Past the grants' age the grants are listed again; the plan is still recent.
+	handler.nowFn = func() time.Time { return time.Now().Add(QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE + time.Minute) }
+	read()
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	if urls[quota.ClaudeProfileURL] != 1 || urls[grantsURL] != 2 || urls[quota.ClaudeUsageURL] != 3 {
+		t.Fatalf("Claude requests by URL after an hour = %v, want the grants listed again and the profile not", urls)
 	}
 }

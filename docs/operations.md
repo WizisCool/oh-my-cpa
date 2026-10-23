@@ -537,7 +537,8 @@ on every path, because Anthropic answers a burst of usage reads with HTTP 429 fo
 429, OMC sends no Claude quota read for the `Retry-After` the provider named, or at least a minute, including a
 manual refresh, which shows the last good reading marked stale with the 429 as its reason. The refused credential
 is not read automatically again for 5 minutes, doubling with each consecutive 429 up to 30 minutes, and its next
-successful read ends the backoff. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
+successful read ends the backoff. A Claude re-read sends only the usage request: the plan is
+re-read every six hours and the reset grants every hour. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
 refresh, because that read exchanges a key upstream. Turning both off restores
 operator-only reads. A demonstration never runs it.
 

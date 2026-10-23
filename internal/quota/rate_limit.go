@@ -26,6 +26,15 @@ type RateLimitSignal struct {
 	RetryAfter time.Duration
 }
 
+// ReadOptions names the supplementary reads a refresh may leave out because the caller holds a
+// recent answer for them. The zero value reads everything.
+type ReadOptions struct {
+	// IsClaudeProfileFresh reuses the prior reading's plan instead of reading the profile.
+	IsClaudeProfileFresh bool
+	// IsClaudeResetGrantsFresh carries the prior reading's reset grants instead of listing them.
+	IsClaudeResetGrantsFresh bool
+}
+
 // RateLimitedError is a read the provider refused with a rate limit. Its text is the same
 // "HTTP 429..." the console has always shown, so a reading's error is unchanged; the signal
 // rides beside it for the caller that schedules the next read.

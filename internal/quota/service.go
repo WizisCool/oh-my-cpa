@@ -343,6 +343,12 @@ func applyReadFailure(result, prior *NormalizedQuota, readErr error) {
 }
 
 func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.AuthFile, prior *NormalizedQuota) (*NormalizedQuota, error) {
+	return s.RefreshCredentialQuotaWith(ctx, file, prior, ReadOptions{})
+}
+
+// RefreshCredentialQuotaWith is RefreshCredentialQuota with the supplementary reads the caller
+// already holds fresh answers for left out.
+func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file management.AuthFile, prior *NormalizedQuota, options ReadOptions) (*NormalizedQuota, error) {
 	// A service is shared by concurrent batch reads; evidence belongs to one reading.
 	s = &Service{client: s.client, now: s.now}
 	if s.now == nil {
@@ -391,7 +397,11 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 			}
 
 		case "claude":
-			plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS)
+			var priorPlan *QuotaPlan
+			if options.IsClaudeProfileFresh && prior != nil {
+				priorPlan = prior.Plan
+			}
+			plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS, priorPlan)
 			if err != nil {
 				fetchErr = err
 			} else {
@@ -403,7 +413,11 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 				// Grant listing is supplementary: a failed or malformed
 				// grants read leaves the quota itself untouched. A refused one
 				// still tells the caller to slow the next reads down.
-				result.ResetGrants, result.RateLimit = s.fetchClaudeResetGrants(ctx, file)
+				if options.IsClaudeResetGrantsFresh && prior != nil {
+					result.ResetGrants = prior.ResetGrants
+				} else {
+					result.ResetGrants, result.RateLimit = s.fetchClaudeResetGrants(ctx, file)
+				}
 			}
 
 		case "antigravity":
@@ -622,7 +636,10 @@ func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.Au
 	return merged
 }
 
-func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
+// fetchClaudeQuota reads the usage windows, and the profile for the plan unless priorPlan is
+// given: the plan changes with a subscription, not between two usage reads, and every request
+// spent on it counts against the same host-wide rate limit as the usage read.
+func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64, priorPlan *QuotaPlan) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept":         "application/json",
 		"Content-Type":   "application/json",
@@ -630,17 +647,23 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 	})
 
 	var plan *QuotaPlan
-	profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
-	// A 429 on the profile read means this host is being paced; the usage read sent right after
-	// it would most likely draw the same answer and only deepen the limit.
-	if profErr == nil {
-		if rateLimitedErr := rateLimitedErrorOf(profResp, s.now()); rateLimitedErr != nil {
-			return nil, nil, nil, rateLimitedErr
+	if priorPlan != nil {
+		// A copy, because balances and extra usage below are this reading's own.
+		reused := *priorPlan
+		plan = &reused
+	} else {
+		profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
+		// A 429 on the profile read means this host is being paced; the usage read sent right
+		// after it would most likely draw the same answer and only deepen the limit.
+		if profErr == nil {
+			if rateLimitedErr := rateLimitedErrorOf(profResp, s.now()); rateLimitedErr != nil {
+				return nil, nil, nil, rateLimitedErr
+			}
 		}
-	}
-	if profErr == nil && profResp.StatusCode == 200 {
-		if normProf, err := profResp.NormalizedBody(); err == nil {
-			plan = ParseClaudeProfile(normProf)
+		if profErr == nil && profResp.StatusCode == 200 {
+			if normProf, err := profResp.NormalizedBody(); err == nil {
+				plan = ParseClaudeProfile(normProf)
+			}
 		}
 	}
 
