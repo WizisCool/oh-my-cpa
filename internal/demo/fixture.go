@@ -537,6 +537,14 @@ func pluginStoreCatalog() []storePluginEntry {
 			description: "Flags a model whose spend leaves its trailing baseline.",
 			repository:  "router-for-me/cpa-plugin-cost-anomaly", license: "MIT",
 			tags: []string{"cost", "alerting"}, sourceID: "official"},
+		// The official registry is a catalogue: it also lists plugins whose code stays in
+		// the author's own repository, which the console marks differently from the
+		// vendor's own plugins.
+		{id: "deepseek-search", name: "DeepSeek Search", version: "0.1.0", author: "karuboniru",
+			description: "Adds DeepSeek-powered web search to Responses-compatible models, with streaming, multi-round search, and client-carried search context.",
+			repository:  "karuboniru/deepseek-search", license: "MIT",
+			tags: []string{"Search", "DeepSeek", "Responses", "Streaming"}, logo: fixtureLogo("DS", "#4D6BFE"),
+			sourceID: "official"},
 		{id: "quota-notifier", name: "Quota notifier", version: "2.1.0", author: "community",
 			description: "Posts a webhook when a credential's quota window crosses a threshold.",
 			repository:  "cpa-community/quota-notifier", license: "MIT",

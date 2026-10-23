@@ -84,7 +84,43 @@ export function isStoreInstallBlocked(entry: StorePluginItem): 'auth' | undefine
   return entry.auth_required && !entry.auth_configured ? 'auth' : undefined;
 }
 
-/** The text an operator retypes to confirm a third-party install: the plugin id. */
+/**
+ * Where a store entry stands, from two facts the server reports separately: which
+ * registry listed it and whose code its repository holds.
+ *
+ * `official` is the only combination whose code the gateway vendor publishes itself.
+ * The official registry is a catalogue, and most of what it lists lives in the authors'
+ * own repositories, so a listing alone never reads as reviewed code.
+ */
+export type StorePluginOrigin = 'omc' | 'official' | 'official-source' | 'third-party';
+
+export function storePluginOrigin(entry: StorePluginItem): StorePluginOrigin {
+  if (entry.is_omc) return 'omc';
+  if (!entry.is_official) return 'third-party';
+  return entry.is_official_repository ? 'official' : 'official-source';
+}
+
+/**
+ * The acknowledgement installing an entry of this origin requires, or `undefined` when it
+ * requires none.
+ *
+ * One record rather than a predicate beside a presentation table: the warning block *is*
+ * the confirmation, so the dialog cannot ask for an acknowledgement it never renders, nor
+ * render a warning the install button then ignores.
+ */
+export interface StoreInstallWarning {
+  title: string;
+  description: string;
+}
+
+export const STORE_INSTALL_WARNINGS: Record<StorePluginOrigin, StoreInstallWarning | undefined> = {
+  omc: { title: 'plugin.omc_plugin_title', description: 'plugin.omc_plugin_desc' },
+  official: undefined,
+  'official-source': { title: 'plugin.official_source_plugin_title', description: 'plugin.official_source_plugin_desc' },
+  'third-party': { title: 'plugin.third_party_title', description: 'plugin.third_party_desc' },
+};
+
+/** The text an operator retypes to confirm an install that needs acknowledging: the plugin id. */
 export function storeInstallConfirmToken(entry: StorePluginItem): string {
   return entry.id;
 }

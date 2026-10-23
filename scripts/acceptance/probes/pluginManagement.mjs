@@ -5,11 +5,11 @@ import { settleLayout, until } from '../harness.mjs';
  * on one page, and the pages plugins register, in the navigation.
  *
  * What a browser establishes here is what the operator sees and can reach: a store card draws
- * the registry's own artwork and links, a third-party install cannot be confirmed without the
- * typed id, a plugin's declared fields are typed controls whose invalid values are refused
- * before anything is sent, and the settings save carries exactly the rules on screen. A
- * page a running plugin registered is a navigation entry that opens a frame on the console's
- * plugin host.
+ * the registry's own artwork and links, an install of anything but the vendor's own code cannot
+ * be confirmed without the typed id, a plugin's declared fields are typed controls whose invalid
+ * values are refused before anything is sent, and the settings save carries exactly the rules on
+ * screen. A page a running plugin registered is a navigation entry that opens a frame on the
+ * console's plugin host.
  */
 
 const LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
@@ -64,29 +64,36 @@ const STORE = {
     { id: 'source-omc', name: 'Oh My CPA', url: 'https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/plugins/registry.json', is_official: false },
   ],
   source_errors: [{ source_id: 'source-down', source_name: 'down.example', source_url: 'https://down.example/r.json', message: 'fetch registry: 503' }],
-  total: 4,
+  total: 5,
   plugins: [
     {
       store_id: 'source-omc/usage-digest', source_id: 'source-omc', source_name: 'Oh My CPA', id: 'usage-digest', name: 'Usage Digest',
       description: 'Posts a daily spend and request summary.', author: 'oh-my-cpa', version: '0.3.0', repository_url: 'https://github.com/WizisCool/omc-plugin-usage-digest',
-      license: 'MIT', tags: ['digest'], platforms: [], is_official: false, is_omc: true,
+      license: 'MIT', tags: ['digest'], platforms: [], is_official: false, is_official_repository: false, is_omc: true,
       auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
     },
     {
       store_id: 'official/request-logger', source_id: 'official', source_name: 'official', id: 'request-logger', name: 'Request Logger',
       description: 'Logs request metadata.', author: 'router-for-me', version: '1.1.0', repository_url: 'https://github.com/router-for-me/request-logger',
-      license: 'MIT', tags: ['logging'], logo: LOGO, platforms: ['linux/amd64'], is_official: true, auth_required: false, auth_configured: false,
+      license: 'MIT', tags: ['logging'], logo: LOGO, platforms: ['linux/amd64'], is_official: true, is_official_repository: true, auth_required: false, auth_configured: false,
       installed: true, installed_version: '1.0.0', install_source_status: 'matched', effective_enabled: true, update_available: true,
     },
     {
       store_id: 'official/rate-limiter', source_id: 'official', source_name: 'official', id: 'rate-limiter', name: 'Rate Limiter',
       description: 'Token buckets per caller key.', author: 'router-for-me', version: '2.0.0', repository_url: 'https://github.com/router-for-me/rate-limiter',
-      homepage: 'https://limiter.example', license: 'Apache-2.0', tags: ['network', 'limits'], platforms: [], is_official: true,
+      homepage: 'https://limiter.example', license: 'Apache-2.0', tags: ['network', 'limits'], platforms: [], is_official: true, is_official_repository: true,
+      auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
+    },
+    {
+      // Listed by the official registry, published in the author's own repository.
+      store_id: 'official/deepseek-search', source_id: 'official', source_name: 'official', id: 'deepseek-search', name: 'DeepSeek Search',
+      description: 'Adds DeepSeek-powered web search.', author: 'karuboniru', version: '0.1.0', repository_url: 'https://github.com/karuboniru/deepseek-search',
+      license: 'MIT', tags: ['search'], platforms: [], is_official: true, is_official_repository: false,
       auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
     },
     {
       store_id: 'source-mirror/team-router', source_id: 'source-mirror', source_name: 'mirror.example', id: 'team-router', name: 'Team Router',
-      description: 'Routes by team.', author: 'someone', version: '0.3.0', tags: [], platforms: [], is_official: false,
+      description: 'Routes by team.', author: 'someone', version: '0.3.0', tags: [], platforms: [], is_official: false, is_official_repository: false,
       auth_required: false, auth_configured: false, installed: false, effective_enabled: false, update_available: false,
     },
   ],
@@ -190,7 +197,7 @@ export async function pluginManagement({ base, page, check, writes }) {
 
   // ── store cards ─────────────────────────────────────────────────────────────
   const cards = page.locator('[data-plugin-panel="store"] article[data-store-id]');
-  const cardsShown = await isTrue(async () => (await cards.count()) === 4, 'the store cards');
+  const cardsShown = await isTrue(async () => (await cards.count()) === 5, 'the store cards');
   check('the store renders one card per registry entry', cardsShown, String(await cards.count()));
   if (!cardsShown) return;
 
@@ -227,6 +234,27 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('a card without an icon draws the generic mark', (await limiter.locator('[data-plugin-logo="fallback"]').count()) === 1);
   check('an installed entry with a newer release offers the update', (await logger.getByRole('button', { name: /更新|Update/ }).count()) >= 1);
   check('the failing registry is named above the cards', (await page.getByText('down.example').count()) >= 1);
+
+  // ── the official registry's community entry ─────────────────────────────────
+  const communityCard = page.locator('article[data-store-id="official/deepseek-search"]');
+  const communityOrigin = await communityCard.getAttribute('data-store-origin');
+  const communityBadges = await communityCard.locator('[class*="badge"]').first().innerText();
+  check(
+    'a community repository listed by the official registry is marked as the official source, not as a third-party one',
+    communityOrigin === 'official-source' && /官方源|Official source/.test(communityBadges) && !/第三方|Third-party/.test(communityBadges),
+    `${communityOrigin}: ${communityBadges}`,
+  );
+  await communityCard.getByRole('button', { name: /安装|Install/ }).click();
+  const communityDialog = page.locator('.ant-modal:visible');
+  await communityDialog.waitFor({ timeout: 5000 });
+  const communityDialogText = await communityDialog.innerText();
+  check(
+    'the dialog tells the operator the code is community-published and unreviewed',
+    /官方源社区插件|Community plugin from the official source/.test(communityDialogText) && /未经审查|unreviewed/.test(communityDialogText),
+    communityDialogText,
+  );
+  check('an official-registry community install still needs its id typed', await communityDialog.locator('.ant-modal-footer .ant-btn-primary').isDisabled());
+  await communityDialog.getByRole('button', { name: /取消|Cancel/ }).click();
 
   await page.getByPlaceholder(/搜索名称|Search by name/).fill('limits');
   const searched = await isTrue(async () => (await cards.count()) === 1, 'the store search');

@@ -21,10 +21,11 @@ import (
  * a caller-visible value is bounded - plugin text arrives from a plugin manifest or a
  * store registry, not from this process.
  *
- * Two values are derived here rather than in the browser, so every surface reads the
+ * Three values are derived here rather than in the browser, so every surface reads the
  * same answer: the repository link (a registry usually names a GitHub `owner/repo` slug,
- * not a URL) and whether an entry is first-party. The configuration document is not
- * part of the list; it is read per plugin when the editor opens.
+ * not a URL), the registry the entry was listed by, and whose code it names. The
+ * configuration document is not part of the list; it is read per plugin when the editor
+ * opens.
  */
 const (
 	// pluginTextLimit bounds one free-text manifest field. Descriptions legitimately run
@@ -36,10 +37,12 @@ const (
 	pluginListLimit = 64
 	// officialPluginSourceID is the id CPA assigns its built-in registry.
 	officialPluginSourceID = "official"
-	// officialPluginRepositoryPrefix is the whole URL prefix first-party repositories
-	// live under. Matching the full prefix rather than the owner keeps a look-alike host
-	// such as `github.com.example.net/router-for-me/` from passing.
-	officialPluginRepositoryPrefix = "https://github.com/router-for-me/"
+	// officialPluginOwner is the GitHub account the gateway vendor publishes its own
+	// plugins from, and officialPluginRepositoryHost the only host those repositories
+	// live on. The owner is compared after parsing, not as a URL prefix, so a path a
+	// browser resolves elsewhere cannot pass.
+	officialPluginOwner          = "router-for-me"
+	officialPluginRepositoryHost = "github.com"
 )
 
 var githubRepositorySlug = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$`)
@@ -104,30 +107,31 @@ type PluginStoreSourceErrorDTO struct {
 }
 
 type StorePluginItemDTO struct {
-	StoreID             string   `json:"store_id"`
-	SourceID            string   `json:"source_id"`
-	SourceName          string   `json:"source_name"`
-	ID                  string   `json:"id"`
-	Name                string   `json:"name"`
-	Description         string   `json:"description,omitempty"`
-	Author              string   `json:"author,omitempty"`
-	Version             string   `json:"version,omitempty"`
-	RepositoryURL       string   `json:"repository_url,omitempty"`
-	Homepage            string   `json:"homepage,omitempty"`
-	License             string   `json:"license,omitempty"`
-	Tags                []string `json:"tags"`
-	Logo                string   `json:"logo,omitempty"`
-	InstallType         string   `json:"install_type,omitempty"`
-	Platforms           []string `json:"platforms"`
-	IsOfficial          bool     `json:"is_official"`
-	IsOMC               bool     `json:"is_omc"`
-	AuthRequired        bool     `json:"auth_required"`
-	AuthConfigured      bool     `json:"auth_configured"`
-	Installed           bool     `json:"installed"`
-	InstalledVersion    string   `json:"installed_version,omitempty"`
-	InstallSourceStatus string   `json:"install_source_status,omitempty"`
-	EffectiveEnabled    bool     `json:"effective_enabled"`
-	UpdateAvailable     bool     `json:"update_available"`
+	StoreID              string   `json:"store_id"`
+	SourceID             string   `json:"source_id"`
+	SourceName           string   `json:"source_name"`
+	ID                   string   `json:"id"`
+	Name                 string   `json:"name"`
+	Description          string   `json:"description,omitempty"`
+	Author               string   `json:"author,omitempty"`
+	Version              string   `json:"version,omitempty"`
+	RepositoryURL        string   `json:"repository_url,omitempty"`
+	Homepage             string   `json:"homepage,omitempty"`
+	License              string   `json:"license,omitempty"`
+	Tags                 []string `json:"tags"`
+	Logo                 string   `json:"logo,omitempty"`
+	InstallType          string   `json:"install_type,omitempty"`
+	Platforms            []string `json:"platforms"`
+	IsOfficial           bool     `json:"is_official"`
+	IsOfficialRepository bool     `json:"is_official_repository"`
+	IsOMC                bool     `json:"is_omc"`
+	AuthRequired         bool     `json:"auth_required"`
+	AuthConfigured       bool     `json:"auth_configured"`
+	Installed            bool     `json:"installed"`
+	InstalledVersion     string   `json:"installed_version,omitempty"`
+	InstallSourceStatus  string   `json:"install_source_status,omitempty"`
+	EffectiveEnabled     bool     `json:"effective_enabled"`
+	UpdateAvailable      bool     `json:"update_available"`
 }
 
 // projectPluginItems projects the installed plugin list, preserving CPA's order.
@@ -311,40 +315,70 @@ func projectStorePlugin(plugin management.StorePluginItem) StorePluginItemDTO {
 		}
 	}
 	return StorePluginItemDTO{
-		StoreID:             boundedText(plugin.StoreID, pluginTextLimit),
-		SourceID:            boundedText(plugin.SourceID, pluginTextLimit),
-		SourceName:          sourceName,
-		ID:                  boundedText(plugin.ID, pluginTextLimit),
-		Name:                boundedText(plugin.Name, pluginTextLimit),
-		Description:         boundedText(plugin.Description, pluginTextLimit),
-		Author:              boundedText(plugin.Author, pluginTextLimit),
-		Version:             boundedText(plugin.Version, pluginTextLimit),
-		RepositoryURL:       repositoryURL,
-		Homepage:            httpURLOrEmpty(plugin.Homepage),
-		License:             boundedText(plugin.License, pluginTextLimit),
-		Tags:                boundedPluginList(plugin.Tags),
-		Logo:                plugin.Logo,
-		InstallType:         boundedText(plugin.InstallType, 64),
-		Platforms:           platforms,
-		IsOfficial:          isOfficialStorePlugin(plugin.SourceID, repositoryURL),
-		IsOMC:               isOMC,
-		AuthRequired:        plugin.AuthRequired,
-		AuthConfigured:      plugin.AuthConfigured,
-		Installed:           plugin.Installed,
-		InstalledVersion:    boundedText(plugin.InstalledVersion, pluginTextLimit),
-		InstallSourceStatus: boundedText(plugin.InstallSourceStatus, 64),
-		EffectiveEnabled:    plugin.EffectiveEnabled,
-		UpdateAvailable:     plugin.UpdateAvailable,
+		StoreID:              boundedText(plugin.StoreID, pluginTextLimit),
+		SourceID:             boundedText(plugin.SourceID, pluginTextLimit),
+		SourceName:           sourceName,
+		ID:                   boundedText(plugin.ID, pluginTextLimit),
+		Name:                 boundedText(plugin.Name, pluginTextLimit),
+		Description:          boundedText(plugin.Description, pluginTextLimit),
+		Author:               boundedText(plugin.Author, pluginTextLimit),
+		Version:              boundedText(plugin.Version, pluginTextLimit),
+		RepositoryURL:        repositoryURL,
+		Homepage:             httpURLOrEmpty(plugin.Homepage),
+		License:              boundedText(plugin.License, pluginTextLimit),
+		Tags:                 boundedPluginList(plugin.Tags),
+		Logo:                 plugin.Logo,
+		InstallType:          boundedText(plugin.InstallType, 64),
+		Platforms:            platforms,
+		IsOfficial:           isOfficialStoreSource(plugin.SourceID),
+		IsOfficialRepository: isOfficialPluginRepository(repositoryURL),
+		IsOMC:                isOMC,
+		AuthRequired:         plugin.AuthRequired,
+		AuthConfigured:       plugin.AuthConfigured,
+		Installed:            plugin.Installed,
+		InstalledVersion:     boundedText(plugin.InstalledVersion, pluginTextLimit),
+		InstallSourceStatus:  boundedText(plugin.InstallSourceStatus, 64),
+		EffectiveEnabled:     plugin.EffectiveEnabled,
+		UpdateAvailable:      plugin.UpdateAvailable,
 	}
 }
 
-// isOfficialStorePlugin requires both the registry CPA assigned and the repository to
-// be first-party. A third-party registry can copy a first-party repository name into
-// its own entry, so the repository alone is not evidence of where the artifact comes
-// from.
-func isOfficialStorePlugin(sourceID, repositoryURL string) bool {
-	return strings.EqualFold(strings.TrimSpace(sourceID), officialPluginSourceID) &&
-		strings.HasPrefix(strings.ToLower(repositoryURL), officialPluginRepositoryPrefix)
+// isOfficialStoreSource reports whether CPA's built-in registry listed the entry. Only
+// that registry carries CPA's fixed source id - a configured registry's id is derived
+// from its URL - so no other source can claim it.
+func isOfficialStoreSource(sourceID string) bool {
+	return strings.EqualFold(strings.TrimSpace(sourceID), officialPluginSourceID)
+}
+
+// isOfficialPluginRepository reports whether the entry's artifact is published by the
+// gateway vendor. It is a separate fact from the registry that listed the entry: the
+// official registry is a catalogue and lists plugins whose code stays in each author's
+// own repository, so a listing says nothing about who wrote the code. A third-party
+// registry can also copy an official repository name into its own entry, which is why
+// the two are read together rather than derived from one another.
+//
+// The owner is read from a parsed URL rather than from its text. Browsers resolve `..`,
+// `.` and `\` as path arithmetic while the string still starts with the vendor's prefix,
+// so a text match would call `https://github.com/router-for-me/../other-owner/limiter` a
+// vendor repository that the operator's browser opens under another owner - and this
+// answer is what waives the typed-id confirmation.
+func isOfficialPluginRepository(repositoryURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(repositoryURL))
+	if err != nil || !strings.EqualFold(parsed.Scheme, "https") || !strings.EqualFold(parsed.Hostname(), officialPluginRepositoryHost) {
+		return false
+	}
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(segments) < 2 || !strings.EqualFold(segments[0], officialPluginOwner) {
+		return false
+	}
+	for _, segment := range segments {
+		// An empty, `.` or `..` segment, or a backslash a browser reads as a separator,
+		// means the path this console classifies is not the path the browser opens.
+		if segment == "" || segment == "." || segment == ".." || strings.ContainsRune(segment, '\\') {
+			return false
+		}
+	}
+	return true
 }
 
 // pluginRepositoryURL turns a registry's repository reference into a link: an
