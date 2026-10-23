@@ -4,19 +4,30 @@ import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { SidebarNavSettings } from '../src/components/settings/SidebarNavSettings';
 import { buildNavGroups } from '../src/components/common/navigation';
-import { LOCKED_NAV_KEYS, retainVisibleGroups } from '../src/types/sidebarNav';
+import { LOCKED_NAV_KEYS, applyNavOrder, retainVisibleGroups } from '../src/types/sidebarNav';
 
 /**
- * The sidebar panel against the real preference layer: the rows it lists and their order, the write
- * a switch makes, the one row it holds inert, and that what it writes is what the rail filters by.
+ * The sidebar panel against the real preference layer: the rows it lists and their order, the writes
+ * a switch and a move make, the one row it holds inert, and that what it writes is what the rail
+ * filters and orders by.
  *
- * The rail redrawing without an entry, and the choice surviving a reload, are the
- * `sidebar-customization` browser probe's claims. What is established here is the contract
- * underneath them: one row per rail entry in the rail's own order, the stored document named and
- * shaped like the rest of the preferences, and the filter agreeing with the write.
+ * The rail redrawing without an entry or in a new order, and either choice surviving a reload, are
+ * the `sidebar-customization` browser probe's claims. What is established here is the contract
+ * underneath them: one row per rail entry in the rail's own order, the stored documents named and
+ * shaped like the rest of the preferences, a move inside a group writing the group's order, a move
+ * across a heading writing nothing, and the filter agreeing with the write.
  */
 
 let api: OmcApi;
+
+/** The rail's model order, which is also the order a panel with no stored order lists. */
+const MODEL_ORDER = [
+  'Dashboard', 'Agent', 'Playground', 'Model Square',
+  'AI providers', 'OAuth management', 'Key management',
+  'Request Events', 'Cost & Usage', 'Logs', 'Audit trail',
+  'Plugin management', 'Plugin store',
+  'Config', 'OMC Settings', 'System Information',
+];
 
 const mount = () => renderWithOmc(<SidebarNavSettings />, { isStrict: true });
 
@@ -39,11 +50,32 @@ async function readySwitch(accessibilityName: string) {
   return control;
 }
 
+async function readyButton(accessibilityName: string) {
+  const button = await screen.findByRole('button', { name: accessibilityName });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  return button;
+}
+
+/** The rows in the order the panel draws them. */
+const rowOrder = (dialog: HTMLElement) =>
+  [...dialog.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent);
+
+/** A minimal DataTransfer: jsdom has the drag events but not the payload they carry. */
+function dataTransfer() {
+  const store = new Map<string, string>();
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (type: string, value: string) => { store.set(type, value); },
+    getData: (type: string) => store.get(type) ?? '',
+  };
+}
+
 beforeEach(() => {
   api = installOmcApi();
 });
 
-describe('sidebar visibility panel', () => {
+describe('sidebar layout panel', () => {
   it('lists every rail entry once, in the rail\'s own order, with the entry that owns the rail inert', async () => {
     const { container } = mount();
     const page = container.querySelector('[data-testid="sidebar-nav-settings"]')!;
@@ -55,19 +87,15 @@ describe('sidebar visibility panel', () => {
     const titles = [...dialog.querySelectorAll('.settings-toggle-title')].map((node) => node.textContent);
     // The console's groups, then the plugins group before Control, because that is where the rail
     // puts them.
-    expect(titles).toEqual([
-      'Dashboard', 'Agent', 'Playground', 'Model Square',
-      'AI providers', 'OAuth management', 'Key management',
-      'Request Events', 'Cost & Usage', 'Logs', 'Audit trail',
-      'Plugin management', 'Plugin store',
-      'Config', 'OMC Settings', 'System Information',
-    ]);
+    expect(titles).toEqual(MODEL_ORDER);
     const settingsToggle = screen.getByRole('switch', { name: 'OMC Settings' });
     expect(settingsToggle.hasAttribute('disabled')).toBe(true);
     expect(settingsToggle.getAttribute('aria-checked')).toBe('true');
     expect(dialog.querySelector('.settings-toggle-desc')?.textContent).toBe('This entry manages the sidebar, so it always shows.');
-    // Nothing is hidden on a fresh deployment, so the reset has nothing to put back.
+    // Nothing is hidden and nothing is rearranged on a fresh deployment, so neither reset has
+    // anything to put back.
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Reset order' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides an entry by writing the hidden set, and that set is what the rail filters by', async () => {
@@ -117,5 +145,81 @@ describe('sidebar visibility panel', () => {
     await openPanel();
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('switch', { name: 'Agent' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('moves an entry with the step buttons, writing each group\'s order', async () => {
+    mount();
+    const dialog = await openPanel();
+    fireEvent.click(await readyButton('Move earlier · Playground'));
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({
+      key: 'omc_nav_order',
+      value: { operate: ['/dashboard', '/playground', '/agent', '/model-square'] },
+    });
+    expect(rowOrder(dialog).slice(0, 4)).toEqual(['Dashboard', 'Playground', 'Agent', 'Model Square']);
+    // The rail is built from this same document, so the entry is in its new place there too; the
+    // order is console state, like the hidden set, and hiding was untouched.
+    const railKeys = applyNavOrder(buildNavGroups([]), { operate: ['/dashboard', '/playground', '/agent', '/model-square'] })
+      .flatMap((group) => group.items.map((item) => item.key));
+    expect(railKeys.slice(0, 4)).toEqual(['/dashboard', '/playground', '/agent', '/model-square']);
+    expect((screen.getByRole('button', { name: 'Reset order' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('reorders on a drag, and refuses a drop that would cross a group heading', async () => {
+    mount();
+    const dialog = await openPanel();
+    await readySwitch('Agent');
+    const drag = dataTransfer();
+    // jsdom has no layout, so every row's midpoint is 0: a drop at clientY 0 lands after the row.
+    const rowOf = (key: string) => dialog.querySelector(`[data-nav-row="${key}"]`)!;
+
+    fireEvent.dragStart(rowOf('/dashboard'), { dataTransfer: drag });
+    fireEvent.dragOver(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
+    fireEvent.drop(rowOf('/agent'), { dataTransfer: drag, clientY: 0 });
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({
+      key: 'omc_nav_order',
+      value: { operate: ['/agent', '/dashboard', '/playground', '/model-square'] },
+    });
+    expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
+
+    // The groups say what an entry is, so a drop across a heading is not an ordering choice: it
+    // writes nothing and changes nothing.
+    const writesAfterMove = api.preferenceWrites().length;
+    fireEvent.dragStart(rowOf('/playground'), { dataTransfer: drag });
+    fireEvent.dragOver(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
+    fireEvent.drop(rowOf('/logs'), { dataTransfer: drag, clientY: 0 });
+    await Promise.resolve();
+    expect(api.preferenceWrites()).toHaveLength(writesAfterMove);
+    expect(rowOrder(dialog).slice(0, 3)).toEqual(['Agent', 'Dashboard', 'Playground']);
+  });
+
+  it('neither reset touches the other setting', async () => {
+    api.state.preferences.omc_nav_hidden = ['/agent'];
+    api.state.preferences.omc_nav_order = { operate: ['/playground', '/dashboard'] };
+    mount();
+    const dialog = await openPanel();
+    await waitFor(() => expect(rowOrder(dialog).slice(0, 2)).toEqual(['Playground', 'Dashboard']));
+    const agent = await readySwitch('Agent');
+    expect(agent.getAttribute('aria-checked')).toBe('false');
+
+    // Show all is visibility only, and it runs while a custom order is still stored: it puts the
+    // entry back and leaves the order document alone.
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(1));
+    expect(api.preferenceWrites()[0]).toEqual({ key: 'omc_nav_hidden', value: [] });
+    expect(agent.getAttribute('aria-checked')).toBe('true');
+    expect(rowOrder(dialog).slice(0, 2)).toEqual(['Playground', 'Dashboard']);
+    expect(api.preferenceWrites().filter((write) => write.key === 'omc_nav_order')).toHaveLength(0);
+    expect((screen.getByRole('button', { name: 'Reset order' }) as HTMLButtonElement).disabled).toBe(false);
+
+    // And Reset order is order only: the visibility setting stays as it is.
+    fireEvent.click(await readyButton('Reset order'));
+    await waitFor(() => expect(api.preferenceWrites()).toHaveLength(2));
+    expect(api.preferenceWrites()[1]).toEqual({ key: 'omc_nav_order', value: {} });
+    expect(rowOrder(dialog)).toEqual(MODEL_ORDER);
+    expect(agent.getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -23,24 +23,115 @@
   padding: 16px 0 4px;
 }
 
+/* One rail entry, wrapped so the row itself can be a drag target and carry the insertion marker.
+   The wrapper is what the browser probe drags and drops; the shared row stays the row's layout. */
+.entry {
+  position: relative;
+  transition: opacity var(--motion-fast) ease;
+}
+
+/* The shared row draws its separator between siblings, and each row now has a wrapper of its own,
+   so the two are not siblings. The same rule is drawn here instead. */
+.entry + .entry::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  inset-inline: 20px;
+  border-top: 1px dashed var(--border);
+  pointer-events: none;
+}
+
+/* An entry that is out of the rail is dimmed but keeps its place: it is still a row the operator
+   can order, and its position here is where it returns when it is shown again. */
+.is-hidden :global(.settings-toggle-title) {
+  color: var(--muted);
+}
+
+.is-dragging {
+  opacity: 0.45;
+}
+
+/* The drop marker: a bar on the side the dragged entry will land. The list runs one way, so the
+   side is always above or below and the marker spans the row. */
+.entry[data-drop]::after {
+  content: '';
+  position: absolute;
+  inset-inline: 8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-xs);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.entry[data-drop='before']::after {
+  top: 0;
+}
+
+.entry[data-drop='after']::after {
+  bottom: 0;
+}
+
 /* The entry's own glyph, then its name: the rail identifies an entry by its icon at 58px, so the
-   row that hides it is recognized the same way. The icon is decorative here - the row's text
-   already names the entry - and inherits the row title's size. */
+   row that moves or hides it is recognized the same way. The icon is decorative here - the row's
+   text already names the entry - and inherits the row title's size. */
 .row-label {
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
 
-.row-label > :first-child {
+.entry-icon {
   color: var(--muted);
   flex: none;
 }
 
-/* The toggle is the whole control; the wrapper is what the browser probe addresses a row by. */
+/* The drag handle. It is the only part of the row that starts a drag, so the label and the switch
+   stay ordinary targets. */
+.handle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--meta);
+  cursor: grab;
+}
+
+.handle:hover {
+  color: var(--fg-2);
+}
+
+.handle:active {
+  cursor: grabbing;
+}
+
+/* The row's trailing edge: the step pair, then the switch. The step pair is a separate group so
+   the switch keeps the spacing it has in every other settings row. */
 .control {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+}
+
+.steps {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The toggle is the whole control; the wrapper is what the browser probe addresses a row by. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The head carries the list's two resets at its trailing edge. In a phone-width dialog the longest
+   translation of those labels no longer fits beside the title, so the extra drops to its own line
+   and wraps inside it rather than squeezing the title or overflowing the dialog. */
+.panel-head {
+  flex-wrap: wrap;
+}
+
+.panel-head :global(.section-head-extra) {
+  flex-wrap: wrap;
 }
 
 @media (max-width: 900px) {

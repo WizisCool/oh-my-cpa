@@ -1167,17 +1167,25 @@ and corner and becomes the screen.
   `--fg` text at 500 and its icon in `--fg`. The washes are foreground over whatever the rail
   stands on, so the same rule reads on the canvas and on the phone sheet; a coloured bar or an
   accent fill never marks the selection, because the rail is chrome and colour belongs to data.
-- The rail is the operator's: which of its entries a deployment shows is a stored preference
-  (`omc_nav_hidden`, holding the *hidden* routes, so an entry a later release adds arrives
-  already visible), set from the OMC settings page - one row that opens the rail's own panel,
-  rather than sixteen rows grown onto a page of one-line settings - and applied to the expanded
-  rail, the collapsed rail and the phone sheet from one filtered model. The panel lists the model
-  the rail draws, including the pages a running plugin registered, so the two cannot disagree
-  about which destinations exist. A group whose every entry is hidden goes with
-  them, the OMC settings entry itself is shown switched on and inert - a preference that could
-  hide its own surface would leave the console unable to undo it - and everything else on the
-  shell reads the unfiltered model, so a page opened by URL still names itself in the breadcrumb
-  and the document title.
+- The rail is the operator's: which of its entries a deployment shows, and where inside its
+  group each one sits, are stored preferences (`omc_nav_hidden`, holding the *hidden* routes, so
+  an entry a later release adds arrives already visible; and `omc_nav_order`, each group's route
+  keys in the operator's order), set from the OMC settings page - one row that opens the rail's
+  own panel, rather than sixteen rows grown onto a page of one-line settings - and applied to the
+  expanded rail, the collapsed rail and the phone sheet from one ordered, filtered model. The
+  panel lists the model the rail draws, including the pages a running plugin registered, so the
+  two cannot disagree about which destinations exist. A group whose every entry is hidden goes
+  with them, the OMC settings entry itself is shown switched on and inert - a preference that
+  could hide its own surface would leave the console unable to undo it - and everything else on
+  the shell reads the unfiltered model, so a page opened by URL still names itself in the
+  breadcrumb and the document title.
+- Ordering is inside a group, never across a heading: the group says what an entry is, so a drag
+  that would reclassify it is refused rather than accepted. A row drags by its handle only, so the
+  label and the switch stay ordinary targets, and the drop marker is a 2px accent bar on the side
+  the entry will land. Every row also carries earlier and later buttons, because a native drag
+  reaches neither a keyboard nor a touch screen, and those write the same document. A hidden row is
+  dimmed but keeps its place, which is where it returns when it is shown again; the panel's two
+  resets are separate, so "Show all" never reorders and "Reset order" never unhides.
 - The rail ends with its navigation: CPA connection and version are read on the
   System Information page, not repeated in the shell.
 

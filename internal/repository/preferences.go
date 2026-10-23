@@ -41,6 +41,11 @@ const (
 	// makes a destination a later release adds appear without anyone re-enabling it.
 	PreferenceNavHidden = "omc_nav_hidden"
 
+	// PreferenceNavOrder is the console rail's order, as each group key mapped to its route keys in
+	// the order the operator arranged them. A group the document does not name keeps the console's
+	// own order, so a release that adds a group or an entry needs no rewrite of what is stored.
+	PreferenceNavOrder = "omc_nav_order"
+
 	// PreferenceDashboardLayout is the dashboard's widget arrangement: every widget the console
 	// knows, in reading order, with its width and whether it is hidden. A widget a later release
 	// adds is missing from an older document, and the console places and shows it by default.

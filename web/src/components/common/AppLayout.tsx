@@ -24,8 +24,8 @@ import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
 import { buildNavGroups } from './navigation';
-import { navEntryLabel, retainVisibleGroups, type NavEntry, type NavGroup } from '../../types/sidebarNav';
-import { useNavVisibility } from '../../hooks/useNavVisibility';
+import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebarNav';
+import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 
 const { Sider, Content } = Layout;
@@ -167,11 +167,10 @@ export const AppLayout: React.FC = () => {
   });
   const navGroups = React.useMemo(() => buildNavGroups(collectPluginPages(pluginList?.plugins)), [pluginList]);
   const navEntries = React.useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
-  // The rail draws the entries the operator has not hidden. Everything else on this shell reads the
-  // full model, so a page reached by a URL - or by a link into it - still names itself in the
-  // breadcrumb, the document title and the group it belongs to.
-  const { hiddenSet } = useNavVisibility();
-  const visibleNavGroups = React.useMemo(() => retainVisibleGroups(navGroups, hiddenSet), [navGroups, hiddenSet]);
+  // The rail draws the entries the operator has not hidden, in the order they arranged them.
+  // Everything else on this shell reads the full model, so a page reached by a URL - or by a link
+  // into it - still names itself in the breadcrumb, the document title and the group it belongs to.
+  const { visibleGroups: visibleNavGroups } = useNavLayout(navGroups);
 
   const currentEntry = navEntries
     .filter((entry) => location.pathname === entry.key || location.pathname.startsWith(`${entry.key}/`))

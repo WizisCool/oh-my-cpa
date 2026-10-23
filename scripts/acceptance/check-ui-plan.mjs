@@ -344,10 +344,11 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/components/settings/FontSettings',
     scenarios: ['font-library', 'omc-settings', 'mobile-console'],
   },
-  // The rail's visibility panel, the model it lists and the hook it writes through. The panel is
-  // what the scenario drives and the rail it redraws is the shell's, which is why the scenario is
-  // its own rather than folded into the settings page's: the claim spans the page and the
-  // navigation that page governs, and the phone console renders the same page narrow.
+  // The rail's layout panel, the model it lists and the hook it writes through. The panel is what
+  // the scenario drives and the rail it redraws is the shell's, which is why the scenario is its
+  // own rather than folded into the settings page's: the claim spans the page and the navigation
+  // that page governs - both what it shows and the order it shows it in - and the phone console
+  // renders the same page narrow.
   {
     prefix: 'web/src/components/settings/SidebarNavSettings',
     scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
@@ -357,7 +358,7 @@ const SCENARIO_PATHS = [
     scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
   },
   {
-    prefix: 'web/src/hooks/useNavVisibility',
+    prefix: 'web/src/hooks/useNavLayout',
     scenarios: ['sidebar-customization', 'omc-settings', 'mobile-console'],
   },
   {
