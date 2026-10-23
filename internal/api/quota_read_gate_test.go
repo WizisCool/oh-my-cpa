@@ -138,7 +138,7 @@ var claudeRateLimitCredentials = []string{"claude-1", "claude-2", "claude-3", "c
 
 func TestQuotaAutoRefreshPacesClaudeAfterRateLimits(t *testing.T) {
 	ctx := context.Background()
-	fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, codexReads: map[string]int{}, isRateLimited: true, retryAfterSecond: 120}
+	fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, codexReads: map[string]int{}, isRateLimited: true, retryAfterSecond: 180}
 	handler := newClaudeRateLimitHandler(t, fixture)
 	base := time.Now()
 	var clockMu sync.Mutex
@@ -191,9 +191,9 @@ func TestQuotaAutoRefreshPacesClaudeAfterRateLimits(t *testing.T) {
 		}
 	}
 
-	// The Retry-After (120s) outlasts the one-minute floor, and nothing is due until it passes.
+	// The Retry-After (180s) outlasts the two-minute floor, and nothing is due until it passes.
 	fixture.setRateLimited(false)
-	for _, at := range []time.Duration{0, 61 * time.Second} {
+	for _, at := range []time.Duration{0, 121 * time.Second} {
 		advanceTo(at)
 		if round, err := handler.runQuotaAutoRefreshRound(ctx); err != nil || round.Due != 0 {
 			t.Fatalf("round at +%s = %+v err=%v, want nothing due inside Retry-After", at, round, err)
@@ -205,7 +205,7 @@ func TestQuotaAutoRefreshPacesClaudeAfterRateLimits(t *testing.T) {
 
 	// After it, the three deferred reads go out; the refused credential is still
 	// inside its own backoff.
-	advanceTo(121 * time.Second)
+	advanceTo(181 * time.Second)
 	round, err = handler.runQuotaAutoRefreshRound(ctx)
 	if err != nil || round.Due != 3 || round.Refreshed != 3 {
 		t.Fatalf("round after Retry-After = %+v err=%v, want the 3 deferred credentials read", round, err)

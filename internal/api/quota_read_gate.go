@@ -19,7 +19,7 @@ const (
 	// After a 429 every Claude read waits at least this long, or the Retry-After the provider
 	// named when that is longer. It is what stops the rest of a round or a batch from sending the
 	// requests the first refusal already answered.
-	QUOTA_RATE_LIMIT_PROVIDER_PAUSE = time.Minute
+	QUOTA_RATE_LIMIT_PROVIDER_PAUSE = 2 * time.Minute
 	// The refused credential itself is not read on a schedule again until its own backoff has
 	// passed: the base doubles with each consecutive 429 and stays below the reset-driven retry
 	// window, so a read after a window reset is delayed rather than abandoned.

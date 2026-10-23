@@ -2382,7 +2382,7 @@ then oldest reading first, at most sixteen per round and four at a time - go thr
 refresh does, so the attempt is recorded beside the reading it could not replace. `refreshQuotaReading` passes Claude reads through a process-wide gate
 (`internal/api/quota_read_gate.go`) for every caller: one read at a time, and a 429
 (`quota.RateLimitSignal`, with the parsed `Retry-After`) pauses every Claude read for the
-longer of that delay and a minute. A read inside the pause sends nothing and answers with
+longer of that delay and two minutes. A read inside the pause sends nothing and answers with
 `quota.Service.DeferredReading`, the prior reading marked stale and no recorded attempt; the
 loop counts it as deferred and keeps it due. The refused credential also gets an exponential
 backoff (5 to 30 minutes) that `AutoRefreshCandidate.ReadBackoffUntilMS` keeps out of the
