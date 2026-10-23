@@ -4,20 +4,19 @@
     {
       "id": "omcpa-codex-candy-eval",
       "name": "降智测试",
-      "description": "OMC-adapted Codex evaluation plugin with candy reasoning tests, model fingerprint detection, and pelican rendering tests.",
+      "description": "在 Oh My CPA 中通过糖果推理题、模型指纹和鹈鹕绘图测试检查模型表现，支持批量测试与历史记录。 / OMC-adapted evaluation plugin with candy reasoning, model fingerprint detection, pelican rendering, batch testing, and result history.",
       "author": "Yorick-Ryu / haowang02",
-      "repository": "https://github.com/Yorick-Ryu/cpa-plugin-codex-candy-eval",
       "version": "0.4.0-omc.4",
+      "repository": "https://github.com/Yorick-Ryu/cpa-plugin-codex-candy-eval",
+      "logo": "https://raw.githubusercontent.com/Yorick-Ryu/cpa-plugin-codex-candy-eval/main/docs/images/logo.svg",
       "homepage": "https://github.com/Yorick-Ryu/cpa-plugin-codex-candy-eval",
       "license": "MIT",
       "tags": [
-        "codex",
-        "evaluation",
-        "omc"
-      ],
-      "install": {
-        "type": "github-release"
-      }
+        "Management",
+        "Codex",
+        "Evaluation",
+        "OMC"
+      ]
     }
   ]
 }
