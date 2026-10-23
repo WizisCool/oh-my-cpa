@@ -44,8 +44,9 @@ still someone else's code relative to the gateway.
 3. **The store marks and orders it.** Entries from the managed registry carry
    `is_omc`, the source is named "Oh My CPA" rather than CPA's URL-host default, and
    its entries are listed before every other registry's, with each registry's own order
-   kept. They are not **official**: only the built-in registry plus a first-party
-   repository is (ADR 0029), and installing one still requires typing the plugin id.
+   kept. They are not **official**: that mark answers which registry listed the entry,
+   and this one is Oh My CPA's rather than CPA's built-in one (ADR 0029, amended), so
+   installing one still requires typing the plugin id.
 
 4. **The switch lives on the OMC settings page.** The plugin settings tab shows the
    source as one fixed line — its name, drawn with the same glyph CPA's own official

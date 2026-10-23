@@ -97,8 +97,10 @@ export interface StorePluginItem {
   logo?: string;
   install_type?: string;
   platforms: string[];
-  /** From the built-in registry and a first-party repository; decided by the server. */
+  /** CPA's built-in registry listed the entry; decided by the server from the source id. */
   is_official: boolean;
+  /** The entry's repository is published by the gateway vendor; decided by the server. */
+  is_official_repository: boolean;
   /** From Oh My CPA's own registry, which the console keeps configured; also decided by the server. */
   is_omc: boolean;
   auth_required: boolean;

@@ -11,8 +11,11 @@ import {
 import {
   filterStorePlugins,
   normalizePluginSettingsDraft,
+  STORE_INSTALL_WARNINGS,
   storeFilterCounts,
+  storeInstallConfirmToken,
   storeListingsByPluginId,
+  storePluginOrigin,
   validatePluginSettingsDraft,
 } from '../web/src/components/plugins/pluginStoreLogic.ts';
 import type { PluginConfigField, StorePluginItem } from '../web/src/types/plugin.ts';
@@ -147,7 +150,7 @@ assert.deepEqual(composePluginConfig(broken, FIELDS, SAVED), {
 function entry(overrides: Partial<StorePluginItem>): StorePluginItem {
   return {
     store_id: 'official/x', source_id: 'official', source_name: 'official', id: 'x', name: 'X', tags: [], platforms: [],
-    is_official: true, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
+    is_official: true, is_official_repository: true, auth_required: false, auth_configured: false, installed: false, effective_enabled: false,
     update_available: false, ...overrides,
   };
 }
@@ -161,6 +164,31 @@ assert.deepEqual(filterStorePlugins(STORE, 'NETWORK', 'all').map((item) => item.
 assert.deepEqual(filterStorePlugins(STORE, '', 'updates').map((item) => item.store_id), ['official/logger']);
 // The listing an installed card borrows is the one it was installed from.
 assert.equal(storeListingsByPluginId(STORE).get('logger')?.store_id, 'official/logger');
+
+// The origin mark keeps the registry that listed an entry apart from whose code it names:
+// the official registry is a catalogue, and it lists community authors' repositories.
+assert.deepEqual(
+  [
+    entry({}),
+    entry({ is_official_repository: false }),
+    entry({ is_official: false }),
+    entry({ is_official: false, is_official_repository: false }),
+    entry({ is_official: false, is_omc: true }),
+  ].map(storePluginOrigin),
+  ['official', 'official-source', 'third-party', 'third-party', 'omc'],
+);
+// Only the vendor's own code from the vendor's own registry installs without an
+// acknowledgement; every other origin's warning block is what the operator types into.
+assert.deepEqual(
+  (['omc', 'official', 'official-source', 'third-party'] as const).map((origin) => STORE_INSTALL_WARNINGS[origin]?.title ?? null),
+  [
+    'plugin.omc_plugin_title',
+    null,
+    'plugin.official_source_plugin_title',
+    'plugin.third_party_title',
+  ],
+);
+assert.equal(storeInstallConfirmToken(entry({ id: 'deepseek-search' })), 'deepseek-search');
 
 // ── plugin system settings ─────────────────────────────────────────────────
 assert.deepEqual(

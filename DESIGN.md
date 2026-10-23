@@ -244,7 +244,7 @@ saturated at the top; see `docs/design.md` §2.
 - **Slate Metadata (`--meta`)** (`#52525b`): Navigation group headers, timestamps, masked keys, and footer build metadata.
 
 ### Status & Functional
-- **Healthy Green (`--success`)** (`#10b981`): Active provider switches, healthy proxy instances, success-rate pips at 80% or better, and 200 OK badges.
+- **Healthy Green (`--success`)** (`#10b981`): Active provider switches, healthy proxy instances, success-rate pips at 80% or better, 200 OK badges, and the plugin store's `official` origin badge, which marks the one origin whose code the gateway vendor publishes itself.
 - **Degraded Amber (`--warn`)** (`#f59e0b`): Quota thresholds, rate warnings, dirty configuration state flags, and degraded health pips.
 - **Danger Red (`--danger`)** (`#ef4444`): Request failures, 4xx/5xx responses, delete confirmations, and disabled accounts.
 - **Cache-Rate Scale**: Sequential gradient interpolated in OKLCH from Amber Gold (`#f59e0b`) at 0% to Emerald Green (`#10b981`) at 100%.

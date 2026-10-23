@@ -190,10 +190,14 @@ configuration save paths add or remove the address under the gate and the mutex,
 configuration save that removed it is repaired inside the save's own lock scope so the
 revision it reports already contains it. A store read that cannot repair the file fails
 rather than serving a catalogue the operator did not configure. The store projection
-marks those entries `is_omc`, names the source `Oh My CPA` instead of CPA's URL host,
-and lists them first; they remain third-party for installation, because running code
-in the gateway is what the typed-id confirmation answers and the built-in registry plus
-a first-party repository is what the official mark answers.
+reports two separate facts for every entry: `is_official` for CPA's built-in registry
+listing it, and `is_official_repository` for its repository belonging to the gateway
+vendor. The official registry is a catalogue and lists plugins whose code stays in each
+author's own repository, so the two are not derived from one another; together they give
+the card its four origin marks (Oh My CPA, official source, official, third-party). Only
+the vendor's own code from the vendor's own registry installs without the typed-id
+confirmation, and entries from Oh My CPA's own registry carry `is_omc`, the source name
+`Oh My CPA`, and are listed first while still requiring that confirmation.
 
 The facade preserves CPA's `supports_oauth` wire field. CPA derives it from the presence
 of an auth provider, so the installed-plugin badge names the **Auth provider** capability
