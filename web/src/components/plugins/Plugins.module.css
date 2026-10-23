@@ -66,6 +66,11 @@
   color: var(--warn);
 }
 
+.badge-success {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
 .badge-accent {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);

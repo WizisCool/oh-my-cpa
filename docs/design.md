@@ -244,6 +244,15 @@ window with no traffic is *unknowable* rather than bad, so it stays `neutral` an
 does not fall into the alarm step, while a measured 0% is a real outage and does.
 The request list does not show a verdict of its own, for the reason below.
 
+### A provenance badge reads as a tone
+
+The plugin store's origin badge says where a store entry was listed and whose code its repository
+holds: `Oh My CPA` is `--accent`, `official`/`官方` is `--success`, `official-source`/`官方源` keeps
+the neutral badge tone, and `third-party`/`第三方` is `--warn`. Green answers the same question the install
+confirmation asks - whether the gateway vendor publishes the code - because that is the one origin
+that installs without typing the plugin id. The tone never carries the answer by itself: the badge
+prints the origin and keeps its own glyph.
+
 ### Latency is not a verdict
 
 The request list prints latency in plain `--fg` at every value. A long duration

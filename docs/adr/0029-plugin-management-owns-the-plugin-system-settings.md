@@ -1,6 +1,6 @@
 # ADR 0029: Plugin management owns the plugin system settings
 
-- Status: Accepted
+- Status: Accepted; the store mark in decision item 2 is amended 2026-10-23
 - Date: 2026-09-28
 
 ## Context
@@ -33,10 +33,14 @@ CPA offers no narrower management route for the three host settings. They are ke
    (`PATCH /plugins/{id}/enabled`), the per-plugin settings document
    (`GET`/`PUT /plugins/{id}/config`), removal and the store with installation from a
    named registry at a named version. Responses are projected into this console's own
-   DTOs; the repository link and whether an entry is first-party are derived on the
-   server, so every surface reads the same answer. A store entry is official only when
-   CPA's built-in registry supplied it *and* its repository is under the first-party
-   GitHub organisation, because a third-party registry can copy a repository name.
+   DTOs; the repository link, the registry that listed an entry and the owner of the code
+   it names are derived on the server, so every surface reads the same answer. The last
+   two are separate facts: CPA's built-in registry is a catalogue and lists plugins whose
+   code stays in each author's own repository, while a third-party registry can copy a
+   first-party repository name into its own entry. `is_official` reports the built-in
+   registry, `is_official_repository` a repository under the first-party GitHub
+   organisation, and the confirmation that asks for the plugin id is required for every
+   entry except the first-party code the built-in registry listed.
 
 3. **The host settings are edited in the document, server-side.**
    `PUT /api/v1/management/plugins/settings` reads `config.yaml`, rewrites only
