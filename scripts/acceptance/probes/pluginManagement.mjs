@@ -108,7 +108,16 @@ const SETTINGS = {
 export function pluginManagementFixtures(writes) {
   const installedPlugins = structuredClone(PLUGINS);
   return [
-    [(url) => url.pathname.endsWith('/plugin-host/v0/resource/plugins/request-logger/console'), () => ({ contentType: 'text/html', body: '<!doctype html><html><body>Probe plugin console</body></html>' })],
+    [(url) => url.pathname.endsWith('/plugin-host/v0/resource/plugins/request-logger/console'), () => ({ contentType: 'text/html', body: `<!doctype html><html data-theme="plugin-owned"><body>
+      <h1>Probe plugin console</h1><input aria-label="Plugin draft"><output id="plugin-theme"></output>
+      <div style="height:1600px"></div>
+      <script>
+        const host = window.parent.document.documentElement;
+        const syncTheme = () => { document.querySelector('#plugin-theme').textContent = host.dataset.theme; };
+        new MutationObserver(syncTheme).observe(host, { attributes: true, attributeFilter: ['data-theme'] });
+        syncTheme();
+      </script>
+    </body></html>` })],
     [(url, method) => ['GET', 'PUT'].includes(method) && url.pathname.endsWith('/management/plugins/settings'), (url, method, request) => {
       if (method === 'PUT') {
         const body = JSON.parse(request.postData() ?? '{}');
@@ -364,6 +373,10 @@ export async function pluginManagement({ base, page, check, writes }) {
   check('the navigation entry opens the plugin page route', hostedShown && new URL(page.url()).pathname.endsWith('/plugin-pages/request-logger/0'), page.url());
   if (hostedShown) {
     const inner = page.frameLocator('[data-plugin-page-frame]').locator('iframe');
+    const pluginDocument = page.frameLocator('[data-plugin-page-frame]').frameLocator('iframe');
+    await pluginDocument.getByRole('heading', { name: 'Probe plugin console' }).waitFor({ state: 'visible' });
+    const draft = pluginDocument.getByRole('textbox', { name: 'Plugin draft' });
+    await draft.fill('unsaved plugin state');
     const source = await inner.getAttribute('src');
     check('the frame reads the page through the console\'s plugin host', /\/api\/v1\/plugin-host\/v0\/resource\/plugins\/request-logger\/console$/.test(source ?? ''), source);
     check('the frame sends no referrer', (await inner.getAttribute('referrerpolicy')) === 'no-referrer');
@@ -407,6 +420,9 @@ export async function pluginManagement({ base, page, check, writes }) {
     };
     await page.getByRole('button', { name: /^Theme: Light$/ }).click();
     await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', 'the dark theme');
+    await pluginDocument.locator('#plugin-theme').filter({ hasText: /^dark$/ }).waitFor();
+    check('a theme change reaches the plugin without reloading its document', await draft.inputValue() === 'unsaved plugin state');
+    check('theme synchronization leaves the plugin-owned theme attribute intact', await pluginDocument.locator('html').getAttribute('data-theme') === 'plugin-owned');
     await settleLayout(page);
     const darkInk = await readSettledInk('the dark menu glyph colour');
     check('the selected SVG menu glyph follows the entry text colour', darkInk.ink === darkInk.text && darkInk.mask.includes(LOGO), JSON.stringify(darkInk));
@@ -422,11 +438,47 @@ export async function pluginManagement({ base, page, check, writes }) {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.getByRole('button', { name: /^Theme: Dark$/ }).click();
     const lightMode = await isTrue(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', 'the light theme');
+    await pluginDocument.locator('#plugin-theme').filter({ hasText: /^light$/ }).waitFor();
+    check('following the light system theme preserves plugin state', await draft.inputValue() === 'unsaved plugin state');
     await settleLayout(page);
     const lightInk = await readSettledInk('the light menu glyph colour');
     check('the SVG menu glyph changes ink with the light theme', lightMode && lightInk.ink === lightInk.text && lightInk.ink !== darkInk.ink, JSON.stringify({ darkInk, lightInk }));
     await page.screenshot({ path: 'tmp/plugin-svg-logos/light.png' });
     await page.getByRole('button', { name: /^Theme: Follow system$/ }).click();
+    const scrolled = await pluginDocument.locator('body').evaluate((body) => {
+      const view = body.ownerDocument.defaultView;
+      view.scrollTo(0, 600);
+      return view.scrollY > 0;
+    });
+    check('the plugin document scrolls inside its frame', scrolled);
+    await page.getByRole('button', { name: 'Reload the page', exact: true }).click();
+    await pluginDocument.getByRole('heading', { name: 'Probe plugin console' }).waitFor({ state: 'visible' });
+    check('reload replaces the plugin document', await draft.inputValue() === '');
+    const popupPromise = page.waitForEvent('popup');
+    await page.getByRole('link', { name: 'Open in a new tab', exact: true }).click();
+    const popup = await popupPromise;
+    try {
+      await popup.getByRole('heading', { name: 'Probe plugin console' }).waitFor({ state: 'visible' });
+      check('a new tab opens the plugin resource directly', popup.url().endsWith('/plugin-host/v0/resource/plugins/request-logger/console'));
+    } finally {
+      await popup.close();
+      await page.bringToFront();
+    }
+    // A reverse proxy may answer a missing shell asset with its own HTML page.
+    const shellURL = await page.locator('[data-plugin-page-frame]').evaluate(frame => frame.src);
+    const replaceShell = route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body>Unavailable</body></html>' });
+    await page.route(shellURL, replaceShell);
+    try {
+      await page.getByRole('button', { name: 'Reload the page', exact: true }).click();
+      const failure = page.getByTestId('plugin-page-load-failure');
+      await failure.waitFor({ state: 'visible' });
+      check('a missing shell frame reports a recoverable failure', await page.locator('[data-plugin-page-frame]').count() === 0);
+    } finally {
+      await page.unroute(shellURL, replaceShell);
+    }
+    await page.getByTestId('plugin-page-load-failure').getByRole('button', { name: /重试|Retry/ }).click();
+    await pluginDocument.getByRole('heading', { name: 'Probe plugin console' }).waitFor({ state: 'visible' });
+    check('retrying a failed shell loads the plugin document', await page.getByTestId('plugin-page-load-failure').count() === 0);
   }
   await page.goto(`${base}/plugin-pages/quota-notifier/0`, { waitUntil: 'domcontentloaded' });
   check('a page of a plugin that is not running is reported as unavailable', await isTrue(async () => page.locator('[data-plugin-page-unavailable]').isVisible(), 'the unavailable notice'));

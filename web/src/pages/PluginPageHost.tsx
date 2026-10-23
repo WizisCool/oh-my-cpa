@@ -10,8 +10,9 @@ import { ExternalLinkOutlined, ReloadOutlined, SettingOutlined } from '../compon
 import { PageLoading } from '../components/common/PageLoading';
 import { LoadFailure } from '../components/feedback';
 import { PluginLogo } from '../components/plugins/PluginParts';
-import { collectPluginPages, findPluginPage, pluginFrameShell, pluginPageFrameURL } from '../components/plugins/pluginPages';
+import { collectPluginPages, findPluginPage, pluginPageFrameURL } from '../components/plugins/pluginPages';
 import styles from '../components/plugins/PluginPageHost.module.css';
+import shellURL from '../components/plugins/pluginFrameShell.html?url&no-inline';
 import { EmptyState } from '../components/common/EmptyState';
 
 /**
@@ -30,7 +31,8 @@ export const PluginPageHost: React.FC = () => {
   const { themeMode } = useTheme();
   const frameTheme: 'dark' | 'light' = themeMode === 'dark' ? 'dark' : 'light';
   const [reloadCount, setReloadCount] = React.useState(0);
-  const [isFrameLoading, setIsFrameLoading] = React.useState(true);
+  const [frameState, setFrameState] = React.useState<'loading' | 'ready' | 'failed'>('loading');
+  const isFrameLoading = frameState === 'loading';
   const shellRef = React.useRef<HTMLIFrameElement | null>(null);
 
   const pluginsQuery = useQuery({
@@ -44,16 +46,7 @@ export const PluginPageHost: React.FC = () => {
   const frameURL = entry ? pluginPageFrameURL(getAppConfig().apiBaseUrl, entry.resourcePath) : '';
   const frameTitle = entry?.navLabel ?? '';
 
-  // The shell is written once per load. A later mode change updates its attribute in
-  // place, which the plugin page observes; rebuilding the document would reload the page
-  // and lose whatever the operator had open in it.
   const latestTheme = React.useRef(frameTheme);
-  const shell = React.useMemo(
-    () => (frameURL ? pluginFrameShell(frameURL, frameTitle, latestTheme.current) : ''),
-    // A reload writes the shell again so it starts in the mode now in force.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [frameURL, frameTitle, reloadCount],
-  );
   const stateFrameTheme = React.useCallback((theme: 'dark' | 'light') => {
     const shellRoot = shellRef.current?.contentDocument?.documentElement;
     if (!shellRoot) return;
@@ -66,8 +59,8 @@ export const PluginPageHost: React.FC = () => {
   }, [frameTheme, stateFrameTheme]);
 
   React.useEffect(() => {
-    setIsFrameLoading(true);
-  }, [shell, reloadCount]);
+    setFrameState('loading');
+  }, [frameURL, frameTitle, reloadCount]);
 
   if (pluginsQuery.isLoading) return <PageLoading variant="block" />;
   if (pluginsQuery.isError && !pluginsQuery.data) {
@@ -116,23 +109,45 @@ export const PluginPageHost: React.FC = () => {
         </span>
       </div>
       <div className={styles.stage}>
-        {isFrameLoading && <PageLoading variant="block" className={styles.loading} />}
-        <iframe
-          key={`${entry.route}:${reloadCount}`}
-          ref={shellRef}
-          // Shown only once the plugin's document has loaded: until then the frame is the
-          // browser's blank canvas, which flashes against the console's surface.
-          className={`${styles.frame} ${isFrameLoading ? styles['frame-pending'] : ''}`}
-          title={frameTitle}
-          srcDoc={shell}
-          referrerPolicy="no-referrer"
-          allow="clipboard-read; clipboard-write"
-          onLoad={() => {
-            setIsFrameLoading(false);
-            stateFrameTheme(frameTheme);
-          }}
-          data-plugin-page-frame
-        />
+        {frameState === 'failed' ? (
+          <LoadFailure
+            title={t('common.load_failed_title')}
+            onRetry={() => setReloadCount((count) => count + 1)}
+            data-testid="plugin-page-load-failure"
+          />
+        ) : (
+          <>
+            {isFrameLoading && <PageLoading variant="block" className={styles.loading} />}
+            <iframe
+              key={`${entry.route}:${frameURL}:${frameTitle}:${reloadCount}`}
+              ref={shellRef}
+              // Shown only once the plugin's document has loaded: until then the frame is the
+              // browser's blank canvas, which flashes against the console's surface.
+              className={`${styles.frame} ${isFrameLoading ? styles['frame-pending'] : ''}`}
+              title={frameTitle}
+              src={shellURL}
+              referrerPolicy="no-referrer"
+              allow="clipboard-read; clipboard-write"
+              onLoad={(event) => {
+                // A network-loaded parent preserves CPA's theme contract without Firefox's
+                // CSP misclassification of same-origin children inside srcdoc (issue #275).
+                const pluginFrame = event.currentTarget.contentDocument?.querySelector('iframe');
+                if (!pluginFrame) {
+                  setFrameState('failed');
+                  return;
+                }
+                stateFrameTheme(latestTheme.current);
+                pluginFrame.title = frameTitle;
+                pluginFrame.onload = () => {
+                  setFrameState('ready');
+                  stateFrameTheme(latestTheme.current);
+                };
+                pluginFrame.src = frameURL;
+              }}
+              data-plugin-page-frame
+            />
+          </>
+        )}
       </div>
     </div>
   );

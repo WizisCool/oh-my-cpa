@@ -929,6 +929,8 @@ func serveAssetRepresentation(writer http.ResponseWriter, request *http.Request,
 
 func contentType(name string) string {
 	switch {
+	case strings.HasSuffix(name, ".html"):
+		return "text/html; charset=utf-8"
 	case strings.HasSuffix(name, ".js"):
 		return "text/javascript; charset=utf-8"
 	case strings.HasSuffix(name, ".css"):

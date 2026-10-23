@@ -43,8 +43,13 @@ console session, and show them in a same-origin frame.
   re-bases the same prefixes at run time for `fetch`, `XMLHttpRequest` and `EventSource`.
 - Every non-`GET` plugin route call is audited (`plugin.route_call`: attempt, then
   outcome), with the method and the status, never the body.
-- The frame's parent is a console-written document carrying `data-theme="dark|light"`, so
-  pages written for CPA's management centre follow the console's colour mode.
+- The frame's parent is an embedded, hashed HTML asset carrying `data-theme="dark|light"`,
+  so pages written for CPA's management centre follow the console's colour mode. The
+  console sets the mode before navigating the child and updates it without reloading or
+  changing the plugin's own theme attributes. The asset must be loaded through its
+  same-origin URL, not inlined: Firefox rejects same-origin child frames in `srcdoc`
+  documents under `frame-src 'self' blob:` (issue #275). Both the console and the parent
+  asset retain that policy.
 - Only a running plugin's pages are listed, only those under its own id, and demo mode
   refuses the whole surface.
 

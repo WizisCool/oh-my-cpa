@@ -77,29 +77,3 @@ export function findPluginPage(
   const index = Number.parseInt(pageIndex, 10);
   return entries.find((entry) => entry.pluginId === pluginId && entry.pageIndex === index);
 }
-
-function escapeAttribute(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/**
- * The document between the console and a plugin page.
- *
- * Plugin pages written for CPA's management centre read their colour scheme from
- * `window.parent.document.documentElement`'s `data-theme` (`dark` or `light`). The
- * console's own root carries a palette id there instead, so the page's parent is this
- * small same-origin document, which states the mode in the vocabulary those pages expect.
- *
- * It also declares the console's colour scheme. A framed document whose scheme differs
- * from its frame's is given an opaque canvas by the browser, which on a dark console is a
- * white rectangle until the plugin page has painted.
- */
-export function pluginFrameShell(frameURL: string, title: string, frameTheme: 'dark' | 'light'): string {
-  return [
-    `<!doctype html><html data-theme="${frameTheme}" style="color-scheme:${frameTheme}"><head><meta charset="utf-8">`,
-    '<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}iframe{display:block;border:0;width:100%;height:100%;color-scheme:inherit}</style>',
-    '</head><body>',
-    `<iframe src="${escapeAttribute(frameURL)}" title="${escapeAttribute(title)}" referrerpolicy="no-referrer" allow="clipboard-read; clipboard-write"></iframe>`,
-    '</body></html>',
-  ].join('');
-}
