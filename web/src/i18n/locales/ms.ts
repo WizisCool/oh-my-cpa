@@ -750,7 +750,7 @@ export const MS: Readonly<Record<string, string>> = {
   "header.language": "Bahasa",
   "omc.title": "Tetapan OMC",
   "omc.tps_calculation_mode": "Kaedah pengiraan TPS",
-  "omc.tps_calculation_desc": "Token output ÷ jumlah latensi; apabila latensi token pertama dikecualikan, ia ditolak jika boleh diukur, jika tidak jumlah latensi digunakan.",
+  "omc.tps_calculation_desc": "Token output ÷ tempoh; apabila latensi token pertama dikecualikan, jumlah latensi digunakan jika pengukuran masa tidak tersedia, token penaakulan dilaporkan, atau kadar selepas penolakan melebihi 500 t/s.",
   "omc.tps_exclude_ttft": "Kecualikan latensi token pertama",
   "omc.tps_include_ttft": "Sertakan latensi token pertama",
   "events.tps_hint_buffered": "Kadar tanpa latensi token pertama melebihi 500 t/s, yang mungkin menandakan penghantaran tertimbal atau berkelompok; menggunakan purata hujung ke hujung: token output ÷ jumlah latensi",

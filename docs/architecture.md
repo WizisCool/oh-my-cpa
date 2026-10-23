@@ -1986,9 +1986,13 @@ its whole payload in one chunk. `eventTokensPerSecond` in
 `omc_tps_calculation_mode` preference:
 
 - `exclude_ttft` (default): subtract a finite positive `ttft_ms` only when it is below
-  total latency and `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms).
+  total latency, `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms),
+  no reasoning tokens are reported, and the resulting rate is at most 500 t/s.
   TPS is then `output_tokens * 1000 / (latency_ms - ttft_ms)`. Otherwise use
-  `output_tokens * 1000 / latency_ms` and identify the result as a fallback.
+  `output_tokens * 1000 / latency_ms`. Missing or unusable timing and reported
+  reasoning tokens produce `fallback_total`; an otherwise usable residual window
+  whose rate would exceed 500 t/s produces `fallback_buffered`. The latter is a
+  buffered-delivery heuristic, not proof of buffering or a cap on end-to-end rates.
 - `include_ttft`: always use `output_tokens * 1000 / latency_ms`, even when TTFT is
   measurable. This does not hide or invalidate the independent TTFT readout.
 - Non-generation records, non-positive or non-finite output tokens, and invalid total
@@ -1999,7 +2003,7 @@ its whole payload in one chunk. `eventTokensPerSecond` in
 serialized preference hook. OMC Settings, request rows and Playground footers share
 one value; changing it recalculates historical readouts without touching stored observations.
 The calculation result exposes `basis` (`exclude_ttft`, `include_ttft`, `fallback_total`,
-or `null`) so both surfaces select the same accurate formula tooltip. The closed preference
+`fallback_buffered`, or `null`) so both surfaces select the same accurate formula tooltip. The closed preference
 API allowlist accepts the new key using its existing JSON-document contract. Missing or
 unsupported values resolve to `exclude_ttft`; no migration is needed.
 
