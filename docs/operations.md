@@ -361,8 +361,13 @@ responses.
 ## TPS calculation mode
 
 OMC Settings → Display chooses whether request-record and Playground TPS includes
-first-token latency. The default excludes it when the remaining window is at least
-50 ms; otherwise it falls back to total latency. Including it always uses total latency.
+first-token latency. The default excludes it only when the remaining window is at
+least 50 ms, no reasoning tokens are reported, and the resulting rate is at most
+500 t/s. Otherwise it falls back to output tokens divided by total latency.
+The token-scaled window is a heuristic for buffered or batched delivery, including
+tool arguments generated before the first visible chunk; it is not a model speed
+limit or proof of a tool call. A dedicated tooltip explains this fallback. Total-latency
+rates are never capped. Including first-token latency always uses total latency.
 The server-stored `omc_tps_calculation_mode` preference (`exclude_ttft` /
 `include_ttft`) also supports Agent/MCP reads and writes; historical timing and usage
 remain unchanged.

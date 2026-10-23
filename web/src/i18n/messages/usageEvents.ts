@@ -2,6 +2,7 @@ import type { Messages } from './types';
 
 /** Request records and routing. */
 export const USAGE_EVENTS_MESSAGES: Messages = {
+  'events.tps_hint_buffered': ['扣除首字延迟后的速率超过 500 t/s，疑似缓冲或批量返回；改用端到端平均速率：输出 Token ÷ 总耗时', 'Excluding first-token latency would exceed 500 t/s, suggesting buffered or batched delivery; using the end-to-end average: output tokens ÷ total latency'],
   'events.tps_hint_fallback': ["首字延迟不可用、剩余窗口不足 50 ms，或推理 Token 生成于首字之前，回退到：输出 Token ÷ 总耗时", "First-token latency is unavailable, the remaining window is below 50 ms, or reasoning tokens preceded the first token; falls back to output tokens ÷ total latency"],
   'events.previous_results': ['上次结果（待更新）', 'Previous results (pending update)'],
   'events.reset': ['重置筛选', 'Reset filters'],

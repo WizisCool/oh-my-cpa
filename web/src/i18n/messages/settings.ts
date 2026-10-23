@@ -17,7 +17,7 @@ export const SETTINGS_MESSAGES: Messages = {
   // A row description survives only when it states something the label cannot.
   'omc.title': ['OMC 设置', 'OMC Settings'],
   'omc.tps_calculation_mode': ["TPS 计算方式", "TPS calculation mode"],
-  'omc.tps_calculation_desc': ["输出 Token ÷ 总耗时；排除首字延迟时先从总耗时中扣除，无法扣除时使用总耗时。", "Output tokens ÷ total latency; excluding first-token latency subtracts it when measurable, otherwise total latency is used."],
+  'omc.tps_calculation_desc': ["输出 Token ÷ 耗时；排除首字延迟时，若计时不可用、含推理 Token，或扣除后速率超过 500 t/s，则使用总耗时。", "Output tokens ÷ duration; excluding first-token latency uses total latency if timing is unavailable, reasoning tokens are present, or the rate after subtraction would exceed 500 t/s."],
   'omc.tps_exclude_ttft': ["排除首字延迟", "Exclude first-token latency"],
   'omc.tps_include_ttft': ["包含首字延迟", "Include first-token latency"],
   'omc.section_quota': ['额度', 'Quota'],
