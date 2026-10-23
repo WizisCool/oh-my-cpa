@@ -130,6 +130,22 @@ component test or a probe; a step here earns its place by needing the built bina
 - Rerun only the failed command. A failure that passes on rerun is a flake to fix at its
   assertion, never a reason to add a retry or lengthen a wait.
 
+## Firefox plugin-page regression
+
+The existing `plugin-management` probe waits for actual plugin content, checks live theme
+propagation without losing an unsaved draft, reload, scrolling, opening a new tab, and
+recovering from a shell response that lacks the plugin frame.
+Run it in Firefox as well as the default Chromium when changing plugin-page hosting:
+
+```sh
+pnpm exec playwright install firefox
+OMC_PROBE_IDS='["plugin-management"]' pnpm exec playwright test --config scripts/testing/probe-config.ts --browser firefox --workers 1
+```
+
+The pre-fix `srcdoc` host fails this probe because Firefox blocks the nested plugin frame
+under the console's `frame-src 'self' blob:` policy. Built-artifact acceptance additionally
+exercises the hashed shell asset through the embedded Go server and its MIME type.
+
 ## Waiting in tests
 
 Wait on something observable: a response, an element state, `until(...)` from

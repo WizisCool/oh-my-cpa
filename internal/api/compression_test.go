@@ -232,35 +232,48 @@ func TestStaticCompressionRechecksAnInFlightMiss(t *testing.T) {
 	}
 }
 
-func TestStaticGzipGETAndHEADHaveMatchingHeaders(t *testing.T) {
-	payload := []byte(strings.Repeat("const fixture = true;\n", 1000))
-	var getHeader http.Header
-	for _, method := range []string{http.MethodGet, http.MethodHead} {
-		request := httptest.NewRequest(method, "/omc/assets/compression-test.js", nil)
-		request.Header.Set("Accept-Encoding", "gzip")
-		recorder := httptest.NewRecorder()
-		serveAssetRepresentation(recorder, request, "assets/compression-test.js", payload)
-		if method == http.MethodGet {
-			getHeader = recorder.Header().Clone()
-			if !bytes.Equal(decompressBody(t, recorder.Body.Bytes()), payload) {
-				t.Fatal("asset changed")
-			}
-			if getHeader.Get("Content-Encoding") != "gzip" || getHeader.Get("Cache-Control") != "public, max-age=31536000, immutable" {
-				t.Fatalf("headers: %v", getHeader)
-			}
-			if getHeader.Get("Content-Length") != strconv.Itoa(recorder.Body.Len()) {
-				t.Fatal("incorrect length")
-			}
-		} else {
-			if recorder.Body.Len() != 0 {
-				t.Fatal("HEAD body")
-			}
-			for _, name := range []string{"Content-Encoding", "Content-Length", "Content-Type", "Cache-Control", "Vary"} {
-				if recorder.Header().Get(name) != getHeader.Get(name) {
-					t.Fatalf("HEAD %s differs", name)
+func TestStaticGETAndHEADHaveMatchingHeaders(t *testing.T) {
+	for _, fixture := range []struct {
+		name, body, mediaType, encoding string
+	}{
+		{"assets/compression-test.js", "const fixture = true;\n", "text/javascript; charset=utf-8", "gzip"},
+		{"assets/plugin-frame.html", "<!doctype html><html><body></body></html>", "text/html; charset=utf-8", ""},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			payload := []byte(strings.Repeat(fixture.body, 1000))
+			var getHeader http.Header
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				request := httptest.NewRequest(method, "/omc/"+fixture.name, nil)
+				request.Header.Set("Accept-Encoding", "gzip")
+				recorder := httptest.NewRecorder()
+				serveAssetRepresentation(recorder, request, fixture.name, payload)
+				if method == http.MethodGet {
+					getHeader = recorder.Header().Clone()
+					body := recorder.Body.Bytes()
+					if fixture.encoding == "gzip" {
+						body = decompressBody(t, body)
+					}
+					if !bytes.Equal(body, payload) {
+						t.Fatal("asset changed")
+					}
+					if getHeader.Get("Content-Encoding") != fixture.encoding || getHeader.Get("Content-Type") != fixture.mediaType || getHeader.Get("Cache-Control") != "public, max-age=31536000, immutable" {
+						t.Fatalf("headers: %v", getHeader)
+					}
+					if getHeader.Get("Content-Length") != strconv.Itoa(recorder.Body.Len()) {
+						t.Fatal("incorrect length")
+					}
+				} else {
+					if recorder.Body.Len() != 0 {
+						t.Fatal("HEAD body")
+					}
+					for _, name := range []string{"Content-Encoding", "Content-Length", "Content-Type", "Cache-Control", "Vary"} {
+						if recorder.Header().Get(name) != getHeader.Get(name) {
+							t.Fatalf("HEAD %s differs", name)
+						}
+					}
 				}
 			}
-		}
+		})
 	}
 }
 
