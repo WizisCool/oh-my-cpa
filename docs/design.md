@@ -955,9 +955,9 @@ retaining either dimension from an earlier layout.
 **The ring hover states the group, its volume and its share**, matching the trend's tooltip rather than
 the share being left to the list alone. A slice is read as a fraction of the ring, so the percentage is
 part of what is being pointed at; it is derived from the same window total the centre reports, so the
-readout and the centre cannot disagree. The group's name comes from the datum through the mark's own
-tooltip items - the library's inferred item is built from the y channel, so every slice would otherwise
-be labelled after the field it plots.
+readout and the centre cannot disagree. A slice carries its stable series-domain key as its datum name.
+The ECharts tooltip formatter resolves that key with the shared translated group-label function, so
+the tooltip, ranked list and centre use the same readable name.
 
 ### Insights
 
