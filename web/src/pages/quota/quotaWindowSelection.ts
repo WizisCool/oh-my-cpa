@@ -1,8 +1,5 @@
 import type { QuotaWindow } from '../../types/quota';
 
-/** How many windows a list row shows before the rest need the Drawer. */
-export const COMPACT_QUOTA_WINDOW_COUNT = 2;
-
 /**
  * Which window a reading describes.
  *
@@ -67,40 +64,4 @@ export function orderQuotaWindows(windows: QuotaWindow[]): QuotaWindow[] {
     groups.get(quotaWindowGroupKey(left))! - groups.get(quotaWindowGroupKey(right))!
       || windowRank(quotaWindowKindOf(left)) - windowRank(quotaWindowKindOf(right))
   ));
-}
-
-/**
- * The pair a list row shows.
- *
- * A row answers "can this credential serve the next request", so it carries the
- * credential's own model family - the first group the provider reports, which is the one
- * named after it - and takes that family's two shortest limits, in the same
- * shortest-first order the Drawer uses. Every other family the same endpoint publishes
- * (Antigravity answers with Claude and GPT groups beside Gemini) stays in the Drawer's
- * quota tab rather than crowding the row. A family that publishes fewer than two windows
- * is filled from what it did return; a family whose windows carry no kind keeps the order
- * its provider sent.
- */
-export function pickCompactQuotaWindows(windows: QuotaWindow[]): QuotaWindow[] {
-  const primary = windows[0];
-  if (!primary) return [];
-  const familyKey = quotaWindowGroupKey(primary);
-  const family: QuotaWindow[] = [];
-  const seenIds = new Set<string>();
-  for (const window of windows) {
-    if (quotaWindowGroupKey(window) !== familyKey) continue;
-    // A provider can repeat a bucket, and a row must not spend one of its two lines on a
-    // duplicate of the other. Two readings of the same window id are one window - deduped by
-    // id, not by object - while distinct windows that share a kind or a group keep both lines.
-    if (window.id) {
-      if (seenIds.has(window.id)) continue;
-      seenIds.add(window.id);
-    } else if (family.includes(window)) {
-      continue;
-    }
-    family.push(window);
-  }
-  return [...family]
-    .sort((left, right) => windowRank(quotaWindowKindOf(left)) - windowRank(quotaWindowKindOf(right)))
-    .slice(0, COMPACT_QUOTA_WINDOW_COUNT);
 }

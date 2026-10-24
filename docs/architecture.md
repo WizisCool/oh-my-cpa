@@ -924,8 +924,9 @@ callback bodies are not retained. Each mutation requires a successful attempt
 audit. The four non-secret summary fields have explicit console and capability
 allowlists. CPA owns token exchange, file preservation and publication.
 `web/src/hooks/useSIWCBindings.ts` holds attempts above credential selection,
-keyed by name and auth index, so closing or switching the detail panel cannot
-mix targets. CPA completion is followed by safe target readback before success;
+keyed by name and auth index, so closing the row's SIWC dialog or opening another
+credential cannot mix targets or drop a pending attempt. CPA completion is followed
+by safe target readback before success;
 readback failure keeps the completed mutation in verification. See
 [SIWC compatibility](cpa-v8-compat.md#credential-scoped-siwc-binding).
 
@@ -942,9 +943,18 @@ credential-aware toast after the list refresh settles. Credential detail,
 configuration and models share one guarded Drawer. Provider-scoped aliases and
 global OAuth exclusions share a separate Model Rules Drawer, with independent
 section drafts; switching provider or closing cannot discard an unsaved section
-without a guard. Its names and brand marks match the provider filter tabs. `CredentialQuotaBody` is the single quota renderer used by the
-workspace and its detail panel. The list always renders a compact quota summary;
-the Quota tab always renders the full quota body. Codex and Claude credentials expose
+without a guard. Its names and brand marks match the provider filter tabs.
+The overview renders one table per provider, following the shared pinned order in
+`web/src/types/credentialProviders.ts`, then the remaining providers alphabetically. `credentialSections.ts` derives quota
+columns from the windows the credentials actually report: a family header spans
+its period columns, each with a sorting button that orders only its section. A
+single plan family uses a single header row. Each quota cell shows its remaining
+share, a bar and, unless full, a reset countdown; its tooltip contains the window
+label, exact reset and estimated capacity. Accounts remain masked until explicitly
+revealed per row. SIWC and reset-credit columns appear only in sections that have
+them. The SIWC badge and row menu open the credential's SIWC dialog; the Details
+glyph opens its Drawer. `CredentialQuotaBody` renders the complete quota reading
+in the Drawer's Quota tab. Codex and Claude credentials expose
 a separate Window warmup tab for rules, status and confirmed manual runs. Warmup drafts
 survive tab switches. Configuration and Models are separate tabs with query eligibility
 bound to the selected tab. The configuration

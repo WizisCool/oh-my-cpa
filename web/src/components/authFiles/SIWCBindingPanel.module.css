@@ -1,12 +1,22 @@
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.target {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .binding {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 16px;
-  margin-block: 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
 }
 .hint {
   margin: 0;

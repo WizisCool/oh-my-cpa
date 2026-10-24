@@ -10,6 +10,7 @@ import test from 'node:test';
 import type { TFunc } from '../web/src/i18n/index.tsx';
 import {
   compactQuotaCapacity,
+  describeCompactQuotaCapacity,
   describeQuotaCapacity,
   formatCapacityError,
   formatEstimatedUsd,
@@ -94,6 +95,18 @@ test('the list row carries the estimate alone, and nothing when it is withheld',
     '≈quota.capacity_tokens(9.6M)',
   );
   assert.equal(compactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
+});
+
+test('the row tooltip names the estimate once instead of reading "Est. capacity Prev"', () => {
+  assert.equal(
+    describeCompactQuotaCapacity({ capacity: { tokens: 9_600_000, cost_nanos: 24_000_000_000, error_percent: 10 } }, 'en-compact', t),
+    'quota.capacity_estimate ≈$24.00',
+  );
+  assert.equal(
+    describeCompactQuotaCapacity({ capacity: { basis: 'previous_cycle', tokens: 9_600_000, error_percent: 10, observed_at_ms: 1 } }, 'en-compact', t),
+    'quota.capacity_previous ≈quota.capacity_tokens(9.6M)',
+  );
+  assert.equal(describeCompactQuotaCapacity({ usage, capacity_unavailable: 'low_usage' }, 'en-compact', t), null);
 });
 
 test('a previous-cycle estimate labels its basis and preserves the current refusal', () => {

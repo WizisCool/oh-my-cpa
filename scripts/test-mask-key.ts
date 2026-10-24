@@ -19,6 +19,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { maskKeyText } from '../web/src/utils/maskKey.ts';
+import { maskAccount, maskAccountIn } from '../web/src/utils/maskAccount.ts';
 
 const MASK_RUN = '••••••••';
 
@@ -94,4 +95,17 @@ test('masking a mask returns the same mask', () => {
     const masked = maskKeyText(value);
     assert.equal(maskKeyText(masked), masked);
   }
+});
+
+test('an account mask keeps the edges an owner recognises and hides the length', () => {
+  const cases: Array<[string, string]> = [
+    ['dongjunze2004@gmail.com', 'do•••4@gmail.com'],
+    ['djz20040127@outlook.com', 'dj•••7@outlook.com'],
+    ['abc@example.com', 'a•••@example.com'],
+    ['vertex-prod-project', 'ver•••ct'],
+    ['short', '•••'],
+    ['', ''],
+  ];
+  for (const [account, masked] of cases) assert.equal(maskAccount(account), masked, account);
+  assert.equal(maskAccountIn('antigravity-dongjunze2004@gmail.com.json', 'dongjunze2004@gmail.com'), 'antigravity-do•••4@gmail.com.json');
 });

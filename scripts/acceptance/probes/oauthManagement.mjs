@@ -127,52 +127,60 @@ export async function oauthManagement({ base, page, check }) {
     `visible=${compactVisible}`,
   );
 
-  const firstRecord = page.getByTestId('oauth-credential-record').first();
+  const priorityRecord = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-01"]');
   check('explicit zero priority and default weight remain visible',
-    (await firstRecord.innerText()).includes('Priority 0') && (await firstRecord.innerText()).includes('Weight 1'));
+    (await priorityRecord.innerText()).includes('Priority 0') && (await priorityRecord.innerText()).includes('Weight 1'));
+  check('a row names no auth index', !(await page.locator('[data-testid="oauth-credential-section"]').first().innerText()).includes('auth-0'));
 
-  // The row answers "can this credential serve the next request" without a click, so the
-  // credential's own family carries both bars, and its way into the rest is one Details link.
-  const twoWindowRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-01"]');
+  // Each provider is one section, in the console's fixed provider order, whatever the records' order.
+  const sectionProviders = await page.getByTestId('oauth-credential-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-provider')));
+  check('credentials are grouped into one section per provider in the pinned order',
+    sectionProviders.join(',') === 'claude,codex,xai,kimi', sectionProviders.join(','));
+
+  const account = priorityRecord.locator('[data-account-masked]');
+  check('the account is masked until the operator reveals it',
+    (await account.count()) === 1 && !(await priorityRecord.innerText()).includes('operator-1@example.test'));
+  await account.click();
+  check('revealing the account shows it whole', (await priorityRecord.innerText()).includes('operator-1@example.test'));
+  await priorityRecord.locator('[aria-pressed="true"]').click();
+
+  // A standard credential's plan windows are the section's period columns, each cell one reading.
+  const twoWindowRow = priorityRecord;
   check(
-    'a compact record bars its five-hour and weekly windows',
-    (await twoWindowRow.locator('[data-quota-compact-window="five_hour"]').count()) === 1
-      && (await twoWindowRow.locator('[data-quota-compact-window="weekly"]').count()) === 1
-      && (await twoWindowRow.locator('[data-quota-compact-window] .meter').count()) === 2,
+    'a standard record bars its five-hour and weekly windows in their own columns',
+    (await twoWindowRow.locator('[data-quota-column="standard|five_hour"] .meter').count()) === 1
+      && (await twoWindowRow.locator('[data-quota-column="standard|weekly"] .meter').count()) === 1,
     (await twoWindowRow.innerText()).replace(/\n/g, ' | '),
   );
-  const plainRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"]');
-  const compactHeight = (row) => row.locator('[data-quota-density="compact"]').evaluate((body) => body.getBoundingClientRect().height);
-  const [estimatedHeight, plainHeight] = [await compactHeight(twoWindowRow), await compactHeight(plainRow)];
-  const compactEstimates = await twoWindowRow.locator('[data-quota-compact-capacity]').evaluateAll((cells) => cells.map((cell) => ({
-    text: cell.textContent,
-    clipped: cell.scrollWidth > cell.clientWidth + 1,
-  })));
+  const estimates = await twoWindowRow.locator('[data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('title') ?? ''));
+  const plainTitles = await page.locator('[data-auth-index="auth-05"] [data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('title') ?? ''));
   check(
-    'a compact record carries each window\'s estimated capacity without growing or clipping it',
-    compactEstimates.length === 2
-      && compactEstimates.every((cell, index) => cell.text === (index === 0 ? '≈$1,230' : 'Prev ≈$1,230') && !cell.clipped)
-      && Math.abs(estimatedHeight - plainHeight) <= 0.5
-      && (await plainRow.locator('[data-quota-compact-capacity]').count()) === 0,
-    `estimates=${JSON.stringify(compactEstimates)} heights=${estimatedHeight}/${plainHeight}`,
+    'each reading carries its estimated capacity in its detail, and a record without one carries none',
+    estimates.length === 2 && estimates[0].includes('Est. capacity ≈$1,230') && estimates[1].includes('Previous cycle estimate ≈$1,230')
+      && plainTitles.length === 2 && plainTitles.every((title) => !title.includes('≈')),
+    JSON.stringify({ estimates, plainTitles }),
   );
   check(
-    'a compact record reaches the full reading through its own Details action',
+    'a record reaches the full reading through its own Details action',
     (await twoWindowRow.getByRole('button', { name: /^(Details|详情):/i }).count()) === 1,
   );
 
+  // The xAI section mixes a grouped credential with flat ones: each model group is a header of its
+  // own, the grouped credential fills its columns, and a flat credential leaves them empty.
+  const xaiSection = page.locator('[data-testid="oauth-credential-section"][data-provider="xai"]');
+  const familyHeads = await xaiSection.locator('thead th[colspan]').allInnerTexts();
   const groupRecord = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-04"]');
-  const groupLabels = await groupRecord
-    .locator('[data-quota-compact-window]')
-    .evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-quota-window-label') ?? ''));
+  const groupLabels = await groupRecord.locator('[data-quota-window-label]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-quota-window-label') ?? ''));
+  const flatGroupCells = await page.locator('[data-auth-index="auth-08"] [data-quota-column^="group:"]').evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-quota-window-label')));
   check(
-    'a compact record never shows a model family it does not belong to',
-    groupLabels.length === 2
-      && groupLabels.every((label) => label.startsWith('Model group 1'))
-      && !groupLabels.some((label) => label.includes('Model group 2') || label.includes('Model group 3')),
-    groupLabels.join(' | '),
+    'every model group a section reports is a header, and a row fills only its own',
+    ['Model group 1', 'Model group 2', 'Model group 3'].every((label) => familyHeads.some((head) => head.includes(label)))
+      && groupLabels.length === 6
+      && [1, 2, 3].every((group) => groupLabels.filter((label) => label.startsWith(`Model group ${group}`)).length === 2)
+      && flatGroupCells.length > 0 && flatGroupCells.every((label) => label == null),
+    JSON.stringify({ familyHeads, groupLabels, flatGroupCells }),
   );
-  check('an explicitly inactive subscription is visible in its compact reading', await groupRecord.locator('[data-subscription-inactive]').isVisible());
+  check('an explicitly inactive subscription is visible in its row', await groupRecord.locator('[data-subscription-inactive]').isVisible());
   await groupRecord.getByRole('button', { name: /^(Details|详情):/i }).click();
   const detailPanel = page.locator('.ant-drawer-open');
   await detailPanel.locator('[data-quota-density="expanded"]').waitFor();
@@ -222,16 +230,15 @@ export async function oauthManagement({ base, page, check }) {
 
   const unsupportedRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-11"]');
   check(
-    'an unsupported live probe still renders its observed primary window',
-    (await unsupportedRow.locator('[data-quota-unsupported="true"]').count()) > 0
+    'a credential whose live probe is unsupported still renders the windows it observed',
+    (await unsupportedRow.locator('[data-quota-column] .meter').count()) === 2
       && (await unsupportedRow.getByText('80%').count()) > 0,
-    `unsupported=${await unsupportedRow.locator('[data-quota-unsupported="true"]').count()}`,
+    (await unsupportedRow.innerText()).replace(/\n/g, ' | '),
   );
   const cooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-10"]');
   check('a known credential_quota reason is consolidated into the CPA cooldown status',
     await cooldownRow.getByText('CPA Cooldown', { exact: true }).isVisible()
-      && !(await cooldownRow.innerText()).includes('credential_quota')
-      && await cooldownRow.locator('[class*="rec-banner-danger"]').count() === 0);
+      && !(await cooldownRow.innerText()).includes('credential_quota'));
   await cooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
   const cooldownTooltip = page.getByRole('tooltip').filter({ hasText: 'CPA 429 rate limit protection active' });
   await cooldownTooltip.waitFor({ state: 'visible' });
@@ -248,7 +255,7 @@ export async function oauthManagement({ base, page, check }) {
   const staleRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-07"]');
   check('a failed refresh leaves the row saying so, with its own refresh beside it',
     (await staleRow.locator('[data-quota-failure-line="failed"]').count()) === 1
-      && (await staleRow.innerText()).includes('Fixture quota refresh failed')
+      && ((await staleRow.locator('[data-quota-failure-line="failed"]').getAttribute('title')) ?? '').includes('Fixture quota refresh failed')
       && (await staleRow.getByTestId('quota-stale-refresh').count()) === 1,
     (await staleRow.innerText()).replace(/\n/g, ' | '));
   check('a current reading offers no refresh of its own',
@@ -277,8 +284,11 @@ export async function oauthManagement({ base, page, check }) {
   await detailPanel.locator('.ant-drawer-close').click();
   await detailPanel.waitFor({ state: 'hidden' });
   const unexpectedCooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-09"]');
-  check('an unexpected cooldown reason remains readable in the compact row',
-    await unexpectedCooldownRow.getByText('Fixture unexpected upstream cooldown', { exact: true }).isVisible());
+  await unexpectedCooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
+  const unexpectedTooltip = page.getByRole('tooltip').filter({ hasText: 'Fixture unexpected upstream cooldown' });
+  check('an unexpected cooldown reason remains readable from the row status',
+    await unexpectedTooltip.waitFor({ state: 'visible' }).then(() => true, () => false));
+  await page.mouse.move(0, 0);
   await cooldownRow.getByRole('button', { name: /More actions|更多操作/i }).click();
   const cooldownItem = page.getByRole('menuitem', { name: /Clear Cooldown|清除冷却/i });
   check('an active cooldown stays actionable through the row menu', await cooldownItem.isEnabled());
@@ -287,7 +297,8 @@ export async function oauthManagement({ base, page, check }) {
   const creditRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-12"]');
   check(
     'a row reports the banked reset credits it holds',
-    (await creditRow.getByText(/Available 2|可用 2 个/).count()) > 0,
+    (await creditRow.locator('[data-quota-credits]').getAttribute('data-quota-credits')) === '2',
+    `credits=${await creditRow.locator('[data-quota-credits]').getAttribute('data-quota-credits')}`,
   );
   check(
     'the row itself offers no reset-credit action',
@@ -429,17 +440,13 @@ export async function oauthManagement({ base, page, check }) {
       layout.overflow === 0 && layout.controls > 0 && layout.outside === 0,
       JSON.stringify(layout),
     );
-    const phoneEstimates = await page.locator('[data-auth-index="auth-01"] [data-quota-compact-capacity]').evaluateAll((cells) => cells.map((cell) => {
-      const rect = cell.getBoundingClientRect();
-      return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth + 1 && cell.scrollWidth <= cell.clientWidth + 1;
-    }));
-    check(
-      `a phone row shows each estimated capacity whole at ${width}px`,
-      phoneEstimates.length === 2 && phoneEstimates.every(Boolean),
-      JSON.stringify(phoneEstimates),
-    );
+    // A phone row is who, its state and its switch; the readings need a width only the Drawer has.
+    const phoneReadings = await page.locator('[data-testid="oauth-credential-record"] [data-quota-column]').evaluateAll((cells) => cells.filter((cell) => cell.getBoundingClientRect().width > 0).length);
+    check(`a phone row leaves the readings to the Drawer at ${width}px`, phoneReadings === 0, `visible=${phoneReadings}`);
     await page.screenshot({ path: `tmp/oauth-management-overview-${width}.png` });
-    await page.getByTestId('oauth-credential-record').first().getByRole('button', { name: /^Details:/ }).click();
+    // The reading with an estimate is auth-01's; the sections order records by provider, so the
+    // first row of the page is not the one whose cycle was estimated.
+    await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-01"]').getByRole('button', { name: /^Details:/ }).click();
     const phoneDrawer = page.locator('.ant-drawer-open');
     await phoneDrawer.getByRole('tab', { name: 'Quota', exact: true }).waitFor();
     await settleLayout(page);
@@ -500,9 +507,13 @@ export async function oauthManagement({ base, page, check }) {
 
 async function verifyFullTokenCapacity({ base, page, check }) {
   const tokenQuota = structuredClone(quota);
+  // The widest reading a window can hold: a previous cycle's token count in full digits, with no
+  // dollar figure to shorten it. The row states it in its tooltip and the Drawer prints it, so both
+  // surfaces are checked for the same figure.
   const previousWindow = tokenQuota[0].windows[1];
   previousWindow.capacity.tokens = 123_456_789_012_345;
   delete previousWindow.capacity.cost_nanos;
+  const FULL_DIGITS = '123,456,789,012,345 tokens';
   const quotaPattern = '**/api/v1/management/quota';
   const quotaHandler = (route) => route.fulfill({ json: { quotas: tokenQuota, total: tokenQuota.length } });
   await page.route(quotaPattern, quotaHandler);
@@ -516,61 +527,60 @@ async function verifyFullTokenCapacity({ base, page, check }) {
   }, style);
   try {
     await setTokenStyle('full');
-    for (const width of [1440, 375, 320]) {
-      await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${base}/oauth-management?density=compact`, { waitUntil: 'domcontentloaded' });
+    const weeklyCell = page.locator('[data-auth-index="auth-01"] [data-quota-column="standard|weekly"]');
+    await weeklyCell.waitFor({ state: 'visible', timeout: 20_000 });
+    const weeklyTitle = () => weeklyCell.getAttribute('title').then((title) => title ?? '');
+    await until(async () => (await weeklyTitle()).includes(FULL_DIGITS), {
+      label: 'the previous-cycle token estimate in full-digit style',
+    });
+    check(
+      'a row states its previous-cycle estimate in full digits and never calls it this cycle',
+      (await weeklyTitle()).includes(`Previous cycle estimate ≈${FULL_DIGITS}`)
+        && !(await weeklyTitle()).includes('Est. capacity Prev'),
+      await weeklyTitle(),
+    );
+    // A phone row has no reading of its own, so the same figure is checked where a phone reads it:
+    // the Drawer's capacity line, which must hold the longest one without leaving the panel.
+    for (const width of [375, 320]) {
+      await page.setViewportSize({ width, height: 844 });
       await page.goto(`${base}/oauth-management?density=compact`, { waitUntil: 'domcontentloaded' });
-      const previousEstimate = page.locator('[data-auth-index="auth-01"] [data-quota-compact-window="weekly"] [data-quota-compact-capacity]');
-      await until(async () => (await previousEstimate.innerText()) === 'Prev ≈123,456,789,012,345 tokens', {
-        label: 'the previous-cycle token estimate in full-digit style',
-      });
-      // A wide record is a subgrid of the list, so its tracks are read from the list that owns them.
-      await until(async () => page.getByTestId('oauth-credential-record').first().evaluate((element) => {
-        const own = getComputedStyle(element).gridTemplateColumns;
-        const tracks = own.startsWith('subgrid') ? getComputedStyle(element.parentElement.parentElement).gridTemplateColumns : own;
-        // A phone record is two tracks: the facts, and the control that ends the line.
-        return tracks.split(' ').length === (window.innerWidth <= 640 ? 2 : 6);
-      }), { label: 'the credential row to adopt the target viewport' });
+      const row = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-01"]');
+      await row.waitFor({ state: 'visible', timeout: 20_000 });
+      await row.getByRole('button', { name: /^Details:/ }).click();
+      const drawer = page.locator('.ant-drawer-open');
+      await drawer.getByRole('tab', { name: 'Quota', exact: true }).click();
+      const reading = drawer.locator('[data-quota-capacity-basis="previous_cycle"]').filter({ hasText: FULL_DIGITS }).first();
+      await reading.waitFor({ state: 'visible', timeout: 10_000 });
       await settleLayout(page);
-      if (width === 1440) {
-        // The header and the records share tracks only if every record does: one row with a wider
-        // action cell must not move its own columns away from the header's.
-        const columnEdges = await page.getByTestId('oauth-credential-record').evaluateAll((records) => {
-          const edges = (row) => [...row.children].slice(0, 6).map((cell) => Math.round(cell.getBoundingClientRect().left));
-          const header = records[0].parentElement.previousElementSibling;
-          return { header: edges(header), records: records.map(edges) };
+      const geometry = await reading.evaluate((element) => {
+        const body = element.closest('.ant-drawer-body').getBoundingClientRect();
+        const parts = [...element.querySelectorAll(':scope > span')].map((part) => {
+          const bounds = part.getBoundingClientRect();
+          return {
+            text: part.textContent,
+            contained: bounds.width > 0 && bounds.left >= body.left - 1 && bounds.right <= body.right + 1,
+          };
         });
-        check(
-          'every credential record starts its columns where the list header does',
-          columnEdges.records.length > 0
-            && columnEdges.records.every((row) => row.every((left, column) => left === columnEdges.header[column])),
-          JSON.stringify(columnEdges),
-        );
-      }
-      const geometry = await previousEstimate.evaluate((element) => {
-        const bounds = element.getBoundingClientRect();
-        const windowBounds = element.closest('[data-quota-compact-window]').getBoundingClientRect();
-        const textRange = document.createRange();
-        textRange.selectNodeContents(element);
-        const fragments = [...textRange.getClientRects()];
-        return {
-          text: element.textContent,
-          isContained: bounds.width > 0 && bounds.left >= windowBounds.left - 1 && bounds.right <= windowBounds.right + 1
-            && element.scrollWidth <= element.clientWidth + 1
-            && fragments.every((fragment) => fragment.left >= windowBounds.left - 1 && fragment.right <= windowBounds.right + 1),
-          overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
-        };
+        return { parts, overflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth) };
       });
       check(
-        `the full-digit previous-cycle token estimate stays readable within its window at ${width}px`,
-        geometry.text === 'Prev ≈123,456,789,012,345 tokens' && geometry.isContained && geometry.overflow === 0,
+        `the full-digit previous-cycle estimate stays inside the drawer at ${width}px`,
+        geometry.parts.some((part) => (part.text ?? '').includes('Previous cycle estimate'))
+          && geometry.parts.some((part) => (part.text ?? '').includes(FULL_DIGITS))
+          && geometry.parts.every((part) => part.contained)
+          && geometry.overflow === 0,
         JSON.stringify(geometry),
       );
+      await page.screenshot({ path: `tmp/oauth-token-capacity-${width}.png` });
+      await drawer.locator('.ant-drawer-close').click();
+      await drawer.waitFor({ state: 'hidden' });
     }
   } finally {
     await page.unroute(quotaPattern, quotaHandler);
     await setTokenStyle('en-compact');
   }
-
 }
 
 async function verifyPluginConnections({ base, page, check, oauthStarts }) {
