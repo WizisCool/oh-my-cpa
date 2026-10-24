@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -182,6 +184,11 @@ func lockUsagePrice(ctx context.Context, book *priceBook, event usage.Event) (lo
 }
 
 func lockUsageCost(ctx context.Context, book *priceBook, event usage.Event, serviceTier string) (lockedPrice, error) {
+	// A supplied but unresolved partition cannot be turned into a billable one by
+	// guessing its dialect. Legacy records retain the established raw-count policy.
+	if event.Accounting != nil && event.Accounting.Status != "complete" {
+		return lockedPrice{status: "unpriced"}, nil
+	}
 	version, err := book.price(ctx, event.Provider, event.Model, event.TimestampMS)
 	// A channel tombstone restores the shared price effective at the request time.
 	if event.Provider != "" && (errors.Is(err, sql.ErrNoRows) || err == nil && !version.Available) {
@@ -239,16 +246,18 @@ func eventTokens(input, output, cacheRead, cacheWrite int64) pricing.Tokens {
 // A disagreement would mean the pricing rules changed after the request was
 // stored, which the stored amount survives unchanged.
 type RequestCostBreakdown struct {
-	Status            string             `json:"status"`
-	StoredNanos       *int64             `json:"stored_nanos,omitempty"`
-	StoredTier        *int64             `json:"stored_tier,omitempty"`
-	ServiceTier       string             `json:"service_tier,omitempty"`
-	ServiceTierSource string             `json:"service_tier_source,omitempty"`
-	Version           *PriceVersion      `json:"price_version,omitempty"`
-	Channel           *ChannelVersion    `json:"channel,omitempty"`
-	Quote             *pricing.Breakdown `json:"quote,omitempty"`
-	RecomputedMatches bool               `json:"recomputed_matches"`
-	InvalidReason     string             `json:"invalid_reason,omitempty"`
+	AccountingStatus  string                 `json:"accounting_status"`
+	Accounting        *usage.TokenAccounting `json:"token_accounting,omitempty"`
+	Status            string                 `json:"status"`
+	StoredNanos       *int64                 `json:"stored_nanos,omitempty"`
+	StoredTier        *int64                 `json:"stored_tier,omitempty"`
+	ServiceTier       string                 `json:"service_tier,omitempty"`
+	ServiceTierSource string                 `json:"service_tier_source,omitempty"`
+	Version           *PriceVersion          `json:"price_version,omitempty"`
+	Channel           *ChannelVersion        `json:"channel,omitempty"`
+	Quote             *pricing.Breakdown     `json:"quote,omitempty"`
+	RecomputedMatches bool                   `json:"recomputed_matches"`
+	InvalidReason     string                 `json:"invalid_reason,omitempty"`
 }
 
 // GetUsageEventCostBreakdown loads the versions a stored request locked. An
@@ -262,17 +271,25 @@ func (r *Repository) GetUsageEventCostBreakdown(ctx context.Context, id int64) (
 	var timestampMS int64
 	var input, output, cacheRead, cacheWrite int64
 	var requestedTier, responseTier string
-	var billedTier, billedTierSource sql.NullString
+	var billedTier, billedTierSource, accounting sql.NullString
 	err := r.SQL().QueryRowContext(ctx, `SELECT pricing_status, cost_nanos, price_version_id, channel_version_id, price_tier,
- timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, service_tier, response_service_tier, billed_service_tier, billed_service_tier_source
+ timestamp_ms, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, service_tier, response_service_tier, billed_service_tier, billed_service_tier_source, token_accounting
  FROM usage_events WHERE id = ?`, id).Scan(
 		&result.Status, &storedNanos, &versionID, &channelID, &storedTier, &timestampMS, &input, &output, &cacheRead, &cacheWrite,
-		&requestedTier, &responseTier, &billedTier, &billedTierSource)
+		&requestedTier, &responseTier, &billedTier, &billedTierSource, &accounting)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}
 	if err != nil {
 		return result, fmt.Errorf("read request cost: %w", err)
+	}
+	result.Accounting, err = decodeStoredTokenAccounting(accounting)
+	result.AccountingStatus = "legacy"
+	if result.Accounting != nil {
+		result.AccountingStatus = result.Accounting.Status
+	}
+	if err != nil {
+		return result, err
 	}
 	if storedNanos.Valid {
 		result.StoredNanos = &storedNanos.Int64
@@ -353,4 +370,32 @@ func (r *Repository) ListModelPriceVersions(ctx context.Context, model string, l
 		versions = append(versions, version)
 	}
 	return versions, rows.Err()
+}
+
+type tokenAccountingValue struct{ accounting *usage.TokenAccounting }
+
+func encodeTokenAccounting(accounting *usage.TokenAccounting) tokenAccountingValue {
+	return tokenAccountingValue{accounting: accounting}
+}
+
+func (value tokenAccountingValue) Value() (driver.Value, error) {
+	if value.accounting == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value.accounting)
+	if err != nil {
+		return nil, err
+	}
+	return string(encoded), nil
+}
+
+func decodeStoredTokenAccounting(stored sql.NullString) (*usage.TokenAccounting, error) {
+	if !stored.Valid {
+		return nil, nil
+	}
+	var accounting usage.TokenAccounting
+	if err := json.Unmarshal([]byte(stored.String), &accounting); err != nil {
+		return nil, fmt.Errorf("read stored token accounting: %w", err)
+	}
+	return &accounting, nil
 }

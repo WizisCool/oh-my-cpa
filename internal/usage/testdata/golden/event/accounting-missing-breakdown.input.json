@@ -1,0 +1,20 @@
+{
+  "why": "Canonical completion includes reasoning exactly once, independently of the raw vendor output convention.",
+  "now_ms": 0,
+  "body": {
+    "record": {
+      "request_id": "missing-breakdown",
+      "accounting_version": 2,
+      "tokens": {
+        "input_tokens": 100,
+        "output_tokens": 30,
+        "reasoning_tokens": 10,
+        "cached_tokens": 20,
+        "cache_read_tokens": 20,
+        "cache_read_tokens_present": true,
+        "cache_creation_tokens": 0,
+        "total_tokens": 140
+      }
+    }
+  }
+}

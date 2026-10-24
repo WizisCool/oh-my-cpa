@@ -2,6 +2,13 @@ import type { Messages } from './types';
 
 /** Request records and routing. */
 export const USAGE_EVENTS_MESSAGES: Messages = {
+  'events.accounting_legacy': ["旧版计量：未保留 canonical 证据，沿用原始计数和已锁定的价格快照。", "Legacy accounting: no canonical evidence was retained; original counts and locked price snapshots are preserved."],
+  'events.accounting_complete': ["Canonical v{version}：原始输入 {raw_input}、输出 {raw_output} → 规范输入 {input}、输出 {output}（推理仅计一次）。", "Canonical v{version}: raw input {raw_input}, output {raw_output} → normalized input {input}, output {output} (reasoning counted once)."],
+  'events.accounting_unresolved': ["Token 计量{status}，无法确认完整的计费分区；此请求未计入费用估算。", "Token accounting is {status}; a complete billable partition is unavailable, so this request is excluded from cost estimates."],
+  'events.accounting_status_invalid': ["无效", "invalid"],
+  'events.accounting_status_unsupported': ["版本不受支持", "unsupported"],
+  'events.accounting_status_inconsistent': ["不一致", "inconsistent"],
+  'events.accounting_status_unclassified': ["未完全分类", "unclassified"],
   'events.tps_hint_buffered': ['扣除首字延迟后的速率超过 500 t/s，疑似缓冲或批量返回；改用端到端平均速率：输出 Token ÷ 总耗时', 'Excluding first-token latency would exceed 500 t/s, suggesting buffered or batched delivery; using the end-to-end average: output tokens ÷ total latency'],
   'events.tps_hint_fallback': ["首字延迟不可用、剩余窗口不足 50 ms，或推理 Token 生成于首字之前，回退到：输出 Token ÷ 总耗时", "First-token latency is unavailable, the remaining window is below 50 ms, or reasoning tokens preceded the first token; falls back to output tokens ÷ total latency"],
   'events.previous_results': ['上次结果（待更新）', 'Previous results (pending update)'],

@@ -391,3 +391,17 @@ Price history rejects corrupt tier snapshots rather than presenting them as base
   matcher. The fixture writes the price and channel versions its fabricated
   history is priced against (`Repository.SeedModelPriceHistoryBackfill`,
   `Repository.SeedChannelHistoryBackfill`). See `docs/architecture.md` §13.
+
+## Canonical token accounting at ingestion
+
+A complete validated CPA v2 breakdown supplies the normalized input, cache-read,
+cache-write and output totals used by the request-time quote. The completion
+bucket includes canonical reasoning exactly once; no universal reasoning
+addition is applied to vendor output. Request records retain the original counts,
+version, typed partition and validation status in immutable accounting evidence,
+which the cost explanation and Agent/MCP request reads also return. Missing
+evidence retains legacy accounting. Supplied unresolved accounting is unpriced
+rather than guessed, and editing prices never backfills it. Existing recorded
+counts, amounts and append-only price versions are unchanged by migration
+`048_usage_token_accounting.sql`; the permanent facts preserve corrected usage
+and raw-evidence measures after request-detail retention.

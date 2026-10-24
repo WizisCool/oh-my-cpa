@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { TokenAccountingNote } from '../src/components/usage/TokenAccountingNote';
 import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
+import { PricingEditorProvider } from '../src/components/pricing/PricingEditorContext';
 import { CostBreakdownView } from '../src/components/pricing/CostBreakdownView';
 import type { RequestCostBreakdown } from '../src/types/pricing';
 import { RequestRow } from '../src/components/usage/RequestRow';
@@ -73,4 +75,34 @@ it('explains a locked outbound-priced tier without labeling it client or respons
   };
   renderTier({}, () => <CostBreakdownView breakdown={breakdown} model="fixture-model" />);
   expect(screen.getByTestId('cost-service-tier').textContent).toMatch(/priced from outbound request|按出站档位计价/);
+});
+
+it.each(['row', 'breakdown'])('does not offer a price edit as a remedy for unresolved token accounting in the %s', surface => {
+  const breakdown: RequestCostBreakdown = {
+    status: 'unpriced', accounting_status: 'unclassified', recomputed_matches: false,
+    token_accounting: {
+      version: 2, status: 'unclassified',
+      raw_tokens: { input_tokens: 100, output_tokens: 30, reasoning_tokens: 10, cached_tokens: 20,
+        cache_read_tokens: 20, cache_read_tokens_present: true, cache_creation_tokens: 0, total_tokens: 140 },
+    },
+  };
+  renderTier({ pricing_status: 'unpriced', token_accounting: breakdown.token_accounting }, event => <PricingEditorProvider>
+    {surface === 'breakdown' ? <CostBreakdownView breakdown={breakdown} model="fixture-model" /> :
+      <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />}
+  </PricingEditorProvider>);
+  expect(screen.queryByTestId(surface === 'breakdown' ? 'cost-set-price' : 'request-set-price')).toBeNull();
+});
+
+it('gives an unresolved request the same cost reason in its row and its accounting explanation', () => {
+  const accounting = {
+    version: 2, status: 'unclassified' as const,
+    raw_tokens: { input_tokens: 100, output_tokens: 30, reasoning_tokens: 10, cached_tokens: 20,
+      cache_read_tokens: 20, cache_read_tokens_present: true, cache_creation_tokens: 0, total_tokens: 140 },
+  };
+  const { container } = renderTier({ pricing_status: 'unpriced', token_accounting: accounting }, event => <>
+    <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
+    <TokenAccountingNote accounting={accounting} />
+  </>);
+  const tooltipReasons = Array.from(container.querySelectorAll('[data-request-tooltip]')).map(element => element.getAttribute('data-request-tooltip'));
+  expect(tooltipReasons).toContain(container.querySelector('p')?.textContent);
 });

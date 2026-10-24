@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -169,5 +172,139 @@ func TestDecodedPriceAndInboxCommitRollBackTogether(t *testing.T) {
 	var cost int64
 	if err = r.SQL().QueryRow(`SELECT cost_nanos FROM usage_events`).Scan(&cost); err != nil || cost != 1_000_000_000 {
 		t.Fatalf("decoded request not locked: %d %v", cost, err)
+	}
+}
+
+func TestCanonicalAccountingSurvivesPricingAndRetention(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name       string
+		output     int64
+		version    int
+		quality    string
+		wantOutput int64
+		wantCost   int64
+		wantStatus string
+		rawCached  int64
+	}{
+		{"separate reasoning", 30, 2, "complete", 40, 170000, "complete", 20},
+		{"inclusive reasoning", 40, 2, "complete", 40, 170000, "complete", 20},
+		{"legacy", 30, 0, "", 30, 150000, "", 20},
+		{"future version", 30, 3, "complete", 30, 0, "unsupported", 20},
+		{"unclassified", 30, 2, "unclassified", 30, 0, "unclassified", 20},
+		{"inconsistent", 30, 2, "inconsistent", 30, 0, "inconsistent", 20},
+		{"cached alias zero", 30, 2, "complete", 40, 170000, "complete", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := usageTestRepository(t)
+			price := pricing.ModelPrice{Model: "canonical", PromptPricePer1M: 1, CompletionPer1M: 2, CacheReadPer1M: 0.5, PriceMultiplier: 1, Source: pricing.SourceManual}
+			if err := repo.UpsertModelPrices(ctx, []pricing.ModelPrice{price}); err != nil {
+				t.Fatal(err)
+			}
+			at := time.Now().Add(24 * time.Hour).Truncate(24 * time.Hour)
+			tokens := usage.TokenStats{InputTokens: 100, OutputTokens: tc.output, ReasoningTokens: 10, CachedTokens: tc.rawCached, CacheReadTokens: 20, CacheReadTokensPresent: true, TotalTokens: 140}
+			payload := map[string]any{"request_id": "canonical", "model": "canonical", "timestamp": at.Add(time.Second), "tokens": tokens}
+			if tc.version != 0 {
+				payload["accounting_version"] = tc.version
+				payload["token_breakdown"] = usage.TokenBreakdown{SchemaVersion: 2, Quality: tc.quality, TotalTokens: 140,
+					Input:  usage.TokenInputBreakdown{TotalTokens: 100, UncachedTokens: 80, CacheReadTokens: 20},
+					Output: usage.TokenOutputBreakdown{TotalTokens: 40, NonReasoningTokens: 30, ReasoningTokens: 10}}
+			}
+			raw, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			event, err := usage.DecodeEvent(string(raw), "default", at)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Exercise the inbox transaction used by the live queue, not only direct inserts.
+			if _, err = repo.AppendUsageInbox(ctx, "default", "http_pull", []string{string(raw)}, at); err != nil {
+				t.Fatal(err)
+			}
+			inbox, err := repo.ClaimUsageInboxBatch(ctx, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = repo.CommitUsageDecoded(ctx, []UsageDecoded{{InboxID: inbox[0].ID, Event: event}}); err != nil {
+				t.Fatal(err)
+			}
+			page, err := repo.ListUsageEvents(ctx, UsageEventFilter{Limit: 5})
+			if err != nil || len(page.Items) != 1 {
+				t.Fatalf("list: %+v %v", page, err)
+			}
+			row := page.Items[0]
+			detail, err := repo.GetUsageEvent(ctx, row.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, record := range []UsageEventRow{row, detail} {
+				if record.Tokens.OutputTokens != tc.wantOutput || !reflect.DeepEqual(record.Accounting, event.Accounting) {
+					t.Fatalf("stored accounting: %+v", record)
+				}
+			}
+			cost, err := repo.GetUsageEventCostBreakdown(ctx, row.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(cost.Accounting, event.Accounting) {
+				t.Fatalf("cost lost accounting: %+v", cost)
+			}
+			if tc.wantCost > 0 {
+				if cost.StoredNanos == nil || *cost.StoredNanos != tc.wantCost || !cost.RecomputedMatches || cost.Quote == nil {
+					t.Fatalf("cost: %+v", cost)
+				}
+			} else if cost.Status != "unpriced" || cost.StoredNanos != nil || cost.Quote != nil {
+				t.Fatalf("unresolved accounting was priced: %+v", cost)
+			}
+			if tc.wantStatus != "" && (detail.Accounting == nil || detail.Accounting.Status != tc.wantStatus || detail.Accounting.RawTokens.OutputTokens != tc.output) {
+				t.Fatalf("raw evidence: %+v", detail.Accounting)
+			}
+			if _, err = repo.SQL().Exec(`UPDATE usage_events SET token_accounting=NULL WHERE id=?`, row.ID); err == nil {
+				t.Fatal("accounting evidence is mutable")
+			}
+			query := UsageFactQuery{InstanceID: "default", FromMS: at.UnixMilli(), ToMS: at.Add(24*time.Hour).UnixMilli() - 1, BucketMS: DayBucketMS}
+			want := UsageMeasures{UsageTotals: UsageTotals{Requests: 1, InputTokens: 100, OutputTokens: tc.wantOutput, ReasoningTokens: 10, CachedTokens: 20, CacheReadTokens: 20, TotalTokens: 140}, CostNanos: tc.wantCost}
+			if tc.wantCost > 0 {
+				want.PricedRequests, want.CostedRequests = 1, 1
+			}
+			if tc.version != 0 {
+				want.Accounting = TokenAccountingMeasures{RawInputTokens: 100, RawOutputTokens: tc.output, RawTotalTokens: 140}
+				if tc.wantStatus == "complete" {
+					want.Accounting.CanonicalRequests = 1
+				} else {
+					want.Accounting.UnresolvedRequests = 1
+				}
+			}
+			verify := func(stage string) {
+				t.Helper()
+				facts, err := repo.QueryUsageFacts(ctx, query)
+				if err != nil || !reflect.DeepEqual(facts.Totals(), want) {
+					t.Fatalf("%s: got %+v want %+v: %v", stage, facts.Totals(), want, err)
+				}
+			}
+			verify("unfolded")
+			if _, err = repo.AggregateUsageFacts(ctx, 100); err != nil {
+				t.Fatal(err)
+			}
+			verify("folded")
+			for pass := 0; pass < 2; pass++ {
+				if _, err = repo.RunLifecycle(ctx, map[string]int64{LifecycleUsageDetail: at.Add(24 * time.Hour).UnixMilli()}, 5); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err = repo.GetUsageEvent(ctx, row.ID); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("detail did not expire: %v", err)
+			}
+			verify("retained daily facts")
+			query.BucketMS = QuarterHourBucketMS
+			verify("retained fine facts")
+			repo.Timezone().Apply(time.UTC)
+			if _, err = repo.EnsureLocalUsageFacts(ctx); err != nil {
+				t.Fatal(err)
+			}
+			query.Calendar = &UsageCalendar{Location: time.UTC, Unit: UsageCalendarDay}
+			verify("rebuilt local-day facts")
+		})
 	}
 }

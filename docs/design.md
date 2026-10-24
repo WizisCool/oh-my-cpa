@@ -421,17 +421,21 @@ Rules:
 5. The hue is redundant encoding — the percentage is printed in the badge — so
    the ramp needs no legend and no colour-only reading.
 
-**Deferred: cache-write accounting.** A provider that accounts cache buckets
-separately (Anthropic-style) reports prompt tokens as `input + cache_read +
-cache_creation`, so its hit ratio currently reads high because the written
-tokens sit outside the denominator. Counting them needs evidence the app does
-not keep: CPA classifies each payload by provider/executor and emits a canonical
-breakdown, but the decoder persists only the raw counts, and the usage facts
-carry no per-convention token columns, so a window cannot be split by convention.
-Fixing it means persisting the breakdown (or per-convention token columns in the
-usage facts) before any arithmetic change. Until then the ratio is a bounded estimate
-for cache-writing providers, and the request list is exact only for providers
-whose input already includes the cached prefix.
+**Canonical and legacy token accounting.** A complete, validated CPA v2
+breakdown supplies non-overlapping input buckets (uncached, cache read and cache
+write) and an output total that includes reasoning once. Request rows, details,
+dashboard aggregates and completion-price explanations use those normalized
+counts. The detail and cost explanation also identify the original vendor input
+and output, so a separate-reasoning raw output of 30 becoming 40 is visible rather
+than silently relabelled. Retained facts preserve normalized totals and the scope
+and raw sums of the accounting evidence after request records expire.
+
+Records without canonical evidence keep their historical interpretation and
+price snapshots, and are labelled legacy; their cache ratios remain bounded
+estimates when the vendor counted cache writes independently. A supplied but
+unsupported, incomplete, inconsistent or unclassified partition is explicit and
+excluded from cost estimates. Editing a price cannot repair that evidence, so
+its cost explanation does not offer price editing as the remedy.
 
 ### Reasoning-effort scale
 

@@ -104,26 +104,28 @@ type TokenStats struct {
 
 // Payload is one CPA usage record as published to the queue.
 type Payload struct {
-	Timestamp     time.Time  `json:"timestamp"`
-	LatencyMS     int64      `json:"latency_ms"`
-	TTFTMS        *int64     `json:"ttft_ms"`
-	Source        string     `json:"source"`
-	AuthIndex     string     `json:"auth_index"`
-	ClientIP      *string    `json:"client_ip"`
-	XForwardedFor *string    `json:"x_forwarded_for"`
-	UserAgent     *string    `json:"user_agent"`
-	Tokens        TokenStats `json:"tokens"`
-	Stream        *bool      `json:"stream"`
-	Failed        bool       `json:"failed"`
-	Fail          FailDetail `json:"fail"`
-	Generate      *bool      `json:"generate"`
-	Provider      string     `json:"provider"`
-	ExecutorType  string     `json:"executor_type"`
-	Model         string     `json:"model"`
-	Alias         *string    `json:"alias"`
-	Endpoint      string     `json:"endpoint"`
-	AuthType      string     `json:"auth_type"`
-	APIKey        string     `json:"api_key"`
+	AccountingVersion json.RawMessage `json:"accounting_version"`
+	TokenBreakdown    json.RawMessage `json:"token_breakdown"`
+	Timestamp         time.Time       `json:"timestamp"`
+	LatencyMS         int64           `json:"latency_ms"`
+	TTFTMS            *int64          `json:"ttft_ms"`
+	Source            string          `json:"source"`
+	AuthIndex         string          `json:"auth_index"`
+	ClientIP          *string         `json:"client_ip"`
+	XForwardedFor     *string         `json:"x_forwarded_for"`
+	UserAgent         *string         `json:"user_agent"`
+	Tokens            TokenStats      `json:"tokens"`
+	Stream            *bool           `json:"stream"`
+	Failed            bool            `json:"failed"`
+	Fail              FailDetail      `json:"fail"`
+	Generate          *bool           `json:"generate"`
+	Provider          string          `json:"provider"`
+	ExecutorType      string          `json:"executor_type"`
+	Model             string          `json:"model"`
+	Alias             *string         `json:"alias"`
+	Endpoint          string          `json:"endpoint"`
+	AuthType          string          `json:"auth_type"`
+	APIKey            string          `json:"api_key"`
 	// AccessProvider names the CPA access provider that authenticated the
 	// caller, and IsNativeKey reports whether the caller's key came from
 	// CPA's native configured-key provider. Both describe caller
@@ -138,7 +140,6 @@ type Payload struct {
 	EffectiveServiceTier string          `json:"effective_service_tier"`
 	ResponseServiceTier  string          `json:"response_service_tier,omitempty"`
 	ResponseModel        string          `json:"response_model,omitempty"`
-	AccountingVersion    int             `json:"accounting_version"`
 	ResponseHeaders      json.RawMessage `json:"response_headers,omitempty"`
 }
 
@@ -156,6 +157,7 @@ const MaxFailBodyRunes = 4096
 
 // Event is the decoded row for usage_events.
 type Event struct {
+	Accounting    *TokenAccounting
 	InstanceID    string
 	EventKey      string
 	APIGroupKey   string
@@ -282,6 +284,14 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		CacheReadTokens:     nonNegative(payload.Tokens.CacheReadTokens),
 		CacheCreationTokens: nonNegative(payload.Tokens.CacheCreationTokens),
 		TotalTokens:         totalTokens(payload.Tokens),
+	}
+	event.Accounting = decodeTokenAccounting(payload.AccountingVersion, payload.TokenBreakdown, payload.Tokens)
+	if accounting := event.Accounting; accounting != nil && accounting.Status == "complete" {
+		breakdown := accounting.Breakdown
+		event.InputTokens, event.OutputTokens = breakdown.Input.TotalTokens, breakdown.Output.TotalTokens
+		event.CacheReadTokens, event.CacheCreationTokens = breakdown.Input.CacheReadTokens, breakdown.Input.CacheWriteTokens
+		event.CachedTokens = breakdown.Input.CacheReadTokens
+		event.ReasoningTokens, event.TotalTokens = breakdown.Output.ReasoningTokens, breakdown.TotalTokens
 	}
 	event.ResponseModel = boundedSafe(payload.ResponseModel, 256)
 	event.ModelSubstituted = isServedModelSubstituted(event.Model, event.ModelAlias, event.ResponseModel)

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -91,10 +90,17 @@ func TestOutboundTierMigrationPreservesRecordsAndSequence(t *testing.T) {
 			if after := snapshot(); after != before {
 				t.Fatalf("historical rows changed: %s -> %s", before, after)
 			}
-			if after := schemaObjects(); !reflect.DeepEqual(after, objects) {
-				t.Fatalf("indexes or immutability triggers changed: %v -> %v", objects, after)
+			afterObjects := schemaObjects()
+			for name, ddl := range objects {
+				if afterObjects[name] != ddl {
+					t.Fatalf("existing index or immutability trigger %s changed: %q -> %q", name, ddl, afterObjects[name])
+				}
 			}
 			if !isEmpty {
+				var accounting *string
+				if err := db.SQL.QueryRowContext(ctx, `SELECT token_accounting FROM usage_events WHERE id = 41`).Scan(&accounting); err != nil || accounting != nil {
+					t.Fatalf("historical canonical evidence was invented: %v %v", accounting, err)
+				}
 				var effective string
 				if err := db.SQL.QueryRowContext(ctx, `SELECT effective_service_tier FROM usage_events WHERE id = 41`).Scan(&effective); err != nil || effective != "" {
 					t.Fatalf("historical outbound evidence: %q %v", effective, err)

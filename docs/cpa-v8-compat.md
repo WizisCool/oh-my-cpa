@@ -7,6 +7,23 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+## Canonical usage accounting
+
+CPA source contract `8289ec4c71ad914d0612c2776352b76ba3d355a6` preserves
+separate-reasoning and cache-subset semantics while merging Interactions plugin
+executor streams. The usage queue already publishes `accounting_version` and
+`token_breakdown`; this change does not require another endpoint or queue reader.
+OMC validates v2 accounting before using its complete normalized input/output and
+cache buckets for usage and pricing, preserves allowlisted raw-count evidence,
+and exposes the same interpretation through console and Agent/MCP request/cost
+reads. Raw output 30 plus separate reasoning 10 becomes canonical output 40;
+reasoning-inclusive raw output 40 remains 40. Missing evidence retains the legacy
+policy. Unsupported, malformed, inconsistent and unclassified evidence is
+explicit and unpriced. Migration `048_usage_token_accounting.sql` adds evidence
+without reinterpreting historical rows or changing their locked amounts.
+Verification is against pinned CPA source and hermetic decoder, persistence,
+pricing and retained-fact regressions, not measured production traffic.
+
 ## Vertex per-model OpenAPI policy
 
 The CPA source contract at `d44f8682bc1438ac0f06159207435bd997bca4c9`

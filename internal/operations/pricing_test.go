@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 type candidateFailingPricing struct {
@@ -279,6 +281,20 @@ func TestRequestCostBreakdownResultsPassTheirOwnSchema(t *testing.T) {
 	} {
 		if _, err := definition.ValidateOutput(breakdown); err != nil {
 			t.Errorf("%s breakdown refused by its schema: %v", name, err)
+		}
+	}
+}
+
+func TestRequestProjectionPreservesCanonicalEvidence(t *testing.T) {
+	for _, accounting := range []*usage.TokenAccounting{nil, {Version: 2, Status: "complete", RawTokens: usage.TokenStats{InputTokens: 100, OutputTokens: 30, ReasoningTokens: 10, TotalTokens: 140}}} {
+		status := "legacy"
+		if accounting != nil {
+			status = "complete"
+		}
+		row := repository.UsageEventRow{ID: 305, Model: "fixture", RequestID: "fixture-request", Accounting: accounting, Tokens: usage.TokenStats{InputTokens: 100, OutputTokens: 40, ReasoningTokens: 10, TotalTokens: 140}}
+		want := RequestItem{ID: 305, Model: "fixture", CallPoint: "fixture", RequestID: "fixture-request", AccountingStatus: status, Accounting: accounting, InputTokens: 100, OutputTokens: 40, ReasoningTokens: 10, Tokens: 140}
+		if got := projectRequest(row); !reflect.DeepEqual(got, want) {
+			t.Fatalf("request accounting projection = %+v, want %+v", got, want)
 		}
 	}
 }

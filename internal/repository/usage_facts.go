@@ -45,7 +45,8 @@ var usageFactMeasures = []string{
 	"requests", "failures", "input_tokens", "output_tokens", "reasoning_tokens",
 	"cached_tokens", "cache_read_tokens", "cache_creation_tokens", "total_tokens",
 	"latency_sum_ms", "ttft_sum_ms", "ttft_count", "cost_nanos", "priced_requests",
-	"costed_requests",
+	"costed_requests", "canonical_requests", "unresolved_accounting_requests",
+	"raw_input_tokens", "raw_output_tokens", "raw_total_tokens",
 }
 
 // usageEventMeasures is one request record expressed as the same measures, so a
@@ -55,7 +56,12 @@ const usageEventMeasures = `
 	cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
 	latency_ms AS latency_sum_ms, COALESCE(ttft_ms, 0) AS ttft_sum_ms,
 	(ttft_ms IS NOT NULL) AS ttft_count, COALESCE(cost_nanos, 0) AS cost_nanos,
-	(pricing_status = 'priced') AS priced_requests, (cost_nanos IS NOT NULL) AS costed_requests`
+	(pricing_status = 'priced') AS priced_requests, (cost_nanos IS NOT NULL) AS costed_requests,
+	(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete') AS canonical_requests,
+	(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete') AS unresolved_accounting_requests,
+	COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0) AS raw_input_tokens,
+	COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0) AS raw_output_tokens,
+	COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0) AS raw_total_tokens`
 
 // UsageDimension is one column a usage read can partition or narrow by.
 //
@@ -120,8 +126,19 @@ type UsageCalendar struct {
 	Unit     UsageCalendarUnit
 }
 
+// TokenAccountingMeasures retain the scope of raw evidence alongside the
+// normalized sums. Requests not counted here are legacy, not known zero usage.
+type TokenAccountingMeasures struct {
+	CanonicalRequests  int64 `json:"canonical_requests"`
+	UnresolvedRequests int64 `json:"unresolved_requests"`
+	RawInputTokens     int64 `json:"raw_input_tokens"`
+	RawOutputTokens    int64 `json:"raw_output_tokens"`
+	RawTotalTokens     int64 `json:"raw_total_tokens"`
+}
+
 // UsageMeasures is the additive content of one fact row or one request record.
 type UsageMeasures struct {
+	Accounting TokenAccountingMeasures
 	UsageTotals
 	// CostNanos sums request-time cost snapshots; a request with no usable price
 	// contributes nothing rather than a fabricated zero price.
@@ -138,6 +155,11 @@ func (m *UsageMeasures) add(other UsageMeasures) {
 	m.CostNanos += other.CostNanos
 	m.PricedRequests += other.PricedRequests
 	m.CostedRequests += other.CostedRequests
+	m.Accounting.CanonicalRequests += other.Accounting.CanonicalRequests
+	m.Accounting.UnresolvedRequests += other.Accounting.UnresolvedRequests
+	m.Accounting.RawInputTokens += other.Accounting.RawInputTokens
+	m.Accounting.RawOutputTokens += other.Accounting.RawOutputTokens
+	m.Accounting.RawTotalTokens += other.Accounting.RawTotalTokens
 }
 
 // UsageFactQuery is one read of deployment usage.
@@ -505,7 +527,9 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 
 func usageMeasureTargets(measures *UsageMeasures) []any {
 	return append(scanTargets(&measures.UsageTotals),
-		&measures.CostNanos, &measures.PricedRequests, &measures.CostedRequests)
+		&measures.CostNanos, &measures.PricedRequests, &measures.CostedRequests,
+		&measures.Accounting.CanonicalRequests, &measures.Accounting.UnresolvedRequests,
+		&measures.Accounting.RawInputTokens, &measures.Accounting.RawOutputTokens, &measures.Accounting.RawTotalTokens)
 }
 
 // ClientKeyFilter narrows a read to one client key fingerprint, or to nothing
@@ -705,7 +729,12 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 			       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
 			       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
 			       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
-			       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL)
+			       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL),
+		       SUM(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete'),
+		       SUM(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete'),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0)),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0)),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0))
 			FROM usage_events
 			WHERE id > ?2 AND id <= ?3
 			GROUP BY instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
@@ -807,7 +836,12 @@ func foldLocalUsageFacts(ctx context.Context, tx *sql.Tx, lastID, highID int64) 
 		       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
 		       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
 		       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
-		       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL)
+		       SUM(COALESCE(cost_nanos, 0)), SUM(pricing_status = 'priced'), SUM(cost_nanos IS NOT NULL),
+		       SUM(COALESCE(json_extract(token_accounting, '$.status'), '') = 'complete'),
+		       SUM(token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') <> 'complete'),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.input_tokens'), 0)),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.output_tokens'), 0)),
+		       SUM(COALESCE(json_extract(token_accounting, '$.raw_tokens.total_tokens'), 0))
 		FROM usage_events
 		WHERE id > ?2 AND id <= ?3
 		GROUP BY instance_id, `+day+`, api_group_key, model, COALESCE(model_alias, ''), auth_index, provider, auth_type

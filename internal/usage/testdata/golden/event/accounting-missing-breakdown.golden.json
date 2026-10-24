@@ -1,0 +1,29 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "Accounting": {
+    "version": 2,
+    "status": "invalid",
+    "raw_tokens": {
+      "input_tokens": 100,
+      "output_tokens": 30,
+      "reasoning_tokens": 10,
+      "cached_tokens": 20,
+      "cache_read_tokens": 20,
+      "cache_read_tokens_present": true,
+      "cache_creation_tokens": 0,
+      "total_tokens": 140
+    }
+  },
+  "CacheReadTokens": 20,
+  "CachedTokens": 20,
+  "EventKey": "missing-breakdown",
+  "Generate": true,
+  "InputTokens": 100,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "OutputTokens": 30,
+  "ReasoningTokens": 10,
+  "RequestID": "missing-breakdown",
+  "TotalTokens": 140
+}

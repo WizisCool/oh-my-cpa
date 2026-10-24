@@ -1,0 +1,47 @@
+{
+  "APIGroupKey": "unknown",
+  "APIGroupLabel": "unknown",
+  "Accounting": {
+    "version": 2,
+    "status": "complete",
+    "raw_tokens": {
+      "input_tokens": 60,
+      "output_tokens": 30,
+      "reasoning_tokens": 10,
+      "cached_tokens": 20,
+      "cache_read_tokens": 20,
+      "cache_read_tokens_present": true,
+      "cache_creation_tokens": 20,
+      "total_tokens": 140
+    },
+    "token_breakdown": {
+      "schema_version": 2,
+      "quality": "complete",
+      "total_tokens": 140,
+      "input": {
+        "total_tokens": 100,
+        "uncached_tokens": 60,
+        "cache_read_tokens": 20,
+        "cache_write_tokens": 20
+      },
+      "output": {
+        "total_tokens": 40,
+        "non_reasoning_tokens": 30,
+        "reasoning_tokens": 10
+      },
+      "unclassified_tokens": 0
+    }
+  },
+  "CacheCreationTokens": 20,
+  "CacheReadTokens": 20,
+  "CachedTokens": 20,
+  "EventKey": "independent-cache",
+  "Generate": true,
+  "InputTokens": 100,
+  "InstanceID": "default",
+  "Model": "unknown",
+  "OutputTokens": 40,
+  "ReasoningTokens": 10,
+  "RequestID": "independent-cache",
+  "TotalTokens": 140
+}
