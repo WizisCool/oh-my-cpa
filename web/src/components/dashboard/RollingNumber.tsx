@@ -11,7 +11,7 @@ interface RollingNumberProps {
 /**
  * RollingNumber prints a readout and sweeps it to the next one.
  *
- * The motion it runs is §7 rule 8's whole scope: the six dashboard KPI numbers, and nothing else in
+ * The motion it runs is §7 rule 8's whole scope: the dashboard KPI numbers and the Insights tiles, and nothing else in
  * the console. The timings are the `roll` and glyph-presence tokens from `themeConfig.ts`, so the
  * exception is a named token rather than a duration buried in a component.
  *

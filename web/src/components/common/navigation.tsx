@@ -9,6 +9,7 @@ import {
   DollarOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
+  InsightsOutlined,
   KeyOutlined,
   LoginOutlined,
   ProfileOutlined,
@@ -58,6 +59,7 @@ export const STATIC_NAV_GROUPS: readonly NavGroup[] = [
     key: 'observe',
     labelKey: 'nav.group.observe',
     items: [
+      { key: '/insights', labelKey: 'nav.insights', icon: <InsightsOutlined /> },
       { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
       { key: '/pricing', labelKey: 'nav.pricing', icon: <DollarOutlined /> },
       { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },

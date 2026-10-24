@@ -2,6 +2,7 @@ import { AGENT_MESSAGES } from './agent';
 import { AUTH_FILES_MESSAGES } from './authFiles';
 import { CONFIG_MESSAGES } from './config';
 import { DASHBOARD_MESSAGES } from './dashboard';
+import { INSIGHTS_MESSAGES } from './insights';
 import { LOGS_MESSAGES } from './logs';
 import { MODELS_MESSAGES } from './models';
 import { OAUTH_MESSAGES } from './oauth';
@@ -28,6 +29,7 @@ export const DICT: Messages = {
   ...SHELL_MESSAGES,
   ...AGENT_MESSAGES,
   ...DASHBOARD_MESSAGES,
+  ...INSIGHTS_MESSAGES,
   ...LOGS_MESSAGES,
   ...USAGE_EVENTS_MESSAGES,
   ...PROVIDERS_MESSAGES,

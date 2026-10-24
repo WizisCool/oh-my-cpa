@@ -21,6 +21,9 @@ export const ApiKeysPage = React.lazy(loadApiKeysPage);
 export const loadDashboardPage = createPageLoader(() => import('./pages/DashboardPage'), 'DashboardPage');
 export const DashboardPage = React.lazy(loadDashboardPage);
 
+export const loadInsightsPage = createPageLoader(() => import('./pages/insights/InsightsPage'), 'InsightsPage');
+export const InsightsPage = React.lazy(loadInsightsPage);
+
 export const loadAgentPage = createPageLoader(() => import('./pages/agent/AgentPage'), 'AgentPage');
 export const AgentPage = React.lazy(loadAgentPage);
 
