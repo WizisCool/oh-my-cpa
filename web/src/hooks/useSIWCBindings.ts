@@ -90,7 +90,7 @@ export function useSIWCBindings(): SIWCBindings {
         update(key, { phase: 'error', isBusy: false, callbackUrl: '', url: undefined, error: 'failed' });
         return;
       }
-      update(key, { phase: result.completed ? 'verifying' : 'waiting', error: undefined });
+      update(key, { phase: result.completed ? 'verifying' : 'waiting', error: !result.completed && current.current[key].error === 'incomplete' ? 'incomplete' : undefined });
     } catch (error) {
       if (!canApply()) return;
       if (error instanceof ApiError && [404, 409, 410].includes(error.status)) {
@@ -154,5 +154,9 @@ export function useSIWCBindings(): SIWCBindings {
       schedule(key, session.state);
     }
   }
-  return { sessions, start, submit, cancel, setCallback: (file, value) => update(siwcTargetKey(file), { callbackUrl: value }) };
+  return { sessions, start, submit, cancel, setCallback: (file, value) => {
+    const key = siwcTargetKey(file);
+    const error = current.current[key]?.error;
+    update(key, { callbackUrl: value, error: error === 'incomplete' ? undefined : error });
+  } };
 }
