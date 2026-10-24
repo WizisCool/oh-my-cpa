@@ -2,7 +2,7 @@
    nothing below moves when it does. */
 .omc-echart-slot { position: relative; width: 100%; min-width: 0; }
 .omc-echart { width: 100%; min-width: 0; }
-.omc-echart svg { overflow: visible; }
+.omc-echart svg { overflow: visible; shape-rendering: geometricPrecision; }
 
 /* The library positions its tooltip; its surface and type are the console's. The shell is the theme's
    surface and hairline (echartsTheme.ts), and the content is the shared `.omc-tip` readout. */

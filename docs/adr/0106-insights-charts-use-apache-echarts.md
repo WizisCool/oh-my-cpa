@@ -1,49 +1,54 @@
-# ADR 0106: Insights charts use Apache ECharts
+# ADR 0106: Dashboard and Insights charts share Apache ECharts
 
 - Status: Accepted
 - Date: 2026-10-24
-- Supplements: ADR 0004 (the dashboard keeps `@ant-design/charts`)
+- Supersedes: ADR 0004
+- Amends: ADR 0008 (shared motion policy, SVG runtime and first-paint reveal)
 
 ## Context
 
-The Insights page (`/insights`) is the console's analytical surface. It needs figures the
-dashboard never drew: a trend whose stacked marks morph when the reader regroups or
-narrows it, a dragged span on that trend that becomes the next window, and a flow figure
-that follows each client key's traffic through the model it asked for to the provider
-that served it. `@ant-design/charts` (ADR 0004) has no flow (sankey) figure. Its G2 runtime
-replaces marks on a data change instead of interpolating them. A brush on it means
-handling selection geometry by hand.
-
-The page also reads one snapshot per window and pivots it in the browser, so every
-filter, grouping and metric switch is a new option for a chart that already exists. A
-runtime that merges a new option into a live instance makes that cheap and makes
-transitions smooth.
+Insights needs a pivotable trend, a dragged span that becomes the next window and
+traffic flows from client keys through models to providers. It already uses a
+modular ECharts runtime. The dashboard's separate AntV runtime adds another lazy
+chunk and theme/lifecycle adapter for six sparklines, a model trend and a ring.
+Sharing a runtime removes that duplication while keeping charts off the startup
+path and gives both surfaces the same instance-preserving updates and hover states.
 
 ## Decision
 
-- Insights charts use **Apache ECharts 6.1.0**, pinned exactly in `web/package.json` and
-  registered piece by piece through `echarts/core` (`web/src/charts/echarts/core.ts`):
-  bar, line and sankey series; grid, tooltip, brush (with its toolbox registered and
-  hidden), mark line, mark area and aria components.
-- The renderer is **SVG**. The page draws a few hundred marks at most. SVG text is laid
-  out by the browser in the console's own typeface, and every mark is an element a probe
-  can read.
-- One wrapper, `EChart.tsx`, creates, updates and disposes each instance. A palette change
-  calls `setTheme` with a theme built from `ThemePalette` (`echartsTheme.ts`), so ink always
-  comes from the tokens. Motion uses the `roll` token, and reduced motion turns animation
-  off.
-- The runtime is its own lazily loaded chunk (`vendor-echarts`), separate from the
-  dashboard's `vendor-charts`. Neither page downloads the other's runtime. The bundle report
-  keeps both runtimes out of the startup graph.
-- The dashboard is not migrated. Tables, the matrix and the rhythm's weekday × hour grid
-  stay DOM (the hourly rhythm is an ECharts bar chart), and sparklines stay inline SVG paths.
+- Dashboard and Insights use **Apache ECharts 6.1.0**, pinned in `web/package.json`.
+  `web/src/charts/echarts/core.ts` registers bar, line, pie and sankey series;
+  grid, tooltip, brush (with hidden toolbox), mark line, mark area and aria components.
+  The dashboard adds only the pie module to the existing registered chart types.
+- The renderer is **SVG**. Both surfaces draw a bounded number of marks, and SVG
+  keeps labels in the console's typeface and geometry observable by browser probes.
+- `EChart.tsx` owns creation, merged options, theme updates with `setTheme`,
+  `ResizeObserver` and disposal. `ChartMount` queues creation without deferring
+  updates. Omitted height fills a caller-owned container, including the square ring.
+- All updates use the `MOTION_ROLL` token through `echartsMotion`; reduced motion
+  explicitly disables library animation. Sparklines reveal left to right; the ring
+  appears complete. Subsequent readings morph in the same instance. Hover feedback
+  uses the 120ms fast token, with series-level timings pinned so runtime defaults
+  cannot override the console policy.
+- A single lazy `vendor-echarts` chunk serves both pages. The AntV dependency and
+  `vendor-charts` chunk are retired. The bundle gate keeps chart modules out of the
+  startup graph; no runtime or asset comes from a CDN.
+- DOM owns legends, ranked lists and the ring's centre. Trend legend hover emphasizes
+  its series and blurs peers. Slice/list hover shows the selected model's tokens and
+  share in the centre, restoring the response's window total on leave.
+- Tooltips use `renderChartTooltip` for escaped content and one shared palette shell.
+  Tables, matrices and weekday-by-hour grids remain DOM rather than runtime marks.
 
 ## Consequences
 
-- The console now carries two chart runtimes. Each is loaded only by the page that draws
-  it, so a reader pays for one at a time. The cost is two theming adapters to keep in step
-  with `ThemePalette`.
-- If the dashboard later needs morphing, a brush or a flow figure, moving it to the same
-  runtime retires `vendor-charts`. That migration is the moment to re-evaluate ADR 0004.
-- An ECharts upgrade is a deliberate dependency change. A missing registration shows up
-  as a console error in the browser probes, not as a blank chart.
+- There is one chart theme, lifecycle and reduced-motion adapter to maintain.
+  Opening either page loads the same runtime; visiting both does not download a
+  second chart engine. Pie support is the only new chart-type registration.
+- Stable series IDs preserve data identity through revisions. Model ranks own color
+  assignment; rank one is painted last and the tooltip retains legend order,
+  including measured zero buckets.
+- Browser probes inspect actual SVG paint, geometry and instance identity. They
+  verify both motion preferences and light/dark palette ink, not merely options or
+  the presence of a chart container.
+- ECharts upgrades and registrations remain deliberate dependency changes, verified
+  by bundle and built-artifact acceptance as well as browser probes.

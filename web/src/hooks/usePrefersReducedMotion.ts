@@ -17,9 +17,8 @@ function matchesReducedMotion(): boolean {
  * usePrefersReducedMotion reports whether the reader has asked for reduced motion.
  *
  * CSS already carries this preference for every transition and keyframe the console owns. It cannot
- * reach a canvas: an AntV mark is redrawn frame by frame by the library, and the library has no
- * reduced-motion handling of its own (neither `@antv/g2` nor `@ant-design/plots` mentions the query
- * anywhere). So the charts have to ask, and they have to keep asking - the preference can change
+ * reach library-controlled geometry animation. Charts must observe the preference in JavaScript,
+ * and keep observing it because the setting can change
  * while the console is open, and a dashboard that animated anyway until the next reload would break
  * the promise mid-session.
  *

@@ -97,7 +97,7 @@ function resolveTileCostReadout(cost: number): RollingReadout {
   };
 }
 
-// Parent query status changes must not turn unchanged series into G2 revisions.
+// Parent query status changes must not turn unchanged series into chart revisions.
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
 function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
@@ -391,6 +391,7 @@ export const DashboardPage: React.FC = () => {
               </span>
             </div>
             <DashboardTrendChart
+              ariaLabel={t('dash.total_requests')}
               points={data.requests.series}
               pick={pickRequests}
               tone="accent"
@@ -416,6 +417,7 @@ export const DashboardPage: React.FC = () => {
               )}
             </div>
             <DashboardTrendChart
+              ariaLabel={t('dash.total_tokens')}
               points={data.tokens.series}
               pick={pickTokens}
               tone="accent"
@@ -439,6 +441,7 @@ export const DashboardPage: React.FC = () => {
             {/* Per-minute rate, so the readout under an RPM label is an RPM and not
                 a raw bucket count. The tile's own value is a rate too. */}
             <DashboardTrendChart
+              ariaLabel={t('dash.rpm')}
               points={data.requests.series}
               pick={pickRequestRate}
               tone="success"
@@ -462,6 +465,7 @@ export const DashboardPage: React.FC = () => {
                 dividing by the bucket's minutes is what makes this tile a distinct
                 reading rather than a restatement of Token total. */}
             <DashboardTrendChart
+              ariaLabel={t('dash.tpm')}
               points={data.tokens.series}
               pick={pickTokenRate}
               tone="warn"
@@ -499,6 +503,7 @@ export const DashboardPage: React.FC = () => {
                 the ratio itself would invent a denominator from total tokens -
                 which would overstate the rate whenever output tokens were large. */}
             <DashboardTrendChart
+              ariaLabel={t('dash.cache_rate')}
               points={data.tokens.series}
               pick={pickCacheReads}
               tone="neutral"
@@ -537,6 +542,7 @@ export const DashboardPage: React.FC = () => {
                 is why the tile keeps its cost_source note rather than implying the
                 spend curve is complete. */}
             <DashboardTrendChart
+              ariaLabel={t('dash.total_cost')}
               points={data.tokens.series}
               pick={pickCost}
               tone="neutral"

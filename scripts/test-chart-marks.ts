@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { CHART_ROLL, resolveChartAnimation } from '../web/src/charts/chartMotion.ts';
 import { sparkColor, seriesColor, seriesDomainKey, seriesColorRange, SERIES_SLOTS } from '../web/src/charts/chartTheme.ts';
 import { formatModelShare, formatModelTokens } from '../web/src/types/dashboardModels.ts';
 import { BUILT_IN_PALETTES, resolvedBuiltInPalette } from '../web/src/theme/palette.ts';
-import { MOTION_ROLL, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+import { themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
 
 /**
  * The palettes the console ships, resolved, plus the two the stylesheet's fallback mirrors.
@@ -14,7 +10,7 @@ import { MOTION_ROLL, themePaletteCssVariables } from '../web/src/theme/themeCon
  * The chart runtime reads a *resolved* palette - the same object Ant Design and the stylesheet are
  * given - so this suite resolves the registry rather than reaching for a hand-written table. What it
  * is pinning is unchanged: a tone and a series slot must come from the palette in force, in both
- * modes, and the tail of this file still checks the stylesheet against the same values.
+ * modes, and the theme projection exports those same slots.
  */
 const RESOLVED_PALETTES = BUILT_IN_PALETTES.map((definition) => resolvedBuiltInPalette(definition.id));
 const palette = {
@@ -22,12 +18,6 @@ const palette = {
   light: resolvedBuiltInPalette('omc-light').palette,
 };
 
-/**
- * The dashboard mark is drawn by AntV, so there is no app-owned geometry left to
- * assert on. What stays app-owned - and therefore still worth pinning - is the
- * tone-to-token mapping: it is the contract that keeps a chart coloured from the
- * palette instead of from a literal, in both themes.
- */
 const TONES = ['accent', 'success', 'warn', 'danger', 'neutral'] as const;
 
 for (const tone of TONES) {
@@ -177,57 +167,6 @@ for (const preset of RESOLVED_PALETTES) {
   }
 }
 
-// ── CSS and TypeScript token synchronization ──────────────────────────────
-//
-// The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, eighteen derived) and
-// projected by `themeConfig.ts` for Ant Design, React components and
-// chart runtime options, and in `web/src/index.css` for stylesheet consumers. Assert that every series
-// token matches character for character so the two copies cannot drift.
-
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const indexCss = fs.readFileSync(path.join(rootDir, 'web/src/index.css'), 'utf8');
-const darkRootBlock = indexCss.slice(indexCss.indexOf(':root {'), indexCss.indexOf(":root[data-theme-mode='light']"));
-const lightRootBlock = indexCss.slice(indexCss.indexOf(":root[data-theme-mode='light']"));
-
-for (let index = 0; index < SERIES_SLOTS; index += 1) {
-  const tokenName = `--series-${index + 1}`;
-  const darkMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(darkRootBlock);
-  const lightMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(lightRootBlock);
-  assert.ok(darkMatch, `web/src/index.css defines ${tokenName} in dark mode`);
-  assert.ok(lightMatch, `web/src/index.css defines ${tokenName} in light mode`);
-  assert.equal(
-    darkMatch[1].toLowerCase(),
-    palette.dark.series[index].toLowerCase(),
-    `dark ${tokenName} in index.css (${darkMatch[1]}) matches themeConfig (${palette.dark.series[index]})`,
-  );
-  assert.equal(
-    lightMatch[1].toLowerCase(),
-    palette.light.series[index].toLowerCase(),
-    `light ${tokenName} in index.css (${lightMatch[1]}) matches themeConfig (${palette.light.series[index]})`,
-  );
-}
-
-for (let index = 0; index < palette.dark.route.length; index += 1) {
-  const tokenName = `--route-${index + 1}`;
-  const darkMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(darkRootBlock);
-  const lightMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(lightRootBlock);
-  assert.ok(darkMatch, `web/src/index.css defines ${tokenName} in dark mode`);
-  assert.ok(lightMatch, `web/src/index.css defines ${tokenName} in light mode`);
-  assert.equal(
-    darkMatch[1].toLowerCase(),
-    palette.dark.route[index].toLowerCase(),
-    `dark ${tokenName} in index.css (${darkMatch[1]}) matches the palette (${palette.dark.route[index]})`,
-  );
-  assert.equal(
-    lightMatch[1].toLowerCase(),
-    palette.light.route[index].toLowerCase(),
-    `light ${tokenName} in index.css (${lightMatch[1]}) matches the palette (${palette.light.route[index]})`,
-  );
-}
-
-// The identity is the slot, and the *family* has to survive a theme switch: series 2 is the same hue
-// family in both themes even though the value differs, because the bright steps are illegible on a
-// light card (the vivid blue reads 2.7:1 there).
 for (let index = 0; index < SERIES_SLOTS; index += 1) {
   assert.notEqual(
     seriesColor(palette.dark, index),
@@ -290,37 +229,5 @@ assert.equal(formatModelTokens(271_700), '271.7K');
 assert.equal(formatModelTokens(0), '0');
 
 console.log('PASS chart marks: tones resolve to distinct palette tokens per theme');
-console.log('PASS series palette: slots legible on the card, distinct from their neighbours, and identical in CSS and TS');
+console.log('PASS series palette: slots legible on the card, distinct from their neighbours, and exported by the theme');
 console.log('PASS model shares: a small share is under-reported, never as zero');
-
-// ── the chart motion ───────────────────────────────────────────────────────
-//
-// A mark's animation is not visible to any per-component test, so what is pinned here is the rule that
-// decides it: the dashboard's charts move on the `roll` token, and a reader who asked for reduced
-// motion gets a spec that is *absent* rather than empty. That distinction is the one that can regress
-// silently - the library reads a missing spec as "use your own defaults", and its default update
-// animation is a 900ms spring, so a chart that passed `undefined` would satisfy a reduced-motion
-// reader's setting on paper while animating twice as hard as the motion-allowed path.
-assert.equal(resolveChartAnimation(true), false, 'reduced motion disables the chart animation');
-assert.equal(resolveChartAnimation(false), CHART_ROLL, 'the default is the roll spec');
-
-// The sweep is the update, and it is the one the poll triggers: the panels re-render on a revision the
-// reader did not ask for, and the wrapper hands the new spec to the same chart instance, so a morph is
-// what makes that read as movement rather than as a hard cut.
-assert.equal(CHART_ROLL.update.type, 'morphing');
-// Enter and exit are fades: content appears, it does not fly, and a mark that grew in from an axis
-// would claim a direction the data does not have.
-assert.equal(CHART_ROLL.enter.type, 'fadeIn');
-assert.equal(CHART_ROLL.exit.type, 'fadeOut');
-
-// One tempo for the whole card: the digits in the tile and the mark beneath them share §7's token, so
-// they cannot drift apart in review.
-for (const phase of ['enter', 'update', 'exit'] as const) {
-  assert.equal(CHART_ROLL[phase].duration, MOTION_ROLL.duration, `${phase} uses the roll duration`);
-  assert.equal(CHART_ROLL[phase].easing, MOTION_ROLL.easing, `${phase} uses the shared ease`);
-}
-// Nothing in budget: `roll` is §7's one exception, and a chart animation longer than the token the
-// documentation names is how an exception becomes a habit.
-assert.ok(MOTION_ROLL.duration <= 240, `the roll token stays at or under 240ms (${MOTION_ROLL.duration})`);
-
-console.log('chart marks: motion assertions passed');

@@ -76,7 +76,7 @@ const AGENT_SCENARIOS = ['agent', 'agent-external', 'agent-question', 'agent-liv
 const SCENARIO_PATHS = [
   { prefix: 'web/src/pages/agent/', scenarios: AGENT_SCENARIOS },
   { prefix: 'web/src/pages/insights/', scenarios: ['insights', 'insights-phone'] },
-  { prefix: 'web/src/charts/echarts/', scenarios: ['insights', 'insights-phone'] },
+  { prefix: 'web/src/charts/echarts/', scenarios: ['insights', 'insights-phone', 'dashboard-charts', 'dashboard-chart-motion', 'dashboard-model-panels', 'mobile-console'] },
   { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow', 'mobile-console'] },
   // The run protocol, stream reader and exports: the Agent runs on all of it, and the Playground
   // reads its stream and writes its export with the same modules.
@@ -307,10 +307,6 @@ const SCENARIO_PATHS = [
     scenarios: DASHBOARD_SCENARIOS,
   },
   {
-    prefix: 'web/src/charts/chartMotion',
-    scenarios: ['dashboard-charts', 'dashboard-chart-motion', 'mobile-console'],
-  },
-  {
     prefix: 'web/src/hooks/usePrefersReducedMotion',
     scenarios: DASHBOARD_SCENARIOS,
   },
@@ -320,7 +316,7 @@ const SCENARIO_PATHS = [
     // ring - whose chrome ink is asserted in both themes - and the marks' shared palette. A chart file
     // that only one panel imports still selects both, because which file a mark's ink comes from is not
     // something this planner can see; over-selecting is the side this file is required to err on.
-    scenarios: ['dashboard-charts', 'dashboard-model-panels', 'insights', 'insights-phone', 'mobile-console'],
+    scenarios: ['dashboard-charts', 'dashboard-chart-motion', 'dashboard-model-panels', 'insights', 'insights-phone', 'mobile-console'],
   },
   // The dashboard's own panels. Both scenarios read the page, so a panel change
   // reaches both: the heatmap is a sibling of the tiles, not a child of a chart.

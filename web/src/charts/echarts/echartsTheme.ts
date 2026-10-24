@@ -1,5 +1,5 @@
 import type { ThemePalette } from '../../theme/palette';
-import { MOTION_ROLL } from '../../theme/themeConfig';
+import { MOTION_FAST, MOTION_ROLL } from '../../theme/themeConfig';
 
 /**
  * The ECharts theme, derived from the console's palette.
@@ -11,6 +11,13 @@ import { MOTION_ROLL } from '../../theme/themeConfig';
  * the chart in place (`setTheme`) rather than recreating it.
  */
 export function buildEchartsTheme(palette: ThemePalette, fontFamily: string): Record<string, unknown> {
+  // Pie and sankey own longer series defaults, which otherwise override global motion options.
+  const seriesMotion = {
+    animationDuration: MOTION_ROLL.duration,
+    animationDurationUpdate: MOTION_ROLL.duration,
+    animationEasing: 'cubicOut',
+    animationEasingUpdate: 'cubicOut',
+  };
   const axis = {
     axisLine: { show: true, lineStyle: { color: palette.border, width: 1 } },
     axisTick: { show: false },
@@ -25,9 +32,10 @@ export function buildEchartsTheme(palette: ThemePalette, fontFamily: string): Re
     categoryAxis: { ...axis, splitLine: { show: false } },
     valueAxis: { ...axis, axisLine: { show: false } },
     timeAxis: axis,
-    line: { symbol: 'none', smooth: false, lineStyle: { width: 1.6 } },
-    bar: { itemStyle: { borderRadius: 0 } },
-    sankey: { label: { color: palette.fg, fontFamily }, lineStyle: { color: palette.fg2, opacity: 0.18 } },
+    line: { ...seriesMotion, symbol: 'none', smooth: false, lineStyle: { width: 1.6 } },
+    bar: { ...seriesMotion, itemStyle: { borderRadius: 0 } },
+    pie: { ...seriesMotion },
+    sankey: { ...seriesMotion, label: { color: palette.fg, fontFamily }, lineStyle: { color: palette.fg2, opacity: 0.18 } },
     tooltip: {
       backgroundColor: palette.surface,
       borderColor: palette.border,
@@ -47,14 +55,15 @@ export function buildEchartsTheme(palette: ThemePalette, fontFamily: string): Re
 }
 
 /**
- * The motion every Insights chart runs: the console's `roll` token, so a mark morphs between two
+ * The motion every dashboard and Insights chart runs: the console's `roll` token, so a mark morphs between two
  * revisions at the tempo the dashboard's readouts sweep at. Reduced motion swaps the geometry in
  * place - the chart is SVG, but its animation is the library's, which CSS cannot reach.
  */
 export function echartsMotion(isReducedMotion: boolean): Record<string, unknown> {
-  if (isReducedMotion) return { animation: false };
+  if (isReducedMotion) return { animation: false, stateAnimation: { duration: 0 } };
   return {
     animation: true,
+    stateAnimation: { duration: MOTION_FAST.duration, easing: 'cubicOut' },
     animationDuration: MOTION_ROLL.duration,
     animationDurationUpdate: MOTION_ROLL.duration,
     animationEasing: 'cubicOut',

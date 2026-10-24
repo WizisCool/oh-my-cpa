@@ -22,9 +22,12 @@ export interface MotionToken {
   readonly easing: string;
 }
 
+/** The fast acknowledgement shared by controls and chart emphasis. */
+export const MOTION_FAST: MotionToken = { duration: 120, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
 /**
  * docs/design.md §7's `roll` token: the dashboard's KPI readouts sweeping to a new value, and the
- * AntV marks behind them morphing between two revisions.
+ * chart marks behind them morphing between two revisions.
  *
  * The only motion in the console longer than `base`, and the only one allowed to run on a poll the
  * reader did not ask for - §7 rules 8 and 5 scope it, and ADR 0007 / ADR 0008 record the trade-off.
@@ -172,7 +175,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       borderRadiusXS: 2,
       borderRadiusOuter: 8,
       wireframe: false,
-      motionDurationFast: '0.12s',
+      motionDurationFast: `${MOTION_FAST.duration / 1000}s`,
       motionDurationMid: '0.18s',
       motionDurationSlow: '0.24s',
       motionEaseOut: 'cubic-bezier(0.16, 1, 0.3, 1)',
