@@ -3,7 +3,6 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Popover, Segmented, Select, Tooltip } from 'antd';
 import dayjs from '../../utils/time';
-import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
@@ -11,6 +10,7 @@ import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { formatTimeAgo } from '../../utils/format';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { useViewSearchParams } from '../../hooks/useViewSearchParams';
 import { PageHeader } from '../../components/common/PageHeader';
 import { RefreshButton } from '../../components/common/RefreshButton';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
@@ -134,7 +134,7 @@ export const PricingPage: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const openEditor = useOpenPriceEditor();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useViewSearchParams();
   const tab: PricingTab = searchParams.get('tab') === 'channels' ? 'channels' : 'models';
   const [search, setSearch] = React.useState('');
   const [filter, setFilter] = React.useState<ModelFilter>('all');
@@ -271,7 +271,7 @@ export const PricingPage: React.FC = () => {
     if (next === 'models') params.delete('tab');
     else params.set('tab', next);
     return params;
-  }, { replace: true });
+  });
 
   const priceColumns = [
     {

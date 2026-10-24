@@ -971,6 +971,143 @@ readout and the centre cannot disagree. The group's name comes from the datum th
 tooltip items - the library's inferred item is built from the y channel, so every slice would otherwise
 be labelled after the field it plots.
 
+### Insights
+
+The analytical page at `/insights` puts one window on one quiet page of panels:
+
+```text
+┌ Insights ───────────────────────────────── [window ▾] (⇄) (⟳) ┐
+│ [Key = design-team ×] [Call model = gpt-5 ×]  + Add filter   Clear all │
+│ Tokens │ Spend │ Requests │ Avg latency │  ← tiles switch the trend
+│ Tokens trend          [By model ▾] [Auto (by day) ▾]            │
+│ ■ gpt-5  ■ claude-sonnet  ■ Others                               │
+│ Keys            │ Call models                                    │
+│ AI providers    │ OAuth credentials                              │
+│ Key comparison (table)                                           │
+│ Key usage mix · Traffic flow · Usage by hour                       │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+- **One page, no sub-views.** Every panel is on the page in a fixed order and the reader scrolls;
+  the console has no tab strip between page sections, and a long ranking unfolds in place ("All 14")
+  instead of living on a second view. Each panel uses the console's ruled head (`Panel` with a
+  `PanelTitle`), the same head the dashboard's cards carry, with its unit or control at the trailing
+  edge.
+- **A ranking reads like the dashboard's model list.** Rows divided by `border-soft` hairlines:
+  the value's mark and name, the amount, a 48px share meter with the percentage, and the change.
+  Panels sit on aligned grid rows: with several keys they form two aligned pairs, while a period with
+  one key gives that key a compact full-width row and puts the model, provider and credential
+  rankings together on the next row. Card edges stay aligned without stretching a one-row key card
+  to the height of a long model list.
+- **Providers and credentials split the traffic the dashboard's way.** A request served through an
+  OAuth sign-in is credited to that credential in "OAuth credentials"; every other request, including
+  one that names no credential, is credited to its provider in "AI providers". The two panels never
+  name the same traffic twice. The trend's provider or credential grouping still stacks every request.
+- **A ranking stays short at any count.** It shows eight rows (five on a phone) and unfolds in place
+  into a list bounded at 432px that scrolls inside its panel; past twelve groups the unfolded list
+  has a search field. A deployment with a hundred credentials gets the same page length as one with
+  five.
+
+- **The subtitle names the window in the fewest characters.** No year inside the current one and no
+  clock on a window that starts and ends on day boundaries ("10-17 – Until now"); the exact instants
+  and the deployment's zone are its hover. On a phone the title sits in the top bar, so the span and
+  the window control share one row, the span truncating before the control wraps.
+- **The header holds only the window.** Granularity is the trend's own control, beside its grouping,
+  because it decides what one bar is, not which days are read. "Auto" names what it resolved to
+  ("Auto (by day)").
+- **The tiles are the metric switch.** Tokens comes first, followed by spend, requests and
+  average latency. A view without a selected metric opens on tokens; a supported explicit URL
+  selection is preserved, while a retired metric opens on tokens. The selected tile carries a 2px
+  rule along its top edge in
+  the primary ink, and the trend plots its metric. Each tile states its change as an arrow and the size of
+  the change, followed by the previous period's value in `meta` ("Prev. $21.62"); a phone keeps only
+  the change. A rise is drawn in a muted red and a fall in a muted green (`--trend-up` and
+  `--trend-down`: `danger` and `success` mixed 64% toward `fg-2`), so the direction reads at a
+  glance while staying clear of the saturated hues that mark a failure. The same tones colour the
+  rankings' and the key table's change columns. The comparison lives only here and in those columns; the
+  previous period is not drawn as a reference line, because a level line on a stacked chart needed
+  explaining.
+- **Every value carries its mark.** A model shows its maker's mark, a provider and a credential their
+  brand (resolved as the request list resolves them), and a key the key glyph, in rankings, chips,
+  filter options, legends and tables (`InsightsValue`).
+- **Figures explain themselves visually, not in prose.** Titles are short nouns ("Traffic flow",
+  "Key usage mix", "Usage by hour"). Legends with marks, tooltips and labels drawn on the chart carry
+  the reading. No figure has a sentence under its title.
+- **Hue names only what the trend draws.** The trend's top five named groups take series slots 1-5
+  by rank. An additive chart folds the rest into a `muted` remainder; latency plots no folded
+  remainder, because latency over unlike groups has no stable identity. A ranking of the same
+  dimension shows the same colour in its share meter. Every other ranking is monochrome (`fg-2` bars
+  on a `border-soft` track). Phones drop the swatches and keep monochrome bars.
+- **An additive metric stacks bars; latency draws lines.** Spend, tokens and requests stack, so a
+  bar's height is the whole and each segment a share. Hovering the plot background shows the time
+  bucket's contributing groups, including individuals folded into the remainder, and its aggregate.
+  Hovering a painted segment lifts that series and shows its value, share and the bucket aggregate.
+  Tooltip rows use the selected metric and include only nonzero values in that bucket. The tooltip
+  lets pointer events pass through so moving between buckets and segments remains continuous.
+  Latency draws lines. Its aggregate is a `muted` dashed reference line, calculated from the
+  underlying measures; the group lines carry their own bucket readings. Buckets
+  with no evidence are shaded and labelled, gaps are never bridged, and a point below the metric's
+  sample floor is hollow so a one-request swing is not read as a settled average. Moving along a line
+  highlights it and keeps the tooltip on that series; a point narrows it to that bucket. With no
+  pinned choice, returning to the background restores every visible group and the aggregate. The
+  line legend toggles groups: any chosen subset is the only set of lines drawn, while an empty subset
+  restores every line. The aggregate stays as the reference.
+- **A painted mark pins its series.** A click on a bar segment, line or point keeps that group as the
+  chart's selection; a click on empty plot space clears it. The same selection is the legend's: the
+  chosen entry takes `selected-inset`, the neutral fill selected rows use, with the normal foreground
+  ink and an inset border, so model marks retain their own colours. Any non-empty legend subset
+  filters both bars and lines, and clearing the subset
+  restores everything. A bar's visible stack is also its tooltip aggregate, so a narrowed chart never
+  labels selected segments with hidden groups. Selecting a series changes the chart only, never the
+  page's URL or ranking filters.
+- **Every value is a filter, and a filter shows where it was made.** A ranking row, a matrix cell and
+  a flow node add their value as a chip; clicking the row again removes it. A ranking panel reads
+  every filter but its own, as the filter picker counts, so after choosing a model the model ranking
+  keeps listing the others: the chosen row takes `selected-inset` with a 2px `fg` rule at its leading
+  edge and bold type, its neighbours step back to 45% opacity, and the panel's trailing edge offers
+  "Clear (1)" in place of its unit. While anything is chosen the filter bar holds to the top of the
+  scroll on the page ground with a `border-soft` rule beneath, and a new chip settles in over `base`
+  (none under reduced motion). The narrowing, grouping and metric are in the URL, and each change is
+  one step of the platform's Back (see "Back undoes a view change"). Dragging across the trend makes
+  the dragged buckets the next window.
+- **A key's detail is one click from anywhere it is named.** A row of the key table, the trailing
+  chevron of a key ranking row and a key's filter chip all open its detail drawer, which Back
+  dismisses.
+- **Legend entries are bounded.** Each trend legend entry sits in its own `border-soft` hairline box,
+  so a swatch can only belong to the name inside it.
+- **Composition is a bar per key.** "What each key used" is a horizontal stacked bar per key, its
+  length the key's whole and its segments the models in series order, with a legend. The exact
+  key × model table is the panel's second view. Latency cannot be cut into parts, so a non-additive
+  metric composes by requests, and the panel's metric label says so.
+- **The rhythm opens on hours.** One bar per local hour, summed over the window, with the busiest
+  three-hour stretch at full ink, a `hover`-tinted area labelled "Peak", and the rest at 42%. The
+  weekday × hour grid is offered only for a window of a week or more; a shorter window would fill one
+  or two rows and leave the rest looking empty.
+- **Heat uses the activity grid's ramp.** The table view and the weekday grid shade with
+  `--heatmap-quiet` → `--heatmap-busy` through `heatmapRampMix`, with a "less → more" scale beside the
+  grid. A cell past the ramp's midpoint prints in `accent-on`, because the body ink no longer clears
+  contrast on the busy stop in the light theme.
+- **Flow is neutral after the first column.** The flow figure (key → call model → provider)
+  colours keys by rank. Later columns use `muted` nodes, and links take their source's colour: 0.2
+  opacity out of a key and 0.08 past it, because a model usually feeds one provider and a band at
+  full link weight draws as a grey box. A key can be followed across without a rainbow.
+- **Every figure that filters keeps its context.** The rankings, the composition (bars, legend and
+  table) and the flow each read every filter but the dimensions they control, so a choice made on
+  them never collapses the figure it was made on: the chosen values stay at full ink, the rest step
+  back (45% for rows, 22% for bar segments, 25% for flow nodes, 30% for table cells), and the
+  panel's head trades its unit for "Clear (n)". A composition legend entry filters by its model;
+  choosing the segment already chosen takes it back. When the narrowing reshapes the panels above
+  it, the pressed row is held at its place on screen (`useScrollAnchor`), so a phone reader does
+  not lose their spot.
+- **Phones omit, never shrink.** Below 640px the tiles take two per row, rankings stack with five
+  rows each, the trend is 220px tall and its drag is off, and the share meters and changes drop out
+  of the ranking rows. The key table, the flow figure and the composition panel are not mounted: the
+  key ranking already lists every key and opens its detail.
+
+The charts are ECharts on the SVG renderer (ADR 0106), themed from `ThemePalette` by
+`buildEchartsTheme`. Their tooltip is the console's `.omc-tip` body, and a mark morphs between
+revisions over `roll`.
+
 ### Caller-key display mask
 
 The request list's Key column and the caller-key facet show a mask, never the
@@ -2225,23 +2362,20 @@ Hard rules:
    loading indicator at all (the loading bar waits 200ms before painting).
    Background auto-refresh must not paint a loading state at all; a reading that
    changed may still say so, which is rules 8 and 5 and nothing else.
-5. **A mark sweeps between revisions instead of hard-cutting.** An AntV mark morphs to its
-   new geometry over `roll`, and fades rather than grows when a series enters or leaves.
-   A plot that hard-cuts every few seconds reads as a redraw rather than as new data - and
-   beside a tile whose number now rolls (rule 8), a snapping line was the one element still
-   saying "this replaced itself". The marks are the dashboard's own, so this covers both the
-   six KPI sparklines and the model panels, which re-read on a query of their own.
-   Two limits keep this a morph rather than a draw-in: it exists **only because the
-   library reuses the chart instance** (the wrapper hands the new spec to the same runtime,
-   so an update interpolates, while a remount is a draw-in and stays forbidden), and a
-   canvas cannot be
-   reached by CSS, so the reduced-motion switch is app-owned
-   (`usePrefersReducedMotion` in `web/src/hooks/`) and must stay wired: the library has no
-   handling of its own and its default update animation is a 900ms spring, which would
-   animate hardest for the reader who asked for none. The cost is stated rather than hidden:
-   a canvas mark is redrawn frame by frame instead of being composited, so rule 1 is *not*
-   satisfied by these eight marks, and 240ms on surfaces this small is the whole of what the
-   exception buys. See ADR 0008.
+5. **A mark sweeps between revisions instead of hard-cutting.** The dashboard's AntV marks
+   morph to their new geometry over `roll`, and fade rather than grow when a series enters or
+   leaves. The Insights ECharts marks apply the same token to merged options (ADR 0106). A plot
+   that hard-cuts every few seconds reads as a redraw rather than new data - and beside a tile
+   whose number now rolls (rule 8), a snapping line was the one element still saying "this
+   replaced itself". This covers the six KPI sparklines, the model panels, and the Insights charts.
+   Two limits keep this a morph rather than a draw-in: it exists **only because each wrapper
+   reuses its chart instance** (a new spec is applied to the live runtime, while a remount is a
+   draw-in and stays forbidden), and the runtime animation cannot be reached by CSS. The
+   reduced-motion switch is therefore app-owned (`usePrefersReducedMotion`; ECharts receives it
+   through `echartsMotion`) and must stay wired: the libraries' defaults would animate hardest
+   for the reader who asked for none. The AntV canvas is redrawn frame by frame instead of being
+   composited, so rule 1 is *not* satisfied by those dashboard marks. ECharts paints SVG, but its
+   `roll`-bounded update remains an explicit exception. See ADR 0008 and ADR 0106.
 6. **Acknowledge actions immediately.** Button `loading` and optimistic
    affordances appear on the interaction itself, not after a transition. The
    progress bar follows rule 4 instead: it waits 200ms to suppress fast-request
@@ -2256,9 +2390,10 @@ Hard rules:
    hover may never animate a layout property, and the one element that scales under the
    pointer (the heatmap mark) may not fade its colour, because the fade would smear behind
    the scale it is meant to accompany.
-8. **The dashboard's numbers may travel.** The six dashboard KPI numbers roll to
-   their new value over `roll` (`MOTION_ROLL` in `themeConfig.ts`), for the reason that names
-   the whole exception: those tiles change under a poll the reader did not ask for, a number
+8. **The dashboard's numbers may travel.** The six dashboard KPI numbers, and the four Insights
+   metric tiles, roll to their new value over `roll` (`MOTION_ROLL` in `themeConfig.ts`), for the
+   reason that names the whole exception: those tiles change under a poll, or under a narrowing
+   whose effect the reader has to see, a number
    that swaps in place is indistinguishable from a number that was already there, and the
    sweep is what says "this reading moved" without the page moving. Rule 5 gives the marks
    drawn from those numbers the same token, and rule 9 lets a stored request travel the routing
@@ -2910,6 +3045,19 @@ Four consequences are designed for rather than discovered, and each is pinned by
 `prefers-reduced-motion` is not involved: the platform owns the animation, which is one more
 reason this is the right mechanism rather than a JS gesture.
 
+### Back undoes a view change
+
+A page whose view lives in the URL - a filter, a tab, a grouping, a metric - writes each change the
+reader makes as its own history entry, so the browser's back arrow, a mouse's back button and a
+phone's edge gesture take the last change back before they leave the page. `useViewSearchParams`
+(`web/src/hooks/useViewSearchParams.ts`) is the wiring: a change pushes; a change that names a
+`coalesce` key replaces the entry when that entry was written under the same key, so a search typed
+out is one step rather than one per keystroke; and `replace` is kept for what the reader did not do -
+restoring a saved view over the entry they arrived on, or clamping a page number past the end, which
+pushed would bring the reader back to the out-of-range page on every Back. Insights, the request
+list, OAuth management, the audit trail, logs, pricing and the model square use it. A stored
+preference such as a time window is not a view change in this sense and leaves no entry.
+
 ### What a phone layout is
 
 A phone layout is a second *rendering* of one list, never a second list. The dataset, the
@@ -3086,7 +3234,8 @@ Model Square answers one question: which model names can a client call right now
 subtitle carries live data only: the model count, the maker count and the reference snapshot's
 source and date. One toolbar holds the search field (names, makers and known model
 identities). A strip of maker chips, each with its mark and a count, filters to one maker; its
-counts follow the search, so a count is what selecting the chip will show. An active filter
+counts follow the search, so a count is what selecting the chip will show. The chosen chip takes
+the shared neutral selected-control fill, leaving its mark and count legible. An active filter
 states "shown of total" and offers one clear action. Search and maker live in the URL.
 
 Makers are open sections under a heading rule. Named makers sort alphabetically; the

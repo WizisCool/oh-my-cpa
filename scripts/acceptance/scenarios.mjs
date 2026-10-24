@@ -1,5 +1,6 @@
 import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './probes/modelSquare.mjs';
 import { mobileConsole } from './probes/mobileConsole.mjs';
+import { insights, insightsFixtures, insightsPhone } from './probes/insights.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
 import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentReplace, agentAttach, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
@@ -902,6 +903,18 @@ export const SCENARIOS = [
     name: 'the configuration backup dialog names each copy, saves its retention, and restores through a confirmation stacked above it',
     options: { routes: configBackupsFixtures(configBackupsLog) },
     run: (context) => configBackups({ ...context, log: configBackupsLog }),
+  },
+  {
+    id: 'insights',
+    name: 'Insights stands its tiles in one row, paints the trend in series tokens in both modes, commits a dragged window and narrows from a ranking',
+    options: { routes: insightsFixtures() },
+    run: insights,
+  },
+  {
+    id: 'insights-phone',
+    name: 'Insights fits a phone with two tiles per row and leaves out the flow figure and the matrix',
+    options: { routes: insightsFixtures(), viewport: { width: 390, height: 844 }, hasTouch: true },
+    run: insightsPhone,
   },
   {
     id: 'model-square',

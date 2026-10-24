@@ -1,3 +1,4 @@
+import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupCredential, WarmupPolicy, WarmupResult, WarmupSettings } from '../types/warmup';
 import type { ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
@@ -668,6 +669,20 @@ export const api = {
       '/management/client-key-aliases',
       { method: 'PUT', body: JSON.stringify({ key_fingerprint: keyFingerprint, alias, version }) },
     );
+  },
+
+  /**
+   * getInsightsCube reads one window of the Insights page whole: every dimension tuple's usage per
+   * bucket, plus the comparison period's totals. The page pivots it in the browser, so its filters and
+   * groupings never read again (`pages/insights/insightsCube.ts`).
+   */
+  async getInsightsCube(query: string): Promise<InsightsCubeResponse> {
+    return request<InsightsCubeResponse>(`/management/insights/cube?${query}`, { method: 'GET' });
+  },
+
+  /** getInsightsRhythm reads a window's usage by local weekday and hour, narrowed by the page's filters. */
+  async getInsightsRhythm(query: string): Promise<InsightsRhythmResponse> {
+    return request<InsightsRhythmResponse>(`/management/insights/rhythm?${query}`, { method: 'GET' });
   },
 
   async getClientKeyUsage(

@@ -323,6 +323,7 @@ troubleshooting.
 <details>
 <summary><b>Observability</b></summary>
 
+- **Insights**: per-key, per-model, per-provider and per-credential comparison over today, yesterday, this or last week and month, rolling spans or custom ranges, each against the previous period, with each key's model mix, a traffic flow and an hour-of-day usage rhythm.
 - **Dashboard**: request volume, token throughput, cache hit rate and cost over presets from 15 minutes to 90 days, an all-time window since installation, or any custom range, plus a year-long token heatmap. Statistics are kept permanently; request records roll out of a configurable retention.
 - **Live routing**: a rolling minute of which models were called and which credentials and providers CPA sent them to. Each new request travels the map out to its credential and back, rerouted attempts and cooldowns included. The panel updates as records are stored, falls back to a short poll when the live stream is unavailable, and is shown on desktop widths.
 - **Model panels**: token trend and usage ring by call model or by requested model, with cost shares.

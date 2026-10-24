@@ -15,10 +15,6 @@
 }
 .chip:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* The chosen maker is the one solid chip: ink on the page, the way a selected segment reads. */
-.chip[aria-pressed="true"] { color: var(--bg); background: var(--fg); }
-.chip[aria-pressed="true"] :global(.count) { color: color-mix(in srgb, var(--bg) 70%, transparent); }
-
 /* Drawn from the palette at chrome weight; the frame gives the glyph a brand mark's footprint. */
 .generic-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--muted); }
 .generic-mark-framed { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg-2); }

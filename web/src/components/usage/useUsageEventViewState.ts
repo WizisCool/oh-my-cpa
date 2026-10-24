@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { useSearchParams } from 'react-router-dom';
+import { useViewSearchParams, type ViewChangeOptions } from '../../hooks/useViewSearchParams';
 
 import { usePreference } from '../../hooks/usePreference';
 import {
@@ -16,6 +16,7 @@ import type { UsageEventsView } from '../../types/usageEventFilters';
 import {
   applyTimeWindow,
   clearAllFilters,
+  isSearchOnlyChange,
   mergeFilters,
   replaceFilters,
   viewPreferenceFromUrl,
@@ -48,7 +49,7 @@ import { useDebouncedSearch } from './useDebouncedSearch';
  */
 export function useUsageEventViewState() {
 
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useViewSearchParams();
   const signature = params.toString();
   // Router state updates are transitions in v7. A second write can therefore run
   // before the first one has rendered; compose it onto the latest intent so the
@@ -93,10 +94,10 @@ export function useUsageEventViewState() {
    */
   const selfWrittenSignatureRef = React.useRef<string | null>(null);
   const writeParams = React.useCallback(
-    (next: URLSearchParams) => {
+    (next: URLSearchParams, options?: ViewChangeOptions) => {
       latestParamsRef.current = new URLSearchParams(next);
       selfWrittenSignatureRef.current = next.toString();
-      setParams(next, { replace: true });
+      setParams(next, options);
     },
     [setParams],
   );
@@ -143,7 +144,8 @@ export function useUsageEventViewState() {
       });
       storedFilters.forEach((value, key) => nextParams.append(key, value));
       if (nextParams.toString()) {
-        writeParams(nextParams);
+        // The saved view is restored over the entry the reader arrived on, not added as a step.
+        writeParams(nextParams, { replace: true });
       }
     }
   }, [prefReady, hydrated, hasExplicit, viewPref, writeParams]);
@@ -191,8 +193,10 @@ export function useUsageEventViewState() {
       // The rewrite is defined in `usageEventViewActions`: every filter dimension is
       // replaced wholesale so a removal is expressible, while the window, page size
       // and cursor are left alone.
+      const previousFilters = readLatestFilterParams();
       const nextParams = replaceFilters(latestParamsRef.current, values, { result: options?.result });
-      writeParams(nextParams);
+      // A search refined keystroke by keystroke is one step of Back; any other filter is its own.
+      writeParams(nextParams, options?.result === undefined && isSearchOnlyChange(previousFilters, values) ? { coalesce: 'q' } : undefined);
       persistView(nextParams, { grouping });
     },
     [grouping, persistView, writeParams],

@@ -129,6 +129,7 @@ export const SHELL_MESSAGES: Messages = {
   'nav.agent': ["智能体", "Agent"],
   'nav.playground': ["操练场", "Playground"],
   'nav.dashboard': ['仪表盘', 'Dashboard'],
+  'nav.insights': ['洞察', 'Insights'],
   'nav.providers': ['AI 提供商', 'AI providers'],
   'nav.api_keys': ['密钥管理', 'Key management'],
   'nav.auth_files': ['OAuth 管理', 'OAuth management'],

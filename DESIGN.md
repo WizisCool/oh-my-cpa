@@ -185,7 +185,7 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 
 ### Series (categorical)
 
-The dashboard's model panels colour a **category**, not a state: a model is whatever upstream name the
+The dashboard's model panels and the Insights trend colour a **category**, not a state: a model is whatever upstream name the
 deployment serves, so its hue carries identity and no verdict. Together with the routing lane palette
 below, these are the decorative colour families in the app, and the only exception to the semantic-only
 rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.md` §2.
@@ -193,6 +193,15 @@ rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.m
 - **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
   purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
   `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/Codex data visualization standards.
+- **Insights** (`/insights`): the trend's top five groups take slots 1-5 by rank and the remainder
+  `muted`; a ranking of the same dimension repeats that colour, every other ranking is monochrome, and
+  phones drop the swatches. Changes against the comparison period are an arrow and a size in a
+  muted red (rise) or green (fall) beside the previous value. The page is one scroll of ruled-head
+  panels with no tab strip; "AI providers" and "OAuth credentials" split the traffic as the
+  dashboard does, a ranking panel ignores its own filter so the chosen row stays in view beside its
+  dimmed neighbours, and an unfolded ranking scrolls inside its panel. Key composition is a stacked bar per key; the rhythm opens on hourly bars with the
+  busiest stretch at full ink; their heat views reuse the activity grid's ramp. See `docs/design.md`
+  §2 *Insights*.
 - **Track** (`--series-track`, `#2c2c30` dark / `#dcdce1` light): the trend's plot floor and the usage
   ring's unfilled track, which is each mode's border step.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
@@ -792,7 +801,8 @@ Model Square answers one question: which model names can a client call right now
 subtitle carries live data only: the model count, the maker count and the reference snapshot's
 source and date. One toolbar holds the search field (names, makers and known model
 identities). A strip of maker chips, each with its mark and a count, filters to one maker; its
-counts follow the search, so a count is what selecting the chip will show. An active filter
+counts follow the search, so a count is what selecting the chip will show. The chosen chip takes
+the shared neutral selected-control fill, leaving its mark and count legible. An active filter
 states "shown of total" and offers one clear action. Search and maker live in the URL.
 
 Makers are open sections under a heading rule. Named makers sort alphabetically; the

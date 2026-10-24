@@ -1,0 +1,16 @@
+/* The console's selected control: a neutral inset fill and weight that keep a mark or glyph in
+   its own colour. Shared by filter chips and chart legends so selection reads the same wherever a
+   control can be toggled. The attribute owns the state, and its hover rule keeps the fill from
+   falling back to the lighter hover wash under the pointer. */
+.selection-control[aria-pressed='true'] {
+  color: var(--fg);
+  background: var(--selected-inset);
+  font-weight: 600;
+}
+.selection-control[aria-pressed='true']:hover {
+  color: var(--fg);
+  background: var(--selected-inset);
+}
+.selection-control[aria-pressed='true'] :global(.count) {
+  color: var(--fg-2);
+}

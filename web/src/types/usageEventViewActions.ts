@@ -95,6 +95,27 @@ export function applyTimeWindow(
 }
 
 /**
+ * isSearchOnlyChange reports whether a filter edit changed only the free-text
+ * search. The debounced search submits the complete next map, so counting the
+ * submitted keys would count every filter that stayed put and turn each keystroke
+ * into a new history entry.
+ */
+export function isSearchOnlyChange(
+  previous: Partial<Record<EventFilterKey, string[]>>,
+  next: Partial<Record<EventFilterKey, string[]>>,
+): boolean {
+  let changed: EventFilterKey | undefined;
+  for (const key of EVENT_FILTER_KEYS) {
+    const before = previous[key] ?? [];
+    const after = next[key] ?? [];
+    if (before.length === after.length && before.every((value, index) => value === after[index])) continue;
+    if (changed !== undefined || key !== 'q') return false;
+    changed = key;
+  }
+  return changed === 'q';
+}
+
+/**
  * mergeFilters folds one dimension into the committed filter map.
  *
  * An empty list removes the dimension instead of storing an empty one, so a

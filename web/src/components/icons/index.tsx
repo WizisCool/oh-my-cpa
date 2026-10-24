@@ -97,6 +97,7 @@ export const WrapTextOutlined = createIcon(Lucide.WrapText, 'anticon-wrap-text')
 export const GlobalOutlined = createIcon(Lucide.Globe, 'anticon-global');
 export const HistoryOutlined = createIcon(Lucide.History, 'anticon-history');
 export const HolderOutlined = createIcon(Lucide.GripVertical, 'anticon-holder');
+export const InsightsOutlined = createIcon(Lucide.ChartNoAxesCombined, 'anticon-insights');
 export const InfoCircleOutlined = createIcon(Lucide.Info, 'anticon-info-circle');
 export const KeyOutlined = createIcon(Lucide.Key, 'anticon-key');
 export const LayersOutlined = createIcon(Lucide.Layers, 'anticon-layers');

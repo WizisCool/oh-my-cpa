@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useViewSearchParams, type ViewChangeOptions } from '../../hooks/useViewSearchParams';
 import { usePreference } from '../../hooks/usePreference';
 import {
   DEFAULT_OAUTH_MANAGEMENT_VIEW,
@@ -9,7 +9,7 @@ import {
 } from './oauthWorkspaceLogic';
 
 export function useOAuthManagementViewState() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useViewSearchParams();
   const preference = usePreference(
     'oauth_management_view_v1',
     DEFAULT_OAUTH_MANAGEMENT_VIEW,
@@ -28,7 +28,7 @@ export function useOAuthManagementViewState() {
 
   const intentRef = React.useRef(0);
   React.useEffect(() => () => { intentRef.current += 1; }, []);
-  const setSearch = React.useCallback((changes: Record<string, string | number | null | undefined>) => {
+  const setSearch = React.useCallback((changes: Record<string, string | number | null | undefined>, options?: ViewChangeOptions) => {
     const intent = ++intentRef.current;
     const nextParams = updateWorkspaceSearch(searchParams, changes);
     const viewKeys = ['status', 'quota', 'sort', 'page_size'];
@@ -41,7 +41,9 @@ export function useOAuthManagementViewState() {
         setSearchParams((current) => current.toString() === nextParams.toString() ? searchParams : current, { replace: true });
       });
     }
-    setSearchParams(nextParams, { replace: true });
+    // Each change is a step of Back; a search typed out folds into one.
+    const isTyping = Object.keys(changes).every((key) => key === 'q' || key === 'page');
+    setSearchParams(nextParams, options ?? (isTyping && 'q' in changes ? { coalesce: 'q' } : undefined));
   }, [searchParams, setSearchParams, resolvedParams, preference.loaded, preference.set]);
 
   return { searchParams, setSearchParams, queryState, setSearch, isViewLoaded: preference.ready };
