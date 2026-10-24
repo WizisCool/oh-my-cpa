@@ -180,7 +180,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     );
   };
 
-  // The provider list's three glyphs, in its order: look, edit, remove. Looking at a key is
+  // Three glyphs, in the provider list's order with a look in front: look, edit, remove. Looking at a key is
   // following its traffic, which needs the fingerprint stored traffic carries; without one the
   // action is disabled and says why, because that absence is worth seeing.
   const renderActions = (record: ApiKeyRecord) => (
