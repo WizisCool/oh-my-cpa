@@ -80,7 +80,7 @@ func (r *Repository) QueryUsageAnalyticsFiltered(ctx context.Context, instanceID
 		return result, fmt.Errorf("invalid analytics bucket width %d", bucketMS)
 	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
-		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS, APIGroupKey: apiKey,
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS, Filters: ClientKeyFilter(apiKey),
 	})
 	if err != nil {
 		return UsageAnalytics{}, err

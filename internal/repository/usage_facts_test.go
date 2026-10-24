@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -50,46 +52,124 @@ func seedFactEvents(t *testing.T, repo *Repository, baseMS, spanMS int64, count 
 	}
 }
 
-// recordFacts answers a usage query from request records alone, which is the
-// definition the facts have to reproduce.
+// recordFacts answers a usage query from request records alone, in Go, which is
+// the definition the facts have to reproduce. It shares nothing with the SQL the
+// read compiles to: dimensions, filters and civil buckets are all derived here.
 func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFactRow {
 	t.Helper()
-	expressions := usageFactGroupExpressions[query.GroupBy]
-	aligned := "0"
-	if query.BucketMS > 0 {
-		aligned = fmt.Sprintf("(timestamp_ms / %d) * %d", query.BucketMS, query.BucketMS)
-	}
-	sums := make([]string, 0, len(usageFactMeasures))
-	for _, measure := range usageFactMeasures {
-		sums = append(sums, "SUM("+measure+")")
-	}
-	statement := `SELECT group_key, sub_group_key, aligned, ` + strings.Join(sums, ", ") + ` FROM (
-		SELECT ` + expressions[0] + ` AS group_key, ` + expressions[1] + ` AS sub_group_key, ` + aligned + ` AS aligned, ` + usageEventMeasures + `
-		FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
-	args := []any{query.InstanceID, query.FromMS, query.ToMS}
-	if query.APIGroupKey != "" {
-		statement += ` AND api_group_key = ?`
-		args = append(args, query.APIGroupKey)
-	}
-	statement += `) GROUP BY group_key, sub_group_key, aligned ORDER BY group_key, sub_group_key, aligned`
-	rows, err := repo.SQL().Query(statement, args...)
+	rows, err := repo.SQL().Query(`
+		SELECT api_group_key, model, COALESCE(model_alias, ''), auth_index, provider, auth_type, timestamp_ms,
+		       failed, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens,
+		       cache_creation_tokens, total_tokens, latency_ms, ttft_ms, cost_nanos, pricing_status
+		FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`,
+		query.InstanceID, query.FromMS, query.ToMS)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	result := []UsageFactRow{}
+	grouped := map[string]*UsageFactRow{}
 	for rows.Next() {
-		var row UsageFactRow
-		targets := append([]any{&row.Group, &row.SubGroup, &row.StartMS}, usageMeasureTargets(&row.UsageMeasures)...)
-		if err := rows.Scan(targets...); err != nil {
+		var key, model, alias, authIndex, provider, authType, status string
+		var timestampMS int64
+		var failed int64
+		var measures UsageMeasures
+		var ttft, cost *int64
+		if err := rows.Scan(&key, &model, &alias, &authIndex, &provider, &authType, &timestampMS, &failed,
+			&measures.InputTokens, &measures.OutputTokens, &measures.ReasoningTokens, &measures.CachedTokens,
+			&measures.CacheReadTokens, &measures.CacheCreationTokens, &measures.TotalTokens, &measures.LatencySumMS,
+			&ttft, &cost, &status); err != nil {
 			t.Fatal(err)
 		}
-		result = append(result, row)
+		values := map[UsageDimension]string{
+			UsageDimensionKey: key, UsageDimensionModel: model, UsageDimensionAuthType: authType,
+			UsageDimensionCallPoint: model, UsageDimensionProvider: "unknown",
+			UsageDimensionCredential: strings.TrimSpace(authIndex),
+		}
+		if trimmed := strings.TrimSpace(alias); trimmed != "" {
+			values[UsageDimensionCallPoint] = trimmed
+		}
+		if trimmed := strings.TrimSpace(provider); trimmed != "" {
+			values[UsageDimensionProvider] = trimmed
+		}
+		if authType == "apikey" {
+			values[UsageDimensionServingKey] = strings.TrimSpace(authIndex)
+		}
+		isKept := true
+		for dimension, wanted := range query.Filters {
+			if len(wanted) > 0 && !slices.Contains(wanted, values[dimension]) {
+				isKept = false
+			}
+		}
+		if !isKept {
+			continue
+		}
+		measures.Requests, measures.Failures = 1, failed
+		if ttft != nil {
+			measures.TTFTSumMS, measures.TTFTCount = *ttft, 1
+		}
+		if cost != nil {
+			measures.CostNanos, measures.CostedRequests = *cost, 1
+		}
+		if status == "priced" {
+			measures.PricedRequests = 1
+		}
+		var startMS int64
+		switch {
+		case query.Calendar != nil:
+			startMS = calendarBucketStart(timestampMS, *query.Calendar)
+		case query.BucketMS > 0:
+			startMS = timestampMS / query.BucketMS * query.BucketMS
+		}
+		keys := make([]string, len(query.Dimensions))
+		for index, dimension := range query.Dimensions {
+			keys[index] = values[dimension]
+		}
+		id := fmt.Sprintf("%q/%d", keys, startMS)
+		row, ok := grouped[id]
+		if !ok {
+			row = &UsageFactRow{Keys: keys, StartMS: startMS}
+			grouped[id] = row
+		}
+		row.UsageMeasures.add(measures)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
+	result := make([]UsageFactRow, 0, len(grouped))
+	for _, row := range grouped {
+		result = append(result, *row)
+	}
+	sort.Slice(result, func(left, right int) bool {
+		for index := range result[left].Keys {
+			if result[left].Keys[index] != result[right].Keys[index] {
+				return result[left].Keys[index] < result[right].Keys[index]
+			}
+		}
+		return result[left].StartMS < result[right].StartMS
+	})
 	return result
+}
+
+// calendarBucketStart is the local hour, day or Monday-first week holding an instant.
+func calendarBucketStart(timestampMS int64, calendar UsageCalendar) int64 {
+	local := time.UnixMilli(timestampMS).In(calendar.Location)
+	switch calendar.Unit {
+	case UsageCalendarHour:
+		return time.Date(local.Year(), local.Month(), local.Day(), local.Hour(), 0, 0, 0, calendar.Location).UnixMilli()
+	case UsageCalendarDay:
+		return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, calendar.Location).UnixMilli()
+	default:
+		daysSinceMonday := (int(local.Weekday()) + 6) % 7
+		return time.Date(local.Year(), local.Month(), local.Day()-daysSinceMonday, 0, 0, 0, 0, calendar.Location).UnixMilli()
+	}
+}
+
+var factTestPartitions = [][]UsageDimension{
+	nil,
+	{UsageDimensionModel},
+	{UsageDimensionCallPoint},
+	{UsageDimensionProvider, UsageDimensionServingKey},
+	{UsageDimensionKey, UsageDimensionCallPoint, UsageDimensionModel, UsageDimensionProvider, UsageDimensionCredential, UsageDimensionAuthType},
 }
 
 func factTestQueries(baseMS int64) []UsageFactQuery {
@@ -102,10 +182,13 @@ func factTestQueries(baseMS int64) []UsageFactQuery {
 	}
 	for _, window := range windows {
 		for _, bucketMS := range []int64{0, 60_000, QuarterHourBucketMS, HourBucketMS, DayBucketMS, 2 * DayBucketMS} {
-			for _, grouping := range []UsageFactGrouping{UsageGroupNone, UsageGroupModel, UsageGroupCallPoint, UsageGroupProviderCredential} {
-				queries = append(queries, UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1], BucketMS: bucketMS, GroupBy: grouping})
+			for _, dimensions := range factTestPartitions {
+				queries = append(queries, UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1], BucketMS: bucketMS, Dimensions: dimensions})
 			}
-			queries = append(queries, UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1], BucketMS: bucketMS, APIGroupKey: "key-1"})
+			queries = append(queries, UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1], BucketMS: bucketMS, Filters: ClientKeyFilter("key-1")})
+			queries = append(queries, UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1], BucketMS: bucketMS,
+				Dimensions: []UsageDimension{UsageDimensionKey},
+				Filters:    map[UsageDimension][]string{UsageDimensionCallPoint: {"fast", "gamma"}, UsageDimensionCredential: {"auth-0", "auth-2"}}})
 		}
 	}
 	return queries
@@ -190,7 +273,7 @@ func TestUsageSurvivesTheDeletionOfItsRequestRecords(t *testing.T) {
 
 	// Read on whole fact buckets before anything is deleted: this is what the
 	// widened windows below must still answer afterwards.
-	whole := UsageFactQuery{InstanceID: "default", FromMS: baseMS, ToMS: baseMS + 4*DayBucketMS - 1, BucketMS: HourBucketMS, GroupBy: UsageGroupModel}
+	whole := UsageFactQuery{InstanceID: "default", FromMS: baseMS, ToMS: baseMS + 4*DayBucketMS - 1, BucketMS: HourBucketMS, Dimensions: []UsageDimension{UsageDimensionModel}}
 	before := recordFacts(t, repo, whole)
 	alignedEdge := UsageFactQuery{InstanceID: "default", FromMS: baseMS + QuarterHourBucketMS, ToMS: baseMS + 4*DayBucketMS - 1, BucketMS: QuarterHourBucketMS}
 	beforeEdge := recordFacts(t, repo, alignedEdge)
@@ -290,5 +373,167 @@ func TestEncryptedInboxKeepsOnePayloadCopy(t *testing.T) {
 	batch, err := repo.ClaimUsageInboxBatch(ctx, 10)
 	if err != nil || len(batch) != 1 || batch[0].RawMessage != payload {
 		t.Fatalf("decoder must still receive the original payload, got %+v: %v", batch, err)
+	}
+}
+
+// A restored database can carry a local-grain marker for a zone this image's
+// tzdata does not know. It is derived state, so it must not stall the primary fold.
+func TestUnknownLocalGrainZoneDoesNotBlockFactsFold(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	seedFactEvents(t, repo, time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC).UnixMilli(), HourBucketMS, 1, 91)
+	if _, err := repo.SQL().Exec(`
+		INSERT INTO usage_aggregation_checkpoints (name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+		VALUES ('facts_local:Not/AZone', 0, 0, 0, 0);
+		INSERT INTO usage_facts_local_daily (instance_id, zone, day_wall_ms) VALUES ('default', 'Not/AZone', 0)`); err != nil {
+		t.Fatal(err)
+	}
+
+	folded, err := repo.AggregateUsageFacts(ctx, 10)
+	if err != nil {
+		t.Fatalf("an unknown local-grain zone blocked the primary fold: %v", err)
+	}
+	if folded != 1 {
+		t.Fatalf("folded %d records, want 1", folded)
+	}
+	var checkpoint int64
+	if err := repo.SQL().QueryRow(`SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = ?`, CheckpointFacts).Scan(&checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	var localRows, localMarkers int
+	if err := repo.SQL().QueryRow(`SELECT (SELECT COUNT(1) FROM usage_facts_local_daily), (SELECT COUNT(1) FROM usage_aggregation_checkpoints WHERE name LIKE ?)`,
+		localFactsMarkerPrefix+"%").Scan(&localRows, &localMarkers); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint == 0 || localRows != 0 || localMarkers != 0 {
+		t.Fatalf("checkpoint %d, stale local rows %d, stale markers %d", checkpoint, localRows, localMarkers)
+	}
+
+	// The periodic rebuild must treat the same marker as unbuilt rather than
+	// refusing forever to replace it.
+	repo.Timezone().Apply(time.UTC)
+	if _, err := repo.SQL().Exec(`INSERT INTO usage_aggregation_checkpoints (name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+		VALUES ('facts_local:Not/AZone', 0, 0, 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if rebuilt, err := repo.EnsureLocalUsageFacts(ctx); err != nil || !rebuilt {
+		t.Fatalf("unknown local-grain marker rebuilt %v: %v", rebuilt, err)
+	}
+	var zoneMarker string
+	if err := repo.SQL().QueryRow(`SELECT name FROM usage_aggregation_checkpoints WHERE name LIKE ? ORDER BY name LIMIT 1`,
+		localFactsMarkerPrefix+"%").Scan(&zoneMarker); err != nil {
+		t.Fatal(err)
+	}
+	if zoneMarker != localFactsMarkerPrefix+"UTC" {
+		t.Fatalf("rebuilt marker is %q", zoneMarker)
+	}
+}
+
+// A civil bucket must be the reader's local hour, day or week however the zone
+// moved during the window: New York's day of the autumn change is 25 hours, and
+// Kathmandu's +05:45 puts every local midnight on a quarter hour.
+func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kathmandu, err := time.LoadLocation("Asia/Kathmandu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseMS := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC).UnixMilli()
+	spanMS := 6 * DayBucketMS
+	seedFactEvents(t, repo, baseMS, spanMS, 700, 11)
+
+	windows := [][2]int64{
+		{baseMS, baseMS + spanMS - 1},
+		{baseMS + 7*60_000 + 3, baseMS + spanMS - 11*60_000},
+	}
+	compare := func(stage string) {
+		t.Helper()
+		for _, window := range windows {
+			for _, location := range []*time.Location{time.UTC, newYork, kathmandu} {
+				for _, unit := range []UsageCalendarUnit{UsageCalendarHour, UsageCalendarDay, UsageCalendarWeek} {
+					for _, dimensions := range factTestPartitions[:3] {
+						query := UsageFactQuery{InstanceID: "default", FromMS: window[0], ToMS: window[1],
+							Calendar: &UsageCalendar{Location: location, Unit: unit}, Dimensions: dimensions}
+						got, err := repo.QueryUsageFacts(ctx, query)
+						if err != nil {
+							t.Fatalf("%s %s %s: %v", stage, location, unit, err)
+						}
+						if want := recordFacts(t, repo, query); !reflect.DeepEqual(got.Rows, want) {
+							t.Fatalf("%s: %s %s buckets disagree with request records\n got %d rows %+v\nwant %d rows %+v",
+								stage, location, unit, len(got.Rows), got.Totals(), len(want), UsageFactResult{Rows: want}.Totals())
+						}
+					}
+				}
+			}
+		}
+	}
+	compare("nothing folded")
+	if _, err := repo.AggregateUsageFacts(ctx, 300); err != nil {
+		t.Fatal(err)
+	}
+	seedFactEvents(t, repo, baseMS, spanMS, 150, 12)
+	compare("partly folded with late records")
+	for {
+		folded, err := repo.AggregateUsageFacts(ctx, 500)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if folded == 0 {
+			break
+		}
+	}
+	compare("fully folded")
+
+	// The local-day grain answers whole local days once it is built, for whichever
+	// zone it was built for, and keeps agreeing as later batches fold into it.
+	for index, location := range []*time.Location{newYork, kathmandu} {
+		repo.Timezone().Apply(location)
+		if rebuilt, err := repo.EnsureLocalUsageFacts(ctx); err != nil || !rebuilt {
+			t.Fatalf("local grain for %s rebuilt %v: %v", location, rebuilt, err)
+		}
+		if rebuilt, err := repo.EnsureLocalUsageFacts(ctx); err != nil || rebuilt {
+			t.Fatalf("local grain for %s rebuilt twice: %v", location, err)
+		}
+		compare("local grain built for " + location.String())
+		seedFactEvents(t, repo, baseMS, spanMS, 120, int64(20+index))
+		compare("local grain with unfolded records")
+		for {
+			folded, err := repo.AggregateUsageFacts(ctx, 70)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if folded == 0 {
+				break
+			}
+		}
+		compare("local grain after more folds")
+	}
+
+	// The local day of the change is one 25-hour bucket.
+	dayOfChange := time.Date(2026, 11, 1, 0, 0, 0, 0, newYork).UnixMilli()
+	nextDay := time.Date(2026, 11, 2, 0, 0, 0, 0, newYork).UnixMilli()
+	days, err := repo.QueryUsageFacts(ctx, UsageFactQuery{InstanceID: "default", FromMS: dayOfChange, ToMS: nextDay + DayBucketMS - 1,
+		Calendar: &UsageCalendar{Location: newYork, Unit: UsageCalendarDay}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(days.Rows) != 2 || days.Rows[0].StartMS != dayOfChange || days.Rows[1].StartMS-days.Rows[0].StartMS != 25*HourBucketMS {
+		t.Fatalf("day buckets across the change are %+v, want starts %d and %d", days.Rows, dayOfChange, nextDay)
+	}
+
+	// On a zone with no offset the daily table still answers whole days, so a long
+	// calendar window stays as cheap as an epoch one.
+	utcDays, err := repo.QueryUsageFacts(ctx, UsageFactQuery{InstanceID: "default", FromMS: baseMS, ToMS: baseMS + spanMS - 1,
+		Calendar: &UsageCalendar{Location: time.UTC, Unit: UsageCalendarWeek}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if utcDays.DetailRequests != 0 {
+		t.Fatalf("a folded UTC calendar read took %d requests from records, want none", utcDays.DetailRequests)
 	}
 }

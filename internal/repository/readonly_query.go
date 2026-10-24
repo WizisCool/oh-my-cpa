@@ -78,6 +78,7 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"usage_events":                  nil,
 	"usage_facts_15m":               nil,
 	"usage_facts_daily":             nil,
+	"usage_facts_local_daily":       nil,
 }
 
 // QUERY_HIDDEN_TABLES are never readable, with the reason recorded for the next reviewer.

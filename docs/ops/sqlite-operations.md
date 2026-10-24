@@ -192,6 +192,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 1. **Usage data lifecycle**:
    - Every table declares one lifecycle in `TABLE_LIFECYCLES` (`internal/repository/lifecycle.go`): `permanent`, `rolling`, `owner_bounded` or `replaced`. A migration that adds a table without declaring it fails `TestEveryTableDeclaresItsLifecycle`;
    - **Permanent**: `usage_facts_15m` and `usage_facts_daily`, which every dashboard panel reads. They grow with distinct model/credential/key combinations per bucket, not with requests, and are never pruned;
+   - **Permanent, derived**: `usage_facts_local_daily`, the same facts per day of the OMC Time Zone, which Insights reads. It is rebuilt from `usage_facts_15m` in one transaction whenever the time zone changes, so restoring a backup or changing the zone never needs a manual step;
    - **Rolling, `OMCPA_USAGE_RETENTION_DAYS`** (default 90, `0` keeps everything): request records (`usage_events`), `error_events`, `ingest_gaps` and discarded payloads. The cutoff is floored to a whole UTC day;
    - **Rolling, `OMCPA_USAGE_INBOX_RETENTION_DAYS`** (default 7, `0` follows the request-record horizon): payloads in `usage_inboxes` that were decoded into a request record. They are the largest part of the database;
    - The pass runs hourly inside `ingest.Maintenance` in batches of 2000 rows, at most 25 full batches at a time; an unfinished pass continues on the next fold tick (`OMCPA_USAGE_AGGREGATE_INTERVAL`, default 15 seconds) so the write gate is never held for a long delete;

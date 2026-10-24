@@ -681,3 +681,28 @@ func TestSleepContextHonoursCancellation(t *testing.T) {
 		t.Fatal("sleep overshot")
 	}
 }
+
+func TestMaintenanceFoldsWhenLocalGrainRebuildFails(t *testing.T) {
+	store := newStore(t)
+	store.Timezone().Apply(time.UTC)
+	if _, err := store.SQL().Exec(`
+ INSERT INTO usage_events (instance_id, event_key, api_group_key, timestamp_ms, created_at_ms)
+ VALUES ('default', 'maintenance-local-rebuild', 'keyless', 1767182400000, 0);
+ CREATE TRIGGER reject_local_marker BEFORE INSERT ON usage_aggregation_checkpoints
+ WHEN NEW.name LIKE 'facts_local:%'
+ BEGIN SELECT RAISE(ABORT, 'fixture rejects derived marker'); END;`); err != nil {
+		t.Fatal(err)
+	}
+	maintenance, err := NewMaintenance(store, nil, time.Second, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maintenance.aggregateOnce(context.Background())
+	status := maintenance.Status()
+	if status.LastError == "" {
+		t.Fatal("local grain failure was not reported")
+	}
+	if status.Folded != 1 {
+		t.Fatalf("primary fold absorbed %d records after derived rebuild failed, want 1", status.Folded)
+	}
+}

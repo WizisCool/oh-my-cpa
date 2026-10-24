@@ -125,7 +125,15 @@ func (m *Maintenance) Run(ctx context.Context) error {
 
 // aggregateOnce folds every pending record, one bounded transaction at a time,
 // so a large backlog never holds the database for longer than one batch.
+//
+// The local-day grain is rebuilt first when the operator changed the time zone,
+// so the fold that follows already writes it for the new zone.
 func (m *Maintenance) aggregateOnce(ctx context.Context) {
+	if _, err := m.store.EnsureLocalUsageFacts(ctx); err != nil {
+		// A derived rebuild failure leaves quarter-hour reads available; the primary
+		// checkpoint must still advance so retention and ingestion can keep up.
+		m.recordError(fmt.Errorf("rebuild local usage facts: %w", err))
+	}
 	for ctx.Err() == nil {
 		folded, err := m.store.AggregateUsageFacts(ctx, m.aggregateBatch)
 		if err != nil {

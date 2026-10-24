@@ -85,6 +85,7 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 
 	"usage_facts_15m":               {Kind: LifecyclePermanent, Reason: "the dashboard's history; about one row per active dimension tuple per quarter hour"},
 	"usage_facts_daily":             {Kind: LifecyclePermanent, Reason: "the dashboard's history at the daily grain"},
+	"usage_facts_local_daily":       {Kind: LifecyclePermanent, Reason: "derived local-day grain; rebuilt from usage_facts_15m when the time zone changes"},
 	"audit_events":                  {Kind: LifecyclePermanent, Reason: "the audit trail grows with operator actions, not traffic"},
 	"model_price_versions":          {Kind: LifecyclePermanent, Reason: "every stored request cost references the version it was locked against"},
 	"pricing_channel_versions":      {Kind: LifecyclePermanent, Reason: "every stored request cost references the multiplier it was locked against"},

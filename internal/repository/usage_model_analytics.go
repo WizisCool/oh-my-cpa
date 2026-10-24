@@ -66,13 +66,13 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	// The grouping key follows the view the panel is drawing. The alias is the
 	// identity in the call view, not a display rewrite: it partitions the rows, so
 	// one call point served by two upstream models still reads as a single line.
-	grouping := UsageGroupModel
+	dimension := UsageDimensionModel
 	if opts.IsGroupedByCallPoint {
-		grouping = UsageGroupCallPoint
+		dimension = UsageDimensionCallPoint
 	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
 		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS,
-		GroupBy: grouping, APIGroupKey: opts.APIGroupKey,
+		Dimensions: []UsageDimension{dimension}, Filters: ClientKeyFilter(opts.APIGroupKey),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read usage model buckets: %w", err)
@@ -81,7 +81,7 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	for _, fact := range facts.Rows {
 		costNanos, pricedRequests := fact.CostNanos, fact.CostedRequests
 		result = append(result, UsageModelBucketRow{
-			Model: fact.Group, StartMS: fact.StartMS, Tokens: fact.TotalTokens, Requests: fact.Requests,
+			Model: fact.Keys[0], StartMS: fact.StartMS, Tokens: fact.TotalTokens, Requests: fact.Requests,
 			CostNanos: &costNanos, PricedRequests: &pricedRequests,
 		})
 	}
@@ -117,14 +117,14 @@ func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID st
 		return result, nil
 	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
-		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, GroupBy: UsageGroupProviderCredential,
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS - 1, Dimensions: []UsageDimension{UsageDimensionProvider, UsageDimensionServingKey},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read usage provider totals: %w", err)
 	}
 	for _, fact := range facts.Rows {
 		result = append(result, UsageProviderTotalsRow{
-			Provider: fact.Group, CredentialIndex: fact.SubGroup, Requests: fact.Requests, Failures: fact.Failures,
+			Provider: fact.Keys[0], CredentialIndex: fact.Keys[1], Requests: fact.Requests, Failures: fact.Failures,
 		})
 	}
 	return result, nil
