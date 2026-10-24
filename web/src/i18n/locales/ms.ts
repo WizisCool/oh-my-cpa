@@ -6,7 +6,7 @@
 export const MS: Readonly<Record<string, string>> = {
   "events.accounting_legacy": "Perakaunan legasi: tiada bukti kanonik disimpan; kiraan asal dan petikan harga terkunci dikekalkan.",
   "events.accounting_complete": "Kanonik v{version}: input asal {raw_input}, output {raw_output} → input ternormal {input}, output {output} (penaakulan dikira sekali).",
-  "events.accounting_unresolved": "Perakaunan token {status}; pecahan boleh bil yang lengkap tidak tersedia, maka permintaan ini tidak termasuk dalam anggaran kos.",
+  "events.accounting_unresolved": "Perakaunan token {status}; input asal {raw_input}, output {raw_output}. Pecahan boleh bil yang lengkap tidak tersedia, maka permintaan ini tidak termasuk dalam anggaran kos.",
   "events.accounting_status_invalid": "tidak sah",
   "events.accounting_status_unsupported": "tidak disokong",
   "events.accounting_status_inconsistent": "tidak konsisten",

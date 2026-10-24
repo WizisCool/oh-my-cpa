@@ -4,7 +4,7 @@ import type { Messages } from './types';
 export const USAGE_EVENTS_MESSAGES: Messages = {
   'events.accounting_legacy': ["旧版计量：未保留 canonical 证据，沿用原始计数和已锁定的价格快照。", "Legacy accounting: no canonical evidence was retained; original counts and locked price snapshots are preserved."],
   'events.accounting_complete': ["Canonical v{version}：原始输入 {raw_input}、输出 {raw_output} → 规范输入 {input}、输出 {output}（推理仅计一次）。", "Canonical v{version}: raw input {raw_input}, output {raw_output} → normalized input {input}, output {output} (reasoning counted once)."],
-  'events.accounting_unresolved': ["Token 计量{status}，无法确认完整的计费分区；此请求未计入费用估算。", "Token accounting is {status}; a complete billable partition is unavailable, so this request is excluded from cost estimates."],
+  'events.accounting_unresolved': ["Token 计量{status}；原始输入 {raw_input}、输出 {raw_output}。无法确认完整的计费分区，此请求未计入费用估算。", "Token accounting is {status}; raw input {raw_input}, output {raw_output}. A complete billable partition is unavailable, so this request is excluded from cost estimates."],
   'events.accounting_status_invalid': ["无效", "invalid"],
   'events.accounting_status_unsupported': ["版本不受支持", "unsupported"],
   'events.accounting_status_inconsistent': ["不一致", "inconsistent"],

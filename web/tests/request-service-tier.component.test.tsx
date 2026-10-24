@@ -93,9 +93,9 @@ it.each(['row', 'breakdown'])('does not offer a price edit as a remedy for unres
   expect(screen.queryByTestId(surface === 'breakdown' ? 'cost-set-price' : 'request-set-price')).toBeNull();
 });
 
-it('gives an unresolved request the same cost reason in its row and its accounting explanation', () => {
+it.each(['invalid', 'unsupported', 'inconsistent', 'unclassified'] as const)('shows original counts for %s accounting in the row and its explanation', status => {
   const accounting = {
-    version: 2, status: 'unclassified' as const,
+    version: 2, status,
     raw_tokens: { input_tokens: 100, output_tokens: 30, reasoning_tokens: 10, cached_tokens: 20,
       cache_read_tokens: 20, cache_read_tokens_present: true, cache_creation_tokens: 0, total_tokens: 140 },
   };
@@ -104,5 +104,8 @@ it('gives an unresolved request the same cost reason in its row and its accounti
     <TokenAccountingNote accounting={accounting} />
   </>);
   const tooltipReasons = Array.from(container.querySelectorAll('[data-request-tooltip]')).map(element => element.getAttribute('data-request-tooltip'));
-  expect(tooltipReasons).toContain(container.querySelector('p')?.textContent);
+  const explanation = container.querySelector('p')?.textContent;
+  expect(tooltipReasons).toContain(explanation);
+  expect(explanation).toContain('100');
+  expect(explanation).toContain('30');
 });

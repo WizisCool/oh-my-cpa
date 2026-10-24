@@ -1515,8 +1515,7 @@ three permanent fact grains preserve canonical and unresolved request counts
 plus raw input/output/total sums for those observed records; requests outside
 those counts have no canonical evidence. These measures fold with the normalized
 usage and locked costs, so detail retention and local-day rebuilding do not
-change their meaning. The dashboard exposes that evidence scope beside its
-normalized token totals when the window contains canonical accounting records.
+change their meaning.
 
 ### The live change signal
 
