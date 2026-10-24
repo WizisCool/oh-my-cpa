@@ -34,6 +34,7 @@ import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
+import { Notice } from '../components/feedback';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_QUOTA_AUTO_REFRESH,
@@ -181,8 +182,8 @@ export const OmcSettingsPage: React.FC = () => {
             <Segmented
               value={tpsMode}
               options={[
-                { value: 'exclude_ttft', label: t('omc.tps_exclude_ttft') },
                 { value: 'include_ttft', label: t('omc.tps_include_ttft') },
+                { value: 'exclude_ttft', label: t('omc.tps_exclude_ttft') },
               ]}
               onChange={(next) => setTpsMode(next as TpsCalculationMode)}
               aria-label={t('omc.tps_calculation_mode')}
@@ -191,6 +192,11 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
+        {tpsMode === 'exclude_ttft' && (
+          <div className="settings-inline-notice">
+            <Notice tone="warning" description={t('omc.tps_exclude_warning')} />
+          </div>
+        )}
         <SettingRow
           label={t('omc.request_model_icons')}
           description={t('omc.request_model_icons_desc')}

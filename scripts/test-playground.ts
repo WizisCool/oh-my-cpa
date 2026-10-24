@@ -4,11 +4,12 @@ import test from 'node:test';
 import {
   actualRequest, applyEvent, buildChatRequest, buildCurl, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS,
   hasCustomParameters, hasOmittedImage, inspectRequest, effectiveModel, MAX_EVENTS, parametersFromSession,
-  parsePlaygroundSession, playgroundUserAgent, readCustomBody, retriedTurn, sanitizeTurnsForStorage, sessionDocument,
-  STORED_IMAGE_URL_LIMIT, usageLink,
+  parsePlaygroundSession, playgroundTpsEvidence, playgroundUserAgent, readCustomBody, retriedTurn,
+  sanitizeTurnsForStorage, sessionDocument, STORED_IMAGE_URL_LIMIT, usageLink,
 } from '../web/src/pages/playground/state.ts';
 import type { Turn } from '../web/src/pages/playground/state.ts';
 import { readEventQuery } from '../web/src/types/usageEventQuery.ts';
+import { calculateTokensPerSecond, outputTotalWithReasoning } from '../web/src/types/tpsCalculation.ts';
 
 function makeTurn(): Turn {
   const user = { role: 'user' as const, content: [{ type: 'text' as const, text: 'hello' }] };
@@ -26,12 +27,45 @@ test('completion, partial failures, and retries do not smuggle partial answers i
   assert.equal(complete.usage, undefined);
 });
 
-test('thought events accumulate in turn.thought', () => {
+test('thought events accumulate and TPS evidence separates reasoning from answer boundaries', () => {
   let turn = makeTurn();
   turn = applyEvent(turn, { type: 'thought', content: 'thinking step 1; ' });
   turn = applyEvent(turn, { type: 'thought', content: 'step 2.' });
   assert.equal(turn.thought, 'thinking step 1; step 2.');
   assert.equal(turn.reply, '');
+  assert.deepEqual(playgroundTpsEvidence(turn), { reasoningTokens: undefined, firstTokenKind: 'non_reasoning' },
+    'a thought channel without a count leaves the output scope unknown, but reply timing still begins after reasoning');
+  assert.deepEqual(playgroundTpsEvidence({ ...turn, usage: { reasoning_tokens: 3 } }), { reasoningTokens: 3, firstTokenKind: 'non_reasoning' });
+  assert.deepEqual(playgroundTpsEvidence({ ...turn, usage: { reasoning_tokens: 0 } }), { reasoningTokens: undefined, firstTokenKind: 'non_reasoning' },
+    'reasoning text with a zero count is contradictory evidence, not a visible-only rate');
+  assert.deepEqual(playgroundTpsEvidence(makeTurn()), { reasoningTokens: 0, firstTokenKind: 'non_reasoning' });
+
+  const inline = { ...makeTurn(), reply: '<think>hidden chain</think>answer' };
+  assert.deepEqual(playgroundTpsEvidence(inline), { reasoningTokens: undefined, firstTokenKind: undefined },
+    'inline reasoning shares the content clock, so the first delta is not an answer boundary');
+  assert.deepEqual(playgroundTpsEvidence({ ...inline, usage: { reasoning_tokens: 4 } }), { reasoningTokens: 4, firstTokenKind: undefined });
+  assert.deepEqual(playgroundTpsEvidence({ ...inline, usage: { reasoning_tokens: 0 } }), { reasoningTokens: undefined, firstTokenKind: undefined });
+  assert.deepEqual(playgroundTpsEvidence({ ...makeTurn(), reply: '<think>still thinking' }), { reasoningTokens: undefined, firstTokenKind: undefined });
+  assert.deepEqual(playgroundTpsEvidence({ ...inline, thought: '' }), { reasoningTokens: undefined, firstTokenKind: 'non_reasoning' },
+    'an empty separate channel still keeps reply tags literal and its first delta after reasoning');
+
+  const inlineUsage = { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, reasoning_tokens: 4 };
+  const inlineEvidence = playgroundTpsEvidence({ ...inline, usage: inlineUsage });
+  const inlineOutput = outputTotalWithReasoning({
+    inputTokens: inlineUsage.prompt_tokens,
+    outputTokens: inlineUsage.completion_tokens,
+    reasoningTokens: inlineEvidence.reasoningTokens,
+    totalTokens: inlineUsage.total_tokens,
+  });
+  assert.equal(calculateTokensPerSecond({
+    outputTokens: inlineOutput.outputTokens,
+    reasoningTokens: inlineEvidence.reasoningTokens,
+    isAccountingValid: inlineOutput.isAccountingValid,
+    durationMS: 100,
+    firstTokenMS: 10,
+    firstTokenKind: inlineEvidence.firstTokenKind,
+  }, 'exclude_ttft').basis, 'unavailable_reasoning',
+  'inline reasoning cannot use the shared content clock as a non-reasoning boundary');
 });
 
 test('bounded diagnostic events do not truncate the actual answer', () => {
@@ -294,6 +328,8 @@ test('session restoration rejects malformed nested turns without crashing later 
     { ...valid, status: 'invented' }, { ...valid, usage: { total_tokens: 'wrong' } },
     { ...valid, reply: {} }, { ...valid, thought: {} }, { ...valid, requestID: 42 },
   ]) assert.equal(parsePlaygroundSession({ turns: [bad, valid] })?.turns?.length, 1);
+  const withReasoning = { ...valid, usage: { completion_tokens: 10, reasoning_tokens: 7, total_tokens: 20 } };
+  assert.equal(parsePlaygroundSession({ turns: [withReasoning] })?.turns?.[0].usage?.reasoning_tokens, 7);
   // A restored turn keeps the id its drill-down needs.
   const withID = { ...valid, requestID: '0000002a', events: [{ type: 'request', request_id: '0000002a' }, { type: 'request', request_id: 42 }] };
   const restored = parsePlaygroundSession(JSON.parse(JSON.stringify({ turns: [withID] })))?.turns?.[0];

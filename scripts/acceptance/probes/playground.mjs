@@ -111,13 +111,10 @@ export async function playground({ base, page, check, context }) {
   check('playground renders the streamed answer and measured timing', await page.getByText('A streamed answer').count() > 0 && (await page.locator('[data-testid="playground-page"]').innerText()).includes('42'), 'expected content and first-content timing');
   const transcript = page.locator('[data-testid="playground-transcript"]');
   check('playground turn footer renders metrics and tps', await transcript.locator('.anticon-thunderbolt').count() > 0 && await transcript.locator('.anticon-field-time').count() > 0);
-  // The displayed rate is the shared formula's, not a second one computed for this footer:
-  // the fixture streams 8 output tokens over 90ms with a 42ms first token, a 48ms residual
-  // below the 50ms floor, so the rate must be the end-to-end fallback 8*1000/90 = 88.89 t/s
-  // rather than the 8*1000/48 = 166.67 t/s a residual-window division would give. This asserts
-  // formula parity with the request records; it is not a claim about any particular reported
-  // rate, which depends on that call's own timings.
-  check('the footer tps matches the shared request-record formula', (await page.locator('[data-testid="playground-page"]').innerText()).includes('88.89 t/s'), 'expected the shared formula\'s rate, not a residual-window division');
+  // The fixture streams 8 output tokens over 90ms. The default end-to-end rate uses that
+  // total duration even though a first-content boundary was also observed.
+  const footerTPS = '88.89 t/s';
+  check('the footer defaults to the total-duration rate', (await page.locator('[data-testid="playground-page"]').innerText()).includes(footerTPS), `expected ${footerTPS}`);
   const viewRequest = answer => answer.getByRole('button', { name: 'View in request records', exact: true });
   check('a turn CPA named links to its request record', await viewRequest(page.locator('[data-testid="playground-answer"]').first()).isEnabled());
   check('model output does not fetch external images or execute HTML', external.length === 0 && !await page.evaluate(() => window.__playgroundInjected), external.join(','));
@@ -149,7 +146,7 @@ export async function playground({ base, page, check, context }) {
   mode = 'success'; await regenerate.click();
   await until(() => calls.length === 3, { label: 'the regenerate to reach the upstream' });
   check('regenerating reuses the same request instead of appending a partial answer', JSON.stringify(calls[2]) === JSON.stringify(calls[1]), 'request snapshot equality');
-  await until(async () => (await transcript.innerText()).includes('8.00 t/s'), { label: 'the measurable TPS result' });
+  await until(async () => (await transcript.innerText()).includes('4.00 t/s'), { label: 'the measurable default TPS result' });
   // Match this request's observed output and timing exactly, independently of unrelated list fixtures.
   await page.route('**/api/**/usage/events?*', route => route.fulfill({ json: {
     items: [{ id: 1, event_key: 'tps-fixture', request_id: '0000002a', timestamp_ms: Date.now(),
@@ -158,7 +155,7 @@ export async function playground({ base, page, check, context }) {
       source: 'hmac:tps-fixture', auth_index: 'credential-fixture', api_group_key: 'hmac:tps-fixture', executor_type: 'openai' }],
     has_more: false, limit: 50,
   } }));
-  for (const [label, expected] of [['Include first-token latency', '4.00 t/s'], ['Exclude first-token latency', '8.00 t/s']]) {
+  for (const [label, expected] of [['Exclude first-token latency', '8.00 t/s'], ['Include first-token latency', '4.00 t/s']]) {
     await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
     const tpsRow = page.locator('.settings-toggle-row').filter({ hasText: 'TPS calculation mode' });
     const write = page.waitForResponse(response => response.url().endsWith('/preferences/omc_tps_calculation_mode') && response.request().method() === 'PUT');

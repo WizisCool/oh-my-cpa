@@ -37,11 +37,25 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   const tpsRow = page.locator('.settings-toggle-row').filter({ hasText: 'TPS calculation mode' });
   const excludeTps = tpsRow.getByRole('radio', { name: 'Exclude first-token latency', exact: true });
   const includeTps = tpsRow.getByRole('radio', { name: 'Include first-token latency', exact: true });
-  await until(() => excludeTps.isChecked(), { label: 'the default TPS mode' });
-  check('TPS defaults to excluding first-token latency', await excludeTps.isChecked());
+  const tpsWarning = page.locator('.omc-settings-page .omc-notice.is-warning');
+  await until(() => includeTps.isChecked(), { label: 'the default TPS mode' });
+  check('TPS defaults to including first-token latency', await includeTps.isChecked());
+  check('the default TPS mode does not warn', await tpsWarning.count() === 0);
+  await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
+  await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the exclusion TPS write' });
+  await tpsWarning.waitFor();
+  check(
+    'exclusion keeps the anomalous-TPS warning inline',
+    await tpsWarning.getAttribute('role') === 'alert'
+      && (await tpsWarning.innerText()).includes('Excluding first-token latency may make TPS unusually high; OMC calibrates with the available evidence'),
+  );
+  check('TPS mode persists through the shared preference API', writes.some(write => write.key === 'omc_tps_calculation_mode' && write.body === '"exclude_ttft"'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => excludeTps.isChecked(), { label: 'the excluded TPS mode after reload' });
+  check('a reloaded settings page keeps the exclusion warning', await excludeTps.isChecked() && await tpsWarning.count() === 1);
   await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Include first-token latency' }).click();
-  await until(() => preferences.omc_tps_calculation_mode === 'include_ttft', { label: 'the TPS mode write' });
-  check('TPS mode persists through the shared preference API', writes.some(write => write.key === 'omc_tps_calculation_mode' && write.body === '"include_ttft"'));
+  await until(() => preferences.omc_tps_calculation_mode === 'include_ttft', { label: 'the inclusion TPS write' });
+  await until(async () => await tpsWarning.count() === 0, { label: 'the exclusion warning to clear' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await until(() => includeTps.isChecked(), { label: 'the TPS mode after reload' });
   check('a reloaded settings page reads the saved TPS mode', await includeTps.isChecked());
@@ -50,14 +64,15 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
   await rejectedWrite;
   await until(() => includeTps.isChecked(), { label: 'the TPS control to roll back after refusal' });
-  check('a refused TPS write restores the saved selection', await includeTps.isChecked() && preferences.omc_tps_calculation_mode === 'include_ttft');
+  check('a refused TPS write restores the saved selection',
+    await includeTps.isChecked() && preferences.omc_tps_calculation_mode === 'include_ttft' && await tpsWarning.count() === 0);
   shouldRejectTpsWrite = false;
   await page.setViewportSize({ width: 320, height: 800 });
   await until(() => tpsRow.locator('.ant-segmented-vertical').count(), { label: 'the phone TPS picker' });
   await settleLayout(page);
   check('the phone TPS choices fit without horizontal overflow', await tpsRow.evaluate(row => row.scrollWidth <= row.clientWidth + 1));
   await tpsRow.locator('.ant-segmented-item').filter({ hasText: 'Exclude first-token latency' }).click();
-  await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the restored default TPS mode' });
+  await until(() => preferences.omc_tps_calculation_mode === 'exclude_ttft', { label: 'the restored excluded TPS mode' });
   await page.setViewportSize({ width: 1440, height: 900 });
   // The viewport acknowledgement can precede React's breakpoint update and the select's resize.
   await until(async () => await tpsRow.locator('.ant-segmented-vertical').count() === 0, { label: 'the desktop TPS picker' });

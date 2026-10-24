@@ -2050,51 +2050,50 @@ Four properties are load-bearing:
 
 ### Streaming status and throughput (TPS) derivation
 
-CPA usage payloads include a boolean `stream` field indicating whether the request
-was executed in streaming mode. Oh My CPA records this in `usage_events.stream`
-(migration 023) as a nullable integer: `1` for streaming, `0` for non-streaming,
-and `NULL` for historical rows where the flag was not captured.
+A usage record carries CPA's total `latency_ms`, optional `ttft_ms`, the raw token counts
+and, when available, canonical token accounting. OMC does not infer hidden reasoning timing
+or progressive delivery from the recorded `stream` flag, a model name, a duration threshold
+or the resulting speed. A first-token timestamp can mark the first observable token even in
+a request the client sent with `stream: false`, and it can be a first-packet fallback.
 
-The flag is operational metadata, not a sufficient classifier for TTFT validity.
-An upstream executor can capture a real first-token event even when the client
-requested `stream: false`, while an apparently streaming request can still receive
-its whole payload in one chunk. `eventTokensPerSecond` in
-`web/src/types/usageEventMetrics.ts` derives output-token rates using the deployment's
-`omc_tps_calculation_mode` preference:
+`calculateTokensPerSecond` in `web/src/types/tpsCalculation.ts` is the shared leaf
+calculation used by `eventTokensPerSecond` and the Playground:
 
-- `exclude_ttft` (default): subtract a finite positive `ttft_ms` only when it is below
-  total latency, `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms),
-  no reasoning tokens are reported, and the resulting rate is at most 500 t/s.
-  TPS is then `output_tokens * 1000 / (latency_ms - ttft_ms)`. Otherwise use
-  `output_tokens * 1000 / latency_ms`. Missing or unusable timing and reported
-  reasoning tokens produce `fallback_total`; an otherwise usable residual window
-  whose rate would exceed 500 t/s produces `fallback_buffered`. The latter is a
-  buffered-delivery heuristic, not proof of buffering or a cap on end-to-end rates.
-- `include_ttft`: always use `output_tokens * 1000 / latency_ms`, even when TTFT is
-  measurable. This does not hide or invalidate the independent TTFT readout.
-- Non-generation records, non-positive or non-finite output tokens, and invalid total
-  latency have no TPS. Remaining elapsed time can include server-side tool calls;
-  the subtraction is not a measurement of pure generation time.
+- `include_ttft` is `output_tokens * 1000 / latency_ms`, using the canonical output total
+  when complete accounting exists. Legacy counts use their grand total to establish
+  whether reported reasoning is already inside output or is a separate bucket; an
+  equation that identifies neither scope makes the rate unavailable.
+- `exclude_ttft` requires a finite first-token timestamp strictly between zero and
+  `latency_ms`; a usage record's zero means absent. It divides output tokens by
+  `latency_ms - ttft_ms` when no reasoning is reported. When the observer knows the
+  timestamp marks non-reasoning content (the Playground's first-content delta after a
+  separate thought channel), it removes the known reasoning count from the numerator and
+  returns the `exclude_ttft_visible` basis; a content clock may itself be zero because it was
+  measured locally. Inline `<think>` reasoning shares the content stream, so its first delta
+  is not an answer boundary. A usage record with reported reasoning has no such content
+  boundary and returns `unavailable_reasoning`.
+- Invalid or inconsistent accounting returns `unavailable_accounting`; missing timing
+  returns `unavailable_timing`. Non-generation records, non-positive output, and values
+  outside the safe-integer range have no TPS and no basis. Unavailable rates are not
+  fallbacks: the selected formula either has the evidence it needs or produces no number.
 
-`TokenDisplayProvider` owns the setting through the existing optimistic, per-key
-serialized preference hook. OMC Settings, request rows and Playground footers share
-one value; changing it recalculates historical readouts without touching stored observations.
-The calculation result exposes `basis` (`exclude_ttft`, `include_ttft`, `fallback_total`,
-`fallback_buffered`, or `null`) so both surfaces select the same accurate formula tooltip. The closed preference
-API allowlist accepts the new key using its existing JSON-document contract. Missing or
-unsupported values resolve to `exclude_ttft`; no migration is needed.
+The Playground's content clock is a separate observation from CPA's `ttft_ms`. When a
+provider omits reasoning details, the Playground treats its reported output as having no
+reported reasoning; this is a claim about the usage evidence, not about hidden model work.
+Gateway usage events now preserve `completion_tokens_details.reasoning_tokens`,
+`output_tokens_details.reasoning_tokens`, and Claude Messages thinking counts from
+`output_tokens_details.thinking_tokens` (plus the legacy top-level `thinking_tokens`),
+so a turn footer can distinguish non-reasoning output from hidden reasoning. The tooltip states that even the content-tail rate can include
+tools and transport time; it is not a claim about internal model speed.
 
-`internal/operations/tps_calculation.go` registers `tps_calculation_get` and
-`tps_calculation_set` for both Agent and MCP administrators. The low-risk write validates
-its two mode values, returns `invalid_parameters` otherwise, persists through the same
-repository and invalidates `preferences`. Reads return the effective mode using
-`internal/repository/tps_calculation.go`.
+The calculation result's basis (`exclude_ttft`, `exclude_ttft_visible`, `include_ttft`,
+`unavailable_timing`, `unavailable_reasoning`, `unavailable_accounting`, or `null`) drives
+the same formula tooltip and JSON export on every surface. The closed preference API
+accepts `omc_tps_calculation_mode`; missing or unsupported values resolve to
+`include_ttft`.
 
-The request list and detail drawer show a non-stream badge when an explicit
-`stream: false` record has no measurable TTFT or when the observed residual window
-collapsed. Historical records (`stream IS NULL`) use the same residual-window
-heuristic, preserving genuine legacy first-token observations without inferring a
-first-token boundary from a completion-only measurement.
+The request list and detail drawer show the non-stream badge only for an explicit
+`stream: false` observation; they do not infer it from collapsed timing or a fast rate.
 
 ### 6.1 The request-record filter vocabulary
 
@@ -3390,8 +3389,11 @@ override from replacing `messages` with content the image checks never approved;
 console does not model pass through untouched. `user_agent` is a transport header rather than a
 body field, so it is resolved here (the operator's value, else `Oh-My-CPA/<build version>`) and
 refused when it is not a header value; a non-streaming body is refused by name, because this
-route projects allowlisted SSE events. TPS in the turn footer comes from the same
-`eventTokensPerSecond` helper and global TPS calculation preference the request records use, so the two cannot disagree.
+route projects allowlisted SSE events. TPS in the turn footer uses the same calculation and
+global preference as request records, while supplying a non-reasoning content boundary when
+reasoning arrives on a separate thought channel. Inline reasoning shares the reply clock, so
+the footer reports exclusion as unavailable. The bases remain explicit so a content-tail
+rate is never mistaken for a usage record's narrower evidence.
 
 Request inspection substitutes image summaries at any depth (a valid custom body may replace
 `messages` with the string-content form) and omits `user_agent` from the body preview, since it

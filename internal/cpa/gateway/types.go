@@ -102,6 +102,7 @@ type Model struct {
 	Vision    string `json:"vision"`
 }
 type Usage struct {
+	ReasoningTokens  *int64 `json:"reasoning_tokens,omitempty"`
 	PromptTokens     *int64 `json:"prompt_tokens,omitempty"`
 	CompletionTokens *int64 `json:"completion_tokens,omitempty"`
 	TotalTokens      *int64 `json:"total_tokens,omitempty"`

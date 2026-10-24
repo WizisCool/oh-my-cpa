@@ -1772,13 +1772,17 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   padding: 16px 20px;
 }
 
-.settings-toggle-row + .settings-toggle-row::before {
+.settings-toggle-row + .settings-toggle-row::before,
+.settings-inline-notice + .settings-toggle-row::before {
   content: '';
   position: absolute;
   top: 0;
   inset-inline: 20px;
   border-top: 1px dashed var(--border);
 }
+
+/* A notice belongs to the row above it rather than becoming a second setting. */
+.settings-inline-notice { padding: 0 20px 16px; }
 
 .settings-toggle-info {
   min-width: 0;
@@ -2487,6 +2491,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .settings-group-head, .settings-group-body { padding: 12px; }
   .settings-group-head { gap: 8px; }
   .settings-toggle-row { gap: 8px; padding-block: 12px; }
+  .settings-inline-notice { padding: 0 20px 12px; }
   .config-page.has-dirty-bar { padding-bottom: calc(var(--config-dirty-height, 0px) + max(12px, env(safe-area-inset-bottom)) + 24px) !important; }
   .ant-modal .ant-modal-title { overflow-wrap: anywhere; }
   .ant-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

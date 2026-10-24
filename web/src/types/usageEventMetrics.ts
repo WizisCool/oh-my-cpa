@@ -99,32 +99,8 @@ export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateRes
   return { rate, cached, hasData: true };
 }
 
-export type TpsCalculationBasis = TpsCalculationMode | 'fallback_total' | 'fallback_buffered';
-
-export function tpsCalculationHintKey(basis: TpsCalculationBasis) {
-  return basis === 'exclude_ttft' ? 'events.tps_hint_ttft'
-    : basis === 'include_ttft' ? 'events.tps_hint_total'
-    : basis === 'fallback_buffered' ? 'events.tps_hint_buffered' : 'events.tps_hint_fallback';
-}
-
-export interface EventTokensPerSecondResult {
-  tps: number | null;
-  formatted: string;
-  basis: TpsCalculationBasis | null;
-}
-
-/**
- * Minimum residual duration in milliseconds after the first token required
- * to consider that boundary measurable. When latency_ms - ttft_ms < 50ms,
- * TTFT has collapsed onto the total response duration (the proxy observed the whole
- * response in a single chunk rather than a progressive first-token arrival).
- */
-export const MIN_STREAMING_GENERATION_WINDOW_MS = 50;
-
-// Usage records have no output-chunk timing to distinguish progressive generation from
-// buffered delivery. Above this heuristic rate, the tail alone is not a reliable denominator.
-// This guards TTFT subtraction, not the end-to-end rate or the recorded TTFT boundary.
-const MAX_TTFT_EXCLUDED_TOKENS_PER_SECOND = 500;
+export { tpsCalculationHintKey, type TpsCalculationBasis, type EventTokensPerSecondResult } from './tpsCalculation';
+import { calculateTokensPerSecond, outputTotalWithReasoning, type EventTokensPerSecondResult } from './tpsCalculation';
 
 const FAST_SERVICE_TIERS = new Set(['fast', 'priority']);
 
@@ -140,95 +116,51 @@ export function fastTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_s
     : 'events.fast_tier_hint';
 }
 
-/**
- * hasMeasurableTTFT determines whether a usage record carries a genuine, non-collapsed
- * time-to-first-token measurement:
- * - Requires ttft_ms > 0 and latency_ms > 0 with ttft_ms < latency_ms
- * - Requires a residual window (latency_ms - ttft_ms) of at least 50 ms. When the remainder
- *   is below this threshold, the proxy observed the whole payload at completion rather than
- *   a progressive stream (e.g. non-streaming requests without upstream chunking).
- */
+/** A positive interval is observable; its size does not establish whether delivery was buffered. */
 export function hasMeasurableTTFT(
   event?: Partial<Pick<UsageEvent, 'latency_ms' | 'ttft_ms'>>,
 ): boolean {
-  if (!event) return false;
-  const latency = Number(event.latency_ms);
-  const ttft = event.ttft_ms != null ? Number(event.ttft_ms) : null;
-  return (
-    ttft !== null &&
-    Number.isFinite(ttft) &&
-    Number.isFinite(latency) &&
-    ttft > 0 &&
-    latency > 0 &&
-    ttft < latency &&
-    latency - ttft >= MIN_STREAMING_GENERATION_WINDOW_MS
-  );
+  const latency = event?.latency_ms;
+  const ttft = event?.ttft_ms;
+  return latency != null && ttft != null && Number.isFinite(latency) && Number.isFinite(ttft)
+    && ttft > 0 && ttft < latency;
 }
 
-/**
- * isNonStreamingEvent reports whether the non-streaming badge should appear beside a
- * record: either the client requested a non-streamed response and no measurable TTFT was
- * captured, or the residual window collapsed as if the payload arrived in one response.
- *
- * `stream: false` alone is not enough to classify TTFT as unusable. CPA can capture a
- * genuine upstream token boundary even when the client requested a non-streamed response,
- * so a measurable residual window keeps the TTFT readout independently of the selected
- * TPS calculation mode. The badge is therefore gated on hasMeasurableTTFT as well as the recorded mode.
- */
-export function isNonStreamingEvent(
-  event?: Partial<Pick<UsageEvent, 'stream' | 'latency_ms' | 'ttft_ms'>>,
-): boolean {
-  if (!event || hasMeasurableTTFT(event)) return false;
-  if (event.stream === false) return true;
-  const latency = Number(event.latency_ms);
-  const ttft = event.ttft_ms != null ? Number(event.ttft_ms) : null;
-  return (
-    ttft !== null &&
-    Number.isFinite(ttft) &&
-    Number.isFinite(latency) &&
-    latency > 0 &&
-    ttft > 0 &&
-    ttft <= latency &&
-    latency - ttft < MIN_STREAMING_GENERATION_WINDOW_MS
-  );
+/** Delivery speed cannot establish the client's requested streaming mode. */
+export function isNonStreamingEvent(event?: Partial<Pick<UsageEvent, 'stream'>>): boolean {
+  return event?.stream === false;
 }
 
-/**
- * The selected denominator changes only this derived readout, never the timing observations.
- * A collapsed first-token boundary cannot support subtraction, so exclusion falls back to
- * total latency. The residual may include server-side tools; it is not pure generation time.
- * Client streaming intent does not establish whether the observed boundary is measurable.
- * Even a measurable tail can be a buffered tool-argument burst with no reasoning tokens.
- * Exclusion therefore also requires a token-scaled window (at most 500 t/s); a shorter
- * window falls back to the end-to-end average without claiming to detect tool calls.
- *
- * Reported reasoning tokens also rule the subtraction out. Hidden reasoning (OpenAI and Codex
- * encrypted reasoning, Gemini thoughts) is generated before the first visible token, so the
- * residual window never contained it: 814 output tokens, 767 of them reasoning, over a 0.43 s
- * tail reads as ~1900 t/s. Providers disagree on whether the output count includes reasoning,
- * so the visible share cannot be isolated either, and the end-to-end average is the only rate
- * the record supports without inflating it.
- */
+/** Canonical accounting establishes whether reasoning is included; legacy counts use their totals. */
 export function eventTokensPerSecond(
-  event?: Partial<Pick<UsageEvent, 'generate' | 'latency_ms' | 'ttft_ms' | 'tokens' | 'stream'>>,
+  event?: Partial<Pick<UsageEvent, 'generate' | 'latency_ms' | 'ttft_ms' | 'tokens' | 'stream' | 'token_accounting' | 'accounting_status'>>,
   mode: TpsCalculationMode = DEFAULT_TPS_CALCULATION_MODE,
 ): EventTokensPerSecondResult {
-  const output = Number(event?.tokens?.output);
-  const latency = Number(event?.latency_ms);
-  if (!event || event.generate === false || !Number.isFinite(output) || output <= 0 ||
-      !Number.isFinite(latency) || latency <= 0) {
-    return { tps: null, formatted: '—', basis: null };
+  const accounting = event?.token_accounting;
+  const breakdown = accounting?.status === 'complete' ? accounting.token_breakdown : undefined;
+  let isAccountingValid = (accounting == null || accounting.status === 'complete')
+    && (accounting?.status !== 'complete' || breakdown != null)
+    && (event?.accounting_status == null || event.accounting_status === 'legacy' || event.accounting_status === 'complete');
+  const reasoning = breakdown?.output.reasoning_tokens ?? event?.tokens?.reasoning;
+  let output = breakdown?.output.total_tokens;
+  if (output == null) {
+    const legacy = outputTotalWithReasoning({
+      inputTokens: event?.tokens?.input,
+      outputTokens: event?.tokens?.output,
+      reasoningTokens: reasoning,
+      totalTokens: event?.tokens?.total,
+    });
+    output = legacy.outputTokens;
+    isAccountingValid &&= legacy.isAccountingValid;
   }
-
-  let basis: TpsCalculationBasis = mode === 'include_ttft' ? 'include_ttft'
-    : hasMeasurableTTFT(event) && !(Number(event.tokens?.reasoning) > 0) ? 'exclude_ttft' : 'fallback_total';
-  const generationWindowMs = latency - Number(event.ttft_ms);
-  if (basis === 'exclude_ttft' && generationWindowMs < output * 1000 / MAX_TTFT_EXCLUDED_TOKENS_PER_SECOND) {
-    basis = 'fallback_buffered';
-  }
-  const durationMs = basis === 'exclude_ttft' ? generationWindowMs : latency;
-  const tps = (output * 1000) / durationMs;
-  return { tps, formatted: `${tps.toFixed(2)} t/s`, basis };
+  return calculateTokensPerSecond({
+    isGeneration: event?.generate,
+    outputTokens: output,
+    reasoningTokens: reasoning,
+    isAccountingValid,
+    durationMS: event?.latency_ms,
+    firstTokenMS: event?.ttft_ms,
+  }, mode);
 }
 
 export function resolvedTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): string {

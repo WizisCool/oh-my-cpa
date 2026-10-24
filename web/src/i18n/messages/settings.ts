@@ -17,9 +17,10 @@ export const SETTINGS_MESSAGES: Messages = {
   // A row description survives only when it states something the label cannot.
   'omc.title': ['OMC 设置', 'OMC Settings'],
   'omc.tps_calculation_mode': ["TPS 计算方式", "TPS calculation mode"],
-  'omc.tps_calculation_desc': ["输出 Token ÷ 耗时；排除首字延迟时，若计时不可用、含推理 Token，或扣除后速率超过 500 t/s，则使用总耗时。", "Output tokens ÷ duration; excluding first-token latency uses total latency if timing is unavailable, reasoning tokens are present, or the rate after subtraction would exceed 500 t/s."],
+  'omc.tps_calculation_desc': ["计算 TPS 时是否排除首字延迟耗时", "Whether to exclude first-token latency when calculating TPS"],
   'omc.tps_exclude_ttft': ["排除首字延迟", "Exclude first-token latency"],
   'omc.tps_include_ttft': ["包含首字延迟", "Include first-token latency"],
+  'omc.tps_exclude_warning': ["排除首字延迟可能让 TPS 显著偏高或异常；OMC 会按可用证据尽量校准", "Excluding first-token latency may make TPS unusually high; OMC calibrates with the available evidence"],
   'omc.section_quota': ['额度', 'Quota'],
   'omc.section_plugin_source': ['插件商店', 'Plugin store'],
   'omc.plugin_source': ['Oh My CPA 插件源', 'Oh My CPA plugin registry'],

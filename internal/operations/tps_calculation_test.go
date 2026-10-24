@@ -48,7 +48,7 @@ func TestTpsCalculationCapabilitiesSharePreference(t *testing.T) {
 				if err := repo.PutPreference(ctx, repository.PreferenceTpsCalculationMode, raw); err != nil {
 					t.Fatal(err)
 				}
-				readMode(repository.TpsExcludeTTFT)
+				readMode(repository.TpsIncludeTTFT)
 			}
 			for _, mode := range []repository.TpsCalculationMode{repository.TpsIncludeTTFT, repository.TpsExcludeTTFT} {
 				input, _ := json.Marshal(TpsCalculationInfo{Mode: mode})
