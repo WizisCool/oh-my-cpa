@@ -401,6 +401,8 @@ describe('a row that says it is out of date', () => {
     expect(container.querySelector('[data-quota-failure-line="failed"]')?.getAttribute('title')).toMatch(/Last refresh failed .*HTTP 401/);
     const control = screen.getByTestId('oauth-credential-refresh');
     expect(control.getAttribute('data-needs-refresh')).toBe('true');
+    // The state is in the name a screen reader announces, not only in the attribute.
+    expect(control.getAttribute('aria-label')).toMatch(/^Refresh quota: .+ \(Needs refresh\)$/);
     fireEvent.click(control);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -414,6 +416,7 @@ describe('a row that says it is out of date', () => {
   it('keeps the refresh on a current reading, without the complaint', () => {
     const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
     expect(screen.getByTestId('oauth-credential-refresh').getAttribute('data-needs-refresh')).toBeNull();
+    expect(screen.getByTestId('oauth-credential-refresh').getAttribute('aria-label')).not.toMatch(/Needs refresh/);
     expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
   });
 });

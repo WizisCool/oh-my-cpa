@@ -2743,6 +2743,7 @@ export const MS: Readonly<Record<string, string>> = {
   "omc.status_reauth": "Log masuk tamat",
   "omc.status_read_failed": "Bacaan kuota gagal",
   "omc.status_refresh_failed": "Muat semula terakhir gagal",
+  "omc.refresh_needed": "Perlu dimuat semula",
   "omc.quota_family_plan": "Pelan",
   "omc.quota_family_code_review": "Semakan kod",
   "omc.section_count": "{n} kelayakan",

@@ -214,6 +214,7 @@ export const SETTINGS_MESSAGES: Messages = {
   'omc.status_reauth': ["需重新认证", "Sign-in expired"],
   'omc.status_read_failed': ["额度读取失败", "Quota read failed"],
   'omc.status_refresh_failed': ["最近刷新失败", "Last refresh failed"],
+  'omc.refresh_needed': ['需要刷新', 'Needs refresh'],
   'omc.quota_family_plan': ["套餐额度", "Plan"],
   'omc.quota_family_code_review': ["代码审查", "Code review"],
   'omc.section_count': ["{n} 个凭据", "{n} credentials"],

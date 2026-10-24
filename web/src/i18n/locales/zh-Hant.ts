@@ -2743,6 +2743,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "omc.status_reauth": "需重新認證",
   "omc.status_read_failed": "額度讀取失敗",
   "omc.status_refresh_failed": "最近重新整理失敗",
+  "omc.refresh_needed": "需要重新整理",
   "omc.quota_family_plan": "方案額度",
   "omc.quota_family_code_review": "程式碼審查",
   "omc.section_count": "{n} 個憑證",

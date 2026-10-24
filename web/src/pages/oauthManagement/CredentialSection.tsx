@@ -390,14 +390,17 @@ function CredentialRow({ record, columns, hasQuotaColumns, hasSIWC, hasCredits, 
             than in the menu. A row the console cannot refresh keeps the glyph's width empty, so
             the Details and menu glyphs stay in one column down the section. */}
         {record.canRefreshQuota ? (
-          <Tooltip title={t('quota.btn_refresh_quota')}>
+          <Tooltip title={needsRefresh ? `${t('quota.btn_refresh_quota')} · ${t('omc.refresh_needed')}` : t('quota.btn_refresh_quota')}>
             <Button
               type="text"
               size="small"
+              className={clsx(needsRefresh && styles['refresh-needed'])}
               icon={<SyncOutlined spin={isRefreshing} />}
               disabled={isBusy || isRefreshing || isDemo}
               onClick={() => actions.onRefreshQuota(record)}
-              aria-label={`${t('quota.btn_refresh_quota')}: ${file.name}`}
+              aria-label={needsRefresh
+                ? `${t('quota.btn_refresh_quota')}: ${file.name} (${t('omc.refresh_needed')})`
+                : `${t('quota.btn_refresh_quota')}: ${file.name}`}
               data-testid="oauth-credential-refresh"
               data-needs-refresh={needsRefresh ? 'true' : undefined}
             />
