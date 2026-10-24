@@ -9,6 +9,7 @@ func TestSelectWindowUsageMatchesMeteredFamilies(t *testing.T) {
 		{Model: "claude-opus-4-1", Usage: WindowUsage{Requests: 8, PricedRequests: 8, Tokens: 800, CostNanos: 8000}},
 		{Model: "gemini-3-pro-preview", Usage: WindowUsage{Requests: 4, PricedRequests: 4, Tokens: 400, CostNanos: 4000}},
 		{Model: "gpt-5(high)", Usage: WindowUsage{Requests: 5, PricedRequests: 5, Tokens: 500, CostNanos: 5000}},
+		{Model: "gemini-4-argon-high", Usage: WindowUsage{Requests: 3, PricedRequests: 3, Tokens: 300, CostNanos: 3000}},
 	}
 	cases := []struct {
 		name     string
@@ -17,7 +18,8 @@ func TestSelectWindowUsageMatchesMeteredFamilies(t *testing.T) {
 		tokens   int64
 	}{
 		{"legacy Sonnet family", QuotaWindow{ID: "seven_day_sonnet", Scope: "model", Model: "claude-3-5-sonnet"}, 3, 150},
-		{"Gemini group", QuotaWindow{Scope: "group", ModelFamilies: []string{"gemini"}}, 4, 400},
+		{"Gemini group", QuotaWindow{Scope: "group", ModelFamilies: []string{"gemini"}}, 7, 700},
+		{"Gemini 4 Argon group", QuotaWindow{Scope: "group", ModelFamilies: AntigravityModelFamilies("Gemini 4 Argon")}, 3, 300},
 		{"external models group", QuotaWindow{Scope: "group", ModelFamilies: []string{"claude", "gpt"}}, 16, 1450},
 		{"exact dated release", QuotaWindow{Scope: "model", Model: "claude-sonnet-4-5"}, 2, 100},
 	}

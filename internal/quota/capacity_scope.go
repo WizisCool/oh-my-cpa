@@ -64,6 +64,8 @@ func AntigravityModelFamilies(groupName string) []string {
 		return []string{"gemini-3-pro"}
 	case "gemini 3 flash":
 		return []string{"gemini-3-flash"}
+	case "gemini 4 argon":
+		return []string{"gemini-4-argon"}
 	}
 	return nil
 }
@@ -87,7 +89,7 @@ func windowModelFamilies(window QuotaWindow) []string {
 
 func isKnownCapacityFamily(family string) bool {
 	switch family {
-	case "claude", "claude-sonnet", "claude-opus", "claude-haiku", "gemini", "gemini-3-pro", "gemini-3-flash", "gpt", "fable":
+	case "claude", "claude-sonnet", "claude-opus", "claude-haiku", "gemini", "gemini-3-pro", "gemini-3-flash", "gemini-4-argon", "gpt", "fable":
 		return true
 	}
 	return false

@@ -892,13 +892,31 @@ func quotaPayloads(now time.Time) map[string]any {
 		antigravitySubscriptionURL: map[string]any{"currentTier": map[string]any{"id": "free-tier"}, "paidTier": map[string]any{"id": "g1-pro-tier"}},
 		metaUsageURL:               map[string]any{"subs_tier_name": "Muse Pro", "is_subs_active": true, "subs_usage": map[string]any{"window": map[string]any{"used_percent": 28, "window_duration_mins": 300, "resets_at": now.Add(3 * time.Hour).Unix()}, "weekly": map[string]any{"used_percent": 46, "resets_at": now.Add(4 * 24 * time.Hour).Unix()}}},
 		antigravityUsageURL: map[string]any{
-			"groups": []map[string]any{{
-				"displayName": "Gemini models",
-				"buckets": []map[string]any{{
-					"bucketId": "gemini-shared", "displayName": "Five Hour Limit",
-					"window": "5h", "resetTime": resetAt, "remainingFraction": 0.71,
-				}},
-			}},
+			// The three families a subscription reports, in the provider's own order: two that publish
+			// a five-hour and a weekly bucket, and Gemini 4 Argon, which publishes weekly only. The
+			// weekly-only family is what leaves one group's five-hour column empty in a row.
+			"groups": []map[string]any{
+				{
+					"displayName": "Gemini Models",
+					"buckets": []map[string]any{
+						{"bucketId": "gemini-shared-week", "displayName": "Weekly Limit", "window": "weekly", "resetTime": weeklyReset, "remainingFraction": 0.71},
+						{"bucketId": "gemini-shared-5h", "displayName": "Five Hour Limit", "window": "5h", "resetTime": resetAt, "remainingFraction": 0.86},
+					},
+				},
+				{
+					"displayName": "Claude and GPT models",
+					"buckets": []map[string]any{
+						{"bucketId": "aerolith-week", "displayName": "Weekly Limit", "window": "weekly", "resetTime": weeklyReset, "remainingFraction": 0.94},
+						{"bucketId": "aerolith-5h", "displayName": "Five Hour Limit", "window": "5h", "resetTime": resetAt, "remainingFraction": 1.0},
+					},
+				},
+				{
+					"displayName": "Gemini 4 Argon",
+					"buckets": []map[string]any{
+						{"bucketId": "gemini-4-argon-week", "displayName": "Weekly Limit", "window": "weekly", "resetTime": weeklyReset, "remainingFraction": 0.5},
+					},
+				},
+			},
 		},
 		devinUsageURL: map[string]any{
 			"planStatus": map[string]any{
