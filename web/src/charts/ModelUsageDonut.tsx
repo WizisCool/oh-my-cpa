@@ -2,7 +2,7 @@ import React from 'react';
 import { useTheme } from '../theme/ThemeContext';
 import { EChart, type EChartHandlers } from './echarts/EChart';
 import type { ECharts, EChartsCoreOption } from './echarts/core';
-import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
+import { seriesColorRange, seriesDomainKey, seriesTrackColor, seriesGroupLabel } from './chartTheme';
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
@@ -12,13 +12,14 @@ export interface ModelUsageDonutProps {
   groups: DashboardModelUsage[];
   totalTokens: number;
   foldedLabel: string;
+  unnamedLabel: string;
   tokenUnitLabel: string;
   activeKey: string | null;
   onHover: (key: string | null) => void;
 }
 
 /** The square frame and DOM readout share a centre, independent of the ranked list's height. */
-export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({ groups, totalTokens, foldedLabel, tokenUnitLabel, activeKey, onHover }) => {
+export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({ groups, totalTokens, foldedLabel, unnamedLabel, tokenUnitLabel, activeKey, onHover }) => {
   const { theme } = useTheme();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const chartRef = React.useRef<ECharts | null>(null);
@@ -29,7 +30,7 @@ export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({ groups, total
     itemStyle: { color: range[groups.indexOf(group)] },
   })), [groups, range]);
   const activeGroup = groups.find((group) => seriesDomainKey(group) === activeKey);
-  const labelOf = React.useCallback((key: string) => key === 'folded' ? foldedLabel : key.replace(/^model:/, ''), [foldedLabel]);
+  const labelOf = React.useCallback((key: string) => seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel), [foldedLabel, unnamedLabel]);
   const option = React.useMemo<EChartsCoreOption>(() => ({
     tooltip: {
       trigger: 'item', className: 'omc-echart-tip', confine: true,

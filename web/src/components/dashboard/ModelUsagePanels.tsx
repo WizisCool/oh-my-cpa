@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
-import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
+import { seriesColor, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
 import { useTheme } from '../../theme/ThemeContext';
 import type { ECharts } from '../../charts/echarts/core';
 import type { ThemePalette } from '../../theme/palette';
@@ -183,7 +183,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
           <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
           <React.Suspense fallback={chartFallback}>
-            <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onApplied={onApplied} />
+            <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onApplied={onApplied} />
           </React.Suspense>
         )}
       </ModelPanelBody>
@@ -215,7 +215,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
         ) : (
           <div className="model-usage-body">
             <React.Suspense fallback={chartFallback}>
-              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} activeKey={activeKey} onHover={setActiveKey} />
+              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} activeKey={activeKey} onHover={setActiveKey} />
             </React.Suspense>
             {/*
               The ranked list is the ring's legend, its label column and its values in one. A separate
@@ -299,21 +299,6 @@ const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> 
     </Tooltip>
   );
 };
-
-/**
- * groupLabel is what a group is called on screen.
- *
- * The folded remainder carries no model name by design - its label is the client's to translate, which
- * is why the API marks it with a flag instead of reserving a string. A named group with an empty name is
- * a different case: the API would not normally emit one, but an empty string in a legend cell reads as
- * missing data rather than as an unnamed group, so it gets the shared "unnamed" copy the rest of the
- * console uses. The label never becomes the group's identity: colour and React keys both come from
- * `seriesDomainKey`, so a group that is renamed here keeps its colour and its row.
- */
-function groupLabel(group: DashboardModelUsage, foldedLabel: string, unnamedLabel: string): string {
-  if (group.folded) return foldedLabel;
-  return group.model.trim() === '' ? unnamedLabel : group.model;
-}
 
 /**
  * ModelLegend is the trend's key.

@@ -6,7 +6,7 @@ import { buildModelTrendSeries } from './modelTrendData';
 import { useTheme } from '../theme/ThemeContext';
 import { EChart } from './echarts/EChart';
 import type { ECharts, EChartsCoreOption } from './echarts/core';
-import { seriesColorRange, seriesDomainKey } from './chartTheme';
+import { seriesColorRange, seriesDomainKey, seriesGroupLabel } from './chartTheme';
 import { currentFontStack } from '../theme/fontLibrary';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
@@ -15,13 +15,14 @@ import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 export interface ModelTokenTrendProps {
   groups: DashboardModelUsage[];
   foldedLabel: string;
+  unnamedLabel: string;
   tokenUnitLabel?: string;
   height?: number;
   onApplied?: (chart: ECharts) => void;
 }
 
 /** Lines separate overlapping model readings; their DOM legend owns the ranked color assignment. */
-export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, foldedLabel, tokenUnitLabel = '', height = 260, onApplied }) => {
+export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, foldedLabel, unnamedLabel, tokenUnitLabel = '', height = 260, onApplied }) => {
   const timeZone = useTimeZone();
   const { theme } = useTheme();
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -29,7 +30,7 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, folde
     const { categories, series } = buildModelTrendSeries(groups);
     const domain = groups.map(seriesDomainKey);
     const range = seriesColorRange(theme.palette, groups);
-    const labelOf = (key: string) => key === 'folded' ? foldedLabel : key.replace(/^model:/, '');
+    const labelOf = (key: string) => seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel);
     const labelFormat = Number(categories.at(-1)) - Number(categories[0]) > 24 * 60 * 60 * 1000 ? 'MM-DD' : 'HH:mm';
     const ticks = new Set(Array.from({ length: Math.min(4, categories.length) }, (_, index) =>
       Math.round(index * (categories.length - 1) / Math.max(1, Math.min(4, categories.length) - 1))));
@@ -75,6 +76,6 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, folde
         blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
       })),
     };
-  }, [groups, theme.palette, foldedLabel, tokenUnitLabel, tokenStyle, timeZone]);
-  return <div className="model-trend"><EChart option={option} height={height} label={groups.map((group) => group.folded ? foldedLabel : group.model).join(', ')} onApplied={onApplied} /></div>;
+  }, [groups, theme.palette, foldedLabel, unnamedLabel, tokenUnitLabel, tokenStyle, timeZone]);
+  return <div className="model-trend"><EChart option={option} height={height} label={groups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')} onApplied={onApplied} /></div>;
 });

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { sparkColor, seriesColor, seriesDomainKey, seriesColorRange, SERIES_SLOTS } from '../web/src/charts/chartTheme.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { sparkColor, seriesColor, seriesDomainKey, seriesGroupLabel, seriesColorRange, SERIES_SLOTS } from '../web/src/charts/chartTheme.ts';
 import { formatModelShare, formatModelTokens } from '../web/src/types/dashboardModels.ts';
 import { BUILT_IN_PALETTES, resolvedBuiltInPalette } from '../web/src/theme/palette.ts';
 import { themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
@@ -167,6 +170,54 @@ for (const preset of RESOLVED_PALETTES) {
   }
 }
 
+// ── CSS and TypeScript token synchronization ──────────────────────────────
+//
+// The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, eighteen derived) and
+// projected by `themeConfig.ts` for Ant Design, React components and
+// chart runtime options, and in `web/src/index.css` for stylesheet consumers. Assert that every series
+// token matches character for character so the two copies cannot drift.
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const indexCss = fs.readFileSync(path.join(rootDir, 'web/src/index.css'), 'utf8');
+const darkRootBlock = indexCss.slice(indexCss.indexOf(':root {'), indexCss.indexOf(":root[data-theme-mode='light']"));
+const lightRootBlock = indexCss.slice(indexCss.indexOf(":root[data-theme-mode='light']"));
+
+for (let index = 0; index < SERIES_SLOTS; index += 1) {
+  const tokenName = `--series-${index + 1}`;
+  const darkMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(darkRootBlock);
+  const lightMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(lightRootBlock);
+  assert.ok(darkMatch, `web/src/index.css defines ${tokenName} in dark mode`);
+  assert.ok(lightMatch, `web/src/index.css defines ${tokenName} in light mode`);
+  assert.equal(
+    darkMatch[1].toLowerCase(),
+    palette.dark.series[index].toLowerCase(),
+    `dark ${tokenName} in index.css (${darkMatch[1]}) matches themeConfig (${palette.dark.series[index]})`,
+  );
+  assert.equal(
+    lightMatch[1].toLowerCase(),
+    palette.light.series[index].toLowerCase(),
+    `light ${tokenName} in index.css (${lightMatch[1]}) matches themeConfig (${palette.light.series[index]})`,
+  );
+}
+
+for (let index = 0; index < palette.dark.route.length; index += 1) {
+  const tokenName = `--route-${index + 1}`;
+  const darkMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(darkRootBlock);
+  const lightMatch = new RegExp(`${tokenName}:\\s*([#0-9a-fA-F]+);`).exec(lightRootBlock);
+  assert.ok(darkMatch, `web/src/index.css defines ${tokenName} in dark mode`);
+  assert.ok(lightMatch, `web/src/index.css defines ${tokenName} in light mode`);
+  assert.equal(
+    darkMatch[1].toLowerCase(),
+    palette.dark.route[index].toLowerCase(),
+    `dark ${tokenName} in index.css (${darkMatch[1]}) matches the palette (${palette.dark.route[index]})`,
+  );
+  assert.equal(
+    lightMatch[1].toLowerCase(),
+    palette.light.route[index].toLowerCase(),
+    `light ${tokenName} in index.css (${lightMatch[1]}) matches the palette (${palette.light.route[index]})`,
+  );
+}
+
 for (let index = 0; index < SERIES_SLOTS; index += 1) {
   assert.notEqual(
     seriesColor(palette.dark, index),
@@ -228,6 +279,16 @@ assert.equal(formatModelShare(5, 0), '—', 'no window total means no share rath
 assert.equal(formatModelTokens(271_700), '271.7K');
 assert.equal(formatModelTokens(0), '0');
 
+for (const [entry, expected] of [
+  [{ model: 'named-model', folded: false }, 'named-model'],
+  [{ model: '', folded: false }, 'unnamed-label'],
+  [{ model: '   ', folded: false }, 'unnamed-label'],
+  [{ model: '', folded: true }, 'folded-label'],
+  [{ model: 'named-model', folded: true }, 'folded-label'],
+] as const) {
+  assert.equal(seriesGroupLabel(entry, 'folded-label', 'unnamed-label'), expected, 'chart and DOM group labels share the same readable name');
+}
+
 console.log('PASS chart marks: tones resolve to distinct palette tokens per theme');
-console.log('PASS series palette: slots legible on the card, distinct from their neighbours, and exported by the theme');
+console.log('PASS series palette: slots legible on the card, distinct from their neighbours, and identical in CSS and TypeScript');
 console.log('PASS model shares: a small share is under-reported, never as zero');
