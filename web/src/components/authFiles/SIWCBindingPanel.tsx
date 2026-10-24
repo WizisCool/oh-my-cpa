@@ -10,11 +10,10 @@ import { FactList } from '../common/FactList';
 import { Notice, useToast } from '../feedback';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
-import { SectionHeading } from '../common/SectionHeading';
 import styles from './SIWCBindingPanel.module.css';
 
 const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, string> = {
-  start: 'siwc.start_failed', callback: 'siwc.callback_failed', cancel: 'siwc.cancel_failed',
+  start: 'siwc.start_failed', callback: 'siwc.callback_failed', incomplete: 'siwc.callback_incomplete', cancel: 'siwc.cancel_failed',
   read: 'siwc.read_failed', expired: 'siwc.expired', failed: 'siwc.failed', conflict: 'siwc.conflict',
 };
 const PHASE_KEYS: Record<SIWCSession['phase'], string> = {
@@ -52,7 +51,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     } else void bindings.start(file, false);
   }
   return <section className={styles['binding']} data-testid="siwc-binding">
-    <SectionHeading title={t('siwc.title')} />
+    {summary.siwc_status === 'invalid' && !isPending && <Notice tone="warning" description={t('siwc.invalid_hint')} />}
     <FactList emphasis="quiet" facts={[
       { key: 'support', label: t('siwc.eligibility'), value: t(isSupported ? 'siwc.supported' : 'siwc.unsupported') },
       { key: 'status', label: t('siwc.local_status'), value: t(summary.siwc_status === 'off' ? 'siwc.status_off' : summary.siwc_status === 'valid' ? 'siwc.status_valid' : summary.siwc_status === 'invalid' ? 'siwc.status_invalid' : 'siwc.unknown') },
@@ -87,6 +86,6 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
         <Button disabled={session.isBusy} onClick={() => void bindings.cancel(file)}>{t('common.cancel')}</Button>
       </div>
     </>}
-    {!isPending && <Button disabled={!isSupported || !canEdit || useMutationResult.isPending || isDemoMode()} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>}
+    {!isPending && <Button type={summary.siwc_status === 'invalid' || !summary.siwc_bound ? 'primary' : 'default'} disabled={!isSupported || !canEdit || useMutationResult.isPending || isDemoMode()} onClick={start}>{t(summary.siwc_bound ? 'siwc.rebind' : 'siwc.bind')}</Button>}
   </section>;
 }

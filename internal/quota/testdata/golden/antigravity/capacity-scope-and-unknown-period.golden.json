@@ -24,6 +24,20 @@
       "reset_label": "01-01 17:00 (20454天17小时后恢复)",
       "period_hours": 0,
       "reset_accuracy": "exact"
+    },
+    {
+      "id": "ag_Gemini 4 Argon_argon-week",
+      "label": "Gemini 4 Argon · 每周限制 (Weekly)",
+      "scope": "group",
+      "used_percent": 4,
+      "remaining_percent": 96,
+      "reset_at_ms": 1767484800000,
+      "reset_label": "01-04 00:00 (20457天后恢复)",
+      "period_hours": 168,
+      "reset_accuracy": "exact",
+      "model_families": [
+        "gemini-4-argon"
+      ]
     }
   ]
 }

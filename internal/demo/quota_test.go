@@ -25,8 +25,25 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 	if err := json.Unmarshal([]byte(latest["auth-antigravity-01"].WindowsJSON), &windows); err != nil {
 		t.Fatal(err)
 	}
-	if len(windows) != 1 || len(windows[0].ModelFamilies) != 1 || windows[0].ModelFamilies[0] != "gemini" {
-		t.Fatalf("unresolved demo group=%+v", windows)
+	// Three families, one bucket each for the weekly-only one: the shape that proves a group's
+	// single reading reaches a column of its own instead of being read as a second plan window.
+	families := make([][]string, 0, len(windows))
+	for _, window := range windows {
+		families = append(families, window.ModelFamilies)
+	}
+	want := [][]string{{"gemini"}, {"gemini"}, {"claude", "gpt"}, {"claude", "gpt"}, {"gemini-4-argon"}}
+	if len(families) != len(want) {
+		t.Fatalf("demo antigravity windows=%d, families=%v", len(windows), families)
+	}
+	for index, family := range families {
+		if strings.Join(family, ",") != strings.Join(want[index], ",") {
+			t.Fatalf("demo antigravity window %d families=%v, want %v", index, family, want[index])
+		}
+	}
+	// A family the capacity estimate cannot classify withholds the whole reading, so the names
+	// must resolve to known capacity families rather than merely being recorded.
+	if _, reason := quota.SelectWindowUsage(windows[len(windows)-1], nil); reason != "" {
+		t.Fatalf("demo weekly-only family is not a known capacity family: %q", reason)
 	}
 	windows = nil
 	if err := json.Unmarshal([]byte(latest["auth-codex-02"].WindowsJSON), &windows); err != nil {

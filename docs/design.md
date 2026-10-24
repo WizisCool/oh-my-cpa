@@ -875,46 +875,32 @@ the baseline. Here up to six groups share one plot, and six overlapping transluc
 a mud that hides whichever model is underneath - which is the reading the panel exists to provide. Lines
 separate; fills compound.
 
-**The line is smoothed, and the curve is monotone.** `shapeField="smooth"` resolves to G2's `smooth`
-shape, which draws with `curveMonotoneX` - a monotone cubic, not a plain Catmull-Rom spline - and the
-KPI sparklines use the same shape. That distinction is the whole reason smoothing is safe here: these
-series are zero-filled, so most buckets sit exactly on the floor, and a non-monotone spline through them
-would overshoot *below* the axis between points, drawing a line where the data says zero. A monotone
-curve cannot leave the range spanned by its own neighbours, so the floor stays the floor. The probe
-asserts this from painted pixels: no series-coloured ink appears below the axis rule.
+**The line is smoothed, and the curve is monotone.** Both model lines and KPI sparklines use
+`smoothMonotone: 'x'` with a zero floor. Smoothing must not turn measured zero buckets into negative
+values between samples. The browser probe checks the painted SVG geometry against the plot floor.
+The dashboard preserves 16px of drawing inset inside each chart container, keeping the marks at their
+established visual scale.
 
 **Measured zero buckets stay connected.** Each line includes every bucket in the shared grid,
 including long quiet stretches, so inactivity reads as a continuous baseline rather than missing data.
 The top-ranked group is painted last, so where lines overlap the first legend entry is on top.
 The shared tooltip names each item by its own series key and lists measured zeros explicitly.
 
-**Chart canvases are supersampled.** Every dashboard chart is drawn at no less than 2x the CSS size
-(`web/src/charts/chartRender.ts`): on a 1x display a 1.75px line rasterised straight onto the pixel grid
-stepped visibly on every steep section. The browser scales the bitmap down, so the geometry is unchanged
-and only its edges are averaged.
-
-**Chart canvases follow their container.** G2's `autoFit` refits a chart only on a window resize, so
-`useChartPlugins` also observes each chart's own container and refits it when that box changes size for
-any other reason - the console font arriving after the first paint and re-measuring the text beside a
-chart is the common one. A canvas left at its first size kept the model ring inscribed in a smaller
-square than its frame, with the total beside the hole.
+**Charts are SVG and follow their container.** The shared `EChart` wrapper observes each chart's
+own box, so changes in card width or font metrics refit it without a window resize. The ring fills its
+CSS square with a 16px inset, and the DOM centre readout anchors to that same frame. SVG precision
+rendering and rounded line caps/joins preserve smooth edges without a bitmap scaling adapter.
 
 **No y-axis.** The reading is the shape of each line against its own baseline - which models rose, and
 when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
 the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the
 floor is what makes a quiet stretch read as zero rather than as absent data.
 
-**The plot's chrome is the palette's ink, at the palette's own opacity.** The grid rules, the axis rule
-and the tooltip's crosshair are the one part of this mark the console does not draw itself: the runtime
-paints them from its own theme, which is one of the library's *light* themes unless the mark names the
-console's mode, and it multiplies the inks it *is* handed by that theme's opacity tokens (`alpha45` on
-the labels, the axis rule and the ticks, `alpha10` on the grid). A palette colour handed through either
-one is not the colour that reaches the card - a near-black grid on a dark card is one 8-bit step from the
-surface it is drawn on. So every rule is named from the palette *and* pinned to full opacity, and the
-theme's mode follows the console's: `--border-soft` for the grid, `--border` for the axis rule and its
-ticks, `--fg-2` for the labels, `--muted` for the crosshair. The browser probe reads both themes' painted
-pixels and matches the ink to the token, because the light card is exactly the surface on which a wrong
-ink still looks correct.
+**The plot's chrome is the palette's ink at full opacity.** Dashboard grid and axis rules use
+`--border`, labels use `--fg-2`, and the pointer uses `--muted`. The shared ECharts theme follows the
+console palette in place, and the browser probe matches actual SVG strokes and text fills in both
+modes. Hovering a DOM legend entry emphasizes its line and blurs the other series; the tooltip retains
+legend order and explicitly lists quiet groups as zero.
 
 **Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
 same instant forty-eight times across a half-width card. The first and last bucket are always among the
@@ -941,8 +927,10 @@ trend card can leave the usage card with more height than its ring and list need
 claims that remaining height and centres the row in it; leaving the body at its intrinsic height put
 the ring near the top of the card and made the unused space below look like a missing panel.
 
-**Both marks are native `@ant-design/charts` components** (`Line` and `Pie`) inside the existing lazily
-loaded `vendor-charts` chunk, and both morph between two revisions on §7's `roll` token (§7 rule 5).
+**Both marks share the lazy SVG ECharts runtime** (`vendor-echarts`, ADR 0106) with Insights and
+morph between revisions on §7's `roll` token. The ring uses 66%/92% inner/outer radii, 1.5-degree gaps
+and 3px rounded slice corners. A slice expands by 4px on emphasis. Hovering either a slice or its ranked
+list row swaps the DOM centre to that model's tokens and share, restoring the window total on leave.
 The ring is not a chart-runtime
 heatmap, so ADR 0005's DOM grid is untouched.
 
@@ -961,15 +949,15 @@ The ring therefore shrinks before the name does, and once neither fits, the two 
 taken on the *card's* inline size via a container query, not on the viewport: the card is half the grid
 at some viewports and the full width at others, so a viewport breakpoint would stack the panels at a
 width where the row still fits and keep them side by side at one where it does not. The ring's frame is
-kept square by CSS through the whole range, because a frame clamped in one axis while the canvas keeps
-the other draws an ellipse.
+kept square by CSS through the whole range, and the SVG drawing refits that square instead of
+retaining either dimension from an earlier layout.
 
 **The ring hover states the group, its volume and its share**, matching the trend's tooltip rather than
 the share being left to the list alone. A slice is read as a fraction of the ring, so the percentage is
 part of what is being pointed at; it is derived from the same window total the centre reports, so the
-readout and the centre cannot disagree. The group's name comes from the datum through the mark's own
-tooltip items - the library's inferred item is built from the y channel, so every slice would otherwise
-be labelled after the field it plots.
+readout and the centre cannot disagree. A slice carries its stable series-domain key as its datum name.
+The ECharts tooltip formatter resolves that key with the shared translated group-label function, so
+the tooltip, ranked list and centre use the same readable name.
 
 ### Insights
 
@@ -1171,7 +1159,7 @@ aligned figures, and Ant Design's `fontFamilyCode`) are custom properties that
 `web/src/theme/fontLibrary.ts` overwrites on the root element from the `omc_fonts`
 preference. Components never name a family: they inherit, or read `var(--font-mono)`, so
 an operator's choice reaches every surface. The two that cannot use the cascade - the
-Monaco editor and canvas chart labels - read the resolved role with `currentFontStack`.
+Monaco editor and runtime chart labels - read the resolved role with `currentFontStack`.
 Every role ends in the Sarasa stack, which draws any character a chosen family lacks
 (ADR 0100).
 
@@ -1345,7 +1333,8 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Clear structure: entity name and identifier on the left, technical metadata / provider in the middle, and direct interactive controls on the right (e.g. switch toggles, action buttons).
 2. **Unified Credential Workspace Density**
    - An identified `credential_quota` cooldown is explained by the existing CPA cooldown status tooltip, without a second red banner. Unrecognized cooldown reasons remain visible in the overview; the Quota tab retains the complete reason and action-failure diagnostics.
-   - OAuth sign-in, credential management and quota reading share one credential collection. The list presents a scan-first overview: identity, management state and metadata, quota condition, plan, observation age and the credential's own model family as its five-hour and weekly windows - each a labelled bar carrying its share, with its reset on the line below. A group's window is named from the period it covers when the provider sends no kind, so the row reads in the console's language whatever the provider labelled. The row carries one visible action beside its enable switch; models, editing, a quota refresh, a cooldown release, download and delete sit in the row menu, because a row is a reading and not a stack of buttons. A menu entry names its action and never the file name, which would stretch the menu to whatever the longest credential is called; the file name belongs to the confirmation, where it identifies the target. A refresh reports itself once, as a toast: a run without a failure is an acknowledgement that leaves on its own, and a run with a failing target is a report toast that lists each target's reason and stays until it is closed. Redeeming a banked reset credit is not a row action at all: it is irreversible and spends an entitlement, so only the Drawer's Quota tab offers it, beside the credit expiries it consumes. One Details action opens the complete reading - every family, credit, cooldown and diagnostic - in the credential Drawer. The overview floor is six complete credential records at 1440x900: the row is allowed its height, because reading a credential matters more than fitting as many of them as possible. The Drawer separates Quota, Configuration and Models into tabs; only the selected task is visible. Configuration drafts survive tab changes and remain guarded when closing from any tab. Safe fields and models are fetched only when their respective tabs are selected. Search stays visible, additional filters are disclosed on demand, and pagination owns page size. Provider tabs show populated families plus the selected family; empty providers remain available in Connect. Record boundaries are visible, status colors remain semantic, and model/group labels and ordering survive full quota rendering.  Full quota completeness is verified in the Quota tab, including six model/group windows, with no horizontal overflow in the list or Drawer at 320px. Compact window footers wrap long capacity estimates, including previous-cycle token-only values in full-digit style, within their own window rather than clipping digits or widening the page.
+   - OAuth sign-in, credential management and quota reading share one credential collection, presented as one table per provider. Columns align across each section: identity and metadata, management state, enable switch, traffic and the reported quota windows. Family headers span their period columns, and period headers sort that section. Each quota cell is a single reading: a monospace share and bar, with a countdown unless full; the tooltip names the window, exact reset and capacity estimate. Healthy bars stay green. Accounts are masked until revealed. SIWC and reset-credit columns appear only where the section has them; the SIWC badge and row menu open a dedicated dialog. Secondary actions are glyphs, with the Details glyph opening the credential Drawer and the row menu holding models, editing, quota refresh, cooldown release, download and delete. A menu entry names its action rather than the file; the confirmation identifies the target. A refresh reports itself once, as a toast: a run without a failure is an acknowledgement that leaves on its own, and a run with a failing target is a report toast that lists each target's reason and stays until it is closed. Redeeming a banked reset credit is irreversible and spends an entitlement, so only the Drawer's Quota tab offers it, beside the credit expiries it consumes. The overview floor is six complete credential records at 1440x900. Phone rows retain identity, state and the enable switch, with quota readings in the Drawer. The Drawer separates Quota, Configuration and Models into tabs; only the selected task is visible. Configuration drafts survive tab changes and remain guarded when closing from any tab. Safe fields and models are fetched only when their respective tabs are selected. Search stays visible, additional filters are disclosed on demand, and pagination owns page size. Provider tabs show populated families plus the selected family; empty providers remain available in Connect. Record boundaries are visible, status colors remain semantic, and model/group labels and ordering survive full quota rendering. Full quota completeness is verified in the Quota tab, including six model/group windows, with no horizontal overflow in the list or Drawer at 320px. The Drawer's capacity line wraps long estimates, including previous-cycle token-only values in full-digit style, without clipping digits or widening the page.
+
 3. **Task-Dependent Density**
    - Monitoring and high-frequency telemetry (Dashboard, Live Logs, Request Records): High density, compact, tabular monospace alignment.
    - Configuration and system operations (Config, Pricing, System Settings): More generous whitespace, 32–48px section spacing, and full-width 1px dividers.
@@ -2195,7 +2184,7 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   browser paints `color-mix` and measures the label against it in every registered palette and an
   accent sweep of operator palettes; a field's hover edge stays `muted`, because the accent is a
   field's focus state.
-- Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
+- Dashboard KPI cards use ECharts line series with gradient areas to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
   is mostly *zero* buckets — six hours resolves to 36 buckets of ten minutes, and a
@@ -2206,16 +2195,15 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   as the axis and stays distinguishable from an unmeasured period.
   The mark is two paths on purpose: the fill is fill-only and the trend is a separate
   stroke, because a stroked area closes its path along the baseline and would paint a
-  horizontal rule across the plot floor. `y.nice` is disabled and `domainMin` pinned to
-  zero for the same reason — a lifted domain would float an empty window above its axis.
-  The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
-  (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
-  initial login shell compact. The resolved palette is bridged into the chart
-  config (`sparkColor(resolved.palette, tone)`), the marks morph between two revisions on
-  §7's `roll` token with a reduced-motion escape (`chartMotion.ts`, §7 rule 5), and the hover
-  readout uses G2's shared tooltip interaction and `web/src/charts/chartTooltip.ts`,
-  the same escaped content renderer as Token Trend. G2 owns bucket hit-testing,
-  crosshairs and overlay positioning; `.omc-tip` shares palette styling across charts.
+  horizontal rule across the plot floor. `yAxis.min` is pinned to zero for the same reason — a lifted
+  domain would float an empty window above its axis.
+  The shared chart runtime lives in the lazy `vendor-echarts` chunk, outside the login shell.
+  `sparkColor(resolved.palette, tone)` supplies the 1.5px line and vertical area gradient from 0.22
+  opacity to transparent. The drawing retains its 16px inset. ECharts reveals a line on first paint,
+  then morphs revisions on `roll`
+  through `echartsMotion`; reduced motion disables both. The axis pointer and one emphasized point
+  anchor the hovered bucket. `renderChartTooltip` supplies escaped content within the confined
+  `.omc-echart-tip` shell, shared with the model panels and Insights.
   KPI card bodies stretch within each grid row and their captions absorb spare space,
   keeping the plots bottom-aligned even when cost notes wrap. Model token trends retain
   measured zero buckets as continuous baseline segments rather than missing observations.
@@ -2229,8 +2217,8 @@ Dashboard KPI, model-trend and model-donut tooltip rows share `web/src/charts/ch
   Rates are per minute because the bucket width is not one minute at every range
   (`dashboardBucketWidth` snaps it to a friendly step), so dividing by the bucket's
   own minutes is what makes an RPM readout an RPM.
-  The `dashboard-charts` probe asserts the six tiles paint six *distinct* pixel
-  patterns; without that check a tile wired back to another tile's series passes
+  The `dashboard-charts` probe asserts the six tiles paint six *distinct* SVG
+  paths; without that check a tile wired back to another tile's series passes
   every per-tile assertion. `dashboard-chart-motion` is its sibling for the motion:
   it drives a revision with motion allowed and again after switching the preference
   in place, and asserts the marks paint intermediate frames in the first case and
@@ -2362,20 +2350,15 @@ Hard rules:
    loading indicator at all (the loading bar waits 200ms before painting).
    Background auto-refresh must not paint a loading state at all; a reading that
    changed may still say so, which is rules 8 and 5 and nothing else.
-5. **A mark sweeps between revisions instead of hard-cutting.** The dashboard's AntV marks
-   morph to their new geometry over `roll`, and fade rather than grow when a series enters or
-   leaves. The Insights ECharts marks apply the same token to merged options (ADR 0106). A plot
-   that hard-cuts every few seconds reads as a redraw rather than new data - and beside a tile
-   whose number now rolls (rule 8), a snapping line was the one element still saying "this
-   replaced itself". This covers the six KPI sparklines, the model panels, and the Insights charts.
-   Two limits keep this a morph rather than a draw-in: it exists **only because each wrapper
-   reuses its chart instance** (a new spec is applied to the live runtime, while a remount is a
-   draw-in and stays forbidden), and the runtime animation cannot be reached by CSS. The
-   reduced-motion switch is therefore app-owned (`usePrefersReducedMotion`; ECharts receives it
-   through `echartsMotion`) and must stay wired: the libraries' defaults would animate hardest
-   for the reader who asked for none. The AntV canvas is redrawn frame by frame instead of being
-   composited, so rule 1 is *not* satisfied by those dashboard marks. ECharts paints SVG, but its
-   `roll`-bounded update remains an explicit exception. See ADR 0008 and ADR 0106.
+5. **A mark sweeps between revisions instead of hard-cutting.** Dashboard and Insights ECharts marks
+   morph through merged options over `roll`. A poll updates the live instance rather than remounting
+   it. First paint reveals sparklines left to right and presents the complete ring; subsequent
+   revisions morph.
+   Chart emphasis uses the 120ms `fast` token, and each series pins its update timing to `roll`.
+   The reduced-motion switch is app-owned (`usePrefersReducedMotion` through `echartsMotion`) because
+   library geometry animation is not controlled by CSS. It disables first-paint and update animation.
+   SVG geometry updates are not compositor-only, so these `roll`-bounded charts remain an explicit
+   exception to rule 1 (ADRs 0008 and 0106).
 6. **Acknowledge actions immediately.** Button `loading` and optimistic
    affordances appear on the interaction itself, not after a transition. The
    progress bar follows rule 4 instead: it waits 200ms to suppress fast-request

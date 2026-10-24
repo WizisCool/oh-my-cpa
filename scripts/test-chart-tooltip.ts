@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { renderChartTooltip } from '../web/src/charts/chartTooltip';
-import { buildModelTrendData } from '../web/src/charts/modelTrendData';
+import { buildModelTrendSeries } from '../web/src/charts/modelTrendData';
 import type { DashboardModelUsage } from '../web/src/types/dashboardModels';
 
 const tooltip = renderChartTooltip('<time>', [{ name: '<img onerror="run()">', color: '#abcdef', value: '1K tokens', exact: '1,024 tokens' }]);
@@ -30,10 +30,14 @@ assert.ok(mixedTooltip.includes('class="omc-tip-rows has-names"'), 'rows share o
 
 const group: DashboardModelUsage = { model: 'first', folded: false, tokens: 12, requests: 2, cost_usd: 0,
   series: [0, 5, 0, 0, 0, 7, 0].map((tokens, index) => ({ t: index * 60000, tokens })) };
-const data = buildModelTrendData([group, { ...group, model: 'second' }]);
-assert.deepEqual(data.slice(7).map((point) => point.tokens), [0, 5, 0, 0, 0, 7, 0]);
-assert.equal(data[0].series, 'model:second');
-assert.equal(data.at(-1)?.series, 'model:first');
-assert.deepEqual(data.slice(7).map((point) => point.bucket), group.series.map((point) => String(point.t)));
-assert.deepEqual(buildModelTrendData([]), []);
+const categories = group.series.map((point) => String(point.t));
+const data = buildModelTrendSeries([group, { ...group, model: 'second', series: [group.series[1], group.series[5]] }]);
+assert.deepEqual(data, {
+  categories,
+  series: [
+    { id: 'model:second', values: [0, 5, 0, 0, 0, 7, 0] },
+    { id: 'model:first', values: [0, 5, 0, 0, 0, 7, 0] },
+  ],
+}, 'trend series share a zero-filled grid and paint rank one last');
+assert.deepEqual(buildModelTrendSeries([]), { categories: [], series: [] });
 console.log('chart tooltip and continuous zero-bucket trend assertions passed');

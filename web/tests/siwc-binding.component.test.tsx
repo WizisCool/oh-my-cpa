@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
+import { SIWCDialog } from '../src/components/authFiles/SIWCDialog';
 import { SIWCBindingPanel } from '../src/components/authFiles/SIWCBindingPanel';
 import { useSIWCBindings } from '../src/hooks/useSIWCBindings';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
@@ -60,7 +61,7 @@ function mount(file = FILE) {
     dispose: () => { surface.unmount(); },
   };
 }
-async function click(name: string) { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); }
+async function click(name: string | RegExp) { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); }
 async function submitCallback(callbackUrl = CALLBACK) {
   fireEvent.change(screen.getByRole('textbox', { name: 'Complete callback URL' }), { target: { value: callbackUrl } });
   await click('Submit callback URL');
@@ -159,6 +160,29 @@ it('requires explicit confirmation before replacing an existing SIWC partition',
     await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
     expect(surface.requests.filter((request) => request.path.endsWith('/bind'))).toHaveLength(1);
     expect(surface.requests[0].body.rebind).toBe(true);
+  } finally { surface.dispose(); }
+});
+
+it('keeps incomplete callback guidance through polling until editing or resubmitting the URL', async () => {
+  vi.useFakeTimers();
+  const surface = mount();
+  const guidance = /The callback URL lacks code or client_id/;
+  try {
+    await click('Bind SIWC');
+    surface.omc.on('POST', '/management/oauth/siwc/callback', () => json({ code: 'siwc_callback_incomplete' }, 400));
+    await submitCallback(CALLBACK.replace('&client_id=issued', ''));
+    expect(screen.getByText(guidance)).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(surface.requests.filter(request => request.path.endsWith('/status'))).toHaveLength(1);
+    expect(screen.getByText(guidance)).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Complete callback URL' }), { target: { value: CALLBACK } });
+    expect(screen.queryByText(guidance)).toBeNull();
+    await click(/Submit callback URL$/);
+    expect(screen.getByText(guidance)).toBeTruthy();
+    surface.omc.on('POST', '/management/oauth/siwc/callback', () => json({ status: 'ok' }));
+    await click(/Submit callback URL$/);
+    expect(screen.queryByText(guidance)).toBeNull();
+    expect((screen.getByRole('textbox', { name: 'Complete callback URL' }) as HTMLInputElement).value).toBe('');
   } finally { surface.dispose(); }
 });
 
@@ -279,4 +303,22 @@ it('lets the operator disable SIWC even when binding material is missing', () =>
   try {
     expect(screen.getByRole('switch', { name: 'Use bound SIWC' }).hasAttribute('disabled')).toBe(false);
   } finally { fixture.dispose(); }
+});
+
+
+it.each([
+  [{ ...FILE, name: 'codex-private@example.test.json', email: 'private@example.test' }, 'pr•••e@example.test', 'codex-pr•••e@example.test.json'],
+  [{ ...FILE, name: 'codex.json' }, 'codex.json', 'codex.json'],
+] as const)('protects the SIWC dialog target identity for %j', async (file, name, title) => {
+  installOmcApi();
+  function Dialog() {
+    const bindings = useSIWCBindings();
+    return <SIWCDialog file={file} canEdit bindings={bindings} onClose={() => {}} />;
+  }
+  const view = renderWithOmc(<Dialog />);
+  try {
+    const dialog = await screen.findByTestId('siwc-dialog');
+    const target = dialog.querySelector('p[title]');
+    expect([target?.textContent, target?.getAttribute('title')]).toEqual([name, title]);
+  } finally { view.unmount(); }
 });

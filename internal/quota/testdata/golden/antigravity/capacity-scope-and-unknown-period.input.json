@@ -24,6 +24,17 @@
             "resetTime": "2026-01-01T17:00:00Z"
           }
         ]
+      },
+      {
+        "displayName": "Gemini 4 Argon",
+        "buckets": [
+          {
+            "bucketId": "argon-week",
+            "window": "weekly",
+            "remainingFraction": 0.96,
+            "resetTime": "2026-01-04T00:00:00Z"
+          }
+        ]
       }
     ]
   }

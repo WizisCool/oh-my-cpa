@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../api/client';
+import { api, apiErrorCode, ApiError } from '../api/client';
 import type { ManagementAuthFile } from '../types/managementAuthFile';
 
 export type SIWCPhase = 'starting' | 'waiting' | 'verifying' | 'success' | 'error' | 'cancelled';
@@ -13,7 +13,7 @@ export interface SIWCSession {
   confirmedFile?: ManagementAuthFile;
   sourceFile?: ManagementAuthFile;
   wasCancelRefused?: boolean;
-  error?: 'start' | 'callback' | 'cancel' | 'read' | 'expired' | 'failed' | 'conflict';
+  error?: 'start' | 'callback' | 'incomplete' | 'cancel' | 'read' | 'expired' | 'failed' | 'conflict';
 }
 export interface SIWCBindings {
   sessions: Record<string, SIWCSession>;
@@ -29,6 +29,12 @@ export function isSIWCPending(session?: SIWCSession): boolean {
   return session?.phase === 'starting' || session?.phase === 'waiting' || session?.phase === 'verifying';
 }
 const POLL_INTERVAL_MS = 3000;
+
+function callbackErrorOf(error: unknown): NonNullable<SIWCSession['error']> {
+  if (!(error instanceof ApiError)) return 'callback';
+  if (error.status === 409) return 'conflict';
+  return error.status === 400 && apiErrorCode(error) === 'siwc_callback_incomplete' ? 'incomplete' : 'callback';
+}
 
 // The workspace owns these attempts, not the selected credential's drawer. A
 // close, tab switch or another credential selection cannot discard a live flow.
@@ -84,7 +90,7 @@ export function useSIWCBindings(): SIWCBindings {
         update(key, { phase: 'error', isBusy: false, callbackUrl: '', url: undefined, error: 'failed' });
         return;
       }
-      update(key, { phase: result.completed ? 'verifying' : 'waiting', error: undefined });
+      update(key, { phase: result.completed ? 'verifying' : 'waiting', error: !result.completed && current.current[key].error === 'incomplete' ? 'incomplete' : undefined });
     } catch (error) {
       if (!canApply()) return;
       if (error instanceof ApiError && [404, 409, 410].includes(error.status)) {
@@ -122,7 +128,7 @@ export function useSIWCBindings(): SIWCBindings {
       await check(key, session.state);
     } catch (error) {
       if (!owns(key, session.state)) return;
-      update(key, { isBusy: false, error: error instanceof ApiError && error.status === 409 ? 'conflict' : 'callback' });
+      update(key, { isBusy: false, error: callbackErrorOf(error) });
       schedule(key, session.state);
     }
   }
@@ -148,5 +154,9 @@ export function useSIWCBindings(): SIWCBindings {
       schedule(key, session.state);
     }
   }
-  return { sessions, start, submit, cancel, setCallback: (file, value) => update(siwcTargetKey(file), { callbackUrl: value }) };
+  return { sessions, start, submit, cancel, setCallback: (file, value) => {
+    const key = siwcTargetKey(file);
+    const error = current.current[key]?.error;
+    update(key, { callbackUrl: value, error: error === 'incomplete' ? undefined : error });
+  } };
 }

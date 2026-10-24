@@ -12,7 +12,7 @@ export type EChartHandlers = Partial<Record<'click' | 'backgroundClick' | 'brush
 
 export interface EChartProps {
   option: EChartsCoreOption;
-  height: number;
+  height?: number;
   className?: string;
   /** The chart's accessible name; ECharts' aria module describes the series under it. */
   label: string;
@@ -86,7 +86,7 @@ const EChartView: React.FC<EChartProps> = ({ option, height, className, label, h
     <div
       ref={container}
       className={['omc-echart', className].filter(Boolean).join(' ')}
-      style={{ height }}
+      style={{ height: height ?? '100%' }}
       role="img"
       aria-label={label}
       data-testid={testId}
@@ -96,7 +96,7 @@ const EChartView: React.FC<EChartProps> = ({ option, height, className, label, h
 
 /** Deferred through the console's chart mount queue, so several charts never initialise in one task. */
 export const EChart: React.FC<EChartProps> = (props) => (
-  <div className="omc-echart-slot" style={{ height: props.height }}>
+  <div className="omc-echart-slot" style={{ height: props.height ?? '100%' }}>
     <ChartMount>
       <EChartView {...props} />
     </ChartMount>

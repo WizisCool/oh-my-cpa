@@ -31,7 +31,7 @@ export async function checkDashboardTooltipRows({ page, check }, selector, label
         nameColor: name && getComputedStyle(name).color,
       };
     });
-    const surface = node.closest('.g2-tooltip');
+    const surface = node.closest('.omc-echart-tip');
     const surfaceStyle = getComputedStyle(surface);
     const probe = document.createElement('span');
     node.append(probe);
@@ -66,143 +66,49 @@ export async function checkDashboardTooltipRows({ page, check }, selector, label
  * readouts they print, and the sweep a revision triggers.
  */
 
-/**
- * The area marks @ant-design/charts paints into each card's .chart-slot.
- *
- * Counting canvases proves almost nothing here: an empty canvas, a mark drawn in
- * the wrong colour, and a mark collapsed onto the plot floor all satisfy it. So the
- * assertions read the painted pixels instead - several distinct tones per tile, ink
- * spanning the plot rather than a stub. That is the check an earlier revision of
- * this probe lacked, which is why it passed on a mark the design never called for.
- */
+/** SVG geometry and ink prove the six marks are painted, not merely mounted. */
 export async function dashboardChartMarks({ base, page, check }) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
-    const clientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
-    window.__kpiChartMeasurements = 0;
-    Object.defineProperty(Element.prototype, 'clientWidth', {
-      ...clientWidth,
-      get() {
-        if (this.parentElement?.classList.contains('chart-slot')) window.__kpiChartMeasurements++;
-        return clientWidth.get.call(this);
-      },
-    });
     window.__chartMountFrames = new WeakMap();
     let frame = 0;
-    function observeFrame() { frame++; requestAnimationFrame(observeFrame); }
-    requestAnimationFrame(observeFrame);
+    const tick = () => { frame++; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
     new MutationObserver((records) => {
       for (const record of records) for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        const canvases = node.matches('canvas') ? [node] : node.querySelectorAll('canvas');
-        for (const canvas of canvases) window.__chartMountFrames.set(canvas, frame);
+        for (const svg of node.matches('svg') ? [node] : node.querySelectorAll('svg')) window.__chartMountFrames.set(svg, frame);
       }
     }).observe(document, { childList: true, subtree: true });
-
   });
   const partialCost = { ...chartDashboard, metrics: { ...chartDashboard.metrics, cost: 89.72, cost_source: 'partial' } };
   await page.route(/\/management\/dashboard(?:\/tail)?(?:\?|$)/, (route) => route.fulfill({ json: partialCost }));
   await page.route('**/pricing/attention', (route) => route.fulfill({ json: { unpriced: ['unpriced-model'] } }));
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await until(async () => await page.locator('.chart-slot canvas').count() === 6,
-    { label: 'all six scheduled KPI charts to mount', timeoutMs: 20_000 });
-  await page.waitForFunction(() => [...document.querySelectorAll('.chart-slot canvas')].every((canvas) => {
-    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-    return pixels.some((value, index) => index % 4 === 3 && value > 20);
-  }));
-
-  const slots = await page.locator('.chart-slot').count();
-  check('all six tiles rendered chart slots', slots === 6, `slots=${slots}`);
-
-  const canvases = await page.locator('.chart-slot canvas').count();
-  check('all six tiles painted canvas marks', canvases === 6, `canvases=${canvases}`);
-  const mountFrames = await page.locator('.chart-slot canvas').evaluateAll((canvases) =>
-    canvases.map((canvas) => window.__chartMountFrames.get(canvas)));
-  check('KPI chart creation yields a frame between mounts',
-    mountFrames.every((frame) => frame !== undefined) && new Set(mountFrames).size === 6,
-    JSON.stringify(mountFrames));
-
-  // Read the painted pixels of the first tile: a non-empty canvas is not evidence
-  // that a mark was drawn, let alone drawn correctly.
-  const firstCanvas = page.locator('.chart-slot canvas').first();
-  const paint = await firstCanvas.evaluate((el) => {
-    const probe = document.createElement('canvas');
-    probe.width = el.width;
-    probe.height = el.height;
-    const ctx = probe.getContext('2d');
-    ctx.drawImage(el, 0, 0);
-    const { data } = ctx.getImageData(0, 0, probe.width, probe.height);
-    const tones = new Set();
-    const colInk = new Array(probe.width).fill(0);
-    let ink = 0;
-    for (let y = 0; y < probe.height; y += 1) {
-      for (let x = 0; x < probe.width; x += 1) {
-        const offset = (y * probe.width + x) * 4;
-        if (data[offset + 3] > 20) {
-          ink += 1;
-          colInk[x] += 1;
-          // Quantise so antialiasing does not read as hundreds of tones, but keep
-          // alpha: the fill and the trend are the same hue at different opacities,
-          // so a key built from RGB alone cannot tell the two marks apart.
-          tones.add(
-            `${data[offset] >> 4},${data[offset + 1] >> 4},${data[offset + 2] >> 4},${data[offset + 3] >> 5}`,
-          );
-        }
-      }
-    }
-    const firstInked = colInk.findIndex((count) => count > 0);
-    const lastInked = colInk.length - 1 - [...colInk].reverse().findIndex((count) => count > 0);
-    return { width: el.width, height: el.height, ink, tones: tones.size, firstInked, lastInked };
+  await until(async () => await page.locator('.chart-slot svg path').count() >= 12,
+    { label: 'six KPI lines and their areas', timeoutMs: 20_000 });
+  const marks = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const tones = ['--accent', '--accent', '--success', '--warn', '--muted', '--muted'];
+    return [...document.querySelectorAll('.chart-slot')].map((slot, index) => {
+      const host = slot.querySelector('.omc-echart');
+      const instance = echarts.getInstanceByDom(host);
+      const series = instance.getOption().series[0];
+      const paths = [...host.querySelectorAll('svg path')];
+      const line = paths.find((path) => path.getAttribute('stroke') === series.lineStyle.color);
+      const area = paths.find((path) => path.getAttribute('fill')?.startsWith('url('));
+      return { tone: getComputedStyle(slot).getPropertyValue(tones[index]).trim(), color: series.lineStyle.color,
+        left: line?.getBBox().x ?? 0, bottom: (line?.getBBox().y ?? 0) + (line?.getBBox().height ?? 0),
+        width: line?.getBBox().width ?? 0, height: line?.getBBox().height ?? 0, plotWidth: slot.clientWidth, plotHeight: slot.clientHeight,
+        hasArea: Boolean(area), frame: window.__chartMountFrames.get(host.querySelector('svg')),
+        path: line?.getAttribute('d') };
+    });
   });
-  check(
-    'the first tile painted a mark',
-    paint.ink > 0,
-    `ink=${paint.ink}`,
-  );
-  // An area carries both a stroked trend and a translucent fill, so a tile that
-  // painted correctly shows more than one tone. A single tone means the fill was
-  // lost (or the mark collapsed), which a canvas count cannot detect.
-  check(
-    'the tile painted both a trend stroke and an area fill',
-    paint.tones >= 2,
-    `distinctTones=${paint.tones}`,
-  );
-  // The mark must span the plot: a series that failed to bind renders as a stub at
-  // one edge rather than across the bucket grid.
-  const spread = paint.width > 0 ? (paint.lastInked - paint.firstInked) / paint.width : 0;
-  check(
-    'the mark spans the plot rather than collapsing to one edge',
-    spread > 0.6,
-    `spread=${spread.toFixed(2)} first=${paint.firstInked} last=${paint.lastInked} of ${paint.width}`,
-  );
-
-  // Every tile must plot its own metric. This was the defect this probe missed
-  // once already: RPM and Requests both plotted request volume, and the cache-rate
-  // and cost tiles both plotted token volume, so four of six tiles drew the same
-  // shape under different labels. Comparing the painted tiles catches a tile that
-  // was wired back to somebody else's series, which no per-tile assertion can.
-  const digests = await page.evaluate(() =>
-    [...document.querySelectorAll('.chart-slot canvas')].map((el) => {
-      const probe = document.createElement('canvas');
-      probe.width = el.width;
-      probe.height = el.height;
-      probe.getContext('2d').drawImage(el, 0, 0);
-      const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
-      let hash = 2166136261;
-      for (let i = 0; i < data.length; i += 7) {
-        hash ^= data[i];
-        hash = Math.imul(hash, 16777619);
-      }
-      return (hash >>> 0).toString(16);
-    }),
-  );
-  const uniqueDigests = new Set(digests);
-  check(
-    'each tile plots its own series rather than repeating another tile',
-    digests.length === 6 && uniqueDigests.size === digests.length,
-    `distinct=${uniqueDigests.size} of ${digests.length} (${digests.join(',')})`,
-  );
-
+  check('all six KPI tiles paint a line and gradient area', marks.length === 6 && marks.every((mark) => mark.hasArea && mark.width > mark.plotWidth * 0.8 && mark.height > 0), JSON.stringify(marks));
+  check('KPI drawings retain their inset instead of stretching into the card', marks.every((mark) => Math.abs(mark.left - 16) <= 1 && Math.abs(mark.width - (mark.plotWidth - 32)) <= 1 && mark.bottom <= mark.plotHeight - 15), JSON.stringify(marks));
+  check('KPI marks use their semantic tones', marks.every((mark) => mark.color.toLowerCase() === mark.tone.toLowerCase()), JSON.stringify(marks));
+  check('different KPI series paint different shapes', new Set(marks.map((mark) => mark.path)).size === 6);
+  check('KPI chart creation yields a frame between mounts', marks.every((mark) => mark.frame !== undefined) && new Set(marks.map((mark) => mark.frame)).size === 6, JSON.stringify(marks.map((mark) => mark.frame)));
   await page.locator('[data-testid="dashboard-unpriced-link"]').waitFor();
   const alignment = await page.locator('.dashboard-grid > [data-widget-kind="metric"] > .dashboard-tile').evaluateAll((tiles) => {
     const rows = new Map();
@@ -214,78 +120,37 @@ export async function dashboardChartMarks({ base, page, check }) {
     return [...rows.values()].every((bottoms) => Math.max(...bottoms) - Math.min(...bottoms) < 2);
   });
   check('same-row KPI plots share a baseline despite wrapped cost notes', alignment);
-
-  const firstSlot = page.locator('.chart-slot').first();
-  const box = await firstSlot.boundingBox();
-  if (!box) throw new Error('no bounding box for the first trend tile');
-  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
-  const tooltip = page.locator('.chart-slot .omc-tip').first();
-  await tooltip.waitFor({ state: 'visible', timeout: 5000 });
-  const tooltipText = await tooltip.innerText();
-  // The tooltip must name a real bucket: at 1h/1-minute resolution the label is
-  // "MM-DD HH:mm", and the value is the request count for that minute.
-  // The readout must be a small overlay, not a box stretched across the tile. A
-  // broad CSS rule once sized every direct div child of the slot, which silently
-  // blew the readout up to the full tile.
-  const tooltipBox = await tooltip.boundingBox();
-  check(
-    'the readout hugs its text instead of spanning the tile',
-    Boolean(tooltipBox) && tooltipBox.width < box.width * 0.5,
-    `tooltipWidth=${tooltipBox ? Math.round(tooltipBox.width) : 'none'} slotWidth=${Math.round(box.width)}`,
-  );
-  check(
-    'the tooltip states a bucket time and a value',
-    /\d{2}-\d{2} \d{2}:\d{2}/.test(tooltipText) && /\d/.test(tooltipText),
-    `text=${JSON.stringify(tooltipText)}`,
-  );
-
-  // Sweep the pointer across the tile, then confirm the chart still reports its
-  // data: a rebuild that dropped the series would show here.
-  for (let step = 0; step <= 20; step += 1) {
-    const x = box.x + Math.min(box.width - 1, (box.width * step) / 20);
-    await page.mouse.move(x, box.y + box.height / 2);
-  }
-  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
-  check(
-    'the tooltip still reports a bucket after a pointer sweep',
-    (await tooltip.innerText().catch(() => '')).trim().length > 0,
-  );
-
-  const overlay = await page.evaluate(() => {
-    const node = document.querySelector('.chart-slot .omc-tip');
-    if (!node) return { present: false };
-    const style = window.getComputedStyle(node);
-    return { present: true, transition: style.transitionDuration, position: style.position };
-  });
-  check(
-    'the hover tooltip does not animate into place',
-    overlay.present && overlay.transition === '0s',
-    JSON.stringify(overlay),
-  );
-  for (let index = 0; index < 6; index += 1) {
+  for (let index = 0; index < 6; index++) {
     const slot = page.locator('.chart-slot').nth(index);
-    const bounds = await slot.boundingBox();
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-    const readout = slot.locator('.omc-tip');
-    await readout.waitFor({ state: 'visible' });
-    check(`KPI ${index + 1} uses the shared tooltip with an exact value`,
-      Boolean(await readout.locator('.omc-tip-value').getAttribute('title')));
-    await checkDashboardTooltipRows({ page, check }, readout, `KPI ${index + 1}`);
+    const box = await slot.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const tip = slot.locator('.omc-tip');
+    await tip.waitFor({ state: 'visible' });
+    check(`KPI ${index + 1} tooltip states a real bucket`, /\d{2}-\d{2} \d{2}:\d{2}/.test(await tip.innerText()));
+    const tipBox = await tip.boundingBox();
+    if (index === 0) check('the KPI tooltip hugs its content', tipBox.width < box.width * 0.5);
+    await checkDashboardTooltipRows({ page, check }, tip, `KPI ${index + 1}`);
   }
-
   await page.mouse.move(0, 0);
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const measurementsBeforeRefresh = await page.evaluate(() => window.__kpiChartMeasurements);
-  const refreshResponse = page.waitForResponse((response) => /\/management\/dashboard(?:\?|$)/.test(response.url()));
+  await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    window.__kpiInstances = [...document.querySelectorAll('.chart-slot .omc-echart')].map((host) => echarts.getInstanceByDom(host));
+    window.__kpiResizeCount = 0;
+    for (const chart of window.__kpiInstances) {
+      const resize = chart.resize;
+      chart.resize = (...args) => { window.__kpiResizeCount++; return resize.apply(chart, args); };
+    }
+  });
+  const answered = page.waitForResponse((response) => /\/management\/dashboard(?:\?|$)/.test(response.url()));
   await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
-  await refreshResponse;
+  await answered;
   await until(async () => await page.locator('.terminal-page-head button:has(.anticon-reload)[aria-busy="false"]').count() === 1,
     { label: 'identical dashboard refresh to settle' });
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const measurementsAfterRefresh = await page.evaluate(() => window.__kpiChartMeasurements);
-  check('an identical refresh does not remeasure the six KPI charts', measurementsBeforeRefresh === measurementsAfterRefresh,
-    `${measurementsBeforeRefresh} → ${measurementsAfterRefresh}`);
-
+  const unchanged = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    return { same: [...document.querySelectorAll('.chart-slot .omc-echart')].every((host, index) => echarts.getInstanceByDom(host) === window.__kpiInstances[index]), resized: window.__kpiResizeCount };
+  });
+  check('an identical refresh preserves chart instances without remeasurement', unchanged.same && unchanged.resized === 0, JSON.stringify(unchanged));
 }
 
 /**
@@ -481,250 +346,89 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
   }
 }
 
-/**
- * The three AntV marks sweep between two revisions, and paint no intermediate frame when the reader
- * asked for reduced motion.
- *
- * This is the one claim about chart motion that no per-component test can reach. A logic test can read
- * the `animate` spec a chart passes (`test-chart-marks`), but only an engine that allows motion can
- * show that the spec produces painted movement, and only one that refuses it can show the override
- * actually reaches the canvas - which matters because AntV has no reduced-motion handling of its own,
- * so the switch is ours and a regression in it would be invisible.
- *
- * The measurement reads the painted pixels once per animation frame rather than screenshotting from
- * Node: a 240ms sweep can end between two harness round trips, and a probe that misses it would fail
- * on a fast machine and pass on a slow one. Sampling inside the page observes the frames the browser
- * actually painted, so "there was an intermediate frame" is asserted rather than hoped for.
- */
-
+/** Revisions morph in place; reduced motion swaps geometry without intermediate frames. */
 export async function dashboardChartMotion({ base, page, context, check }) {
-  /** The mark each panel paints into, which is what a canvas readout has to address. */
-  const MARKS = [
-    ['the requests sparkline', '.dashboard-tile .chart-slot canvas'],
-    ['the model token trend', '.model-trend canvas'],
-    ['the model usage ring', '.model-ring-frame canvas'],
+  const marks = [
+    ['requests sparkline', '.chart-slot .omc-echart'],
+    ['model token trend', '.model-trend .omc-echart'],
+    ['model usage ring', '.model-ring-frame .omc-echart'],
   ];
-
-  /**
-   * Starts sampling one canvas's ink, one frame in two, and never two marks at once.
-   *
-   * The cost is a deliberate constraint rather than an optimisation. Reading a canvas means pulling
-   * its pixels back out of the compositor, so three concurrent samplers at 60fps would move a few
-   * hundred kilobytes a frame - and this scenario runs *concurrently* with the cross-stack acceptance
-   * suite, whose own timing-sensitive reads are documented as failing under CPU contention. One
-   * sampler at a time, every other frame, leaves the sweep plainly visible (240ms is around fourteen
-   * frames) while keeping the probe's footprint off that suite's critical path.
-   *
-   * The whole canvas is read with a stride rather than a single row: a line whose values sit near its
-   * baseline paints its ink in the lower few rows, so one row through the middle would find only
-   * background and report that nothing moved.
-   */
-  const startSampler = (target, selector) =>
-    target.evaluate((markSelector) => {
-      const canvas = document.querySelector(markSelector);
-      if (!canvas) return 'missing';
-      const drawing = canvas.getContext('2d');
-      if (!drawing) return 'not-a-2d-canvas';
-      const sampler = { samples: [], running: true };
-      window.__paintSampler = sampler;
-      const signature = () => {
-        const pixels = drawing.getImageData(0, 0, canvas.width, canvas.height).data;
-        let value = 0;
-        for (let index = 0; index < pixels.length; index += 28) {
-          value = (value * 31 + pixels[index] + pixels[index + 3]) % 2147483647;
-        }
-        return value;
-      };
-      let frame = 0;
-      const tick = () => {
-        if (frame % 2 === 0) sampler.samples.push(signature());
-        frame += 1;
-        if (sampler.running) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-      return 'sampling';
-    }, selector);
-
-  const stopSampler = (target) =>
-    target.evaluate(() => {
-      const sampler = window.__paintSampler;
-      if (!sampler) return [];
-      sampler.running = false;
-      return sampler.samples;
-    });
-
-  /**
-   * Summarises one mark's frames.
-   *
-   * `strays` is the claim this scenario exists for: frames that are neither the reading before the
-   * revision nor the one after it. A hard cut paints none; a sweep paints several. Comparing against
-   * this mark's own first and last frame - rather than against a fixed count - keeps the claim
-   * independent of how many frames the machine managed to paint.
-   */
-  const summarise = (samples) => ({
-    frames: samples.length,
-    distinct: new Set(samples).size,
-    strays: samples.filter((value) => value !== samples[0] && value !== samples[samples.length - 1]).length,
-  });
-
-  /**
-   * The dashboard fixture with the spike at a different bucket on each revision.
-   *
-   * Two things about this mutation are load bearing. It changes the plot's *shape*, because the
-   * sparkline has no axis and its y domain is normalized to the window's own maximum - scaling every
-   * bucket by one factor repaints the canvas pixel for pixel, so a uniform level change is invisible
-   * here with or without animation. And it moves the spike rather than growing it, because raising one
-   * spike and letting it dominate the domain makes every later revision paint the same picture: a
-   * frozen canvas that would be read as a chart that stopped updating.
-   */
-  const spikedDashboard = (revision) => {
-    const body = JSON.parse(JSON.stringify(chartDashboard));
-    const bucket = revision % 2 === 0 ? 7 : 22;
-    body.requests.series = body.requests.series.map((point, index) => (index === bucket ? { ...point, v: 999_999 } : point));
-    return body;
-  };
-
-  /**
-   * The models fixture with a different group tripled on each revision, so both panels change shape
-   * and not just level: the ring redraws its shares and the trend lifts another line.
-   */
-  const shiftedModels = (revision) => {
-    const body = JSON.parse(JSON.stringify(chartDashboardModels));
-    const group = body.models[revision % Math.max(1, body.models.length)];
-    if (group) {
-      group.tokens *= 3;
-      group.series = group.series.map((point) => ({ ...point, tokens: point.tokens * 3 }));
-    }
-    body.total_tokens = body.models.reduce((sum, item) => sum + item.tokens, 0);
-    return body;
-  };
-
-  // Both preference states are measured on ONE page, by switching the preference rather than by
-  // opening a second browser context. Two contexts would each mount the dashboard, and the second
-  // mount's marks can come up with a chart instance the library never re-renders - a frozen canvas
-  // that says nothing about motion - so a two-lane probe reports the harness rather than the app.
-  // Switching in place is also the stronger claim: §7's override has to hold when the preference
-  // changes while the console is open, not only when it was set before the page loaded.
-  const bodies = {
-    dashboard: JSON.parse(JSON.stringify(chartDashboard)),
-    models: JSON.parse(JSON.stringify(chartDashboardModels)),
-  };
-  // Awaited before anything is driven: `BrowserContext.route()` is asynchronous, and a navigation
-  // that starts before the registration lands is answered by the previous fixture.
-  await context.route(
-    (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard'),
-    (route) => route.fulfill({ json: bodies.dashboard }),
-  );
-  await context.route(
-    (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/tail'),
-    (route) => route.fulfill({ json: bodies.dashboard }),
-  );
-  await context.route(
-    (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/models'),
-    (route) => route.fulfill({ json: bodies.models }),
-  );
-
+  const bodies = { dashboard: chartDashboard, models: chartDashboardModels };
+  await installRoutes(context, [
+    [(url) => /\/management\/dashboard(?:\/tail)?$/.test(url.pathname), () => bodies.dashboard],
+    [(url) => url.pathname.endsWith('/management/dashboard/models'), () => bodies.models],
+    [(url) => url.pathname.endsWith('/management/dashboard/token-heatmap'), () => chartTokenHeatmap],
+  ]);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  for (const [, selector] of MARKS) {
-    await page.locator(selector).first().waitFor({ timeout: 20_000 });
-  }
-  // `enter` is enabled, so the first paint animates too. Sampling before it ends would count those
-  // frames as a revision's intermediates.
-  await page.waitForTimeout(700);
-
-  /**
-   * Drives one revision, sampling the named mark, and reports its frames.
-   *
-   * The mutation has to change the plot's *shape*: the sparkline has no axis and its y domain is
-   * normalized to the window's own maximum, so scaling every bucket by the same factor repaints the
-   * canvas pixel for pixel - a uniform level change is invisible here with or without animation.
-   * It also has to *move* rather than grow, or later revisions repaint the same picture.
-   */
-  let revision = 0;
-  const measureRevision = async (markSelector) => {
-    bodies.dashboard = spikedDashboard(revision);
-    bodies.models = shiftedModels(revision);
-    revision += 1;
-    const started = await startSampler(page, markSelector);
-    // The canvas node is captured before the revision lands. A morph keeps it - the library hands the
-    // new spec to the runtime it already has - while a remount mints a new canvas, and a remount is
-    // exactly what would turn this sweep into a draw-in. Painted intermediates cannot tell the two
-    // apart, which is why the identity is asserted rather than inferred from frames.
-    const canvasPresent = await page.evaluate((selector) => {
-      window.__canvasUnderTest = document.querySelector(selector);
-      return Boolean(window.__canvasUnderTest);
-    }, markSelector);
-    const answered = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/models');
-    });
-    await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
-    await answered;
-    await page.waitForTimeout(700);
-    const identity = await page.evaluate(
-      (selector) => ({
-        painted: Boolean(window.__canvasUnderTest),
-        // The same selector, resolved after the revision: a morph hands the new spec to the runtime
-        // that owns this node, a remount replaces it.
-        preserved: Boolean(window.__canvasUnderTest) && document.querySelector(selector) === window.__canvasUnderTest,
-      }),
-      markSelector,
-    );
-    return { started, samples: await stopSampler(page), canvasPresent, identity };
-  };
-
-  // ── a reader who allows motion sees the marks move ─────────────────────────
-  // One revision per mark, and only one mark sampled at a time: each revision serves a different
-  // shape, so every claim below is made about a change that really happened.
-  for (const [name, selector] of MARKS) {
-    const measured = await measureRevision(selector);
-    check(`${name} paints into a canvas this probe can read`, measured.started === 'sampling', `${measured.started}`);
-    check(`${name} has a canvas to hold its chart`, measured.canvasPresent, JSON.stringify(measured.identity));
-    check(
-      `${name} keeps its chart instance across a revision, so the sweep is a morph and not a draw-in`,
-      measured.identity.preserved,
-      JSON.stringify(measured.identity),
-    );
-    const summary = summarise(measured.samples);
-    check(`${name} reaches its new reading on a revision`, summary.distinct >= 2 && summary.frames > 0, JSON.stringify(summary));
-    check(`${name} sweeps instead of hard-cutting`, summary.strays > 0, JSON.stringify(summary));
-  }
-
-  // ── the same page, once the reader asks for reduced motion ─────────────────
-  // A fresh revision is driven after the switch, so the frames measured here belong to the
-  // preference that was in force when the data arrived.
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.waitForTimeout(120);
-
-  // A reduced-motion override has to remove the motion without removing the surface. antd's floating
-  // panels are the case that proves it is not free: they enter with a zoom, rc-motion leaves the enter
-  // state inline until the animation ends, and `animation: none` alone therefore left the panel at
-  // scale 0 and opacity 0 - measured. This asserts the panel still arrives, at the geometry it would
-  // have settled at anyway.
-  await page.locator('.range-trigger').click();
-  await page.waitForTimeout(600);
-  const openedPanel = await page.evaluate(() => {
-    const node = [...document.querySelectorAll('.ant-popover, .ant-dropdown, .ant-picker-dropdown')].find(
-      (candidate) => getComputedStyle(candidate).visibility === 'visible',
-    );
-    if (!node) return { present: false };
-    const style = getComputedStyle(node);
-    const box = node.getBoundingClientRect();
-    return { present: true, opacity: style.opacity, width: Math.round(box.width), height: Math.round(box.height) };
+  await until(async () => await page.locator('.omc-echart svg').count() === 8, { label: 'dashboard charts', timeoutMs: 20_000 });
+  await page.evaluate(async () => { window.__echartsRuntime = (await import('/omc/src/charts/echarts/core.ts')).echarts; });
+  await page.waitForFunction(() => [...document.querySelectorAll('.omc-echart')].every((host) => window.__echartsRuntime.getInstanceByDom(host)?.getZr().animation.isFinished()));
+  const timing = await page.evaluate(() => [...document.querySelectorAll('.omc-echart')].flatMap((host) => {
+    const chart = window.__echartsRuntime.getInstanceByDom(host);
+    return chart.getModel().getSeries().map((series) => ({ type: series.subType,
+      initial: series.get('animationDuration'), update: series.get('animationDurationUpdate'), hover: series.get(['stateAnimation', 'duration']) }));
+  }));
+  check('chart revisions and hover obey the console motion budgets', timing.every((item) => item.update === 240 && item.hover <= 120 && (item.type === 'pie' ? item.initial === 0 : item.initial <= 240)), JSON.stringify(timing));
+  // The list can change its numeric width on a revision and resize the ring in a second layout.
+  // Keep geometry fixed here; the model-panel scenario independently verifies container refitting.
+  await page.locator('.model-ring-frame').evaluate((frame) => {
+    frame.style.width = `${frame.getBoundingClientRect().width}px`;
+    frame.style.maxWidth = 'none';
   });
-  check(
-    'a floating panel still arrives under reduced motion, without its zoom',
-    openedPanel.present && openedPanel.opacity === '1' && openedPanel.width > 0 && openedPanel.height > 0,
-    JSON.stringify(openedPanel),
-  );
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  for (const [name, selector] of MARKS) {
-    const measured = await measureRevision(selector);
-    const summary = summarise(measured.samples);
-    check(`${name} still reaches its new reading under reduced motion`, summary.distinct >= 2, JSON.stringify(summary));
-    check(`${name} paints no intermediate frame under reduced motion`, summary.strays === 0, JSON.stringify(summary));
+  let revision = 0;
+  for (const isReduced of [false, true]) {
+    await page.emulateMedia({ reducedMotion: isReduced ? 'reduce' : 'no-preference' });
+    await page.waitForFunction((reduced) => {
+      const echarts = window.__echartsRuntime;
+      return [...document.querySelectorAll('.omc-echart')].every((host) => echarts.getInstanceByDom(host)?.getOption().animation === !reduced);
+    }, isReduced);
+    for (const [name, selector] of marks) {
+      revision++;
+      bodies.dashboard = structuredClone(chartDashboard);
+      bodies.dashboard.requests.series = bodies.dashboard.requests.series.map((point, index) => index === (revision % 2 ? 7 : 22) ? { ...point, v: 999_999 } : point);
+      bodies.models = structuredClone(chartDashboardModels);
+      const group = bodies.models.models[revision % bodies.models.models.length];
+      group.tokens *= 3;
+      group.series = group.series.map((point) => ({ ...point, tokens: point.tokens * 3 }));
+      bodies.models.total_tokens = bodies.models.models.reduce((sum, item) => sum + item.tokens, 0);
+      await page.evaluate(async (selector) => {
+        const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+        const host = document.querySelector(selector);
+        const instance = echarts.getInstanceByDom(host);
+        const signature = () => [...host.querySelectorAll('svg path')].map((path) => path.getAttribute('d')).join('|');
+        const sampler = { instance, host, signature, option: JSON.stringify(instance.getOption().series), samples: [signature()], running: true };
+        window.__chartSampler = sampler;
+        const tick = () => { sampler.samples.push(signature()); if (sampler.running) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }, selector);
+      const answered = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/dashboard/models'));
+      await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
+      await answered;
+      await page.waitForFunction(() => {
+        const sampler = window.__chartSampler;
+        return JSON.stringify(sampler.instance.getOption().series) !== sampler.option && sampler.instance.getZr().animation.isFinished();
+      });
+      const measured = await page.evaluate(async () => {
+        await new Promise(requestAnimationFrame);
+        const sampler = window.__chartSampler;
+        sampler.running = false;
+        sampler.samples.push(sampler.signature());
+        const first = sampler.samples[0];
+        const last = sampler.samples.at(-1);
+        return { distinct: new Set(sampler.samples).size,
+          intermediate: sampler.samples.filter((sample) => sample !== first && sample !== last).length,
+          same: !sampler.instance.isDisposed() && sampler.host.isConnected };
+      });
+      check(`${name} keeps its instance across a revision`, measured.same);
+      check(`${name} reaches its new reading${isReduced ? ' under reduced motion' : ''}`, measured.distinct >= 2, JSON.stringify(measured));
+      check(`${name} ${isReduced ? 'paints no intermediate frame' : 'morphs through intermediate frames'}`, isReduced ? measured.intermediate === 0 : measured.intermediate > 0, JSON.stringify(measured));
+    }
   }
+  await page.locator('.range-trigger').click();
+  const popover = page.locator('.ant-popover:visible').first();
+  await popover.waitFor({ state: 'visible' });
+  const surface = await popover.evaluate((node) => ({ opacity: getComputedStyle(node).opacity, width: node.getBoundingClientRect().width }));
+  check('a floating panel still arrives under reduced motion', surface.opacity === '1' && surface.width > 0, JSON.stringify(surface));
+  await page.keyboard.press('Escape');
 }
-

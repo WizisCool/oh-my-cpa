@@ -89,22 +89,14 @@ export default defineConfig(({ command }) => ({
         manualChunks: (id) => {
           // Vite's shared preload helper is called by every `React.lazy` route, so
           // wherever it lands becomes an eager dependency of the entry. Left to
-          // Rollup it was merged into vendor-charts, which dragged the whole chart
+          // Rollup it can be merged into a chart chunk, dragging the whole chart
           // runtime into the entry graph and modulepreloaded it on every route -
           // exactly the eager load the lazy import below is meant to avoid. Pinning
           // it to its own tiny chunk keeps the entry's static graph free of charts.
           if (id.includes('vite/preload-helper')) {
             return 'vendor-preload';
           }
-          if (
-            id.includes('node_modules/@antv/') ||
-            id.includes('node_modules/@ant-design/charts') ||
-            id.includes('node_modules/@ant-design/plots')
-          ) {
-            return 'vendor-charts';
-          }
-          // The Insights page's chart runtime, separate from the dashboard's so neither page
-          // downloads the other's (ADR 0106).
+          // The SVG runtime shared by the dashboard and Insights stays lazy (ADR 0106).
           if (id.includes('node_modules/echarts/') || id.includes('node_modules/zrender/')) {
             return 'vendor-echarts';
           }

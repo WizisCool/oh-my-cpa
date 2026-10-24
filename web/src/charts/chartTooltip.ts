@@ -13,7 +13,7 @@ export function escapeTooltipText(value: string): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** Shared content for G2's positioned tooltip; upstream labels are untrusted. */
+/** Shared content for the positioned chart tooltip; upstream labels are untrusted. */
 export function renderChartTooltip(time: string | undefined, rows: ChartTooltipRow[]): string {
   const hasNames = rows.some((row) => Boolean(row.name));
   const hasShares = rows.some((row) => row.share !== undefined);

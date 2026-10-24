@@ -958,8 +958,9 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         return;
       }
       if (targetURL.includes('retrieveUserQuotaSummary')) {
-        // Mirrors the real antigravity summary: two groups, weekly bucket listed
-        // before the five-hour one, display names like "Five Hour Limit".
+        // Mirrors the real antigravity summary: one group per model family, weekly buckets listed
+        // before the five-hour ones, display names like "Five Hour Limit", and a family that
+        // publishes no five-hour bucket at all (Gemini 4 Argon is weekly-only).
         json(response, 200, {
           status_code: 200,
           header: { 'content-type': ['application/json'] },
@@ -973,9 +974,8 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
                 { bucketId: 'aerolith-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 1.0, resetTime: new Date(Date.now() + 7 * 86400000).toISOString() },
                 { bucketId: 'aerolith-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 1.0, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
               ] },
-              { displayName: 'Additional model group', buckets: [
-                { bucketId: 'additional-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 0.8, resetTime: new Date(Date.now() + 6 * 86400000).toISOString() },
-                { bucketId: 'additional-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 0.9, resetTime: new Date(Date.now() + 4 * 3600000).toISOString() },
+              { displayName: 'Gemini 4 Argon', buckets: [
+                { bucketId: 'gemini-4-argon-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 0.8, resetTime: new Date(Date.now() + 6 * 86400000).toISOString() },
               ] },
             ],
           },

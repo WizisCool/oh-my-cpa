@@ -53,6 +53,15 @@ or `auth_index`) is distinct from OMC's binding-session poll at
 `/management/oauth/siwc/status?state=...`; OMC does not call the dedicated query
 because its credential-list read already supplies the local summary.
 
+`use_siwc` does not route every request. CPA v8.0.38
+([`0db19025`](https://github.com/router-for-me/CLIProxyAPI/commit/0db19025)) sends
+ChatGPT Alpha Search through the ordinary OAuth partition, and CPA v8.0.40
+([`d946c4fb`](https://github.com/router-for-me/CLIProxyAPI/commit/d946c4fb)) does the
+same for every request whose User-Agent names a Codex client (`codex-rs`,
+`codex_cli_rs`, `codex-tui`, `codex_exec`, Codex desktop). The console's switch copy
+and the agent capability description say so, because the switch alone would read
+as if those clients used SIWC too.
+
 ## Antigravity observation fingerprint
 
 The reviewed CPA source baseline `02e9e85204052dfed9bf73b7075c7b414111a4b3`
@@ -73,7 +82,11 @@ credential list and the existing Agent/MCP credential read. Missing support
 metadata disables binding. Stored material presence and expiry are not live
 validity checks.
 
-The credential detail offers Bind SIWC and an explicitly confirmed Rebind SIWC.
+A provider section exposes a SIWC column only when it contains a Codex credential
+with SIWC state. The column carries each eligible row's badge (bind, off, on,
+rebind when CPA reports the token locally invalid, or binding while an attempt is
+pending). The badge and the row menu both open the credential's SIWC dialog. The dialog offers Bind SIWC and an
+explicitly confirmed Rebind SIWC.
 The server resolves a unique credential identity and sends only CPA's managed
 ID/name to the fixed binding endpoint. This is standalone/local-file-only;
 Home mode, non-file backends and older gateways are unavailable. There is no
@@ -84,7 +97,9 @@ Binding sessions are process-local and target-scoped. The browser pastes the
 complete `http://127.0.0.1:1455/auth/callback` URL, including the issued
 `client_id`, even when that page cannot load: this flow starts no loopback
 listener. OMC forwards the URL unchanged after matching its state and redirect
-origin/path. Callback values are never stored in preferences or audit records.
+origin/path, and refuses a URL without `code` and `client_id` (or `error`) with
+`code: siwc_callback_incomplete`, the one mistake the operator can fix by copying
+again after the redirect finishes. Callback values are never stored in preferences or audit records.
 Attempt audits are fail-closed for start, callback and cancellation. Callback
 acceptance remains pending; only completed status followed by safe credential
 readback is success. Readback failure after completion stays in verification

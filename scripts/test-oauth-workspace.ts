@@ -18,9 +18,12 @@ import {
   workspaceProviderOptions,
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
-import { pickCompactQuotaWindows, orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
+import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
+import { compareSections, quotaCellsOf, quotaFamiliesOf, sortByQuotaColumn } from '../web/src/pages/oauthManagement/credentialSections.ts';
+import type { QuotaWindow } from '../web/src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../web/src/components/authFiles/authFileLogic.ts';
+import { siwcBadgeState } from '../web/src/components/authFiles/siwcBadge.ts';
 import type { TFunc } from '../web/src/i18n/index.tsx';
 
 /** Stands in for the dictionary: the countdown assertions only need the arguments back. */
@@ -324,69 +327,6 @@ test('the all sentinel does not erase a literal search for the word all', () => 
   assert.equal(updated.get('provider'), 'codex');
 });
 
-test('a compact row carries the five-hour and weekly limits of one group', () => {
-  const picked = pickCompactQuotaWindows([
-    { id: 'a-five', label: 'Gemini Models · Five Hour Limit Remaining', kind: 'five_hour', scope: 'group' },
-    { id: 'a-week', label: 'Gemini Models · Weekly Limit Remaining', kind: 'weekly', scope: 'group' },
-    { id: 'b-five', label: 'Claude Models · Five Hour Limit Remaining', kind: 'five_hour', scope: 'group' },
-  ]);
-  assert.deepEqual(picked.map((window) => window.id), ['a-five', 'a-week']);
-});
-
-test('a compact row fills its lines from whatever the provider returned', () => {
-  assert.deepEqual(
-    pickCompactQuotaWindows([{ id: 'week', label: 'Weekly', kind: 'weekly', scope: 'standard' }]).map((window) => window.id),
-    ['week'],
-    'a provider with one window shows that window rather than an empty line',
-  );
-  assert.deepEqual(
-    pickCompactQuotaWindows([
-      { id: 'day', label: 'Daily', kind: 'daily', scope: 'standard' },
-      { id: 'month', label: 'Monthly', kind: 'monthly', scope: 'standard' },
-      { id: 'other', label: 'Other', kind: 'custom', scope: 'standard' },
-    ]).map((window) => window.id),
-    ['day', 'month'],
-    'a provider with neither kind is still represented by its own first windows',
-  );
-  assert.deepEqual(pickCompactQuotaWindows([]), []);
-});
-
-test('a compact row never shows the same window twice', () => {
-  const five = { id: 'five', label: 'Five hour', kind: 'five_hour', scope: 'standard' } as const;
-  const week = { id: 'week', label: 'Weekly', kind: 'weekly', scope: 'standard' } as const;
-  const picked = pickCompactQuotaWindows([five, five, week]);
-  assert.deepEqual(
-    picked.map((window) => window.id),
-    ['five', 'week'],
-    'the same window reported twice spends one of the row’s two lines on a repeat',
-  );
-});
-
-test('two readings of one window id are one window', () => {
-  const picked = pickCompactQuotaWindows([
-    { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: 80 },
-    { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: 75 },
-    { id: 'five_hour', label: 'Five hour', kind: 'five_hour', scope: 'standard' },
-  ]);
-  assert.deepEqual(
-    picked.map((window) => window.id),
-    ['five_hour', 'weekly'],
-    'deduplication is by id, not by object identity or by kind',
-  );
-});
-
-test('distinct windows that share a kind keep both of the row’s lines', () => {
-  const picked = pickCompactQuotaWindows([
-    { id: 'a-week', label: 'Family A · Weekly', kind: 'weekly', scope: 'group' },
-    { id: 'b-week', label: 'Family A · Weekly (secondary)', kind: 'weekly', scope: 'group' },
-  ]);
-  assert.deepEqual(
-    picked.map((window) => window.id),
-    ['a-week', 'b-week'],
-    'a kind is not an identity: two distinct limits both belong in the row',
-  );
-});
-
 test('a daily limit leads its own weekly limit', () => {
   const daily = { id: 'devin_daily', label: 'daily', kind: 'daily', scope: 'standard' } as const;
   const weekly = { id: 'devin_weekly', label: 'weekly', kind: 'weekly', scope: 'standard' } as const;
@@ -394,10 +334,6 @@ test('a daily limit leads its own weekly limit', () => {
     orderQuotaWindows([weekly, daily]).map((window) => window.id),
     ['devin_daily', 'devin_weekly'],
     'the shorter limit binds first even when the provider lists the weekly one first',
-  );
-  assert.deepEqual(
-    pickCompactQuotaWindows(orderQuotaWindows([weekly, daily])).map((window) => window.id),
-    ['devin_daily', 'devin_weekly'],
   );
 });
 
@@ -446,16 +382,6 @@ test('a window without a kind is named from the period it covers', () => {
   assert.equal(quotaWindowKindOf(groupWindow(720)), 'monthly');
   assert.equal(quotaWindowKindOf(groupWindow(2)), undefined, 'an unknown period stays unnamed rather than being forced into a bucket');
   assert.equal(quotaWindowKindOf({ ...groupWindow(2), kind: 'custom' }), 'custom', 'an explicit kind always wins');
-});
-
-test('a grouped row is picked by period, not by the order the provider listed', () => {
-  const weekly = { id: 'g-week', label: 'Gemini Models · Weekly Limit Remaining', scope: 'group' as const, period_hours: 168 };
-  const fiveHour = { id: 'g-five', label: 'Gemini Models · Five Hour Limit Remaining', scope: 'group' as const, period_hours: 5 };
-  const otherFamily = { id: 'c-five', label: 'Claude and GPT models · Five Hour Limit Remaining', scope: 'group' as const, period_hours: 5 };
-  assert.deepEqual(
-    pickCompactQuotaWindows([weekly, fiveHour, otherFamily]).map((window) => window.id),
-    ['g-five', 'g-week'],
-  );
 });
 
 const creditInfo = (available: number, applicable: number): QuotaItem['reset_credits'] => ({
@@ -587,11 +513,6 @@ test('a limit outside the plan’s windows is not folded into them', () => {
     quotaWindowGroupKey(standard),
     'a code-review allowance is not one of the credential’s five-hour or weekly limits',
   );
-  // The row carries the credential's own plan, not the allowance beside it.
-  assert.deepEqual(
-    pickCompactQuotaWindows(orderQuotaWindows([standard, codeReview])).map((window) => window.id),
-    ['weekly'],
-  );
 });
 
 test('a target nobody could refresh is reported, not counted as clean', () => {
@@ -611,9 +532,80 @@ test('an allowance outside the plan is one family, not one per window', () => {
   const weekly = { id: 'code_review_weekly', label: '代码审查 每周配额', scope: 'code_review' } as const;
   assert.equal(quotaWindowGroupKey(fiveHour), quotaWindowGroupKey(weekly));
   assert.notEqual(quotaWindowGroupKey(weekly), quotaWindowGroupKey({ id: 'weekly', label: 'Weekly', scope: 'standard' }));
-  assert.deepEqual(
-    pickCompactQuotaWindows(orderQuotaWindows([fiveHour, weekly])).map((window) => window.id),
-    ['code_review_5h', 'code_review_weekly'],
-    'both of an allowance’s windows belong in the row when the allowance is all it has',
-  );
+});
+
+test('siwc badge: the row names the one SIWC state the operator acts on', () => {
+  const cases: Array<[string, Partial<ManagementAuthFile>, Parameters<typeof siwcBadgeState>[1], ReturnType<typeof siwcBadgeState>]> = [
+    ['not codex', { type: 'claude', provider: 'claude', siwc_bind_supported: true }, undefined, undefined],
+    ['unsupported and unbound', { siwc_bind_supported: false }, undefined, undefined],
+    ['runtime-only cannot bind', { siwc_bind_supported: true, runtime_only: true }, undefined, undefined],
+    ['supported and unbound', { siwc_bind_supported: true, siwc_bound: false }, undefined, 'bind'],
+    ['bound, not used', { siwc_bind_supported: true, siwc_bound: true, use_siwc: false, siwc_status: 'off' }, undefined, 'off'],
+    ['bound and used', { siwc_bind_supported: true, siwc_bound: true, use_siwc: true, siwc_status: 'valid' }, undefined, 'active'],
+    ['bound where binding is unavailable keeps its switch', { siwc_bind_supported: false, siwc_bound: true, use_siwc: true }, undefined, 'active'],
+    ['locally invalid outranks use', { siwc_bind_supported: true, siwc_bound: true, use_siwc: true, siwc_status: 'invalid' }, undefined, 'rebind'],
+    ['pending attempt outranks everything', { siwc_bind_supported: true, siwc_bound: true, siwc_status: 'invalid' }, { phase: 'waiting', callbackUrl: '', isBusy: false }, 'pending'],
+    ['finished attempt falls back to the summary', { siwc_bind_supported: true, siwc_bound: false }, { phase: 'cancelled', callbackUrl: '', isBusy: false }, 'bind'],
+  ];
+  for (const [name, overrides, session, expected] of cases) {
+    assert.equal(siwcBadgeState(file({ provider: 'codex', ...overrides }), session), expected, name);
+  }
+});
+
+const quotaRecord = (name: string, windows: QuotaWindow[], provider = 'antigravity') =>
+  buildOAuthWorkspaceProjection([file({ name, auth_index: name, type: provider, provider })], [quota({ auth_index: name, name, type: provider, provider, windows })], choices).records[0];
+
+test('section columns: each family once, each period a column, in the order a reader compares', () => {
+  const group = (name: string, bucket: string, hours: number): QuotaWindow => ({ id: `ag_${name}_${bucket}`, label: `${name} · ${hours === 5 ? '5小时限制 (5-Hour)' : '每周限制 (Weekly)'}`, scope: 'group', period_hours: hours });
+  const cases: Array<[string, QuotaWindow[][], Array<[string | undefined, string[]]>]> = [
+    ['antigravity groups, weekly listed first, Argon weekly only', [[
+      group('Gemini models', 'week', 168), group('Gemini models', '5h', 5),
+      group('Claude and GPT models', 'week', 168), group('Claude and GPT models', '5h', 5),
+      group('Gemini 4 Argon', 'week', 168),
+    ]], [['Gemini', ['5h', 'weekly']], ['Claude and GPT', ['5h', 'weekly']], ['Gemini 4 Argon', ['weekly']]]],
+    ['a group only one credential reports still gets its column', [
+      [group('Gemini models', '5h', 5)],
+      [group('Gemini models', '5h', 5), group('Gemini 4 Argon', 'week', 168)],
+    ], [['Gemini', ['5h']], ['Gemini 4 Argon', ['weekly']]]],
+    ['a second weekly limit in the plan is its own column, not an overwrite', [[
+      { id: 'five_hour', label: '5小时滚动用量 (5-Hour)', scope: 'standard', period_hours: 5 },
+      { id: 'seven_day', label: '每周总用量上限 (Weekly)', scope: 'standard', period_hours: 168 },
+      { id: 'seven_day_oauth_apps', label: '第三方应用 每周用量', scope: 'standard', period_hours: 168 },
+      { id: 'seven_day_opus', label: 'Opus 每周用量', scope: 'model', model: 'claude-3-opus', period_hours: 168 },
+    ]], [[undefined, ['5h', 'weekly', '第三方应用 每周用量']], ['Opus', ['weekly']]]],
+    ['a period with no name keeps the provider label', [[
+      { id: 'meta_window', label: '3-hour window', scope: 'standard', period_hours: 3 },
+      { id: 'meta_weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', period_hours: 168 },
+    ]], [[undefined, ['weekly', '3-hour window']]]],
+    ['the code-review allowance is a family beside the plan', [[
+      { id: 'five_hour', label: '5h', kind: 'five_hour', scope: 'standard' },
+      { id: 'code_review_weekly', label: '代码审查 每周配额', scope: 'code_review', period_hours: 168 },
+    ]], [[undefined, ['5h']], [undefined, ['weekly']]]],
+    ['no readings, no columns', [[]], []],
+  ];
+  const short = { five_hour: '5h', daily: 'daily', weekly: 'weekly', monthly: 'monthly' } as const;
+  for (const [name, credentials, expected] of cases) {
+    const records = credentials.map((windows, index) => quotaRecord(`cred-${index}`, windows));
+    const families = quotaFamiliesOf(records).map((family) => [family.label, family.columns.map((column) => column.period ? short[column.period] : column.label!)]);
+    assert.deepEqual(families, expected, name);
+  }
+});
+
+test('section columns: a repeated window id is one reading', () => {
+  const week: QuotaWindow = { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: 80 };
+  const cells = quotaCellsOf([week, { ...week, remaining_percent: 75 }]);
+  assert.equal(cells.size, 1);
+  assert.equal(cells.get('standard|weekly')?.remaining_percent, 80);
+});
+
+test('section columns sort by reading, with missing readings last either way', () => {
+  const weekly = (remaining?: number): QuotaWindow[] => remaining === undefined ? [] : [{ id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: remaining }];
+  const records = [quotaRecord('a', weekly(40)), quotaRecord('b', weekly()), quotaRecord('c', weekly(90))];
+  assert.deepEqual(sortByQuotaColumn(records, 'standard|weekly', 'asc').map((record) => record.fileName), ['a', 'c', 'b']);
+  assert.deepEqual(sortByQuotaColumn(records, 'standard|weekly', 'desc').map((record) => record.fileName), ['c', 'a', 'b']);
+});
+
+test('sections keep a fixed order: pinned providers, then the rest alphabetically', () => {
+  const providers = ['zeta-plugin', 'codex', 'gemini', 'claude', 'acme-plugin', 'meta'];
+  assert.deepEqual([...providers].sort(compareSections), ['claude', 'codex', 'meta', 'acme-plugin', 'gemini', 'zeta-plugin']);
 });

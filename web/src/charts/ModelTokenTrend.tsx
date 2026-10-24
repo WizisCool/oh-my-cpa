@@ -1,306 +1,81 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
-import { ChartMount } from './ChartMount';
-import { Line } from '@ant-design/charts';
 import dayjs from '../utils/time';
 import { renderChartTooltip } from './chartTooltip';
-import { buildModelTrendData } from './modelTrendData';
+import { buildModelTrendSeries } from './modelTrendData';
 import { useTheme } from '../theme/ThemeContext';
-import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
-import { resolveChartAnimation } from './chartMotion';
-import { useChartPlugins } from './chartRender';
-import { seriesColorRange, seriesDomainKey } from './chartTheme';
+import { EChart } from './echarts/EChart';
+import type { ECharts, EChartsCoreOption } from './echarts/core';
+import { seriesColorRange, seriesDomainKey, seriesGroupLabel } from './chartTheme';
 import { currentFontStack } from '../theme/fontLibrary';
-import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
+import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 
 export interface ModelTokenTrendProps {
-  /** Ranked groups, as the endpoint returned them. Order is the colour assignment. */
   groups: DashboardModelUsage[];
-  /** The label for the folded remainder, already translated by the caller. */
   foldedLabel: string;
-  /** The unit word printed beside a tooltip's value, translated by the caller. */
+  unnamedLabel: string;
   tokenUnitLabel?: string;
   height?: number;
+  onApplied?: (chart: ECharts) => void;
 }
 
-/**
- * ModelTokenTrend draws each group's token volume over the window as one line.
- *
- * **Why the mark is a line and not an area.** The KPI tiles above use an area because their series is
- * a fixed zero-filled grid where a quiet stretch is a *measured* zero, and an area carries that down
- * to the baseline so an empty stretch is distinguishable from an unmeasured one. Here six groups share
- * one plot, and six overlapping translucent fills stack into a mud that hides whichever model is
- * underneath - which is the reading the panel exists to provide. Lines separate; fills compound.
- *
- * **Why the legend is not the library's.** It is rendered by the panels as DOM beside the chart, for
- * two reasons. G2's legend is built from canvas-adjacent DOM with its own type scale, so it would be
- * the one place in the console not set in the mono stack; and the colour of a group has to be the same
- * in the trend's legend and in the usage list, which is only guaranteed if one list produces both. The
- * mark therefore draws no legend of its own.
- *
- * The lines morph between two revisions rather than being replaced (§7 rule 5). The panel re-reads on
- * the same poll the tiles do, so a plot that hard-cut every few seconds looked like a redraw; the
- * library reuses its chart instance across an update, which is what makes the change a morph instead
- * of a draw-in. A reader who asked for reduced motion gets the geometry swapped in place, because the
- * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
- */
-export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
+/** Lines separate overlapping model readings; their DOM legend owns the ranked color assignment. */
+export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, foldedLabel, unnamedLabel, tokenUnitLabel = '', height = 260, onApplied }) => {
   const timeZone = useTimeZone();
-  const { theme, themeMode } = useTheme();
-  const isReducedMotion = usePrefersReducedMotion();
-  const animate = resolveChartAnimation(isReducedMotion);
+  const { theme } = useTheme();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  // The chart's own colours come from the palette, never from a literal.
-  const colors = theme.palette;
-
-  // Domain and range are passed explicitly rather than left to the library's default palette, and the
-  // domain is a stable *key* per group rather than the display label or an array position. What that
-  // buys is agreement, not stability: both panels colour from the same ranked response, so a model's
-  // line and its ring slice cannot be two different hues. A model's colour does follow its rank, so it
-  // can change when the ranking does - which the legend beside it always states.
-  const domain = React.useMemo(() => groups.map(seriesDomainKey), [groups]);
-  const range = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
-
-  const labelOf = React.useCallback(
-    (key: string) => (key === 'folded' ? foldedLabel : key.replace(/^model:/, '')),
-    [foldedLabel],
-  );
-
-  // Labels follow legend order; tooltip items are matched by series key before rendering.
-  const groupLabels = React.useMemo(() => groups.map((group) => labelOf(seriesDomainKey(group))), [groups, labelOf]);
-
-  // One row per group per bucket. The trellis is built here rather than asking the library to melt
-  // six series: the groups already share one bucket grid, so the long form is a flat map and the
-  // colour key travels with every point.
-  //
-  // Zero buckets are measured inactivity, so keep the baseline continuous between runs.
-  //
-  // **The top-ranked group is drawn last**, so where two lines cross, the one the legend lists first
-  // is the one on top.
-  const data = React.useMemo(() => buildModelTrendData(groups), [groups]);
-
-  // Supersampled: see `chartRender.ts` for why the canvas is drawn at no less than 2x.
-  const { plugins, onReady } = useChartPlugins();
-
-  // The bucket axis, in order. The domain is every bucket of the window grid - taken from the
-  // longest series, which is all of them, since the groups share one grid - so a bucket in which
-  // every model was quiet still occupies its place on the axis instead of being collapsed out of
-  // the plot.
-  const buckets = React.useMemo(() => {
-    let longest: string[] = [];
-    for (const group of groups) {
-      if (group.series.length > longest.length) longest = group.series.map((point) => String(point.t));
-    }
-    return longest;
-  }, [groups]);
-
-  // The label format follows the span, because the tick is the only place the window's extent is
-  // stated. `MM-DD HH:mm` is right for a day or less, where the time of day is what a reader places a
-  // spike by; over a longer window the time of day is noise and the date is the coordinate. It also
-  // keeps the label narrow enough that the outermost tick still fits inside the card's padding: the
-  // last tick sits on the plot's right edge, so half its label hangs into the gutter, and a 12-glyph
-  // label overhung a 16px gutter while a 6-glyph one does not.
-  const labelFormat = React.useMemo(() => {
-    if (buckets.length < 2) return 'MM-DD HH:mm';
-    const span = Number(buckets[buckets.length - 1]) - Number(buckets[0]);
-    return span > 24 * 60 * 60 * 1000 ? 'MM-DD' : 'HH:mm';
-  }, [buckets]);
-
-  // Ticks are picked by position rather than left to the layout. A band scale gives every bucket its
-  // own tick, and at the dashboard's ~48 buckets that printed the same date forty-eight times across a
-  // half-width card. Four labels is what the card can carry without two of them touching, and choosing
-  // them here - rather than letting an auto-hide heuristic drop arbitrary ones - is what keeps the
-  // first and last bucket labelled, which are the two a reader actually places the window with.
-  const tickFilter = React.useMemo(() => {
-    if (buckets.length === 0) return undefined;
-    const wanted = new Set<number>();
-    const labels = Math.min(4, buckets.length);
-    for (let index = 0; index < labels; index += 1) {
-      const position = labels === 1 ? 0 : Math.round((index * (buckets.length - 1)) / (labels - 1));
-      wanted.add(position);
-    }
-    return (_value: string, index: number) => wanted.has(index);
-  }, [buckets]);
-
-  // Every ink the plot's frame is drawn with is named from the palette *and* pinned to full opacity.
-  //
-  // G2's axis theme multiplies the inks it is handed by its own opacity tokens - the labels, the axis
-  // rule and the ticks by `alpha45`, the grid by `alpha10` - so a palette value handed through them is
-  // not the colour that reaches the card. Those tokens, and the palette behind them, also belong to the
-  // theme the mark renders under rather than to this console's, which is how a dark card came to be
-  // framed in the library's near-black ink: the grid was painted one 8-bit step away from the card's own
-  // background, and the labels and rule at roughly half their token's contrast. The weights below are
-  // the palette's own, which the design system already measured for each surface.
-  const axis = React.useMemo(() => ({
-    x: {
-      // The tick values are the bucket keys, so the digits are parsed back for the label. The format
-      // is the console's own rather than a locale-dependent date string.
-      labelFormatter: (value: string) => dayjs(Number(value)).format(labelFormat),
-      labelAutoRotate: false,
-      // A canvas inherits no font and G2's themes declare no family, so without this the tick labels
-      // were painted in the browser's default sans-serif - the one piece of text on the page not set in
-      // the console's mono stack. Read from the document because the operator may have chosen
-      // another monospace typeface, and a canvas cannot resolve the custom property itself.
-      labelFontFamily: currentFontStack('mono'),
-      labelFontSize: 10,
-      // `fg2` rather than `muted`: these labels are data - the instants the window covers - and the
-      // secondary text step is the one that carries them: 6.63:1 on the dark card and 7.43:1 on the
-      // light one (WCAG 2.x relative luminance against the card surface), clear of AA at 10px.
-      labelFill: colors.fg2,
-      labelOpacity: 1,
-      // Two lines of the readout's own width: the labels are the widest thing on this axis and the
-      // card is half the page wide, so the last one is pulled inside the frame rather than centred on
-      // its bucket where half of it would hang past the padding.
-      labelAlign: 'center',
-      tickFilter,
-      line: true,
-      lineStroke: colors.border,
-      lineStrokeOpacity: 1,
-      tickStroke: colors.border,
-      tickOpacity: 1,
-    },
-    y: {
-      // No y-axis at all. The reading is the shape of each line against its own baseline - which
-      // models rose, and when - and the numbers are in the tooltip and in the usage list beside it.
-      // An axis would take the width the lines need to add a scale nothing on the card refers to, so
-      // the floor is kept and the values are not.
-      label: false,
-      title: false,
-      line: false,
-      tick: false,
-      grid: true,
-    },
-  }), [tickFilter, labelFormat, timeZone, colors.fg2, colors.border]);
-
-  if (data.length === 0) {
-    return <div className="model-trend-empty" style={{ height }} aria-hidden="true" />;
-  }
-
-  return (
-    <div className="model-trend" style={{ height }}>
-      <ChartMount>
-        <Line
-          data={data}
-          xField="bucket"
-          yField="tokens"
-          colorField="series"
-          height={height}
-          autoFit
-          // The lines morph between two revisions rather than being redrawn: the panel re-reads on the same
-          // poll the tiles do, and a ranking that hard-cuts every few seconds reads as a flicker. See
-          // `chartMotion.ts` for the motion and its reduced-motion escape.
-          animate={animate}
-          // A smoothed line rather than straight segments between buckets.
-          //
-          // G2 resolves this string to its `smooth` shape, which draws with `curveMonotoneX` - a monotone
-          // cubic, not a plain Catmull-Rom spline. That distinction is why this is safe here: the series
-          // are zero-filled, so most buckets sit exactly on the floor, and a non-monotone spline through
-          // them would overshoot *below* the axis between points and draw a line where the data says zero.
-          // A monotone curve cannot leave the range spanned by its own neighbours, so the floor stays the
-          // floor. The KPI tiles above use the same shape for the same reason.
-          shapeField="smooth"
-          // No library legend: the legend is the app's DOM (see above), so the trend's colours stay in the
-          // console's type scale and in the same assignment as the usage list.
-          legend={false}
-          scale={{
-            // A band scale, not a linear one.
-            //
-            // The grid is uniform - every bucket is one bucket width from its neighbour - so both fit the
-            // mark. What separates them is the edges. A linear scale on raw epoch milliseconds puts the
-            // first and last bucket exactly on the plot's corners, so the axis labels under those corners
-            // are cut by the card's gutter and the outermost marks are half-clipped. A band scale reserves
-            // half a band at each end, which is what makes the first and last tick read inside the frame.
-            x: { type: 'band', domain: buckets, paddingInner: 0, paddingOuter: 0.5 },
-            y: { nice: false, domainMin: 0 },
-            color: { domain, range },
-          }}
-          axis={axis}
-          theme={{
-            // The mode is named so nothing the palette does not name is drawn in the wrong half of the
-            // library's ink: without it every chart renders the library's *light* theme, whose ink is
-            // near-black, onto a card that may be dark.
-            type: themeMode,
-            // The grid ink belongs to the *axis*, not to a scale under it. The axis renderer resolves
-            // `theme.axis` and then `theme.axis<Position>` / `theme.axis<Channel>`, so a channel nested
-            // under `axis` is never read at all - which is where the grid's ink used to be declared, and
-            // why the grid kept the library's own. The axis labels are styled on `axis.x` above instead,
-            // because that is the object the axis renderer reads for them.
-            // The grid is the `border` step, the token design.md §2 names for chart grid rules. The chart
-            // is drawn supersampled and scaled down, which leaves a one-pixel rule at roughly half its
-            // ink; at the soft step that half was invisible on a light card.
-            axis: { gridStroke: colors.border, gridStrokeOpacity: 1 },
-            // The crosshair is drawn by the tooltip interaction, so its ink is a `tooltip` token of the
-            // *theme* - a different `tooltip` from the mark's interaction spec below, which is read from
-            // the interaction's own options. Both rules are drawn, because `crosshairsY` follows the
-            // `crosshairs` level, so both are named: the interaction's default ink is near-black, which is
-            // how the one line a reader follows with the pointer disappeared on every dark card.
-            tooltip: {
-              crosshairsStroke: colors.muted,
-              crosshairsStrokeOpacity: 1,
-              crosshairsLineWidth: 1,
-            },
-            view: {
-              viewFill: 'transparent',
-              plotFill: 'transparent',
-              mainFill: 'transparent',
-              contentFill: 'transparent',
-            },
-          }}
-          // An explicit padding, not the library's `auto`. The automatic layout sizes the strips from the
-          // axis labels' own measured bounds, and inside a fixed-height card the bottom strip came out
-          // larger than the canvas, so the labels were painted past its edge and clipped to their top
-          // halves. The reserved strips are: 10px of headroom, 32px below the plot for a 10px label with
-          // its tick and spacing, and 40px at each side so the outermost tick's label - which is centred
-          // on the plot's very edge - stays inside the card instead of being cut by the gutter.
-          paddingTop={10}
-          paddingBottom={32}
-          paddingLeft={40}
-          paddingRight={40}
-          plugins={plugins}
-          onReady={onReady}
-          style={{ lineWidth: 1.75, lineJoin: 'round', lineCap: 'round' }}
-          state={{ active: { lineWidth: 2.5 } }}
-          // The tooltip is configured on the *interaction*, not on the mark: G2 reads `render` from the
-          // interaction's options, so a renderer placed in the mark's own `tooltip` spec is ignored and the
-          // library's default template is used instead - which prints the raw domain value as each item's
-          // name. A shared crosshair is what makes six lines readable at one instant: the readout lists
-          // every series at the hovered bucket, which is how a reader compares models rather than tracing
-          // one.
-          interaction={{
-            tooltip: {
-              shared: true,
-              crosshairs: true,
-              render: (
-                _event: unknown,
-                context: { items?: Array<{ color?: string; value?: number | null; name?: string }>; title?: string },
-              ) => {
-                // Named by each item's own series key rather than by its position: the rows are drawn
-                // in reverse rank, so position does not line up with the legend. The readout is re-sorted into the
-                // legend's order and a quiet series is listed at zero rather than left out.
-                const byKey = new Map((context?.items ?? []).map((item) => [String(item.name ?? ''), item]));
-                const items = domain.map((key, rank) => {
-                  const item = byKey.get(key);
-                  return { key, color: item?.color ?? range[rank], value: item?.value ?? 0 };
-                });
-                if (items.length === 0) return '';
-                // The bucket arrives as the group's title - a string of epoch milliseconds - not on each
-                // item, so it is parsed from there. Falling back to "now" would print a time the mark is
-                // not showing, which is worse than printing nothing.
-                const bucketMS = Number(context?.title);
-                const time = Number.isFinite(bucketMS) ? dayjs(bucketMS).format('MM-DD HH:mm') : '';
-                return renderChartTooltip(time, items.map((item, index) => ({
-                  name: groupLabels[index] ?? labelOf(item.key),
-                  color: item.color,
-                  value: `${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
-                  exact: `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
-                })));
-              },
-            },
-          }}
-        />
-      </ChartMount>
-    </div>
-  );
+  const option = React.useMemo<EChartsCoreOption>(() => {
+    const { categories, series } = buildModelTrendSeries(groups);
+    const domain = groups.map(seriesDomainKey);
+    const range = seriesColorRange(theme.palette, groups);
+    const labelOf = (key: string) => seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel);
+    const labelFormat = Number(categories.at(-1)) - Number(categories[0]) > 24 * 60 * 60 * 1000 ? 'MM-DD' : 'HH:mm';
+    const ticks = new Set(Array.from({ length: Math.min(4, categories.length) }, (_, index) =>
+      Math.round(index * (categories.length - 1) / Math.max(1, Math.min(4, categories.length) - 1))));
+    return {
+      grid: { left: 56, right: 56, top: 26, bottom: 48 },
+      xAxis: {
+        type: 'category', data: categories, boundaryGap: false,
+        axisLabel: {
+          interval: (index: number) => ticks.has(index),
+          formatter: (value: string) => dayjs(Number(value)).format(labelFormat),
+          showMinLabel: true, showMaxLabel: true, color: theme.palette.fg2,
+          fontFamily: currentFontStack('mono'), fontSize: 10,
+        },
+        axisTick: { show: true, interval: (index: number) => ticks.has(index) },
+        axisLine: { lineStyle: { color: theme.palette.border } },
+      },
+      yAxis: {
+        type: 'value', min: 0, axisLabel: { show: false }, axisTick: { show: false }, axisLine: { show: false },
+        splitLine: { lineStyle: { color: theme.palette.border } },
+      },
+      tooltip: {
+        trigger: 'axis', className: 'omc-echart-tip', confine: true, axisPointer: { type: 'line' },
+        formatter: (items: Array<{ seriesId: string; dataIndex: number; value: number }>) => {
+          const index = items[0]?.dataIndex;
+          if (index === undefined) return '';
+          const byKey = new Map(items.map((item) => [item.seriesId, item.value]));
+          return renderChartTooltip(dayjs(Number(categories[index])).format('MM-DD HH:mm'), domain.map((key, rank) => {
+            const value = byKey.get(key) ?? 0;
+            return {
+              name: labelOf(key), color: range[rank],
+              value: `${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+              exact: `${formatTokensFull(value)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+            };
+          }));
+        },
+      },
+      series: series.map((item) => ({
+        id: item.id, name: labelOf(item.id), type: 'line', data: item.values,
+        smooth: true, smoothMonotone: 'x', showSymbol: false, symbol: 'circle', symbolSize: 5,
+        lineStyle: { color: range[domain.indexOf(item.id)], width: 1.75, cap: 'round', join: 'round' },
+        itemStyle: { color: range[domain.indexOf(item.id)] },
+        emphasis: { focus: 'series', lineStyle: { width: 2.5 } },
+        blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
+      })),
+    };
+  }, [groups, theme.palette, foldedLabel, unnamedLabel, tokenUnitLabel, tokenStyle, timeZone]);
+  return <div className="model-trend"><EChart option={option} height={height} label={groups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')} onApplied={onApplied} /></div>;
 });

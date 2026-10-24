@@ -80,3 +80,9 @@ export function seriesDomainKey(entry: { folded: boolean; model: string }): stri
 export function seriesColorRange(palette: ThemePalette, entries: Array<{ folded: boolean; model: string }>): string[] {
   return entries.map((_, index) => seriesColor(palette, index));
 }
+
+
+/** Translated group labels stay shared by the DOM legend, chart tooltips and accessible readouts. */
+export function seriesGroupLabel(entry: { folded: boolean; model: string }, foldedLabel: string, unnamedLabel: string): string {
+  return entry.folded ? foldedLabel : entry.model.trim() === '' ? unnamedLabel : entry.model;
+}

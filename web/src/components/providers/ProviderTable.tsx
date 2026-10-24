@@ -2,7 +2,7 @@ import type React from 'react';
 import clsx from 'clsx';
 import { Button, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
-import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
+import { DeleteOutlined, EditOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
@@ -335,19 +335,10 @@ export function ProviderTable({
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 120,
+      width: 88,
       align: 'right',
       render: (_, record) => (
         <div className="row-actions">
-          <Tooltip title={t('common.details')}>
-            <Button
-              size="small"
-              className="row-action-btn"
-              icon={<EyeOutlined />}
-              onClick={() => handleOpenEdit(record)}
-              aria-label={`${t('common.details')}: ${record.name}`}
-            />
-          </Tooltip>
           <Tooltip title={t('common.edit')}>
             <Button
               size="small"

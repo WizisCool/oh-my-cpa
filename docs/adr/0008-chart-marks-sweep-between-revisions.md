@@ -1,6 +1,6 @@
 # ADR 0008: Chart marks sweep between revisions, reversing §7 rule 5
 
-- Status: Accepted
+- Status: Accepted; implementation and first-paint policy amended by ADR 0106
 - Date: 2026-09-17
 
 ## Context
@@ -48,42 +48,24 @@ surprises that a plausible-looking demo would have hidden:
 
 ## Decision
 
-1. **Rule 5 is rewritten rather than deleted.** A mark morphs to its new geometry over `roll`, and fades
-   rather than grows when a series enters or leaves (content appears; it does not fly, and a mark growing
-   in from an axis claims a direction the data does not have). The entering/exiting case is a fade for
-   exactly the reason `DESIGN.md` rejects entrance flourishes.
-
-2. **All three marks take the same spec:** the six KPI sparklines, the model token trend and the model
-   usage ring. One shared definition (`web/src/charts/chartMotion.ts`) and one token
-   (`MOTION_ROLL`), so a tile's digits and the mark under them move at one tempo and cannot drift apart
-   in review.
-
-3. **The reduced-motion switch is app-owned and mandatory.** `web/src/hooks/usePrefersReducedMotion.ts`
-   reads the media query and re-reads it on change, because a preference that only took effect on reload
-   would break the promise mid-session. `resolveChartAnimation` returns `false` - not an empty object and
-   not `undefined` - since the library reads a missing spec as "use your own defaults", which is the
-   900ms spring.
-
-4. **The morph is bounded by the instance reuse that makes it a morph.** If a chart is ever remounted on
-   a revision (a `key` change, an imperative ref owning the lifecycle, a `changeData` rewrite), the
-   animation silently becomes a draw-in and this decision no longer holds. `dashboard-chart-motion`
-   asserts intermediates exist; a draw-in on remount would still pass it, so the constraint is recorded
-   here and in the component's own comment.
-
-5. **The cost is accepted explicitly.** A canvas mark is redrawn frame by frame; it is not a
-   compositor-only `transform`, so §7 rule 1 is not satisfied by these eight marks. The exception is
-   bounded to 240ms on eight small canvases, and rule 1 continues to bind everywhere else - including
-   the digits, which are real transforms.
-
-6. **The poll may move a reading and the mark behind it, and nothing else.** §7's auto-refresh row is
-   updated in the same change: the view still must not remount, reset pagination or relabel data.
-
-7. **Assertions moved to where the claim is observable.** A logic test pins the spec and its
-   reduced-motion branch; the browser scenario `dashboard-chart-motion` drives a revision with motion
-   allowed and again after switching the preference in place, and asserts painted intermediates in the
-   first case and none in the second. Both probe lanes that already existed keep running with reduced
-   motion, so their pixel assertions stay deterministic - which is a second reason the gate is
-   app-owned rather than optional.
+1. **Marks morph between readings on the shared `roll` token.** The six KPI sparklines, model trend,
+   usage ring and Insights charts use `MOTION_ROLL` through
+   `web/src/charts/echarts/echartsTheme.ts`. ADR 0106 extends the first-paint policy to a line reveal
+   while the ring appears complete, keeping subsequent readings as morphs.
+2. **Reduced motion is app-owned and mandatory.** `usePrefersReducedMotion` observes changes during
+   the session; `echartsMotion` explicitly returns `animation: false` when requested. CSS cannot
+   disable library-controlled geometry animation.
+3. **The instance survives revisions.** `EChart.tsx` merges options into the same live instance;
+   remounting on a poll would turn an update into a new draw-in. `dashboard-chart-motion` verifies
+   both instance identity and painted intermediates, then drives another revision with reduced
+   motion and requires a direct swap.
+4. **The cost is explicit.** SVG geometry animation is not a compositor-only transform. It is a
+   bounded exception to §7 rule 1, using the same token as the readout it describes.
+5. **A poll may move the reading and its marks, nothing else.** It must not remount the view, reset
+   pagination, change layout or relabel the data.
+6. **Geometry is asserted in the browser.** Probes inspect actual SVG paths through revisions and
+   inspect palette ink and layout under reduced motion. A configuration flag alone cannot prove
+   that a rendered mark moved or stayed still.
 
 ## Consequences
 
@@ -100,7 +82,7 @@ surprises that a plausible-looking demo would have hidden:
 
 ### Trade-offs
 
-- **A canvas redraw is not compositor-only.** §7 rule 1 binds for everything else in the console and now
+- **A geometry update is not compositor-only.** §7 rule 1 binds for everything else in the console and now
   has eight named exceptions that a reader of the token table must notice.
 - **§7 rule 5 is no longer absolute.** It went from a flat prohibition to a scoped claim with two
   conditions attached; that is a heavier rule to hold in review than "charts do not animate".
@@ -112,11 +94,8 @@ surprises that a plausible-looking demo would have hidden:
 - **ADR 0007's scope note is superseded on one point.** It recorded that "rule 5 is untouched"; this ADR
   is the newer decision, and 0007 is not rewritten - it remains an accurate record of what was decided
   then.
-- **ADR 0004's fourth mitigation is superseded.** That ADR, adopting the charting runtime, required
-  "disable chart library animations explicitly (`animate: false`)" as a visual invariant. Rule 5 above
-  replaces that instruction; the other three mitigations in the same list - the dedicated
-  `vendor-charts` chunk, the lazy import, and the enforced bundle budget - stand unchanged, and the
-  budget was re-verified under this change.
+- **The runtime changed in ADR 0106.** The motion policy remains, while both pages share the lazy
+  `vendor-echarts` chunk and SVG lifecycle. ADR 0004 is superseded in full.
 
 ## Alternatives considered
 
