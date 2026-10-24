@@ -1296,7 +1296,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .tile-caption .tile-caption-link { height: auto; padding: 0; font-size: inherit; color: var(--warn); }
 .chart-slot { position: relative; margin-top: 14px; min-width: 0; }
 .chart-slot > div { width: 100%; height: 100%; }
-.chart-slot canvas { display: block; width: 100% !important; height: 100% !important; }
 .chart-slot svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 
@@ -1314,7 +1313,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    The blocks below are deliberately NOT `.chart-slot`. That class belongs to the six KPI sparklines,
    and it disables pointer events on its canvas and pins the plot to the slot's height; the model
    trend needs the library's own shared tooltip, which requires the pointer. The two chart surfaces
-   are therefore styled separately even though both hold an AntV mark. */
+   are therefore styled separately even though both hold an SVG chart. */
 
 /* `min-width: 0` is load-bearing: these are grid children holding a canvas that sizes to its
    container, and without it a long model name in the legend would push the card wider than its
@@ -1326,11 +1325,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    where the drawing stops being worth the space it is taking - the query below stacks the panels
    instead once even that is not enough. */
 .model-ring { position: relative; flex: 0 1 220px; min-width: 160px; display: flex; align-items: center; justify-content: center; }
-/* The square frame carries the drawing and the readout. G2 sizes the canvas from the container and
-   keeps the ring inscribed in that element's own box, but the wrapper's height follows the flex row
-   it sits in and can end up taller than the drawing — which is exactly how the total drifted off the
-   ring's centre. Centring the readout on this square frame, the same box the canvas is sized from,
-   keeps it on the ring's true centre at every card width and pixel ratio. */
+/* The SVG and DOM readout share one square, so container resizing cannot separate their centres. */
 .model-ring-frame {
   position: relative;
   flex: none;
@@ -1340,16 +1335,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
      given, so a frame that kept its 220px height while its width was clamped would leave the ring
      inscribed in a taller box and the readout floating below the arcs' centre. */
   aspect-ratio: 1 / 1;
-}
-/* The chart fills the frame instead of sizing it. The wrapper the chart library injects carries an
-   inline `position: relative` and an inline height, so this rule has to outrank an inline declaration
-   to make the wrapper a layer of the frame rather than a box the frame has to grow around - otherwise
-   the ring's height is decided by the canvas it is about to contain, which is the circular dependency
-   that left the drawing off-centre. */
-.model-ring-frame > [data-chart-source-type] {
-  position: absolute !important;
-  inset: 0;
-  height: 100% !important;
 }
 /* The centre of the ring. Tabular numerals keep the total from shifting as the value changes between
    polls. */
@@ -1383,43 +1368,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    below them - which design.md §7 forbids twice over: a poll is not a view change, and nothing
    expensive may ride along with a re-render. The page's own progress bar already reports the fetch
    without occupying layout. */
-/* The chart runtime's own tooltip, painted by us rather than by the library.
-   G2's default is a near-opaque white box with a sans-serif face and a black text colour, which reads
-   as a foreign element on a warm charcoal console - and in the dark theme it was the brightest thing on
-   the page. These rules are scoped to dashboard chart poppers so nothing else inherits them, and they
-   take their surface and text colours from the palette like every other panel in the app. */
-.chart-slot .g2-tooltip,
-.model-trend .g2-tooltip,
-.model-ring .g2-tooltip {
-  font-family: var(--font-mono) !important;
-  font-size: var(--text-xs) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-xs) !important;
-  background: var(--surface) !important;
-  color: var(--fg) !important;
-  /* The surface is ours and is opaque by construction, so the popper is too. The library's dark theme
-     fades its own tooltip to 0.95, which would let the marks under it show through 5% of the panel -
-     and would make the two themes disagree about a surface neither of them owns. */
-  opacity: 1 !important;
-  box-shadow: none !important;
-  padding: 6px 8px !important;
-  /* The library flips a readout that would leave its chart, and can only do so if the readout is
-     narrower than the screen it flips within. */
-  max-width: calc(100vw - 32px) !important;
-  box-sizing: border-box !important;
-}
-/* The library's own title/name/value rules each set their own colour, so each is overridden rather
-   than left to inherit - an inherited colour is what a later library rule would win against. */
-.model-trend .g2-tooltip .g2-tooltip-title,
-.model-ring .g2-tooltip .g2-tooltip-title,
-.model-trend .g2-tooltip .g2-tooltip-list-item-name-label,
-.model-ring .g2-tooltip .g2-tooltip-list-item-name-label,
-.model-trend .g2-tooltip .g2-tooltip-list-item-value,
-.model-ring .g2-tooltip .g2-tooltip-list-item-value {
-  color: var(--fg) !important;
-  font-family: var(--font-mono) !important;
-}
-
 /* The heading must not stretch the data tracks: a timestamp is often wider than a KPI value.
    Shared content-sized tracks keep markers beside names and align numeric edges across model rows. */
 .omc-tip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }

@@ -105,9 +105,8 @@ the rule.**
 - The bounds that can be measured are measured and asserted (legibility against the card, separation
   between neighbours, and agreement between the two copies of the tokens), so the sequence can be
   revised without re-arguing the rule.
-- Both marks are native `@ant-design/charts` components (`Line`, `Pie`) inside the existing lazily
-  loaded `vendor-charts` chunk, so the exception costs no new runtime and the bundle budget is
-  unchanged.
+- Both marks use the shared lazy SVG ECharts runtime (`vendor-echarts`, ADR 0106).
+  DOM legends and ranked lists retain the same slot assignment across the trend and ring.
 
 ### Trade-offs
 

@@ -5,8 +5,9 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
-import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
+import { seriesColor, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
 import { useTheme } from '../../theme/ThemeContext';
+import type { ECharts } from '../../charts/echarts/core';
 import type { ThemePalette } from '../../theme/palette';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
@@ -85,7 +86,7 @@ function useDashboardModels({ query, range, enabled }: ModelUsagePanelsProps) {
 }
 
 // A shared loading boundary keeps the ranking readable while the chart module arrives; its
-// expensive canvas creation then yields through the common mount queue.
+// chart initialization then yields through the common mount queue.
 const chartFallback = <div className="model-chart-skeleton" aria-hidden="true" />;
 
 /**
@@ -152,6 +153,19 @@ export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
 export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle = false, ...props }) => {
   const t = useT();
   const { theme } = useTheme();
+  const chartRef = React.useRef<ECharts | null>(null);
+  const hoveredKeyRef = React.useRef<string | null>(null);
+  const highlightModel = React.useCallback((key: string | null) => {
+    hoveredKeyRef.current = key;
+    const chart = chartRef.current;
+    if (!chart || chart.isDisposed()) return;
+    chart.dispatchAction({ type: 'downplay' });
+    if (key !== null) chart.dispatchAction({ type: 'highlight', seriesId: key });
+  }, []);
+  const onApplied = React.useCallback((chart: ECharts) => {
+    chartRef.current = chart;
+    highlightModel(hoveredKeyRef.current);
+  }, [highlightModel]);
   const models = useDashboardModels(props);
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
@@ -164,12 +178,12 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
       extra={hasViewToggle ? <ModelViewToggle /> : undefined}
     >
       <ModelPanelBody models={models}>
-        <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} />
+        <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} onHover={highlightModel} />
         {groups.length === 0 ? (
           <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
           <React.Suspense fallback={chartFallback}>
-            <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} />
+            <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onApplied={onApplied} />
           </React.Suspense>
         )}
       </ModelPanelBody>
@@ -178,6 +192,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
 };
 
 export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
+  const [activeKey, setActiveKey] = React.useState<string | null>(null);
   const t = useT();
   const { theme } = useTheme();
   const { modelView, style: tokenStyle } = useTokenDisplayStyle();
@@ -200,7 +215,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
         ) : (
           <div className="model-usage-body">
             <React.Suspense fallback={chartFallback}>
-              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} />
+              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} activeKey={activeKey} onHover={setActiveKey} />
             </React.Suspense>
             {/*
               The ranked list is the ring's legend, its label column and its values in one. A separate
@@ -215,7 +230,10 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
                 // The cost sits beside the name rather than at the far edge because it is the
                 // second thing an operator reads a spend table for, and the share stays last
                 // where it continues the percentage column of the ring beside it.
-                <li className="model-usage-row" key={seriesDomainKey(group)}>
+                <li className="model-usage-row" key={seriesDomainKey(group)}
+                  onMouseEnter={() => setActiveKey(seriesDomainKey(group))} onMouseLeave={() => setActiveKey(null)}
+                  onFocus={() => setActiveKey(seriesDomainKey(group))} onBlur={() => setActiveKey(null)}
+                >
                   <span className="model-usage-swatch" style={{ background: seriesColor(theme.palette, index) }} aria-hidden="true" />
                   <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
                     {groupLabel(group, foldedLabel, unnamedLabel)}
@@ -283,21 +301,6 @@ const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> 
 };
 
 /**
- * groupLabel is what a group is called on screen.
- *
- * The folded remainder carries no model name by design - its label is the client's to translate, which
- * is why the API marks it with a flag instead of reserving a string. A named group with an empty name is
- * a different case: the API would not normally emit one, but an empty string in a legend cell reads as
- * missing data rather than as an unnamed group, so it gets the shared "unnamed" copy the rest of the
- * console uses. The label never becomes the group's identity: colour and React keys both come from
- * `seriesDomainKey`, so a group that is renamed here keeps its colour and its row.
- */
-function groupLabel(group: DashboardModelUsage, foldedLabel: string, unnamedLabel: string): string {
-  if (group.folded) return foldedLabel;
-  return group.model.trim() === '' ? unnamedLabel : group.model;
-}
-
-/**
  * ModelLegend is the trend's key.
  *
  * It exists because the trend draws up to six lines and a line with no label is unreadable. It is the
@@ -313,10 +316,13 @@ const ModelLegend: React.FC<{
   foldedLabel: string;
   unnamedLabel: string;
   palette: ThemePalette;
-}> = ({ groups, foldedLabel, unnamedLabel, palette }) => (
+  onHover: (key: string | null) => void;
+}> = ({ groups, foldedLabel, unnamedLabel, palette, onHover }) => (
   <ul className="model-legend">
     {groups.map((group, index) => (
-      <li className="model-legend-item" key={seriesDomainKey(group)}>
+      <li className="model-legend-item" key={seriesDomainKey(group)}
+        onMouseEnter={() => onHover(seriesDomainKey(group))} onMouseLeave={() => onHover(null)}
+      >
         <span className="model-legend-swatch" style={{ background: seriesColor(palette, index) }} aria-hidden="true" />
         <span className="model-legend-label" title={groupLabel(group, foldedLabel, unnamedLabel)}>
           {groupLabel(group, foldedLabel, unnamedLabel)}

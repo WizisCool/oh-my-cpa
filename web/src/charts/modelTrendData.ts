@@ -1,9 +1,14 @@
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { seriesDomainKey } from './chartTheme';
 
-/** Draw the highest-ranked model last while preserving every measured zero bucket. */
-export function buildModelTrendData(groups: DashboardModelUsage[]) {
-  return [...groups].reverse().flatMap((group) => group.series.map((point) => ({
-    series: seriesDomainKey(group), bucket: String(point.t), at: point.t, tokens: point.tokens,
-  })));
+/** A shared bucket grid keeps quiet series visible; rank one is painted last at crossings. */
+export function buildModelTrendSeries(groups: DashboardModelUsage[]) {
+  const categories = [...new Set(groups.flatMap((group) => group.series.map((point) => point.t)))].sort((left, right) => left - right);
+  return {
+    categories: categories.map(String),
+    series: [...groups].reverse().map((group) => {
+      const byBucket = new Map(group.series.map((point) => [point.t, point.tokens]));
+      return { id: seriesDomainKey(group), values: categories.map((at) => byBucket.get(at) ?? 0) };
+    }),
+  };
 }

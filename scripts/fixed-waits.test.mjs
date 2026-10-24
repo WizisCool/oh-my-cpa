@@ -46,7 +46,6 @@ const BASELINE = {
   'scripts/acceptance/probe.mjs': 1,
   // One rejecting lifecycle budget; no successful assertion waits on it.
   'scripts/acceptance/lifecycle.mjs': 1,
-  'scripts/acceptance/probes/dashboardCharts.mjs': 5,
   'scripts/acceptance/probes/dashboardTokenHeatmap.mjs': 8,
 
   'scripts/acceptance/probes/omcSettings.mjs': 1,

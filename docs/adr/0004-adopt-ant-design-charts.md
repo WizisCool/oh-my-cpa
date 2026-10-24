@@ -1,6 +1,6 @@
 # ADR 0004: Adopt @ant-design/charts for dashboard and data visualization
 
-- Status: Accepted; supplemented by ADR 0106 (Insights uses Apache ECharts; the dashboard keeps this runtime)
+- Status: Superseded by ADR 0106 (dashboard and Insights share the SVG ECharts runtime)
 - Date: 2026-09-14
 
 ## Context
