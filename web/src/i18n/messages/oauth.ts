@@ -2,7 +2,6 @@ import type { Messages } from './types';
 
 /** OAuth sign-in flows. */
 export const OAUTH_MESSAGES: Messages = {
-  'siwc.local_status': ["SIWC 本地状态", "Local SIWC status"],
   'siwc.status_off': ["未使用", "Off"],
   'siwc.status_valid': ["本地有效", "Locally valid"],
   'siwc.status_invalid': ["本地无效", "Locally invalid"],
@@ -12,15 +11,13 @@ export const OAUTH_MESSAGES: Messages = {
   'siwc.summary_hint': ["本地状态由 CPA 根据到期时间和已记录的拒绝判断，不刷新令牌或请求上游验证，也不代表实时健康检查。旧版缺少状态时显示未知；绑定材料和存储到期时间不能代替该状态。", "CPA evaluates local expiry and remembered rejection without token refresh or upstream verification; this is not live health. Missing status on older versions is unknown. Binding material and stored expiry do not establish validity."],
   'siwc.unknown': ['未知', 'Unknown'],
   'siwc.cancel_refused': ['CPA 未取消此流程；绑定可能已完成，正在核对结果。', 'CPA did not cancel this flow; binding may have completed. Checking the outcome.'],
+  'siwc.bound': ['已绑定', 'Bound'],
+  'siwc.expires': ['{time} 到期', 'Expires {time}'],
+  'siwc.about_status': ['关于本地状态', 'About local status'],
+  'siwc.about_use': ['关于此开关', 'About this switch'],
+  'siwc.about_callback': ['如何获取回调 URL', 'Finding the callback URL'],
   'siwc.title': ["Sign in with ChatGPT（SIWC）", "Sign in with ChatGPT (SIWC)"],
-  'siwc.eligibility': ["绑定支持", "Binding eligibility"],
-  'siwc.supported': ["支持", "Supported"],
   'siwc.unsupported': ["不支持", "Unsupported"],
-  'siwc.configured': ["已配置使用 SIWC", "Configured to use SIWC"],
-  'siwc.material': ["绑定材料齐全", "Binding material present"],
-  'siwc.expiry': ["存储的到期时间", "Stored expiry"],
-  'siwc.yes': ["是", "Yes"],
-  'siwc.no': ["否", "No"],
   'siwc.unsupported_hint': ["需要支持此功能的 CPA v8.0.35 或更新版本，以及本地文件形式的 Codex OAuth 凭证。Home 模式及其他存储后端不支持。", "Requires CPA v8.0.35 or later with this capability and a local file-backed Codex OAuth credential. Home mode and other storage backends are unsupported."],
   'siwc.bind': ["绑定 SIWC", "Bind SIWC"],
   'siwc.rebind': ["重新绑定 SIWC", "Rebind SIWC"],

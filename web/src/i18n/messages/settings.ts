@@ -202,7 +202,6 @@ export const SETTINGS_MESSAGES: Messages = {
   'omc.tab_configuration': ['配置', 'Configuration'],
   'omc.result_count': ['匹配 {n} / {total} 个凭证', '{n} matching of {total} credentials'],
   'omc.col_credential': ['凭据与账号', 'Credential'],
-  'omc.col_traffic': ['请求统计', 'Traffic'],
   'omc.col_quota_window': ['配额状态与余量', 'Quota & Windows'],
   'omc.quota_missing_index': ['缺少认证索引，无法关联配额', 'Missing auth index; quota cannot be associated'],
   'omc.quota_ambiguous': ['认证索引重复，关联和写入已阻止', 'Duplicate auth index; association and writes are blocked'],

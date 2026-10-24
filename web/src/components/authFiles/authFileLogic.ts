@@ -109,7 +109,6 @@ export function matchesStatusFilter(
 export type AuthFileSortKey =
   | 'name-asc'
   | 'name-desc'
-  | 'requests-desc'
   | 'priority-desc'
   | 'weight-desc';
 
@@ -127,13 +126,6 @@ export function sortAuthFiles(
       return copy.sort((a, b) =>
         b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })
       );
-    case 'requests-desc':
-      return copy.sort((a, b) => {
-        const totalA = (a.success ?? 0) + (a.failed ?? 0);
-        const totalB = (b.success ?? 0) + (b.failed ?? 0);
-        if (totalB !== totalA) return totalB - totalA;
-        return a.name.localeCompare(b.name);
-      });
     case 'priority-desc':
       return copy.sort((a, b) => {
         const prioA = a.priority ?? 0;

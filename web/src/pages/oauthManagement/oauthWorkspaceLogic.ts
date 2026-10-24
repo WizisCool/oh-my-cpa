@@ -99,7 +99,6 @@ const QUOTA_FILTERS = new Set<OAuthWorkspaceQuotaFilter>([
 const AUTH_FILE_SORTS = new Set<AuthFileSortKey>([
   'name-asc',
   'name-desc',
-  'requests-desc',
   'priority-desc',
   'weight-desc',
 ]);
@@ -429,11 +428,6 @@ export function sortOAuthWorkspaceRecords(
   switch (sort) {
     case 'name-desc':
       return copy.sort((left, right) => byName(right, left));
-    case 'requests-desc':
-      return copy.sort((left, right) => {
-        const requestDelta = (right.file.success + right.file.failed) - (left.file.success + left.file.failed);
-        return requestDelta || byName(left, right);
-      });
     case 'priority-desc':
       return copy.sort((left, right) => {
         const priorityDelta = (right.file.priority ?? 0) - (left.file.priority ?? 0);

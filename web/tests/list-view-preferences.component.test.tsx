@@ -95,12 +95,12 @@ describe('list view preference persistence', () => {
 
   it('rolls OAuth controls back when a save fails instead of retaining an unsaved URL override', async () => {
     api.state.preferences.oauth_management_view_v1 = { pageSize: 24, status: 'disabled', quota: 'all', sort: 'name-desc' };
-    mount(<OAuthView />, '/?sort=requests-desc');
+    mount(<OAuthView />, '/?sort=weight-desc');
     await waitFor(() => expect((screen.getByRole('button', { name: 'Filter OAuth' }) as HTMLButtonElement).disabled).toBe(false));
     refuseWrites();
     fireEvent.click(screen.getByRole('button', { name: 'Filter OAuth' }));
     await screen.findByText('write_busy');
-    await waitFor(() => expect(readView()).toMatchObject({ status: 'disabled', quota: 'all', sort: 'requests-desc' }));
+    await waitFor(() => expect(readView()).toMatchObject({ status: 'disabled', quota: 'all', sort: 'weight-desc' }));
     expect(api.state.preferences.oauth_management_view_v1).toEqual({ pageSize: 24, status: 'disabled', quota: 'all', sort: 'name-desc' });
   });
 

@@ -256,10 +256,20 @@ export async function oauthManagement({ base, page, check }) {
   check('a failed refresh leaves the row saying so, with its own refresh beside it',
     (await staleRow.locator('[data-quota-failure-line="failed"]').count()) === 1
       && ((await staleRow.locator('[data-quota-failure-line="failed"]').getAttribute('title')) ?? '').includes('Fixture quota refresh failed')
-      && (await staleRow.getByTestId('quota-stale-refresh').count()) === 1,
+      && (await staleRow.locator('[data-testid="oauth-credential-refresh"][data-needs-refresh="true"]').count()) === 1,
     (await staleRow.innerText()).replace(/\n/g, ' | '));
-  check('a current reading offers no refresh of its own',
-    (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"] [data-testid="quota-stale-refresh"]').count()) === 0);
+  // The stale reading steps back, but its cell does not: a translucent cell would fade the row's
+  // hover fill with it and leave a dark band under the pointer.
+  const staleCells = await staleRow.locator('[data-quota-column]').evaluateAll((cells) => cells.map((cell) => ({
+    cell: getComputedStyle(cell).opacity,
+    content: cell.firstElementChild ? getComputedStyle(cell.firstElementChild).opacity : '1',
+  })));
+  check('a stale reading dims its content, not the cell under the row hover',
+    staleCells.length > 0 && staleCells.every(({ cell, content }) => cell === '1' && Number(content) < 1),
+    JSON.stringify(staleCells));
+  check('a current reading keeps its refresh glyph without asking for it',
+    (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"] [data-testid="oauth-credential-refresh"]').count()) === 1
+      && (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-02"] [data-needs-refresh]').count()) === 0);
   // The fixture holds twelve credentials: eight whose reading is current, one whose provider has no
   // live probe (still current), two on a gateway cooldown, and the one whose refresh failed. The
   // exact numbers are the claim: a record counted in both the healthy total and the out-of-date
@@ -440,9 +450,22 @@ export async function oauthManagement({ base, page, check }) {
       layout.overflow === 0 && layout.controls > 0 && layout.outside === 0,
       JSON.stringify(layout),
     );
-    // A phone row is who, its state and its switch; the readings need a width only the Drawer has.
-    const phoneReadings = await page.locator('[data-testid="oauth-credential-record"] [data-quota-column]').evaluateAll((cells) => cells.filter((cell) => cell.getBoundingClientRect().width > 0).length);
-    check(`a phone row leaves the readings to the Drawer at ${width}px`, phoneReadings === 0, `visible=${phoneReadings}`);
+    // A phone card carries the readings its credential reports, each named, inside the viewport,
+    // and drops the placeholders that only keep a desktop column aligned.
+    const phoneReadings = await page.locator('[data-testid="oauth-credential-record"] [data-quota-column]').evaluateAll((cells) => cells.map((cell) => {
+      const rect = cell.getBoundingClientRect();
+      if (cell.hasAttribute('data-quota-missing')) return rect.width === 0;
+      return rect.width > 0 && rect.right <= window.innerWidth + 1 && Boolean(cell.innerText.trim());
+    }));
+    check(`a phone card shows its reported readings and no placeholders at ${width}px`,
+      phoneReadings.length > 0 && phoneReadings.every(Boolean),
+      `ok=${phoneReadings.filter(Boolean).length}/${phoneReadings.length}`);
+    // Reset credits are one credential's own figure: a card without them has no credits cell, even
+    // in a section where another credential has some.
+    const absentCredits = await page.locator('[data-quota-credits-missing]').evaluateAll((cells) => cells.map((cell) => cell.getBoundingClientRect().width));
+    check(`a phone card without reset credits shows no credits placeholder at ${width}px`,
+      absentCredits.length > 0 && absentCredits.every((cellWidth) => cellWidth === 0),
+      `widths=${absentCredits.join(',')}`);
     await page.screenshot({ path: `tmp/oauth-management-overview-${width}.png` });
     // The reading with an estimate is auth-01's; the sections order records by provider, so the
     // first row of the page is not the one whose cycle was estimated.
@@ -1028,7 +1051,7 @@ async function verifyWorkspaceScale({ base, page, check }) {
     });
     check('a failed batch target reads out of date and offers its own refresh',
       /Stale|快照已过期/.test(await failedRow.innerText())
-        && (await failedRow.getByTestId('quota-stale-refresh').count()) === 1,
+        && (await failedRow.locator('[data-testid="oauth-credential-refresh"][data-needs-refresh="true"]').count()) === 1,
       (await failedRow.innerText()).replace(/\n/g, ' | '));
     check('a target the batch did refresh keeps reading current',
       (await page.locator('[data-testid="oauth-credential-record"][data-auth-index="scale-0"] [data-quota-failure-line]').count()) === 0
