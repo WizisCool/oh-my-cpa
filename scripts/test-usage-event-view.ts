@@ -41,7 +41,6 @@ import {
   successRateTone,
   SUCCESS_RATE_DEGRADED_PERCENT,
   SUCCESS_RATE_HEALTHY_PERCENT,
-  eventTokensPerSecond,
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
@@ -1163,114 +1162,14 @@ assert.equal(emptyResolver('openai-compatible-anything'), 'openai-compatible-any
 assert.equal(providerFacetLabel('CommandCode GOAT', 42), 'CommandCode GOAT (42)');
 console.log('PASS provider name resolution: exact upstream identity, custom name, duplicate ambiguity, raw-key fallback');
 
-// Tokens Per Second (TPS) tests
-assert.equal(eventTokensPerSecond(undefined).formatted, '—');
-assert.equal(eventTokensPerSecond({ generate: false, latency_ms: 1000, tokens: { total: 500, input: 400, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
-assert.equal(eventTokensPerSecond({ generate: true, latency_ms: 1000, tokens: { total: 400, input: 400, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
-assert.equal(eventTokensPerSecond({ generate: true, latency_ms: 0, tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
-
-// Exact 109.21 t/s with TTFT subtraction:
-// output = 10921, latency = 120000 ms, ttft = 20000 ms -> generation = 100000 ms -> 109.21 t/s
-const tpsExact = eventTokensPerSecond({
-  generate: true,
-  latency_ms: 120_000,
-  ttft_ms: 20_000,
-  tokens: { total: 20000, input: 9079, output: 10921, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
-});
-assert.equal(tpsExact.formatted, '109.21 t/s');
-assert.equal(tpsExact.basis, 'exclude_ttft');
-
-// Fallback without TTFT: output = 500, latency = 2500 ms -> 200.00 t/s
-const tpsNoTTFT = eventTokensPerSecond({
-  generate: true,
-  latency_ms: 2500,
-  tokens: { total: 1000, input: 500, output: 500, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
-});
-assert.equal(tpsNoTTFT.formatted, '200.00 t/s');
-assert.equal(tpsNoTTFT.basis, 'fallback_total');
-
-// Both timing and token-scaled windows must support subtraction. At 25 output tokens,
-// the 50 ms timing floor coincides with the 500 t/s buffered-delivery guard.
-const boundaryTokens = { total: 125, input: 100, output: 25, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 };
-const belowFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1049, ttft_ms: 1000, tokens: boundaryTokens });
-assert.deepEqual(belowFloor, { tps: 25_000 / 1049, formatted: '23.83 t/s', basis: 'fallback_total' });
-const atFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1050, ttft_ms: 1000, tokens: boundaryTokens });
-assert.deepEqual(atFloor, { tps: 500, formatted: '500.00 t/s', basis: 'exclude_ttft' });
-
-// Invalid TTFT (ttft >= latency) falls back safely to total latency rather than division by zero / negative
-const tpsInvalidTTFT = eventTokensPerSecond({
-  generate: true,
-  latency_ms: 2000,
-  ttft_ms: 2500,
-  tokens: { total: 500, input: 400, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
-});
-assert.equal(tpsInvalidTTFT.formatted, '50.00 t/s');
-assert.equal(tpsInvalidTTFT.basis, 'fallback_total');
-
-// Event 749a21af root-cause test:
-// output = 13066, latency = 61275, ttft = 61258 (non-streaming, collapsed 17ms window)
-// Must NOT yield 768588.24 t/s; must yield 213.24 t/s (13066 * 1000 / 61275)
-const tps749a21afExplicitNonStream = eventTokensPerSecond({
-  generate: true,
-  stream: false,
-  latency_ms: 61_275,
-  ttft_ms: 61_258,
-  tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
-});
-assert.equal(tps749a21afExplicitNonStream.formatted, '213.24 t/s');
-assert.equal(tps749a21afExplicitNonStream.basis, 'fallback_total');
-
-// Historical legacy record with stream=null / omitted and collapsed window (17ms < 50ms):
-const tps749a21afLegacy = eventTokensPerSecond({
-  generate: true,
-  latency_ms: 61_275,
-  ttft_ms: 61_258,
-  tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
-});
-assert.equal(tps749a21afLegacy.formatted, '213.24 t/s');
-assert.equal(tps749a21afLegacy.basis, 'fallback_total');
-
-// Explicit streaming with stream=true: uses first-token-excluded calculation
-const tpsStreamingExplicit = eventTokensPerSecond({
-  generate: true,
-  stream: true,
-  latency_ms: 10_000,
-  ttft_ms: 2_000,
-  tokens: { total: 1000, input: 200, output: 800, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
-});
-assert.equal(tpsStreamingExplicit.formatted, '100.00 t/s'); // 800 * 1000 / 8000
-assert.equal(tpsStreamingExplicit.basis, 'exclude_ttft');
-
-// Event b561ad87 (Codex OAuth):
-// Client sent stream=false, but upstream CodexExecutor captured genuine ttft_ms=4423,
-// latency=31251, with measurable residual window 26828ms. TTFT IS measurable, so the record
-// keeps its TTFT readout; the 135 hidden reasoning tokens preceded that boundary, so TPS uses
-// total latency: 1400 * 1000 / 31251 = 44.80 t/s.
-const tpsB561ad87 = eventTokensPerSecond({
-  generate: true,
-  stream: false,
-  latency_ms: 31_251,
-  ttft_ms: 4_423,
-  tokens: { total: 13508, input: 12108, output: 1400, reasoning: 135, cached: 2816, cache_read: 2816, cache_creation: 0 },
-});
-assert.equal(tpsB561ad87.formatted, '44.80 t/s');
-assert.equal(tpsB561ad87.basis, 'fallback_total');
-
-// hasMeasurableTTFT tests
+// Timing visibility and request mode do not depend on a guessed throughput threshold.
 assert.equal(hasMeasurableTTFT(undefined), false);
-assert.equal(hasMeasurableTTFT({ latency_ms: 31251, ttft_ms: 4423 }), true); // 26828ms window
-assert.equal(hasMeasurableTTFT({ latency_ms: 61275, ttft_ms: 61258 }), false); // collapsed window (17ms < 50ms)
-assert.equal(hasMeasurableTTFT({ latency_ms: 10000, ttft_ms: 10000 }), false); // zero window
-assert.equal(hasMeasurableTTFT({ latency_ms: 10000, ttft_ms: 10500 }), false); // invalid
-
-// isNonStreamingEvent tests
-assert.equal(isNonStreamingEvent(undefined), false);
-assert.equal(isNonStreamingEvent({ stream: false }), true); // explicit non-stream with no captured TTFT
-assert.equal(isNonStreamingEvent({ stream: true }), false);
-assert.equal(isNonStreamingEvent({ stream: false, latency_ms: 31251, ttft_ms: 4423 }), false); // genuine upstream TTFT
-assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); // collapsed historical window
-assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
-assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
+for (const [latency_ms, ttft_ms, expected] of [[31251, 4423, true], [61275, 61258, true], [10000, 10000, false], [10000, 10500, false]] as const) {
+  assert.equal(hasMeasurableTTFT({ latency_ms, ttft_ms }), expected);
+}
+for (const stream of [true, false, null, undefined]) {
+  assert.equal(isNonStreamingEvent({ stream }), stream === false);
+}
 
 // The mark consumes the backend's provider-aware evidence, not the response alone.
 assert.equal(isFastTierEvent({ resolved_service_tier: 'priority' }), true);
@@ -1286,7 +1185,7 @@ assert.equal(fastTierHintKey({ resolved_service_tier_source: 'outbound' }), 'eve
 assert.equal(fastTierHintKey({ resolved_service_tier_source: 'response' }), 'events.fast_tier_hint');
 assert.equal(isFastTierEvent(undefined), false);
 
-console.log('PASS tokens per second (TPS): TTFT-aware output rate, fallback end-to-end average, edge boundaries');
+console.log('PASS TPS and stream visibility: no speed-derived classification');
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');

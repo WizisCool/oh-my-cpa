@@ -15,7 +15,7 @@ func TestTpsCalculationModeDefaultsAndSurvivesReopen(t *testing.T) {
 	}
 	repo := New(database)
 	mode, err := repo.ReadTpsCalculationMode(ctx)
-	if err != nil || mode != TpsExcludeTTFT {
+	if err != nil || mode != TpsIncludeTTFT {
 		t.Fatalf("default=%s err=%v", mode, err)
 	}
 	for _, raw := range []string{`null`, `true`, `{}`, `"future_mode"`} {
@@ -23,7 +23,7 @@ func TestTpsCalculationModeDefaultsAndSurvivesReopen(t *testing.T) {
 			t.Fatal(err)
 		}
 		mode, err := repo.ReadTpsCalculationMode(ctx)
-		if err != nil || mode != TpsExcludeTTFT {
+		if err != nil || mode != TpsIncludeTTFT {
 			t.Fatalf("fallback=%s err=%v", mode, err)
 		}
 	}

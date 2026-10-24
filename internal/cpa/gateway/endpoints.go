@@ -191,8 +191,42 @@ func decoderFor(endpoint Endpoint) streamDecoder {
 	return &chatDecoder{}
 }
 
+type reasoningTokenDetails struct {
+	ReasoningTokens *int64 `json:"reasoning_tokens"`
+}
+
+type chatUsage struct {
+	PromptTokens     *int64                 `json:"prompt_tokens"`
+	CompletionTokens *int64                 `json:"completion_tokens"`
+	TotalTokens      *int64                 `json:"total_tokens"`
+	Details          *reasoningTokenDetails `json:"completion_tokens_details"`
+}
+
+func (usage *chatUsage) project() *Usage {
+	result := &Usage{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens}
+	if usage.Details != nil {
+		result.ReasoningTokens = usage.Details.ReasoningTokens
+	}
+	return result
+}
+
+type responsesUsage struct {
+	InputTokens  *int64                 `json:"input_tokens"`
+	OutputTokens *int64                 `json:"output_tokens"`
+	TotalTokens  *int64                 `json:"total_tokens"`
+	Details      *reasoningTokenDetails `json:"output_tokens_details"`
+}
+
+func (usage *responsesUsage) project() *Usage {
+	result := &Usage{PromptTokens: usage.InputTokens, CompletionTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens}
+	if usage.Details != nil {
+		result.ReasoningTokens = usage.Details.ReasoningTokens
+	}
+	return result
+}
+
 func emitUsage(usage *Usage, emit func(Event) error) error {
-	for _, value := range []*int64{usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens} {
+	for _, value := range []*int64{usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.ReasoningTokens} {
 		if value != nil && *value < 0 {
 			return &Error{Code: "invalid_gateway_response"}
 		}
@@ -221,7 +255,7 @@ func (decoder *chatDecoder) decode(data string, emit func(Event) error) (bool, e
 			} `json:"delta"`
 			FinishReason *string `json:"finish_reason"`
 		} `json:"choices"`
-		Usage *Usage          `json:"usage"`
+		Usage *chatUsage      `json:"usage"`
 		Error json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal([]byte(data), &chunk) != nil {
@@ -263,7 +297,7 @@ func (decoder *chatDecoder) decode(data string, emit func(Event) error) (bool, e
 		}
 	}
 	if chunk.Usage != nil {
-		if err := emitUsage(chunk.Usage, emit); err != nil {
+		if err := emitUsage(chunk.Usage.project(), emit); err != nil {
 			return false, err
 		}
 	}
@@ -287,11 +321,7 @@ func (decoder *responsesDecoder) decode(data string, emit func(Event) error) (bo
 			Type string `json:"type"`
 		} `json:"item"`
 		Response struct {
-			Usage *struct {
-				InputTokens  *int64 `json:"input_tokens"`
-				OutputTokens *int64 `json:"output_tokens"`
-				TotalTokens  *int64 `json:"total_tokens"`
-			} `json:"usage"`
+			Usage             *responsesUsage `json:"usage"`
 			IncompleteDetails struct {
 				Reason string `json:"reason"`
 			} `json:"incomplete_details"`
@@ -302,7 +332,7 @@ func (decoder *responsesDecoder) decode(data string, emit func(Event) error) (bo
 	}
 	finish := func(reason string) (bool, error) {
 		if usage := frame.Response.Usage; usage != nil {
-			if err := emitUsage(&Usage{PromptTokens: usage.InputTokens, CompletionTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens}, emit); err != nil {
+			if err := emitUsage(usage.project(), emit); err != nil {
 				return false, err
 			}
 		}
@@ -344,11 +374,18 @@ type messagesDecoder struct {
 	finishReason string
 }
 
+type messagesTokenDetails struct {
+	ThinkingTokens  *int64 `json:"thinking_tokens"`
+	ReasoningTokens *int64 `json:"reasoning_tokens"`
+}
+
 type messagesUsage struct {
-	InputTokens              *int64 `json:"input_tokens"`
-	OutputTokens             *int64 `json:"output_tokens"`
-	CacheCreationInputTokens *int64 `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     *int64 `json:"cache_read_input_tokens"`
+	InputTokens              *int64                `json:"input_tokens"`
+	OutputTokens             *int64                `json:"output_tokens"`
+	CacheCreationInputTokens *int64                `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     *int64                `json:"cache_read_input_tokens"`
+	ThinkingTokens           *int64                `json:"thinking_tokens"`
+	Details                  *messagesTokenDetails `json:"output_tokens_details"`
 }
 
 // prompt is every token the model read: the schema reports cached input beside the rest
@@ -364,6 +401,27 @@ func (usage *messagesUsage) prompt() *int64 {
 		}
 	}
 	return &total
+}
+
+// project keeps Anthropic's output_tokens as the inclusive total. thinking_tokens is a
+// subset, not an additional output bucket, so the Playground can remove it only from a
+// content-tail rate while the end-to-end rate still uses the reported total.
+func (usage *messagesUsage) project(prompt *int64) *Usage {
+	result := &Usage{PromptTokens: prompt, CompletionTokens: usage.OutputTokens}
+	if usage.Details != nil {
+		result.ReasoningTokens = usage.Details.ThinkingTokens
+		if result.ReasoningTokens == nil {
+			result.ReasoningTokens = usage.Details.ReasoningTokens
+		}
+	}
+	if result.ReasoningTokens == nil {
+		result.ReasoningTokens = usage.ThinkingTokens
+	}
+	if result.PromptTokens != nil && result.CompletionTokens != nil {
+		total := *result.PromptTokens + *result.CompletionTokens
+		result.TotalTokens = &total
+	}
+	return result
 }
 
 func (decoder *messagesDecoder) decode(data string, emit func(Event) error) (bool, error) {
@@ -424,12 +482,7 @@ func (decoder *messagesDecoder) decode(data string, emit func(Event) error) (boo
 			if prompt := frame.Usage.prompt(); prompt != nil {
 				decoder.promptTokens = prompt
 			}
-			usage := &Usage{PromptTokens: decoder.promptTokens, CompletionTokens: frame.Usage.OutputTokens}
-			if usage.PromptTokens != nil && usage.CompletionTokens != nil {
-				total := *usage.PromptTokens + *usage.CompletionTokens
-				usage.TotalTokens = &total
-			}
-			if err := emitUsage(usage, emit); err != nil {
+			if err := emitUsage(frame.Usage.project(decoder.promptTokens), emit); err != nil {
 				return false, err
 			}
 		}

@@ -222,6 +222,66 @@ func TestResponsesStreamProjection(t *testing.T) {
 	}
 }
 
+func TestStreamUsageKeepsReasoningCounts(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		endpoint      Endpoint
+		path          string
+		body          string
+		wantReasoning int64
+	}{
+		{
+			name: "chat", endpoint: EndpointChat, path: "/v1/chat/completions",
+			body: `data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30,"completion_tokens_details":{"reasoning_tokens":7}}}` + "\n\n" +
+				"data: [DONE]\n\n",
+		},
+		{
+			name: "messages flat thinking", endpoint: EndpointMessages, path: "/v1/messages",
+			body: `event: message_start` + "\n" + `data: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":0}}}` + "\n\n" +
+				`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}` + "\n\n" +
+				`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":20,"thinking_tokens":7}}` + "\n\n" +
+				`event: message_stop` + "\n" + `data: {"type":"message_stop"}` + "\n\n",
+		},
+		{
+			name: "messages thinking", endpoint: EndpointMessages, path: "/v1/messages",
+			body: `event: message_start` + "\n" + `data: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":0}}}` + "\n\n" +
+				`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}` + "\n\n" +
+				`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":20,"output_tokens_details":{"thinking_tokens":7}}}` + "\n\n" +
+				`event: message_stop` + "\n" + `data: {"type":"message_stop"}` + "\n\n",
+		},
+		{
+			name: "responses", endpoint: EndpointResponses, path: "/v1/responses",
+			body: `data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n" +
+				`data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":20,"total_tokens":30,"output_tokens_details":{"reasoning_tokens":7}}}}` + "\n\n",
+		},
+		{
+			name: "chat separate reasoning bucket", endpoint: EndpointChat, path: "/v1/chat/completions", wantReasoning: 3,
+			body: `data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":15,"completion_tokens_details":{"reasoning_tokens":3}}}` + "\n\n" +
+				"data: [DONE]\n\n",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			events, err := streamEndpoint(t, test.endpoint, test.path, test.body, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantReasoning := test.wantReasoning
+			if wantReasoning == 0 {
+				wantReasoning = 7
+			}
+			for _, event := range events {
+				if event.Type == "usage" {
+					if event.Usage == nil || event.Usage.ReasoningTokens == nil || *event.Usage.ReasoningTokens != wantReasoning {
+						t.Fatalf("usage reasoning = %s", mustJSON(t, event.Usage))
+					}
+					return
+				}
+			}
+			t.Fatalf("no usage event in %s", mustJSON(t, events))
+		})
+	}
+}
+
 func TestMessagesStreamProjection(t *testing.T) {
 	body := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":4,\"cache_read_input_tokens\":10,\"output_tokens\":1}}}\n\n" +
 		"data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\"}}\n\n" +

@@ -108,7 +108,12 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       put('latency_ms', event.latency_ms);
       put('ttft_ms', event.ttft_ms);
     }
-    if (!masks.has('tps')) put('tokens_per_second', eventTokensPerSecond(event, input.tpsMode).tps);
+    if (!masks.has('tps')) {
+      const rate = eventTokensPerSecond(event, input.tpsMode);
+      put('tokens_per_second', rate.tps);
+      put('tps_basis', rate.basis);
+      put('tps_mode', input.tpsMode);
+    }
     if (!masks.has('tokens')) {
       const { cached, cache_read: cacheRead, cache_creation: cacheCreation, ...counts } = event.tokens;
       put('tokens', masks.has('cache') ? counts : { ...counts, cached, cache_read: cacheRead, cache_creation: cacheCreation });

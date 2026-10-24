@@ -14,7 +14,7 @@ type TpsCalculationInfo struct {
 }
 
 func (s *Service) registerTpsCalculation(registry *capability.Registry) error {
-	if err := read(registry, "tps_calculation_get", "Read the deployment-wide TPS calculation mode. exclude_ttft subtracts measurable first-token latency, falling back to total latency when unavailable, when the record reports reasoning tokens, or when subtraction would exceed 500 t/s (suspected buffered delivery); include_ttft uses total latency.", func(ctx context.Context, _ Empty) (TpsCalculationInfo, error) {
+	if err := read(registry, "tps_calculation_get", "Read the deployment-wide TPS calculation mode. include_ttft divides total output tokens by total latency. exclude_ttft subtracts first-token latency only when the output-token scope and timing match; otherwise the rate is unavailable.", func(ctx context.Context, _ Empty) (TpsCalculationInfo, error) {
 		mode, err := s.Repo.ReadTpsCalculationMode(ctx)
 		return TpsCalculationInfo{Mode: mode}, err
 	}); err != nil {

@@ -34,6 +34,7 @@ import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
 import { usePreference } from '../hooks/usePreference';
+import { useToast } from '../components/feedback';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_QUOTA_AUTO_REFRESH,
@@ -118,6 +119,7 @@ const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, string> = {
 
 export const OmcSettingsPage: React.FC = () => {
   const t = useT();
+  const toast = useToast();
   const timezone = useTimeZoneSetting();
   const { lang, setLang } = useI18n();
   const {
@@ -181,10 +183,16 @@ export const OmcSettingsPage: React.FC = () => {
             <Segmented
               value={tpsMode}
               options={[
-                { value: 'exclude_ttft', label: t('omc.tps_exclude_ttft') },
                 { value: 'include_ttft', label: t('omc.tps_include_ttft') },
+                { value: 'exclude_ttft', label: t('omc.tps_exclude_ttft') },
               ]}
-              onChange={(next) => setTpsMode(next as TpsCalculationMode)}
+              onChange={(next) => {
+                const mode = next as TpsCalculationMode;
+                if (mode === 'exclude_ttft' && tpsMode !== 'exclude_ttft') {
+                  toast.warning(t('omc.tps_exclude_warning'));
+                }
+                setTpsMode(mode);
+              }}
               aria-label={t('omc.tps_calculation_mode')}
               vertical={isNarrow}
               block={isNarrow}

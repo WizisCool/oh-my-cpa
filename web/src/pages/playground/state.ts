@@ -1,6 +1,7 @@
 export { createID } from '../../utils/ids';
 export type { IDSource } from '../../utils/ids';
-export { extractThinking } from '../../utils/thinking';
+import { extractThinking } from '../../utils/thinking';
+export { extractThinking };
 export { effectiveModel } from '../../types/requestModel';
 export { MAX_IMAGE_BYTES, MAX_IMAGES, IMAGE_TYPES, readImage, readAgentImage } from '../../components/workspace/imageAttachments';
 export type { ImageAttachment } from '../../components/workspace/imageAttachments';
@@ -241,7 +242,7 @@ function isStoredEvent(value: unknown): value is StreamEvent {
   return value.usage === undefined || isStoredUsage(value.usage);
 }
 function isStoredUsage(value: unknown): value is Usage {
-  return isObject(value) && ['prompt_tokens', 'completion_tokens', 'total_tokens'].every(key => value[key] === undefined || typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0);
+  return isObject(value) && ['prompt_tokens', 'completion_tokens', 'total_tokens', 'reasoning_tokens'].every(key => value[key] === undefined || typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0);
 }
 function isStoredTurn(value: unknown): value is Turn {
   if (!isObject(value) || typeof value.id !== 'string' || typeof value.reply !== 'string' || typeof value.keyLabel !== 'string' || !isStoredMessage(value.user) || value.user.role !== 'user') return false;
@@ -365,7 +366,32 @@ export interface ChatRequest {
   user_agent?: string;
   custom_body?: Record<string, unknown>;
 }
-export interface Usage { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+export interface Usage { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; reasoning_tokens?: number }
+
+export interface PlaygroundTpsEvidence {
+  reasoningTokens?: number;
+  /** The first content timestamp is a body boundary only when reasoning did not arrive in `reply`. */
+  firstTokenKind?: 'non_reasoning';
+}
+
+/**
+ * Separates the token and timing evidence available from a Playground turn. Inline reasoning
+ * shares the content stream, so its first delta cannot prove when visible output began.
+ */
+export function playgroundTpsEvidence(turn: Pick<Turn, 'thought' | 'reply' | 'usage'>): PlaygroundTpsEvidence {
+  // A separate thought channel makes reply literal text, even when it contains a tag that
+  // looks like inline reasoning.
+  const hasThoughtChannel = turn.thought !== undefined;
+  const inline = hasThoughtChannel ? undefined : extractThinking(turn.reply);
+  const hasInlineReasoning = inline?.thought !== undefined || inline?.isThinking === true;
+  const hasReasoning = hasThoughtChannel || hasInlineReasoning;
+  const reported = turn.usage?.reasoning_tokens;
+  return {
+    reasoningTokens: hasReasoning && (reported === undefined || reported === 0) ? undefined : reported ?? 0,
+    firstTokenKind: hasInlineReasoning ? undefined : 'non_reasoning',
+  };
+}
+
 /** Every event the playground route streams; anything else is a malformed response. */
 export const PLAYGROUND_EVENT_TYPES = ['meta', 'request', 'delta', 'thought', 'usage', 'done', 'error'] as const;
 export interface StreamEvent {

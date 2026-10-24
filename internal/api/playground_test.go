@@ -134,6 +134,16 @@ func TestPlaygroundStreamDeadlineContextAndCancellation(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("paid calls %d", calls.Load())
 	}
+	thoughtStart := strings.Index(string(data), "event: thought")
+	if thoughtStart < 0 {
+		t.Fatalf("missing thought event: %s", data)
+	}
+	thoughtEnd := strings.Index(string(data)[thoughtStart:], "\n\n")
+	doneStart := strings.Index(string(data), "event: done")
+	if thoughtEnd < 0 || strings.Contains(string(data)[thoughtStart:thoughtStart+thoughtEnd], "first_content_ms") ||
+		doneStart < 0 || !strings.Contains(string(data)[doneStart:], `"first_content_ms":`) {
+		t.Fatalf("first content must begin at the answer delta, not its thought: %s", data)
+	}
 	// CPA's id reaches the console before the answer, so the turn can name its record early.
 	announced := strings.Index(string(data), "event: request\ndata: {\"request_id\":\"0000002a\"}")
 	if announced < 0 || announced > strings.Index(string(data), "event: thought") {

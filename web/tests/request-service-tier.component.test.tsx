@@ -68,6 +68,12 @@ it('shows the client, outbound and response tiers separately in request details'
   expect(screen.getByText('default')).toBeTruthy();
 });
 
+it('exposes an unavailable TPS basis to keyboard users in request details', async () => {
+  renderTier({ latency_ms: 0 }, event => <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />);
+  const rate = await screen.findByText('—', { selector: 'strong[tabindex="0"]' });
+  expect(rate.getAttribute('aria-label')).toMatch(/^TPS: —\./);
+});
+
 it('explains a locked outbound-priced tier without labeling it client or response evidence', () => {
   const breakdown: RequestCostBreakdown = {
     status: 'priced', stored_nanos: 6_000_000, service_tier: 'priority', service_tier_source: 'outbound', recomputed_matches: true,

@@ -214,6 +214,8 @@ assert.deepEqual(openDocument.requests[0], {
   latency_ms: 1250,
   ttft_ms: 300,
   tokens_per_second: (50 * 1000) / 950,
+  tps_basis: 'exclude_ttft',
+  tps_mode: 'exclude_ttft',
   tokens: { total: 200, input: 150, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
   cost_usd: 0.0123,
   api_key_alias: 'laptop key',

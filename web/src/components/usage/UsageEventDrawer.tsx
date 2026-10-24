@@ -31,6 +31,8 @@ import {
 } from '../../types/usageEventIdentity';
 import {
   formatEventDuration,
+  eventTokensPerSecond,
+  tpsCalculationHintKey,
   hasMeasurableTTFT,
   isFastTierEvent,
   fastTierHintKey,
@@ -68,7 +70,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are
   // exact counts, so the full form is what this surface prints.
-  const { style: tokenStyle, modelView } = useTokenDisplayStyle();
+  const { style: tokenStyle, modelView, tpsMode } = useTokenDisplayStyle();
   const isCallView = modelView === 'call';
   const toast = useToast();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
@@ -223,6 +225,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     </div>
   );
 
+  const rate = eventTokensPerSecond(event, tpsMode);
   const latency = event?.latency_ms ?? 0;
   const isMeasurable = hasMeasurableTTFT(event);
   const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
@@ -291,6 +294,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               <span>{t('events.duration')}</span>
               <strong>{formatEventDuration(event.latency_ms)}</strong>
             </div>
+            {rate.basis !== null && (
+              <div>
+                <span>{t('events.col_tps')}</span>
+                <Tooltip title={t(tpsCalculationHintKey(rate.basis))}>
+                  <strong tabIndex={0} aria-label={`${t('events.col_tps')}: ${rate.formatted}. ${t(tpsCalculationHintKey(rate.basis))}`}>{rate.formatted}</strong>
+                </Tooltip>
+              </div>
+            )}
             {isMeasurable && (
               <div>
                 <span>{t('events.ttft')}</span>

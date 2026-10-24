@@ -234,7 +234,7 @@ func (stream *agentStream) decodeChat(text string, emit func(Event) error) error
 			} `json:"delta"`
 			FinishReason *string `json:"finish_reason"`
 		} `json:"choices"`
-		Usage *Usage          `json:"usage"`
+		Usage *chatUsage      `json:"usage"`
 		Error json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal([]byte(text), &chunk) != nil {
@@ -288,7 +288,7 @@ func (stream *agentStream) decodeChat(text string, emit func(Event) error) error
 		}
 	}
 	if chunk.Usage != nil {
-		stream.reply.Usage = chunk.Usage
+		stream.reply.Usage = chunk.Usage.project()
 	}
 	return nil
 }
@@ -307,11 +307,7 @@ func (stream *agentStream) decodeResponses(text string, emit func(Event) error) 
 			Arguments string `json:"arguments"`
 		} `json:"item"`
 		Response struct {
-			Usage *struct {
-				InputTokens  *int64 `json:"input_tokens"`
-				OutputTokens *int64 `json:"output_tokens"`
-				TotalTokens  *int64 `json:"total_tokens"`
-			} `json:"usage"`
+			Usage *responsesUsage `json:"usage"`
 			Error json.RawMessage `json:"error"`
 		} `json:"response"`
 	}
@@ -320,7 +316,7 @@ func (stream *agentStream) decodeResponses(text string, emit func(Event) error) 
 	}
 	end := func(finish string) {
 		if usage := frame.Response.Usage; usage != nil {
-			stream.reply.Usage = &Usage{PromptTokens: usage.InputTokens, CompletionTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens}
+			stream.reply.Usage = usage.project()
 		}
 		stream.finish, stream.isDone = finish, true
 	}
@@ -455,12 +451,7 @@ func (stream *agentStream) decodeMessages(text string, emit func(Event) error) e
 			if prompt := frame.Usage.prompt(); prompt != nil {
 				stream.promptTokens = prompt
 			}
-			usage := &Usage{PromptTokens: stream.promptTokens, CompletionTokens: frame.Usage.OutputTokens}
-			if usage.PromptTokens != nil && usage.CompletionTokens != nil {
-				total := *usage.PromptTokens + *usage.CompletionTokens
-				usage.TotalTokens = &total
-			}
-			stream.reply.Usage = usage
+			stream.reply.Usage = frame.Usage.project(stream.promptTokens)
 		}
 	case "message_stop":
 		// A call with no parameters streams no argument text; its input is the empty object.

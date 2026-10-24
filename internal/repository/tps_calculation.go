@@ -12,7 +12,7 @@ const (
 	TpsIncludeTTFT TpsCalculationMode = "include_ttft"
 )
 
-// ReadTpsCalculationMode preserves the historical denominator for absent or unsupported preferences.
+// ReadTpsCalculationMode uses the end-to-end average for absent or unsupported preferences.
 func (r *Repository) ReadTpsCalculationMode(ctx context.Context) (TpsCalculationMode, error) {
 	raw, _, err := r.GetPreference(ctx, PreferenceTpsCalculationMode)
 	if err != nil {
@@ -20,7 +20,7 @@ func (r *Repository) ReadTpsCalculationMode(ctx context.Context) (TpsCalculation
 	}
 	var mode TpsCalculationMode
 	if json.Unmarshal([]byte(raw), &mode) != nil || (mode != TpsExcludeTTFT && mode != TpsIncludeTTFT) {
-		mode = TpsExcludeTTFT
+		mode = TpsIncludeTTFT
 	}
 	return mode, nil
 }

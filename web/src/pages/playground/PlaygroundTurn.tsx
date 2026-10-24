@@ -12,8 +12,8 @@ import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { eventTokensPerSecond, tpsCalculationHintKey } from '../../types/usageEventMetrics';
-import { effectiveModel, extractThinking, turnTone } from './state';
+import { calculateTokensPerSecond, outputTotalWithReasoning, tpsCalculationHintKey } from '../../types/tpsCalculation';
+import { effectiveModel, extractThinking, playgroundTpsEvidence, turnTone } from './state';
 import type { Turn } from './state';
 import { playgroundErrorKey } from './errors';
 import type { PlaygroundMessageCustom } from './runtime';
@@ -178,20 +178,21 @@ const AssistantContent = React.memo(function AssistantContent({ turn, isLast, ca
 function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenRequests }: AssistantContentProps) {
   const { t } = useI18n();
   const { style: tokenStyle, tpsMode } = useTokenDisplayStyle();
-  const rate = eventTokensPerSecond({
-    generate: true,
-    latency_ms: turn.durationMS,
-    ttft_ms: turn.firstContentMS,
-    tokens: {
-      output: turn.usage?.completion_tokens ?? 0,
-      total: turn.usage?.total_tokens ?? 0,
-      input: turn.usage?.prompt_tokens ?? 0,
-      reasoning: 0,
-      cached: 0,
-      cache_read: 0,
-      cache_creation: 0,
-    },
-    stream: true,
+  const evidence = playgroundTpsEvidence(turn);
+  const output = outputTotalWithReasoning({
+    inputTokens: turn.usage?.prompt_tokens,
+    outputTokens: turn.usage?.completion_tokens,
+    reasoningTokens: evidence.reasoningTokens,
+    totalTokens: turn.usage?.total_tokens,
+  });
+  const rate = calculateTokensPerSecond({
+    isGeneration: true,
+    outputTokens: output.outputTokens,
+    reasoningTokens: evidence.reasoningTokens,
+    isAccountingValid: output.isAccountingValid,
+    durationMS: turn.durationMS,
+    firstTokenMS: turn.firstContentMS,
+    firstTokenKind: evidence.firstTokenKind,
   }, tpsMode);
   const milliseconds = (value: number) => `${Math.max(0, value).toLocaleString()} ms`;
 
