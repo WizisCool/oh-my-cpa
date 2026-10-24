@@ -1,14 +1,15 @@
 import React from 'react';
 import { Button, Dropdown } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
+import { ThemeProvider as OpenUIThemeProvider } from '@openuidev/react-ui';
 import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
 import {
-  AppstoreOutlined, BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, EditOutlined, FileTextOutlined,
-  LinkOutlined, MessageOutlined, PictureOutlined, PlayCircleOutlined, PlusOutlined, QuoteOutlined, ReloadOutlined, StopOutlined, ToolOutlined, WarningOutlined,
+  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, EditOutlined, FileTextOutlined,
+  LinkOutlined, MessageOutlined, PictureOutlined, PlayCircleOutlined, PlusOutlined, QuestionCircleOutlined, QuoteOutlined, ReloadOutlined, StopOutlined, ToolOutlined, WarningOutlined,
 } from '../../components/icons';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import type { ComposerCommand, ComposerTriggers } from '../../components/workspace/AssistantComposer';
@@ -18,6 +19,8 @@ import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffor
 import { TargetChip } from '../../components/workspace/TargetChip';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { exportFileName } from '../../agent/export';
+import { openUITheme } from '../../agent/openui/theme';
+import { useTheme } from '../../theme/ThemeContext';
 import type { Presentation, Trace } from '../../agent/types';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -36,12 +39,12 @@ import { useDemoArrivalToast } from '../../components/common/DemoNotice';
 import { saveBlob } from '../../utils/download';
 import { ThreadPlaceholder } from '../../components/workspace/ThreadPlaceholder';
 import { AgentMessage } from './AgentMessage';
-import { failureCode, getCapabilities, getOperation, getSession, readTurnImages, resetSession } from './api';
+import { decideOperation, failureCode, getCapabilities, getOperation, getSession, readTurnImages, resetSession } from './api';
+import { useOpenUIToolHost } from './useOpenUIToolHost';
 import { CapabilityDirectory } from './CapabilityDirectory';
 import { ExternalAgentGuide } from './ExternalAgentGuide';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
-import { QuestionPanel } from './interrupts/QuestionPanel';
 import { AgentAttachmentAdapter, splitAttachedFiles } from './attachments';
 import { useAgentThreadRuntime } from './runtime';
 import {
@@ -89,8 +92,6 @@ const DRAWER_TITLES: Record<DrawerView, string> = {
 
 /** How each presentation a command can ask for is drawn on its chip. */
 const PRESENTATIONS: Record<Presentation, { label: string; icon: React.ReactNode }> = {
-  ui: { label: 'agent.present.ui', icon: <AppstoreOutlined aria-hidden="true" /> },
-  canvas: { label: 'agent.present.canvas', icon: <AppstoreOutlined aria-hidden="true" /> },
   text: { label: 'agent.present.text', icon: <FileTextOutlined aria-hidden="true" /> },
 };
 
@@ -100,7 +101,10 @@ const KEYBOARD_MIN_HEIGHT = 160;
 
 export function AgentPage() {
   const { t, lang } = useI18n();
+  const { themeMode, theme: resolved } = useTheme();
+  const openUIThemeTokens = React.useMemo(() => openUITheme(resolved.palette.series), [resolved.palette.series]);
   const queryClient = useQueryClient();
+  const openUIApproval = useOpenUIToolHost();
   const isDemo = isDemoMode();
   const isPhone = useIsPhoneViewport();
   const pageRef = React.useRef<HTMLDivElement>(null);
@@ -313,7 +317,7 @@ export function AgentPage() {
   const retryTurn = React.useCallback(() => {
     if (!newestTurn) return;
     setEditTarget('');
-    void run.send(newestTurn.user, { replaceTurn: newestTurn.id, present: newestTurn.present }).catch((cause: unknown) => {
+    void run.send(newestTurn.user, { replaceTurn: newestTurn.id, present: newestTurn.present === 'text' ? 'text' : undefined }).catch((cause: unknown) => {
       if (cause instanceof RunRejectedError) setRejection({ code: cause.code, text: '' });
     });
   }, [newestTurn, run]);
@@ -337,17 +341,14 @@ export function AgentPage() {
     }
   };
 
-  const answerQuestion = (operation: Operation) => {
-    const lastTurn = turns.at(-1);
-    const trace = lastTurn?.traces.find(item => item.result.operation_id === operation.id);
-    // The answer goes through the framework's own human-input channel, which lands in the same
-    // continuation an approval does.
-    try {
-      if (!lastTurn || !trace) throw new Error('missing');
-      runtime.thread.getMessageById(`${lastTurn.id}:assistant`).getMessagePartByToolCallId(trace.id).resumeToolCall({ operation });
-    } catch {
-      continueAfter(operation);
-    }
+  // The agent's form is answered in the transcript, where prompt_openui renders it; declining it
+  // from the composer ends the wait the same way a refused approval does.
+  const [isSkipping, setIsSkipping] = React.useState(false);
+  const skipQuestion = (operation: Operation) => {
+    setIsSkipping(true);
+    decideOperation(operation.id, false)
+      .then(continueAfter, (cause: unknown) => setLocalError(failureCode(cause)))
+      .finally(() => setIsSkipping(false));
   };
 
   // ── the view context ───────────────────────────────────────────────────────
@@ -410,7 +411,6 @@ export function AgentPage() {
   const triggers = React.useMemo<ComposerTriggers>(() => {
     const handlers = () => commandHandlers.current;
     const offered: (ComposerCommand | false)[] = [
-      canAsk && { id: 'ui', description: t('agent.command.ui'), icon: PRESENTATIONS.ui.icon, run: () => setPresent('ui') },
       canAsk && { id: 'text', description: t('agent.command.text'), icon: PRESENTATIONS.text.icon, run: () => setPresent('text') },
       isRunning && { id: 'stop', description: t('agent.command.stop'), icon: <StopOutlined />, run: () => handlers().stop() },
       canReplace && { id: 'retry', description: t('agent.command.retry'), icon: <ReloadOutlined />, run: () => handlers().retryTurn() },
@@ -543,6 +543,15 @@ export function AgentPage() {
       </Button>
     </div>
   ) : null;
+  const questionHint = openOperation && isQuestion && !isRunning ? (
+    <div className={styles['awaiting']} role="status" data-testid="agent-question">
+      <QuestionCircleOutlined aria-hidden="true" />
+      <span>{t('agent.openui.form_hint')}</span>
+      <Button type="link" size="small" loading={isSkipping} onClick={() => skipQuestion(openOperation)}>
+        {t('agent.openui.form_skip')}
+      </Button>
+    </div>
+  ) : null;
   const quote = (
     <ComposerPrimitive.Quote className={styles['quote']}>
       <QuoteOutlined aria-hidden="true" />
@@ -607,6 +616,8 @@ export function AgentPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime} config={AGENT_AUI_CONFIG}>
       <AgentViewContext.Provider value={view}>
+        {/* Interfaces OpenUI renders take the console's tokens; scoped to the page, not the body. */}
+        <OpenUIThemeProvider mode={themeMode} lightTheme={openUIThemeTokens} darkTheme={openUIThemeTokens} cssSelector={`.${styles['shell']}`}>
         <div ref={pageRef} className={styles['shell']} data-testid="agent-page" data-hero={isHero || undefined} data-keyboard={isKeyboardOpen || undefined}>
           {bar}
           <main className={styles['shell-main']}>
@@ -632,18 +643,13 @@ export function AgentPage() {
                 {() => <AgentMessage />}
               </AssistantThread>
             )}
-            {openOperation && isQuestion ? (
-              <div className={workspace['composer']}>
-                <QuestionPanel key={openOperation.id} operation={openOperation} onDecided={answerQuestion} />
-              </div>
-            ) : (
-              <AssistantComposer
+            <AssistantComposer
                 placeholder={t(isPhone ? 'agent.message' : 'agent.message.placeholder')}
                 inputLabel={t('agent.message')}
                 sendLabel={t(isRunning ? 'agent.queue.send' : 'agent.send')}
                 stopLabel={t('agent.stop')}
                 blockedReason={isAwaiting ? t('agent.operation.hint') : !isDemo && !isFullyConfigured ? t('conversation.target.choose') : undefined}
-                header={<>{approvalHint}{quote}</>}
+                header={<>{approvalHint}{questionHint}{quote}</>}
                 chips={chips}
                 // The endpoint leads the foot, as in the Playground. A turn waiting on a decision
                 // pins it with the rest: its calls are replayed in the schema they were made in.
@@ -688,8 +694,7 @@ export function AgentPage() {
                 queue={{ summary: count => t('agent.queue.summary', { count: String(count) }), removeLabel: t('agent.queue.remove') }}
                 triggers={triggers}
               />
-            )}
-            {isHero && !(openOperation && isQuestion) && examples}
+            {isHero && examples}
           </main>
           <AppDrawer
             title={t(DRAWER_TITLES[shownViewRef.current])}
@@ -705,6 +710,8 @@ export function AgentPage() {
             {shownViewRef.current === 'connect' && <ExternalAgentGuide isDemo={isDemo} />}
           </AppDrawer>
         </div>
+        {openUIApproval}
+        </OpenUIThemeProvider>
       </AgentViewContext.Provider>
     </AssistantRuntimeProvider>
   );

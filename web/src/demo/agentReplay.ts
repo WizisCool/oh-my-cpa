@@ -1,8 +1,8 @@
 import { EventType } from '@ag-ui/core';
 import { parseAgentEvent } from '../agent/protocol';
 import type { AgentEvent, AgentRunRequest } from '../agent/protocol';
-import { isDisplayTool } from '../agent/types';
-import type { CapabilityReceipt, Conversation, DisplayView, Trace, Turn, TurnPart } from '../agent/types';
+import { isOpenUITool } from '../agent/types';
+import type { CapabilityReceipt, Conversation, Trace, Turn, TurnPart } from '../agent/types';
 import { createID } from '../utils/ids';
 import recording from './agentRecording.json';
 import {
@@ -22,7 +22,6 @@ interface RecordedTrace {
   arguments: Record<string, unknown>;
   result: CapabilityReceipt;
   duration_ms: number;
-  view?: DisplayView;
 }
 
 interface RecordedTurn extends Omit<Turn, 'id' | 'reply' | 'traces' | 'started_at_ms' | 'ended_at_ms'> {
@@ -31,8 +30,8 @@ interface RecordedTurn extends Omit<Turn, 'id' | 'reply' | 'traces' | 'started_a
 }
 
 const THOUGHT_CHUNK = 14;
-/** A display's markup arrives fast enough to watch it being drawn without waiting on it. */
-const DISPLAY_ARGUMENT_CHUNK = 72;
+/** An interface's program arrives fast enough to watch it being drawn without waiting on it. */
+const PROGRAM_ARGUMENT_CHUNK = 72;
 
 /**
  * Replays the recorded Agent run as the events a live run sends (ADR 0092).
@@ -40,8 +39,8 @@ const DISPLAY_ARGUMENT_CHUNK = 72;
  * The demonstration calls no model, so this stands where the run request does and yields the
  * same AG-UI stream the server's translator would have: a round per model request, reasoning and
  * answer text as deltas, each call announced before its result, then the stored conversation and
- * the run's end. Everything downstream - the reducer, the transcript, the call timeline, a
- * generated interface drawn while its markup is still arriving - is the console's own code
+ * the run's end. Everything downstream - the reducer, the transcript, the call timeline, an
+ * OpenUI interface drawn while its program is still arriving - is the console's own code
  * reading it, which is the point: the demonstration shows the product working, not a picture of
  * it. Every event goes through the wire parser before it is yielded, so a replay cannot emit a
  * shape a real run could not.
@@ -95,22 +94,22 @@ export async function* replayAgentRun(request: AgentRunRequest, signal: AbortSig
       const argumentsText = JSON.stringify(trace.arguments);
       const callStartedAtMS = Date.now();
       yield emit({ type: EventType.TOOL_CALL_START, toolCallId: trace.id, toolCallName: trace.name, metadata: { started_at_ms: callStartedAtMS } });
-      // A display's arguments are the model writing an interface, and the console draws it as it
-      // is written; any other call's arguments arrive whole, as the server announces them.
-      for (const delta of isDisplayTool(trace.name) ? chunkText(argumentsText, DISPLAY_ARGUMENT_CHUNK) : [argumentsText]) {
+      // An OpenUI call's arguments are the model writing an interface, and the console draws it as
+      // it is written; any other call's arguments arrive whole, as the server announces them.
+      for (const delta of isOpenUITool(trace.name) ? chunkText(argumentsText, PROGRAM_ARGUMENT_CHUNK) : [argumentsText]) {
         yield emit({ type: EventType.TOOL_CALL_ARGS, toolCallId: trace.id, delta });
-        if (isDisplayTool(trace.name)) await pace(REPLAY_FRAME_MS, signal);
+        if (isOpenUITool(trace.name)) await pace(REPLAY_FRAME_MS, signal);
       }
       yield emit({ type: EventType.TOOL_CALL_END, toolCallId: trace.id });
       await pace(Math.max(trace.duration_ms, REPLAY_CALL_FLOOR_MS), signal);
       const callEndedAtMS = Date.now();
       settled.push({
         id: trace.id, name: trace.name, arguments: argumentsText, result: trace.result,
-        started_at_ms: callStartedAtMS, ended_at_ms: callEndedAtMS, ...(trace.view ? { view: trace.view } : {}),
+        started_at_ms: callStartedAtMS, ended_at_ms: callEndedAtMS,
       });
       yield emit({
         type: EventType.TOOL_CALL_RESULT, messageId: `result:${trace.id}`, toolCallId: trace.id, content: JSON.stringify(trace.result), role: 'tool',
-        metadata: { started_at_ms: callStartedAtMS, ended_at_ms: callEndedAtMS, ...(trace.view ? { view: trace.view } : {}) },
+        metadata: { started_at_ms: callStartedAtMS, ended_at_ms: callEndedAtMS },
       });
       // A call ends its round: the next thing the model writes answers what the call returned.
       yield* closeRound();

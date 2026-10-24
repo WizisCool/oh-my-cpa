@@ -1,5 +1,6 @@
 import { extractThinking } from '../utils/thinking';
-import { displayCallStage, isDisplayTool } from './types';
+import { isProgramText, programOf } from './openui/program';
+import { isOpenUITool } from './types';
 import type { Trace, TurnPart } from './types';
 
 /** One step of an answer's working: a stretch of reasoning, or a capability call. */
@@ -8,16 +9,17 @@ export type AnswerStep = { kind: 'thought'; text: string } | { kind: 'call'; tra
 /**
  * One block of an answer as a reader meets it, top to bottom.
  *
- * `chain` is a stretch of reasoning and calls drawn as one timeline (ADR 0084). `figure` is a
- * display call drawn where the model made it (ADR 0082); a display call that failed is a `call`
- * row standing on its own, which is where its code and detail are read. Reasoning with no call
- * beside it needs no timeline around it and is a `thought` of its own.
+ * `chain` is a stretch of reasoning and calls drawn as one timeline (ADR 0084). `interface` is an
+ * OpenUI program drawn where the model wrote it - a `present_openui` or `prompt_openui` call, or
+ * answer text that is itself a program (ADR 0088); an OpenUI call that failed is a `call` row
+ * standing on its own, which is where its code and detail are read. Reasoning with no call beside
+ * it needs no timeline around it and is a `thought` of its own.
  */
 export type AnswerSegment =
   | { kind: 'text'; text: string }
   | { kind: 'thought'; text: string }
   | { kind: 'chain'; steps: AnswerStep[] }
-  | { kind: 'figure'; trace: Trace }
+  | { kind: 'interface'; program: string }
   | { kind: 'call'; trace: Trace };
 
 /**
@@ -44,14 +46,13 @@ export function answerLayout(parts: readonly TurnPart[], traces: readonly Trace[
     if (part.type === 'tool') {
       const trace = part.trace_id ? byID.get(part.trace_id) : undefined;
       if (!trace) continue;
-      if (!isDisplayTool(trace.name)) {
+      if (!isOpenUITool(trace.name)) {
         working.push({ kind: 'call', trace });
         continue;
       }
       settleWorking();
-      const stage = displayCallStage(trace);
-      // A draft is a figure still being written: there is nothing settled to lay out yet.
-      if (stage !== 'draft') segments.push({ kind: stage === 'figure' ? 'figure' : 'call', trace });
+      const isDrawn = trace.result.status === 'success' || trace.result.status === 'pending' || trace.result.status === 'running';
+      segments.push(isDrawn ? { kind: 'interface', program: programOf(trace.arguments) } : { kind: 'call', trace });
       continue;
     }
     if (!part.content) continue;
@@ -64,7 +65,7 @@ export function answerLayout(parts: readonly TurnPart[], traces: readonly Trace[
     if (inline.thought) working.push({ kind: 'thought', text: inline.thought });
     if (inline.reply) {
       settleWorking();
-      segments.push({ kind: 'text', text: inline.reply });
+      segments.push(isProgramText(inline.reply) ? { kind: 'interface', program: inline.reply } : { kind: 'text', text: inline.reply });
     }
   }
   settleWorking();

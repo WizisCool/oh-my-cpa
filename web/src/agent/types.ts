@@ -17,52 +17,6 @@ export interface CapabilityReceipt {
   invalidates?: string[];
 }
 
-export const BLOCK_TYPES = ['stats', 'fields', 'callout', 'steps', 'meters', 'links'] as const;
-export type ViewTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
-
-/** One entry of a panel block; which fields are present follows the block's type. */
-export interface ViewItem {
-  label: string;
-  value?: string;
-  delta?: string;
-  tone?: ViewTone;
-  /** A Lucide icon name, or `brand:<maker>`; resolved by the console, unknown names draw a neutral mark. */
-  icon?: string;
-  text?: string;
-  status?: 'done' | 'active' | 'pending' | 'failed';
-  share?: number;
-  /** A console page from the server's closed set, relative to the console's base path. */
-  route?: string;
-}
-
-export interface ViewBlock {
-  type: typeof BLOCK_TYPES[number];
-  title?: string;
-  tone?: ViewTone;
-  text?: string;
-  items?: ViewItem[];
-}
-
-/**
- * A frozen display (ADR 0042, 0072, 0079), stored on the call that drew it. A stored conversation
- * may still hold a kind this console no longer draws (ADR 0073); `completedDisplayViews` leaves
- * those out.
- */
-export interface DisplayView {
-  kind: 'panel' | 'canvas' | 'ui';
-  title: string;
-  columns: string[];
-  rows: Record<string, string | number | boolean | null>[];
-  source?: { call_id: string; path?: string; data_ref?: string };
-  /** A panel's blocks: the model's own statements, laid out by the console. */
-  blocks?: ViewBlock[];
-  /** A canvas's markup, only ever drawn inside a sandboxed frame. */
-  html?: string;
-  icons?: string[];
-  /** `none` draws the view straight on the conversation, without the figure's frame and title. */
-  frame?: 'card' | 'none';
-}
-
 export interface Trace {
   id: string;
   name: string;
@@ -71,7 +25,6 @@ export interface Trace {
   result: CapabilityReceipt;
   started_at_ms?: number;
   ended_at_ms?: number;
-  view?: DisplayView;
 }
 
 /**
@@ -115,11 +68,10 @@ export interface Turn {
   started_at_ms?: number;
   ended_at_ms?: number;
   usage?: TurnUsage;
-  /** Follow-up questions the model offered with a finished answer. */
-  suggestions?: string[];
   prompt_version?: string;
-  /** The presentation a composer command asked this turn's answer to take. */
-  present?: Presentation;
+  /** The presentation a composer command asked this turn's answer to take; stored turns may carry
+   *  the retired `ui` and `canvas`, which no longer change anything. */
+  present?: string;
   /** Images sent with the message, by reference: the bytes are read from the image endpoint. */
   images?: TurnImage[];
 }
@@ -130,8 +82,8 @@ export interface TurnImage {
   bytes: number;
 }
 
-/** What `/ui` and `/text` ask of one answer; stored turns may carry `canvas`. */
-export type Presentation = 'ui' | 'canvas' | 'text';
+/** What `/text` asks of one answer: Markdown instead of the default OpenUI interface. */
+export type Presentation = 'text';
 
 export interface Conversation {
   active_run_id?: string;
@@ -162,76 +114,26 @@ export interface AgentInterrupt {
   permission?: string;
 }
 
-/** The display tools this console can draw; declared on every run (ADR 0042). */
-export const DISPLAY_TOOLS = ['render_view', 'render_ui', 'render_canvas'] as const;
-export type DisplayToolName = typeof DISPLAY_TOOLS[number];
 /**
- * Everything a run declares: the tools that draw, plus `suggest_next`, which draws nothing in the
- * transcript - the server keeps its questions on the turn instead of making it a call.
+ * The official OpenUI assistant-ui tools (ADR 0088): `present_openui` is the answer itself and
+ * `prompt_openui` a form the turn waits on. The console declares `present_openui` on every run - it
+ * renders OpenUI - and the server offers `prompt_openui` alongside it.
  */
-export const DECLARED_TOOLS = ['render_ui', 'suggest_next'] as const;
+export const PRESENT_OPENUI = 'present_openui';
+export const PROMPT_OPENUI = 'prompt_openui';
+export const DECLARED_TOOLS = [PRESENT_OPENUI] as const;
 
-export function isDisplayTool(name: string): name is DisplayToolName {
-  return (DISPLAY_TOOLS as readonly string[]).includes(name);
-}
-
-function isDrawableView(view: DisplayView | undefined): view is DisplayView {
-  return view?.kind === 'panel' || view?.kind === 'canvas' || view?.kind === 'ui';
+export function isOpenUITool(name: string): boolean {
+  return name === PRESENT_OPENUI || name === PROMPT_OPENUI;
 }
 
 /**
- * How a display call is drawn where the model made it: the figure once it has settled, a draft
- * while its arguments are still arriving, and an ordinary call row when it failed or holds a kind
- * this console no longer draws, so a refusal is never an invisible gap in the answer.
+ * The display tools of the generative UI OpenUI replaced. A stored conversation may still hold
+ * their calls; they are read as calls that changed nothing and are no longer drawn.
  */
-export function displayCallStage(trace: Trace): 'figure' | 'draft' | 'row' {
-  if (trace.result.status === 'success' && isDrawableView(trace.view)) return 'figure';
-  return trace.result.status === 'running' && !trace.view ? 'draft' : 'row';
-}
+export const RETIRED_DISPLAY_TOOLS: readonly string[] = ['render_view', 'render_ui', 'render_canvas', 'render_chart', 'render_table'];
 
-/**
- * The title of a display call whose arguments are still arriving. The text is a JSON prefix, so
- * it cannot be parsed as a document; the title is read once its own string has closed.
- */
-export function draftViewTitle(argumentsText: string | undefined): string {
-  const match = /"title"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(argumentsText ?? '');
-  if (!match) return '';
-  try {
-    const title: unknown = JSON.parse(match[1]);
-    return typeof title === 'string' ? title.trim() : '';
-  } catch {
-    return '';
-  }
-}
-
-/**
- * The markup of a display call whose arguments are still arriving: the `html` string as far as it
- * has been written. The text is a JSON prefix, so the string is cut back to its last whole
- * character - an escape may have been split by the stream - and decoded on its own.
- */
-export function draftViewHTML(argumentsText: string | undefined): string {
-  const match = /"html"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(argumentsText ?? '');
-  if (!match) return '';
-  // A `\uXXXX` escape is six characters, so at most five have to go before the rest decodes.
-  for (let cut = 0; cut <= 5 && cut <= match[1].length; cut++) {
-    try {
-      const html: unknown = JSON.parse(`"${match[1].slice(0, match[1].length - cut)}"`);
-      if (typeof html === 'string') return html;
-    } catch {
-      // Still inside an escape: drop one more character.
-    }
-  }
-  return '';
-}
-
-/** New UI drafts use the inline default; older display-tool drafts keep their own card geometry. */
-export function isDraftViewFrameless(argumentsText: string | undefined, toolName = 'render_ui'): boolean {
-  const frame = /"frame"\s*:\s*"(none|card)"/.exec(argumentsText ?? '');
-  return frame ? frame[1] === 'none' : toolName === 'render_ui';
-}
-
-/** A successful display is usable immediately, independently of the enclosing turn's status. */
-export function completedDisplayViews(turn: Pick<Turn, 'status' | 'traces'> | undefined): Trace[] {
-  if (!turn) return [];
-  return turn.traces.filter(trace => isDisplayTool(trace.name) && displayCallStage(trace) === 'figure');
+/** A call that drew rather than read or changed anything. */
+export function isPresentationTool(name: string): boolean {
+  return name === PRESENT_OPENUI || RETIRED_DISPLAY_TOOLS.includes(name);
 }

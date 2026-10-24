@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Image, Tooltip } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
-import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAui, useAuiState } from '@assistant-ui/react';
+import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -11,7 +11,8 @@ import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
-import { DISPLAY_TOOLS } from '../../agent/types';
+import { isOpenUITool, PRESENT_OPENUI, PROMPT_OPENUI } from '../../agent/types';
+import { isProgramText } from '../../agent/openui/program';
 import type { Turn } from '../../agent/types';
 import { useI18n } from '../../i18n';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -22,6 +23,7 @@ import type { AgentMessageCustom } from './thread';
 import { formatBytes } from '../../utils/format';
 import { useAgentView } from './tools/AgentViewContext';
 import { ToolFallback } from './tools/registry';
+import { OpenUIText } from './tools/openui';
 import { GenerationLoader } from '../../components/workspace/GenerationLoader';
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import styles from './AgentPage.module.css';
@@ -40,7 +42,7 @@ export function AgentUserMessage() {
     <MessagePrimitive.Root className={workspace['message']} data-role="user">
       {(!!files?.length || present) && (
         <div className={styles['sent-files']} data-testid="agent-sent-files">
-          {present && <span className={styles['sent-file']} data-tone="accent" data-testid="agent-sent-present">{t(`agent.present.${present}`)}</span>}
+          {present === 'text' && <span className={styles['sent-file']} data-tone="accent" data-testid="agent-sent-present">{t('agent.present.text')}</span>}
           {files?.map((file, index) => (
             <span key={`${file.name}:${index}`} className={styles['sent-file']}>
               <PaperClipOutlined aria-hidden="true" />
@@ -69,9 +71,9 @@ export function AgentUserMessage() {
 }
 
 /**
- * Reasoning and capability calls form the answer's chain of thought; the answer text stays outside
- * it. A display call is left out of the chain: it is drawn where the model made it, as the figure
- * itself, so the model decides what the reader meets before and after it (ADR 0082).
+ * Reasoning and capability calls form the answer's chain of thought; the answer stays outside it.
+ * An OpenUI call is the answer, so it is drawn where the model made it, as the interface itself
+ * (ADR 0082, 0088), never folded into the working above it.
  *
  * `agent/answerLayout.ts` states the same rule as a plain function for a saved copy of the
  * conversation; the two change together.
@@ -79,7 +81,8 @@ export function AgentUserMessage() {
 const GROUP_BY = groupPartByType({
   reasoning: ['group-chain'],
   'tool-call': ['group-chain'],
-  ...Object.fromEntries(DISPLAY_TOOLS.map(name => [`tool-call:${name}`, []])),
+  [`tool-call:${PRESENT_OPENUI}`]: [],
+  [`tool-call:${PROMPT_OPENUI}`]: [],
 });
 
 type GroupPart = { readonly type: `group-${string}`; readonly indices: readonly number[] };
@@ -215,30 +218,6 @@ function TurnFooter({ turn }: { turn: Turn }) {
 }
 
 /**
- * The questions the model offered after its answer, under the newest answer only: an older turn's
- * follow-ups were about a conversation that has since moved on. Choosing one writes it into the
- * message box rather than sending it, so the operator can still change it.
- *
- * The box is addressed through the thread: inside a message the bare composer scope is that
- * message's edit composer, which nothing on this page draws.
- */
-function FollowUps({ suggestions }: { suggestions?: string[] }) {
-  const { t } = useI18n();
-  const aui = useAui();
-  const isLast = useAuiState(state => state.message.isLast);
-  if (!isLast || !suggestions?.length) return null;
-  return (
-    <div className={workspace['follow-ups']} role="group" aria-label={t('agent.follow_ups')} data-testid="agent-follow-ups">
-      {suggestions.map((suggestion, index) => (
-        <button key={suggestion} type="button" className={workspace['follow-up']} style={{ '--follow-up-row': index } as React.CSSProperties} onClick={() => aui.thread().composer().setText(suggestion)}>
-          {suggestion}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/**
  * One thread message, drawn by the role of the message it is bound to rather than the role the
  * thread's render callback saw: the runtime can place its own placeholder where a message was.
  */
@@ -267,7 +246,11 @@ export function AgentAssistantMessage() {
               case 'group-chain':
                 return <ChainGroup group={part as GroupPart}>{children}</ChainGroup>;
               case 'text':
-                return (
+                return isProgramText(part.text) ? (
+                  <div className={styles['openui']} data-testid="agent-openui">
+                    <OpenUIText program={part.text} isStreaming={part.status.type === 'running'} />
+                  </div>
+                ) : (
                   <div data-aui-quote-selectable>
                     <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('conversation.external_image')} />
                   </div>
@@ -275,7 +258,11 @@ export function AgentAssistantMessage() {
               case 'reasoning':
                 return <ReasoningBlock text={part.text} isThinking={part.status.type === 'running'} />;
               case 'tool-call':
-                return part.toolUI ?? <ToolFallback {...part} />;
+                // A refused program is a call row, which is where its code and detail are read.
+                if (isOpenUITool(part.toolName) && !part.isError && part.toolUI) {
+                  return <div className={styles['openui']} data-testid="agent-openui" data-tool={part.toolName} data-aui-quote-selectable="false">{part.toolUI}</div>;
+                }
+                return <ToolFallback {...part} />;
               default:
                 return null;
             }
@@ -293,7 +280,6 @@ export function AgentAssistantMessage() {
           </MessagePrimitive.Error>
         )}
         {isLive ? <ActivityStrip /> : turn && <TurnFooter turn={turn} />}
-        {!isLive && turn && <FollowUps suggestions={turn.suggestions} />}
       </div>
     </MessagePrimitive.Root>
   );

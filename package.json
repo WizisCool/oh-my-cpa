@@ -58,6 +58,8 @@
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
     "verify:toolchain:strict": "node scripts/verify-toolchain.mjs --strict",
     "models:sync": "node scripts/sync-model-metadata.mjs",
+    "openui:prompt": "node --import tsx scripts/generate-openui-prompt.ts",
+    "check:openui-prompt": "node --import tsx scripts/generate-openui-prompt.ts --check",
     "verify:race": "node scripts/maintenance-checks.mjs race",
     "verify:fuzz": "node scripts/maintenance-checks.mjs fuzz",
     "verify:advisories": "node scripts/maintenance-checks.mjs advisories",
