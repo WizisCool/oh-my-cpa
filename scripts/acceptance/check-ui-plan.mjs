@@ -209,6 +209,13 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/pages/quota/',
     scenarios: ['oauth-management', 'oauth-vertex-import', 'oauth-model-rules', 'oauth-token-capacity', 'oauth-authorization-outcomes', 'oauth-workspace-scale', 'oauth-plugin-connections', 'overlay-back', 'mobile-console'],
   },
+  // The account mask the OAuth rows print until the operator reveals a reading. It is a leaf
+  // module and only those rows import it, so without this rule a change to it would run every
+  // scenario to prove what one page shows.
+  {
+    prefix: 'web/src/utils/maskAccount',
+    scenarios: ['oauth-management', 'mobile-console'],
+  },
   // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
   // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a
   // rule they fall through to "an unrecognised frontend path widens the plan", which is safe but

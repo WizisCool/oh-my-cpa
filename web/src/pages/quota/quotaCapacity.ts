@@ -109,3 +109,16 @@ export function compactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNu
   }
   return `${prefix}≈${t('quota.capacity_tokens', { n: formatTokens(capacity.tokens, tokenStyle) })}`;
 }
+
+/**
+ * The same reading for the row's tooltip, where it is a sentence of its own: the basis names the
+ * estimate once instead of reading "Est. capacity Prev ≈…", and a previous cycle is never called
+ * the current cycle's capacity.
+ */
+export function describeCompactQuotaCapacity(window: CapacityWindow, tokenStyle: TokenNumberStyle, t: TFunc): string | null {
+  const reading = compactQuotaCapacity(window, tokenStyle, t);
+  if (!reading) return null;
+  const isPreviousCycle = window.capacity?.basis === 'previous_cycle';
+  const figure = isPreviousCycle ? reading.slice(`${t('quota.capacity_previous_short')} `.length) : reading;
+  return `${t(isPreviousCycle ? 'quota.capacity_previous' : 'quota.capacity_estimate')} ${figure}`;
+}

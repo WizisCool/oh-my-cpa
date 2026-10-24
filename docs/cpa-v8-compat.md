@@ -82,7 +82,11 @@ credential list and the existing Agent/MCP credential read. Missing support
 metadata disables binding. Stored material presence and expiry are not live
 validity checks.
 
-The credential detail offers Bind SIWC and an explicitly confirmed Rebind SIWC.
+A provider section exposes a SIWC column only when it contains a Codex credential
+with SIWC state. The column carries each eligible row's badge (bind, off, on,
+rebind when CPA reports the token locally invalid, or binding while an attempt is
+pending). The badge and the row menu both open the credential's SIWC dialog. The dialog offers Bind SIWC and an
+explicitly confirmed Rebind SIWC.
 The server resolves a unique credential identity and sends only CPA's managed
 ID/name to the fixed binding endpoint. This is standalone/local-file-only;
 Home mode, non-file backends and older gateways are unavailable. There is no

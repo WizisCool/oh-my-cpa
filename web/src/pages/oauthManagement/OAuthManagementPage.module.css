@@ -25,7 +25,6 @@
 
 .summary-healthy,
 .summary-disabled,
-.summary-problem,
 .summary-attention {
   display: inline-flex;
   align-items: center;
@@ -36,7 +35,6 @@
 
 .summary-healthy { color: var(--success); }
 .summary-disabled { color: var(--meta); }
-.summary-problem { color: var(--danger); }
 .summary-attention { color: var(--warn); }
 
 .status-dot {
@@ -93,61 +91,10 @@
   padding-inline: 2px;
 }
 
-/* The list is one grid, and the header and every record are subgrids of it, so a column is one
-   track whatever any row holds. Two grids declared from the same track list still disagreed: the
-   `auto` actions track resolved per grid, and the difference shifted every flexible column
-   between the header and the rows. Below the collapse width the records lay themselves out. */
-.records {
-  --oauth-record-columns: minmax(240px, 1.2fr) 88px 48px minmax(105px, 0.45fr) minmax(300px, 1.4fr) auto;
+.sections {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-@media (min-width: 1201px) {
-  .records {
-    display: grid;
-    grid-template-columns: var(--oauth-record-columns);
-    column-gap: 16px;
-  }
-
-  .records > * {
-    display: grid;
-    grid-template-columns: subgrid;
-    grid-column: 1 / -1;
-  }
-}
-
-.records > :last-child > article {
-  border-bottom: 0;
-}
-
-.table-header {
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  user-select: none;
-}
-
-.th-identity {
-  padding-left: 28px;
-}
-
-.th-status,
-.th-switch,
-.th-management,
-.th-quota {
-  min-width: 0;
-}
-
-.th-actions {
-  text-align: right;
-  padding-right: 4px;
+  gap: 16px;
 }
 
 .filter-toggle {
@@ -213,12 +160,6 @@
 .toolbar > :global(.ant-dropdown-button) {
   width: auto;
   flex: 0 0 auto;
-}
-
-@media (max-width: 1200px) {
-  .table-header {
-    display: none;
-  }
 }
 
 @media (max-width: 900px) {

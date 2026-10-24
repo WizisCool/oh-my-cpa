@@ -9,7 +9,10 @@ import {
 } from '../src/components/dashboard/CredentialQuota';
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
-import { CompactQuotaView } from '../src/pages/quota/CompactQuotaView';
+import { App as AntdApp } from 'antd';
+import { CredentialSection, type CredentialRowActions } from '../src/pages/oauthManagement/CredentialSection';
+import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
+import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import type { QuotaItem, QuotaWindow } from '../src/types/quota';
 
@@ -368,19 +371,31 @@ describe('a row that says it is out of date', () => {
       ...overrides,
     });
 
-  const renderRow = (item: QuotaItem, onRefresh?: () => void) => render(
-    <MemoryRouter>
-      <I18nProvider>
-        <CompactQuotaView item={item} nowMS={NOW_MS} onRefresh={onRefresh} />
-      </I18nProvider>
-    </MemoryRouter>,
-  );
+  const renderRow = (item: QuotaItem, onRefresh?: () => void) => {
+    const { records } = buildOAuthWorkspaceProjection([file(item.auth_index)], [item], []);
+    const [section] = buildCredentialSections(records, records);
+    const actions: CredentialRowActions = {
+      isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
+      onSelect: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn(),
+      onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(),
+    };
+    if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
+    return render(
+      <MemoryRouter>
+        <I18nProvider>
+          <AntdApp>
+            <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
+          </AntdApp>
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  };
 
   it('answers its own complaint with one refresh, without opening the drawer', () => {
     const refresh = vi.fn();
-    renderRow(staleItem(), refresh);
+    const { container } = renderRow(staleItem(), refresh);
     expect(screen.getByText('Stale')).toBeTruthy();
-    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    expect(container.querySelector('[data-quota-failure-line="failed"]')?.getAttribute('title')).toMatch(/Last refresh failed .*HTTP 401/);
     const control = screen.getByTestId('quota-stale-refresh');
     fireEvent.click(control);
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -388,13 +403,13 @@ describe('a row that says it is out of date', () => {
 
   it('offers no refresh when the caller has none to offer', () => {
     const { container } = renderRow(staleItem(), undefined);
-    expect(screen.getByText(/Last refresh failed/)).toBeTruthy();
+    expect(container.querySelector('[data-quota-failure-line="failed"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
   });
 
   it('leaves a current reading without the control, and without the complaint', () => {
     const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
     expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
-    expect(screen.queryByText(/Last refresh failed/)).toBeNull();
+    expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
   });
 });

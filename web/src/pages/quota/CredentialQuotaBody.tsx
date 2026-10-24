@@ -28,8 +28,8 @@ interface CredentialQuotaBodyProps {
 /**
  * The native quota reading: every window the provider published, in group order, with plan,
  * credits, cooldown, per-window reset actions and the raw diagnostics. The Drawer's quota tab
- * renders it. A list row renders `CompactQuotaView` instead, because a row answers a smaller
- * question and must stay the height of one credential.
+ * renders it. A list row renders one cell per quota column of its provider section instead,
+ * because a row answers a smaller question and must stay the height of one credential.
  */
 export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   item,
