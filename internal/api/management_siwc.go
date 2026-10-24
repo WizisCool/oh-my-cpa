@@ -15,6 +15,7 @@ import (
 
 const SIWC_BINDING_LIMIT = 128
 const SIWC_BINDING_TTL = 5 * time.Minute
+const SIWC_CALLBACK_INCOMPLETE_CODE = "siwc_callback_incomplete"
 
 var SIWC_STATE_PATTERN = regexp.MustCompile(`^[A-Za-z0-9_-]{1,512}$`)
 
@@ -236,6 +237,12 @@ func (h *Handler) submitSIWCBindingCallback(writer http.ResponseWriter, request 
 		query, err := url.ParseQuery(parsed.RawQuery)
 		if err != nil || len(query["state"]) != 1 || query.Get("state") != request.URL.Query().Get("state") {
 			writeError(writer, http.StatusBadRequest, "callback does not match this binding")
+			return
+		}
+		// CPA needs the issued client_id, which the authorization URL does not carry. A URL
+		// copied before the redirect finished lacks it, and naming that is the operator's fix.
+		if query.Get("error") == "" && (query.Get("code") == "" || query.Get("client_id") == "") {
+			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "SIWC callback requires code and client_id", "code": SIWC_CALLBACK_INCOMPLETE_CODE})
 			return
 		}
 		if err := h.recordAudit(request, "oauth.siwc.callback", "auth_file", session.name, "attempt", nil); err != nil {

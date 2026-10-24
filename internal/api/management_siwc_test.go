@@ -162,15 +162,27 @@ func TestSIWCCallbackScopeConflictsAndSecretExclusion(t *testing.T) {
 	})
 	base += "/omc/api/v1/management/oauth/siwc"
 	doJSON(t, client, "POST", base+"/bind", `{"name":"codex.json","auth_index":"idx","rebind":true}`)
-	for _, redirect := range []string{
-		"http://127.0.0.1:1455/auth/callback?state=other&code=SYNTHETIC-CODE&client_id=issued",
-		"http://127.0.0.1:1455/auth/callback?state=fixture-state&state=other&code=SYNTHETIC-CODE&client_id=issued",
-		"https://evil.example.test/auth/callback?state=fixture-state",
+	for _, testCase := range []struct {
+		redirect string
+		wantCode string
+	}{
+		{redirect: "http://127.0.0.1:1455/auth/callback?state=other&code=SYNTHETIC-CODE&client_id=issued"},
+		{redirect: "http://127.0.0.1:1455/auth/callback?state=fixture-state&state=other&code=SYNTHETIC-CODE&client_id=issued"},
+		{redirect: "https://evil.example.test/auth/callback?state=fixture-state"},
+		{redirect: "http://127.0.0.1:1455/auth/callback?state=fixture-state&code=SYNTHETIC-CODE", wantCode: "siwc_callback_incomplete"},
+		{redirect: "http://127.0.0.1:1455/auth/callback?state=fixture-state&client_id=issued", wantCode: "siwc_callback_incomplete"},
+		{redirect: "http://127.0.0.1:1455/auth/callback?state=fixture-state", wantCode: "siwc_callback_incomplete"},
 	} {
-		body, _ := json.Marshal(map[string]string{"redirect_url": redirect})
+		body, _ := json.Marshal(map[string]string{"redirect_url": testCase.redirect})
 		response, raw := doJSON(t, client, "POST", base+"/callback?state=fixture-state", string(body))
-		if response.StatusCode != 400 {
-			t.Fatalf("bad callback: %d %s", response.StatusCode, raw)
+		var got struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != 400 || got.Code != testCase.wantCode {
+			t.Fatalf("bad callback: status=%d code=%q, want status=400 code=%q", response.StatusCode, got.Code, testCase.wantCode)
 		}
 	}
 	for _, r := range recorder.all() {

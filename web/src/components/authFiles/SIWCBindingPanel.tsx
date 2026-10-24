@@ -14,7 +14,7 @@ import { SectionHeading } from '../common/SectionHeading';
 import styles from './SIWCBindingPanel.module.css';
 
 const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, string> = {
-  start: 'siwc.start_failed', callback: 'siwc.callback_failed', cancel: 'siwc.cancel_failed',
+  start: 'siwc.start_failed', callback: 'siwc.callback_failed', incomplete: 'siwc.callback_incomplete', cancel: 'siwc.cancel_failed',
   read: 'siwc.read_failed', expired: 'siwc.expired', failed: 'siwc.failed', conflict: 'siwc.conflict',
 };
 const PHASE_KEYS: Record<SIWCSession['phase'], string> = {
