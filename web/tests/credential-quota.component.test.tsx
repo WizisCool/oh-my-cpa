@@ -394,12 +394,15 @@ describe('a row that says it is out of date', () => {
     );
   };
 
-  it('answers its own complaint with one refresh, without opening the drawer', () => {
+  it('answers its own complaint with the row\'s refresh, without opening the drawer', () => {
     const refresh = vi.fn();
     const { container } = renderRow(staleItem(), refresh);
     expect(screen.getByText('Stale')).toBeTruthy();
     expect(container.querySelector('[data-quota-failure-line="failed"]')?.getAttribute('title')).toMatch(/Last refresh failed .*HTTP 401/);
-    const control = screen.getByTestId('quota-stale-refresh');
+    const control = screen.getByTestId('oauth-credential-refresh');
+    expect(control.getAttribute('data-needs-refresh')).toBe('true');
+    // The state is in the name a screen reader announces, not only in the attribute.
+    expect(control.getAttribute('aria-label')).toMatch(/^Refresh quota: .+ \(Needs refresh\)$/);
     fireEvent.click(control);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -407,12 +410,13 @@ describe('a row that says it is out of date', () => {
   it('offers no refresh when the caller has none to offer', () => {
     const { container } = renderRow(staleItem(), undefined);
     expect(container.querySelector('[data-quota-failure-line="failed"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
+    expect(container.querySelector('[data-testid="oauth-credential-refresh"]')).toBeNull();
   });
 
-  it('leaves a current reading without the control, and without the complaint', () => {
+  it('keeps the refresh on a current reading, without the complaint', () => {
     const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
-    expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
+    expect(screen.getByTestId('oauth-credential-refresh').getAttribute('data-needs-refresh')).toBeNull();
+    expect(screen.getByTestId('oauth-credential-refresh').getAttribute('aria-label')).not.toMatch(/Needs refresh/);
     expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
   });
 });

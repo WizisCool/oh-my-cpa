@@ -1,36 +1,171 @@
 .dialog {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
 }
+
+/* The credential the dialog acts on, directly under the title it qualifies. */
 .target {
-  margin: 0;
+  margin: -6px 0 0;
   overflow: hidden;
   color: var(--muted);
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .binding {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
 }
-.hint {
-  margin: 0;
+
+/* The verdict and the facts behind it, set into the dialog as one well. */
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.status-label {
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+  padding-left: 15px;
   color: var(--muted);
   font-size: var(--text-sm);
 }
-.actions {
+
+.status-meta > * + *::before {
+  margin: 0 8px;
+  color: var(--meta);
+  content: "·";
+}
+
+.status-meta:empty {
+  display: none;
+}
+
+.meta-hint {
+  text-decoration: underline dotted var(--meta);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* An explanation on request: a glyph beside the thing it explains, never a paragraph under it. */
+.info {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--meta);
+  font-size: var(--text-sm);
+  cursor: help;
+  transition: color var(--motion-fast) ease;
+}
+
+.info:hover,
+.info:focus-visible {
+  color: var(--fg-2);
+}
+
+.info:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.setting-label,
+.step-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.step-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 5px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.callback {
+
+.footer {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.phase {
+  min-height: 22px;
+  font-size: var(--text-sm);
 }

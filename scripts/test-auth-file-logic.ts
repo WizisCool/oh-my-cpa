@@ -84,9 +84,6 @@ test('Sorting: handles name, requests, priority, weight', () => {
   const byNameDesc = sortAuthFiles([fA, fB], 'name-desc');
   assert.equal(byNameDesc[0].name, 'b.json');
 
-  const byRequests = sortAuthFiles([fA, fB], 'requests-desc');
-  assert.equal(byRequests[0].name, 'b.json', 'b.json has 20 total requests vs 10');
-
   const byPriority = sortAuthFiles([fA, fB], 'priority-desc');
   assert.equal(byPriority[0].name, 'b.json', 'b.json has priority 10 vs 1');
 

@@ -253,6 +253,8 @@ test('query parsing clamps unknown state and keeps one-shot OAuth intent separat
   assert.equal(parsed.page, 1);
   assert.equal(parsed.pageSize, 12);
   assert.equal(parsed.density, 'compact');
+  // A link or a saved view from before the request-count sort was retired reads as the default.
+  assert.equal(parseOAuthWorkspaceQuery(new URLSearchParams('sort=requests-desc')).sort, 'name-asc');
   const durable = consumeOneShotIntent(new URLSearchParams(
     'provider=codex&q=ops&density=compact&action=connect&connect_provider=iflow&focus=quota',
   ));
@@ -567,6 +569,10 @@ test('section columns: each family once, each period a column, in the order a re
       [group('Gemini models', '5h', 5)],
       [group('Gemini models', '5h', 5), group('Gemini 4 Argon', 'week', 168)],
     ], [['Gemini', ['5h']], ['Gemini 4 Argon', ['weekly']]]],
+    ['a group no credential reports gets no column', [
+      [group('Gemini models', '5h', 5), group('Claude and GPT models', '5h', 5)],
+      [group('Gemini models', '5h', 5), group('Claude and GPT models', '5h', 5)],
+    ], [['Gemini', ['5h']], ['Claude and GPT', ['5h']]]],
     ['a second weekly limit in the plan is its own column, not an overwrite', [[
       { id: 'five_hour', label: '5小时滚动用量 (5-Hour)', scope: 'standard', period_hours: 5 },
       { id: 'seven_day', label: '每周总用量上限 (Weekly)', scope: 'standard', period_hours: 168 },

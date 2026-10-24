@@ -25,7 +25,7 @@ export function SIWCDialog({ file, canEdit, bindings, onClose }: SIWCDialogProps
   const identity = file ? deriveAuthFileIdentity(file) : undefined;
   const targetName = identity?.isAccountPrimary ? maskAccount(identity.primary) : identity?.primary;
   return (
-    <Modal open={Boolean(file)} title={t('siwc.title')} footer={null} onCancel={onClose} width={560} destroyOnHidden>
+    <Modal open={Boolean(file)} title={t('siwc.title')} footer={null} onCancel={onClose} width={480} destroyOnHidden>
       {file && (
         <div className={styles.dialog} data-testid="siwc-dialog">
           <p className={styles.target} title={identity?.isAccountPrimary ? maskAccountIn(file.name, identity.primary) : file.name}>{targetName ?? file.name}</p>

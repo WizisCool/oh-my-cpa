@@ -1,7 +1,7 @@
 import { buildOAuthWorkspaceProjection, type OAuthWorkspaceRecord } from '../../web/src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { AuthFileSortKey } from '../../web/src/components/authFiles/authFileLogic';
 
-export const OAUTH_SORT_KEYS: AuthFileSortKey[] = ['name-asc', 'name-desc', 'requests-desc', 'priority-desc', 'weight-desc'];
+export const OAUTH_SORT_KEYS: AuthFileSortKey[] = ['name-asc', 'name-desc', 'priority-desc', 'weight-desc'];
 
 export function createOAuthSortRecords(count: number): OAuthWorkspaceRecord[] {
   const files = Array.from({length: count}, (_, index) => {
@@ -20,7 +20,6 @@ export function legacyOAuthSort(records: OAuthWorkspaceRecord[], sort: AuthFileS
     left.file.name.localeCompare(right.file.name, undefined, {numeric: true, sensitivity: 'base'});
   switch (sort) {
     case 'name-desc': return copy.sort((left, right) => byName(right, left));
-    case 'requests-desc': return copy.sort((left, right) => (right.file.success + right.file.failed) - (left.file.success + left.file.failed) || byName(left, right));
     case 'priority-desc': return copy.sort((left, right) => (right.file.priority ?? 0) - (left.file.priority ?? 0) || byName(left, right));
     case 'weight-desc': return copy.sort((left, right) => (right.file.weight ?? 1) - (left.file.weight ?? 1) || byName(left, right));
     case 'name-asc':

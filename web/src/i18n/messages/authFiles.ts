@@ -68,7 +68,6 @@ export const AUTH_FILES_MESSAGES: Messages = {
   'af.sort_label': ['排序', 'Sort'],
   'af.sort_name_asc': ['文件名 (A-Z)', 'File Name (A-Z)'],
   'af.sort_name_desc': ['文件名 (Z-A)', 'File Name (Z-A)'],
-  'af.sort_requests': ['请求量 (高到低)', 'Total Requests (High to Low)'],
   'af.sort_priority': ['优先级 (高到低)', 'Priority (High to Low)'],
   'af.sort_weight': ['权重 (高到低)', 'Weight (High to Low)'],
   'af.batch_enable': ['批量启用', 'Batch Enable'],

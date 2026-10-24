@@ -805,7 +805,6 @@ export const OAuthManagementPage: React.FC = () => {
               options={[
                 { value: 'name-asc', label: t('af.sort_name_asc') },
                 { value: 'name-desc', label: t('af.sort_name_desc') },
-                { value: 'requests-desc', label: t('af.sort_requests') },
                 { value: 'priority-desc', label: t('af.sort_priority') },
                 { value: 'weight-desc', label: t('af.sort_weight') },
               ]}
