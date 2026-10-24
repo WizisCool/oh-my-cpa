@@ -103,6 +103,11 @@ export default defineConfig(({ command }) => ({
           ) {
             return 'vendor-charts';
           }
+          // The Insights page's chart runtime, separate from the dashboard's so neither page
+          // downloads the other's (ADR 0106).
+          if (id.includes('node_modules/echarts/') || id.includes('node_modules/zrender/')) {
+            return 'vendor-echarts';
+          }
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||

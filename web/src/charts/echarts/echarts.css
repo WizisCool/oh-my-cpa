@@ -1,0 +1,16 @@
+/* An ECharts surface draws on the panel it sits in; the slot holds its height before it mounts so
+   nothing below moves when it does. */
+.omc-echart-slot { position: relative; width: 100%; min-width: 0; }
+.omc-echart { width: 100%; min-width: 0; }
+.omc-echart svg { overflow: visible; }
+
+/* The library positions its tooltip; its surface and type are the console's. The shell is the theme's
+   surface and hairline (echartsTheme.ts), and the content is the shared `.omc-tip` readout. */
+.omc-echart-tip {
+  font-family: var(--font-mono) !important;
+  font-size: var(--text-xs) !important;
+  border-radius: var(--radius-xs) !important;
+  box-shadow: none !important;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+}

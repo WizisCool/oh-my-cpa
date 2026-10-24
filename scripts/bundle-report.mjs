@@ -69,7 +69,7 @@ function isDeferredModule(moduleId) {
   return moduleId.startsWith('web/src/pages/')
     || moduleId === 'web/src/components/common/AppLayout.tsx'
     || moduleId === 'web/src/components/config/YamlSourceEditor.tsx'
-    || /^node_modules\/(?:@antv\/|@ant-design\/(?:charts|plots)\/|monaco-editor\/|react-markdown\/|remark-gfm\/)/.test(moduleId);
+    || /^node_modules\/(?:@antv\/|@ant-design\/(?:charts|plots)\/|echarts\/|zrender\/|monaco-editor\/|react-markdown\/|remark-gfm\/)/.test(moduleId);
 }
 
 export function findLoadingViolations(chunks, initialFiles) {

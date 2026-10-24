@@ -1426,16 +1426,20 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .omc-tip-time { color: var(--muted); margin-bottom: 2px; }
 .omc-tip-rows { display: grid; grid-template-columns: max-content max-content; gap: 2px 6px; max-width: 100%; }
 .omc-tip-rows.has-names { grid-template-columns: max-content minmax(0, max-content) max-content; }
-.omc-tip-rows.has-shares { grid-template-columns: max-content max-content max-content; }
-.omc-tip-rows.has-names.has-shares { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
+.omc-tip-rows.has-shares,
+.omc-tip-rows.has-notes { grid-template-columns: max-content max-content max-content; }
+.omc-tip-rows.has-names.has-shares,
+.omc-tip-rows.has-names.has-notes { grid-template-columns: max-content minmax(0, max-content) max-content max-content; }
 .omc-tip-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; font-variant-numeric: tabular-nums; }
 .omc-tip-swatch { grid-column: 1; width: 8px; height: 8px; border-radius: 999px; }
 .omc-tip-name { grid-column: 2; color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .omc-tip-value { grid-column: 2; color: var(--fg-2); white-space: nowrap; text-align: right; }
 .omc-tip-rows.has-names .omc-tip-value { grid-column: 3; }
-/* Reserve a share track only for readouts that report it. */
-.omc-tip-share { grid-column: 3; color: var(--muted); white-space: nowrap; text-align: right; }
-.omc-tip-rows.has-names .omc-tip-share { grid-column: 4; }
+/* Reserve a metadata track only for readouts that report it. */
+.omc-tip-share,
+.omc-tip-note { grid-column: 3; color: var(--muted); white-space: nowrap; text-align: right; }
+.omc-tip-rows.has-names .omc-tip-share,
+.omc-tip-rows.has-names .omc-tip-note { grid-column: 4; }
 
 /* A glyph in the header's own muted ink rather than a framed button: the panel is a reading, and
    its one control should not outweigh the title it sits beside. */
