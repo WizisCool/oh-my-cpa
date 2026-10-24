@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useT } from '../src/i18n';
 import { useState } from 'react';
+import { ProviderTable } from '../src/components/providers/ProviderTable';
 import { ProviderEditorDrawer } from '../src/components/providers/ProviderEditorDrawer';
 import { useProviderManagement } from '../src/components/providers/useProviderManagement';
 import { useProviderIconOverrides } from '../src/components/providers/useProviderIconOverrides';
@@ -102,5 +103,28 @@ it('saves a changed protocol with the original identity and refreshes migrated i
     expect(writes()[2].body).toEqual({ 'openai-compat-0': 'Anthropic', 'codex-1': 'DeepSeek', 'codex-2': 'DeepSeek' });
     expect(writes()[2].body['openai-compat-1']).toBeUndefined();
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / Protocol' })).toBeNull());
+  } finally { view.unmount(); }
+});
+
+function ProviderRows({ onEdit }: { onEdit: (provider: ProviderItem) => void }) {
+  const t = useT();
+  const editor = useProviderManagement({
+    t, toast, providerIcons: {}, writeProviderIcon: async () => ({ ok: true }),
+    shiftCachedProviderIcons: () => {}, settleProviderRow: () => {},
+  });
+  return <ProviderTable {...editor} providers={[PROVIDER]} providersLoading={false}
+    emptyText="Empty" traffic={new Map()} providerIcons={{}} handleOpenEdit={onEdit} />;
+}
+
+it('offers a single editor action for each provider and passes its identity', () => {
+  installOmcApi();
+  const onEdit = vi.fn();
+  const view = renderWithOmc(<ProviderRows onEdit={onEdit} />);
+  try {
+    const editorActions = screen.getAllByRole('button', { name: /^(Details|Edit): Relay$/ });
+    expect(editorActions).toHaveLength(1);
+    fireEvent.click(editorActions[0]);
+    expect(onEdit.mock.calls).toEqual([[PROVIDER]]);
+    expect(screen.getByRole('button', { name: 'Delete: Relay' })).toBeTruthy();
   } finally { view.unmount(); }
 });
