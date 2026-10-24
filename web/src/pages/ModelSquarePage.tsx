@@ -2,7 +2,8 @@ import React from 'react';
 import clsx from 'clsx';
 import { Button } from 'antd';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useViewSearchParams, type ViewChangeOptions } from '../hooks/useViewSearchParams';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
@@ -37,6 +38,7 @@ import {
   type ModelSquareProvider,
 } from '../types/modelSquare';
 import styles from './ModelSquarePage.module.css';
+import selectionStyles from '../components/common/selection.module.css';
 import { SearchInput } from '../components/common/SearchInput';
 import { EmptyState } from '../components/common/EmptyState';
 import { SectionHeading } from '../components/common/SectionHeading';
@@ -280,7 +282,7 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
 
 export const ModelSquarePage: React.FC = () => {
   const t = useT();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useViewSearchParams();
   const search = params.get('q') ?? '';
   const manufacturerId = params.get('maker') ?? '';
   const [page, setPage] = React.useState(1);
@@ -330,11 +332,12 @@ export const ModelSquarePage: React.FC = () => {
     total: entries.filter(entry => entry.manufacturer.id === manufacturer.id).length,
   }));
 
-  const updateParams = (change: (next: URLSearchParams) => void) => {
+  const updateParams = (change: (next: URLSearchParams) => void, options?: ViewChangeOptions) => {
     setPage(1);
-    setParams(current => { const next = new URLSearchParams(current); change(next); return next; }, { replace: true });
+    setParams(current => { const next = new URLSearchParams(current); change(next); return next; }, options);
   };
-  const setParam = (name: string, value: string) => updateParams(next => { if (value) next.set(name, value); else next.delete(name); });
+  // Typing a search is one step of Back; choosing a maker is another.
+  const setParam = (name: string, value: string) => updateParams(next => { if (value) next.set(name, value); else next.delete(name); }, name === 'q' ? { coalesce: 'q' } : undefined);
   const isFiltered = search !== '' || manufacturerId !== '';
   const clearFilters = () => updateParams(next => { next.delete('q'); next.delete('maker'); });
 
@@ -371,10 +374,10 @@ export const ModelSquarePage: React.FC = () => {
         {isFiltered && <Button type="link" size="small" className={styles['clear-filters']} onClick={clearFilters}>{t('models.clear_filters')}</Button>}
       </Toolbar>
       <div className={clsx(styles['chip-group'], styles['maker-strip'])} role="group" aria-label={t('models.filter_makers')}>
-        <button type="button" className={styles['chip']} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
+        <button type="button" className={clsx(styles['chip'], selectionStyles['selection-control'])} aria-pressed={manufacturerId === ''} onClick={() => setParam('maker', '')}>
           {t('common.all')}<Count size="small">{searched.length}</Count>
         </button>
-        {makers.map(({ manufacturer, count }) => <button key={manufacturer.id} type="button" className={styles['chip']} data-maker={manufacturer.id} aria-pressed={manufacturerId === manufacturer.id} onClick={() => setParam('maker', manufacturerId === manufacturer.id ? '' : manufacturer.id)}>
+        {makers.map(({ manufacturer, count }) => <button key={manufacturer.id} type="button" className={clsx(styles['chip'], selectionStyles['selection-control'])} data-maker={manufacturer.id} aria-pressed={manufacturerId === manufacturer.id} onClick={() => setParam('maker', manufacturerId === manufacturer.id ? '' : manufacturer.id)}>
           <ManufacturerMark manufacturer={manufacturer} size={14} />
           {manufacturerLabel(manufacturer, t)}<Count size="small">{count}</Count>
         </button>)}

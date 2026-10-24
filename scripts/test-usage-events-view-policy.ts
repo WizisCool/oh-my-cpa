@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import {
   applyTimeWindow,
   clearAllFilters,
+  isSearchOnlyChange,
   mergeFilters,
   replaceFilters,
   viewPreferenceFromUrl,
@@ -96,6 +97,14 @@ test('a filter edit never touches the pagination cursor it is about to invalidat
   // result set cannot be reused), not something a filter rewrite does silently.
   const before = new URLSearchParams('preset=1h&cursor=abc&model=o3');
   assert.equal(replaceFilters(before, { provider: ['openai'] }).get('cursor'), 'abc');
+});
+
+test('a search is a coalesced history step even when other filters stay applied', () => {
+  assert.equal(isSearchOnlyChange({ model: ['linked-model'] }, { model: ['linked-model'], q: ['first'] }), true);
+  assert.equal(isSearchOnlyChange({ model: ['linked-model'], q: ['first'] }, { model: ['linked-model'], q: ['second'] }), true);
+  assert.equal(isSearchOnlyChange({ model: ['linked-model'], q: ['first'] }, { model: ['linked-model'] }), true);
+  assert.equal(isSearchOnlyChange({ model: ['linked-model'] }, { model: ['other'], q: ['first'] }), false);
+  assert.equal(isSearchOnlyChange({}, {}), false);
 });
 
 // ---------------------------------------------------------------------------

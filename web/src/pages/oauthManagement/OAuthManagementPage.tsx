@@ -173,7 +173,8 @@ export const OAuthManagementPage: React.FC = () => {
 
   React.useEffect(() => {
     if (!filesQuery.data || queryState.page <= maxPage) return;
-    setSearch({ page: maxPage === 1 ? null : maxPage });
+    // A clamp corrects the entry in force; pushed, Back would land on the page past the end again.
+    setSearch({ page: maxPage === 1 ? null : maxPage }, { replace: true });
   }, [filesQuery.data, maxPage, queryState.page, setSearch]);
 
   const [resetSearchToken, setResetSearchToken] = React.useState(0);

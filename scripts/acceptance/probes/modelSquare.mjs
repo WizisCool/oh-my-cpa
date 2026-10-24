@@ -121,6 +121,16 @@ export async function modelSquare({ base, page, context, check }) {
   await page.locator('[data-maker="openai"]').click();
   await until(async () => await entries.count() === 4, { label: 'maker filter' });
   check('a maker filter shows that maker alone, and says how many', await sections.count() === 1 && await page.locator('[data-maker="openai"]').getAttribute('aria-pressed') === 'true' && (await status.innerText()) === `Showing 4 of ${DIRECTORY.models.length}`);
+  const makerSelection = await until(() => page.locator('[data-maker="openai"]').evaluate((button) => {
+    const probe = document.createElement('span');
+    probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--selected-inset').trim();
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    const actual = getComputedStyle(button).backgroundColor;
+    return actual === expected ? { actual, expected } : undefined;
+  }), { label: 'maker selection fill', timeoutMs: 2_000 }).catch(() => undefined);
+  check('a selected maker chip takes the shared theme selection fill', makerSelection !== undefined, makerSelection ? makerSelection.actual : 'not selected-inset');
   // Anywhere on the row that is not one of its own controls opens the details: here, its served-by cell.
   const servedBy = await gptRow.getByText('Codex OAuth').boundingBox();
   await page.mouse.click(servedBy.x + servedBy.width / 2, servedBy.y + servedBy.height / 2);

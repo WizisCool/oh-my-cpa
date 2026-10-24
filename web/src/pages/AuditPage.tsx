@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useViewSearchParams } from '../hooks/useViewSearchParams';
 import { useT } from '../i18n';
 import { AuditTrail } from '../components/audit/AuditTrail';
 import { readAuditFilters, writeAuditFilters, type AuditFilters } from '../types/audit';
@@ -14,11 +14,14 @@ import { readAuditFilters, writeAuditFilters, type AuditFilters } from '../types
  */
 export const AuditPage: React.FC = () => {
   const t = useT();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useViewSearchParams();
   const filters = React.useMemo(() => readAuditFilters(searchParams), [searchParams]);
   const setFilters = React.useCallback(
-    (next: AuditFilters) => setSearchParams(writeAuditFilters(next), { replace: true }),
-    [setSearchParams],
+    // A search typed out is one step of Back; a category, outcome or range is its own.
+    (next: AuditFilters) => setSearchParams(writeAuditFilters(next), next.search !== filters.search
+      && next.outcome === filters.outcome && next.range === filters.range
+      && next.categories.join() === filters.categories.join() ? { coalesce: 'search' } : undefined),
+    [filters, setSearchParams],
   );
 
   return (

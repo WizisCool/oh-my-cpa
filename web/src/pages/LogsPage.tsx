@@ -1,6 +1,7 @@
 import React from 'react';
 import { Segmented } from 'antd';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
+import { useViewSearchParams } from '../hooks/useViewSearchParams';
 import { useT } from '../i18n';
 import { PageHeader } from '../components/common/PageHeader';
 import { CpaLogPanel } from '../components/logs/CpaLogPanel';
@@ -25,7 +26,7 @@ function parseSource(value: string | null): LogSource {
  */
 export const LogsPage: React.FC = () => {
   const t = useT();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useViewSearchParams();
   const source = parseSource(searchParams.get('source'));
   const isAuditLink = searchParams.get('source') === 'audit';
 
@@ -35,7 +36,7 @@ export const LogsPage: React.FC = () => {
       if (next === 'cpa') params.delete('source');
       else params.set('source', next);
       return params;
-    }, { replace: true });
+    });
   };
 
   if (isAuditLink) return <Navigate to="/audit" replace />;
