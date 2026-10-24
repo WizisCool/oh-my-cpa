@@ -488,7 +488,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), scroll smoothing
   (`omc_scroll_smoothing`), the typeface roles (`omc_fonts`), the rail entries the
   console hides (`omc_nav_hidden`) and the order it puts them in (`omc_nav_order`), and the
-  dashboard's widget arrangement (`omc_dashboard_layout`).
+  dashboard's widget arrangement (`omc_dashboard_layout`), and the separate Insights
+  window (`insights_range`).
 - **Dashboard Arrangement**: The order, width and visibility of the dashboard's widgets, stored as
   the `omc_dashboard_layout` preference - every widget the console knows, in reading order, with its
   width in columns of four and whether it is hidden. A widget a later release adds is missing from an

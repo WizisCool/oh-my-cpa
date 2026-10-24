@@ -482,7 +482,7 @@ func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string
 // record it was locked on.
 func (r *Repository) QueryUsageCostWindowFiltered(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageCostStats, error) {
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
-		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: max(bucketMS, 0), APIGroupKey: apiKey,
+		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: max(bucketMS, 0), Filters: ClientKeyFilter(apiKey),
 	})
 	if err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost: %w", err)

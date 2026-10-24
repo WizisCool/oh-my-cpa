@@ -239,6 +239,14 @@ func demoExportCases() []demoExportCase {
 		demoExportCase{Name: "dashboard-models-model-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=model"},
 		demoExportCase{Name: "dashboard-providers-all", Path: "/api/v1/management/dashboard/providers?" + allTime},
 	)
+	// The static replay serves relative presets and all-time as closed snapshots.
+	// Every capture resolves against the same seeded clock.
+	for _, preset := range []string{"24h", "7d", "30d", "90d", "all"} {
+		cases = append(cases,
+			demoExportCase{Name: "insights-cube-" + preset, Path: "/api/v1/management/insights/cube?preset=" + preset},
+			demoExportCase{Name: "insights-rhythm-" + preset, Path: "/api/v1/management/insights/rhythm?preset=" + preset},
+		)
+	}
 	// The heatmap is asked for in the viewer's own zone; the export keeps a UTC and a
 	// non-UTC zone so the Worker's calendar maths has a reference for both an offset
 	// that is a whole number of hours and one that is not.
@@ -360,6 +368,26 @@ func TestExportDemoDataset(t *testing.T) {
 			one.Path = resolved
 		}
 		responses[one.Name] = demoExportFetch(t, server.URL, one)
+		if strings.HasPrefix(one.Name, "insights-") && responses[one.Name].Status != http.StatusOK {
+			t.Fatalf("%s returned HTTP %d", one.Name, responses[one.Name].Status)
+		}
+		if strings.HasPrefix(one.Name, "insights-cube-") {
+			var cube insightsCubeResponse
+			if err := json.Unmarshal([]byte(responses[one.Name].Body), &cube); err != nil {
+				t.Fatal(err)
+			}
+			if len(cube.Rows) == 0 || len(cube.Columns) == 0 || len(cube.BucketStarts) == 0 {
+				t.Fatalf("%s must demonstrate non-empty usage", one.Name)
+			}
+		} else if strings.HasPrefix(one.Name, "insights-rhythm-") {
+			var rhythm insightsRhythmResponse
+			if err := json.Unmarshal([]byte(responses[one.Name].Body), &rhythm); err != nil {
+				t.Fatal(err)
+			}
+			if len(rhythm.Cells) != 7*24 || rhythm.Window.Timezone == "" {
+				t.Fatalf("%s must carry a window and 168 rhythm cells", one.Name)
+			}
+		}
 	}
 	demoExportRunWindow.endMS = time.Now().UnixMilli()
 

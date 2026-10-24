@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func performanceRepository(tb testing.TB, n int) *Repository {
@@ -152,5 +153,62 @@ func BenchmarkUsageModelBuckets(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+// BenchmarkUsageFactsCube reads the Insights cube - every dimension, on civil days -
+// over ninety days of folded facts with forty live dimension combinations per
+// quarter hour. UTC reads whole days from the daily table and Asia/Shanghai from the
+// local-day grain, which the benchmark builds the way the fold loop would.
+func BenchmarkUsageFactsCube(b *testing.B) {
+	repo := performanceRepository(b, 0)
+	const days = 90
+	const combinations = 40
+	fromMS := int64(1700006400000) // a UTC midnight
+	for _, grain := range []struct {
+		table    string
+		bucketMS int64
+	}{{usageFactsFineTable, QuarterHourBucketMS}, {usageFactsDailyTable, DayBucketMS}} {
+		if _, err := repo.SQL().Exec(`
+			WITH RECURSIVE buckets(start_ms) AS (
+				SELECT ?1 UNION ALL SELECT start_ms + ?2 FROM buckets WHERE start_ms + ?2 < ?1 + ?3
+			), combos(n) AS (
+				SELECT 0 UNION ALL SELECT n + 1 FROM combos WHERE n + 1 < ?4
+			)
+			INSERT INTO `+grain.table+` (instance_id, bucket_start_ms, api_group_key, model, model_alias, auth_index,
+				provider, auth_type, requests, input_tokens, output_tokens, total_tokens, cost_nanos, priced_requests, costed_requests)
+			SELECT 'default', start_ms, 'hmac:key-' || (n % 20), 'model-' || (n % 8), 'alias-' || (n % 5),
+				'auth-' || (n % 10), 'provider-' || (n % 3), 'oauth', 3, 300, 200, 500, 1000, 3, 3
+			FROM buckets, combos`,
+			fromMS, grain.bucketMS, int64(days)*DayBucketMS, combinations); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if _, err := repo.SQL().Exec(`
+		INSERT INTO usage_aggregation_checkpoints (name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+		VALUES (?, 0, 0, 0, 0) ON CONFLICT(name) DO NOTHING`, CheckpointFacts); err != nil {
+		b.Fatal(err)
+	}
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		b.Fatal(err)
+	}
+	repo.Timezone().Apply(shanghai)
+	if _, err := repo.EnsureLocalUsageFacts(context.Background()); err != nil {
+		b.Fatal(err)
+	}
+	dimensions := []UsageDimension{UsageDimensionKey, UsageDimensionCallPoint, UsageDimensionModel,
+		UsageDimensionProvider, UsageDimensionCredential, UsageDimensionAuthType}
+	for _, location := range []*time.Location{time.UTC, shanghai} {
+		b.Run(location.String(), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				if _, err := repo.QueryUsageFacts(context.Background(), UsageFactQuery{
+					InstanceID: "default", FromMS: fromMS, ToMS: fromMS + int64(days)*DayBucketMS - 1,
+					Calendar: &UsageCalendar{Location: location, Unit: UsageCalendarDay}, Dimensions: dimensions,
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

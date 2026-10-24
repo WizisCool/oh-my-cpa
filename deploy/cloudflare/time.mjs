@@ -46,6 +46,8 @@ const INSTANT_NAMED = new Set([
   'latest_after',
   'from',
   'to',
+  // The Insights cube's grid, a list of bucket starts.
+  'bucket_starts',
   // Reported in seconds rather than milliseconds, detected by magnitude.
   'modified',
 ]);
@@ -123,6 +125,7 @@ function parseInstant(text) {
 
 /** Moves one instant held as a number, preserving the unit it was written in. */
 function shiftNumber(value, deltaMs) {
+  if (Array.isArray(value)) return value.map((item) => shiftNumber(item, deltaMs));
   // Zero is an instant that never happened (an unconfigured channel's update time), and
   // moving it would render a date in 1970 plus the delta as though it were real.
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return value;

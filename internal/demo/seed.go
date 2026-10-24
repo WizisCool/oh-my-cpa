@@ -545,7 +545,8 @@ func seedRollups(ctx context.Context, repo *repository.Repository) error {
 			return fmt.Errorf("fold demo usage facts: %w", err)
 		}
 		if folded < 20000 {
-			return nil
+			_, err := repo.EnsureLocalUsageFacts(ctx)
+			return err
 		}
 	}
 }

@@ -99,6 +99,14 @@ discarded. `internal/api/demo_export_test.go` asserts that pair on the exported 
 because the console simply keeps its full response when a tail is dropped - nothing visible
 fails.
 
+Insights captures move by whole weeks so local hours, Monday buckets and the fixed
+weekday cells in the rhythm agree. Relative presets and all-time replay
+closed snapshots with explicit bounds. Calendar presets, custom bounds and explicit
+granularities return `demo_uncaptured`: the static capture cannot recompute those
+windows against the visitor's current date. Every supported preset, including `24h`,
+can end up to seven days before the visitor's clock; the response exposes that end
+instead of labeling it as current. Only those five supported presets are exported.
+
 ## The live routing panel runs on simulated traffic
 
 Re-basing keeps a report current, but the dashboard's live routing panel is not a report:
