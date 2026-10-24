@@ -1,3 +1,4 @@
+import { tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { RequestTooltip } from './RequestTooltip';
@@ -417,18 +418,18 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 9: cost, locked at request time; unpriced stays an em dash
-            rather than a fabricated 0, beside the one action that fixes it */}
+        {/* Missing prices can be configured for future requests; unresolved
+            accounting cannot be repaired by changing the model's price. */}
         <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
             <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
           ) : (
             <>
-              <RequestTooltip title={t('events.cost_unpriced')}>
+              <RequestTooltip title={event.token_accounting && event.token_accounting.status !== 'complete' ? tokenAccountingMessage(t, event.token_accounting) : t('events.cost_unpriced')}>
                 <span className="req-cost-none">—</span>
               </RequestTooltip>
-              {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (
+              {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (!event.token_accounting || event.token_accounting.status === 'complete') && (
                 <RequestTooltip title={t('cost.set_price', { model: event.model })}>
                   <button
                     type="button"

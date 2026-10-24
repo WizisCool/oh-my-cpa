@@ -444,10 +444,10 @@ const usageEventInsertPrefix = `
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
 			stream, channel_version_id, price_tier, response_model, model_substituted,
 			fail_status_code, fail_body, response_headers, access_provider, is_native_key,
-			billed_service_tier, billed_service_tier_source
+			billed_service_tier, billed_service_tier_source, token_accounting
 		) VALUES `
 
-const usageEventColumnCount = 49
+const usageEventColumnCount = 50
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
@@ -464,7 +464,7 @@ func usageEventValues(event usage.Event, locked lockedPrice, createdMS int64) []
 		event.TotalTokens, createdMS, locked.cost, locked.version, locked.status, boolPtrInt(event.Stream),
 		locked.channelVersion, locked.tier, event.ResponseModel, boolInt(event.ModelSubstituted),
 		event.FailStatusCode, event.FailBody, event.ResponseHeaders, event.AccessProvider, boolInt(event.IsNativeKey),
-		locked.serviceTier, locked.serviceTierSource,
+		locked.serviceTier, locked.serviceTierSource, encodeTokenAccounting(event.Accounting),
 	}
 }
 

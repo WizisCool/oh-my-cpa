@@ -156,18 +156,19 @@ type UsageEventFilter struct {
 
 // UsageEventRow is one stored request record.
 type UsageEventRow struct {
-	ID            int64  `json:"id"`
-	InstanceID    string `json:"instance_id"`
-	EventKey      string `json:"event_key"`
-	RequestID     string `json:"request_id"`
-	TimestampMS   int64  `json:"timestamp_ms"`
-	Provider      string `json:"provider"`
-	Endpoint      string `json:"endpoint"`
-	ExecutorType  string `json:"executor_type"`
-	AuthType      string `json:"auth_type"`
-	AuthIndex     string `json:"auth_index"`
-	APIGroupKey   string `json:"api_group_key"`
-	APIGroupLabel string `json:"api_group_label"`
+	Accounting    *usage.TokenAccounting `json:"token_accounting,omitempty"`
+	ID            int64                  `json:"id"`
+	InstanceID    string                 `json:"instance_id"`
+	EventKey      string                 `json:"event_key"`
+	RequestID     string                 `json:"request_id"`
+	TimestampMS   int64                  `json:"timestamp_ms"`
+	Provider      string                 `json:"provider"`
+	Endpoint      string                 `json:"endpoint"`
+	ExecutorType  string                 `json:"executor_type"`
+	AuthType      string                 `json:"auth_type"`
+	AuthIndex     string                 `json:"auth_index"`
+	APIGroupKey   string                 `json:"api_group_key"`
+	APIGroupLabel string                 `json:"api_group_label"`
 	// APIKeyMask is the display-only mask of the client key. It is empty for
 	// records ingested before the mask column existed: the request record keeps
 	// only the fingerprint, which cannot be turned back into a readable mask.
@@ -357,7 +358,7 @@ func usageEventListSelect(from string) string {
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
-		       e.response_model, e.model_substituted, e.fail_status_code
+		       e.response_model, e.model_substituted, e.fail_status_code, e.token_accounting
 		FROM ` + from + `
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -385,6 +386,7 @@ func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args
 		var streamVal sql.NullInt64
 		var resourceID, resourceName sql.NullString
 		var costUSD sql.NullFloat64
+		var accounting sql.NullString
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
@@ -394,8 +396,13 @@ func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
-			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode); errScan != nil {
+			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &accounting); errScan != nil {
 			return nil, fmt.Errorf("scan usage event: %w", errScan)
+		}
+		var errAccounting error
+		row.Accounting, errAccounting = decodeStoredTokenAccounting(accounting)
+		if errAccounting != nil {
+			return nil, errAccounting
 		}
 		row.Failed = failed == 1
 		row.Generate = generate == 1
@@ -437,6 +444,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	var isNativeKey sql.NullInt64
 	var resourceID, resourceName sql.NullString
 	var costUSD sql.NullFloat64
+	var accounting sql.NullString
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
@@ -448,7 +456,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       d.id, d.cpa_resource_name AS resource_name,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
 		       e.response_model, e.model_substituted, e.fail_status_code, e.fail_body, e.response_headers,
-		       e.access_provider, e.is_native_key
+		       e.access_provider, e.is_native_key, e.token_accounting
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -468,12 +476,16 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID,
 		&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &row.FailBody, &row.ResponseHeaders,
-		&row.AccessProvider, &isNativeKey)
+		&row.AccessProvider, &isNativeKey, &accounting)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
 	if err != nil {
 		return row, fmt.Errorf("read usage event: %w", err)
+	}
+	row.Accounting, err = decodeStoredTokenAccounting(accounting)
+	if err != nil {
+		return row, err
 	}
 	row.Failed = failed == 1
 	row.Generate = generate == 1

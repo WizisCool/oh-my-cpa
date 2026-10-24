@@ -1,3 +1,4 @@
+import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Modal, Tabs, Tooltip } from 'antd';
@@ -524,6 +525,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           : []),
                       ]),
                     )}
+                    <TokenAccountingNote accounting={event.token_accounting} className="request-detail-note" />
                     {section(
                       t('events.token_breakdown'),
                       fields([

@@ -34,6 +34,13 @@ export interface DashboardRequests {
 }
 
 export interface DashboardTokens {
+  token_accounting?: {
+    canonical_requests: number;
+    unresolved_requests: number;
+    raw_input_tokens: number;
+    raw_output_tokens: number;
+    raw_total_tokens: number;
+  };
   total: number;
   input: number;
   output: number;

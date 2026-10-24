@@ -28,17 +28,19 @@ import (
 // short redacted product label (security.MinimizeUserAgent on the persistence
 // path), so it names the calling client without carrying the raw header.
 type usageEventResponse struct {
-	ID            int64  `json:"id"`
-	EventKey      string `json:"event_key"`
-	RequestID     string `json:"request_id,omitempty"`
-	TimestampMS   int64  `json:"timestamp_ms"`
-	Provider      string `json:"provider"`
-	Endpoint      string `json:"endpoint,omitempty"`
-	ExecutorType  string `json:"executor_type,omitempty"`
-	AuthType      string `json:"auth_type,omitempty"`
-	AuthIndex     string `json:"auth_index,omitempty"`
-	APIGroupKey   string `json:"api_group_key,omitempty"`
-	APIGroupLabel string `json:"api_group_label,omitempty"`
+	AccountingStatus string                 `json:"accounting_status"`
+	Accounting       *usage.TokenAccounting `json:"token_accounting,omitempty"`
+	ID               int64                  `json:"id"`
+	EventKey         string                 `json:"event_key"`
+	RequestID        string                 `json:"request_id,omitempty"`
+	TimestampMS      int64                  `json:"timestamp_ms"`
+	Provider         string                 `json:"provider"`
+	Endpoint         string                 `json:"endpoint,omitempty"`
+	ExecutorType     string                 `json:"executor_type,omitempty"`
+	AuthType         string                 `json:"auth_type,omitempty"`
+	AuthIndex        string                 `json:"auth_index,omitempty"`
+	APIGroupKey      string                 `json:"api_group_key,omitempty"`
+	APIGroupLabel    string                 `json:"api_group_label,omitempty"`
 	// APIKeyAlias is the operator-assigned name for the caller key, resolved
 	// server-side from the fingerprint in APIGroupKey. It is a display label
 	// only: APIGroupKey stays the filter identity, so renaming a key never
@@ -99,6 +101,11 @@ type usageEventResponse struct {
 
 func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	var item usageEventResponse
+	item.Accounting = row.Accounting
+	item.AccountingStatus = "legacy"
+	if row.Accounting != nil {
+		item.AccountingStatus = row.Accounting.Status
+	}
 	item.ID = row.ID
 	item.EventKey = row.EventKey
 	item.RequestID = row.RequestID
@@ -654,6 +661,8 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"latency_ms":                   item.LatencyMS,
 		"ttft_ms":                      item.TTFTMS,
 		"tokens":                       item.Tokens,
+		"accounting_status":            item.AccountingStatus,
+		"token_accounting":             item.Accounting,
 		"resource_id":                  item.ResourceID,
 		"resource_name":                item.ResourceName,
 		"has_request_log":              item.HasRequestLog,

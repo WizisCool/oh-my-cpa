@@ -96,11 +96,15 @@ export async function dashboardModelPanels({ base, page, check }) {
   const firstRow = page.locator('.model-usage-row').first();
   await firstRow.hover();
   check('hovering the ranked list swaps the centre to that model and its share', (await page.locator('.model-ring').getAttribute('aria-label')).includes(list[0].name) && await page.locator('.model-ring-unit').innerText() === list[0].share);
-  const listHighlight = await page.evaluate(async () => {
-    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-    const chart = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart'));
-    return chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(0).currentStates;
-  });
+  // React updates the centre before ECharts applies the visual state on its next frame.
+  const listHighlight = await until(async () => {
+    const states = await page.evaluate(async () => {
+      const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+      const chart = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart'));
+      return chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(0).currentStates;
+    });
+    return states.includes('emphasis') && states;
+  }, { label: 'ranked list slice emphasis painted' });
   check('the ranked list highlights its slice', listHighlight.includes('emphasis'), JSON.stringify(listHighlight));
   await page.mouse.move(0, 0);
   await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'ring total restored after list leave' });
@@ -123,15 +127,18 @@ export async function dashboardModelPanels({ base, page, check }) {
   await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'ring total restored after slice leave' });
 
   await page.locator('.model-legend-item').first().hover();
-  const highlighted = await page.evaluate(async () => {
-    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-    const chart = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart'));
-    return chart.getModel().getSeries().map((series) => {
-      const states = new Set();
-      chart.getViewOfSeriesModel(series).group.traverse((node) => node.currentStates?.forEach((state) => states.add(state)));
-      return { id: series.id, states: [...states] };
+  const highlighted = await until(async () => {
+    const seriesStates = await page.evaluate(async () => {
+      const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+      const chart = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart'));
+      return chart.getModel().getSeries().map((series) => {
+        const states = new Set();
+        chart.getViewOfSeriesModel(series).group.traverse((node) => node.currentStates?.forEach((state) => states.add(state)));
+        return { id: series.id, states: [...states] };
+      });
     });
-  });
+    return seriesStates.some((series) => series.states.includes('emphasis')) && seriesStates.some((series) => series.states.includes('blur')) && seriesStates;
+  }, { label: 'legend series emphasis and peer blur painted' });
   check('legend hover emphasizes its series and blurs peers', highlighted.some((series) => series.states?.includes('emphasis')) && highlighted.some((series) => series.states?.includes('blur')), JSON.stringify(highlighted));
   await page.mouse.move(0, 0);
   const surfaces = [];

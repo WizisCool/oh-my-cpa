@@ -1,3 +1,4 @@
+import type { TokenAccounting, TokenAccountingStatus } from './tokenAccounting';
 import type { RequestCostBreakdown } from './pricing';
 
 /**
@@ -17,6 +18,8 @@ export interface UsageEventTokens {
 }
 
 export interface UsageEvent {
+  accounting_status?: TokenAccountingStatus;
+  token_accounting?: TokenAccounting | null;
   id: number;
   event_key: string;
   request_id?: string;

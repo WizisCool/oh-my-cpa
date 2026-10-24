@@ -1489,6 +1489,34 @@ RESP `LPOP`, and an unreachable RESP endpoint degrades to the HTTP usage queue
 management key triggers a long cooldown instead of retrying, because CPA bans a
 client IP after repeated failures.
 
+### Canonical token accounting
+
+`internal/usage/accounting.go` consumes the queue's existing `accounting_version`
+and `token_breakdown` fields. Only a complete v2 partition with present,
+non-negative, overflow-safe buckets, matching totals and compatible raw counts
+replaces the stored input/output/cache buckets. Canonical output already includes
+reasoning exactly once: an Interactions record with raw input 100, output 30,
+reasoning 10 and total 140 therefore stores input 100 and output 40. A dialect
+whose raw output is already 40 stores the same output, not 50.
+
+Migration `048_usage_token_accounting.sql` adds nullable, immutable
+`usage_events.token_accounting` evidence: the version, validation status, typed
+breakdown and original vendor token counts. Existing rows remain NULL and retain
+their original counts and locked prices. Missing evidence is explicitly legacy;
+new legacy-format records retain the established raw-count pricing policy.
+Supplied unsupported, malformed, inconsistent or unclassified accounting keeps
+its usage telemetry but is unpriced, even when the model has a configured price.
+It never manufactures a complete billable partition or changes an old snapshot.
+
+The request list/detail, Agent/MCP request reads and cost explanation expose the
+same allowlisted evidence and accounting status. The completion bucket uses the
+stored canonical output total, while the raw output remains inspectable. All
+three permanent fact grains preserve canonical and unresolved request counts
+plus raw input/output/total sums for those observed records; requests outside
+those counts have no canonical evidence. These measures fold with the normalized
+usage and locked costs, so detail retention and local-day rebuilding do not
+change their meaning.
+
 ### The live change signal
 
 A page that shows request records learns that one was stored from a signal, not

@@ -94,7 +94,8 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   search, or authorization logic. Historical records written before this
   contract may still contain the earlier `/24` or `/64` network mask; that data
   cannot be recovered and is never synthetically expanded.
-- **Unpriced Usage**: A request for which no valid price version existed at request time. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
+- **Canonical Token Accounting**: CPA's versioned, non-overlapping input and output partition. A complete validated v2 breakdown normalizes stored input and output; output includes reasoning exactly once. The raw vendor counts and validation status remain immutable request evidence. Missing evidence is legacy and retains the original accounting policy; supplied but unresolved evidence is never promoted to a complete billable partition. Usage Facts preserve the normalized totals plus the count and raw-token sums of observed canonical or unresolved records.
+- **Unpriced Usage**: A request for which no valid price version existed at request time, or whose supplied canonical accounting could not establish a complete billable partition. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
 - **Update State**: The System Information page's answer about one product, and one of
   four values rather than a boolean: `update_available`, `up_to_date`, `update_ahead`
   (the build is newer than any release - ahead of publication, not an update to

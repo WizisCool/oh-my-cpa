@@ -8,6 +8,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 type UsageInput struct {
@@ -103,16 +104,21 @@ type Comparison struct {
 	Previous Analysis `json:"previous"`
 }
 type RequestItem struct {
-	ID          int64    `json:"id"`
-	TimestampMS int64    `json:"timestamp_ms"`
-	Provider    string   `json:"provider"`
-	Model       string   `json:"model"`
-	CallPoint   string   `json:"call_point"`
-	IsFailed    bool     `json:"is_failed"`
-	Tokens      int64    `json:"tokens"`
-	LatencyMS   int64    `json:"latency_ms"`
-	TTFTMS      *int64   `json:"ttft_ms,omitempty"`
-	CostUSD     *float64 `json:"cost_usd,omitempty"`
+	AccountingStatus string                 `json:"accounting_status"`
+	Accounting       *usage.TokenAccounting `json:"token_accounting,omitempty"`
+	InputTokens      int64                  `json:"input_tokens"`
+	OutputTokens     int64                  `json:"output_tokens"`
+	ReasoningTokens  int64                  `json:"reasoning_tokens"`
+	ID               int64                  `json:"id"`
+	TimestampMS      int64                  `json:"timestamp_ms"`
+	Provider         string                 `json:"provider"`
+	Model            string                 `json:"model"`
+	CallPoint        string                 `json:"call_point"`
+	IsFailed         bool                   `json:"is_failed"`
+	Tokens           int64                  `json:"tokens"`
+	LatencyMS        int64                  `json:"latency_ms"`
+	TTFTMS           *int64                 `json:"ttft_ms,omitempty"`
+	CostUSD          *float64               `json:"cost_usd,omitempty"`
 	// RequestID is CPA's id for the request, which is what an operator searches by.
 	RequestID string `json:"request_id,omitempty"`
 	// ServedModel is set only when the upstream served a different model than was requested.
@@ -126,7 +132,13 @@ func projectRequest(row repository.UsageEventRow) RequestItem {
 	if row.ModelAlias != nil && *row.ModelAlias != "" {
 		callPoint = *row.ModelAlias
 	}
+	status := "legacy"
+	if row.Accounting != nil {
+		status = row.Accounting.Status
+	}
 	item := RequestItem{
+		AccountingStatus: status, Accounting: row.Accounting,
+		InputTokens: row.Tokens.InputTokens, OutputTokens: row.Tokens.OutputTokens, ReasoningTokens: row.Tokens.ReasoningTokens,
 		ID: row.ID, TimestampMS: row.TimestampMS, Provider: safeLabel(row.Provider), Model: safeLabel(row.Model),
 		CallPoint: safeLabel(callPoint), IsFailed: row.Failed, Tokens: row.Tokens.TotalTokens,
 		LatencyMS: row.LatencyMS, TTFTMS: row.TTFTMS, CostUSD: row.CostUSD, RequestID: safeLabel(row.RequestID),

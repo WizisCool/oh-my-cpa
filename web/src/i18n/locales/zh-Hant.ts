@@ -4,6 +4,13 @@
  * Keys mirror the base dictionary in ../messages/. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "events.accounting_legacy": "舊版計量：未保留 canonical 證據，沿用原始計數和已鎖定的價格快照。",
+  "events.accounting_complete": "Canonical v{version}：原始輸入 {raw_input}、輸出 {raw_output} → 規範輸入 {input}、輸出 {output}（推理僅計一次）。",
+  "events.accounting_unresolved": "Token 計量{status}；原始輸入 {raw_input}、輸出 {raw_output}。無法確認完整的計費分區，此請求未計入費用估算。",
+  "events.accounting_status_invalid": "無效",
+  "events.accounting_status_unsupported": "版本不受支援",
+  "events.accounting_status_inconsistent": "不一致",
+  "events.accounting_status_unclassified": "未完全分類",
   "events.outbound_tier": "出站檔位",
   "events.fast_tier_outbound_hint": "Fast 模式 · 出站服務等級 {tier}",
   "events.resolved_tier_outbound": "{tier}（按出站判斷）",
