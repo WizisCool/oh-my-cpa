@@ -41,9 +41,9 @@ import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import {
   credentialStatusOf,
   quotaCellsOf,
-  sortByQuotaColumn,
   type CredentialSection as Section,
   type QuotaColumn,
+  type QuotaColumnSort,
   type QuotaFamilyHeader,
 } from './credentialSections';
 import { maskAccount, maskAccountIn } from '../../utils/maskAccount';
@@ -72,6 +72,8 @@ interface CredentialSectionProps {
   selectedKeys: Set<string>;
   nowMS: number;
   actions: CredentialRowActions;
+  columnSort?: QuotaColumnSort;
+  onSort: (key: string) => void;
 }
 
 const PERIOD_KEYS: Record<NonNullable<QuotaColumn['period']>, string> = {
@@ -83,7 +85,6 @@ function familyTitle(family: QuotaFamilyHeader, t: TFunc): string {
   return t(family.scope === 'code_review' ? 'omc.quota_family_code_review' : 'omc.quota_family_plan');
 }
 
-type ColumnSort = { key: string; direction: 'asc' | 'desc' };
 
 /**
  * One provider's credentials as one table.
@@ -93,14 +94,13 @@ type ColumnSort = { key: string; direction: 'asc' | 'desc' };
  * column's header sorts the section by that reading, which is how an operator with many accounts
  * finds the one with the most Claude quota left without opening anything.
  */
-export function CredentialSection({ section, title, pluginLogo, selectedKeys, nowMS, actions }: CredentialSectionProps) {
+export function CredentialSection({ section, title, pluginLogo, selectedKeys, nowMS, actions, columnSort, onSort }: CredentialSectionProps) {
   const t = useT();
-  const [columnSort, setColumnSort] = React.useState<ColumnSort>();
   const metadata = getCredentialProviderMetadata(section.provider);
   const columns = section.families.flatMap((family) => family.columns);
-  const records = columnSort ? sortByQuotaColumn(section.records, columnSort.key, columnSort.direction) : section.records;
-  const hasSIWC = section.records.some((record) => actions.siwcBadge(record));
-  const hasCredits = section.records.some((record) => record.quota?.reset_credits !== undefined);
+  const records = section.records;
+  const hasSIWC = section.visibleRecords.some((record) => actions.siwcBadge(record));
+  const hasCredits = section.visibleRecords.some((record) => record.quota?.reset_credits !== undefined);
   const selectable = section.records.filter((record) => record.canSelectForFileBatch);
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
   const statuses = section.records.map((record) => credentialStatusOf(record, isAuthFileDisabled(record.file), isAuthFileProblem(record.file)));
@@ -119,10 +119,6 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
   const hasGroupedHeader = section.families.length > 1 || section.families.some((family) => family.scope !== 'standard');
   const headerRows = hasGroupedHeader ? 2 : 1;
 
-  const sortBy = (key: string) => setColumnSort((current) => (
-    current?.key !== key ? { key, direction: 'asc' } : current.direction === 'asc' ? { key, direction: 'desc' } : undefined
-  ));
-
   const periodHeader = (column: QuotaColumn, isFirstOfFamily: boolean) => {
     const isSorted = columnSort?.key === column.key;
     const label = column.period ? t(PERIOD_KEYS[column.period]) : column.label;
@@ -132,7 +128,7 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
         className={clsx(styles['th-period'], isFirstOfFamily && styles['th-divided'])}
         aria-sort={isSorted ? (columnSort.direction === 'asc' ? 'ascending' : 'descending') : undefined}
       >
-        <button type="button" className={styles['sort-button']} onClick={() => sortBy(column.key)} title={label}>
+        <button type="button" className={styles['sort-button']} onClick={() => onSort(column.key)} title={label}>
           <span className={styles['sort-label']}>{label}</span>
           {isSorted && (columnSort.direction === 'asc' ? <ArrowUpOutlined /> : <ArrowDownOutlined />)}
         </button>

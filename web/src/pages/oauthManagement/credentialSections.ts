@@ -35,7 +35,13 @@ export interface QuotaFamilyHeader {
 export interface CredentialSection {
   provider: string;
   records: OAuthWorkspaceRecord[];
+  visibleRecords: OAuthWorkspaceRecord[];
   families: QuotaFamilyHeader[];
+}
+
+export interface QuotaColumnSort {
+  key: string;
+  direction: 'asc' | 'desc';
 }
 
 const PERIOD_RANK: Record<QuotaPeriod, number> = { five_hour: 0, daily: 1, weekly: 2, monthly: 3 };
@@ -134,12 +140,20 @@ export function compareSections(left: string, right: string): number {
   return sectionRank(left) - sectionRank(right) || left.localeCompare(right);
 }
 
-/** Records keep their own order within a section; sections follow `compareSections`. */
-export function orderBySection(records: OAuthWorkspaceRecord[]): OAuthWorkspaceRecord[] {
-  return records
-    .map((record, index) => ({ record, index }))
-    .sort((left, right) => compareSections(left.record.displayProvider, right.record.displayProvider) || left.index - right.index)
-    .map(({ record }) => record);
+/** Section order stays fixed; an active quota sort orders the provider's full filtered records. */
+export function orderBySection(records: OAuthWorkspaceRecord[], columnSorts: Readonly<Partial<Record<string, QuotaColumnSort>>> = {}): OAuthWorkspaceRecord[] {
+  const sections = new Map<string, OAuthWorkspaceRecord[]>();
+  for (const record of records) {
+    const rows = sections.get(record.displayProvider) ?? [];
+    rows.push(record);
+    sections.set(record.displayProvider, rows);
+  }
+  return [...sections.entries()]
+    .sort(([left], [right]) => compareSections(left, right))
+    .flatMap(([provider, rows]) => {
+      const sort = columnSorts[provider];
+      return sort ? sortByQuotaColumn(rows, sort.key, sort.direction) : rows;
+    });
 }
 
 /**
@@ -155,11 +169,10 @@ export function buildCredentialSections(pageRecords: OAuthWorkspaceRecord[], vis
   }
   return [...sections.entries()]
     .sort(([left], [right]) => compareSections(left, right))
-    .map(([provider, records]) => ({
-      provider,
-      records,
-      families: quotaFamiliesOf(visibleRecords.filter((record) => record.displayProvider === provider)),
-    }));
+    .map(([provider, records]) => {
+      const providerRecords = visibleRecords.filter((record) => record.displayProvider === provider);
+      return { provider, records, visibleRecords: providerRecords, families: quotaFamiliesOf(providerRecords) };
+    });
 }
 
 /** A column's reading for sorting: missing readings sort last whichever way the column is sorted. */

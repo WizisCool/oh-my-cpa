@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/i18n';
 import {
   CredentialQuotaPanel,
@@ -11,6 +11,9 @@ import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { App as AntdApp } from 'antd';
 import { CredentialSection, type CredentialRowActions } from '../src/pages/oauthManagement/CredentialSection';
+import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
+import { installOmcApi } from './support/omcApi';
+import { renderWithOmc } from './support/render';
 import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
 import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
@@ -384,7 +387,7 @@ describe('a row that says it is out of date', () => {
       <MemoryRouter>
         <I18nProvider>
           <AntdApp>
-            <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} />
+            <CredentialSection section={section} selectedKeys={new Set()} nowMS={NOW_MS} actions={actions} onSort={vi.fn()} />
           </AntdApp>
         </I18nProvider>
       </MemoryRouter>,
@@ -411,5 +414,51 @@ describe('a row that says it is out of date', () => {
     const { container } = renderRow(quota('codex-fine', [quotaWindow('five_hour', 80, 2)]), vi.fn());
     expect(container.querySelector('[data-testid="quota-stale-refresh"]')).toBeNull();
     expect(container.querySelector('[data-quota-failure-line]')).toBeNull();
+  });
+});
+
+
+describe('provider sections across pages', () => {
+  function mountPages() {
+    const files = Array.from({ length: 13 }, (_, index) => file(`account-${String(index + 1).padStart(2, '0')}`,
+      index === 12 ? { siwc_bound: true, siwc_status: 'valid', use_siwc: true } : {}));
+    const quotas = files.map((entry, index) => quota(entry.auth_index!, [quotaWindow('weekly', index === 12 ? 1 : 80 - index, 100)],
+      index === 12 ? { reset_credits: { available_count: 2, applicable_available_count: 2 } } : {}));
+    const api = installOmcApi({ authFiles: files.map(entry => ({ file: entry, fields: {} })) });
+    api.on('GET', '/management/quota', () => ({ quotas }));
+    const router = createMemoryRouter([{ path: '*', element: <OAuthManagementPage /> }], { initialEntries: ['/oauth-management?page_size=12'] });
+    return renderWithOmc(<RouterProvider router={router} />);
+  }
+  const visibleIdentities = () => screen.getAllByTestId('oauth-credential-record').map(row => row.getAttribute('data-auth-index'));
+
+  it('keeps provider-wide SIWC and credit columns when the qualifying account is on another page', async () => {
+    const view = mountPages();
+    try {
+      await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
+      await screen.findByRole('button', { name: 'Weekly' });
+      expect(screen.getByRole('columnheader', { name: 'SIWC' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Reset credits' })).toBeTruthy();
+      const headers = screen.getAllByRole('columnheader').map(header => header.textContent);
+      fireEvent.click(screen.getByTitle('2'));
+      await waitFor(() => expect(visibleIdentities()).toEqual(['account-13']));
+      expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(headers);
+    } finally { view.unmount(); }
+  });
+
+  it('sorts a provider by quota before slicing pages and keeps that order on the next page', async () => {
+    const view = mountPages();
+    try {
+      await waitFor(() => expect(visibleIdentities()).toHaveLength(12));
+      fireEvent.click(await screen.findByRole('button', { name: 'Weekly' }));
+      await waitFor(() => expect(visibleIdentities()).toEqual(
+        Array.from({ length: 12 }, (_, index) => `account-${String(13 - index).padStart(2, '0')}`),
+      ));
+      fireEvent.click(screen.getByTitle('2'));
+      await waitFor(() => expect(visibleIdentities()).toEqual(['account-01']));
+      fireEvent.click(screen.getByRole('button', { name: /Weekly/ }));
+      await waitFor(() => expect(visibleIdentities()).toEqual(
+        Array.from({ length: 12 }, (_, index) => `account-${String(index + 1).padStart(2, '0')}`),
+      ));
+    } finally { view.unmount(); }
   });
 });

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
+import { SIWCDialog } from '../src/components/authFiles/SIWCDialog';
 import { SIWCBindingPanel } from '../src/components/authFiles/SIWCBindingPanel';
 import { useSIWCBindings } from '../src/hooks/useSIWCBindings';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
@@ -302,4 +303,22 @@ it('lets the operator disable SIWC even when binding material is missing', () =>
   try {
     expect(screen.getByRole('switch', { name: 'Use bound SIWC' }).hasAttribute('disabled')).toBe(false);
   } finally { fixture.dispose(); }
+});
+
+
+it.each([
+  [{ ...FILE, name: 'codex-private@example.test.json', email: 'private@example.test' }, 'pr•••e@example.test', 'codex-pr•••e@example.test.json'],
+  [{ ...FILE, name: 'codex.json' }, 'codex.json', 'codex.json'],
+] as const)('protects the SIWC dialog target identity for %j', async (file, name, title) => {
+  installOmcApi();
+  function Dialog() {
+    const bindings = useSIWCBindings();
+    return <SIWCDialog file={file} canEdit bindings={bindings} onClose={() => {}} />;
+  }
+  const view = renderWithOmc(<Dialog />);
+  try {
+    const dialog = await screen.findByTestId('siwc-dialog');
+    const target = dialog.querySelector('p[title]');
+    expect([target?.textContent, target?.getAttribute('title')]).toEqual([name, title]);
+  } finally { view.unmount(); }
 });

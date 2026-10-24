@@ -44,7 +44,7 @@ import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { VertexImportModal } from '../../components/authFiles/VertexImportModal';
 import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { CredentialSection, type CredentialRowActions } from './CredentialSection';
-import { buildCredentialSections, orderBySection } from './credentialSections';
+import { buildCredentialSections, orderBySection, type QuotaColumnSort } from './credentialSections';
 import { useOAuthSessions } from './useOAuthSessions';
 import { isSIWCPending, siwcTargetKey, useSIWCBindings } from '../../hooks/useSIWCBindings';
 import { SIWCDialog } from '../../components/authFiles/SIWCDialog';
@@ -96,6 +96,7 @@ export const OAuthManagementPage: React.FC = () => {
   const { searchParams, setSearchParams, queryState, setSearch, isViewLoaded } = useOAuthManagementViewState();
   const visibleNow = useVisibleNow();
   const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
+  const [quotaColumnSorts, setQuotaColumnSorts] = React.useState<Partial<Record<string, QuotaColumnSort>>>({});
   const isDemo = isDemoMode();
   React.useEffect(() => {
     if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc') {
@@ -164,7 +165,7 @@ export const OAuthManagementPage: React.FC = () => {
     [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
   );
   // Pages are cut from the section order, so a page groups into the same sections the next page continues.
-  const visibleRecords = React.useMemo(() => orderBySection(sortedRecords), [sortedRecords]);
+  const visibleRecords = React.useMemo(() => orderBySection(sortedRecords, quotaColumnSorts), [sortedRecords, quotaColumnSorts]);
 
   const pageSize = queryState.pageSize;
   const maxPage = Math.max(1, Math.ceil(visibleRecords.length / pageSize));
@@ -845,6 +846,18 @@ export const OAuthManagementPage: React.FC = () => {
                 selectedKeys={selectedKeySet}
                 nowMS={visibleNow}
                 actions={rowActions}
+                columnSort={quotaColumnSorts[section.provider]}
+                onSort={(key) => {
+                  setQuotaColumnSorts((current) => {
+                    const next = { ...current };
+                    const sort = current[section.provider];
+                    if (sort?.key !== key) next[section.provider] = { key, direction: 'asc' };
+                    else if (sort.direction === 'asc') next[section.provider] = { key, direction: 'desc' };
+                    else delete next[section.provider];
+                    return next;
+                  });
+                  setSearch({ page: null });
+                }}
               />
             ))}
           </div>
