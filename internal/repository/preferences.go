@@ -13,7 +13,10 @@ import (
 // settings. Named here so the API and every page agree on the key instead of
 // each hardcoding its own string.
 const (
-	PreferenceDashboardRange      = "dashboard_range"
+	PreferenceDashboardRange = "dashboard_range"
+	// PreferenceInsightsRange is the Insights page's window, kept apart from the
+	// dashboard's: the two pages answer different questions over different spans.
+	PreferenceInsightsRange       = "insights_range"
 	PreferenceLogFilters          = "log_filters"
 	PreferenceProviderIcons       = "provider_icons"
 	PreferenceProviderNames       = "provider_names"

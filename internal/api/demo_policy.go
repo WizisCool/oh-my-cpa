@@ -172,6 +172,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/dashboard/token-heatmap", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/dashboard/models", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/dashboard/providers", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/insights/cube", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/insights/rhythm", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs/status", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/service-logs", demoAllow, ""},

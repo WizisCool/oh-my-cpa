@@ -1619,8 +1619,11 @@ never pruned. They grow with *distinct dimension combinations per bucket*, not w
 
 `Repository.QueryUsageFacts` is the single read every panel goes through; the older
 `QueryUsageAnalytics`, `QueryUsageModelBuckets`, `QueryUsageProviderTotals`,
-`QueryUsageCostWindow` and `QueryDailyTokenTotals` are thin projections of it. A new panel
-adds a grouping or a measure there instead of writing another scan of `usage_events`.
+`QueryUsageCostWindow` and `QueryDailyTokenTotals` are thin projections of it. A query names
+the dimensions it groups by (`UsageDimension`: key, model, call point, provider, credential,
+auth type, serving key) and the values it keeps (`Filters`, one `IN` per dimension, rendered
+in a fixed order so a query always compiles to one statement). A new panel adds a dimension
+or a measure there instead of writing another scan of `usage_events`.
 
 Three rules keep the read exact:
 
@@ -1641,6 +1644,35 @@ Three rules keep the read exact:
 The fine grain is fifteen minutes because every civil UTC offset in use is a multiple of
 it: a local calendar day is a whole number of buckets in any deployment time zone, which
 an hourly grain cannot offer (`+05:30`, `+05:45`).
+
+**Calendar buckets.** A query with a `Calendar` (hour, day or Monday week in a time zone)
+buckets on the wall clock rather than on epoch multiples. Go splits the window at each
+offset change (`time.Time.ZoneBounds`). The SQL adds the matching offset to every timestamp
+with one `CASE`, aligns the wall-clock value, and Go turns each key back into an instant.
+That is exact across a DST change: every row of one local day carries the same key, and
+the 25-hour day is one bucket. Because every offset is a multiple of fifteen minutes, the
+fine grain divides any local hour or day. The UTC daily table is read only where the
+offset is zero throughout the window.
+
+**Local-day facts.** A non-UTC deployment reading ninety days by local day would otherwise
+group every fifteen-minute row of the window, which measured about three seconds. Migration
+047 adds `usage_facts_local_daily`, the same measures per local day of one zone, behind the
+checkpoint marker `facts_local:<zone>`. `EnsureLocalUsageFacts` rebuilds it from the
+fifteen-minute facts in one transaction when the OMC Time Zone changes. The same fold that
+advances `facts` keeps it current. A read takes local days only while the marker names its
+zone (an `EXISTS` guard in the same statement), and otherwise reads the interior from the
+fine table, so a zone change can never serve the previous zone's days.
+`BenchmarkUsageFactsCube` pins the Insights shape at about 140 ms over ninety days.
+
+**The Insights cube.** `GET /management/insights/cube` returns one window's facts per bucket
+and per full tuple of key, call point, model, provider and credential, dictionary-encoded
+with positional measure columns, plus the Comparison Window's totals per tuple. The response supports browser-side
+projections from a single snapshot without issuing a new request for each grouping. Rows grow with active tuples per bucket, never with requests. Past 60,000 rows an
+automatic granularity is coarsened and reported in `window.bucket`; an explicit one is a
+400. Windows and Calendar Presets are resolved by the server in the OMC Time Zone
+(`internal/api/insights_window.go`). The rhythm grid needs local hours under day buckets,
+so `GET /management/insights/rhythm` is its own read. It takes the request list's filter
+parameters, and fingerprints a raw key value server-side.
 
 **The detail horizon.** Once the lifecycle pass has removed request records before an
 instant, the ragged edges and the fine grids behind it can no longer be read. The instant is

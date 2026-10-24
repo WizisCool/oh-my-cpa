@@ -3,6 +3,7 @@
   "server_timezone": "UTC",
   "known_keys": [
     "dashboard_range",
+    "insights_range",
     "log_filters",
     "provider_icons",
     "provider_names",

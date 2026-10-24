@@ -21,6 +21,7 @@ import (
 // blob store reachable through the session.
 var knownPreferences = map[string]bool{
 	repository.PreferenceDashboardRange:      true,
+	repository.PreferenceInsightsRange:       true,
 	repository.PreferenceLogFilters:          true,
 	repository.PreferenceProviderIcons:       true,
 	repository.PreferenceProviderNames:       true,

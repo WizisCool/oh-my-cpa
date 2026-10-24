@@ -310,3 +310,50 @@ func (r *Repository) SetClientKeyAlias(ctx context.Context, instanceID, keyFinge
 	}
 	return stored, nil
 }
+
+// ClientKeyMasksFor returns the display mask each fingerprint was last recorded
+// with, for keys whose requests are still retained.
+//
+// A key removed from CPA has no mask in the current configuration, and its usage
+// facts outlive its request records, so this is best effort: a key whose last
+// record has rolled out of retention resolves to nothing and the caller falls
+// back to the fingerprint.
+func (r *Repository) ClientKeyMasksFor(ctx context.Context, instanceID string, keyFingerprints []string) (map[string]string, error) {
+	resolved := map[string]string{}
+	if r == nil || r.SQL() == nil {
+		return resolved, errors.New("repository is not initialized")
+	}
+	for start := 0; start < len(keyFingerprints); start += maxSQLiteParameters {
+		chunk := keyFingerprints[start:min(start+maxSQLiteParameters, len(keyFingerprints))]
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, instanceID)
+		for _, fingerprint := range chunk {
+			args = append(args, fingerprint)
+		}
+		// SQLite takes the bare column from the row MAX() picked: the newest mask.
+		rows, err := r.SQL().QueryContext(ctx, `
+			SELECT api_group_key, api_key_mask, MAX(id)
+			FROM usage_events
+			WHERE instance_id = ? AND api_key_mask <> '' AND api_group_key IN (`+
+			strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")+`)
+			GROUP BY api_group_key`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("resolve client key masks: %w", err)
+		}
+		for rows.Next() {
+			var fingerprint, mask string
+			var id int64
+			if errScan := rows.Scan(&fingerprint, &mask, &id); errScan != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan client key mask: %w", errScan)
+			}
+			resolved[fingerprint] = mask
+		}
+		errRows := rows.Err()
+		rows.Close()
+		if errRows != nil {
+			return nil, fmt.Errorf("iterate client key masks: %w", errRows)
+		}
+	}
+	return resolved, nil
+}

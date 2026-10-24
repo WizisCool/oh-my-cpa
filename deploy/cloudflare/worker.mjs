@@ -24,10 +24,23 @@
  */
 import { applyQueryFilters } from './filters.mjs';
 import { routingAt, signalInstantsBetween } from './liveRouting.mjs';
-import { DATASET, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
+import { DATASET, INSIGHTS_PATH_PREFIX, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
 const DEMO_HEADER = 'X-OMCPA-Demo';
+
+/** Code for a read whose filters the dataset holds no capture for. */
+const UNCAPTURED_CODE = 'demo_uncaptured';
+
+/**
+ * The Insights rhythm's filters. The cube is filtered in the browser, so every filter
+ * works on it; the rhythm is filtered on the server, and the dataset holds it for the
+ * whole deployment only, so a filtered ask is told so rather than answered for everyone.
+ */
+const RHYTHM_FILTERS = ['api_key', 'model_alias', 'model', 'provider', 'auth_index'];
+
+const WEEK_MS = 7 * 86_400_000;
+const INSIGHTS_REPLAY_PRESETS = new Set(['24h', '7d', '30d', '90d', 'all']);
 
 /** Refusal code the console renders as "this is disabled in the demonstration". */
 const REFUSED_CODE = 'demo_operation_refused';
@@ -186,7 +199,26 @@ function matchEventIdentity(decoded, pathname, dataset) {
 }
 
 function serve(entry, nowMs, url) {
-  const deltaMs = nowMs - REFERENCE_MS;
+  const isInsights = url.pathname.startsWith(INSIGHTS_PATH_PREFIX);
+  if (isInsights && (url.searchParams.has('from') || url.searchParams.has('to')
+    || !INSIGHTS_REPLAY_PRESETS.has((url.searchParams.get('preset') || '7d').trim().toLowerCase())
+    || !['', 'auto'].includes((url.searchParams.get('bucket') || '').trim().toLowerCase()))) {
+    return new Response(
+      JSON.stringify({ error: 'this Insights window or granularity is not captured in the demonstration', code: UNCAPTURED_CODE }),
+      { status: 404, headers: JSON_HEADERS },
+    );
+  }
+  if (url.pathname === `${INSIGHTS_PATH_PREFIX}rhythm` && RHYTHM_FILTERS.some((name) => url.searchParams.has(name))) {
+    return new Response(
+      JSON.stringify({ error: 'the demonstration holds this view for the whole deployment only', code: UNCAPTURED_CODE }),
+      { status: 404, headers: JSON_HEADERS },
+    );
+  }
+  // Whole weeks preserve local hours, Monday buckets and the rhythm grid
+  // together. Calendar presets need a fresh aggregation, so they are refused above.
+  const deltaMs = isInsights
+    ? Math.trunc((nowMs - REFERENCE_MS) / WEEK_MS) * WEEK_MS
+    : nowMs - REFERENCE_MS;
   let body = entry.body;
   try {
     // The identity is substituted on the capture and then re-based with it, rather than
@@ -203,7 +235,10 @@ function serve(entry, nowMs, url) {
       );
     }
     const decoded = rebase(applyQueryFilters(identity, url, { deltaMs, dataset: DATASET }), deltaMs);
-    const preset = url.searchParams.has('preset') ? dashboardPresetOf(url) : '';
+    // Replays are closed snapshots: their final bucket does not extend to the visitor's now.
+    if (isInsights) decoded.window.open_end = false;
+    // Insights captures are taken by preset name and already carry it.
+    const preset = url.searchParams.has('preset') && !isInsights ? dashboardPresetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {
     // A body that is not JSON is served as captured. There are none today; this keeps

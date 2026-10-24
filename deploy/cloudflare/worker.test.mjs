@@ -122,6 +122,39 @@ describe('routing', () => {
     }
   });
 
+  it('keeps Insights week windows and rhythm weekdays aligned after rebasing', async (t) => {
+    const dayMs = 86_400_000;
+    t.mock.method(Date, 'now', () => REFERENCE_MS + 10 * dayMs + 3_600_000);
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    for (const preset of ['7d', '30d', '90d', 'all']) {
+      for (const view of ['cube', 'rhythm']) {
+        const response = await worker.fetch(request(`/api/v1/management/insights/${view}?preset=${preset}`), env);
+        const captured = JSON.parse(DATASET.responses[`insights-${view}-${preset}`].body);
+        const expected = rebase(captured, 7 * dayMs);
+        expected.window.open_end = false;
+        assert.deepEqual(await response.json(), expected, `${view}/${preset}`);
+      }
+    }
+  });
+
+  it('refuses Insights windows and granularities absent from the capture', async (t) => {
+    t.mock.method(Date, 'now', () => Date.UTC(2026, 9, 24, 12));
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    for (const query of ['preset=today', 'preset=yesterday', 'preset=this_week', 'preset=last_week',
+      'preset=this_month', 'preset=last_month', 'from=1767139200000&to=1767225600000',
+      'preset=7d&bucket=month', 'preset=unknown']) {
+      for (const view of ['cube', 'rhythm']) {
+        const response = await worker.fetch(request(`/api/v1/management/insights/${view}?${query}`), env);
+        assert.equal(response.status, 404, `${view}?${query}`);
+        assert.deepEqual(await response.json(), {
+          error: 'this Insights window or granularity is not captured in the demonstration', code: 'demo_uncaptured',
+        });
+      }
+    }
+  });
+
   it('defaults the dashboard to the console’s own default window', () => {
     assert.equal(
       responseNameFor(request('/api/v1/management/dashboard')),
