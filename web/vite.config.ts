@@ -48,6 +48,9 @@ export default defineConfig(({ command }) => ({
   // The worker imports CommonJS dependencies that the page's entry graph never visits.
   // Prebundle its dependency graph so development workers are as offline-safe as built ones.
   optimizeDeps: {
+    // Optimizing the icon import map promotes thousands of lazy icons into shared
+    // eager chunks. Keep this ESM map native so a workspace loads only its icons.
+    exclude: ['lucide-react/dynamicIconImports.mjs'],
     include: [
       'monaco-yaml > @vscode/l10n',
       'monaco-yaml > jsonc-parser',
