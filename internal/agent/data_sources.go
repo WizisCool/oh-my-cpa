@@ -33,7 +33,7 @@ func createDataReferenceID(callID, path string) string {
 }
 
 func findTraceDataSources(trace Trace) []DataReference {
-	if trace.Result.Status != "success" || isDisplayCall(trace.Name) || len(trace.Result.Data) == 0 {
+	if trace.Result.Status != "success" || isPresentationCall(trace.Name) || len(trace.Result.Data) == 0 {
 		return nil
 	}
 	var data any
@@ -120,8 +120,8 @@ func selectSourceFields(rows []any, parent map[string]any) []string {
 		}
 	}
 	sort.Strings(fields)
-	if len(fields) > MAX_CANVAS_FIELDS {
-		fields = fields[:MAX_CANVAS_FIELDS]
+	if len(fields) > MAX_SOURCE_FIELDS {
+		fields = fields[:MAX_SOURCE_FIELDS]
 	}
 	return fields
 }
@@ -142,48 +142,13 @@ func findConversationDataSources(conversation *Conversation) []DataReference {
 	return sources
 }
 
-func resolveDataReference(conversation *Conversation, source DataSource) (DataSource, error) {
-	if source.DataRef == "" {
-		return source, nil
-	}
-	if len(source.DataRef) != len("ds_")+sha256.Size*2 {
-		return source, refuse("source.data_ref must be copied from data_sources in a tool result")
-	}
-	for turnIndex := len(conversation.Turns) - 1; turnIndex >= 0; turnIndex-- {
-		for _, trace := range conversation.Turns[turnIndex].Traces {
-			for _, candidate := range findTraceDataSources(trace) {
-				if candidate.DataRef != source.DataRef {
-					continue
-				}
-				if source.CallID != "" && source.CallID != candidate.CallID || source.Path != "" && source.Path != candidate.Path {
-					return source, refuse("source.data_ref conflicts with call_id or path; use source {data_ref} alone")
-				}
-				return DataSource{CallID: candidate.CallID, Path: candidate.Path, DataRef: candidate.DataRef}, nil
-			}
-		}
-	}
-	return source, refuse("source.data_ref is unavailable in this conversation; choose a current data_sources entry")
-}
-
-func buildModelToolResult(conversation *Conversation, trace Trace) ([]byte, error) {
+// buildModelToolResult is what the model reads back from a call: the result, and the data references
+// an OpenUI Query can name instead of copying rows into the program.
+func buildModelToolResult(trace Trace) ([]byte, error) {
 	result := struct {
 		capability.Result
 		DataSources []DataReference `json:"data_sources,omitempty"`
-		Recovery    string          `json:"recovery,omitempty"`
 	}{Result: trace.Result, DataSources: findTraceDataSources(trace)}
-	if trace.Name == RENDER_UI && trace.Result.Status == "error" {
-		result.DataSources = findConversationDataSources(conversation)
-		failures := 0
-		if len(conversation.Turns) > 0 {
-			traces := conversation.Turns[len(conversation.Turns)-1].Traces
-			for index := len(traces) - 1; index >= 0 && traces[index].Name == RENDER_UI && traces[index].Result.Status == "error"; index-- {
-				failures++
-			}
-		}
-		if failures >= 2 {
-			result.Recovery = "Repeated UI validation failures: correct the named field and use source {data_ref} from data_sources with top-level fields. Do not retry unchanged parameters or transcribe figures into HTML. If a valid display cannot be produced, answer with the verified findings and state the display limitation."
-		}
-	}
 	return json.Marshal(result)
 }
 
@@ -193,8 +158,15 @@ type operationOutcome struct {
 	Operation  string `json:"operation_id,omitempty"`
 }
 
-// Completed investigations keep their conclusion and provenance, not the SQL/HTML repair transcript.
-// The original messages and traces remain stored, so references still freeze the authoritative rows.
+// Completed investigations keep their conclusion and provenance, not the SQL repair transcript.
+// The original messages and traces remain stored, so a data reference still reads the authoritative
+// rows.
+//
+// The interfaces a turn presented stay in its history as the calls they were (the OpenUI spec's
+// "earlier responses appear as the program the model wrote"): the next question is often about
+// what the operator is looking at, and a follow-up interface reuses its predecessor's structure.
+// They are replayed as calls with their results rather than as text, so the model keeps answering
+// through the tool instead of imitating a program written into prose.
 func buildCompletedTurnMessages(turn Turn, registry *capability.Registry) []gateway.AgentMessage {
 	metadata := struct {
 		DataSources        []DataReference    `json:"data_sources,omitempty"`
@@ -208,21 +180,18 @@ func buildCompletedTurnMessages(turn Turn, registry *capability.Registry) []gate
 			seenSources[source.DataRef] = true
 		}
 	}
-	for index := len(turn.Traces) - 1; index >= 0; index-- {
-		trace := turn.Traces[index]
-		if (trace.Name != RENDER_UI && trace.Name != RENDER_CANVAS) || trace.Result.Status != "success" {
-			continue
+	var presented []Trace
+	for _, trace := range turn.Traces {
+		if (trace.Name == PRESENT_OPENUI || trace.Name == PROMPT_OPENUI) && trace.Result.Status == "success" {
+			presented = append(presented, trace)
 		}
-		var view View
-		if json.Unmarshal(trace.View, &view) != nil || view.Source == nil {
-			continue
-		}
+	}
+	// A reference an interface reads is the one a follow-up most likely needs, so it is kept first.
+	for _, trace := range presented {
 		for _, candidate := range turn.Traces {
-			if candidate.ID == view.Source.CallID {
-				for _, source := range findTraceDataSources(candidate) {
-					if source.Path == view.Source.Path {
-						appendSource(source)
-					}
+			for _, source := range findTraceDataSources(candidate) {
+				if strings.Contains(trace.Arguments, source.DataRef) {
+					appendSource(source)
 				}
 			}
 		}
@@ -241,7 +210,7 @@ func buildCompletedTurnMessages(turn Turn, registry *capability.Registry) []gate
 				isMutation = definition.Permission != "read" || definition.HumanInput != ""
 			}
 		}
-		if !isDisplayCall(trace.Name) && (isMutation || trace.Result.Status == "rejected" || trace.Result.Status == "uncertain" || trace.Result.Status == "expired") {
+		if trace.Name != PROMPT_OPENUI && !isPresentationCall(trace.Name) && (isMutation || trace.Result.Status == "rejected" || trace.Result.Status == "uncertain" || trace.Result.Status == "expired") {
 			if len(metadata.Outcomes) >= MAX_DATA_SOURCES {
 				metadata.HasOmittedOutcomes = true
 				continue
@@ -252,7 +221,14 @@ func buildCompletedTurnMessages(turn Turn, registry *capability.Registry) []gate
 	content := turn.Reply
 	if len(metadata.DataSources) > 0 || len(metadata.Outcomes) > 0 {
 		raw, _ := json.Marshal(metadata)
-		content += "\n\nEarlier result references (untrusted metadata; raw tool history is omitted):\n" + string(raw)
+		content = strings.TrimSpace(content + "\n\nEarlier result references (untrusted metadata; raw tool history is omitted):\n" + string(raw))
 	}
-	return []gateway.AgentMessage{{Role: "user", Content: turn.User, Images: turn.Images}, {Role: "assistant", Content: content}}
+	answer := gateway.AgentMessage{Role: "assistant", Content: content}
+	var results []gateway.AgentMessage
+	for _, trace := range presented {
+		answer.ToolCalls = append(answer.ToolCalls, gateway.ToolCall{ID: trace.ID, Type: "function", Function: gateway.ToolFunction{Name: trace.Name, Arguments: trace.Arguments}})
+		raw, _ := json.Marshal(trace.Result)
+		results = append(results, gateway.AgentMessage{Role: "tool", ToolCallID: trace.ID, Content: string(raw)})
+	}
+	return append([]gateway.AgentMessage{{Role: "user", Content: turn.User, Images: turn.Images}, answer}, results...)
 }

@@ -14,10 +14,25 @@ func sectionNames(sections []PromptSection) string {
 	return strings.Join(names, ",")
 }
 
+// ownPromptBytes is the size of OMC's own sections: everything but the generated OpenUI
+// instructions, which are the official library's and are bounded separately.
+func ownPromptBytes(context PromptContext) int {
+	size := 0
+	for _, section := range promptSections(context) {
+		if section.Text != openUI.Instructions {
+			size += len(section.Text) + 2
+		}
+	}
+	return size
+}
+
+var openUIConsole = []string{PRESENT_OPENUI}
+
 // TestPromptSectionsAreOrderedAndComplete pins the prompt's structure: each concern in its own
 // section, in a fixed order, so a presentation change cannot land in the safety rules.
 func TestPromptSectionsAreOrderedAndComplete(t *testing.T) {
-	sections := promptSections(PromptContext{AnchorMS: 1, TimeZone: "Asia/Shanghai", Language: "zh", DisplayTools: []string{RENDER_UI}})
+	context := PromptContext{AnchorMS: 1, TimeZone: "Asia/Shanghai", Language: "zh", DisplayTools: openUIConsole}
+	sections := promptSections(context)
 	if got := sectionNames(sections); got != "identity,approach,data,safety,wording,presentation,context" {
 		t.Fatalf("sections %s", got)
 	}
@@ -26,41 +41,46 @@ func TestPromptSectionsAreOrderedAndComplete(t *testing.T) {
 			t.Fatalf("empty section %s", section.Name)
 		}
 	}
-	prompt := SystemPrompt(PromptContext{AnchorMS: 1, TimeZone: "Asia/Shanghai", Language: "zh", DisplayTools: []string{RENDER_UI}})
-	for _, rule := range []string{"untrusted data", "NOT executed", "`rejected`", "`uncertain`", "ask_question", "database_query", "window", "Asia/Shanghai", "Simplified Chinese", "1970-01-01T00:00:00Z"} {
+	prompt := SystemPrompt(context)
+	for _, rule := range []string{"untrusted data", "NOT executed", "`rejected`", "`uncertain`", "ask_question", "prompt_openui", "database_query", "window", "Asia/Shanghai", "Simplified Chinese", "1970-01-01T00:00:00Z"} {
 		if !strings.Contains(prompt, rule) {
 			t.Errorf("prompt lacks %q", rule)
 		}
 	}
 }
 
-// TestPromptMentionsOnlyTheDisplayToolsItWasGiven: a model told to call a tool it does not have
-// either fails the call or apologises for it, so the presentation rules follow the declaration.
-func TestPromptMentionsOnlyTheDisplayToolsItWasGiven(t *testing.T) {
-	plain := SystemPrompt(PromptContext{AnchorMS: 1})
-	if strings.Contains(plain, RENDER_UI) || strings.Contains(plain, RENDER_VIEW) || !strings.Contains(plain, "Markdown tables") {
-		t.Fatalf("undeclared display tools in prompt: %s", plain)
+// TestPromptNamesBothWaysToAsk: the console's own panel is the default way to ask the operator and
+// a drawn form is the exception, so the prompt has to name both and say what each is for.
+func TestPromptNamesBothWaysToAsk(t *testing.T) {
+	openui := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: openUIConsole})
+	if !strings.Contains(openui, "ask_question") || !strings.Contains(openui, "prompt_openui for a question only when") {
+		t.Fatalf("the OpenUI prompt does not distinguish the two asking tools: %s", askRule(openUIConsole))
 	}
-	canvas := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: []string{RENDER_UI}})
-	if !strings.Contains(canvas, RENDER_UI) || strings.Contains(canvas, RENDER_VIEW) || !strings.Contains(canvas, "call_id") {
-		t.Fatalf("canvas prompt: %s", canvas)
-	}
-	if strings.Contains(plain, "console language") {
-		t.Fatal("language line without a language")
-	}
-	// A turn asked for as text is told about no display, whatever the console declared.
-	text := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: []string{RENDER_UI}, Present: PRESENT_TEXT})
-	if strings.Contains(text, RENDER_UI) || strings.Contains(text, RENDER_VIEW) {
-		t.Fatalf("text prompt: %s", text)
+	text := SystemPrompt(PromptContext{AnchorMS: 1})
+	if !strings.Contains(text, "ask_question") || strings.Contains(text, "prompt_openui") {
+		t.Fatalf("the Markdown prompt should ask with ask_question alone: %s", askRule(nil))
 	}
 }
 
-func TestPromptLetsTheModelSelectIntelligentUI(t *testing.T) {
-	prompt := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: []string{RENDER_UI}})
-	for _, phrase := range []string{"Draw without being asked", "OMC.diagram", "never repeat its numbers", "Local interactions", "OMC.compose", "custom_icons_list", "OMC.chart", "custom layouts and interaction logic", "drawn where you call render_ui", "frame none", "inline component", "frame card", "before html", "filters, forms, calculators"} {
-		if !strings.Contains(prompt, phrase) {
-			t.Errorf("presentation rules lack %q: %s", phrase, prompt)
+// TestPromptTeachesOpenUIOnlyToAConsoleThatRendersIt: the default answer is the official OpenUI
+// instructions; a console that declared nothing, or a turn asked for as text, gets Markdown and is
+// never told about a tool it does not have.
+func TestPromptTeachesOpenUIOnlyToAConsoleThatRendersIt(t *testing.T) {
+	openui := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: openUIConsole})
+	if !strings.Contains(openui, openUI.Instructions) || !strings.Contains(openui, "root = Card(") || !strings.Contains(openui, `Query("data_rows"`) || strings.Contains(openui, "Markdown tables") {
+		t.Fatal("the default prompt does not carry the generated OpenUI instructions")
+	}
+	for name, context := range map[string]PromptContext{
+		"undeclared": {AnchorMS: 1},
+		"text":       {AnchorMS: 1, DisplayTools: openUIConsole, Present: PRESENT_TEXT},
+	} {
+		prompt := SystemPrompt(context)
+		if strings.Contains(prompt, PRESENT_OPENUI) || strings.Contains(prompt, PROMPT_OPENUI) || !strings.Contains(prompt, "Markdown tables") {
+			t.Errorf("%s prompt: %s", name, prompt)
 		}
+	}
+	if strings.Contains(SystemPrompt(PromptContext{AnchorMS: 1}), "console language") {
+		t.Fatal("language line without a language")
 	}
 }
 
@@ -81,52 +101,47 @@ func TestPromptAsksForAReadableAnswer(t *testing.T) {
 	}
 }
 
+// TestPromptFitsItsBudget: OMC's own sections fit their per-round budget in the fullest context a
+// console can ask for, and the generated OpenUI instructions stay near the size they were adopted at.
+// Growth past either is a change to look at, not a limit a running turn meets.
 func TestPromptFitsItsBudget(t *testing.T) {
-	// The fullest prompt a console can ask for still fits the per-round budget.
 	for style := range TOKEN_STYLES {
-		prompt := SystemPrompt(PromptContext{AnchorMS: 1, TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: style, DisplayTools: []string{RENDER_UI, SUGGEST_NEXT}, Present: PRESENT_CANVAS})
-		if len(prompt) > MAX_PROMPT_BYTES {
-			t.Fatalf("system prompt is %d bytes against %d", len(prompt), MAX_PROMPT_BYTES)
+		context := PromptContext{AnchorMS: 1, Model: strings.Repeat("m", 512), ReasoningEffort: "xhigh", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: style, DisplayTools: openUIConsole}
+		if size := ownPromptBytes(context); size > MAX_PROMPT_BYTES {
+			t.Fatalf("OMC's sections are %d bytes against %d", size, MAX_PROMPT_BYTES)
 		}
-		t.Logf("%s: %d bytes", style, len(prompt))
+	}
+	if len(openUI.Instructions) > 112<<10 {
+		t.Fatalf("generated OpenUI instructions grew to %d bytes; check the catalogue and prompt options", len(openUI.Instructions))
 	}
 }
 
 func TestPromptStatesDomainWindowAndConfiguredModel(t *testing.T) {
-	prompt := SystemPrompt(PromptContext{AnchorMS: 1, Model: "codex-auto-review", ReasoningEffort: "high", DisplayTools: []string{RENDER_UI}})
-	for _, phrase := range []string{"client-requested model name", "[from_ms,to_ms)", "timestamp_ms < to_ms", "pricing and token-bucket evidence", "source {data_ref}", "not operation_id", "does not verify browser rendering", `"model":"codex-auto-review"`, `"reasoning_effort":"high"`, "actual upstream identity is unverified"} {
+	prompt := SystemPrompt(PromptContext{AnchorMS: 1, Model: "codex-auto-review", ReasoningEffort: "high", DisplayTools: openUIConsole})
+	for _, phrase := range []string{"client-requested model name", "[from_ms,to_ms)", "timestamp_ms < to_ms", "pricing and token-bucket evidence", `"model":"codex-auto-review"`, `"reasoning_effort":"high"`, "actual upstream identity is unverified"} {
 		if !strings.Contains(prompt, phrase) {
 			t.Errorf("missing %q", phrase)
 		}
 	}
-	full := SystemPrompt(PromptContext{AnchorMS: 1, Model: strings.Repeat("m", 512), ReasoningEffort: "xhigh", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: "zh", DisplayTools: []string{RENDER_UI, SUGGEST_NEXT}, Present: PRESENT_CANVAS})
-	if len(full) > MAX_PROMPT_BYTES {
-		t.Fatalf("full prompt: %d bytes exceeds %d", len(full), MAX_PROMPT_BYTES)
-	}
 }
 
 func TestPromptBoundsEscapedIdentityMetadata(t *testing.T) {
-	prompt := SystemPrompt(PromptContext{AnchorMS: 1, Model: strings.Repeat("\x01", 512), ReasoningEffort: "high", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: "zh", DisplayTools: []string{RENDER_UI, SUGGEST_NEXT}, Present: PRESENT_CANVAS})
-	if len(prompt) > MAX_PROMPT_BYTES || !strings.Contains(prompt, "identity metadata was omitted") {
-		t.Fatalf("escaped identity is unbounded: %d bytes", len(prompt))
+	context := PromptContext{AnchorMS: 1, Model: strings.Repeat("\x01", 512), ReasoningEffort: "high", TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", TokenStyle: "zh", DisplayTools: openUIConsole}
+	if size := ownPromptBytes(context); size > MAX_PROMPT_BYTES || !strings.Contains(SystemPrompt(context), "identity metadata was omitted") {
+		t.Fatalf("escaped identity is unbounded: %d bytes", size)
 	}
 }
 
 // The model learns the tools it can call, not the UI transport's implementation history.
 func TestModelInstructionsDescribeAvailableCapabilities(t *testing.T) {
-	for _, tool := range []string{RENDER_UI} {
-		prompt := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: []string{tool}})
-		declarations, _ := json.Marshal(DisplayToolDeclarations([]string{tool}))
-		for _, phrase := range []string{"older clients", "old client", "new client", "legacy", "compatibility", "deprecated", "旧客户端", "新客户端", "旧户"} {
-			if strings.Contains(strings.ToLower(prompt+string(declarations)), phrase) {
-				t.Errorf("model instructions contain %q", phrase)
-			}
+	declarations, _ := json.Marshal(DisplayToolDeclarations(openUIConsole))
+	own := SystemPrompt(PromptContext{AnchorMS: 1})
+	for _, phrase := range []string{"older clients", "old client", "new client", "legacy", "compatibility", "旧客户端", "新客户端", "render_ui", "canvas"} {
+		if strings.Contains(strings.ToLower(own+string(declarations)), phrase) {
+			t.Errorf("model instructions contain %q", phrase)
 		}
-		if !strings.Contains(prompt, tool) || strings.Contains(prompt, RENDER_CANVAS) || strings.Contains(prompt, RENDER_VIEW) {
-			t.Errorf("prompt does not reflect declared tool %s: %s", tool, prompt)
-		}
-		if len(DisplayToolDeclarations([]string{tool})) != 1 || !strings.Contains(string(declarations), `"name":"render_ui"`) {
-			t.Errorf("UI tool missing from upstream declarations: %s", declarations)
-		}
+	}
+	if len(DisplayToolDeclarations(openUIConsole)) != 1 || !strings.Contains(string(declarations), `"name":"present_openui"`) || !strings.Contains(string(declarations), `"required":["ui"]`) {
+		t.Errorf("present_openui missing from upstream declarations: %s", declarations)
 	}
 }

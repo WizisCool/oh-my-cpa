@@ -17,7 +17,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
-// Trace is one capability or display call of a turn: what the model asked for, when it ran, and
+// Trace is one capability or presentation call of a turn: what the model asked for, when it ran, and
 // what came back. Arguments are the model's own text, kept so the operator can audit exactly what
 // was requested; they never carry a secret, because secrets reach the executor through the
 // console's private decision endpoint rather than through the model.
@@ -28,8 +28,6 @@ type Trace struct {
 	Result    capability.Result `json:"result"`
 	StartedMS int64             `json:"started_at_ms,omitempty"`
 	EndedMS   int64             `json:"ended_at_ms,omitempty"`
-	// View is a display call's frozen dataset (ADR 0042); capability calls have none.
-	View json.RawMessage `json:"view,omitempty"`
 }
 
 // Usage is a turn's token counts, summed over its model rounds as the gateway reported them. A
@@ -95,8 +93,6 @@ type Turn struct {
 	StartedMS int64                  `json:"started_at_ms,omitempty"`
 	EndedMS   int64                  `json:"ended_at_ms,omitempty"`
 	Usage     *Usage                 `json:"usage,omitempty"`
-	// Suggestions are the follow-up questions the model offered with a finished answer.
-	Suggestions []string `json:"suggestions,omitempty"`
 	// PromptVersion is the system prompt the turn's rounds ran with.
 	PromptVersion string `json:"prompt_version,omitempty"`
 	// Present is the presentation the operator asked this turn for with a composer command. It is
@@ -147,11 +143,11 @@ type Input struct {
 	Endpoint string
 	Resume   []string
 	Language string
-	// DisplayTools names the display tools the console can draw for this run (ADR 0042).
+	// DisplayTools names the display tools the console can draw for this run (ADR 0107).
 	DisplayTools []string
 	// ReplaceTurn names the newest turn the message takes the place of, for a retry or an edit.
 	ReplaceTurn string
-	// Present is the presentation asked for with the message: PRESENT_UI, PRESENT_TEXT or none.
+	// Present is the presentation asked for with the message: PRESENT_TEXT or none.
 	Present string
 	// TokenStyle is how the console writes token counts, so the answer writes them the same way.
 	TokenStyle string
@@ -424,9 +420,8 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 	if _, ok := TOKEN_STYLES[input.TokenStyle]; input.TokenStyle != "" && !ok {
 		return errors.New("invalid_parameters")
 	}
-	// A presentation belongs to a new message, and a canvas can only be asked of a console that
-	// draws one.
-	if _, ok := presentations[input.Present]; input.Present != "" && (!ok || !input.isMessage() || ((input.Present == PRESENT_CANVAS || input.Present == PRESENT_UI) && !contains(input.DisplayTools, RENDER_UI))) {
+	// A presentation belongs to a new message.
+	if _, ok := presentations[input.Present]; input.Present != "" && (!ok || !input.isMessage()) {
 		return errors.New("invalid_parameters")
 	}
 	if conversation.ID == "" {
@@ -528,14 +523,14 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 
 // isReplaceable reports whether a turn can be dropped for a retry or an edit without the
 // conversation misstating what happened: it is settled, and everything it called only read or
-// drew. A turn that prepared or ran a change stays, because the audit trail and the operator's
+// presented. A turn that prepared or ran a change stays, because the audit trail and the operator's
 // own memory both hold that it took place.
 func (r *Runtime) isReplaceable(turn Turn) bool {
 	if turn.Status == "running" || turn.Status == "pending" || len(turn.Pending) > 0 {
 		return false
 	}
 	for _, trace := range turn.Traces {
-		if isDisplayCall(trace.Name) {
+		if isPresentationCall(trace.Name) {
 			continue
 		}
 		definition, err := r.Executor.Registry.Lookup(trace.Name, PRINCIPAL)
@@ -611,6 +606,9 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 	// round buys nothing, because the fingerprint cannot change inside a turn.
 	clients := map[string]ModelClient{}
 	offered := presentedTools(input.DisplayTools, turn.Present)
+	// The calls the last round made: when they presented the answer and nothing else, the turn is
+	// over once they are recorded, which is the official integration's policy for present_openui.
+	var answered []gateway.ToolCall
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -649,10 +647,10 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 				if err := emit(Event{Type: "tool_call", Trace: &trace}); err != nil {
 					return err
 				}
-				// A display tool the console declared is resolved here, against this
-				// conversation's own results; everything else is the executor's.
+				// The answer itself changes nothing and is checked here; everything else is the
+				// executor's.
 				if contains(offered, call.Function.Name) {
-					trace.Result, trace.View = renderDisplay(conversation, call.Function.Name, call.Function.Arguments)
+					trace.Result = presentOpenUI(call.Function.Arguments)
 				} else {
 					result, err := r.Executor.Invoke(ctx, PRINCIPAL, call.Function.Name, json.RawMessage(call.Function.Arguments), conversation.ID)
 					if err != nil {
@@ -685,12 +683,16 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 				turn.Status = "pending"
 				return nil
 			}
-			modelResult, err := buildModelToolResult(conversation, trace)
+			modelResult, err := buildModelToolResult(trace)
 			if err != nil {
 				return err
 			}
 			turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "tool", ToolCallID: call.ID, Content: string(modelResult)})
 			turn.Pending = turn.Pending[1:]
+		}
+		if isFinalPresentation(turn, answered) {
+			turn.Status = "success"
+			return nil
 		}
 		turn.Rounds++
 		promptContext := PromptContext{AnchorMS: conversation.AnchorMS, Language: input.Language, TokenStyle: input.TokenStyle, DisplayTools: input.DisplayTools, Present: turn.Present, Model: conversation.Model, ReasoningEffort: conversation.ReasoningEffort}
@@ -701,7 +703,7 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 		// a whole model call each, and the registry is bounded by construction, so the model is
 		// better served by the catalogue than by a search that can only return what it already
 		// could have been told.
-		tools := append(r.toolDeclarations(), DisplayToolDeclarations(offered)...)
+		tools := append(r.toolDeclarations(offered), DisplayToolDeclarations(offered)...)
 		messages := []gateway.AgentMessage{{Role: "system", Content: SystemPrompt(promptContext)}}
 		// Settled turns retain conclusions and provenance, while the active investigation keeps
 		// every result. A turn stays in this history whatever it settled as: one that failed, was
@@ -736,15 +738,13 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 		if err != nil {
 			return err
 		}
-		calls, suggestions := takeSuggestions(offered, reply.Calls)
+		calls := reply.Calls
 		turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "assistant", Content: reply.Content, ToolCalls: calls, Thinking: reply.Thinking})
 		if len(calls) == 0 {
-			// Follow-ups belong to a finished answer; ones offered before more work are stale.
-			turn.Suggestions = suggestions
 			turn.Status = "success"
 			return nil
 		}
-		turn.Pending = calls
+		turn.Pending, answered = calls, calls
 	}
 }
 
@@ -778,8 +778,14 @@ func ToolDeclarations(definitions []*capability.Definition) []gateway.AgentTool 
 	return tools
 }
 
-func (r *Runtime) toolDeclarations() []gateway.AgentTool {
-	return ToolDeclarations(r.Executor.Registry.List(PRINCIPAL))
+// toolDeclarations is the registry's catalogue for one turn. prompt_openui answers with an OpenUI
+// form, so a turn that cannot render OpenUI is not offered it.
+func (r *Runtime) toolDeclarations(offered []string) []gateway.AgentTool {
+	definitions := r.Executor.Registry.List(PRINCIPAL)
+	if !contains(offered, PRESENT_OPENUI) {
+		definitions = slices.DeleteFunc(slices.Clone(definitions), func(definition *capability.Definition) bool { return definition.Name == PROMPT_OPENUI })
+	}
+	return ToolDeclarations(definitions)
 }
 
 // modelClient resolves one fingerprint once per turn.

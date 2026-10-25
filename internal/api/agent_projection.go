@@ -21,7 +21,6 @@ type agentTurnDTO struct {
 	StartedMS     int64             `json:"started_at_ms,omitempty"`
 	EndedMS       int64             `json:"ended_at_ms,omitempty"`
 	Usage         *agent.Usage      `json:"usage,omitempty"`
-	Suggestions   []string          `json:"suggestions,omitempty"`
 	PromptVersion string            `json:"prompt_version,omitempty"`
 	Present       string            `json:"present,omitempty"`
 	// Images are references; the page reads each from the image endpoint.
@@ -44,7 +43,6 @@ type agentConversationDTO struct {
 func agentTraceForConsole(trace agent.Trace) agent.Trace {
 	if trace.Name == "database_query" {
 		trace.Result.Data = nil
-		trace.View = nil
 	}
 	return trace
 }
@@ -63,7 +61,7 @@ func agentConversationForConsole(conversation *agent.Conversation) *agentConvers
 			ID: turn.ID, User: turn.User, Reply: turn.Reply, Parts: turn.Parts,
 			Status: turn.Status, Code: turn.Code, Failure: turn.Failure, Traces: traces, Rounds: turn.Rounds,
 			Calls: turn.Calls, StartedMS: turn.StartedMS, EndedMS: turn.EndedMS,
-			Usage: turn.Usage, Suggestions: turn.Suggestions, PromptVersion: turn.PromptVersion, Present: turn.Present, Images: turn.Images,
+			Usage: turn.Usage, PromptVersion: turn.PromptVersion, Present: turn.Present, Images: turn.Images,
 		}
 	}
 	return &agentConversationDTO{

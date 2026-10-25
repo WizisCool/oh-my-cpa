@@ -21,8 +21,7 @@ func queryProjectionFixture() agent.Conversation {
 			{ID: "query", Name: "database_query", Arguments: `{"sql":"select provider from usage_events"}`, StartedMS: 1, EndedMS: 2,
 				Result: capability.Result{Status: "success", Data: json.RawMessage(`{"columns":["provider"],"rows":[["private-query-cell"]]}`)}},
 			{ID: "usage", Name: "usage_aggregate", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"requests":1}`)}},
-			{ID: "display", Name: "render_table", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"rendered":true,"rows":1}`)},
-				View: json.RawMessage(`{"kind":"table","title":"Summary","columns":["requests"],"rows":[{"requests":1}]}`)},
+			{ID: "display", Name: "present_openui", Arguments: `{"ui":"root = Card([t])\nt = TextContent(\"One request\")"}`, Result: capability.Result{Status: "success", Data: json.RawMessage(`{"displayed":true}`)}},
 		},
 		Messages: []gateway.AgentMessage{{Role: "tool", ToolCallID: "query", Content: "private-query-cell"}},
 		Pending:  []gateway.ToolCall{{ID: "internal-pending"}},
@@ -47,7 +46,7 @@ func assertConsoleQueryProjection(t *testing.T, raw []byte) {
 	if turn.Traces[0].Result.Data != nil || turn.Traces[0].Result.Status != "success" || turn.Traces[0].EndedMS != 2 {
 		t.Fatalf("query receipt: %+v", turn.Traces[0])
 	}
-	if string(turn.Traces[1].Result.Data) != `{"requests":1}` || len(turn.Traces[2].View) == 0 {
+	if string(turn.Traces[1].Result.Data) != `{"requests":1}` || !strings.Contains(turn.Traces[2].Arguments, "root = Card") {
 		t.Fatalf("dedicated read or final display lost: %+v", turn.Traces)
 	}
 }
@@ -85,7 +84,6 @@ func TestAgentStreamProjectsQueryResultsAndSnapshot(t *testing.T) {
 		trace.Result.Status = status
 		trace.Result.Code = "query_code"
 		trace.Result.Detail = "query diagnostic"
-		trace.View = json.RawMessage(`{"rows":[["private-query-cell"]]}`)
 		content, _ := json.Marshal(trace.Result)
 		if err := translateAgentEvent(translator, "fixture", agent.Event{Type: "tool_result", Trace: &trace, Content: string(content)}); err != nil {
 			t.Fatal(err)

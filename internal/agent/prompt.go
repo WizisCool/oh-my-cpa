@@ -9,11 +9,12 @@ import (
 // PROMPT_VERSION names the system prompt a turn ran with. It is recorded on the turn, so an
 // operator asking "why did it answer like that" can tell which instructions were in force; change
 // it whenever a section's wording changes.
-const PROMPT_VERSION = "2026-10-08.11"
+const PROMPT_VERSION = "2026-10-25.3"
 
-// MAX_PROMPT_BYTES bounds the system prompt. It is resent on every model round of every turn, so
-// it is a per-round cost like the tool catalogue, and a section that grows past this is a
-// section to tighten rather than a budget to raise.
+// MAX_PROMPT_BYTES bounds OMC's own sections of the system prompt. They are resent on every model
+// round of every turn, so they are a per-round cost like the tool catalogue, and a section that
+// grows past this is a section to tighten rather than a budget to raise. The generated OpenUI
+// instructions are the official library's and are measured by their own test.
 const MAX_PROMPT_BYTES = 6 << 10
 
 // PromptContext is what varies between rounds: the time anchor, the deployment's calendar zone,
@@ -38,30 +39,22 @@ var TOKEN_STYLES = map[string]string{
 	"full":       "Write token counts in full with grouped digits (3,412,870 tokens), as the console does.",
 }
 
-// The presentations an operator can ask one turn for with a composer command. Each narrows the
-// display tools the turn is offered, so the request is kept by what the model can call rather than
-// by its reading of a sentence; the sentence says why its tools changed.
-const (
-	PRESENT_CANVAS = "canvas"
-	PRESENT_UI     = "ui"
-	PRESENT_TEXT   = "text"
-)
+// PRESENT_TEXT is the one presentation an operator can ask a turn for with a composer command:
+// Markdown text instead of the default OpenUI answer. It withdraws the OpenUI tools for that turn,
+// so the request is kept by what the model can call rather than by its reading of a sentence; the
+// sentence says why its tools changed. Stored turns may still name the retired `ui` and `canvas`.
+const PRESENT_TEXT = "text"
 
 var presentations = map[string]string{
-	PRESENT_CANVAS: "The operator asked for an interactive UI: use render_ui when useful.",
-	PRESENT_UI:     "The operator asked for an interactive UI: use render_ui when useful.",
-	PRESENT_TEXT:   "The operator asked for this answer as text only: no display is available this turn.",
+	PRESENT_TEXT: "The operator asked for this answer as Markdown text only: no interface is available this turn.",
 }
 
 // presentedTools is the display tools a turn is offered under the presentation it was asked for.
 func presentedTools(declared []string, present string) []string {
-	var kept []string
-	for _, name := range declared {
-		if name == SUGGEST_NEXT || (present != PRESENT_TEXT && name == RENDER_UI) {
-			kept = append(kept, name)
-		}
+	if present == PRESENT_TEXT || !contains(declared, PRESENT_OPENUI) {
+		return nil
 	}
-	return kept
+	return []string{PRESENT_OPENUI}
 }
 
 // PromptSection is one titled block of the system prompt.
@@ -86,7 +79,7 @@ func promptSections(context PromptContext) []PromptSection {
 	sections := []PromptSection{
 		{Name: "identity", Text: "You are the OMC management assistant for one Oh My CPA deployment. OMC names, organises and observes the CLIProxyAPI (CPA) gateway it manages: client keys, providers, credentials, usage, pricing and quota. Call Point is the client-requested model name; provider/channel is the route, Connection the user-owned resource, client key the caller. You act only through the registered capabilities. Reply in the language the operator writes in."},
 		{Name: "approach", Text: strings.Join([]string{
-			"Work out what the operator wants before acting; if the request is ambiguous or depends on their preference, call ask_question instead of guessing.",
+			askRule(presentedTools(context.DisplayTools, context.Present)),
 			"Prefer the dedicated capability for a question. Use database_query only for what no dedicated capability answers, and aggregate in SQL instead of reading rows.",
 			"Call independent capabilities together in one round. Prefer aggregates over record lists.",
 			"Routine usage statistics need the requested grouping, totals and window; stop there unless further diagnosis is requested or needed. Do not re-read a result.",
@@ -143,27 +136,32 @@ func tokenRule(style string) string {
 	return TOKEN_STYLES["en-compact"]
 }
 
-// presentationRules says how to shape an answer, with the display tools when the console can draw
-// them and with Markdown alone when it cannot. The two variants never both apply, so a model is
-// never told to call a tool it was not given.
+// askRule says how to ask the operator rather than guess, and which of the two ways to ask.
+//
+// `ask_question` is the console's own panel: a few questions with short options, answered in place,
+// always consistent because the console draws it. `prompt_openui` draws a form the model composes,
+// which is worth its freedom only when the question genuinely needs one - a comparison put side by
+// side, several typed fields whose layout carries meaning. Both wait for the operator; neither is
+// for approving a change, which writes already ask.
+func askRule(displayTools []string) string {
+	if contains(displayTools, PRESENT_OPENUI) {
+		return strings.Join([]string{
+			"Work out what the operator wants before acting instead of guessing.",
+			"To ask, use ask_question: 1-4 questions together, two to six short options each, and the operator can always type an answer instead. It is answered in the console's own panel, so it reads and behaves the same in every conversation.",
+			"Use prompt_openui for a question only when the answer needs a form the panel cannot express - a side-by-side comparison, several typed fields whose layout carries meaning - and never draw input controls inside a present_openui answer.",
+		}, " ")
+	}
+	return "Work out what the operator wants before acting; if the request is ambiguous or depends on their preference, ask with ask_question instead of guessing."
+}
+
+// presentationRules says how to shape an answer: the official OpenUI instructions when the console
+// renders OpenUI, Markdown otherwise. The two never both apply, so a model is never told to call a
+// tool it was not given.
 func presentationRules(displayTools []string) string {
-	rules := []string{"Lead with the answer; keep it short and use headings only for long answers."}
-	if contains(displayTools, RENDER_UI) {
-		rules = append(rules,
-			"Draw without being asked when structure helps: trends and comparisons (charts; tables for exact figures), resource status (stat cards), flows or dependencies (OMC.diagram), what-ifs (controls). State the conclusion beside the UI; never repeat its numbers in Markdown tables. Text suits one fact, a short list or an error.",
-			"Copy source {data_ref} from data_sources with fields beside source; {call_id, path} names a tool call, not operation_id, and a path in result.data. Use frozen OMC.rows, not transcribed figures. OMC.chart, OMC.table and OMC.fmt are optional; custom layouts and interaction logic are welcome. Label units and use theme variables. A receipt does not verify browser rendering.",
-			"Verify displayed facts; draw the answer, not every result. Local interactions must not fabricate data or claim a management change succeeded.",
-			"UI is drawn where you call render_ui. Build an inline component: filters, forms, calculators, status or workflow explorers. frame none is the borderless default; frame card is a titled figure. Write title and frame before html for streaming.",
-			"Label controls and keep them keyboard reachable. Local controls explore frozen facts or labelled what-if assumptions; new reads and management actions use reviewed OMC.compose follow-ups.",
-			"Declare icons in render_ui.icons; OMC.icon and data-omc-icon support Lucide, brand:<maker>, custom:<id> from custom_icons_list or provider icon_id. OMC.compose offers a reviewed follow-up; ordinary permission and confirmation still apply.",
-		)
-	} else {
-		rules = append(rules, "Present small comparisons as short Markdown tables and summarise larger results instead of listing them.")
+	if contains(displayTools, PRESENT_OPENUI) {
+		return openUI.Instructions
 	}
-	if contains(displayTools, SUGGEST_NEXT) {
-		rules = append(rules, "When a natural next question exists, call suggest_next in the same response as the final answer text; skip it for a question, a refusal or a pending operation.")
-	}
-	return strings.Join(rules, " ")
+	return "Lead with the answer; keep it short and use headings only for long answers. Present small comparisons as short Markdown tables and summarise larger results instead of listing them."
 }
 
 // SystemPrompt joins the sections into the text the model receives.
