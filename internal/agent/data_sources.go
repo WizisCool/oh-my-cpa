@@ -126,22 +126,6 @@ func selectSourceFields(rows []any, parent map[string]any) []string {
 	return fields
 }
 
-func findConversationDataSources(conversation *Conversation) []DataReference {
-	var sources []DataReference
-	for turnIndex := len(conversation.Turns) - 1; turnIndex >= 0; turnIndex-- {
-		traces := conversation.Turns[turnIndex].Traces
-		for traceIndex := len(traces) - 1; traceIndex >= 0; traceIndex-- {
-			for _, source := range findTraceDataSources(traces[traceIndex]) {
-				sources = append(sources, source)
-				if len(sources) == MAX_DATA_SOURCES {
-					return sources
-				}
-			}
-		}
-	}
-	return sources
-}
-
 // buildModelToolResult is what the model reads back from a call: the result, and the data references
 // an OpenUI Query can name instead of copying rows into the program.
 func buildModelToolResult(trace Trace) ([]byte, error) {
