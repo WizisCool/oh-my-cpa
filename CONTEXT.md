@@ -303,10 +303,10 @@ unaudited.
 ## i18n
 
 Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
-dictionary lives in `web/src/i18n/messages/` as `[zh, en]` pairs, one file per
-key prefix group (`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`), while
-`web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts` carry the
-additional catalogs. All four are accessed through `t(key, vars)`; language
+dictionary lives in `web/src/i18n/locales/zh/` as one file per product area
+(`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`), and `en/` mirrors it; the
+Traditional Chinese and Malay catalogs are one module each,
+`web/src/i18n/locales/zh-Hant.ts` and `ms.ts`. All four are accessed through `t(key, vars)`; language
 persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every
 registered language fully localizes — a localized UI must not show untranslated
 captions from another language beside its own copy (proper nouns and industry

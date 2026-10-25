@@ -95,7 +95,7 @@ are also available through the read-only `models_list` capability.
   - Native sub-path compatibility: All code must natively support the `/omc` prefix (`VITE_BASE_URL`), forbidding hardcoded root paths (`/`);
   - Single-replica single-writer: Designed specifically for single-instance SQLite WAL; no distributed multi-writer mechanisms are introduced;
   - Strict allowlisted APIs: The browser communicates only with the Oh My CPA backend; arbitrary target-URL proxies are forbidden. Ordinary APIs retain explicit DTO allowlists; the trusted Plugin Host permits only fixed-origin native management trees and the fixed model directory under ADR 0067. Server-side fetches have flow-specific destination restrictions: release and pricing hosts are compile-time constants, a configurable repository is validated by shape rather than accepted as a URL, and release redirects cannot leave the configured origin. Operator-triggered Google Fonts installation allows only Google's font hosts or the configured mirror's registrable domain, including same-site subdomains; IP and local mirror hosts require an exact hostname match, and every redirect is checked against the same boundary;
-  - Complete multilingual localization: Full Simplified Chinese, Traditional Chinese, English and Malay alignment (`web/src/i18n/messages/` plus the catalogs under `web/src/i18n/locales/`); no unlocalized captions or mixed languages in the UI.
+  - Complete multilingual localization: Full Simplified Chinese, Traditional Chinese, English and Malay alignment (one catalog file per product area per language under `web/src/i18n/locales/`); no unlocalized captions or mixed languages in the UI.
 
 ## Brand Commitments
 
