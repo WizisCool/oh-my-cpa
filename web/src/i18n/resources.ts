@@ -25,8 +25,8 @@ type AntdLocale = NonNullable<ConfigProviderProps['locale']>;
 export const CATALOGS: Record<Lang, Catalog | (() => Promise<Catalog>)> = {
   zh,
   en,
-  'zh-Hant': () => import('./locales/zh-Hant').then((module) => module.ZH_HANT as Catalog),
-  ms: () => import('./locales/ms').then((module) => module.MS as Catalog),
+  'zh-Hant': () => import('./locales/zh-Hant').then((module) => module.default),
+  ms: () => import('./locales/ms').then((module) => module.default),
 };
 
 /**

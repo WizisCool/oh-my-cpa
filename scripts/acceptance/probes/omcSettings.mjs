@@ -936,7 +936,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // The fetch is failed by aborting the chunk request, which is the same state a redeploy produces.
   // The browser refuses to re-fetch a module whose import has already failed in a document, so the
   // recovery asserted below is the reload, not a second click.
-  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
+  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\/index)?(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
   const pageErrors = [];
   const collectPageError = (error) => pageErrors.push(String(error.message));
   page.on('pageerror', collectPageError);
