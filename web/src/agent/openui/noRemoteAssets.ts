@@ -44,13 +44,19 @@ function fenceElement(element: Element): void {
       element.setAttribute('data-blocked-asset', '');
     }
   }
-  // A background image is the same request as an `<img>`, written in CSS, and one declaration may
-  // name several.
   const style = element.getAttribute('style');
   if (!style) return;
-  const urls = Array.from(style.matchAll(/url\(\s*['"]?([^'")]+)/gi), match => match[1]);
-  if (urls.length === 0 || urls.every(isLocalAsset)) return;
-  element.setAttribute('style', style.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (whole, url: string) => (isLocalAsset(url) ? whole : 'none')));
+  const fenced = sanitizeAssetStyle(style);
+  if (fenced !== style) element.setAttribute('style', fenced);
+}
+
+/**
+ * A stylesheet declaration with every asset URL that the console does not serve replaced by
+ * `none`. A background image is the same request as an `<img>`, written in CSS, and one declaration
+ * may name several; the exported markup runs the same rule before a document is written.
+ */
+export function sanitizeAssetStyle(style: string): string {
+  return style.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (whole, url: string) => (isLocalAsset(url) ? whole : 'none'));
 }
 
 /**

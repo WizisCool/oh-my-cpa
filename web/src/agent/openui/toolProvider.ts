@@ -5,7 +5,7 @@ import { DATA_ROWS_TOOL } from './prompt';
 /** What a rendered interface's Query and Mutation calls need from the page that shows it. */
 export interface OpenUIToolHost {
   /** The registry entry a call names, or undefined when there is none. */
-  capability: (name: string) => Promise<{ permission: string; human_input?: string } | undefined>;
+  capability: (name: string) => Promise<{ permission: string; risk?: string; human_input?: string } | undefined>;
   /** Runs a capability through the console's executor endpoint. */
   invoke: (name: string, args: Record<string, unknown>) => Promise<CapabilityReceipt>;
   /** Reads the rows a data reference of the conversation names. */
@@ -56,9 +56,11 @@ async function call(name: string, args: Record<string, unknown>): Promise<ToolEn
   }
   const entry = await current.capability(name);
   if (!entry || isWithheld(name, entry)) return failure(current.describe('capability_forbidden'));
-  // A Query runs as soon as the interface renders; a change belongs to a Mutation that a button
-  // runs. The executor still asks for approval where it always would - this keeps a program from
-  // preparing a change nobody clicked for.
+  // A Query runs as soon as the interface renders, and the provider cannot tell it from a Mutation:
+  // the renderer hands over a name and arguments. A change that the executor would run without a
+  // decision is therefore refused outright - a Query must not perform one - and the changes a
+  // program may run are the ones that wait for the operator's approval anyway, behind a click.
+  if (entry.permission !== 'read' && entry.risk !== 'high') return failure(current.describe('openui_change_needs_review'));
   if (entry.permission !== 'read' && !current.isUserAction()) return failure(current.describe('openui_change_needs_action'));
   let receipt = await current.invoke(name, args);
   if (receipt.status === 'pending' && receipt.operation_id) receipt = await current.approve(receipt.operation_id);

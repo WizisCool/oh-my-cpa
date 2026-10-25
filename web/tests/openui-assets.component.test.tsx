@@ -1,6 +1,7 @@
 import { act } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { fenceRemoteAssets } from '../src/agent/openui/noRemoteAssets';
+import { inertMarkup } from '../src/agent/openui/staticRender';
 
 /**
  * A generated answer is model output, so the assets it names are fenced where it renders: the
@@ -42,4 +43,32 @@ it('fences remote assets in a rendered program and leaves local ones alone', asy
   expect(late.getAttribute('src')).toBeNull();
   disconnect();
   document.body.innerHTML = '';
+});
+
+/**
+ * A saved conversation is a document that runs only its own script, so the markup it carries must
+ * not request anything when it is opened: an asset stays only when the console serves it, while a
+ * link may still point at the web.
+ */
+it('keeps remote assets out of exported markup', () => {
+  const root = document.createElement('div');
+  root.innerHTML = [
+    '<a id="link" href="https://openui.com/docs">docs</a>',
+    '<a id="script-link" href="javascript:alert(1)">x</a>',
+    '<img id="remote" src="https://example.com/beacon.png">',
+    '<img id="local" src="/api/v1/plugins/demo/logo">',
+    '<img id="mixed" srcset="/a.png 1x, https://example.com/b.png 2x">',
+    '<div id="painted" style="background-image:url(https://example.com/bg.png)"></div>',
+  ].join('');
+
+  const markup = inertMarkup(root);
+  const parsed = document.createElement('div');
+  parsed.innerHTML = markup;
+
+  expect(parsed.querySelector('#link')?.getAttribute('href')).toBe('https://openui.com/docs');
+  expect(parsed.querySelector('#script-link')?.hasAttribute('href')).toBe(false);
+  expect(parsed.querySelector('#remote')?.hasAttribute('src')).toBe(false);
+  expect(parsed.querySelector('#local')?.getAttribute('src')).toBe('/api/v1/plugins/demo/logo');
+  expect(parsed.querySelector('#mixed')?.hasAttribute('srcset')).toBe(false);
+  expect(parsed.querySelector<HTMLElement>('#painted')?.getAttribute('style')).not.toContain('example.com');
 });

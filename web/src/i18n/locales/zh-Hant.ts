@@ -303,6 +303,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.command.image": "匯出對話為圖片（PNG）",
   "agent.command.capabilities": "開啟能力目錄",
   "agent.command.connect": "開啟外部接入指南",
+  "agent.error.openui_review": "這個修改會在沒有你確認的情況下直接執行，因此介面不能呼叫它；請讓智能體將它作為一次變更提交，由你決定。",
   "agent.error.openui_action": "介面裡的修改只能由你點選按鈕觸發。",
   "agent.question.title": "智能體想先問你",
   "agent.question.other": "其他答案…",

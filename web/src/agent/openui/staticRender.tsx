@@ -5,6 +5,7 @@ import type { McpClientLike } from '@openuidev/react-lang';
 import { openuiChatLibrary, ThemeProvider } from '@openuidev/react-ui';
 import type { Theme, ThemeMode } from '@openuidev/react-ui';
 import { OPENUI_TOOL_PROVIDER } from './toolProvider';
+import { fenceRemoteAssets, isLocalAsset, sanitizeAssetStyle } from './noRemoteAssets';
 
 /** How long the interface may keep changing - queries answering, charts animating - before it is taken as drawn. */
 const SETTLE_QUIET_MS = 300;
@@ -16,22 +17,45 @@ const SETTLE_LIMIT_MS = 8_000;
  * rest on the component library.
  */
 const SCRIPT_HOOKS = /^data-(?:copy|copy-label|panel|toggle-panel|toggle-search|close|expand|collapse|print|search|search-count)$/;
-const SAFE_URL = /^(?:https?:|mailto:|#|data:image\/(?:png|jpeg|gif|webp);)/i;
-const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'poster', 'srcset']);
+/** Where a link may go in a saved document; an asset source has its own, local-only rule. */
+const LINK_URL = /^(?:https?:|mailto:|#)/i;
+/** Attributes that name an asset: they follow the same rule as a rendered answer, not the link's. */
+const ASSET_ATTRIBUTES = new Set(['src', 'srcset', 'poster', 'xlink:href']);
 const DROPPED_ELEMENTS = 'script,iframe,object,embed,link,meta,base,template,noscript';
+
+/** Every candidate of a `srcset`, so a 2x remote source cannot ride along with a local one. */
+function assetURLs(attribute: string, value: string): string[] {
+  if (attribute !== 'srcset') return [value];
+  return value.split(',').map(part => part.trim().split(/\s+/)[0] ?? '').filter(Boolean);
+}
 
 /**
  * The drawn interface as inert markup for a document that runs only its own fixed script: no
  * element that loads or runs anything, no handler or script hook, no address other than a web or
  * mail link, and every control left without a behaviour.
  */
-function inertMarkup(root: Element): string {
+export function inertMarkup(root: Element): string {
   const copy = root.cloneNode(true) as Element;
   copy.querySelectorAll(DROPPED_ELEMENTS).forEach(element => element.remove());
   for (const element of [copy, ...Array.from(copy.querySelectorAll('*'))]) {
     for (const { name, value } of Array.from(element.attributes)) {
       const lower = name.toLowerCase();
-      if (lower.startsWith('on') || SCRIPT_HOOKS.test(lower) || (URL_ATTRIBUTES.has(lower) && !SAFE_URL.test(value.trim()))) element.removeAttribute(name);
+      if (lower.startsWith('on') || SCRIPT_HOOKS.test(lower)) {
+        element.removeAttribute(name);
+        continue;
+      }
+      // A saved document must not phone home when it is opened, so an asset is kept only when the
+      // console serves it; a link may still point at the web.
+      if (ASSET_ATTRIBUTES.has(lower)) {
+        if (!assetURLs(lower, value.trim()).every(isLocalAsset)) element.removeAttribute(name);
+        continue;
+      }
+      if (lower === 'style') {
+        const fenced = sanitizeAssetStyle(value);
+        if (fenced !== value) element.setAttribute(name, fenced);
+        continue;
+      }
+      if (lower === 'href' ? !LINK_URL.test(value.trim()) : ['action', 'formaction'].includes(lower)) element.removeAttribute(name);
     }
   }
   return copy.innerHTML;
@@ -92,6 +116,9 @@ export async function renderInterfaces(programs: readonly string[], options: { t
     },
   };
   const root = createRoot(host);
+  // The programs are model output and the host is a live document: fence what they name before
+  // they render, so export does not request a remote asset the console would not show either.
+  const releaseFence = fenceRemoteAssets(host);
   try {
     flushSync(() => root.render(
       <ThemeProvider mode={options.mode} lightTheme={options.theme} darkTheme={options.theme} cssSelector={`.${scope}`}>
@@ -112,6 +139,7 @@ export async function renderInterfaces(programs: readonly string[], options: { t
     return { markup, themeCSS: declarations.trim() };
   } finally {
     root.unmount();
+    releaseFence();
     host.remove();
   }
 }

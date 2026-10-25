@@ -48,8 +48,11 @@ footer beside a finished answer carried five unrelated readouts.
   (`agent/openui/noRemoteAssets.ts`): same-origin, `data:` and `blob:` stay, anything else loses its
   source and keeps its box.
 - Query and Mutation calls reach capabilities through the console's existing executor endpoint, with
-  the same permission, approval, audit and invalidation rules as any other console request. A
-  change requires user activation in the browser.
+  the same permission, approval, audit and invalidation rules as any other console request. The
+  renderer hands the console a tool name and its arguments, not whether a Query or a Mutation made
+  the call, so a change a program may run is only one the executor would wait on: a low-risk change,
+  which would run the moment its call arrived, is refused and stays in the conversation's own flow.
+  A high-risk change additionally requires user activation in the browser.
 - The instructions that teach the language are generated from the installed official packages by
   `pnpm openui:prompt` and embedded in the server, so the server owns what the model is told and a
   dependency upgrade fails `pnpm check:openui-prompt` when the embedded copy is stale.

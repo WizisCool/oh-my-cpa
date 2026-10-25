@@ -303,6 +303,7 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.command.image": "Eksport perbualan sebagai imej (PNG)",
   "agent.command.capabilities": "Buka direktori keupayaan",
   "agent.command.connect": "Buka panduan ejen luaran",
+  "agent.error.openui_review": "Perubahan ini akan berjalan tanpa keputusan anda, jadi antara muka tidak boleh memanggilnya; minta ejen mencadangkannya sebagai perubahan yang anda luluskan.",
   "agent.error.openui_action": "Perubahan dalam antara muka hanya berjalan daripada butangnya.",
   "agent.question.title": "Ejen mempunyai soalan",
   "agent.question.other": "Jawapan lain…",

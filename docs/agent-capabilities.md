@@ -183,9 +183,12 @@ reference to a query's rows is, which is what lets an interface draw a result th
 A reference is bounded to 1000 rows and its fields to scalars.
 
 Query and Mutation calls from a program reach capabilities through the console's executor
-endpoint with the ordinary permission, approval, audit and invalidation rules. A change runs only
-from the operator's own click (`navigator.userActivation`), and a browser that cannot prove the
-click refuses; a high-risk change still waits for approval. Assets a program names are fenced to
+endpoint with the ordinary permission, approval, audit and invalidation rules. The renderer reports
+a tool name and its arguments, not which of the two made the call, so a program may run only the
+changes the executor would wait on: a low-risk change - which would run as soon as its call
+arrived - is refused and belongs in the conversation's own approval flow. A high-risk change runs
+only from the operator's own click (`navigator.userActivation`), and a browser that cannot prove the
+click refuses. Assets a program names are fenced to
 the console's own origin, `data:` and `blob:`; the fence is a net rather than a wall, so the prompt
 also forbids external assets (ADR 0107).
 
@@ -205,12 +208,10 @@ forbids stating the same figure twice. A program that fails to render stays a ca
 the renderer's structured errors; the console offers a repair action that sends those diagnostics
 back to the model. Exports embed inert markup drawn by the same official library.
 
-`suggest_next` rides the same declaration and is not a display call. The model calls it in the
-response that carries its final answer, with one to three follow-up questions (80 characters each);
-the runtime takes it out of the round's calls before anything else reads them, so it produces no
-trace, no receipt and no extra model round, and the questions are stored on the turn as
-`suggestions`. A malformed call, or one made beside other calls - before the answer exists - is
-dropped without a refusal. The console offers the newest turn's suggestions under its answer.
+Follow-up suggestions come from the program itself: a `FollowUpBlock` of `FollowUpItem`s is part of
+the drawn answer, and picking one sends its text as the operator's next message. There is no
+separate suggestion tool, so nothing needs a trace-less round and nothing survives a console that
+declines to draw.
 
 What this means for a new capability: a result that holds its rows as an array of objects with
 scalar fields - or, like `database_query`, as positional arrays beside a `columns` list - can be

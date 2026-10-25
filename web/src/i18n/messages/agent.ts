@@ -75,6 +75,7 @@ export const AGENT_MESSAGES: Messages = {
   'agent.command.capabilities': ["打开能力目录", "Open the capability directory"],
   'agent.command.connect': ["打开外部接入指南", "Open the external agent guide"],
   'agent.error.openui_action': ["界面里的修改只能由你点击按钮触发。", "A change in an interface runs only from its button."],
+  'agent.error.openui_review': ["这个修改会在没有你确认的情况下直接执行，所以界面不能调用它；请让智能体把它作为一次变更提交，由你决定。", "This change would run without a decision from you, so an interface cannot call it; have the agent propose it as a change you approve."],
   'agent.question.title': ["智能体想先问你", "The agent has a question"],
   'agent.question.other': ["其他答案…", "Something else…"],
   'agent.question.answer': ["输入你的回答", "Type your answer"],
