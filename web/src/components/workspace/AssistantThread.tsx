@@ -34,15 +34,19 @@ export function AssistantThread({ empty, latestLabel, isCompact = false, testId,
   // from a follow-up chip while reading further up: the answer to what they just said follows
   // below, and the primitive alone would keep following the reader's place instead.
   const viewport = useThreadViewport();
+  // Read through a ref: an effect that depended on the viewport's identity would cancel its own
+  // pending frame when the store re-renders, and by then the send it was scrolling for is spent.
+  const viewportRef = React.useRef(viewport);
+  viewportRef.current = viewport;
   const sentMessages = useAuiState(state => state.thread.messages.filter(message => message.role === 'user').length);
   const previousSent = React.useRef(sentMessages);
   React.useEffect(() => {
     const isNew = sentMessages > previousSent.current;
     previousSent.current = sentMessages;
     if (!isNew) return;
-    const frame = requestAnimationFrame(() => viewport.scrollToBottom({ behavior: isReducedMotion ? 'instant' : 'smooth' }));
+    const frame = requestAnimationFrame(() => viewportRef.current.scrollToBottom({ behavior: isReducedMotion ? 'instant' : 'smooth' }));
     return () => cancelAnimationFrame(frame);
-  }, [sentMessages, isReducedMotion, viewport]);
+  }, [sentMessages, isReducedMotion]);
   return (
     <ThreadPrimitive.Root className={clsx(styles['conversation'], isCompact && styles['is-compact'])}>
       <ThreadPrimitive.Viewport className={styles['transcript']} data-testid={testId} autoScroll>

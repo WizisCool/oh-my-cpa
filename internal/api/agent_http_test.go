@@ -217,3 +217,40 @@ func TestOpenUICapabilityCatalogue(t *testing.T) {
 	}
 	testkit.Golden(t, "../agent/openui/capabilities.json", agent.OpenUITools(fixture.handler.agent.executor.Registry.List(agent.PRINCIPAL)))
 }
+
+// TestAgentDataRowsWireFormat pins the contract the OpenUI renderer reads: a reference the
+// conversation does not hold is a refusal the interface can display, a malformed request is a
+// plain 400, and a management-key bearer is not a console session.
+func TestAgentDataRowsWireFormat(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	url := fixture.baseURL + "/omc/api/v1/agent/data-rows"
+
+	response, body := doJSON(t, fixture.client, "POST", url, `{"data_ref":"nope","unexpected":true}`)
+	if response.StatusCode != 400 || !strings.Contains(string(body), "invalid_parameters") {
+		t.Fatalf("unknown field: %d %s", response.StatusCode, body)
+	}
+
+	response, body = doJSON(t, fixture.client, "POST", url, `{"data_ref":"unknown"}`)
+	if response.StatusCode != 200 || !strings.Contains(string(body), `"status":"error"`) || !strings.Contains(string(body), `"detail":"`) {
+		t.Fatalf("unknown reference: %d %s", response.StatusCode, body)
+	}
+
+	request, err := http.NewRequest("POST", url, strings.NewReader(`{"data_ref":"unknown"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer management-secret-value")
+	request.Header.Set("Origin", fixture.baseURL)
+	// A fresh client: the signed-in one carries the console's cookie, which would answer instead.
+	bearer, err := (&http.Client{}).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bearer.Body.Close()
+	// The console's own cookie is what a rendered interface acts under; a bearer reaches the
+	// capability endpoint, not this one.
+	if bearer.StatusCode != 401 {
+		t.Fatalf("management bearer reached the data-rows endpoint: %d", bearer.StatusCode)
+	}
+}
