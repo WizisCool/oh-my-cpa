@@ -235,7 +235,7 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 				return
 			}
 
-			refreshed, err := h.refreshQuotaReading(ctx, svc, file, prior)
+			refreshed, err := h.refreshAutomaticQuotaReading(ctx, svc, file, prior)
 			if err == nil && refreshed != nil && refreshed.IsDeferred {
 				// Nothing was sent, so the attempt this round recorded is taken back: the read
 				// stays due as it was and goes out once the provider's pause has passed.
