@@ -2,10 +2,12 @@ import { splitAttachedFiles } from './attachments';
 import type { AttachedFile } from './attachments';
 import type { AppendMessage, ThreadMessageLike } from '@assistant-ui/react';
 import type { RunFrame } from '../../agent/runReducer';
+import { ASK_QUESTION, isOpenUITool, PROMPT_OPENUI } from '../../agent/types';
 import type { Conversation, Presentation, Trace, Turn, TurnPart } from '../../agent/types';
+import { programOf } from '../../agent/openui/program';
 import { getAppConfig } from '../../types/config';
 import { extractThinking } from '../../utils/thinking';
-import { ASK_QUESTION, turnParts } from './state';
+import { turnParts } from './state';
 
 /**
  * The Agent transcript as assistant-ui messages.
@@ -79,21 +81,29 @@ const FAILED_STATUSES = new Set(['error', 'rejected', 'expired']);
 /**
  * One call as a tool-call part. A call waiting on the operator carries the framework's own
  * human-in-the-loop marker: `approval` for a change to allow or deny (with private input when the
- * operation asks for it), `interrupt` for the agent's question.
+ * operation asks for it), `interrupt` for a `prompt_openui` form.
+ *
+ * An OpenUI call is shaped the way the official renderers read it: `args.ui` is the program as far
+ * as it has streamed, and a settled call's result is the tool's own data - `{displayed: true}`, or
+ * the submitted form, whose state the renderer restores on a reload.
  */
 export function toolCallPart(trace: Trace, isOpen: boolean): ToolCallPart {
   const isRunning = trace.result.status === 'running';
   const isPending = trace.result.status === 'pending' && !!trace.result.operation_id;
-  const isQuestion = trace.name === ASK_QUESTION;
+  // Both asking tools wait on the operator and neither asks permission: a question is answered in
+  // a panel or a drawn form, never allowed or denied.
+  const isQuestion = trace.name === PROMPT_OPENUI || trace.name === ASK_QUESTION;
+  const isOpenUI = isOpenUITool(trace.name);
+  const isFailed = FAILED_STATUSES.has(trace.result.status);
+  const result = isOpenUI && trace.result.status === 'success' ? trace.result.data : trace.result;
   return {
     type: 'tool-call',
     toolCallId: trace.id,
     toolName: trace.name,
     argsText: trace.arguments ?? '',
-    args: parseArguments(trace.arguments) as ToolCallPart['args'],
+    args: (isOpenUI ? { ui: programOf(trace.arguments) } : parseArguments(trace.arguments)) as ToolCallPart['args'],
     // A call waiting on the operator has no result yet: it stays `requires-action` until decided.
-    ...(isRunning || isPending ? {} : { result: trace.result, isError: FAILED_STATUSES.has(trace.result.status) }),
-    ...(trace.view ? { artifact: trace.view } : {}),
+    ...(isRunning || isPending ? {} : { result, isError: isFailed }),
     ...(trace.started_at_ms ? { timing: { startedAt: trace.started_at_ms, ...(trace.ended_at_ms ? { completedAt: trace.ended_at_ms } : {}) } } : {}),
     ...(isRunning || isPending ? {} : { modelContent: [{ type: 'text' as const, text: JSON.stringify(trace.result) }] }),
     ...(isPending && isOpen && !isQuestion ? { approval: { id: trace.result.operation_id as string } } : {}),
@@ -139,8 +149,10 @@ export function turnMessageStatus(turn: Turn): NonNullable<ThreadMessageLike['st
 }
 
 /** The operator's message: their words as its text, the files sent with them named beside it. */
-function userMessage(id: string, sent: string, present?: Presentation, images: readonly string[] = []): ThreadMessageLike {
+function userMessage(id: string, sent: string, stored?: string, images: readonly string[] = []): ThreadMessageLike {
   const { text, files } = splitAttachedFiles(sent);
+  // A retired presentation a stored turn carries no longer changes its answer, so it is not shown.
+  const present: Presentation | undefined = stored === 'text' ? 'text' : undefined;
   return {
     id,
     role: 'user',

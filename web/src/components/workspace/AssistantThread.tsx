@@ -1,5 +1,5 @@
 import React from 'react';
-import { AuiIf, ThreadPrimitive } from '@assistant-ui/react';
+import { AuiIf, ThreadPrimitive, useAuiState, useThreadViewport } from '@assistant-ui/react';
 import type { MessageState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { ArrowDownOutlined } from '../icons';
@@ -30,6 +30,19 @@ export interface AssistantThreadProps {
  */
 export function AssistantThread({ empty, latestLabel, isCompact = false, testId, toolbar, children }: AssistantThreadProps) {
   const isReducedMotion = usePrefersReducedMotion();
+  // A message the operator sent returns the conversation to its newest end, even when they sent it
+  // from a follow-up chip while reading further up: the answer to what they just said follows
+  // below, and the primitive alone would keep following the reader's place instead.
+  const viewport = useThreadViewport();
+  const sentMessages = useAuiState(state => state.thread.messages.filter(message => message.role === 'user').length);
+  const previousSent = React.useRef(sentMessages);
+  React.useEffect(() => {
+    const isNew = sentMessages > previousSent.current;
+    previousSent.current = sentMessages;
+    if (!isNew) return;
+    const frame = requestAnimationFrame(() => viewport.scrollToBottom({ behavior: isReducedMotion ? 'instant' : 'smooth' }));
+    return () => cancelAnimationFrame(frame);
+  }, [sentMessages, isReducedMotion, viewport]);
   return (
     <ThreadPrimitive.Root className={clsx(styles['conversation'], isCompact && styles['is-compact'])}>
       <ThreadPrimitive.Viewport className={styles['transcript']} data-testid={testId} autoScroll>

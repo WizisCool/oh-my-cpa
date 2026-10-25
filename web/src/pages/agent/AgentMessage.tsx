@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Image, Tooltip } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
-import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAui, useAuiState } from '@assistant-ui/react';
+import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -11,7 +11,8 @@ import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
-import { DISPLAY_TOOLS } from '../../agent/types';
+import { isOpenUITool, PRESENT_OPENUI, PROMPT_OPENUI } from '../../agent/types';
+import { isProgramText } from '../../agent/openui/program';
 import type { Turn } from '../../agent/types';
 import { useI18n } from '../../i18n';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -22,12 +23,26 @@ import type { AgentMessageCustom } from './thread';
 import { formatBytes } from '../../utils/format';
 import { useAgentView } from './tools/AgentViewContext';
 import { ToolFallback } from './tools/registry';
-import { GenerationLoader } from '../../components/workspace/GenerationLoader';
+import { OpenUIText, OpenUISurface } from './tools/openui';
 import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import styles from './AgentPage.module.css';
 
 // User text is plain content, not a paragraph with browser-default vertical margins.
 const USER_PART_COMPONENTS = { Text: () => <MessagePartPrimitive.Text smooth={false} /> };
+
+/**
+ * The answer a form was submitted with, as the operator's own message.
+ *
+ * A `prompt_openui` submission continues the same turn, so without this the operator's choice and
+ * the answer that follows it would be one block of assistant text. The submission is drawn where
+ * it was made - under the form, in the message bubble they would have sent - while the turn it
+ * belongs to is the one still running.
+ */
+function formAnswer(part: MessagePartState): string {
+  if (part.type !== 'tool-call' || part.toolName !== PROMPT_OPENUI) return '';
+  const result = part.result as { message?: unknown } | undefined;
+  return typeof result?.message === 'string' ? result.message : '';
+}
 
 /** The operator's message. */
 export function AgentUserMessage() {
@@ -40,7 +55,7 @@ export function AgentUserMessage() {
     <MessagePrimitive.Root className={workspace['message']} data-role="user">
       {(!!files?.length || present) && (
         <div className={styles['sent-files']} data-testid="agent-sent-files">
-          {present && <span className={styles['sent-file']} data-tone="accent" data-testid="agent-sent-present">{t(`agent.present.${present}`)}</span>}
+          {present === 'text' && <span className={styles['sent-file']} data-tone="accent" data-testid="agent-sent-present">{t('agent.present.text')}</span>}
           {files?.map((file, index) => (
             <span key={`${file.name}:${index}`} className={styles['sent-file']}>
               <PaperClipOutlined aria-hidden="true" />
@@ -69,9 +84,9 @@ export function AgentUserMessage() {
 }
 
 /**
- * Reasoning and capability calls form the answer's chain of thought; the answer text stays outside
- * it. A display call is left out of the chain: it is drawn where the model made it, as the figure
- * itself, so the model decides what the reader meets before and after it (ADR 0082).
+ * Reasoning and capability calls form the answer's chain of thought; the answer stays outside it.
+ * An OpenUI call is the answer, so it is drawn where the model made it, as the interface itself
+ * (ADR 0082, 0088), never folded into the working above it.
  *
  * `agent/answerLayout.ts` states the same rule as a plain function for a saved copy of the
  * conversation; the two change together.
@@ -79,7 +94,8 @@ export function AgentUserMessage() {
 const GROUP_BY = groupPartByType({
   reasoning: ['group-chain'],
   'tool-call': ['group-chain'],
-  ...Object.fromEntries(DISPLAY_TOOLS.map(name => [`tool-call:${name}`, []])),
+  [`tool-call:${PRESENT_OPENUI}`]: [],
+  [`tool-call:${PROMPT_OPENUI}`]: [],
 });
 
 type GroupPart = { readonly type: `group-${string}`; readonly indices: readonly number[] };
@@ -138,7 +154,8 @@ function ChainGroup({ group, children }: { group: GroupPart; children: React.Rea
  *
  * Reasoning and a running call say what they are where they are drawn - the disclosure reads
  * "Thinking", the call's row carries its title - so the strip names a phase only when nothing in
- * the answer does: waiting on the model, or retrying it.
+ * the answer does: waiting on the model, or retrying it. One mark and one timer for the whole
+ * transcript is what keeps the phases from reading as separate widgets.
  */
 function ActivityStrip() {
   const { t } = useI18n();
@@ -148,7 +165,6 @@ function ActivityStrip() {
     : activity.runningCall || activity.isThinking ? '' : t('agent.activity.waiting');
   return (
     <div className={styles['activity']} role="status" aria-live="polite" data-testid="agent-activity">
-      <GenerationLoader size="mark" />
       {label && <span className={styles['activity-label']}><span className={workspace['live-text']}>{label}</span></span>}
       <span className={workspace['metric']}><LiveElapsed startedAtMS={activity.startedAtMS} isRunning /></span>
     </div>
@@ -165,18 +181,25 @@ function TurnFooter({ turn }: { turn: Turn }) {
   const clock = formatClock(turn.started_at_ms, lang);
   const calls = turn.traces.length;
   const { replaceableTurnID, retryTurn, editTurn } = useAgentView();
+  // The footer answers two questions a reader asks of a finished answer: did it succeed, and how
+  // much did it cost. The clock, the round count and the call count stay reachable on the status
+  // line instead of standing beside it as a row of unrelated readouts.
+  const detail = [
+    clock,
+    (turn.rounds ?? 0) > 0 ? t('agent.foot.rounds', { rounds: String(turn.rounds), calls: String(calls) }) : '',
+  ].filter(Boolean).join(' · ');
   return (
     <div className={workspace['message-foot']}>
-      <span className={workspace['status']}>
-        <span className={workspace['pip']} data-tone={statusTone(turn.status, turn.code)} aria-hidden="true" />
-        {t(isAwaitingAnswer(turn) ? 'agent.status.question' : turnLabelKey(turn))}
-      </span>
+      <Tooltip title={detail || undefined}>
+        {/* Focusable so the clock and the round and call counts are reachable from the keyboard and
+            by touch: a tooltip that only answers a pointer hides them from everyone else. */}
+        <span className={workspace['status']} data-testid="agent-status" tabIndex={detail ? 0 : undefined}>
+          <span className={workspace['pip']} data-tone={statusTone(turn.status, turn.code)} aria-hidden="true" />
+          {t(isAwaitingAnswer(turn) ? 'agent.status.question' : turnLabelKey(turn))}
+        </span>
+      </Tooltip>
       {duration !== undefined && (
         <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{formatDuration(duration)}</span>
-      )}
-      {clock && <span className={workspace['metric']}>{clock}</span>}
-      {(turn.rounds ?? 0) > 0 && (
-        <span className={workspace['metric']}>{t('agent.foot.rounds', { rounds: String(turn.rounds), calls: String(calls) })}</span>
       )}
       {turn.usage?.total_tokens !== undefined && (
         <Tooltip title={t('agent.foot.tokens')}>
@@ -215,30 +238,6 @@ function TurnFooter({ turn }: { turn: Turn }) {
 }
 
 /**
- * The questions the model offered after its answer, under the newest answer only: an older turn's
- * follow-ups were about a conversation that has since moved on. Choosing one writes it into the
- * message box rather than sending it, so the operator can still change it.
- *
- * The box is addressed through the thread: inside a message the bare composer scope is that
- * message's edit composer, which nothing on this page draws.
- */
-function FollowUps({ suggestions }: { suggestions?: string[] }) {
-  const { t } = useI18n();
-  const aui = useAui();
-  const isLast = useAuiState(state => state.message.isLast);
-  if (!isLast || !suggestions?.length) return null;
-  return (
-    <div className={workspace['follow-ups']} role="group" aria-label={t('agent.follow_ups')} data-testid="agent-follow-ups">
-      {suggestions.map((suggestion, index) => (
-        <button key={suggestion} type="button" className={workspace['follow-up']} style={{ '--follow-up-row': index } as React.CSSProperties} onClick={() => aui.thread().composer().setText(suggestion)}>
-          {suggestion}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/**
  * One thread message, drawn by the role of the message it is bound to rather than the role the
  * thread's render callback saw: the runtime can place its own placeholder where a message was.
  */
@@ -258,8 +257,13 @@ export function AgentAssistantMessage() {
   const turn = custom.turn;
   const isLive = !!custom.isLive;
   const failure = turn?.code && turn.code !== 'cancelled' ? turn.code : '';
+  // A message that draws an interface takes the page's wide lane; one that only speaks stays in
+  // the reading lane, which is what keeps a paragraph from stretching across a monitor.
+  const hasInterface = useAuiState(state => state.message.parts.some(part => (
+    part.type === 'text' ? isProgramText(part.text) : part.type === 'tool-call' && isOpenUITool(part.toolName) && !part.isError
+  )));
   return (
-    <MessagePrimitive.Root className={workspace['message']} data-role="assistant">
+    <MessagePrimitive.Root className={workspace['message']} data-role="assistant" data-wide={hasInterface || undefined}>
       <div className={workspace['answer']} data-testid={isLive ? 'agent-running' : 'agent-turn'}>
         <MessagePrimitive.GroupedParts groupBy={GROUP_BY} indicator="never">
           {({ part, children }) => {
@@ -267,15 +271,34 @@ export function AgentAssistantMessage() {
               case 'group-chain':
                 return <ChainGroup group={part as GroupPart}>{children}</ChainGroup>;
               case 'text':
-                return (
-                  <div data-aui-quote-selectable>
+                return isProgramText(part.text) ? (
+                  <OpenUISurface tool="text">
+                    <OpenUIText program={part.text} isStreaming={part.status.type === 'running'} />
+                  </OpenUISurface>
+                ) : (
+                  <div className={styles['prose']} data-aui-quote-selectable>
                     <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('conversation.external_image')} />
                   </div>
                 );
               case 'reasoning':
-                return <ReasoningBlock text={part.text} isThinking={part.status.type === 'running'} />;
-              case 'tool-call':
-                return part.toolUI ?? <ToolFallback {...part} />;
+                return <div className={styles['prose']}><ReasoningBlock text={part.text} isThinking={part.status.type === 'running'} /></div>;
+              case 'tool-call': {
+                // A refused program is a call row, which is where its code and detail are read.
+                if (isOpenUITool(part.toolName) && !part.isError && part.toolUI) {
+                  const answer = formAnswer(part);
+                  return (
+                    <>
+                      <OpenUISurface tool={part.toolName}>{part.toolUI}</OpenUISurface>
+                      {!!answer && (
+                        <div className={clsx(workspace['message'], workspace['is-answer'])} data-testid="agent-form-answer">
+                          <div className={clsx(workspace['user-bubble'], workspace['user-text'])} data-aui-quote-selectable>{answer}</div>
+                        </div>
+                      )}
+                    </>
+                  );
+                }
+                return <ToolFallback {...part} />;
+              }
               default:
                 return null;
             }
@@ -293,7 +316,6 @@ export function AgentAssistantMessage() {
           </MessagePrimitive.Error>
         )}
         {isLive ? <ActivityStrip /> : turn && <TurnFooter turn={turn} />}
-        {!isLive && turn && <FollowUps suggestions={turn.suggestions} />}
       </div>
     </MessagePrimitive.Root>
   );

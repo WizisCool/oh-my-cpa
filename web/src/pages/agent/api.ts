@@ -1,6 +1,7 @@
 import { ApiError, requestResponse } from '../../api/client';
 import { observeServerClock } from '../../types/serverClock';
-import type { Capability, Conversation, Operation, QuestionReply } from './state';
+import type { Capability, Conversation, Operation } from './state';
+import type { CapabilityReceipt } from '../../agent/types';
 import { readDemoConversation, resetDemoConversation } from '../../demo/session';
 import { isDemoMode } from '../../types/demoMode';
 
@@ -36,10 +37,10 @@ export async function getOperation(id: string, signal?: AbortSignal): Promise<Op
 }
 
 /**
- * The operator's one decision on a prepared operation: allow or deny. A secret or an answer rides
- * along only when the operation asks for it.
+ * The operator's one decision on a prepared operation: allow or deny. A secret, or the answer a
+ * submitted form gives, rides along only when the operation asks for it.
  */
-export async function decideOperation(id: string, approve: boolean, input: { secret?: string; answer?: { answers: QuestionReply[] } } = {}): Promise<Operation> {
+export async function decideOperation(id: string, approve: boolean, input: { secret?: string; answer?: unknown } = {}): Promise<Operation> {
   return (await requestResponse(`/agent/operations/${encodeURIComponent(id)}/decision`, {
     method: 'POST',
     body: JSON.stringify({ approve, ...input }),
@@ -73,6 +74,16 @@ export function failureCode(error: unknown): string {
     return code ?? (error.status === 401 ? 'session_expired' : 'gateway_unavailable');
   }
   return error instanceof Error ? error.message : 'gateway_unavailable';
+}
+
+/** Runs one capability through the console's executor endpoint, for a rendered interface. */
+export async function invokeCapability(name: string, args: Record<string, unknown>): Promise<CapabilityReceipt> {
+  return (await requestResponse('/capabilities/invoke', { method: 'POST', body: JSON.stringify({ name, arguments: args }) })).json();
+}
+
+/** The rows a data reference of the current conversation names: OpenUI's data_rows tool. */
+export async function readDataRows(dataRef: string): Promise<CapabilityReceipt> {
+  return (await requestResponse('/agent/data-rows', { method: 'POST', body: JSON.stringify({ data_ref: dataRef }) })).json();
 }
 
 export async function getCapabilities(signal?: AbortSignal): Promise<Capability[]> {

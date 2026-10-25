@@ -1,6 +1,6 @@
 import { answerLayout } from './answerLayout';
 import { argumentSummary, callDuration, statusTone } from './callFacts';
-import type { Conversation, DisplayView, Presentation, Trace, TurnPart } from './types';
+import type { Conversation, Trace, TurnPart } from './types';
 import type { Turn as PlaygroundTurn } from '../pages/playground/state';
 import { effectiveModel } from '../types/requestModel';
 import { extractThinking } from '../utils/thinking';
@@ -25,7 +25,8 @@ export type SnapshotSegment =
   | { kind: 'text'; text: string }
   | { kind: 'thought'; text: string }
   | { kind: 'chain'; steps: SnapshotStep[] }
-  | { kind: 'figure'; view: DisplayView }
+  /** An OpenUI program; `markup` is what the official renderer drew of it, filled in at export. */
+  | { kind: 'interface'; program: string; markup?: string }
   | ({ kind: 'call' } & SnapshotCall);
 export interface SnapshotTurn {
   user: string;
@@ -39,7 +40,7 @@ export interface SnapshotTurn {
   usage?: Record<string, number | undefined>;
   parameters?: Record<string, unknown>;
   /** The presentation a composer command asked of the answer, named above the message. */
-  present?: Presentation;
+  present?: string;
   rounds?: number;
   calls?: number;
 }
@@ -98,13 +99,11 @@ export function agentSnapshot(conversation: Conversation, imageData: ReadonlyMap
         model: conversation.model, startedAt: turn.started_at_ms,
         duration: turn.ended_at_ms !== undefined && turn.started_at_ms !== undefined ? turn.ended_at_ms - turn.started_at_ms : undefined,
         usage: turn.usage ? { ...turn.usage } : undefined,
-        present: turn.present, rounds: turn.rounds, calls: turn.traces.length,
+        present: turn.present === 'text' ? turn.present : undefined, rounds: turn.rounds, calls: turn.traces.length,
         segments: answerLayout(parts, turn.traces).map<SnapshotSegment>(segment => {
           switch (segment.kind) {
             case 'chain':
               return { kind: 'chain', steps: segment.steps.map(step => step.kind === 'call' ? { kind: 'call', ...snapshotCall(step.trace) } : step) };
-            case 'figure':
-              return { kind: 'figure', view: snapshotValue(segment.trace.view) as DisplayView };
             case 'call':
               return { kind: 'call', ...snapshotCall(segment.trace) };
             default:
@@ -116,9 +115,9 @@ export function agentSnapshot(conversation: Conversation, imageData: ReadonlyMap
   };
 }
 
-/** The figures a snapshot draws, in reading order. */
-export function snapshotViews(snapshot: ConversationSnapshot): DisplayView[] {
-  return snapshot.turns.flatMap(turn => turn.segments.flatMap(segment => segment.kind === 'figure' ? [segment.view] : []));
+/** The interfaces a snapshot draws, in reading order. */
+export function snapshotInterfaces(snapshot: ConversationSnapshot): Extract<SnapshotSegment, { kind: 'interface' }>[] {
+  return snapshot.turns.flatMap(turn => turn.segments.flatMap(segment => segment.kind === 'interface' ? [segment] : []));
 }
 
 /** Keep each turn's original parameters; the current composer can name a different request. */

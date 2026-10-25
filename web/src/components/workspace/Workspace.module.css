@@ -160,7 +160,9 @@
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  max-width: calc(var(--workspace-column) + 48px);
+  /* A page that draws wide content sets `--thread-column`; the reading measure stays the
+     fallback, so the Playground's column is unchanged. */
+  max-width: calc(var(--thread-column, var(--workspace-column)) + 48px);
   margin: 0 auto;
   padding: 24px 24px 16px;
   box-sizing: border-box;
@@ -174,13 +176,38 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
   min-width: 0;
+  /* A message is read in the reading lane; one that carries a drawn interface takes the
+     page's wider lane, which is why the lane is a variable and not the message's own width. */
+  max-width: var(--thread-reading-width, none);
+  /* Anchored to the lane's start rather than centred inside it: a heading, its paragraph and a
+     wide interface that follows them then share one left edge, which is what makes an answer read
+     as one document instead of two columns stacked on each other. */
+  margin-inline: 0;
   font-size: var(--text-base);
   line-height: 1.65;
 }
 
+.message[data-wide] {
+  max-width: none;
+}
+
+/* The answer a form was submitted with: it is the operator's own message, so it takes the same
+   right edge theirs do rather than the reading measure of the answer around it. It is not a
+   message of its own - the turn it belongs to is the one still running - so it carries no
+   `data-role`, which every selector that counts what the operator sent would otherwise see. */
+.is-answer {
+  max-width: none;
+  align-items: flex-end;
+  margin-inline-start: auto;
+}
+
 .message[data-role='user'] {
   align-items: flex-end;
+  /* The operator's message is the one part of a conversation that reads from the right, so it
+     takes the column's right edge - the same edge a generated interface and the composer end on. */
+  margin-inline-start: auto;
 }
 
 .user-bubble {
@@ -429,7 +456,13 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   overflow-anchor: none;
-  scrollbar-width: thin;
+  /* The read is bounded and scrolls, but a rail inside running text is furniture over prose: the
+     gesture and the fade at the top already say there is more above. */
+  scrollbar-width: none;
+}
+
+.reasoning-body::-webkit-scrollbar {
+  display: none;
 }
 
 .reasoning-content {
@@ -817,8 +850,10 @@
 .composer-frame {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-thread);
+  /* One soft pill rather than a bordered box: the control reads as a surface that lifts off the
+     page, which is what the official chat does with the same component set. */
+  border: 1px solid var(--border-soft);
+  border-radius: 26px;
   background: var(--bg);
   box-shadow: var(--shadow-raised);
   transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
@@ -837,7 +872,7 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 14px 14px 6px 16px;
+  padding: 12px 10px 4px 18px;
 }
 
 .composer-input {
@@ -1047,8 +1082,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
-  padding: 4px 8px 8px 12px;
+  min-height: 30px;
+  padding: 2px 10px 8px 16px;
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -1824,44 +1859,9 @@
   50% { opacity: .25; }
 }
 
-.generation-loader {
-  --loader-cell: 7px;
-  display: inline-grid;
-  grid-template-columns: repeat(3, var(--loader-cell));
-  gap: calc(var(--loader-cell) / 2);
-  flex-shrink: 0;
-}
-
-.generation-loader[data-size='mark'] {
-  --loader-cell: 3px;
-  gap: 2px;
-}
-
-.generation-loader-cell {
-  width: var(--loader-cell);
-  height: var(--loader-cell);
-  border-radius: 50%;
-  background: var(--fg);
-  opacity: .15;
-  /* One shared cycle, entered by each cell at its own step, so the nine cells need no timer. */
-  animation: generation-loader 2700ms linear infinite;
-  animation-delay: calc(var(--loader-phase) * -300ms);
-}
-
-@keyframes generation-loader {
-  0%, 30% { opacity: .9; }
-  38%, 94% { opacity: .15; }
-  100% { opacity: .9; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .stream-caret {
     animation: none;
-  }
-
-  .generation-loader-cell {
-    animation: none;
-    opacity: .4;
   }
 }
 

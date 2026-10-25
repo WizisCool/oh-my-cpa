@@ -46,8 +46,8 @@ interface AgentRuntimeOptions {
  * lands in `useAgentRun` or on the decision endpoint, never in state the framework owns.
  */
 export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDisabled, onRejected, onDecided, takeSendOptions, attachments }: AgentRuntimeOptions): AssistantRuntime {
-  const callbacksRef = React.useRef({ run, onRejected, onDecided, takeSendOptions });
-  callbacksRef.current = { run, onRejected, onDecided, takeSendOptions };
+  const callbacksRef = React.useRef({ run, onRejected, onDecided, takeSendOptions, conversation });
+  callbacksRef.current = { run, onRejected, onDecided, takeSendOptions, conversation };
 
   // Messages sent while a run is in flight wait here and go out, in order, once it settles. The
   // server runs one turn at a time, so the queue never interrupts: it has no cancel to steer with,
@@ -148,11 +148,14 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
       const operation = await decideOperation(approvalId, approved, approved && text ? { secret: text } : {});
       callbacksRef.current.onDecided(operation);
     },
-    // A question is answered by the question panel through the same endpoint; the panel hands the
-    // decided operation back here so the run continues through one path.
-    onResumeToolCall: ({ payload }) => {
-      const operation = (payload as { operation?: Operation } | undefined)?.operation;
-      if (operation) callbacksRef.current.onDecided(operation);
+    // A submitted prompt_openui form is the official renderer's `addResult`. It is the operator's
+    // answer to the operation the turn waits on, so it goes to the same decision endpoint and the
+    // run continues through the same path an approval does.
+    onAddToolResult: async ({ toolCallId, result }) => {
+      const trace = callbacksRef.current.conversation?.turns.at(-1)?.traces.find(item => item.id === toolCallId);
+      const operationID = trace?.result.status === 'pending' ? trace.result.operation_id : undefined;
+      if (!operationID) return;
+      callbacksRef.current.onDecided(await decideOperation(operationID, true, { answer: result }));
     },
   });
 }
