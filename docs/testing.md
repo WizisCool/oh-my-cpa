@@ -69,6 +69,11 @@ away from the newest end and then clicking a suggestion returns the transcript t
 because the answer to what was just sent appears below. It fails without the scroll-on-send effect
 in `components/workspace/AssistantThread.tsx`.
 
+The probe harness prewarms selected heavy workspaces with the same authenticated API fixtures
+as the scenarios (`scripts/testing/probe-warmup.ts`). It waits for the workspace itself, not a
+sign-in screen, before interaction measurements. No interaction deadline is widened, and a
+startup failure is reported rather than silently swallowed.
+
 ## Rendered tests and the in-memory OMC
 
 A component test renders the real component over the real typed client, and
