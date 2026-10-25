@@ -234,6 +234,11 @@ export const AGENT_MESSAGES: Messages = {
     "遇到含糊或需要你偏好的地方时，用一个表单先问你；提交后继续同一轮对话。",
     "Asks you with a form before guessing when a request is ambiguous; your answer continues the same turn.",
   ],
+  'agent.capability.ask_question': ["向操作者提问", "Ask the operator"],
+  'agent.capability.ask_question.description': [
+    "向操作者提出一到四个问题并等待回答；每题给出简短选项，也始终可以自行输入。",
+    "Ask the operator one to four questions and wait for the answer; each offers short options and always allows a typed reply.",
+  ],
   'agent.capability.audit_list': ["查看审计记录", "Read the audit trail"],
   'agent.capability.audit_list.description': [
     "读取最近 50 条审计结果摘要，不含详情与来源身份。",

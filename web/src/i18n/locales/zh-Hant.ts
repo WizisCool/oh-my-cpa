@@ -529,6 +529,8 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.capability.providers_delete.description": "刪除一個提供方及其憑證與對應，路由到它的呼叫將失去該路由。",
   "agent.capability.providers_get": "查看提供方",
   "agent.capability.providers_get.description": "查看一個 API 提供方的安全狀態。",
+  "agent.capability.ask_question": "向操作者提問",
+  "agent.capability.ask_question.description": "向操作者提出一到四個問題並等待回答；每題給出簡短選項，也始終可以自行輸入。",
   "agent.capability.providers_list": "列出提供方",
   "agent.capability.providers_list.description": "列出已設定的 API 提供方及可呼叫的模型對應。",
   "agent.capability.providers_set_display_name": "修改提供方顯示名稱",

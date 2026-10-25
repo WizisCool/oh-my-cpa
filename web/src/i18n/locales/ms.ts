@@ -522,6 +522,8 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.capability.providers_delete.description": "Memadam satu penyedia bersama kelayakan dan pemetaannya; panggilan yang dihalakan kepadanya kehilangan laluan itu.",
   "agent.capability.providers_get": "Periksa penyedia",
   "agent.capability.providers_get.description": "Memeriksa keadaan selamat satu penyedia API.",
+  "agent.capability.ask_question": "Tanya pengendali",
+  "agent.capability.ask_question.description": "Tanya pengendali satu hingga empat soalan dan tunggu jawapan; setiap satu menawarkan pilihan pendek dan sentiasa membenarkan jawapan ditaip.",
   "agent.capability.providers_list": "Senaraikan penyedia",
   "agent.capability.providers_list.description": "Menyenaraikan penyedia API yang dikonfigurasi dan pemetaan model yang boleh dipanggil.",
   "agent.capability.providers_set_display_name": "Namakan semula penyedia",
