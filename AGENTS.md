@@ -140,6 +140,7 @@ Where things live, when you need to check or update them:
 | `docs/ops/cloudflare-demo.md` | Deployment runbook for the public demonstration |
 | `docs/releasing.md` | Distribution, tag publishing, version identity |
 | `docs/testing.md` | Test layers, the golden runner, the CI lanes and how to reproduce them |
+| `web/src/i18n/README.md` / `GLOSSARY.md` / `STYLE.md` | Where copy lives, how to add or translate a sentence, the enforced term per concept, and how a sentence reads |
 | `docs/agent-capabilities.md` | Agent capability contract and the MCP bridge |
 | `docs/cpa-v8-compat.md` / `docs/cpamc-parity.md` | CPA v8 baseline and relocation; CPAMC parity matrix |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations |

@@ -48,7 +48,7 @@ export default {
   "siwc.callback_incomplete": "URL panggil balik tiada code atau client_id. Tunggu sehingga pelayar dialihkan ke 127.0.0.1:1455, kemudian salin URL penuh daripada bar alamat.",
   "siwc.badge_unbound": "Belum diikat",
   "siwc.conflict": "Konflik operasi: pengikatan mungkin belum selesai atau panggil balik sudah dihantar. Semak status semasa.",
-  "oauth.providers_title": "Pembekal OAuth yang Disokong",
+  "oauth.providers_title": "Penyedia OAuth yang Disokong",
   "oauth.open_auth_url": "Buka Halaman Keizinan",
   "oauth.status_waiting": "Menunggu pengguna melengkapkan kebenaran dalam penyemak imbas",
   "oauth.status_success": "Keizinan berjaya! Kredensial disimpan dalam CPA",

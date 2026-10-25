@@ -107,7 +107,7 @@ export default {
   "agent.empty.description": "Ejen membaca penggunaan, penyedia, kuota dan keadaan kelayakan, serta boleh menjalankan tindakan pengurusan.",
   "agent.examples": "Cuba salah satu",
   "agent.example.usage": "Ringkaskan penggunaan 24 jam terakhir mengikut penyedia.",
-  "agent.example.compare": "Bandingkan bilangan permintaan dan kadar kegagalan mengikut pembekal dalam 24 jam terakhir",
+  "agent.example.compare": "Bandingkan bilangan permintaan dan kadar kegagalan mengikut penyedia dalam 24 jam terakhir",
   "agent.example.quota": "Kelayakan mana yang hampir mencapai had kuota?",
   "agent.example.daily": "Kira permintaan dan kadar kegagalan setiap hari bagi 7 hari terakhir.",
   "agent.session.failed": "Perbualan sisi pelayan tidak dapat dibaca. Semak sambungan CPA dan cuba lagi.",
