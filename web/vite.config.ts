@@ -5,6 +5,7 @@ import { resolveApiTarget } from '../scripts/api-target.mjs';
 import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
 import { bundleGraphPlugin } from '../scripts/bundle-graph.mjs';
 import { bareBaseRedirectPlugin } from '../scripts/dev-base-redirect.mjs';
+import { compactEnglishCatalogPlugin } from '../scripts/compact-locales.mjs';
 
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -21,6 +22,7 @@ export default defineConfig(({ command }) => ({
     react(),
     bundleGraphPlugin(repoRoot),
     bareBaseRedirectPlugin(),
+    compactEnglishCatalogPlugin(repoRoot),
   ],
   // Development has one browser entry at /omc/ (the bare /omc redirects to it);
   // Vite proxies only API calls to Go. Production output stays relative so Go can embed it at any subpath.
