@@ -549,7 +549,10 @@ on every path, because Anthropic answers a burst of usage reads with HTTP 429 fo
 429, OMC sends no Claude quota read for the `Retry-After` the provider named, or at least two minutes, including a
 manual refresh, which shows the last good reading marked stale with the 429 as its reason. The refused credential
 is not read automatically again for 5 minutes, doubling with each consecutive 429 up to 30 minutes, and its next
-successful read ends the backoff. A Claude re-read sends only the usage request: the plan is
+successful read ends the backoff. That backoff covers every automatic quota read, including
+credential warmup's evidence read and its pending confirmation, so a probe nobody is waiting
+on cannot spend another refused request; a manual refresh keeps its own rule and waits only for
+the provider pause. A Claude re-read sends only the usage request: the plan is
 re-read every six hours and the reset grants every hour, and a refused grants listing waits its
 hour without holding back the usage reads. This pacing lives in memory and restarts with the process. Meta credentials are only read on a manual
 refresh, because that read exchanges a key upstream. Turning both off restores
@@ -649,7 +652,9 @@ evidence, including a present non-array or null `limits` field, remains unknown 
 than falling back to an apparently available legacy limit.
 
 The background loop checks once per minute, with bounded four-way rounds of 16, and
-reuses stored quota observations targeted for refresh every five minutes. Daily starts
+reuses stored quota observations targeted for refresh every five minutes. A round whose windows
+are already active stores the observation it reconciled and sends nothing, not even another
+quota read; a consuming request still reads fresh evidence immediately before it is sent. Daily starts
 missed by more than one hour are not replayed. If starting now would overlap the next
 daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
 zone changes future calendar decisions, not stored instants.

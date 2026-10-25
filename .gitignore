@@ -2,8 +2,10 @@
 node_modules/
 .pnpm-store/
 
-# Generated from @lobehub/icons-static-svg by scripts/sync-lobe-icons.mjs
+# Generated from @lobehub/icons-static-svg by scripts/sync-lobe-icons.mjs. A build that is
+# interrupted leaves its staging directory behind, which must not become a commit.
 web/public/lobe-icons/
+web/public/lobe-icons.tmp-*/
 
 # Production builds
 web/dist/
