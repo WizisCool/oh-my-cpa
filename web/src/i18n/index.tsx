@@ -1,42 +1,28 @@
 import React from 'react';
-import { LANGUAGES, languageLocale, type Lang } from './language';
-import { DICT } from './messages';
+import type { Catalog, MessageKey, MessageVars, TFunc } from './catalog';
+import { formatMessage } from './format';
+import { DEFAULT_LANG, isLang, languageLocale, type Lang } from './language';
+import { ANTD_LOCALES, CATALOGS } from './resources';
+import source from './locales/zh';
 
 export { LANGUAGES, languageLocale, isChineseLanguage } from './language';
 export type { Lang } from './language';
-
-export type TFunc = (key: string, vars?: Record<string, string | number>) => string;
-
-type Catalog = Readonly<Record<string, string>>;
-
-/**
- * The catalogs loaded on demand.
- *
- * The base dictionary already carries two complete languages, but the additional
- * catalogs are large enough that bundling them into the entry chunk would make every
- * reader pay for languages they did not choose. Keeping the loaders here also means
- * the registry remains the only place a language must be declared: when a switcher
- * asks for one of these ids, this map supplies the catalog that makes it readable.
- */
-const CATALOG_LOADERS: Partial<Record<Lang, () => Promise<Catalog>>> = {
-  'zh-Hant': () => import('./locales/zh-Hant').then((module) => module.ZH_HANT),
-  ms: () => import('./locales/ms').then((module) => module.MS),
-};
+export type { MessageKey, MessageVars, TFunc } from './catalog';
 
 const loadedCatalogs = new Map<Lang, Catalog>();
 const catalogPromises = new Map<Lang, Promise<Catalog>>();
 
-function isDeferredLanguage(lang: Lang): boolean {
-  return Boolean(CATALOG_LOADERS[lang]);
+function bundledCatalog(lang: Lang): Catalog | undefined {
+  const entry = CATALOGS[lang];
+  return typeof entry === 'function' ? loadedCatalogs.get(lang) : entry;
 }
 
 function loadCatalog(lang: Lang): Promise<Catalog> {
-  const loaded = loadedCatalogs.get(lang);
-  if (loaded) return Promise.resolve(loaded);
+  const ready = bundledCatalog(lang);
+  if (ready) return Promise.resolve(ready);
   const existing = catalogPromises.get(lang);
   if (existing) return existing;
-  const loader = CATALOG_LOADERS[lang];
-  if (!loader) return Promise.resolve({});
+  const loader = CATALOGS[lang] as () => Promise<Catalog>;
   const pending = loader().then(
     (catalog) => {
       loadedCatalogs.set(lang, catalog);
@@ -57,34 +43,54 @@ function loadCatalog(lang: Lang): Promise<Catalog> {
 }
 
 /**
- * Whether the base dictionary names a key. For copy chosen from a server value - an audit
- * action, a result - so an identifier the console has no sentence for falls back to a
- * deliberate rendering instead of printing the lookup key.
+ * Whether a computed id names a message. For copy chosen from a server value - an audit action,
+ * a result - so an identifier the console has no sentence for falls back to a deliberate
+ * rendering instead of printing the lookup key, and the caller holds a `MessageKey` afterwards.
  */
-export function hasMessage(key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(DICT, key);
+export function hasMessage(key: string): key is MessageKey {
+  return Object.prototype.hasOwnProperty.call(source, key);
 }
 
-/** A key with no entry renders as itself, so a miss is visible in development. */
+/** The message a computed id names, or `undefined` when the console has no sentence for it. */
+export function messageKey(key: string): MessageKey | undefined {
+  return hasMessage(key) ? key : undefined;
+}
+
+/**
+ * Copy for an id computed from a server value, or `fallback` when the console has no sentence
+ * for it: a value added on the server before the console caught up still reads as itself.
+ */
+export function translateOr(t: TFunc, key: string, fallback: string, vars?: MessageVars): string {
+  return hasMessage(key) ? t(key, vars) : fallback;
+}
+
+/**
+ * The translator for a language whose catalog is available. Every catalog is complete by type,
+ * so there is no per-key fallback to another language: a reader never meets a sentence in a
+ * language they did not choose.
+ */
 export function makeT(lang: Lang): TFunc {
-  return (key, vars) => {
-    const entry = DICT[key];
-    let text = key;
-    if (lang === 'zh') text = entry?.[0] ?? key;
-    else if (lang === 'en') text = entry?.[1] ?? key;
-    else {
-      // A deferred catalog can be incomplete while a deployment is rolling
-      // out. Fall back to the base dictionary rather than showing a raw key.
-      const fallbackIndex = lang === 'zh-Hant' ? 0 : 1;
-      text = loadedCatalogs.get(lang)?.[key] ?? entry?.[fallbackIndex] ?? key;
-    }
-    if (vars) {
-      for (const [name, value] of Object.entries(vars)) {
-        text = text.split(`{${name}}`).join(String(value));
-      }
-    }
-    return text;
-  };
+  const catalog = bundledCatalog(lang) ?? (CATALOGS[DEFAULT_LANG] as Catalog);
+  const lookup = catalog as Readonly<Record<string, string | undefined>>;
+  const locale = languageLocale(lang);
+  // An id the catalog does not define renders as itself: a miss stays visible in the console rather
+  // than printing an empty gap, which is how every catalogue miss has read so far. The own-property
+  // test is what makes that true of every string a caller can pass: a plain property read would
+  // answer `toString` with a function, and filling placeholders into a function throws.
+  return (key, vars) => formatMessage(
+    Object.prototype.hasOwnProperty.call(lookup, key) ? lookup[key] ?? key : key,
+    vars,
+    locale,
+  );
+}
+
+/** Ant Design's locale for a reading language; `ConfigProvider` follows the console's choice. */
+export function antdLocale(lang: Lang) {
+  return ANTD_LOCALES[lang];
+}
+
+function isDeferredLanguage(lang: Lang): boolean {
+  return typeof CATALOGS[lang] === 'function';
 }
 
 const LANG_KEY = 'omc-lang';
@@ -95,16 +101,16 @@ const LANG_KEY = 'omc-lang';
  * It is the same language `readInitialLang` picks for an unrecognized stored id, so a console that
  * cannot read its stored preference still lands somewhere deliberate instead of nowhere.
  */
-const FALLBACK_LANG: Lang = 'zh';
+const FALLBACK_LANG: Lang = DEFAULT_LANG;
 function readInitialLang(): Lang {
-  if (typeof window === 'undefined') return 'zh';
+  if (typeof window === 'undefined') return DEFAULT_LANG;
   try {
     const stored = window.localStorage.getItem(LANG_KEY);
-    return LANGUAGES.some((language) => language.id === stored) ? (stored as Lang) : 'zh';
+    return isLang(stored) ? stored : DEFAULT_LANG;
   } catch {
     // Storage can be blocked by the browser or a sandboxed frame. The console
     // still has to render its default reading language.
-    return 'zh';
+    return DEFAULT_LANG;
   }
 }
 
@@ -115,9 +121,9 @@ interface I18nContextValue {
 }
 
 const I18nContext = React.createContext<I18nContextValue>({
-  lang: 'zh',
+  lang: DEFAULT_LANG,
   setLang: () => undefined,
-  t: makeT('zh'),
+  t: makeT(DEFAULT_LANG),
 });
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

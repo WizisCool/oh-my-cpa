@@ -322,7 +322,8 @@ When a new OMC feature suits an agent:
    path, and the operation itself, including a failure path.
 4. Give the console's capability directory its copy: `agent.capability.<name>` (a short title)
    and `agent.capability.<name>.description` (what the call does, for the operator) in
-   `web/src/i18n/messages/agent.ts` and every catalog under `web/src/i18n/locales/`. The registry's
+   `web/src/i18n/locales/zh/agent.ts` and `locales/en/agent.ts`, and in the catalogs that are still
+   one module each, `locales/zh-Hant.ts` and `locales/ms.ts`. The registry's
    `Description` stays English and is written for the model; the console shows it only in an
    expanded row. `pnpm check-i18n` fails when a registered capability has no copy or copy names a
    capability that is gone.

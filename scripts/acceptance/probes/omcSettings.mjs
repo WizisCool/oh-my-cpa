@@ -885,7 +885,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   let becameTraditionalChinese = false;
   await until(async () => {
     becameTraditionalChinese = /OMC 設定/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
-      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-Hant';
+      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-HK';
     return becameTraditionalChinese;
   }, { label: 'the header menu to switch the console to Traditional Chinese' }).catch(() => {});
   check(
