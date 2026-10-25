@@ -107,8 +107,8 @@ func (g *quotaProviderGate) pausedUntil(nowMS int64) int64 {
 	return 0
 }
 
-// scheduledReadAt is the earliest instant the background loop may read authIndex: the provider
-// pause or the credential's own backoff, whichever ends later.
+// scheduledReadAt is the earliest instant an automatic read may be sent for authIndex: the
+// provider pause or the credential's own backoff, whichever ends later.
 func (g *quotaProviderGate) scheduledReadAt(authIndex string) int64 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -203,7 +203,11 @@ func (g *quotaProviderGate) forgetExcept(current map[string]management.AuthFile)
 // readThroughGate runs read under file's provider gate. While the provider is paused it sends
 // nothing and answers with the previous reading marked stale, so a manual click inside a
 // Retry-After cannot spend the request the provider asked us to hold.
-func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, read func(quota.ReadOptions) (*quota.NormalizedQuota, error)) (*quota.NormalizedQuota, error) {
+//
+// An automatic read also waits out the credential's own backoff. A warmup probe, a pending
+// activation confirmation and the background loop are all questions nobody is waiting on, and
+// repeating one during a backoff only deepens the limit it is trying to observe.
+func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, isAutomatic bool, read func(quota.ReadOptions) (*quota.NormalizedQuota, error)) (*quota.NormalizedQuota, error) {
 	gate := h.quotaReadGates.forFile(file)
 	if gate == nil {
 		return read(quota.ReadOptions{})
@@ -221,6 +225,9 @@ func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file 
 		return svc.DeferredReading(file, prior, time.UnixMilli(untilMS)), nil
 	}
 	authIndex := strings.TrimSpace(file.AuthIndex)
+	if untilMS := gate.scheduledReadAt(authIndex); isAutomatic && untilMS > h.now().UnixMilli() {
+		return svc.DeferredReading(file, prior, time.UnixMilli(untilMS)), nil
+	}
 	options := gate.readOptions(authIndex, prior, h.now().UnixMilli())
 	reading, err := read(options)
 	if err == nil {

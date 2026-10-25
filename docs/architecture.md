@@ -2465,7 +2465,10 @@ longer of that delay and two minutes. A read inside the pause sends nothing and 
 `quota.Service.DeferredReading`, the prior reading marked stale and no recorded attempt; the
 loop counts it as deferred and keeps it due. The refused credential also gets an exponential
 backoff (5 to 30 minutes) that `AutoRefreshCandidate.ReadBackoffUntilMS` keeps out of the
-schedule, and a usable read clears it. A Claude read is three requests against the same
+schedule, and a usable read clears it. That entry point is
+`Handler.refreshAutomaticQuotaReading`, which extends the wait to the credential's whole
+`scheduledReadAt`; the manual and Agent surfaces keep using `refreshQuotaReading` and wait only
+for the provider pause. A Claude read is three requests against the same
 limit (profile, usage, reset grants); the gate passes `quota.ReadOptions` so a re-read sends
 only the usage request and carries the prior plan for six hours and the prior grants for an
 hour. The grants listing is display-only and refuses more readily than usage, so a failed or
@@ -3628,7 +3631,12 @@ secret-free tables are explicitly classified for lifecycle and read-only queries
 The application starts and joins the minute warmup loop alongside quota auto-refresh.
 Disabled policies cause no upstream usage reads. Enabled credentials are checked in
 bounded rounds of 16 with at most four concurrent contexts, targeting fresh evidence
-every five minutes and reusing newer stored quota evidence. Every consuming attempt
+every five minutes and reusing newer stored quota evidence. A round decides from the state it
+reconciled: when the windows are already active it stores that observation and sends nothing,
+so an active credential costs no provider requests between its five-minute evidence reads. An
+automatic evidence read and its pending confirmation are
+`Handler.refreshAutomaticQuotaReading` calls, so they wait out a credential backoff; a manual
+request keeps its confirmed, revision-bound path. Every consuming attempt
 performs a fresh read first. Auto and manual requests share a credential lock and durable
 receipts. A pre-send revalidation refusal restores the prior cycle, daily task and activation
 basis because no consuming request occurred. Restart-abandoned executing receipts are

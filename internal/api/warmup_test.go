@@ -30,6 +30,7 @@ type warmupFixture struct {
 	isPaidUnknown, isActivationDelayed          bool
 	mu                                          sync.Mutex
 	sends, reads, credentialReads               int
+	usageReads, grantsReads, usageStatus        int
 	onCredentialRead                            func(int) bool
 	isActive, isPaid, isUsageFailed, isTimedOut bool
 	entered, release                            chan struct{}
@@ -73,6 +74,10 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 			if payload.AuthIndex != "exact-claude" {
 				t.Errorf("wrong credential: %s", payload.AuthIndex)
 			}
+			if payload.URL == "https://api.anthropic.com/api/oauth/profile" {
+				_, _ = writer.Write([]byte(`{"status_code":200,"body":{"account":{"has_claude_max":true}}}`))
+				return
+			}
 			if payload.URL == endpoint {
 				fixture.mu.Lock()
 				fixture.sends++
@@ -108,8 +113,19 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 			if provider == "claude" && strings.HasPrefix(payload.URL, "https://api.anthropic.com/api/oauth/usage") || provider == "codex" && payload.URL == "https://chatgpt.com/backend-api/wham/usage" {
 				fixture.mu.Lock()
 				fixture.reads++
+				isGrants := strings.Contains(payload.URL, "cedar_ember")
+				if isGrants {
+					fixture.grantsReads++
+				} else {
+					fixture.usageReads++
+				}
 				isActive, isPaid, isUsageFailed := fixture.isActive, fixture.isPaid, fixture.isUsageFailed
+				usageStatus := fixture.usageStatus
 				fixture.mu.Unlock()
+				if !isGrants && usageStatus != 0 {
+					_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": usageStatus, "header": map[string][]string{"Retry-After": {"0"}}, "body": map[string]any{}})
+					return
+				}
 				if isUsageFailed {
 					_, _ = writer.Write([]byte(`{"status_code":500,"body":{}}`))
 					return
@@ -853,6 +869,105 @@ func TestWarmupCredentialReportsCurrentWindowState(t *testing.T) {
 	credential, err := handler.warmupCredential(ctx, client, file, true)
 	if err != nil || credential.Reason != "already_active" || credential.State.IsProtocolVerified {
 		t.Fatalf("active window projection: %+v %v", credential, err)
+	}
+}
+
+func TestWarmupActiveWindowsReuseQuotaObservations(t *testing.T) {
+	ctx := context.Background()
+	fixture := &warmupFixture{isActive: true}
+	handler := newWarmupHandler(t, fixture)
+	base := time.Now().UTC()
+	now := base
+	handler.nowFn = func() time.Time { return now }
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := handler.warmupFile(ctx, client, "exact-claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A manual quota refresh must not start a per-minute polling loop in warmup.
+	if _, err := handler.refreshWarmupObservation(ctx, client, file); err != nil {
+		t.Fatal(err)
+	}
+	for minute := 1; minute <= 11; minute++ {
+		now = base.Add(time.Duration(minute) * time.Minute)
+		if err := handler.runCredentialWarmupRound(ctx); err != nil {
+			t.Fatal(err)
+		}
+		fixture.mu.Lock()
+		usageReads, grantsReads, sends := fixture.usageReads, fixture.grantsReads, fixture.sends
+		fixture.mu.Unlock()
+		if want := 1 + minute/5; usageReads != want || grantsReads != 1 || sends != 0 {
+			t.Fatalf("minute %d: usage=%d grants=%d sends=%d, want %d usage reads, one grants read and no consuming requests", minute, usageReads, grantsReads, sends, want)
+		}
+	}
+}
+
+func TestWarmupAutomaticQuotaReadsHonorCredentialBackoff(t *testing.T) {
+	for _, isPending := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pending=%t", isPending), func(t *testing.T) {
+			ctx := context.Background()
+			fixture := &warmupFixture{isActive: true}
+			handler := newWarmupHandler(t, fixture)
+			base := time.Now().UTC()
+			now := base
+			handler.nowFn = func() time.Time { return now }
+			client, err := handler.capabilityClient(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := handler.warmupFile(ctx, client, "exact-claude")
+			if err != nil {
+				t.Fatal(err)
+			}
+			observation, err := handler.refreshWarmupObservation(ctx, client, file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := warmup.State{CredentialID: handler.warmupCredentialIdentity(file), Provider: "claude", Observation: observation}
+			if isPending {
+				state.LastResult = &warmup.Result{RequestID: "pending-confirmation", Status: "pending", Model: "claude-haiku-test"}
+			}
+			if err := handler.repo.WriteWarmupState(ctx, "default", file.AuthIndex, state, now.UnixMilli()); err != nil {
+				t.Fatal(err)
+			}
+			fixture.mu.Lock()
+			fixture.usageStatus = http.StatusTooManyRequests
+			fixture.mu.Unlock()
+			for _, step := range []struct {
+				minute int
+				reads  int
+			}{{5, 2}, {10, 3}, {15, 3}, {20, 4}, {25, 4}} {
+				now = base.Add(time.Duration(step.minute) * time.Minute)
+				if err := handler.runCredentialWarmupRound(ctx); err != nil {
+					t.Fatal(err)
+				}
+				fixture.mu.Lock()
+				usageReads, sends := fixture.usageReads, fixture.sends
+				fixture.mu.Unlock()
+				if usageReads != step.reads || sends != 0 {
+					t.Fatalf("minute %d: usage=%d sends=%d, want %d usage reads and no consuming requests during quota backoff", step.minute, usageReads, sends, step.reads)
+				}
+			}
+			fixture.mu.Lock()
+			fixture.usageStatus = 0
+			fixture.mu.Unlock()
+			now = base.Add(40 * time.Minute)
+			if err := handler.runCredentialWarmupRound(ctx); err != nil {
+				t.Fatal(err)
+			}
+			fixture.mu.Lock()
+			usageReads, sends := fixture.usageReads, fixture.sends
+			fixture.mu.Unlock()
+			if usageReads != 5 || sends != 0 {
+				t.Fatalf("recovery: usage=%d sends=%d, want one recovered quota read and no consuming requests", usageReads, sends)
+			}
+			if until := handler.quotaReadGates.forFile(file).scheduledReadAt(file.AuthIndex); until > now.UnixMilli() {
+				t.Fatal("usable quota read did not clear credential backoff")
+			}
+		})
 	}
 }
 

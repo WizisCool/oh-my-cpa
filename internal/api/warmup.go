@@ -371,8 +371,20 @@ func writeWarmupError(writer http.ResponseWriter, err error) {
 }
 
 func (h *Handler) refreshWarmupObservation(ctx context.Context, client *management.Client, file management.AuthFile) (*warmup.Observation, error) {
+	return h.readWarmupObservation(ctx, client, file, false)
+}
+
+// readWarmupObservation reads quota evidence for warmup. isAutomatic marks a read nobody is
+// waiting on: the scheduler's own observation refresh and its pending confirmation both wait out
+// a credential backoff instead of spending another refused request.
+func (h *Handler) readWarmupObservation(ctx context.Context, client *management.Client, file management.AuthFile, isAutomatic bool) (*warmup.Observation, error) {
 	service := quota.NewServiceWithClock(client, h.now)
-	reading, err := h.refreshQuotaReading(ctx, service, file, h.loadPriorNormalizedQuota(ctx, file.AuthIndex))
+	prior := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
+	refresh := h.refreshQuotaReading
+	if isAutomatic {
+		refresh = h.refreshAutomaticQuotaReading
+	}
+	reading, err := refresh(ctx, service, file, prior)
 	if err != nil || reading == nil || reading.Error != "" || reading.Status == "error" || reading.Status == "stale" || reading.WarmupEvidence == nil {
 		return nil, errors.New("quota_unknown")
 	}
@@ -484,8 +496,15 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 		return finish("cooldown")
 	}
 	priorReading := h.loadPriorNormalizedQuota(ctx, authIndex)
-	before, err := h.refreshWarmupObservation(ctx, client, file)
-	if err != nil {
+	// An automatic call may reuse the scheduler's fresh observation: it was just stored, and
+	// reading again would spend a provider request to learn what the stored evidence already says.
+	// A manual call and an unresolved earlier run still read, because their answer is about now.
+	var before *warmup.Observation
+	isReused := false
+	if !isManual && isWarmupRunSettled(state) && priorReading != nil && priorReading.WarmupEvidence != nil &&
+		h.now().UnixMilli()-priorReading.WarmupEvidence.ObservedAtMS < warmup.OBSERVATION_MAX_AGE_MS {
+		before, isReused = priorReading.WarmupEvidence, true
+	} else if before, err = h.readWarmupObservation(ctx, client, file, !isManual); err != nil {
 		return finish("quota_unknown")
 	}
 	if priorReading != nil && priorReading.WarmupEvidence != nil && priorReading.WarmupEvidence.ObservedAtMS < before.ObservedAtMS {
@@ -527,11 +546,23 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 	}
 	trigger, reason, cycle, _ := warmup.Decide(credential.Policy, state, now, isManual)
 	if trigger == "" {
-		if strings.HasPrefix(cycle, "daily/") {
-			state.DailyKey = warmup.DailyKey(credential.Policy.DailyTime, now)
-			_ = h.repo.WriteWarmupState(ctx, defaultInstanceID(), authIndex, state, now.UnixMilli())
+		return h.skipWarmupRun(ctx, authIndex, state, credential.Policy.DailyTime, now, reason, cycle, finish)
+	}
+	// Evidence a caller asked for now may have been reused from the scheduler. A consuming
+	// request still needs a read immediately before it, so a send never rests on evidence the
+	// operator did not just ask to confirm.
+	if isReused {
+		if before, err = h.readWarmupObservation(ctx, client, file, !isManual); err != nil {
+			return finish("quota_unknown")
 		}
-		return finish(reason)
+		if priorReading != nil && priorReading.WarmupEvidence != nil && priorReading.WarmupEvidence.ObservedAtMS < before.ObservedAtMS {
+			state = warmup.Reconcile(state, *priorReading.WarmupEvidence)
+		}
+		state = warmup.Reconcile(state, *before)
+		before = state.Observation
+		if trigger, reason, cycle, _ = warmup.Decide(credential.Policy, state, now, isManual); trigger == "" {
+			return h.skipWarmupRun(ctx, authIndex, state, credential.Policy.DailyTime, now, reason, cycle, finish)
+		}
 	}
 	if state.LastCycle == fmt.Sprintf("cycle/%d", state.Generation) && !isManual {
 		return finish("already_attempted")
@@ -608,6 +639,30 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 	}
 	_ = h.auditWarmup(finalCtx, "warmup.run", authIndex, result.Status, map[string]any{"reason": result.Reason, "request_id": result.RequestID})
 	return result, nil
+}
+
+// isWarmupRunSettled reports whether the last result is a finished observation rather than a run
+// still waiting for its confirmation read. An unresolved run keeps reading because its next answer
+// decides the outcome.
+func isWarmupRunSettled(state warmup.State) bool {
+	status := ""
+	if state.LastResult != nil {
+		status = state.LastResult.Status
+	}
+	return status != "pending" && status != "uncertain" && status != "executing"
+}
+
+// skipWarmupRun records a call that sent nothing: the daily task it consumed, and the reconciled
+// observation. Persisting the observation is what ends the loop that made an automatic round read
+// the same snapshot again on the next tick, because a newer stored snapshot outranks warmup state.
+func (h *Handler) skipWarmupRun(ctx context.Context, authIndex string, state warmup.State, dailyTime string, now time.Time, reason, cycle string, finish func(string) (warmup.Result, error)) (warmup.Result, error) {
+	if strings.HasPrefix(cycle, "daily/") {
+		state.DailyKey = warmup.DailyKey(dailyTime, now)
+	}
+	if err := h.repo.WriteWarmupState(ctx, defaultInstanceID(), authIndex, state, h.now().UnixMilli()); err != nil {
+		return warmup.Result{}, err
+	}
+	return finish(reason)
 }
 
 func (h *Handler) RunCredentialWarmup(ctx context.Context) error {
@@ -755,7 +810,7 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 			}
 			isPending := state.LastResult != nil && (state.LastResult.Status == "pending" || state.LastResult.Status == "executing")
 			if observation == nil || isPending {
-				observation, _ = h.refreshWarmupObservation(ctx, client, file)
+				observation, _ = h.readWarmupObservation(ctx, client, file, true)
 			}
 			if observation == nil {
 				state.NextAttemptMS = h.now().Add(5 * time.Minute).UnixMilli()
@@ -788,10 +843,17 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 				return
 			}
 			saveErr := h.repo.WriteWarmupState(ctx, defaultInstanceID(), file.AuthIndex, state, h.now().UnixMilli())
-			h.warmupRuntime.release(file.AuthIndex)
 			if saveErr != nil {
+				h.warmupRuntime.release(file.AuthIndex)
 				return
 			}
+			// The reconciled state decides first: with active windows and fresh evidence there is
+			// nothing to send, and entering execution would only read policy and quota again.
+			if trigger, _, cycle, _ := warmup.Decide(credential.Policy, state, now, false); trigger == "" && !strings.HasPrefix(cycle, "daily/") {
+				h.warmupRuntime.release(file.AuthIndex)
+				return
+			}
+			h.warmupRuntime.release(file.AuthIndex)
 			_, _ = h.executeWarmup(ctx, file.AuthIndex, "", "", false)
 		}(file, credential)
 	}

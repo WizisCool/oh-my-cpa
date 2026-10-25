@@ -66,12 +66,24 @@ type QuotaRefreshAttemptDTO struct {
 // capability - so a failure the operator is shown in a toast is also the failure the page can
 // still report after the toast is gone.
 func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
+	return h.refreshQuotaReadingAs(ctx, svc, file, prior, false)
+}
+
+// refreshAutomaticQuotaReading is the same read for a caller no operator is waiting on. It also
+// honors the credential backoff a refused automatic read established; a manual refresh keeps its
+// existing rule and waits only for the provider pause, because the operator is asking for the
+// answer now.
+func (h *Handler) refreshAutomaticQuotaReading(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
+	return h.refreshQuotaReadingAs(ctx, svc, file, prior, true)
+}
+
+func (h *Handler) refreshQuotaReadingAs(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, isAutomatic bool) (*quota.NormalizedQuota, error) {
 	// Stamped before the read, on the same clock the service stamps the reading with: two reads of
 	// one credential can overlap, and the stored attempt must answer "which read started last", not
 	// "which response landed last". A slow failing read that started first may finish after a newer
 	// successful one, and completion order would let it report the credential as broken.
 	attemptedAtMS := svc.Now().UnixMilli()
-	refreshed, err := h.readThroughGate(ctx, svc, file, prior, func(options quota.ReadOptions) (*quota.NormalizedQuota, error) {
+	refreshed, err := h.readThroughGate(ctx, svc, file, prior, isAutomatic, func(options quota.ReadOptions) (*quota.NormalizedQuota, error) {
 		return svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
 	})
 	if refreshed != nil && refreshed.IsDeferred {
