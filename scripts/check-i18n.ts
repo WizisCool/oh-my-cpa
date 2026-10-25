@@ -147,6 +147,9 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
   // Every language, against the source.
   const catalogs = new Map<string, Messages>();
   for (const lang of registered) {
+    // A registered language with no directory is already a registry problem; reading the missing
+    // directory would throw instead of reporting it.
+    if (!directories.includes(lang)) continue;
     const files = domainFiles(lang);
     for (const file of sourceDomains) if (!files.includes(file)) fail('structure', `locales/${lang}/ has no ${file}`);
     for (const file of files) if (!sourceDomains.includes(file)) fail('structure', `locales/${lang}/${file} has no source file in locales/${SOURCE_LANG}/`);
