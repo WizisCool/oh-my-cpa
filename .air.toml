@@ -18,6 +18,8 @@ tmp_dir = "tmp/air"
   full_bin = ""
   include_dir = []
   include_ext = ["go", "sql"]
+  # The language instructions are embedded in the backend, not loaded by Vite.
+  include_file = ["internal/agent/openui/openui.json"]
   kill_delay = "500ms"
   log = "tmp/air/build-errors.log"
   send_interrupt = true

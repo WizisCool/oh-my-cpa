@@ -27,6 +27,7 @@ export const CHECK_IDS = [
   'motion',
   'style-tokens',
   'feedback',
+  'openui-prompt',
   'go',
   'docs',
   'toolchain',
@@ -50,6 +51,8 @@ function planFileChecks(file) {
   const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
   if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
+  if (file.startsWith('internal/agent/openui/')) add('go', 'openui-prompt');
+  if (file.startsWith('web/src/agent/openui/') || file === 'scripts/generate-openui-prompt.ts') add('openui-prompt');
   if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components', 'self-tests');
   if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');

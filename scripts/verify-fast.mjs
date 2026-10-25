@@ -53,6 +53,7 @@ export const CHECK_COMMANDS = {
   motion: { label: 'motion budget', command: 'pnpm', args: ['check:motion'] },
   'style-tokens': { label: 'style tokens', command: 'pnpm', args: ['check:style-tokens'] },
   feedback: { label: 'feedback surfaces', command: 'pnpm', args: ['check:feedback'] },
+  'openui-prompt': { label: 'generated OpenUI instructions', command: 'pnpm', args: ['check:openui-prompt'] },
   // -short skips the few tests that cost tens of seconds; CI runs them.
   go: { label: 'Go tests', command: 'go', args: ['test', '-short', './...'] },
   docs: { label: 'documentation references', command: 'pnpm', args: ['check-docs'] },
