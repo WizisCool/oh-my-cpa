@@ -1,6 +1,6 @@
 import { checkConversationExport } from './conversation-export.mjs';
 import { fulfillFixture, abortFixture } from '../browser-guard.mjs';
-import { settleLayout, until } from '../harness.mjs';
+import { settleLayout, until, untilBooted } from '../harness.mjs';
 import { playgroundFixtures } from './playground.mjs';
 
 const THREAD = 'agent-test-session';
@@ -268,7 +268,7 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent offers a new conversation once there is one to replace', await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled());
   await checkConversationExport({ page, check, kind: 'agent', expectedText: 'The approved operation completed.' });
   await page.reload();
-  await page.getByText('The approved operation completed.').waitFor();
+  await untilBooted(page.getByText('The approved operation completed.'), 'the restored history after a reload');
   // The model is named where the message is written; the key scopes its list.
   const chip = page.locator('[data-testid="target-chip"]');
   const selection = () => chip.innerText();
@@ -797,7 +797,7 @@ export async function agentLive({ base, page, check }) {
       snapshot({ ...initial(), revision: 3, turns: [firstTurn, second] }), finished([], 'run-queued')]) });
   });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
-  await page.locator('[data-testid="agent-page"]').waitFor();
+  await untilBooted(page.locator('[data-testid="agent-page"]'), 'the Agent page after a navigation');
   const input = page.getByLabel('Describe an OMC query or action');
   const emptyHeight = await input.evaluate(element => element.getBoundingClientRect().height);
   check('the desktop composer starts at one line', emptyHeight < 30, `height=${emptyHeight}`);
@@ -980,7 +980,7 @@ export async function agentReplace({ base, page, check }) {
   // A turn that changed something is part of the record: it can be neither retried nor edited.
   conversation = { ...conversation, revision: conversation.revision + 1, turns: [answered('turn-write', 'Disable it', 'Disabled.', [{ id: 'call-write', name: 'providers_set_status', arguments: '{}', result: { status: 'success', data: {} } }])] };
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await workspace.getByText('Disabled.', { exact: true }).waitFor();
+  await untilBooted(workspace.getByText('Disabled.', { exact: true }), 'the recorded turn after a reload');
   check('a turn that made a change offers no retry or edit', await workspace.getByRole('button', { name: 'Retry', exact: true }).count() === 0 && await workspace.getByRole('button', { name: 'Edit and resend', exact: true }).count() === 0);
 }
 
@@ -1230,11 +1230,12 @@ async function verifyAgentRecovery({ base, page, check }) {
     try { await route.fulfill({ contentType: 'text/event-stream', body: sse([started('recover-turn', runID), ...text('recover-message', 'Recovered complete.'), snapshot(finishedConversation), finished([], runID)]) }); } catch { /* The old subscriber was closed by reload. */ }
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await untilBooted(page.getByLabel('Describe an OMC query or action'), 'the Agent composer after a reload');
   await page.getByLabel('Describe an OMC query or action').fill('Recover this run');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await until(() => subscriptionCount >= 2, { label: 'the failed subscription to reconnect' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  await untilBooted(page.getByRole('button', { name: 'Stop', exact: true }), 'the Agent to reattach to the running task after a reload');
   await until(() => subscriptionCount >= 3, { label: 'refresh to attach to the original run' });
   check('the message box stays writable while a rejoined run works', await page.getByLabel('Describe an OMC query or action').isEnabled());
   check('Agent refresh reattaches without sending Stop or starting another model call', generationCount === 1 && cancelCount === 0, JSON.stringify({ generationCount, cancelCount, subscriptionCount }));

@@ -36,9 +36,22 @@
  * click, which is also what makes such a check readable.
  */
 
-/** Longer than any single condition this suite waits on, and short enough to keep
- *  a genuinely broken expectation from stalling the run to its job timeout. */
+/** The budget for a condition on a page that is already up: long enough for the app to settle, and
+ *  short enough to keep a genuinely broken expectation from stalling the run to its job timeout. */
 export const CONDITION_TIMEOUT_MS = 10_000;
+
+/**
+ * The budget for the first render after a navigation or reload, as distinct from a condition on a
+ * page that is already up.
+ *
+ * In development the largest routes ship one module per file: a Playground reload dispatches about
+ * two hundred requests, and a trace on a loaded host measured the page mounting 11.5s after the
+ * reload while the restored state itself was correct as soon as it rendered. CI runs two workers on
+ * a two-core runner, so that first render has less headroom than the measurement, not more. The claim
+ * these probes make - a refresh restores the run - needs a boot budget rather than Playwright's 10s
+ * action timeout. Every condition after the boot keeps `CONDITION_TIMEOUT_MS`.
+ */
+export const PAGE_BOOT_TIMEOUT_MS = 30_000;
 
 /** Bounded polls keep a wait cheap on a settled page; the ceiling stops a slow
  *  page from being hammered with reads while it catches up. */
@@ -70,6 +83,28 @@ export async function until(predicate, { label = 'condition', timeoutMs = CONDIT
     const value = await predicate();
     if (value) return value;
   }
+}
+
+/**
+ * Waits for the first render after a navigation or reload, within the boot budget.
+ *
+ * `isVisible()` answers immediately, so the polling loop owns the deadline and a shortage reports the
+ * label the caller wrote instead of a locator's own timeout. Every wait after this one stays on
+ * `CONDITION_TIMEOUT_MS`.
+ */
+export async function untilBooted(locator, label) {
+  return until(() => locator.isVisible(), { label, timeoutMs: PAGE_BOOT_TIMEOUT_MS });
+}
+
+/**
+ * A locator's text once it is attached, or the empty string before that.
+ *
+ * `innerText()` on a locator that is not attached spends its own action timeout before throwing, so a
+ * predicate that reads text while a page is still booting would sit inside that timeout instead of
+ * polling. Reading the count first keeps the loop in charge of the deadline.
+ */
+export async function attachedText(locator) {
+  return await locator.count() ? locator.innerText() : '';
 }
 
 /**

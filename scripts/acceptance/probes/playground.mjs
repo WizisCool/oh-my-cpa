@@ -1,6 +1,6 @@
 import { checkConversationExport } from './conversation-export.mjs';
 import { abortFixture } from '../browser-guard.mjs';
-import { until } from '../harness.mjs';
+import { attachedText, until, untilBooted, PAGE_BOOT_TIMEOUT_MS } from '../harness.mjs';
 
 export function playgroundFixtures() {
   return [
@@ -47,7 +47,7 @@ export async function playground({ base, page, check, context }) {
         frame('usage', { usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } }) + frame('done', { finish_reason: 'stop', first_content_ms: hasMeasurableTiming ? 1000 : 42, duration_ms: hasMeasurableTiming ? 2000 : 90 })) });
   });
   await page.goto(`${base}/playground`, { waitUntil: 'domcontentloaded' });
-  await page.locator('[data-testid="playground-page"]').waitFor();
+  await untilBooted(page.locator('[data-testid="playground-page"]'), 'the Playground page after a navigation');
   const input = page.getByPlaceholder('Enter a message, or paste an image…');
   check('the message box takes text before a model is chosen, and only sending waits for one', await input.isEnabled() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
   // The model is chosen where the message is written, on the chip the Agent's composer uses.
@@ -58,8 +58,8 @@ export async function playground({ base, page, check, context }) {
   // Reloaded with no pause after the choice: a selection that waited out the parameter debounce
   // before being written is dropped by a reload, which unmounts nothing.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  const target = () => page.locator('[data-testid="target-chip"]').innerText();
-  await until(async () => (await target()).includes('vision-alias'), { label: 'the chosen model after an immediate reload' });
+  const target = () => attachedText(page.locator('[data-testid="target-chip"]'));
+  await until(async () => (await target()).includes('vision-alias'), { label: 'the chosen model after an immediate reload', timeoutMs: PAGE_BOOT_TIMEOUT_MS });
   check('a model chosen just before a reload is still selected after it', (await target()).includes('vision-alias'), await target());
   check('playground offers one image picker beside paste', await page.getByRole('button', { name: 'Add image', exact: true }).count() === 1);
   await input.evaluate((element, base64) => {
@@ -165,7 +165,7 @@ export async function playground({ base, page, check, context }) {
     await until(async () => (await page.locator('.req-tps-val').first().innerText()) === expected, { label: 'the request record TPS mode' });
     check(`request records honor ${label}`, (await page.locator('.req-tps-val').first().innerText()) === expected);
     await page.goto(`${base}/playground`, { waitUntil: 'domcontentloaded' });
-    await until(async () => (await transcript.innerText()).includes(expected), { label: 'the restored Playground TPS mode' });
+    await until(async () => (await attachedText(transcript)).includes(expected), { label: 'the restored Playground TPS mode', timeoutMs: PAGE_BOOT_TIMEOUT_MS });
     check(`historical Playground answers honor ${label} without inference`, (await transcript.innerText()).includes(expected) && calls.length === 3);
   }
 
@@ -208,6 +208,7 @@ export async function playground({ base, page, check, context }) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await until(async () => await page.getByText('A streamed answer').count() > 0, {
     label: 'the persisted conversation after a reload',
+    timeoutMs: PAGE_BOOT_TIMEOUT_MS,
   });
   check('refresh restores latest session including conversation across devices', await page.getByText('A streamed answer').count() > 0, 'persisted conversation');
   await until(async () => await distanceFromLatest() < 48, { label: 'the reloaded transcript to settle on the newest message' });
@@ -283,7 +284,7 @@ export async function playgroundNarrow({ base, page, check }) {
     && ['/v1/chat/completions', '/v1/responses', '/v1/messages'].every((path, index) => endpointRows[index]?.includes(path)), endpointRows.join(' | '));
   await endpoints.getByRole('option', { name: 'Messages', exact: true }).click();
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await until(async () => (await page.locator('[data-testid="endpoint-chip"]').innerText()).includes('Messages'), { label: 'the chosen endpoint after a reload' });
+  await until(async () => (await attachedText(page.locator('[data-testid="endpoint-chip"]'))).includes('Messages'), { label: 'the chosen endpoint after a reload', timeoutMs: PAGE_BOOT_TIMEOUT_MS });
   check('an endpoint chosen just before a reload is still selected after it', (await page.locator('[data-testid="endpoint-chip"]').innerText()).includes('Messages'));
   // No model is chosen here. A disabled message box takes no focus, which on a phone is a tap that
   // raises no keyboard and gives no reason.
@@ -323,7 +324,7 @@ async function verifyPlaygroundRecovery({ base, page, check }) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await until(() => subscriptions >= 2, { label: 'Playground to reconnect after a socket error' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  await untilBooted(page.getByRole('button', { name: 'Stop', exact: true }), 'the Playground to reattach to the running task after a reload');
   await until(() => subscriptions >= 3, { label: 'Playground refresh to subscribe to the same task' });
   check('Playground reload keeps one generation and does not cancel it', generationCount === 1 && cancelCount === 0, JSON.stringify({ generationCount, subscriptions, cancelCount }));
   release();
@@ -334,6 +335,6 @@ async function verifyPlaygroundRecovery({ base, page, check }) {
   await page.locator('[data-testid="playground-empty"]').waitFor();
   await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences)).playground_session?.turns?.length === 0, { label: 'new conversation to persist' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Send', exact: true }).waitFor();
+  await untilBooted(page.getByRole('button', { name: 'Send', exact: true }), 'the cleared conversation after a reload');
   check('a retained completed journal cannot resurrect a cleared conversation', await page.getByText('Recovered playground answer', { exact: true }).count() === 0 && generationCount === 1);
 }
