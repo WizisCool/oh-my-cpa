@@ -240,8 +240,11 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
   // same file for this check, so the two cannot drift into disagreeing about what is enforced.
   const glossaryPath = path.join(I18N, 'GLOSSARY.md');
   const glossary = fs.existsSync(glossaryPath) ? fs.readFileSync(glossaryPath, 'utf8') : '';
-  const enforcedBlock = /```glossary-enforced\n([\s\S]*?)```/.exec(glossary)?.[1] ?? '';
-  for (const line of enforcedBlock.split('\n')) {
+  const enforcedBlock = /```glossary-enforced\n([\s\S]*?)```/.exec(glossary)?.[1];
+  // An absent block is a glossary problem, not a pass: removing the fence would otherwise switch
+  // every spelling check off while `GLOSSARY.md` still reads as though it enforced them.
+  if (!enforcedBlock?.trim()) fail('glossary', 'GLOSSARY.md has no glossary-enforced block');
+  for (const line of (enforcedBlock ?? '').split('\n')) {
     if (!line.trim()) continue;
     const [lang, rejected, preferred] = line.split('\t');
     if (!lang || !rejected || !preferred) {

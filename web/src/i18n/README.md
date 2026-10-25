@@ -66,7 +66,9 @@ capabilities; other families are not, so adding the sentence is part of the serv
 3. Add the antd locale and the deferral decision to `resources.ts` if the language's catalog should
    not be part of the first paint (see `CATALOGS`, and `web/vite.config.ts` for the chunk name the
    acceptance probe looks for).
-4. Add the language's `Intl` locale to `LANGUAGES`; dates and numbers follow it.
+4. Add the language's `Intl` locale to `LANGUAGES`; dates and message counts follow it. Counting
+   numbers in tables and charts do not — `web/src/types/tokenDisplay.ts` groups them the same way in
+   every language, for the reason `GLOSSARY.md` gives.
 
 ## Files
 
