@@ -1,8 +1,8 @@
 /**
  * The translation gate: structural and formatting checks for the i18n catalogs.
  *
- * The compiler already proves the per-file key sets (`satisfies Translation<typeof source>`) and
- * that every `t()` key exists (`MessageKey`). What this automated gate verifies:
+ * The compiler already proves the per-file key sets (`satisfies Translation<typeof source>`). What
+ * this automated gate verifies:
  *
  * - The registry, locale directories and language-switcher flags strictly agree;
  * - No id is defined in multiple domain files (preventing silent overwrite during catalog assembly);
@@ -10,8 +10,6 @@
  * - Each translation reads the exact same placeholders as its source sentence;
  * - Empty, whitespace-padded, or structurally malformed translation values are rejected;
  * - Every key in the source catalog is referenced somewhere in codebase or through a computed prefix;
- * - Source files carry no hardcoded Chinese copy (note: English JSX string validation remains
- *   supplemented by PR reviews, while structural catalog integrity is strictly enforced);
  * - Every registered Agent capability has localized copy.
  *
  * Whether a sentence reads naturally is a linguistic question requiring native review: `--report`

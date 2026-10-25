@@ -304,7 +304,8 @@ unaudited.
 
 Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
 dictionary lives in `web/src/i18n/locales/zh/` as one file per product area
-(`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`), and `en/` mirrors it; the
+(`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`; the files are grouped by area, not by
+prefix, so `pg.*` sits in `agent.ts`), and `en/` mirrors it; the
 Traditional Chinese and Malay catalogs are one module each,
 `web/src/i18n/locales/zh-Hant.ts` and `ms.ts`. All four are accessed through `t(key, vars)`; language
 persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every
