@@ -179,27 +179,33 @@ export async function measureVerification(lane, task, workload = []) {
 // Native Actions timestamps include setup/cache costs, without a new service or
 // another test suite. Compare three completed runs so one cold runner only warns.
 export async function checkCiVerificationCost(env = process.env) {
-  const baselineSeconds = env.GITHUB_EVENT_NAME === 'pull_request' ? 506 : 282;
-  const baselineRunnerSeconds = env.GITHUB_EVENT_NAME === 'pull_request' ? 857 : 1167;
   const api = endpoint => JSON.parse(execFileSync('gh', ['api', `repos/${env.GITHUB_REPOSITORY}/${endpoint}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 }));
   const summary = [];
   try {
     const current = api(`actions/runs/${env.GITHUB_RUN_ID}`);
-    const previous = api(`actions/workflows/${current.workflow_id}/runs?event=${current.event}&status=success&per_page=3`).workflow_runs.filter(run => run.id !== current.id);
-    const samples = [current, ...previous].slice(0, 3).map(run => {
+    const previous = api(`actions/workflows/${current.workflow_id}/runs?event=${current.event}&status=success&per_page=10`).workflow_runs.filter(run => run.id !== current.id);
+    const samples = [];
+    let isFullCatalog;
+    for (const run of [current, ...previous].slice(0, 10)) {
       const jobs = api(`actions/runs/${run.id}/jobs?per_page=100`).jobs.filter(job => job.conclusion === 'success' && job.completed_at);
       if (!jobs.length) throw new Error('No completed verification jobs');
+      const hasFullCatalog = jobs.some(job => job.name.startsWith('probes-full ('));
+      if (isFullCatalog === undefined) isFullCatalog = hasFullCatalog;
+      if (hasFullCatalog !== isFullCatalog) continue;
       const duration = job => (Date.parse(job.completed_at) - Date.parse(job.started_at)) / 1000;
       const setup = jobs.find(job => job.name === 'changes');
       const seconds = (setup ? duration(setup) : 0) + Math.max(0, ...jobs.filter(job => !['changes', 'static', 'probes'].includes(job.name)).map(duration));
       const runnerSeconds = jobs.reduce((total, job) => total + duration(job), 0);
-      return { id: run.id, seconds, runnerSeconds };
-    });
+      samples.push({ id: run.id, seconds, runnerSeconds });
+      if (samples.length === 3) break;
+    }
+    const baselineSeconds = isFullCatalog ? 282 : 506;
+    const baselineRunnerSeconds = isFullCatalog ? 1167 : 857;
     const limit = baselineSeconds * 1.5 + 30;
-    summary.push(`### Verification cost\n\nBaseline: ${baselineSeconds}s; significant-growth threshold: ${limit}s (50% + 30s runner/cache allowance).\n`, ...samples.map(sample => `- Run ${sample.id}: ${sample.seconds.toFixed(1)}s execution critical path, ${sample.runnerSeconds.toFixed(1)} runner-seconds`));
-    const isSlow = samples[0].seconds > limit;
-    if (isSlow || samples[0].runnerSeconds > baselineRunnerSeconds * 1.5 + 30) console.warn(`::warning::Verification exceeds ${limit}s. Inspect job timings; consolidate duplicate tests before changing the measured baseline.`);
     const runnerLimit = baselineRunnerSeconds * 1.5 + 30;
+    summary.push(`### Verification cost\n\nCatalog: ${isFullCatalog ? 'full' : 'affected PR'}; ${samples.length} comparable successful run(s).\n\nBaseline: ${baselineSeconds}s; significant-growth threshold: ${limit}s (50% + 30s runner/cache allowance).\n`, ...samples.map(sample => `- Run ${sample.id}: ${sample.seconds.toFixed(1)}s execution critical path, ${sample.runnerSeconds.toFixed(1)} runner-seconds`));
+    const isSlow = samples[0].seconds > limit;
+    if (isSlow || samples[0].runnerSeconds > runnerLimit) console.warn(`::warning::Verification exceeds its ${isFullCatalog ? 'full' : 'affected PR'} budget (${limit}s critical path or ${runnerLimit} runner-seconds). Inspect job timings; consolidate duplicate tests before changing the measured baseline.`);
     const hasRegression = samples.length === 3 && (samples.every(sample => sample.seconds > limit) || samples.every(sample => sample.runnerSeconds > runnerLimit));
     summary.push(`Runner-time baseline: ${baselineRunnerSeconds}s; significant-growth threshold: ${runnerLimit}s.`);
     if (hasRegression) console.error('::error::Three consecutive verification runs exceed the measured budget. Reduce cost or document evidence for a new baseline in scripts/parallel-checks.mjs and docs/testing.md.');

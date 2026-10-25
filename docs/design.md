@@ -701,7 +701,7 @@ tokens keep those hues exclusively, and both panels state their categories in te
 names each group, and the ranked list prints each group's name, volume and share. Colour is never the
 only encoding.
 
-Rules, all measured and asserted by `scripts/test-chart-marks.ts`:
+Palette contrast, separation and runtime-projection rules asserted by `scripts/test-chart-marks.ts`:
 
 1. **Every slot clears 3:1 against the card it is drawn on** (WCAG's bar for a graphical object, not
 the 4.5:1 body-text bar - these are 1.6px lines and 8px swatches). Measured across both themes the
@@ -711,10 +711,8 @@ swatch. The sequence exists for that bound: it alternates warm and cool families
 warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
 3. **The runtime projection is what every palette is checked against.** `web/src/theme/palette.ts` is
 the only source of the six slots. `index.css` carries the dark and light sets as the pre-hydration
-fallback, and the suite compares that fallback with the derived palettes character for character; every
-other palette's slots are projected at runtime by `themePaletteCssVariables` and asserted against its own
-derivation. A token changed in one place and not the other fails rather than shipping a chart in a colour
-the legend does not show.
+fallback. `themePaletteCssVariables` projects each resolved palette's slots at runtime, and the suite
+checks that projection against the same palette.
 4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group -
 `model:<name>` or the folded discriminator - rather than the display label, so a real model whose name
 equals the remainder's translated label cannot take the remainder's colour. The range is then generated

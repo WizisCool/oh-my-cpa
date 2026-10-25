@@ -204,9 +204,9 @@ rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.m
   §2 *Insights*.
 - **Track** (`--series-track`, `#2c2c30` dark / `#dcdce1` light): the trend's plot floor and the usage
   ring's unfilled track, which is each mode's border step.
-- Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
-  and the stylesheet tokens match the derived palette character for character. All bounds are asserted by
-  `scripts/test-chart-marks.ts` from the palette itself. The slots above are the OMC Dark/OMC Light pair;
+- Every slot clears 3:1 against the card, and adjacent legend entries are at least ΔE 25 apart in CIE Lab.
+  `scripts/test-chart-marks.ts` asserts these bounds from the resolved palette and checks its runtime
+  CSS-variable projection. The slots above are the OMC Dark/OMC Light pair;
   the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
   mode's set.
 

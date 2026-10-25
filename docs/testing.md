@@ -218,7 +218,10 @@ workloads; reproduce a cost regression with comparable scope before changing its
 
 The required CI aggregate reads GitHub's native job timestamps, reports runner-seconds and
 execution critical path (setup plus the slowest parallel lane, excluding queue time), and
-checks the current run plus two preceding successful runs of the same event. Historical PR runs established a
+checks the current run plus two preceding successful runs of the same event and catalog
+class. Successful native `probes-full` jobs identify a full catalog, including `full-ci`
+pull requests; those use the full-run budget, not the affected-PR budget. At most ten
+recent candidates are inspected with bounded API calls. Historical PR runs established a
 506-second execution baseline (448/506/513 seconds across three runs); full runs established
 282 seconds (262/282/370). Runner-time medians were 857 and 1,167 seconds respectively. CI allows **50% + 30 seconds** for
 runner/cache variation and rejects three successive significant overruns in either execution critical path or total runner-time. A lone cold runner
@@ -278,8 +281,8 @@ logic tests. Four rendered cases and source-CSS assertions that pinned presentat
 also removed; interaction, accessibility, lifecycle and real colour-contrast claims stay.
 No security, migration, CPA-write, updater or embedded-distribution test was removed.
 Across changed test files, the net reduction is 566 lines. The changed selector and
-orchestration files (including the two new entry/helpers) shrink from 1,123 to 995 lines,
-a net reduction of 128 despite the cost reporting and cancellation handling.
+orchestration files (including the two new entry/helpers) shrink from 1,123 to 1,001 lines,
+a net reduction of 122 despite the cost reporting and cancellation handling.
 
 Temporary development experiments verified ordinary page and shared-component selection,
 new-suite discovery, locale-only changes, shared test setup, global inputs and unknown-path
