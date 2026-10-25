@@ -93,8 +93,8 @@ export default {
   "quota.btn_refresh_quota": "Muat semula kuota",
   "quota.in_minutes": "{n}m lagi",
   "quota.in_hours": "{n}j lagi",
-  "quota.in_hours_min": "{h}h {m}m lagi",
-  "quota.in_days": "{n}d kiri",
-  "quota.in_days_min": "{d}h {h}h kiri",
+  "quota.in_hours_min": "{h}j {m}m lagi",
+  "quota.in_days": "{n}h kiri",
+  "quota.in_days_min": "{d}h {h}j kiri",
   "quota.days_ago": "{n}h yang lalu",
 } satisfies Translation<typeof source>;
