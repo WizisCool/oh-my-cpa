@@ -4,44 +4,55 @@ import { runChecks, measureVerification } from './parallel-checks.mjs';
 import type { Check, Execute } from './testing/checks.ts';
 
 export async function runFullVerification({ execute = runChecks, isSerial = false, probePort }: { execute?: Execute; isSerial?: boolean; probePort?: number } = {}) {
+  const cancellation = new AbortController();
+  const cancel = () => cancellation.abort();
+  process.once('SIGTERM', cancel);
+  process.once('SIGINT', cancel);
   async function runGroup(checks: Check[]) {
+    if (cancellation.signal.aborted) return false;
     if (!isSerial) return execute(checks);
     let hasPassed = true;
     for (const check of checks) {
+      if (cancellation.signal.aborted) return false;
       if (!await execute([check])) hasPassed = false;
     }
     return hasPassed;
   }
-  // Build and secret/toolchain correctness remain prerequisites for serving a binary.
-  if (!await runGroup([{ label: 'toolchain', command: 'pnpm', args: ['verify:toolchain:strict'] }])) return false;
-  // Go's embed walks files by path; pruning a distribution during that walk can
-  // invalidate an already-enumerated asset even when HTML is copied last.
-  if (!await runGroup([{ label: 'build', command: 'pnpm', args: ['build'] }])) return false;
-  if (!await runGroup([
-    ...(isSerial ? [
-      { label: 'static-go', command: 'pnpm', args: ['verify:static:go'] },
-      { label: 'static-frontend', command: 'pnpm', args: ['verify:static:frontend'] },
-      { label: 'static-repository', command: 'pnpm', args: ['verify:static:repository'] },
-    ] : [{ label: 'static', command: 'pnpm', args: ['verify:static'] }]),
-  ])) return false;
-  if (!await runGroup([{ label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] }])) return false;
-  if (!await runGroup([{ label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] }])) return false;
+  try {
+    // Build and secret/toolchain correctness remain prerequisites for serving a binary.
+    if (!await runGroup([{ label: 'toolchain', command: 'pnpm', args: ['verify:toolchain:strict'] }])) return false;
+    // Go's embed walks files by path; pruning a distribution during that walk can
+    // invalidate an already-enumerated asset even when HTML is copied last.
+    if (!await runGroup([{ label: 'build', command: 'pnpm', args: ['build'] }])) return false;
+    if (!await runGroup([
+      ...(isSerial ? [
+        { label: 'static-go', command: 'pnpm', args: ['verify:static:go'] },
+        { label: 'static-frontend', command: 'pnpm', args: ['verify:static:frontend'] },
+        { label: 'static-repository', command: 'pnpm', args: ['verify:static:repository'] },
+      ] : [{ label: 'static', command: 'pnpm', args: ['verify:static'] }]),
+    ])) return false;
+    if (!await runGroup([{ label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] }])) return false;
+    if (!await runGroup([{ label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] }])) return false;
 
-  // Bundle policy is a separate verdict, not a prerequisite for browser evidence.
-  // Every verdict is retained: a successful browser cannot erase a bundle failure.
-  const hasPassedBundle = await runGroup([{ label: 'bundle', command: 'pnpm', args: ['check:bundle'] }]);
-  // Hosted lanes have separate runners. Locally they share CPU and Chromium
-  // scheduling; overlapping them distorts frame assertions and lazy-route readiness.
-  let hasPassedBrowser = true;
-  for (const check of [
-    { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
-    { label: 'probes', command: 'pnpm', args: ['verify:probes', ...(isSerial ? ['--workers', '1'] : []), ...(probePort === undefined ? [] : ['--port', String(probePort)])] },
-  ]) {
-    if (!await runGroup([check])) hasPassedBrowser = false;
+    // Bundle policy is a separate verdict, not a prerequisite for browser evidence.
+    // Every verdict is retained: a successful browser cannot erase a bundle failure.
+    const hasPassedBundle = await runGroup([{ label: 'bundle', command: 'pnpm', args: ['check:bundle'] }]);
+    // Hosted lanes have separate runners. Locally they share CPU and Chromium
+    // scheduling; overlapping them distorts frame assertions and lazy-route readiness.
+    let hasPassedBrowser = true;
+    for (const check of [
+      { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
+      { label: 'probes', command: 'pnpm', args: ['verify:probes', ...(isSerial ? ['--workers', '1'] : []), ...(probePort === undefined ? [] : ['--port', String(probePort)])] },
+    ]) {
+      if (!await runGroup([check])) hasPassedBrowser = false;
+    }
+    // The demo has its own server; keep it out of the CPU-sensitive browser group.
+    const hasPassedDemo = await runGroup([{ label: 'demo', command: 'pnpm', args: ['verify:demo'] }]);
+    return hasPassedBundle && hasPassedBrowser && hasPassedDemo;
+  } finally {
+    process.removeListener('SIGTERM', cancel);
+    process.removeListener('SIGINT', cancel);
   }
-  // The demo has its own server; keep it out of the CPU-sensitive browser group.
-  const hasPassedDemo = await runGroup([{ label: 'demo', command: 'pnpm', args: ['verify:demo'] }]);
-  return hasPassedBundle && hasPassedBrowser && hasPassedDemo;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
