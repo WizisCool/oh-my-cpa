@@ -116,17 +116,13 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
 
   // Registry, directories and flags.
   const registered = LANGUAGES.map((language) => language.id as string);
-  const entries = fs.readdirSync(LOCALES, { withFileTypes: true });
-  const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-  // The two deferred catalogs still live in one module each; a registered language may be either
-  // shape, so both are recognised here and only the directory shape carries per-area checks.
-  const singleFiles = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.ts')).map((entry) => entry.name.replace(/\.ts$/, ''));
+  const directories = fs.readdirSync(LOCALES, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
   for (const id of registered) {
-    if (!directories.includes(id) && !singleFiles.includes(id)) {
-      fail('registry', `language "${id}" is registered but web/src/i18n/locales/${id} is neither a directory nor a module`);
-    }
+    if (!directories.includes(id)) fail('registry', `language "${id}" is registered but web/src/i18n/locales/${id} is not a directory`);
   }
-  for (const id of [...directories, ...singleFiles]) {
+  for (const id of directories) {
     if (!registered.includes(id)) fail('registry', `web/src/i18n/locales/${id} is not registered in web/src/i18n/language.ts`);
   }
   const flags = fs.readFileSync(path.join(ROOT, 'web', 'src', 'components', 'common', 'LanguageFlag.tsx'), 'utf8');
@@ -150,7 +146,7 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
 
   // Every language, against the source.
   const catalogs = new Map<string, Messages>();
-  for (const lang of registered.filter((id) => directories.includes(id))) {
+  for (const lang of registered) {
     const files = domainFiles(lang);
     for (const file of sourceDomains) if (!files.includes(file)) fail('structure', `locales/${lang}/ has no ${file}`);
     for (const file of files) if (!sourceDomains.includes(file)) fail('structure', `locales/${lang}/${file} has no source file in locales/${SOURCE_LANG}/`);
@@ -168,15 +164,6 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
       }
     }
     const catalog = await loadModule(path.join(LOCALES, lang, 'index.ts'));
-    catalogs.set(lang, catalog);
-  }
-
-  // A catalog stored as one module is checked for completeness and formatting, which is what it can
-  // be checked for; the per-area layout is what the directory languages above provide.
-  for (const lang of registered.filter((id) => singleFiles.includes(id))) {
-    const singleModule = await import(pathToFileURL(path.join(LOCALES, `${lang}.ts`)).href) as Record<string, Messages>;
-    const catalog = Object.values(singleModule).find((value) => value && typeof value === 'object') as Messages | undefined;
-    if (!catalog) { fail('structure', `locales/${lang}.ts exports no catalog`); continue; }
     catalogs.set(lang, catalog);
   }
 
