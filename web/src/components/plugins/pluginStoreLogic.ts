@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import type {
   PluginItem,
   PluginStoreAuthRule,
@@ -109,8 +110,8 @@ export function storePluginOrigin(entry: StorePluginItem): StorePluginOrigin {
  * render a warning the install button then ignores.
  */
 export interface StoreInstallWarning {
-  title: string;
-  description: string;
+  title: MessageKey;
+  description: MessageKey;
 }
 
 export const STORE_INSTALL_WARNINGS: Record<StorePluginOrigin, StoreInstallWarning | undefined> = {

@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
 import type { QuotaWindow } from '../../types/quota';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../quota/quotaWindowSelection';
@@ -188,7 +189,7 @@ export function sortByQuotaColumn(records: OAuthWorkspaceRecord[], columnKey: st
 
 export interface CredentialStatus {
   tone: 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
-  labelKey: string;
+  labelKey: MessageKey;
   /** The reading is out of date or failed, and a fresh read is the operator's fix. */
   canRefreshFix: boolean;
   /** The provider rejected the sign-in; signing in again is the fix. */
@@ -204,7 +205,7 @@ export interface CredentialStatus {
  * last quota reading said, because that reading is not being acted on.
  */
 export function credentialStatusOf(record: OAuthWorkspaceRecord, isDisabled: boolean, isProblem: boolean): CredentialStatus {
-  const status = (tone: CredentialStatus['tone'], labelKey: string, extra: Partial<CredentialStatus> = {}): CredentialStatus => (
+  const status = (tone: CredentialStatus['tone'], labelKey: MessageKey, extra: Partial<CredentialStatus> = {}): CredentialStatus => (
     { tone, labelKey, canRefreshFix: false, needsReauth: false, ...extra }
   );
   if (record.file.runtime_only) return status('neutral', 'af.runtime_only_badge');

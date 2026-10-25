@@ -1,3 +1,4 @@
+import { prefixedKey } from '../../i18n/catalog';
 import React from 'react';
 
 import { Button, InputNumber, Modal, Table, Tooltip, Typography } from 'antd';
@@ -23,22 +24,6 @@ const { Text } = Typography;
 
 const BACKUPS_QUERY_KEY = ['management-config-backups'];
 
-/** Reasons the console names; anything newer than this build reads as a generic write. */
-const KNOWN_REASONS = new Set([
-  'config_changes',
-  'config_source',
-  'provider_keys',
-  'client_keys',
-  'oauth_aliases',
-  'oauth_excluded_models',
-  'plugin_settings',
-  'plugin_install',
-  'plugin_delete',
-  'credential_status',
-  'restore',
-  'manual',
-  'legacy_conversion',
-]);
 
 interface ConfigBackupsButtonProps {
   /**
@@ -129,7 +114,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
     }
   };
 
-  const describeReason = (reason: string) => t(KNOWN_REASONS.has(reason) ? `cfg.backups_reason_${reason}` : 'cfg.backups_reason_other');
+  const describeReason = (reason: string) => t(prefixedKey('cfg.backups_reason_', reason) ?? 'cfg.backups_reason_other');
 
   const restoreBlockedReason = (backup: ConfigBackup): string | undefined => {
     if (isDemo) return t('demo.blocked');

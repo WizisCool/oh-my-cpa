@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
@@ -60,7 +61,7 @@ interface EditorState {
 
 const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: '' };
 
-const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: string; hintKey?: string }[] = [
+const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: MessageKey; hintKey?: MessageKey }[] = [
   { key: 'all', tone: 'neutral', labelKey: 'keys.stat_all' },
   { key: 'active', tone: 'success', labelKey: 'keys.stat_active' },
   { key: 'idle', tone: 'neutral', labelKey: 'keys.stat_idle', hintKey: 'keys.stat_idle_hint' },

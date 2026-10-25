@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 /**
  * The console's typefaces: two roles, each a built-in typeface or a family from the
  * deployment's font library.
@@ -46,8 +47,8 @@ export type BuiltInFontId = 'sarasa-mono' | 'system-sans' | 'system-serif' | 'sy
 
 export interface BuiltInFont {
   id: BuiltInFontId;
-  nameKey: string;
-  descriptionKey: string;
+  nameKey: MessageKey;
+  descriptionKey: MessageKey;
   stack: string;
 }
 

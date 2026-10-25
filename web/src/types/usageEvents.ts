@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import type { TokenAccounting, TokenAccountingStatus } from './tokenAccounting';
 import type { RequestCostBreakdown } from './pricing';
 
@@ -350,7 +351,7 @@ export function formatUsageRegex(field: UsageRegexField, pattern: string): strin
  * what is certain is reported here - the length, and the two constructs RE2 has
  * no form of - and the server stays the authority on everything else.
  */
-export function usageRegexProblem(pattern: string): string | undefined {
+export function usageRegexProblem(pattern: string): MessageKey | undefined {
   if (pattern.length > USAGE_REGEX_MAX_LENGTH) return 'events.regex_too_long';
   if (/\(\?<?[=!]|\\[1-9]/.test(pattern)) return 'events.regex_unsupported';
   return undefined;

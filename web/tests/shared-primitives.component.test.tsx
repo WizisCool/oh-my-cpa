@@ -11,7 +11,7 @@ import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { Toolbar } from '../src/components/common/Toolbar';
-import { I18nProvider, useT } from '../src/i18n';
+import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -289,7 +289,9 @@ describe('Pager', () => {
 describe('the translator', () => {
   function UnknownIds() {
     const t = useT();
-    return <span>{t('toString')} · {t('no.such.id', { n: 1 })}</span>;
+    // A miss reaches the translator as plain text: the runtime answers any string with itself, and
+    // this is the one place a caller has to say so.
+    return <span>{t('toString' as MessageKey)} · {t('no.such.id' as MessageKey, { n: 1 })}</span>;
   }
 
   it('renders an id the catalog does not define as itself, including a name the prototype carries', () => {

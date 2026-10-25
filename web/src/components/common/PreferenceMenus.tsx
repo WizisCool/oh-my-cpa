@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { Dropdown, type MenuProps } from 'antd';
 import { DesktopOutlined, MoonOutlined, SunOutlined } from '../icons';
@@ -14,7 +15,7 @@ import type { ThemeModePreference } from '../../theme/themePreference';
  * visible as itself, or an operator who chose it would read the console as having picked a mode for
  * them. The desktop mark is what "the machine decides" looks like next to a sun and a moon.
  */
-const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
+const MODE_LABEL_KEYS: Record<ThemeModePreference, MessageKey> = {
   light: 'omc.theme_mode_light',
   dark: 'omc.theme_mode_dark',
   system: 'omc.theme_mode_system',

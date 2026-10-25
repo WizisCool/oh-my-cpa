@@ -1,3 +1,4 @@
+import { translateOr } from '../../i18n/catalog';
 import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
@@ -526,7 +527,8 @@ export function useOAuthWorkspaceActions(
     const plan = buildQuotaRefreshTargets(source);
     await refreshQuotaIndexes(plan.eligibleIndexes, plan.skipped.map((item) => ({
       name: item.name,
-      reason: t(`omc.quota_skip_${item.reason}`),
+      // A reason the console has no sentence for reads as the reason itself, not as an id.
+      reason: translateOr(t, `omc.quota_skip_${item.reason}`, item.reason),
     })));
   }, [refreshQuotaIndexes, t]);
 

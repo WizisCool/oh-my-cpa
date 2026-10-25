@@ -1,3 +1,4 @@
+import { translateOr } from '../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
 import { Button } from 'antd';
@@ -189,7 +190,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
   const text = (value?: string) => value || unknown;
   const limit = (value?: number) => value ? value.toLocaleString() : unknown;
-  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? t(`models.modality.${value}`) : value)).join(' · ') : unknown;
+  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? translateOr(t, `models.modality.${value}`, value) : value)).join(' · ') : unknown;
   const flag = (value?: boolean) => {
     if (value === undefined) return unknown;
     return value

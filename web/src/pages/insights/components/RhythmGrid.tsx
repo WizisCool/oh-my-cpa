@@ -1,3 +1,4 @@
+import { translateOr, type TFunc } from '../../../i18n/catalog';
 import React from 'react';
 import { Segmented } from 'antd';
 import { Panel } from '../../../components/common/Panel';
@@ -26,6 +27,11 @@ interface RhythmGridProps {
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
+
+/** A weekday's name in the reading language; a number the catalog does not name reads as itself. */
+function weekdayLabel(t: TFunc, weekday: number): string {
+  return translateOr(t, `insights.weekday.${weekday}`, String(weekday));
+}
 const LEGEND_STEPS = [0.08, 0.3, 0.55, 0.8, 1];
 const clock = (hour: number) => `${String(hour % 24).padStart(2, '0')}:00`;
 
@@ -75,7 +81,7 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
           ))}
           {WEEKDAYS.map((weekday) => (
             <React.Fragment key={weekday}>
-              <span className={styles['rhythm-day']}>{t(`insights.weekday.${weekday}`)}</span>
+              <span className={styles['rhythm-day']}>{weekdayLabel(t, weekday)}</span>
               {HOURS.map((hour) => {
                 const cell = cells.get(weekday * 24 + hour);
                 const value = cell ? valueOf(cell) : 0;
@@ -86,7 +92,7 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
                     className={styles['rhythm-cell']}
                     data-empty={value <= 0 || undefined}
                     style={{ '--heatmap-quiet-share': heatmapRampMix(value, max).fromShare } as React.CSSProperties}
-                    title={`${t(`insights.weekday.${weekday}`)} ${clock(hour)}–${clock(hour + 1)} · ${formatMetric(metric, value, style)}`}
+                    title={`${weekdayLabel(t, weekday)} ${clock(hour)}–${clock(hour + 1)} · ${formatMetric(metric, value, style)}`}
                   />
                 );
               })}

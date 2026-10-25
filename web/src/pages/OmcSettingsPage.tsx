@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
@@ -45,13 +46,13 @@ import {
 } from '../types/quotaAutoRefresh';
 
 
-const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
+const MODE_LABEL_KEYS: Record<ThemeModePreference, MessageKey> = {
   light: 'omc.theme_mode_light',
   dark: 'omc.theme_mode_dark',
   system: 'omc.theme_mode_system',
 };
 
-const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, string> = {
+const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, MessageKey> = {
   bg: 'omc.token_bg',
   surface: 'omc.token_surface',
   elevated: 'omc.token_elevated',
@@ -63,7 +64,7 @@ const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, string> = {
   accent: 'omc.token_accent',
 };
 
-const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
+const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
   text: 'omc.contrast_role_text',
   hint: 'omc.contrast_role_hint',
   quiet: 'omc.contrast_role_quiet',
@@ -111,7 +112,7 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
  * surface is the config panel's, with its different save semantics. The two pages coexist in the
  * sidebar under "Control".
  */
-const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, string> = {
+const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, MessageKey> = {
   on: 'omc.scroll_smoothing_on',
   system: 'omc.theme_mode_system',
   off: 'omc.scroll_smoothing_off',

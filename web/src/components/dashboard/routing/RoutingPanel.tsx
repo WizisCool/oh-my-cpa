@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
 import { Tooltip } from 'antd';
@@ -34,7 +35,7 @@ import { RoutingMap, type RoutingArrivals } from './RoutingMap';
 import { routeColor, type IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
 
-const STRATEGY_LABEL_KEYS: Record<string, string> = {
+const STRATEGY_LABEL_KEYS: Record<string, MessageKey> = {
   'round-robin': 'cfg.strategy_round_robin',
   'weighted-round-robin': 'cfg.strategy_wrr',
   'fill-first': 'cfg.strategy_fill_first',

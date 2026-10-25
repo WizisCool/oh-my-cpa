@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import clsx from 'clsx';
 import React from 'react';
 import { Button, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
@@ -56,7 +57,7 @@ function canonicalViewKey(view: UsageEventsView): string {
 interface FacetSpec {
   key: EventFilterKey;
   facet: keyof UsageFacets;
-  labelKey: string;
+  labelKey: MessageKey;
 }
 
 /**
@@ -90,7 +91,7 @@ const ALIAS_FACETS: FacetSpec[] = [
 ];
 
 /** What the reader calls each field a pattern can be matched against. */
-export const REGEX_FIELD_LABELS: Record<UsageRegexField, string> = {
+export const REGEX_FIELD_LABELS: Record<UsageRegexField, MessageKey> = {
   model: 'events.request_model',
   model_alias: 'events.call_model',
   response_model: 'events.served_model',
@@ -100,7 +101,7 @@ export const REGEX_FIELD_LABELS: Record<UsageRegexField, string> = {
   request_id: 'events.col_request_id',
 };
 
-const TEXT_FIELDS: Array<{ key: EventFilterKey; labelKey: string }> = [
+const TEXT_FIELDS: Array<{ key: EventFilterKey; labelKey: MessageKey }> = [
   { key: 'ua', labelKey: 'events.col_ua' },
   { key: 'endpoint', labelKey: 'events.endpoint' },
   { key: 'request_id', labelKey: 'events.col_request_id' },
@@ -223,7 +224,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     return options;
   };
 
-  const section = (titleKey: string, children: React.ReactNode) => (
+  const section = (titleKey: MessageKey, children: React.ReactNode) => (
     <section className={styles['group']}>
       <SectionHeading as="h3" level="label" className={clsx('req-filter-group-title', styles['group-title'])} title={t(titleKey)} />
       <div className={styles['group-body']}>{children}</div>
@@ -238,7 +239,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
    */
   // Keyed by the control's id: the rows are rendered from the facet and field lists, and the id is
   // the one value already unique across them.
-  const row = (labelKey: string, labelFor: string, control: React.ReactNode, errorKeys?: string[]) => (
+  const row = (labelKey: MessageKey, labelFor: string, control: React.ReactNode, errorKeys?: string[]) => (
     <div className={clsx('req-filter-row', styles['row'])} key={labelFor}>
       <label className={styles['label']} htmlFor={labelFor}>
         {t(labelKey)}
@@ -284,7 +285,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       />,
     );
 
-  const textRow = (field: { key: EventFilterKey; labelKey: string }) =>
+  const textRow = (field: { key: EventFilterKey; labelKey: MessageKey }) =>
     row(
       field.labelKey,
       `req-text-${field.key}`,
@@ -339,7 +340,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
     ['regex'],
   );
 
-  const rangeRow = (key: 'latency' | 'tokens' | 'cost', labelKey: string, unit: string) => {
+  const rangeRow = (key: 'latency' | 'tokens' | 'cost', labelKey: MessageKey, unit: string) => {
     // Cost is a nano-dollar decimal, which no number input can represent without
     // rounding, so that one field is a text input constrained by its own
     // validator. Latency and tokens are integral by definition.

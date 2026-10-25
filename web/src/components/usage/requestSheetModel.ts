@@ -1,3 +1,4 @@
+import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { formatCacheRate } from '../../theme/cacheScale';
 import { displayEffortName, effortStep } from '../../theme/effortScale';
 import { modelMarkIconId } from '../../types/modelSquare';
@@ -124,7 +125,7 @@ const ROW_PAD_BLOCK = 28;
  */
 export function resolveSheetColumns(
   widths: RequestColumnWidths,
-  label: (labelKey: string) => string,
+  label: (labelKey: MessageKey) => string,
 ): { columns: SheetColumn[]; width: number } {
   const fixed = REQUEST_COLUMNS.map((column) => {
     const manual = widths[column.id];
@@ -162,7 +163,7 @@ export interface RequestSheetInput {
   masks: ReadonlySet<RequestMaskId>;
   colWidths: RequestColumnWidths;
   caption: string;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: TFunc;
   tokenStyle: TokenNumberStyle;
   tpsMode: TpsCalculationMode;
   modelView?: 'call' | 'model';

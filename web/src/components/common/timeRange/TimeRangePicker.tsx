@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../../i18n/catalog';
 import React from 'react';
 import { Button, Checkbox, Drawer, Popover } from 'antd';
 import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
@@ -45,7 +46,7 @@ export interface TimeRangePickerProps {
 
 type PanelMode = 'quick' | 'custom';
 
-const ERROR_KEYS: Record<string, string | undefined> = {
+const ERROR_KEYS: Record<string, MessageKey | undefined> = {
   reversed: 'time_range.reversed',
   future: 'time_range.in_future',
 };
