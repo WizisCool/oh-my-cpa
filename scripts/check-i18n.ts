@@ -209,7 +209,12 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
   // Every id is referenced, by its literal or by a computed prefix such as `insights.metric.${...}`.
   const code = sourceFiles(path.join(ROOT, 'web', 'src')).map((file) => withoutComments(fs.readFileSync(file, 'utf8'))).join('\n');
   const literals = new Set(code.match(/['"`][A-Za-z0-9_.-]+['"`]/g)?.map((literal) => literal.slice(1, -1)) ?? []);
-  const prefixes = [...code.matchAll(/`([a-z_]+\.[A-Za-z0-9_.-]*)\$\{/g)].map((match) => match[1]);
+  const prefixes = [
+    ...[...code.matchAll(/`([a-z_]+\.[A-Za-z0-9_.-]*)\$\{/g)].map((match) => match[1]),
+    // `prefixedKey('audit.cat.', value)`: the prefix is spelled out on its own, and the runtime
+    // suffix is what `hasMessage` answers for.
+    ...[...code.matchAll(/prefixedKey\('([A-Za-z0-9_.-]+)'/g)].map((match) => match[1]),
+  ];
   for (const key of Object.keys(source)) {
     if (literals.has(key)) continue;
     if (prefixes.some((prefix) => key.startsWith(prefix))) continue;

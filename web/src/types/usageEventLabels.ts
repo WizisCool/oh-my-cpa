@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -24,7 +25,7 @@ export function requestGroupName(event: UsageEvent): string | undefined {
 
 /** Result-capsule label key for one record: the stored failed flag is the only
  *  success signal, so the capsule can never disagree with the filter counts. */
-export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): string {
+export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): MessageKey {
   return event.failed ? 'events.filter_failed' : 'events.filter_success';
 }
 

@@ -1,4 +1,4 @@
-import type source from './locales/zh';
+import source from './locales/zh';
 
 /**
  * A message id. The Simplified Chinese catalog defines the set: it is the product's semantic
@@ -20,12 +20,39 @@ export type Translation<Source> = { readonly [Key in keyof Source]: string };
 export type MessageVars = Readonly<Record<string, string | number>>;
 
 /**
- * A translator.
- *
- * The parameter is a plain string because several dozen call sites compute it - `audit.cat.${...}`,
- * `cfg.backups_reason_${...}`, a permission class from the server - and a lookup that names no
- * message renders the id it was given, which keeps a value the console has not caught up with
- * readable instead of blank. Narrowing this to `MessageKey` is a separate step, taken once those
- * call sites look their copy up through a helper that can prove the id exists.
+ * A translator. The key is a `MessageKey`, so a typo or a sentence that was renamed is a compile
+ * error at the call site rather than a rendered id. Copy whose id is assembled at runtime goes
+ * through a helper that proves the id (see `web/src/i18n/keys.ts`).
  */
-export type TFunc = (key: string, vars?: MessageVars) => string;
+export type TFunc = (key: MessageKey, vars?: MessageVars) => string;
+
+/**
+ * Whether a computed id names a message. For copy chosen from a server value - an audit action, a
+ * result - so an identifier the console has no sentence for falls back to a deliberate rendering
+ * instead of printing the lookup key, and the caller holds a `MessageKey` afterwards.
+ */
+export function hasMessage(key: string): key is MessageKey {
+  return Object.prototype.hasOwnProperty.call(source, key);
+}
+
+/** The message a computed id names, or `undefined` when the console has no sentence for it. */
+export function messageKey(key: string): MessageKey | undefined {
+  return hasMessage(key) ? key : undefined;
+}
+
+/**
+ * The message an id assembled from a prefix and a runtime value names, or `undefined`. The prefix
+ * is spelled out at the call site, so a family that was renamed is a compile-time question even
+ * when its suffix comes from the server.
+ */
+export function prefixedKey(prefix: `${string}.` | `${string}_` | `${string}.${string}.`, suffix: string): MessageKey | undefined {
+  return messageKey(`${prefix}${suffix}`);
+}
+
+/**
+ * Copy for an id computed from a server value, or `fallback` when the console has no sentence
+ * for it: a value added on the server before the console caught up still reads as itself.
+ */
+export function translateOr(t: TFunc, key: string, fallback: string, vars?: MessageVars): string {
+  return hasMessage(key) ? t(key, vars) : fallback;
+}

@@ -1,6 +1,7 @@
+import type { MessageKey } from '../../i18n/catalog';
 import type { ReleaseProduct, SystemProductVersion, SystemUpdaterResponse } from '../../types/system';
 
-export function deriveVersionPresentation(version: SystemProductVersion, isChecking = false) {
+export function deriveVersionPresentation(version: SystemProductVersion, isChecking = false): VersionPresentation {
   const hasChangelog = version.merge_count > 0;
   const shouldShowNotesNotice = hasChangelog && !version.notes_available && !version.check_error && !isChecking && !version.checking;
   const common = { hasChangelog, shouldShowNotesNotice };
@@ -18,13 +19,13 @@ export function deriveVersionPresentation(version: SystemProductVersion, isCheck
     case 'update_ahead':
       return { ...common, statusKey: 'sys.update_ahead', tone: 'neutral' as const, detailKey: '' };
     default: {
-      const reasons = {
+      const reasons: Record<string, MessageKey> = {
         running_version_not_comparable: 'sys.reason_running_not_comparable',
         newest_release_not_comparable: 'sys.reason_latest_not_comparable',
         no_releases_published: 'sys.reason_no_releases',
         not_checked_yet: 'sys.reason_not_checked',
       };
-      const reasonKey = version.reason ? reasons[version.reason] : '';
+      const reasonKey = (version.reason ? reasons[version.reason] : undefined) ?? '';
       const isComparisonDetail = version.reason === 'running_version_not_comparable' || version.reason === 'newest_release_not_comparable';
       return {
         ...common,
@@ -56,17 +57,27 @@ export type UpdateOffer =
   /** `isBusy` is another product's update in flight: the action exists but must wait. */
   | { kind: 'available'; isBusy: boolean }
   /** `stage` is the step reached, for the step bar; `stageKey` is that step in words. */
-  | { kind: 'running'; stage: UpdateStage; stageKey: string }
-  | { kind: 'blocked'; reasonKey: string; image: string };
+  | { kind: 'running'; stage: UpdateStage; stageKey: MessageKey }
+  | { kind: 'blocked'; reasonKey: MessageKey; image: string };
 
-const UPDATE_STAGE_KEYS: Record<UpdateStage, string> = {
+/** The version line: what it says, how it reads, and whether it needs a second line. */
+export interface VersionPresentation {
+  hasChangelog: boolean;
+  shouldShowNotesNotice: boolean;
+  statusKey: MessageKey;
+  tone: 'neutral' | 'success' | 'warn' | 'accent';
+  /** The second line, or an empty string when the first line says it all. */
+  detailKey: MessageKey | '';
+}
+
+const UPDATE_STAGE_KEYS: Record<UpdateStage, MessageKey> = {
   pulling: 'sys.update_stage.pulling',
   stopping: 'sys.update_stage.stopping',
   starting: 'sys.update_stage.starting',
   verifying: 'sys.update_stage.verifying',
 };
 
-const UPDATE_BLOCK_KEYS: Record<string, string> = {
+const UPDATE_BLOCK_KEYS: Record<string, MessageKey> = {
   pinned: 'sys.update_blocked.pinned',
   not_a_local_container: 'sys.update_blocked.not_a_local_container',
   signature_unavailable: 'sys.update_blocked.signature_unavailable',

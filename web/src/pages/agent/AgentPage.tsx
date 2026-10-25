@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { Button, Dropdown } from 'antd';
 import { LabelTip } from '../../components/common/LabelTip';
@@ -70,7 +71,7 @@ import { AppDrawer } from '../../components/common/AppDrawer';
  * question this deployment answers without a decision to approve: readings from read capabilities,
  * or a picture the model draws for itself. It teaches the shape of a request and of an answer.
  */
-const EXAMPLES = [
+const EXAMPLES: readonly { key: MessageKey; icon: React.ReactNode }[] = [
   { key: 'agent.example.usage', icon: <BarChartOutlined aria-hidden="true" /> },
   { key: 'agent.example.compare', icon: <PlayCircleOutlined aria-hidden="true" /> },
   { key: 'agent.example.quota', icon: <DashboardOutlined aria-hidden="true" /> },
@@ -87,13 +88,13 @@ const DEMO_REPLAY_EXAMPLE = 'agent.example.daily';
  */
 type DrawerView = 'directory' | 'connect';
 
-const DRAWER_TITLES: Record<DrawerView, string> = {
+const DRAWER_TITLES: Record<DrawerView, MessageKey> = {
   directory: 'agent.directory',
   connect: 'agent.connect',
 };
 
 /** How each presentation a command can ask for is drawn on its chip. */
-const PRESENTATIONS: Record<Presentation, { label: string; icon: React.ReactNode }> = {
+const PRESENTATIONS: Record<Presentation, { label: MessageKey; icon: React.ReactNode }> = {
   text: { label: 'agent.present.text', icon: <FileTextOutlined aria-hidden="true" /> },
 };
 

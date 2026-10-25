@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import clsx from 'clsx';
 import { Button, Segmented, Tooltip } from 'antd';
@@ -27,7 +28,7 @@ export interface DashboardBoardProps {
   onChange: (next: DashboardLayout) => void;
 }
 
-const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, string> = {
+const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, MessageKey> = {
   1: 'dash.layout.span_1',
   2: 'dash.layout.span_2',
   3: 'dash.layout.span_3',

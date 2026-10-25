@@ -1,3 +1,4 @@
+import { translateOr } from '../../../i18n/catalog';
 import React from 'react';
 import { Button, Input } from 'antd';
 import { ParagraphPlaceholder } from '../../../components/common/ContentPlaceholder';
@@ -100,7 +101,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
         <>
           <header className={styles['approval-head']}>
             <span className={styles['approval-title']}>{t('agent.operation.title')}</span>
-            <Tag tone={isDestructive ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
+            <Tag tone={isDestructive ? 'danger' : 'warn'}>{translateOr(t, `agent.permission.${permission}`, permission)}</Tag>
           </header>
           <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
         </>

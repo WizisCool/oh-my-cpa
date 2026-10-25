@@ -1,3 +1,4 @@
+import { prefixedKey } from '../../i18n/catalog';
 import { ApiError, describeError } from '../../api/client';
 import type { TFunc } from '../../i18n';
 
@@ -9,7 +10,8 @@ import type { TFunc } from '../../i18n';
 export function pricingErrorText(t: TFunc, error: unknown): string {
   if (error instanceof ApiError && error.data && typeof error.data === 'object') {
     const code = (error.data as { code?: unknown }).code;
-    if (typeof code === 'string' && PRICING_ERROR_CODES.has(code)) return t(`pricing.error.${code}`);
+    const key = typeof code === 'string' && PRICING_ERROR_CODES.has(code) ? prefixedKey('pricing.error.', code) : undefined;
+    if (key) return t(key);
   }
   return describeError(error);
 }

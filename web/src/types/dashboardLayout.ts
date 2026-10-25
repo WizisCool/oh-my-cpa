@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 /**
  * The dashboard as a set of widgets, and the operator's arrangement of them.
  *
@@ -36,7 +37,7 @@ export type DashboardWidgetId =
 export interface DashboardWidgetSpec {
   id: DashboardWidgetId;
   /** The translation key the editor names the widget by. */
-  labelKey: string;
+  labelKey: MessageKey;
   defaultSpan: DashboardWidgetSpan;
   /**
    * The widths the widget reads at, narrowest first. A map that needs its three columns, or a list

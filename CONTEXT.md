@@ -306,8 +306,13 @@ Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
 dictionary lives in `web/src/i18n/locales/zh/` as one file per product area
 (`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`; the files are grouped by area, not by
 prefix, so `pg.*` sits in `agent.ts`), and `en/`, `zh-Hant/` and `ms/` mirror it file for file.
-All four are accessed through `t(key, vars)`; language
-persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every
+All four are accessed through `t(key, vars)`, whose key is a `MessageKey`: a
+sentence that does not exist is a compile error. Copy chosen from a server value
+goes through `prefixedKey`/`messageKey`, which answer a `MessageKey` or nothing,
+and each caller decides what an identifier the console has no sentence for shows
+instead — itself where it still means something to the operator, a generic
+sentence where it does not. Language persists in `localStorage('omc-lang')` and
+the antd locale follows. Rule: every
 registered language fully localizes — a localized UI must not show untranslated
 captions from another language beside its own copy (proper nouns and industry
 terms excepted).

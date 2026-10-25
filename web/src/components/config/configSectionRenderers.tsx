@@ -102,7 +102,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
           className="config-mono-input"
           allowClear
           disabled={disabled}
-          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
+          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
           value={String(val ?? '')}
           onChange={(e) => updateFieldInDoc(field, e.target.value)}
         />
@@ -149,7 +149,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
           open={false}
           suffixIcon={null}
           disabled={disabled}
-          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
+          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
           value={items}
           onChange={(next: string[]) => updateFieldInDoc(field, next.map((item) => item.trim()).filter(Boolean))}
         />
@@ -223,7 +223,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
           rows={3}
           className="config-mono-textarea"
           disabled={disabled}
-          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
+          placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
           value={String(val ?? '')}
           onChange={(e) => updateFieldInDoc(field, e.target.value)}
         />

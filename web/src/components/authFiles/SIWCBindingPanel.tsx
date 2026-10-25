@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -14,14 +15,14 @@ import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
 
-const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, string> = {
+const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, MessageKey> = {
   start: 'siwc.start_failed', callback: 'siwc.callback_failed', incomplete: 'siwc.callback_incomplete', cancel: 'siwc.cancel_failed',
   read: 'siwc.read_failed', expired: 'siwc.expired', failed: 'siwc.failed', conflict: 'siwc.conflict',
 };
 const PHASE_TONES: Record<SIWCSession['phase'], StatusTone> = {
   starting: 'accent', waiting: 'accent', verifying: 'accent', success: 'success', error: 'warn', cancelled: 'neutral',
 };
-const PHASE_KEYS: Record<SIWCSession['phase'], string> = {
+const PHASE_KEYS: Record<SIWCSession['phase'], MessageKey> = {
   starting: 'siwc.starting', waiting: 'siwc.waiting', verifying: 'siwc.verifying',
   success: 'siwc.success', error: 'siwc.failed', cancelled: 'siwc.cancelled',
 };

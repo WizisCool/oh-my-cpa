@@ -21,6 +21,7 @@
  * hand-tuned values.
  */
 
+import type { MessageKey } from '../i18n/catalog';
 import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
 
 // Conversation objects use foreground transparency rather than authored colours, so every
@@ -424,8 +425,8 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
 export interface BuiltInPalette {
   id: BuiltInPaletteId;
   mode: ThemeMode;
-  nameKey: string;
-  descriptionKey: string;
+  nameKey: MessageKey;
+  descriptionKey: MessageKey;
   core: ThemeCore;
 }
 

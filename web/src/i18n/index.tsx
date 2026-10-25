@@ -1,13 +1,13 @@
 import React from 'react';
-import type { Catalog, MessageKey, MessageVars, TFunc } from './catalog';
+import type { Catalog, TFunc } from './catalog';
 import { formatMessage } from './format';
 import { DEFAULT_LANG, isLang, languageLocale, type Lang } from './language';
 import { ANTD_LOCALES, CATALOGS } from './resources';
-import source from './locales/zh';
 
 export { LANGUAGES, languageLocale, isChineseLanguage } from './language';
 export type { Lang } from './language';
 export type { MessageKey, MessageVars, TFunc } from './catalog';
+export { hasMessage, messageKey, translateOr, prefixedKey } from './catalog';
 
 const loadedCatalogs = new Map<Lang, Catalog>();
 const catalogPromises = new Map<Lang, Promise<Catalog>>();
@@ -40,28 +40,6 @@ function loadCatalog(lang: Lang): Promise<Catalog> {
   );
   catalogPromises.set(lang, pending);
   return pending;
-}
-
-/**
- * Whether a computed id names a message. For copy chosen from a server value - an audit action,
- * a result - so an identifier the console has no sentence for falls back to a deliberate
- * rendering instead of printing the lookup key, and the caller holds a `MessageKey` afterwards.
- */
-export function hasMessage(key: string): key is MessageKey {
-  return Object.prototype.hasOwnProperty.call(source, key);
-}
-
-/** The message a computed id names, or `undefined` when the console has no sentence for it. */
-export function messageKey(key: string): MessageKey | undefined {
-  return hasMessage(key) ? key : undefined;
-}
-
-/**
- * Copy for an id computed from a server value, or `fallback` when the console has no sentence
- * for it: a value added on the server before the console caught up still reads as itself.
- */
-export function translateOr(t: TFunc, key: string, fallback: string, vars?: MessageVars): string {
-  return hasMessage(key) ? t(key, vars) : fallback;
 }
 
 /**

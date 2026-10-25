@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -51,7 +52,7 @@ const CLOCK_TICK_MS = 30_000;
 
 export type CredentialQuotaPanelState = 'loading' | 'unknown' | 'empty' | 'ready';
 
-const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, string> = {
+const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, MessageKey> = {
   five_hour: 'dash.quota.window_five_hour',
   daily: 'dash.quota.window_daily',
   weekly: 'dash.quota.window_weekly',
@@ -59,7 +60,7 @@ const WINDOW_LABEL_KEYS: Record<QuotaWindowPeriod, string> = {
 };
 
 /** The states whose row says what is wrong instead of drawing the windows it cannot use. */
-const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: string; Icon: React.ComponentType<{ className?: string }> }>> = {
+const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: MessageKey; Icon: React.ComponentType<{ className?: string }> }>> = {
   reauth: { labelKey: 'dash.quota.state_reauth', Icon: KeyOutlined },
   cooldown: { labelKey: 'dash.quota.state_cooldown', Icon: PauseCircleOutlined },
   problem: { labelKey: 'dash.quota.state_problem', Icon: CloseCircleOutlined },

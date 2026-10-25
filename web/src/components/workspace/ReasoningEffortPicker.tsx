@@ -1,3 +1,4 @@
+import { prefixedKey } from '../../i18n/catalog';
 import { useI18n } from '../../i18n';
 import { ComposerPicker, ComposerPickerList } from './ComposerPicker';
 import styles from './Workspace.module.css';
@@ -16,9 +17,19 @@ export interface ReasoningEffortPickerProps {
 export function ReasoningEffortPicker({ value, onChange, isDisabled = false }: ReasoningEffortPickerProps) {
   const { t } = useI18n();
   const levels = value && !REASONING_EFFORTS.includes(value) ? [...REASONING_EFFORTS, value] : REASONING_EFFORTS;
-  const labelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.effort.label.${level}`) : level;
-  const parameterLabelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.effort.parameter.${level}`) : level;
-  const accessibleLabelOf = (level: string) => REASONING_EFFORTS.includes(level) ? t(`conversation.reasoning_effort.${level}`) : level;
+  // A level a model reports but the console has no sentence for reads as the level itself.
+  const labelOf = (level: string) => {
+    const key = REASONING_EFFORTS.includes(level) ? prefixedKey('conversation.effort.label.', level) : undefined;
+    return key ? t(key) : level;
+  };
+  const parameterLabelOf = (level: string) => {
+    const key = REASONING_EFFORTS.includes(level) ? prefixedKey('conversation.effort.parameter.', level) : undefined;
+    return key ? t(key) : level;
+  };
+  const accessibleLabelOf = (level: string) => {
+    const key = REASONING_EFFORTS.includes(level) ? prefixedKey('conversation.reasoning_effort.', level) : undefined;
+    return key ? t(key) : level;
+  };
   return (
     <ComposerPicker
       label={t('conversation.reasoning_effort')}

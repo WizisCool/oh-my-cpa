@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Button, Input, Segmented, Spin } from 'antd';
 import { LoadingRegion, Placeholder } from './common/Placeholder';
@@ -655,7 +656,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
   );
 };
 
-const CUSTOM_ICON_ERROR_KEYS: Record<string, string> = {
+const CUSTOM_ICON_ERROR_KEYS: Record<string, MessageKey> = {
   custom_icon_too_large: 'icons.error_size',
   custom_icon_invalid_image: 'icons.error_image',
   custom_icon_invalid_name: 'icons.error_name',

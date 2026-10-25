@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import type React from 'react';
 import type { TFunc } from '../i18n';
 
@@ -17,20 +18,21 @@ import type { TFunc } from '../i18n';
  * ordering is a choice inside a group, never a way to reclassify an entry by dragging it.
  */
 
-/** One destination in the rail. */
-export interface NavEntry {
-  /** The route it opens, and the stable key the hidden set names it by. */
-  key: string;
-  /** A translation key, or for a plugin's own page the label the plugin registered. */
-  labelKey: string;
-  isLiteralLabel?: boolean;
-  icon: React.ReactNode;
-}
+/**
+ * One destination in the rail.
+ *
+ * A plugin's own page names itself with the label it registered, which is not copy this console
+ * owns; `isLiteralLabel` is what tells the two apart, so `labelKey` is a translation id everywhere
+ * the compiler can prove it.
+ */
+export type NavEntry =
+  | { key: string; labelKey: MessageKey; isLiteralLabel?: false; icon: React.ReactNode }
+  | { key: string; labelKey: string; isLiteralLabel: true; icon: React.ReactNode };
 
 /** A run of destinations under one heading. */
 export interface NavGroup {
   key: string;
-  labelKey: string;
+  labelKey: MessageKey;
   items: NavEntry[];
 }
 

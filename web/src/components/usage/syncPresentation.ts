@@ -12,12 +12,13 @@
  * languages stay localized. These functions choose *which* message the operator
  * sees and with what numbers; they never choose the sentence.
  */
+import type { MessageKey } from '../../i18n/catalog';
 import type { UsageIngestRefresh } from '../../types/usageEvents';
 
 export interface SyncMessage {
   /** Matches the antd message severity the page shows. */
   tone: 'info' | 'success' | 'warning';
-  key: string;
+  key: MessageKey;
   vars?: Record<string, string | number>;
 }
 

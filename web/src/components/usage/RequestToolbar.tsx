@@ -1,4 +1,5 @@
 
+import type { MessageKey } from '../../i18n/catalog';
 import { Button, Segmented, Select } from 'antd';
 import { FilterOutlined } from '../icons';
 
@@ -87,7 +88,7 @@ export function RequestToolbar({
    */
   const facetMulti = (
     key: EventFilterKey,
-    labelKey: string,
+    labelKey: MessageKey,
     values: UsageFacets[keyof UsageFacets] | undefined,
   ) => {
     const selected = committedParams[key] ?? [];

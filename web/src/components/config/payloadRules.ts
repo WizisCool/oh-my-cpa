@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import { isMap, type Document } from 'yaml';
 
 export type PayloadProtocol = '' | 'openai' | 'gemini' | 'claude' | 'codex' | 'antigravity';
@@ -74,7 +75,7 @@ export interface PayloadValidationIssue {
   ruleId: string;
   targetId: string;
   field: 'model' | 'path' | 'value' | 'duplicate';
-  messageKey: string;
+  messageKey: MessageKey;
 }
 
 let nextDynamicId = 1;

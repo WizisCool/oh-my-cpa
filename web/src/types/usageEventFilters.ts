@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/catalog';
 import type { UsageCostFilter, UsageResultFilter, UsageServedFilter } from './usageEvents';
 import {
   isUsageServedState,
@@ -24,7 +25,7 @@ export const RANGE_FIELDS = [
   { key: 'latency', labelKey: 'events.col_latency', unitKey: 'events.unit_ms' },
   { key: 'tokens', labelKey: 'events.col_tokens', unitKey: 'events.unit_tokens' },
   { key: 'cost', labelKey: 'events.col_cost', unitKey: 'events.unit_usd' },
-] as const;
+] as const satisfies readonly { key: string; labelKey: MessageKey; unitKey: MessageKey }[];
 
 export type RangeFieldKey = (typeof RANGE_FIELDS)[number]['key'];
 
@@ -165,8 +166,8 @@ export function draftToView(draft: UsageEventsFilterDraft): UsageEventsView {
  * transposed the numbers or meant a different field, and guessing which makes
  * the panel look correct while showing a result set nobody asked for.
  */
-export function validateFilterDraft(draft: UsageEventsFilterDraft): Record<string, string> {
-  const errors: Record<string, string> = {};
+export function validateFilterDraft(draft: UsageEventsFilterDraft): Record<string, MessageKey> {
+  const errors: Record<string, MessageKey> = {};
   for (const field of RANGE_FIELDS) {
     const bounds = draft.ranges[field.key];
     if (!bounds) continue;

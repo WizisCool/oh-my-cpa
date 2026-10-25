@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Tooltip } from 'antd';
@@ -38,7 +39,7 @@ const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
  * week of labels is what makes the rows readable without counting them - which is the whole
  * reason the grid has rows.
  */
-const WEEKDAY_KEYS = [
+const WEEKDAY_KEYS: readonly MessageKey[] = [
   'dash.heatmap.dow.mon',
   'dash.heatmap.dow.tue',
   'dash.heatmap.dow.wed',
