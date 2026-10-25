@@ -5,7 +5,7 @@ import { ApprovalCard } from '../interrupts/ApprovalCard';
 import type { CapabilityReceipt } from '../state';
 import { useAgentView } from './AgentViewContext';
 import { CapabilityCall } from './CapabilityCall';
-import { DisplayCall } from './DisplayCall';
+import { OPENUI_TOOLKIT } from './openui';
 
 /**
  * The Agent's tool views, registered with assistant-ui as one toolkit keyed by tool name.
@@ -15,9 +15,10 @@ import { DisplayCall } from './DisplayCall';
  * Adding a view for a capability is one entry here; a capability without one is drawn by
  * `ToolFallback`, the generic call row, so a server-side addition is never invisible.
  *
- * Every entry is a `backend` tool with a renderer and nothing else: the server owns the catalogue
- * and executes every call (ADR 0041), so the toolkit contributes views, never declarations the
- * model would act on.
+ * The server owns the catalogue and executes every call (ADR 0041), so the toolkit contributes
+ * views, never declarations the model would act on. The OpenUI tools are the official integration's
+ * own renderers (ADR 0107); the ExternalStore runtime never executes them in the browser, so the
+ * only thing they send back is a submitted `prompt_openui` form, through `onAddToolResult`.
  */
 
 /** The call's trace, from the page's state when it has one, otherwise read off the part. */
@@ -50,15 +51,7 @@ export function ToolFallback(part: ToolCallMessagePartProps) {
   );
 }
 
-function DisplayToolView(part: ToolCallMessagePartProps) {
-  return <DisplayCall trace={useTrace(part)} />;
-}
-
-const AGENT_TOOLKIT: Toolkit = {
-  render_view: { type: 'backend', render: DisplayToolView },
-  render_ui: { type: 'backend', render: DisplayToolView },
-  render_canvas: { type: 'backend', render: DisplayToolView },
-};
+const AGENT_TOOLKIT: Toolkit = OPENUI_TOOLKIT;
 
 /** Passed to the runtime provider, which installs the toolkit's views for the thread below it. */
 export const AGENT_AUI_CONFIG = AuiConfig({ tools: Tools({ toolkit: AGENT_TOOLKIT }) });
