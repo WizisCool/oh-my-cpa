@@ -68,7 +68,7 @@ and [`package.json`](package.json).
 ## Development Guidelines
 
 ### 1. Localization
-User-facing strings must never be hardcoded in backend responses or React components. New copy arrives in all four languages at once: add the id to `web/src/i18n/locales/zh/<area>.ts` and the same id to the `en`, `zh-Hant` and `ms` files of that name, then run `pnpm check-i18n`. Translators do not need to touch code: the catalogs are the whole surface.
+User-facing strings must never be hardcoded in backend responses or React components. New copy arrives in all four languages at once: add the id to `web/src/i18n/locales/zh/<area>.ts`, then to `web/src/i18n/locales/en/<area>.ts`, and to `web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts`, which hold those two languages as one module each, then run `pnpm check-i18n`. Translators do not need to touch code: the catalogs are the whole surface.
 
 ### 2. Styling & Theme Tokens
 - Never hardcode color hex values in components. Read the resolved palette from `web/src/theme/palette.ts` or use the CSS variables from `docs/design.md`; the eighteen derived tokens are computed, so reach for the relationship rather than re-deriving one.
