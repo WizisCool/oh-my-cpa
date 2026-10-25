@@ -246,7 +246,9 @@ async function main() {
           await page.getByTestId('agent-demo-example').click();
           const turn = page.getByTestId('agent-turn');
           await turn.waitFor({ state: 'visible', timeout: REPLAY_TIMEOUT_MS });
-          await turn.getByTestId('agent-view').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
+          // The recorded answer is an OpenUI program: the built bundle must draw it with the
+          // official renderer and the replay's lazy chunk, not only restore the text around it.
+          await turn.getByTestId('agent-openui').waitFor({ state: 'visible', timeout: NAVIGATION_TIMEOUT_MS });
           if (await page.getByTestId('agent-rejected').count() > 0) throw new Error('the demonstration refused its own example question');
         }
         if (route.path === '/playground') {
