@@ -38,6 +38,8 @@ const FAILURE_KEYS: Record<string, string> = {
   invalid_answer: 'agent.error.answer',
   capability_forbidden: 'agent.error.forbidden',
   capability_unavailable: 'agent.error.unavailable',
+  openui_change_needs_action: 'agent.error.openui_action',
+  openui_change_needs_review: 'agent.error.openui_review',
   invalid_parameters: 'agent.error.parameters',
   invalid_timezone: 'omc.timezone_invalid',
   invalid_tool_arguments: 'agent.error.arguments',
@@ -144,12 +146,16 @@ export function formatDuration(milliseconds: number): string {
   return `${minutes}m ${Math.round(seconds - minutes * 60)}s`;
 }
 
-/** The capability the agent asks the operator through; registered by the server's agent runtime. */
-export const ASK_QUESTION = 'ask_question';
+/**
+ * The two tools a turn waits on an answer for: a form the model composed, and the console's own
+ * question panel. Both read as a question, never as a decision to allow or deny.
+ */
+const PROMPT_OPENUI = 'prompt_openui';
+const ASK_QUESTION = 'ask_question';
 
 /**
  * The label a call row states: running, done, needs you, uncertain, failed. A call waiting on the
- * agent's question says so rather than "awaiting confirmation", which would send the operator
+ * agent's form says so rather than "awaiting confirmation", which would send the operator
  * looking for an approval that is not there.
  */
 export function callStatusKey(trace: { name: string; result: { status: string } }): string {
@@ -157,7 +163,7 @@ export function callStatusKey(trace: { name: string; result: { status: string } 
     case 'running':
       return 'agent.call.running';
     case 'pending':
-      return trace.name === ASK_QUESTION ? 'agent.status.question' : 'agent.call.needs_you';
+      return trace.name === PROMPT_OPENUI || trace.name === ASK_QUESTION ? 'agent.status.question' : 'agent.call.needs_you';
     case 'success':
       return 'agent.call.done';
     default:

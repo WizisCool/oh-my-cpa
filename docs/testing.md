@@ -26,6 +26,40 @@ Discovery is automatic everywhere except the probe catalog: a probe is an entry 
 it; without one, a change to the page runs every scenario. Shared dependency, build
 configuration and public-asset changes also select the whole catalog.
 
+## OpenUI generation and streaming
+
+`pnpm check:openui-prompt` compares the embedded Agent instructions with the official
+library's generated prompt and OMC's capability catalogue. It runs in the repository
+static lane and in affected checks for prompt sources, generated files and dependency
+changes. After changing those inputs, run `pnpm openui:prompt` and review the generated
+diff. Air watches `internal/agent/openui/openui.json` because the backend embeds it at
+build time; restart `pnpm dev` after changing Air's watcher configuration.
+
+The `agent-stream` probe holds the OpenUI tool's argument stream open and checks that
+content appears before the argument JSON is complete, then fills the same interface
+with a table and chart. This verifies browser streaming, not model generation quality.
+A real-inference check must also establish that the model receives the generated
+instructions and emits a renderable program progressively.
+
+## Asking the operator
+
+Two probes cover the two ways a turn can wait for the operator. `agent-ask` drives
+`ask_question`: the panel takes the composer's place, a digit key picks a single choice and moves
+on, every question has its own tab plus a review tab, and one decision carries each answer back.
+`agent-question` drives `prompt_openui`: the drawn form appears inside the answer, its submit
+decides once with the official action, and the submitted answer is drawn as the operator's own
+message under the form.
+
+`agent-followups` covers the third case, where nothing waits: on a phone-sized viewport, reading
+away from the newest end and then clicking a suggestion returns the transcript to its newest end,
+because the answer to what was just sent appears below. It fails without the scroll-on-send effect
+in `components/workspace/AssistantThread.tsx`.
+
+The probe harness compiles the console once before the catalog runs
+(`scripts/testing/probe-warmup.ts`). The dev server transforms a route's module graph on first
+request, and without that visit the first scenario of a run spent the compile inside its own
+first assertion; the warm-up changes when the work happens, never an assertion's budget.
+
 ## Rendered tests and the in-memory OMC
 
 A component test renders the real component over the real typed client, and

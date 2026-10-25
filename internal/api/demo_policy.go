@@ -129,6 +129,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodDelete, "/api/mcp", demoRefuse, "external agent access is unavailable in the demonstration"},
 	{http.MethodGet, "/api/v1/agent/session", demoAllow, ""},
 	{http.MethodGet, "/api/v1/agent/images/{id}", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodPost, "/api/v1/agent/data-rows", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
 	{http.MethodPost, "/api/v1/agent/session/reset", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
 	{http.MethodPost, "/api/v1/agent/run", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
 	{http.MethodGet, "/api/v1/agent/operations/{id}", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},

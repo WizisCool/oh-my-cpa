@@ -1,13 +1,10 @@
 import { embeddedFontCSS } from '../theme/sarasaFont';
 import { saveBlob } from '../utils/download';
-import { loadUIIcons } from './uiIcons';
-import { uiIconReferences } from './uiAssets';
-import { loadLucideIcons } from './agentIcons';
+import type { Theme, ThemeMode } from '@openuidev/react-ui';
 import { exportFileName } from './export';
-import { drawCanvasPicture } from './canvasCapture';
-import { conversationHTML, snapshotCanvasDocument, snapshotCanvases } from './conversationHtml';
+import { conversationHTML } from './conversationHtml';
 import type { SnapshotDocumentOptions } from './conversationHtml';
-import { SNAPSHOT_IMAGE_SCALE, SNAPSHOT_IMAGE_WIDTH, snapshotImageSlices, snapshotViews } from './conversationSnapshot';
+import { SNAPSHOT_IMAGE_SCALE, SNAPSHOT_IMAGE_WIDTH, snapshotImageSlices, snapshotInterfaces } from './conversationSnapshot';
 
 const SNAPSHOT_LOAD_TIMEOUT_MS = 15_000;
 
@@ -20,37 +17,8 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/**
- * Puts each canvas's picture in the slot the document left for it.
- *
- * A canvas is drawn at the width its slot was laid out to, so its chart and table take the same
- * lines they would in the conversation. One that does not answer keeps its note: a picture missing
- * one figure says so, rather than the whole export failing for it.
- */
-async function fillCanvasSlots(snapshotDocument: Document, canvasDocuments: readonly string[]): Promise<void> {
-  const slots = Array.from(snapshotDocument.querySelectorAll<HTMLElement>('[data-canvas-slot]'));
-  await Promise.all(slots.map(async (slot, index) => {
-    const frameDocument = canvasDocuments[index];
-    const width = slot.getBoundingClientRect().width;
-    if (!frameDocument || !(width > 0)) return;
-    try {
-      const picture = await drawCanvasPicture(frameDocument, width, SNAPSHOT_IMAGE_SCALE);
-      const image = snapshotDocument.createElement('img');
-      image.className = 'canvas-picture';
-      image.width = picture.width;
-      image.height = picture.height;
-      image.alt = '';
-      image.src = picture.url;
-      slot.replaceWith(image);
-      image.closest('figure')?.setAttribute('data-pictured', '');
-    } catch {
-      // The note under the slot stands in for the figure.
-    }
-  }));
-}
-
 /** Render a separate, script-disabled document so scrolling and disclosures in the app stay untouched. */
-async function snapshotImages(html: string, canvasDocuments: readonly string[]): Promise<Blob[]> {
+async function snapshotImages(html: string): Promise<Blob[]> {
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', 'allow-same-origin');
   frame.setAttribute('aria-hidden', 'true');
@@ -70,7 +38,6 @@ async function snapshotImages(html: string, canvasDocuments: readonly string[]):
     snapshotDocument.body.classList.add('image-capture');
     // A picture has no disclosure to open: the capability chain is shown, and reasoning stays out.
     snapshotDocument.querySelectorAll<HTMLDetailsElement>('details.chain').forEach(chain => { chain.open = true; });
-    await fillCanvasSlots(snapshotDocument, canvasDocuments);
     await snapshotDocument.fonts.ready;
     await Promise.all(Array.from(snapshotDocument.images).map(image => image.decode()));
     const height = Math.ceil(snapshotDocument.body.getBoundingClientRect().height);
@@ -111,31 +78,42 @@ async function snapshotImages(html: string, canvasDocuments: readonly string[]):
 /** Stands in for the font in a rendered document until its text has chosen the shards. */
 const FONT_PLACEHOLDER = '/*omc-snapshot-font*/';
 
-export async function downloadConversation(options: SnapshotDocumentOptions, format: 'html' | 'image', prefix: string): Promise<void> {
-  const views = snapshotViews(options.snapshot);
-  // The icon set is fetched only for a conversation whose panels name one.
-  const hasIcons = views.some(view => view.blocks?.some(block => block.items?.some(item => item.icon) || block.type === 'links'));
-  const icons = hasIcons ? await loadLucideIcons().catch(() => undefined) : undefined;
-  const uiIcons = await loadUIIcons(views.flatMap(uiIconReferences)).catch(() => ({}));
-  const draftAppearance = { ...options.appearance, fontCSS: FONT_PLACEHOLDER, icons, uiIcons };
+/** The width an interface is laid out at in the saved document: its reading column. */
+const INTERFACE_WIDTH = 760;
+
+/**
+ * Draws the snapshot's interfaces into it and returns the stylesheet they need. The renderer and
+ * OpenUI's stylesheet are loaded only for a conversation that has an interface to draw.
+ */
+async function drawInterfaces(options: SnapshotDocumentOptions, openui: { theme: Theme; mode: ThemeMode }): Promise<string> {
+  const segments = snapshotInterfaces(options.snapshot);
+  if (!segments.length) return '';
+  const [{ renderInterfaces }, { default: componentsCSS }] = await Promise.all([
+    import('./openui/staticRender'),
+    import('@openuidev/react-ui/components.css?inline'),
+  ]);
+  const drawn = await renderInterfaces(segments.map(segment => segment.program), { ...openui, width: INTERFACE_WIDTH });
+  segments.forEach((segment, index) => { segment.markup = drawn.markup[index] || undefined; });
+  return `${componentsCSS}.interface{${drawn.themeCSS}}`;
+}
+
+export async function downloadConversation(options: SnapshotDocumentOptions, format: 'html' | 'image', prefix: string, openui: { theme: Theme; mode: ThemeMode }): Promise<void> {
+  const interfaceCSS = await drawInterfaces(options, openui);
+  const draftAppearance = { ...options.appearance, fontCSS: FONT_PLACEHOLDER, interfaceCSS };
   // The embedded font holds only the shards this export draws: the document's own copy and the
-  // conversation, whose canvases render separately.
+  // conversation as drawn.
   const withFont = async (draft: string) => {
     const fontCSS = await embeddedFontCSS(draft + JSON.stringify(options.snapshot), 'OMC Snapshot');
     // The head's style is the placeholder's first occurrence, before any conversation text.
     return { fontCSS, html: draft.replace(FONT_PLACEHOLDER, () => fontCSS) };
   };
+  const { html } = await withFont(conversationHTML({ ...options, appearance: draftAppearance }));
   if (format === 'html') {
-    const { html } = await withFont(conversationHTML({ ...options, appearance: draftAppearance }));
     saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFileName(prefix, 'html', options.exportedAt));
     return;
   }
-  // A picture cannot run a canvas, so the document leaves each one a slot and the capture fills it.
-  const { fontCSS, html } = await withFont(conversationHTML({ ...options, appearance: { ...draftAppearance, canvases: 'slot' } }));
-  const appearance = { ...draftAppearance, fontCSS };
-  const canvasDocuments = snapshotCanvases(options.snapshot).map(view => snapshotCanvasDocument(view, appearance, options.language));
   // All pages must encode successfully before any download: a failed last page cannot look complete.
-  const images = await snapshotImages(html, canvasDocuments);
+  const images = await snapshotImages(html);
   images.forEach((image, index) => saveBlob(image, exportFileName(
     images.length > 1 ? `${prefix}-${String(index + 1).padStart(3, '0')}` : prefix, 'png', options.exportedAt)));
 }

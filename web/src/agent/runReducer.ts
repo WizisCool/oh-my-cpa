@@ -1,6 +1,6 @@
 import { EventType } from '@ag-ui/core';
 import type { AgentEvent } from './protocol';
-import type { AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, TurnPart, TurnUsage } from './types';
+import type { AgentInterrupt, CapabilityReceipt, Conversation, InterruptReason, Trace, TurnPart, TurnUsage } from './types';
 
 /**
  * What one run has produced so far, rebuilt from its AG-UI events.
@@ -183,7 +183,6 @@ export function applyAgentEvent(frame: RunFrame, event: AgentEvent): RunFrame {
     case EventType.TOOL_CALL_RESULT: {
       const startedAt = numberOf(metadata.started_at_ms);
       const endedAt = numberOf(metadata.ended_at_ms);
-      const view = typeof metadata.view === 'object' && metadata.view !== null ? metadata.view as DisplayView : undefined;
       // A resumed run reports a call an earlier run started: the trace is created without a
       // part, because that call already has its place in the stored turn.
       return {
@@ -193,7 +192,6 @@ export function applyAgentEvent(frame: RunFrame, event: AgentEvent): RunFrame {
           result: parseReceipt(event.content),
           ...(startedAt ? { started_at_ms: startedAt } : {}),
           ...(endedAt ? { ended_at_ms: endedAt } : {}),
-          ...(view ? { view } : {}),
         })),
       };
     }

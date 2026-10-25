@@ -123,19 +123,18 @@ export async function agentWorkspace({ base, page, check }) {
   // while a list is open, so neither completion may reach the model as a message.
   await composer.pressSequentially('/');
   const commands = page.locator('[data-testid="composer-commands"]');
-  await commands.getByText('/ui', { exact: true }).waitFor();
+  await commands.getByText('/text', { exact: true }).waitFor();
   // A command is something the page can do now. An empty conversation has nothing to retry,
   // export or replace, so those are not listed; and no row is a canned question.
   const listed = (await commands.locator('button, [role="option"]').allInnerTexts()).map(text => text.split('\n')[0].trim());
-  check('the command list offers only what can run now', ['/ui', '/text', '/capabilities', '/connect'].every(name => listed.includes(name))
+  check('the command list offers only what can run now', ['/text', '/capabilities', '/connect'].every(name => listed.includes(name))
     && !listed.some(name => ['/new', '/retry', '/edit', '/export', '/image', '/stop', '/usage'].includes(name)), JSON.stringify(listed));
-  await composer.pressSequentially('ui');
-  await commands.getByText('/text', { exact: true }).waitFor({ state: 'detached' });
+  await composer.pressSequentially('text');
   await composer.press('Enter');
   const present = page.locator('[data-testid="agent-present"]');
   await present.waitFor();
-  check('/ui sets how the next answer is presented without sending', await composer.inputValue() === '' && await present.getAttribute('data-present') === 'ui'
-    && (await present.innerText()).includes('Interactive UI') && runs.length === 0, JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
+  check('/text asks for the next answer as Markdown without sending', await composer.inputValue() === '' && await present.getAttribute('data-present') === 'text'
+    && (await present.innerText()).includes('Text-only answer') && runs.length === 0, JSON.stringify({ value: await composer.inputValue(), runs: runs.length }));
   await page.getByRole('button', { name: 'Back to the default answer format', exact: true }).click();
   check('the presentation chip is removable', await present.count() === 0);
   // The frame holds what a message is sent with and nothing else: attach, the endpoint, effort,
@@ -143,10 +142,6 @@ export async function agentWorkspace({ base, page, check }) {
   const frameButtons = await page.locator('[data-testid="agent-page"] form button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') ?? ''));
   check('the composer frame offers attach, the endpoint, effort, the model and send only',
     frameButtons.length === 5 && frameButtons[0] === 'Attach images or text files' && frameButtons[1].startsWith('Endpoint:') && frameButtons[2].startsWith('Reasoning effort:') && frameButtons[3].startsWith('Model:') && frameButtons[4] === 'Send', JSON.stringify(frameButtons));
-  await composer.pressSequentially('/ui');
-  await commands.getByText('/text', { exact: true }).waitFor({ state: 'detached' });
-  await composer.press('Enter');
-  await present.waitFor();
   await composer.pressSequentially('Explain @providers_l');
   await page.locator('[data-testid="composer-mentions"]').getByText('providers_list', { exact: true }).waitFor();
   await composer.press('Enter');
@@ -246,12 +241,13 @@ export async function agentWorkspace({ base, page, check }) {
   const card = page.locator('[data-testid="agent-transcript"] [data-testid="agent-authorization"][data-approval-id="operation-test"]');
   await card.waitFor();
   const request = runs[0];
-  check('the message carries the presentation the command asked for, once', request.forwardedProps.present === 'ui' && await page.locator('[data-testid="agent-present"]').count() === 0, JSON.stringify(request.forwardedProps));
+  check('a message without a command asks for the default, which is the interface', request.forwardedProps.present === undefined
+    && await page.locator('[data-testid="agent-present"]').count() === 0, JSON.stringify(request.forwardedProps));
   check('agent submits a message with Enter as one AG-UI user message', runs.length === 1 && request.protocolVersion === '1.0' && request.messages.length === 1
     && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
   check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
     && request.forwardedProps.reasoning_effort === 'high' && request.forwardedProps.endpoint === undefined && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
-  check('agent declares only the display tools it can draw and the follow-up note, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_ui', 'suggest_next'])
+  check('agent declares the one interface tool it draws and never supplies state', JSON.stringify(request.tools.map(tool => tool.name)) === JSON.stringify(['present_openui'])
     && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
   check('agent tells the server the console language and how it writes token counts', JSON.stringify(request.context) === JSON.stringify([{ description: 'console_language', value: 'en' }, { description: 'console_token_style', value: 'en-compact' }]), JSON.stringify(request.context));
   check('agent shows the approval inline under the call, not in a dialog', await page.getByRole('dialog').count() === 0
@@ -646,13 +642,8 @@ export async function agentStream({ base, page, check, expectProblem }) {
   await until(isCaretExpanded, { label: 'expanded reasoning to rotate its caret' });
   check('expanded reasoning has a downward-facing caret', await isCaretExpanded());
 
-  // Keep one real UI tool call open across observations: a component must appear before its
-  // argument string finishes, and its scripts must wait until the validated view replaces it.
-  // Playwright's service-worker block probes `navigator.serviceWorker` in each frame without an
-  // origin: the nonce-scoped draft, which reloads when appearance settles, the validated
-  // component, and the frames the image export draws the frozen document in. `expectProblem`
-  // reads the count as the ceiling this scenario tolerates, not a tally it has to reach.
-  expectProblem({ kind: 'pageerror', message: /(?:Failed to read the 'serviceWorker' property|Service worker is disabled because the context is sandboxed)/, count: 5 });
+  // A present_openui call streams its program: the official renderer draws the interface while
+  // the argument string is still arriving, and the answered call settles on the same interface.
   await page.evaluate(() => {
     const fetchRequest = window.fetch;
     window.fetch = async (input, options) => {
@@ -668,47 +659,50 @@ export async function agentStream({ base, page, check, expectProblem }) {
       return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
     };
   });
-  await page.getByLabel('Describe an OMC query or action').fill('Build an inline status component');
+  await page.getByLabel('Describe an OMC query or action').fill('Build a status card');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await until(() => page.evaluate(() => Boolean(window.__inlineUIStream)), { label: 'the held inline UI response' });
-  const componentHTML = '<div id="capture-mark" style="width:48px;height:24px;background:rgb(255,0,255)"></div><div class="omc-stack"><p id="inline-label">Provider status</p><output id="inline-state">Preparing</output><button id="inline-action" onclick="document.getElementById(\'inline-state\').textContent=\'Selected\'">Select scope</button></div><script>document.getElementById("inline-state").textContent="Ready"</script>';
-  const argumentsText = JSON.stringify({ title: 'Inline provider status', html: componentHTML });
-  const split = argumentsText.lastIndexOf('</div>');
+  await until(() => page.evaluate(() => Boolean(window.__inlineUIStream)), { label: 'the held interface response' });
+  const program = [
+    'root = Card([header, summary, chart, table])',
+    'header = CardHeader("Provider status")',
+    'summary = TextContent("Usage for the retained window.")',
+    'rows = [{model: "gpt-4.1", requests: 120}, {model: "gemini-2.5", requests: 80}]',
+    'modelColumn = Col("Model", rows.model)',
+    'requestsColumn = Col("Requests", rows.requests, "number")',
+    'table = Table([modelColumn, requestsColumn])',
+    'series = Series("Requests", rows.requests)',
+    'chart = BarChart(rows.model, [series], "grouped", "Model", "Requests", 200)',
+  ].join('\n');
+  const argumentsText = JSON.stringify({ ui: program });
+  const split = argumentsText.indexOf('rows = ');
   const writeUI = events => page.evaluate(events => window.__inlineUIStream.write(events), events);
-  await writeUI([started('turn-inline'), step(1), ...text('inline:before', 'Status before the component.'),
-    { type: 'TOOL_CALL_START', toolCallId: 'inline-ui', toolCallName: 'render_ui' },
+  await writeUI([started('turn-inline'), step(1), ...text('inline:before', 'Status before the card.'),
+    { type: 'TOOL_CALL_START', toolCallId: 'inline-ui', toolCallName: 'present_openui' },
     { type: 'TOOL_CALL_ARGS', toolCallId: 'inline-ui', delta: argumentsText.slice(0, split) }]);
-  const draft = page.getByTestId('agent-view-draft');
-  await draft.waitFor();
-  const draftFrame = draft.frameLocator('[data-testid="agent-canvas-draft"]');
-  await draftFrame.locator('#inline-state').waitFor();
-  check('a new UI streams as a frameless component before its argument string is complete',
-    await draft.getAttribute('data-frame') === 'none' && await draftFrame.locator('#inline-label').innerText() === 'Provider status');
+  const streaming = page.getByTestId('agent-openui').first();
+  await streaming.getByText('Provider status', { exact: true }).waitFor();
+  check('an interface is drawn from the program as it streams, before its argument string is complete',
+    await streaming.getByText('Usage for the retained window.', { exact: true }).isVisible()
+      && await page.getByTestId('agent-openui-failure').count() === 0);
   await writeUI([{ type: 'TOOL_CALL_ARGS', toolCallId: 'inline-ui', delta: argumentsText.slice(split) }]);
-  await until(async () => await draftFrame.locator('script').count() === 1, { label: 'the component markup to reach its draft frame' });
-  check('a streamed component preview does not execute model scripts', await draftFrame.locator('#inline-state').innerText() === 'Preparing');
-  expectProblem({ kind: 'console', message: /^Executing inline event handler violates the following Content Security Policy directive/, count: 1 });
-  await draftFrame.locator('#inline-action').click();
-  check('a streamed component preview does not activate inline event handlers', await draftFrame.locator('#inline-state').innerText() === 'Preparing');
-  const view = { kind: 'ui', frame: 'none', title: 'Inline provider status', columns: [], rows: [], html: componentHTML };
-  const inlineTurn = { id: 'turn-inline', user: 'Build an inline status component', reply: 'Status before the component. Status after the component.',
-    parts: [{ type: 'text', content: 'Status before the component.' }, { type: 'tool', trace_id: 'inline-ui' }, { type: 'text', content: 'Status after the component.' }],
-    status: 'success', traces: [{ id: 'inline-ui', name: 'render_ui', arguments: argumentsText, result: { status: 'success', data: { rendered: true } }, view }] };
+  await streaming.getByRole('cell', { name: 'gpt-4.1', exact: true }).waitFor();
+  check('the rest of the program fills the same interface in place', await streaming.getByRole('table').count() === 1
+    && await streaming.locator('svg').count() >= 1 && await page.getByTestId('agent-openui-failure').count() === 0);
+  const inlineTurn = { id: 'turn-inline', user: 'Build a status card', reply: 'Status before the card. Status after the card.',
+    parts: [{ type: 'text', content: 'Status before the card.' }, { type: 'tool', trace_id: 'inline-ui' }, { type: 'text', content: 'Status after the card.' }],
+    status: 'success', traces: [{ id: 'inline-ui', name: 'present_openui', arguments: argumentsText, result: { status: 'success', data: { displayed: true } } }] };
   await page.evaluate(events => { window.__inlineUIStream.write(events); window.__inlineUIStream.close(); }, [
-    { type: 'TOOL_CALL_END', toolCallId: 'inline-ui' }, toolResult('inline-ui', { status: 'success', data: { rendered: true } }, { view }),
-    ...text('inline:after', 'Status after the component.'), snapshot({ ...initial(), revision: 4, turns: [inlineTurn] }), finished(),
+    { type: 'TOOL_CALL_END', toolCallId: 'inline-ui' }, toolResult('inline-ui', { status: 'success', data: { displayed: true } }),
+    ...text('inline:after', 'Status after the card.'), snapshot({ ...initial(), revision: 4, turns: [inlineTurn] }), finished(),
   ]);
-  const finishedComponent = page.getByTestId('agent-view').filter({ hasText: 'Inline provider status' });
-  await finishedComponent.frameLocator('[data-testid="agent-canvas"]').locator('#inline-state').getByText('Ready', { exact: true }).waitFor();
-  check('the completed component keeps its inline frame and activates scripts only in the sandbox',
-    await finishedComponent.getAttribute('data-frame') === 'none' && await finishedComponent.locator('iframe').getAttribute('sandbox') === 'allow-scripts'
-      && await page.getByTestId('agent-view-draft').count() === 0);
-  const activeComponent = finishedComponent.frameLocator('[data-testid="agent-canvas"]');
-  await activeComponent.locator('#inline-action').click();
-  check('the completed sandbox activates the component event handler', await activeComponent.locator('#inline-state').innerText() === 'Selected');
-  await checkConversationExport({ page, check, kind: 'agent-ui', expectedText: 'Status after the component.', canvasProbe: { selector: '#inline-state', text: 'Ready' } });
+  await page.getByText('Status after the card.', { exact: true }).waitFor();
+  const settledUI = page.getByTestId('agent-openui');
+  await settledUI.getByRole('cell', { name: 'gpt-4.1', exact: true }).waitFor();
+  check('the settled turn draws the interface its call carried, outside the call chain', await settledUI.count() === 1
+    && await page.locator('[data-testid="agent-chain"] [data-testid="agent-openui"]').count() === 0
+    && await page.getByTestId('agent-openui-failure').count() === 0);
+  await checkConversationExport({ page, check, kind: 'agent-ui', expectedText: 'Status after the card.', interfaceProbe: { text: 'gpt-4.1' } });
 }
-
 
 export async function agentNarrow({ base, page, check }) {
   // A stored turn whose call returned one long unbroken field: its digest is a single line, and
@@ -889,231 +883,68 @@ export async function agentLive({ base, page, check }) {
  * table with its own CSV actions, and a chart can be read as the data behind it.
  */
 export async function agentViews({ base, page, check, expectProblem }) {
-  const rows = [{ model: 'gpt-4.1', requests: 120, tokens: 1204300 }, { model: 'gemini-2.5', requests: 80, tokens: 86400 }];
-  // A conversation stored before charts and tables became canvases still holds their views.
-  const retiredView = { kind: 'table', title: 'Stored before canvases', columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
-  // The common figures come from the kit the canvas is given, not from hand-written marks.
-  const figureView = { kind: 'canvas', title: 'Tokens by model', columns: ['model', 'requests', 'tokens'], rows, source: { call_id: 'call-usage', path: 'rows' },
-    html: '<div id="chart"></div><div id="table"></div><script>OMC.chart("#chart",{type:"column",x:"model",y:["tokens"],unit:"tokens"});OMC.table("#table",{columns:[{field:"model",label:"Model"},{field:"tokens",label:"Tokens",unit:"tokens"}]})</script>' };
-  const panelView = { kind: 'panel', title: 'Last 24 hours', columns: [], rows: [], blocks: [
-    { type: 'stats', items: [{ label: 'Requests', value: '1,204', delta: '+12%', tone: 'success', icon: 'TrendingUp' }, { label: 'Spend', value: '$4.20', icon: 'no-such-icon' }] },
-    { type: 'callout', tone: 'warning', text: 'Two credentials are cooling down.' },
-    { type: 'steps', items: [{ label: 'Check quota', status: 'done' }, { label: 'Rotate the key', status: 'active', text: 'After the current window' }] },
-    { type: 'meters', items: [{ label: 'Daily budget', value: '$8 of $10', share: 0.8, tone: 'warning' }] },
-    { type: 'links', items: [{ label: 'Open quota', route: 'quota' }] },
-  ] };
-  // The canvas tries every way out it has; the checks below are that none of them leaves the page.
-  const canvasView = { kind: 'ui', frame: 'none', title: 'Routing sketch', columns: ['model', 'requests'], rows,
-    html: '<div id="mark" style="height:300px"><label class="omc-field">Scope<select id="scope"><option value="all">All models</option><option value="first">First model</option></select></label>rows <b id="count"></b><button id="prepare" type="button">Explore last week</button></div><script>document.getElementById("count").textContent=String(OMC_DATA.length);document.getElementById("scope").onchange=function(){document.getElementById("count").textContent=this.value==="first"?"1":String(OMC_DATA.length)};document.getElementById("prepare").onclick=function(){OMC.compose("Compare requests last week")};fetch("/canvas-leak-fetch").catch(function(){});new Image().src="/canvas-leak-image";try{document.getElementById("count").dataset.cookie=String(document.cookie.length)}catch(error){document.getElementById("count").dataset.cookie="denied"}</script>' };
-  // A request the policy refuses is still announced before it fails with `csp`; one that failed any
-  // other way, or did not fail, got as far as the network.
-  const leaks = new Set();
-  page.on('request', request => { if (request.url().includes('canvas-leak')) leaks.add(request); });
-  page.on('requestfailed', request => { if (request.failure()?.errorText === 'csp') leaks.delete(request); });
-  // The sketch is built twice: once on arrival and once when the theme is switched below.
-  expectProblem({ kind: 'console', message: /canvas-leak-fetch' violates the following Content Security Policy/, count: 2 });
-  expectProblem({ kind: 'console', message: /^Fetch API cannot load .*canvas-leak-fetch/, count: 2 });
-  expectProblem({ kind: 'console', message: /canvas-leak-image' violates the following Content Security Policy/, count: 2 });
-  expectProblem({ kind: 'requestfailed', url: /canvas-leak-image$/, message: /^csp$/, count: 2 });
-  // Playwright's own service-worker block probes `navigator.serviceWorker` in each rebuilt frame,
-  // which a frame without an origin refuses: the chart and the sketch, once each.
-  expectProblem({ kind: 'pageerror', message: /^Failed to read the 'serviceWorker' property from 'Navigator'/, count: 2 });
-  expectProblem({ kind: 'console', message: /^Framing 'http:\/\/127\.0\.0\.1:9\/' violates the following Content Security Policy directive: "frame-src/, count: 1 });
-  // The harness blocks service workers by reading the property in every frame, which a frame
-  // without an origin refuses; the canvas itself never touches it.
-  expectProblem({ kind: 'pageerror', message: /Service worker is disabled because the context is sandboxed/, count: 4 });
-  await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [{
-    id: 'turn-views', user: 'Chart requests by model', reply: 'Here they are.', status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(),
-    usage: { input_tokens: 5000, output_tokens: 200, total_tokens: 5200, context_tokens: 3200 }, suggestions: ['Compare with last week'],
-    parts: [{ type: 'tool', trace_id: 'call-usage' }, { type: 'tool', trace_id: 'call-table' }, { type: 'tool', trace_id: 'call-panel' }, { type: 'text', content: 'Before the figures.' }, { type: 'tool', trace_id: 'call-figure' }, { type: 'text', content: 'Between the figures.' }, { type: 'tool', trace_id: 'call-canvas' }, { type: 'text', content: 'Here they are.' }],
-    traces: [
-      { id: 'call-usage', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: { rows } } },
-      { id: 'call-table', name: 'render_table', arguments: '{"title":"Stored before canvases"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: retiredView },
-      { id: 'call-panel', name: 'render_view', arguments: '{"title":"Last 24 hours"}', result: { status: 'success', data: { rendered: true, blocks: 5 } }, view: panelView },
-      { id: 'call-figure', name: 'render_canvas', arguments: '{"title":"Tokens by model"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: figureView },
-      { id: 'call-canvas', name: 'render_canvas', arguments: '{"title":"Routing sketch"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: canvasView },
-    ],
-  }] } }));
+  const rows = [{ provider: 'gpt-4.1', requests: 120, tokens: 1204300 }, { provider: 'gemini-2.5', requests: 80, tokens: 86400 }];
+  // The program an answer carries: a table read through the conversation's own data_rows tool, and
+  // a change that only a click may run.
+  const program = [
+    'root = Card([header, tbl, state, action])',
+    'header = CardHeader("Provider usage", "Read from this conversation")',
+    'data = Query("data_rows", {data_ref: "ds_providers"}, {rows: []})',
+    'nameColumn = Col("Provider", data.rows.provider)',
+    'tokensColumn = Col("Tokens", data.rows.tokens, "number")',
+    'tbl = Table([nameColumn, tokensColumn])',
+    'toggle = Mutation("providers_set_status", {provider: "gpt-4.1", enabled: false})',
+    'state = toggle.status == "success" ? TextContent("Disabled") : TextContent("Ready")',
+    'action = Button("Disable gpt-4.1", @Run(toggle), "secondary")',
+  ].join('\n');
+  let conversation = initial();
+  let operation = { id: 'view-operation', capability: 'providers_set_status', permission: 'write', risk: 'high', status: 'pending', preview: { target: 'gpt-4.1', changes: { enabled: false } }, result: { status: 'pending' } };
+  const rowsReads = [];
+  const invokes = [];
+  const decisions = [];
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/data-rows', async route => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    rowsReads.push(body);
+    await route.fulfill({ json: { status: 'success', data: { rows, fields: ['provider', 'requests', 'tokens'] } } });
+  });
+  await page.route('**/capabilities/invoke', async route => {
+    invokes.push(JSON.parse(route.request().postData() ?? '{}'));
+    await route.fulfill({ json: { status: 'pending', operation_id: operation.id } });
+  });
+  await page.route(`**/agent/operations/${operation.id}`, route => route.fulfill({ json: operation }));
+  await page.route(`**/agent/operations/${operation.id}/decision`, async route => {
+    decisions.push(JSON.parse(route.request().postData() ?? '{}'));
+    operation = { ...operation, status: 'success', result: { status: 'success', invalidates: ['management-providers'] } };
+    await route.fulfill({ json: operation });
+  });
+  const trace = { id: 'call-view', name: 'present_openui', arguments: JSON.stringify({ ui: program }), result: { status: 'success', data: { displayed: true } } };
+  conversation = { ...conversation, revision: 2, turns: [{ id: 'turn-view', user: 'Which providers used tokens?', reply: '', parts: [{ type: 'tool', trace_id: trace.id }], status: 'success', started_at_ms: Date.now() - 700, ended_at_ms: Date.now(), traces: [trace] }] };
+  await page.route('**/agent/run', route => route.fulfill({ contentType: 'text/event-stream', body: sse([started('turn-view'), step(1), ...text('view:1', 'Reading the conversation.'), snapshot(conversation), finished()]) }));
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
-  await page.locator('[data-testid="agent-page"]').waitFor();
-  await page.getByText('Here they are.').waitFor();
-  check('a display call is drawn outside the call chain, where the answer reads', await page.locator('[data-testid="agent-chain"] [data-testid="agent-view"]').count() === 0);
-  check('a stored chart or table is no longer drawn, and its call stays in the record',
-    await page.locator('[data-testid="agent-view"]').count() === 3 && await page.getByText('Stored before canvases').count() === 0);
+  const drawn = page.locator('[data-testid="agent-openui"][data-tool="present_openui"]');
+  await drawn.waitFor();
+  await drawn.getByRole('cell', { name: 'gpt-4.1', exact: true }).waitFor();
+  check('a program reads the conversation\'s rows through data_rows and tabulates them',
+    rowsReads.length === 1 && rowsReads[0].data_ref === 'ds_providers'
+      && JSON.stringify(await drawn.getByRole('cell').allInnerTexts()) === JSON.stringify(['gpt-4.1', '1204300', 'gemini-2.5', '86400']),
+    JSON.stringify({ rowsReads, cells: await drawn.getByRole('cell').allInnerTexts() }));
+  check('reading rows changes nothing', invokes.length === 0 && decisions.length === 0 && await page.getByTestId('agent-openui-failure').count() === 0);
 
-  // The kit draws the chart and the table from the frozen rows, in the console's token style.
-  const figure = page.locator('[data-testid="agent-view"][data-kind="canvas"]').filter({ hasText: 'Tokens by model' });
-  const drawn = figure.frameLocator('[data-testid="agent-canvas"]');
-  await drawn.locator('#chart rect').first().waitFor();
-  check('a canvas charts its rows with the kit', await drawn.locator('#chart rect').count() === 2 && await drawn.locator('#chart svg text').filter({ hasText: 'gpt-4.1' }).count() === 1);
-  const cells = () => drawn.locator('#table tbody td').allInnerTexts();
-  check('a canvas table formats tokens the way the console writes them', (await cells()).join('|') === 'gpt-4.1|1.2M|gemini-2.5|86.4K', (await cells()).join('|'));
-  await drawn.locator('#table th').filter({ hasText: 'Tokens' }).click();
-  check('a canvas table sorts by a column', (await cells())[0] === 'gemini-2.5' && await drawn.locator('#table th[aria-sort="ascending"]').count() === 1);
-
-  // A chart is drawn at its frame's width: on a phone its axis text is the size the kit set, not
-  // a desktop drawing scaled down to a third.
-  const chartScale = () => drawn.locator('#chart svg').evaluate(svg => svg.getBoundingClientRect().width / svg.viewBox.baseVal.width);
-  const wideViewport = page.viewportSize();
-  await page.setViewportSize({ width: 375, height: 850 });
-  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at a phone width' });
-  check('a canvas chart keeps its text size on a phone and its marks', Math.abs(await chartScale() - 1) < 0.05
-    && await drawn.locator('#chart rect').count() === 2 && await drawn.locator('#chart .omc-tip').count() === 1, String(await chartScale()));
-  await page.setViewportSize(wideViewport);
-  await until(async () => Math.abs(await chartScale() - 1) < 0.05, { label: 'the chart to be drawn again at the desktop width' });
-
-  // A normal dashboard may exceed the old 1,600px viewport. Its last row belongs to the
-  // transcript, not to a nested scrolling viewport that narrows the chart on classic scrollbars.
-  const frameGeometry = () => drawn.locator('html').evaluate(root => ({
-    contentHeight: root.scrollHeight, viewportHeight: root.clientHeight,
-    contentWidth: root.scrollWidth, viewportWidth: root.clientWidth,
-  }));
-  await drawn.locator('body').evaluate(body => {
-    const section = document.createElement('section');
-    section.id = 'tall-dashboard';
-    section.style.height = '1800px';
-    section.textContent = 'Additional comparison rows';
-    const footer = document.createElement('p');
-    footer.id = 'dashboard-footer';
-    footer.textContent = 'Last comparison row';
-    body.append(section, footer);
-  });
-  await until(async () => (await frameGeometry()).viewportHeight > 1800, { label: 'the dashboard frame to grow with its content' });
-  const dashboardGeometry = await frameGeometry();
-  const footerGeometry = await drawn.locator('#dashboard-footer').evaluate(footer => ({
-    bottom: footer.getBoundingClientRect().bottom, viewportHeight: innerHeight,
-  }));
-  check('an interactive dashboard fits vertically without clipping its last row or adding root scrollbars',
-    dashboardGeometry.contentHeight <= dashboardGeometry.viewportHeight + 1
-      && dashboardGeometry.contentWidth <= dashboardGeometry.viewportWidth + 1
-      && footerGeometry.bottom <= footerGeometry.viewportHeight, JSON.stringify({ dashboardGeometry, footerGeometry }));
-  await drawn.locator('body').evaluate(body => {
-    body.querySelector('#tall-dashboard').remove();
-    body.querySelector('#dashboard-footer').remove();
-  });
-  await until(async () => (await frameGeometry()).viewportHeight < 1000, { label: 'the dashboard frame to shrink after content is removed' });
-
-  const componentRadii = await drawn.locator('body').evaluate(body => {
-    const samples = document.createElement('section');
-    samples.innerHTML = '<div class="omc-card"></div><div class="omc-callout"></div><div class="omc-tabs"><button>Scope</button></div><button class="omc-diagram-node">Provider</button>';
-    body.append(samples);
-    const radii = [...samples.querySelectorAll('.omc-card,.omc-callout,.omc-tabs,.omc-tabs button,.omc-diagram-node')]
-      .map(element => getComputedStyle(element).borderRadius);
-    samples.remove();
-    return radii;
-  });
-  check('interactive components use the console surface and control corners',
-    componentRadii.join('|') === '10px|10px|10px|6px|10px', componentRadii.join('|'));
-
-  const download = page.waitForEvent('download');
-  await figure.getByRole('button', { name: 'Save as image', exact: true }).click();
-  const saved = await download;
-  check('a canvas saves as a picture of itself', /^tokens-by-model-\d{8}-\d{6}\.png$/.test(saved.suggestedFilename()), saved.suggestedFilename());
-
-  await figure.getByRole('button', { name: 'Full screen', exact: true }).click();
-  const full = page.getByRole('dialog', { name: 'Tokens by model' });
-  await full.frameLocator('[data-testid="agent-canvas"]').locator('#chart rect').first().waitFor();
-  const cover = await full.evaluate(element => { const box = element.getBoundingClientRect(); return [box.left, box.top, innerWidth - box.right, innerHeight - box.bottom]; });
-  const frameBox = await full.locator('[data-testid="agent-canvas"]').boundingBox();
-  check('a full-screen canvas takes the viewport and gives its frame the height', cover.every(edge => edge === 0) && (frameBox?.height ?? 0) > 600, `${cover} ${frameBox?.height}`);
-  for (let step = 0; step < 4; step += 1) await page.keyboard.press('Tab');
-  check('Tab stays inside a full-screen canvas', await full.evaluate(element => element.contains(document.activeElement)));
-  await page.keyboard.press('Escape');
-  await full.waitFor({ state: 'detached' });
-  check('Escape returns a full-screen canvas to its place in the answer', await figure.getByRole('button', { name: 'Full screen', exact: true }).count() === 1);
-  await until(async () => await figure.getByRole('button', { name: 'Full screen', exact: true }).evaluate(button => button === document.activeElement), { label: 'focus to return to the inline fullscreen control' });
-
-  const panel = page.locator('[data-testid="agent-view"][data-kind="panel"]');
-  await panel.locator('svg[data-icon="trending-up"]').waitFor();
-  check('a panel draws each block the model chose', await panel.getByText('1,204').count() === 1 && await panel.getByText('Two credentials are cooling down.').count() === 1
-    && await panel.getByRole('img', { name: 'In progress' }).count() === 1 && await panel.getByRole('meter', { name: 'Daily budget' }).getAttribute('aria-valuenow') === '80');
-  check('an icon is resolved from any Lucide name, and an unknown one is a neutral mark rather than a failure',
-    await panel.locator('svg[data-icon="trending-up"] path').count() >= 1 && await panel.locator('svg[data-icon="neutral"]').count() === 1);
-  check('a panel link leads to a console page under the base path', (await panel.getByRole('link', { name: 'Open quota' }).getAttribute('href') ?? '').endsWith('/omc/quota'));
-  check('a panel fits its column', await panel.evaluate(element => element.scrollWidth <= element.clientWidth));
-
-  const sketch = page.getByRole('figure', { name: 'Routing sketch', exact: true });
-  const canvas = sketch.locator('[data-testid="agent-canvas"]');
-  const positions = await page.locator('[data-testid="agent-turn"]').evaluate(turn => {
-    const before = [...turn.querySelectorAll('p')].find(paragraph => paragraph.textContent === 'Before the figures.');
-    const between = [...turn.querySelectorAll('p')].find(paragraph => paragraph.textContent === 'Between the figures.');
-    const after = [...turn.querySelectorAll('p')].find(paragraph => paragraph.textContent === 'Here they are.');
-    const figures = turn.querySelectorAll('[data-testid="agent-view"]');
-    const comesBefore = (first, second) => Boolean(first?.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
-    return comesBefore(before, figures[1]) && comesBefore(figures[1], between)
-      && comesBefore(between, figures[2]) && comesBefore(figures[2], after);
-  });
-  check('each figure stays between the text written before and after its call', positions);
-  const frameless = await sketch.evaluate(figure => {
-    const style = getComputedStyle(figure);
-    const title = getComputedStyle(figure.querySelector('[class*="view-title"]'));
-    return { border: style.borderTopWidth, background: style.backgroundColor, titleWidth: title.width, name: figure.getAttribute('aria-label') };
-  });
-  check('a frameless UI has no card ground or title bar and retains its accessible name', frameless.border === '0px'
-    && frameless.background === 'rgba(0, 0, 0, 0)' && frameless.titleWidth === '1px' && frameless.name === 'Routing sketch', JSON.stringify(frameless));
-  const inner = sketch.frameLocator('[data-testid="agent-canvas"]');
-  await inner.locator('#count').waitFor();
-  check('a canvas is a script-only sandbox that receives its frozen rows', await canvas.getAttribute('sandbox') === 'allow-scripts' && await inner.locator('#count').innerText() === '2');
-  await until(async () => (await canvas.boundingBox())?.height === 300, { label: 'the canvas to take its reported height' });
-  check('a canvas frame takes the height its content reports', (await canvas.boundingBox())?.height === 300);
-  const UIRequests = [];
-  const trackUIRequest = request => { if (new URL(request.url()).pathname.endsWith('/agent/run')) UIRequests.push(request); };
-  page.on('request', trackUIRequest);
-  await inner.locator('#scope').selectOption('first');
-  check('an inline component filters its frozen data locally', await inner.locator('#count').innerText() === '1' && UIRequests.length === 0);
-  await inner.locator('#scope').selectOption('all');
-  await inner.getByRole('button', { name: 'Explore last week', exact: true }).click();
-  const followUp = sketch.getByTestId('agent-ui-draft');
-  await followUp.waitFor();
-  check('an interactive component offers a reviewed follow-up without starting a run',
-    (await followUp.innerText()).includes('Compare requests last week') && UIRequests.length === 0);
-  await followUp.getByRole('button', { name: 'Copy to composer', exact: true }).click();
-  check('reviewing an inline component copies its draft without executing it',
-    await page.getByLabel('Describe an OMC query or action').inputValue() === 'Compare requests last week' && UIRequests.length === 0);
-  await page.getByLabel('Describe an OMC query or action').fill('');
-  page.off('request', trackUIRequest);
-
-  check('a canvas reads the theme and has no origin of its own', await inner.locator('body').evaluate(body => getComputedStyle(body).getPropertyValue('--accent').trim() !== '' && window.origin === 'null')
-    && ['0', 'denied'].includes(await inner.locator('#count').getAttribute('data-cookie') ?? ''));
-  // One switch, not several: the frame is rebuilt from the values the page holds after the switch.
-  const modeBefore = await page.evaluate(() => document.documentElement.dataset.themeMode);
-  // The control cycles three preferences, and one of them may resolve to the mode already shown.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (await page.evaluate(mode => document.documentElement.dataset.themeMode !== mode, modeBefore)) break;
-    // The change lands inside a view transition, after the click; read the mode only once the
-    // preference has moved, or a step that already switched is taken again.
-    const preference = await page.evaluate(() => document.documentElement.dataset.themePreference);
-    await page.getByRole('button', { name: /^Theme:/ }).click();
-    await page.waitForFunction(previous => document.documentElement.dataset.themePreference !== previous, preference);
-  }
-  const pageSurface = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
-  const frameSurface = () => inner.locator('body').evaluate(body => getComputedStyle(body).getPropertyValue('--bg').trim());
-  await until(async () => await frameSurface() === await pageSurface(), { label: 'the canvas to follow one theme switch' });
-  check('a canvas follows the theme on the switch that changes it', await frameSurface() === await pageSurface());
-  // Self-navigation is the one exit the frame's own policy does not close; the console's frame policy does.
-  await inner.locator('body').evaluate(() => { window.location.href = 'http://127.0.0.1:9/canvas-leak-navigation'; }).catch(() => undefined);
-  await page.waitForFunction(() => { try { return [...document.querySelectorAll('[data-testid="agent-canvas"]')].at(-1)?.contentDocument === null; } catch { return true; } });
-  check('nothing a canvas tries reaches the network', leaks.size === 0, [...leaks].map(request => request.url()).join(' '));
-  // Source is one of the figure's icon actions, and the same button brings the canvas back.
-  await sketch.getByRole('button', { name: 'View source', exact: true }).click();
-  check('a canvas can be read as the markup behind it', await sketch.locator('pre').innerText().then(text => text.includes('canvas-leak-fetch')));
-  // Not pressed here: drawing this canvas again would repeat the leak attempts above.
-  check('the same action offers the way back to the canvas', await sketch.getByRole('button', { name: 'View rendered UI', exact: true }).count() === 1 && await sketch.locator('.ant-segmented').count() === 0);
-
-  // The fixture's catalog lists a 4,000-token window for the session's model, and the turn's last
-  // round read 3,200: the readout is the last round's input, not the turn's summed input.
-  const readout = page.locator('[data-testid="context-readout"]');
-  check('the composer states the share of the context window in use', await readout.innerText() === '80%' && await readout.getAttribute('data-tone') === 'warning',
-    `${await readout.innerText()} ${await readout.getAttribute('data-tone')}`);
-  await page.locator('[data-testid="agent-follow-ups"]').getByRole('button', { name: 'Compare with last week' }).click();
-  check('a follow-up question fills the composer without sending', await page.getByLabel('Describe an OMC query or action').inputValue() === 'Compare with last week');
-
+  // A Mutation runs only from the button that carries it, and the console decides the change on the
+  // conversation's own approval card before the Mutation resolves.
+  check('a mutation button states what it will do', await drawn.getByRole('button', { name: 'Disable gpt-4.1', exact: true }).count() === 1 && await drawn.getByText('Ready', { exact: true }).isVisible());
+  await drawn.getByRole('button', { name: 'Disable gpt-4.1', exact: true }).click();
+  await page.getByTestId('agent-openui-approval').waitFor();
+  check('the change asks for approval with what it will change', await page.getByTestId('agent-openui-approval').getByText('gpt-4.1').count() >= 1 && invokes.length === 1
+    && invokes[0].name === 'providers_set_status' && invokes[0].arguments?.provider === 'gpt-4.1', JSON.stringify(invokes));
+  await page.getByTestId('agent-openui-approval').getByRole('button', { name: /^(Allow|Allow exactly once)$/ }).first().click();
+  await drawn.getByText('Disabled', { exact: true }).waitFor();
+  check('allowing the change decides it once and the mutation reads the outcome',
+    decisions.length === 1 && decisions[0].approve === true && operation.status === 'success');
+  await checkConversationExport({ page, check, kind: 'agent-ui', expectedText: 'Which providers used tokens?', interfaceProbe: { text: 'gpt-4.1' } });
 }
 
-/**
- * `ask_question` takes the composer's place: the agent's options, a typed answer beside them, and
- * sending the reply continues the run.
- */
 export async function agentReplace({ base, page, check }) {
   const answered = (id, user, reply, traces = []) => ({ id, user, reply, parts: [...traces.map(trace => ({ type: 'tool', trace_id: trace.id })), { type: 'text', content: reply }], status: 'success', started_at_ms: Date.now() - 500, ended_at_ms: Date.now(), traces });
   let conversation = { ...initial(), revision: 2, turns: [answered('turn-old', 'Which provder fails most?', 'First answer.', [{ id: 'call-list', name: 'providers_list', arguments: '{}', result: { status: 'success', data: {} } }])] };
@@ -1227,6 +1058,84 @@ export async function agentAttach({ base, page, check }) {
 }
 
 export async function agentQuestion({ base, page, check }) {
+  // `prompt_openui` is a form the turn waits on: the official renderer draws it inside the answer,
+  // the console's own decision endpoint carries the submission, and the run continues.
+  const program = [
+    'root = Card([header, form])',
+    'header = CardHeader("Which window?", "The summary needs one choice before it can be written.")',
+    'form = Form("window", btns, [windowField])',
+    'windowField = FormControl("Window", choice, "The summary covers this period.")',
+    'choice = Select("window", options, "Select a window", { required: true })',
+    'options = [SelectItem("hour", "Last hour"), SelectItem("day", "Last 24 hours")]',
+    'btns = Buttons([Button("Continue", @ToAssistant("Last 24 hours"), "primary")])',
+  ].join('\n');
+  let conversation = initial();
+  let operation = { id: 'question-test', capability: 'prompt_openui', permission: 'read', human_input: 'answer', status: 'pending', preview: { target: 'prompt_openui', changes: {} }, result: { status: 'pending' } };
+  const runs = [];
+  const decisions = [];
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/operations/question-test', route => route.fulfill({ json: operation }));
+  await page.route('**/agent/operations/question-test/decision', async route => {
+    decisions.push(JSON.parse(route.request().postData() ?? '{}'));
+    operation = { ...operation, status: 'success', result: { status: 'success', data: { type: 'continue_conversation', message: 'Last 24 hours' } } };
+    await route.fulfill({ json: operation });
+  });
+  await page.route('**/agent/run', async route => {
+    runs.push(JSON.parse(route.request().postData() ?? '{}'));
+    const isFirst = runs.length === 1;
+    const trace = { id: 'tool-question', name: 'prompt_openui', arguments: JSON.stringify({ ui: program }), result: isFirst ? { status: 'pending', operation_id: operation.id } : { status: 'success', data: { type: 'continue_conversation', message: 'Last 24 hours' } } };
+    const parts = isFirst ? [{ type: 'tool', trace_id: trace.id }] : [{ type: 'tool', trace_id: trace.id }, { type: 'text', content: 'Here is the 24 hour summary.' }];
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-question', user: 'Summarize usage', reply: isFirst ? '' : 'Here is the 24 hour summary.', parts, status: isFirst ? 'pending' : 'success', started_at_ms: Date.now() - 800, ended_at_ms: Date.now(), traces: [trace] }] };
+    const body = isFirst
+      ? [started('turn-question'), step(1), ...toolCall(trace.id, trace.name, trace.arguments), toolResult(trace.id, trace.result), snapshot(conversation),
+        finished([{ id: operation.id, reason: 'question', toolCallId: trace.id, metadata: { capability: 'prompt_openui', permission: 'read' } }])]
+      : [started('turn-question', 'run-resume'), toolResult(trace.id, trace.result), step(2), ...text('run-resume:1', 'Here is the 24 hour summary.'), snapshot(conversation), finished([], 'run-resume')];
+    await route.fulfill({ contentType: 'text/event-stream', body: sse(body) });
+  });
+  await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="agent-page"]').waitFor();
+  await page.getByLabel('Describe an OMC query or action').fill('Summarize usage');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const form = page.locator('[data-testid="agent-openui"][data-tool="prompt_openui"]');
+  await form.waitFor();
+  await form.getByText('Which window?', { exact: true }).waitFor();
+  check('a form is drawn inside the answer while the turn waits, and the composer stays usable',
+    await page.getByLabel('Describe an OMC query or action').count() === 1
+      && await form.getByText('The summary covers this period.', { exact: true }).isVisible()
+      && await page.getByTestId('agent-openui-failure').count() === 0);
+  check('nothing is decided before the operator submits', decisions.length === 0 && runs.length === 1);
+
+  // The form's own submit carries the official action; the console forwards it as the answer.
+  const submit = form.getByRole('button', { name: 'Continue', exact: true });
+  await form.getByRole('combobox').or(form.getByRole('button', { name: /Select a window/ })).first().click();
+  await page.getByRole('option', { name: 'Last 24 hours' }).click();
+  await until(async () => await submit.isEnabled(), { label: 'the required choice to unlock the submit' });
+  await submit.click();
+  await page.getByText('Here is the 24 hour summary.').waitFor();
+  const answer = decisions[0]?.answer;
+  check('submitting decides the operation once with the official action as its answer',
+    decisions.length === 1 && decisions[0].approve === true && answer?.type === 'continue_conversation'
+      && typeof answer.message === 'string' && answer.message.includes('Last 24 hours'), JSON.stringify(decisions));
+  check('the answer resumes the same turn and returns the composer',
+    runs.length === 2 && runs[1].resume?.[0]?.interruptId === 'question-test'
+      && await page.getByLabel('Describe an OMC query or action').count() === 1, JSON.stringify(runs[1]));
+
+  // The submission is the operator's own message: it is drawn as a bubble between the form and
+  // the answer that follows, instead of the answer continuing straight out of the form.
+  const submitted = page.getByTestId('agent-form-answer');
+  await submitted.waitFor();
+  const geometry = await page.evaluate(() => {
+    const bubble = document.querySelector('[data-testid="agent-form-answer"]').getBoundingClientRect();
+    const form = document.querySelector('[data-testid="agent-openui"][data-tool="prompt_openui"]').getBoundingClientRect();
+    return { bubbleTop: bubble.top, bubbleRight: bubble.right, formBottom: form.bottom, formMiddle: (form.left + form.right) / 2 };
+  });
+  check('the submitted answer is shown as the operator\'s message, above the answer it triggered',
+    (await submitted.innerText()).includes('Last 24 hours')
+      && geometry.bubbleTop >= geometry.formBottom - 1
+      && geometry.bubbleRight > geometry.formMiddle, JSON.stringify(geometry));
+}
+
+export async function agentAsk({ base, page, check }) {
   let conversation = initial();
   let operation = { id: 'question-test', capability: 'ask_question', permission: 'read', human_input: 'answer', status: 'pending', preview: { target: 'Which window?', changes: { questions: [
     { question: 'Which window should the summary cover?', header: 'Window', options: [{ label: 'Last hour' }, { label: 'Last 24 hours', description: 'The console default' }] },
@@ -1291,7 +1200,6 @@ export async function agentQuestion({ base, page, check }) {
     && runs[1].resume?.[0]?.interruptId === 'question-test' && await page.getByLabel('Describe an OMC query or action').count() === 1, JSON.stringify(runs[1]));
 }
 
-
 async function verifyAgentRecovery({ base, page, check }) {
   let generationCount = 0;
   let subscriptionCount = 0;
@@ -1338,4 +1246,59 @@ async function verifyAgentRecovery({ base, page, check }) {
   release();
   await page.getByText('Recovered complete.', { exact: true }).waitFor();
   check('Agent replay replaces partial text and restores one complete answer', await page.getByText('Recovered complete.', { exact: true }).count() === 1 && await page.getByText('Partial answer', { exact: true }).count() === 0 && generationCount === 1);
+}
+
+/**
+ * A suggestion is the operator sending a message from wherever they are reading. Clicking one has
+ * to return the conversation to its newest end, because the answer it starts appears below - the
+ * primitive keeps the reader's place by default, which is right for arriving tokens and wrong for
+ * something the operator just sent.
+ */
+export async function agentFollowUps({ base, page, check }) {
+  const program = [
+    'root = Card([header, body, rows, fu])',
+    'header = CardHeader("最近 24 小时", "三家提供商，共 1,632 次请求。")',
+    'body = TextContent("失败集中在其中一个提供商。下面是这段时间的记录，逐条列出。", "default")',
+    'rows = TableBlock(cols, data)',
+    'cols = [Column("请求 ID"), Column("提供商"), Column("模型"), Column("状态"), Column("耗时")]',
+    'data = [Row("req-0001", "Alpha", "gpt-4.1", "200", "412ms"), Row("req-0002", "Beta", "claude-sonnet-4", "500", "918ms"), Row("req-0003", "Alpha", "gpt-4.1-mini", "200", "268ms"), Row("req-0004", "Gamma", "gemini-2.5-pro", "429", "1204ms"), Row("req-0005", "Alpha", "gpt-4.1", "200", "377ms"), Row("req-0006", "Beta", "claude-sonnet-4", "200", "655ms")]',
+    'fu = FollowUpBlock([FollowUpItem("哪个提供商失败最多？"), FollowUpItem("把失败的请求列出来")])',
+  ].join('\n');
+  const asked = [];
+  let conversation = initial();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/run', async route => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    asked.push(body.messages.at(-1)?.content ?? '');
+    const turn = {
+      id: 'turn-follow', user: String(body.messages.at(-1)?.content ?? ''), status: 'success', present: null,
+      started_at_ms: Date.now() - 500, ended_at_ms: Date.now(), rounds: 1,
+      parts: [{ type: 'text', content: '这是接下来的一段回答，用来把对话再撑长一些。' }], traces: [],
+    };
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [turn] };
+    await route.fulfill({ contentType: 'text/event-stream', body: sse([started(turn.id), step(1), ...text('follow-1', turn.parts[0].content), snapshot(conversation), finished()]) });
+  });
+  const opener = {
+    id: 'turn-open', user: '看看最近的请求', status: 'success', present: null,
+    started_at_ms: Date.now() - 9000, ended_at_ms: Date.now() - 8000, rounds: 1,
+    parts: [{ type: 'tool', trace_id: 'call-open' }, { type: 'text', content: Array.from({ length: 24 }, (_, index) => `第 ${index + 1} 行记录，够把手机上的对话撑出可视范围。`).join('\n\n') }],
+    traces: [{ id: 'call-open', name: 'present_openui', arguments: JSON.stringify({ ui: program }), result: { status: 'success', data: { displayed: true } }, started_at_ms: Date.now() - 9000, ended_at_ms: Date.now() - 8500 }],
+  };
+  conversation = { ...conversation, turns: [opener] };
+  await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
+  const thread = page.locator('[data-testid="agent-page"]');
+  await thread.locator('[data-testid="agent-openui"]').waitFor();
+
+  // The reader is at the top of a conversation longer than the phone's viewport.
+  const viewport = page.locator('[data-testid="agent-transcript"]');
+  await viewport.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
+  await settleLayout(page);
+  const isAtBottom = () => viewport.evaluate(element => element.scrollHeight - element.scrollTop - element.clientHeight <= 2);
+  const metrics = await viewport.evaluate(element => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, scrollTop: element.scrollTop, overflowY: getComputedStyle(element).overflowY }));
+  check('the reader can be away from the newest end before sending', !(await isAtBottom()), JSON.stringify(metrics));
+
+  await thread.getByRole('button', { name: '哪个提供商失败最多？' }).click();
+  await until(isAtBottom, { label: 'the transcript to return to the newest end' });
+  check('sending from a suggestion returns the transcript to its newest end on a phone', await isAtBottom(), JSON.stringify({ asked }));
 }

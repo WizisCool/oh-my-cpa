@@ -90,7 +90,7 @@ endpoint has no setting of its own. See [Agent and MCP](#agent-and-mcp).
   (NFS/CIFS).
 - **Master key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and
   payloads. Back it up securely.
-- **Framed content**: The console's document declares `frame-src 'self' blob:`. It frames plugin pages from its own origin and the Agent's sandboxed canvases (ADR 0072); a reverse proxy must not replace that policy with one that allows other frame sources.
+- **Framed content**: The console's document declares `frame-src 'self' blob:`. It frames plugin pages from its own origin; a reverse proxy must not replace that policy with one that allows other frame sources.
 - **Network security**: Keep CPA on a private network or loopback interface. The supplied
   Compose files publish CPA and OMC only on loopback; use direct local access or an SSH
   tunnel. Public access requires HTTPS through operator-owned infrastructure.
@@ -283,8 +283,8 @@ needed) allows or denies that one operation; `omc_operation_status` reads the
 outcome and can wait up to 30 seconds for the decision (`wait_seconds`). The read-only database queries and `ask_question` are offered to the built-in
 Agent only. Raw SQL results and private model history are omitted from Agent session
 responses and run snapshots, and query receipts have no raw-result preview; the selected
-model still receives the rows and may use them in its answer or an explicit
-`render_ui` display. See `docs/agent-capabilities.md`.
+model still receives the rows and may use them in its answer or in a projected
+`data_rows` reference a drawn interface uses. See `docs/agent-capabilities.md`.
 
 ## Model playground
 

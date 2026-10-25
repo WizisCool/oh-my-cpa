@@ -3,7 +3,7 @@ import path from 'node:path';
 import { until } from '../harness.mjs';
 
 /** Exercise the real download, then the standalone reader without the application renderer. */
-export async function checkConversationExport({ page, check, kind, expectedText, canvasProbe }) {
+export async function checkConversationExport({ page, check, kind, expectedText, interfaceProbe }) {
   const directory = path.resolve('tmp/conversation-export');
   await fs.mkdir(directory, { recursive: true });
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -20,10 +20,13 @@ export async function checkConversationExport({ page, check, kind, expectedText,
     await standalone.setContent(html, { waitUntil: 'load' });
     await standalone.evaluate(() => document.fonts.ready);
     await standalone.locator('.answer').first().waitFor();
-    if (canvasProbe) {
-      const generated = standalone.frameLocator('.canvas-frame').locator(canvasProbe.selector);
-      await generated.getByText(canvasProbe.text, { exact: true }).waitFor();
-      check(`${kind} standalone HTML activates the generated UI in an opaque network-blocked sandbox`, await standalone.locator('.canvas-frame').getAttribute('sandbox') === 'allow-scripts');
+    if (interfaceProbe) {
+      // The interface is the markup the official renderer drew at export time, kept inert: no
+      // frame, no script, and no control that could still run something.
+      const drawn = standalone.locator('figure.interface').filter({ hasText: interfaceProbe.text });
+      await drawn.waitFor();
+      check(`${kind} standalone HTML carries the drawn interface as inert markup`, await drawn.locator('script, iframe').count() === 0
+        && await drawn.getAttribute('inert') !== null, await drawn.innerText().then(text => text.slice(0, 120)));
     }
     const layout = await standalone.evaluate(() => {
       const column = document.querySelector('.transcript-column');
@@ -73,6 +76,6 @@ export async function checkConversationExport({ page, check, kind, expectedText,
     return { width: image.width, height: image.height, opaque, marker, colors: colors.size };
   }, bytes.toString('base64'));
   check(`${kind} image export produces a painted, opaque high-resolution conversation`, image.suggestedFilename().endsWith('.png') && evidence.width === 1680 && evidence.height > 500 && evidence.opaque > 1000 && evidence.colors > 20, JSON.stringify(evidence));
-  if (canvasProbe) check(`${kind} image export contains actual generated UI pixels`, evidence.marker > 100, JSON.stringify(evidence));
+  if (interfaceProbe) check(`${kind} image export paints the interface the document carries`, evidence.colors > 20 && evidence.opaque > 1000, JSON.stringify(evidence));
   check(`${kind} image capture removes its temporary document`, await page.locator('body > iframe[aria-hidden="true"]').count() === 0);
 }

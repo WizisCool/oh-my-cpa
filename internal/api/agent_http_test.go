@@ -12,6 +12,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/agui"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 )
 
 func TestAgentHTTPManagementKeyAndCapabilityBoundary(t *testing.T) {
@@ -105,7 +106,7 @@ func TestAgentCatalogueFitsTheSchemaBudget(t *testing.T) {
 		t.Fatalf("registry looks truncated: %d definitions", len(definitions))
 	}
 	// The whole catalogue a console-declared run can offer: every capability plus the display tools.
-	raw, err := json.Marshal(append(agent.ToolDeclarations(definitions), agent.DisplayToolDeclarations([]string{agent.RENDER_UI, agent.SUGGEST_NEXT})...))
+	raw, err := json.Marshal(append(agent.ToolDeclarations(definitions), agent.DisplayToolDeclarations([]string{agent.PRESENT_OPENUI})...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func TestAgentRunSpeaksAGUI(t *testing.T) {
 			t.Fatalf("accepted %s: %d %s", body, response.StatusCode, payload)
 		}
 	}
-	response, payload := doJSON(t, fixture.client, "POST", url, `{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}],"tools":[{"name":"render_ui","description":"interactive UI"}],"context":[{"description":"console_language","value":"en"},{"description":"console_token_style","value":"zh"}],"forwardedProps":{"revision":99,"model":"m","client_key_fingerprint":"f","present":"ui"}}`)
+	response, payload := doJSON(t, fixture.client, "POST", url, `{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}],"tools":[{"name":"present_openui","description":"interactive UI"}],"context":[{"description":"console_language","value":"en"},{"description":"console_token_style","value":"zh"}],"forwardedProps":{"revision":99,"model":"m","client_key_fingerprint":"f"}}`)
 	if response.StatusCode != 200 || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
 		t.Fatalf("stale run %d %s", response.StatusCode, payload)
 	}
@@ -203,5 +204,53 @@ func TestAgentEventsTranslateToInterrupts(t *testing.T) {
 	}
 	if len(events) != 2 || events[0].Type != agui.STATE_SNAPSHOT || events[1].Type != agui.RUN_ERROR || events[1].Code != "budget_exceeded" {
 		t.Fatalf("failed turn %+v", events)
+	}
+}
+
+// TestOpenUICapabilityCatalogue keeps the catalogue the OpenUI prompt lists (and the console's tool
+// provider admits) equal to the registry a deployment builds. A change here is a change to what a
+// rendered interface may call: regenerate with UPDATE_GOLDEN=1, then `pnpm openui:prompt`.
+func TestOpenUICapabilityCatalogue(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	if err := fixture.handler.ensureAgent(); err != nil {
+		t.Fatal(err)
+	}
+	testkit.Golden(t, "../agent/openui/capabilities.json", agent.OpenUITools(fixture.handler.agent.executor.Registry.List(agent.PRINCIPAL)))
+}
+
+// TestAgentDataRowsWireFormat pins the contract the OpenUI renderer reads: a reference the
+// conversation does not hold is a refusal the interface can display, a malformed request is a
+// plain 400, and a management-key bearer is not a console session.
+func TestAgentDataRowsWireFormat(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	url := fixture.baseURL + "/omc/api/v1/agent/data-rows"
+
+	response, body := doJSON(t, fixture.client, "POST", url, `{"data_ref":"nope","unexpected":true}`)
+	if response.StatusCode != 400 || !strings.Contains(string(body), "invalid_parameters") {
+		t.Fatalf("unknown field: %d %s", response.StatusCode, body)
+	}
+
+	response, body = doJSON(t, fixture.client, "POST", url, `{"data_ref":"unknown"}`)
+	if response.StatusCode != 200 || !strings.Contains(string(body), `"status":"error"`) || !strings.Contains(string(body), `"detail":"`) {
+		t.Fatalf("unknown reference: %d %s", response.StatusCode, body)
+	}
+
+	request, err := http.NewRequest("POST", url, strings.NewReader(`{"data_ref":"unknown"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer management-secret-value")
+	request.Header.Set("Origin", fixture.baseURL)
+	// A fresh client: the signed-in one carries the console's cookie, which would answer instead.
+	bearer, err := (&http.Client{}).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bearer.Body.Close()
+	// The console's own cookie is what a rendered interface acts under; a bearer reaches the
+	// capability endpoint, not this one.
+	if bearer.StatusCode != 401 {
+		t.Fatalf("management bearer reached the data-rows endpoint: %d", bearer.StatusCode)
 	}
 }

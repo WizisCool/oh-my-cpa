@@ -28,20 +28,21 @@ func TestDataReferencesDescribeStableSelectableRows(t *testing.T) {
 	if next := findTraceDataSources(trace); !reflect.DeepEqual(sources, next) {
 		t.Fatal("references are not stable")
 	}
-	conversation := &Conversation{Turns: []Turn{{Traces: []Trace{trace}}}}
-	result, raw := renderDisplay(conversation, RENDER_UI, canvasCall(fmt.Sprintf(`{"data_ref":%q}`, sources[0].DataRef), `["key","requests"]`))
-	var view View
-	if result.Status != "success" || json.Unmarshal(raw, &view) != nil || view.Rows[0]["requests"] != float64(12) || view.Source.CallID != trace.ID || view.Source.DataRef != sources[0].DataRef {
-		t.Fatalf("result %+v view %s", result, raw)
+	runtime := newTestRuntime(t)
+	if err := runtime.save(context.Background(), &Conversation{ID: "conversation", Turns: []Turn{{Traces: []Trace{trace}}}}); err != nil {
+		t.Fatal(err)
 	}
-	for name, source := range map[string]string{
-		"foreign conversation": fmt.Sprintf(`{"data_ref":%q}`, createDataReferenceID("foreign", "data.groups")),
-		"operation conflict":   fmt.Sprintf(`{"data_ref":%q,"call_id":"operation_usage"}`, sources[0].DataRef),
-		"path conflict":        fmt.Sprintf(`{"data_ref":%q,"path":"data.data.groups"}`, sources[0].DataRef),
-		"invalid handle":       `{"data_ref":"made-up"}`,
+	rows, err := runtime.ReadDataRows(context.Background(), sources[0].DataRef)
+	raw, _ := json.Marshal(rows)
+	if err != nil || string(raw) != `{"rows":[{"key":"provider","requests":12}],"fields":["key","requests"]}` {
+		t.Fatalf("rows %s: %v", raw, err)
+	}
+	for name, reference := range map[string]string{
+		"foreign conversation": createDataReferenceID("foreign", "data.groups"),
+		"invalid handle":       "made-up",
 	} {
-		if result, raw := renderDisplay(conversation, RENDER_UI, canvasCall(source, `["key"]`)); result.Status != "error" || raw != nil || result.Detail == "" {
-			t.Errorf("%s: %+v", name, result)
+		if _, err := runtime.ReadDataRows(context.Background(), reference); capability.ErrorDetail(err) == "" {
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 }
@@ -60,7 +61,8 @@ func TestDataReferencesHandleSQLAndBoundMetadata(t *testing.T) {
 		{ID: "sql", Name: "database_query", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"columns":["m","n"],"rows":[[1]]}`)}},
 		{ID: "pending", Name: "usage_aggregate", Result: capability.Result{Status: "pending", Data: json.RawMessage(`[{"m":1}]`)}},
 		{ID: "error", Name: "usage_aggregate", Result: capability.Result{Status: "error", Data: json.RawMessage(`[{"m":1}]`)}},
-		{ID: "canvas", Name: RENDER_UI, Result: capability.Result{Status: "success", Data: json.RawMessage(`[{"m":1}]`)}},
+		{ID: "presented", Name: PRESENT_OPENUI, Result: capability.Result{Status: "success", Data: json.RawMessage(`[{"m":1}]`)}},
+		{ID: "canvas", Name: "render_ui", Result: capability.Result{Status: "success", Data: json.RawMessage(`[{"m":1}]`)}},
 		{ID: "retired", Name: "render_chart", Result: capability.Result{Status: "success", Data: json.RawMessage(`[{"m":1}]`)}},
 	} {
 		if sources := findTraceDataSources(trace); len(sources) != 0 {
@@ -88,27 +90,18 @@ func TestDataReferencesHandleSQLAndBoundMetadata(t *testing.T) {
 	}
 }
 
-func TestCanvasErrorsExplainSessionFailureModes(t *testing.T) {
-	trace := sourceFixtureTrace()
-	conversation := &Conversation{Turns: []Turn{{Traces: []Trace{trace}}}}
-	for name, test := range map[string]struct{ arguments, detail string }{
-		"nested fields":    {`{"title":"usage","html":"<div></div>","source":{"call_id":"call_usage","fields":["requests"]}}`, "put fields at the top level"},
-		"operation id":     {canvasCall(`{"call_id":"operation_usage","path":"data.groups"}`, `["requests"]`), `tool-call id is "call_usage"`},
-		"envelope path":    {canvasCall(`{"call_id":"call_usage","path":"data.data.groups"}`, `["requests"]`), "path starts inside result.data"},
-		"wrong field type": {canvasCall(`{"call_id":"call_usage","path":"data.groups"}`, `[123]`), "arguments.fields[0] must have type string"},
-		"missing html":     {`{"title":"usage"}`, "arguments.html is required"},
-		"html type":        {`{"title":"usage","html":{"private":"never echo this value"}}`, "arguments.html must have type string"},
-	} {
-		result, view := renderDisplay(conversation, RENDER_UI, test.arguments)
-		if result.Status != "error" || view != nil || !strings.Contains(result.Detail, test.detail) || strings.Contains(result.Detail, "never echo this value") {
-			t.Errorf("%s: %+v", name, result)
-		}
+// TestDataRowsReadPositionalSQLRowsByTheirColumns: a SQL result's rows are arrays beside a column
+// list, and an interface reads them by column name like any other rows.
+func TestDataRowsReadPositionalSQLRowsByTheirColumns(t *testing.T) {
+	trace := Trace{ID: "sql", Name: "database_query", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"columns":["model","requests"],"rows":[["m",1],["n",2]]}`)}}
+	runtime := newTestRuntime(t)
+	if err := runtime.save(context.Background(), &Conversation{ID: "conversation", Turns: []Turn{{Traces: []Trace{trace}}}}); err != nil {
+		t.Fatal(err)
 	}
-	failure := Trace{ID: "bad", Name: RENDER_UI, Result: capability.Result{Status: "error", Code: "invalid_tool_arguments", Detail: "fields must be top-level"}}
-	conversation.Turns[0].Traces = append(conversation.Turns[0].Traces, failure, failure)
-	raw, err := buildModelToolResult(conversation, failure)
-	if err != nil || !strings.Contains(string(raw), `"data_sources"`) || !strings.Contains(string(raw), `"recovery"`) || strings.Contains(string(raw), `"key":"provider"`) {
-		t.Fatalf("repair feedback %s: %v", raw, err)
+	rows, err := runtime.ReadDataRows(context.Background(), findTraceDataSources(trace)[0].DataRef)
+	raw, _ := json.Marshal(rows)
+	if err != nil || string(raw) != `{"rows":[{"model":"m","requests":1},{"model":"n","requests":2}],"fields":["model","requests"]}` {
+		t.Fatalf("rows %s: %v", raw, err)
 	}
 }
 
@@ -146,9 +139,12 @@ func TestRuntimeKeepsReferencesPrivateAndUsesThemAfterCompaction(t *testing.T) {
 				if strings.Contains(string(serialized), "private-value-only-in-raw-result") || strings.Contains(string(serialized), `"role":"tool"`) || !strings.Contains(string(serialized), reference.DataRef) {
 					t.Fatalf("completed raw history was replayed or provenance lost: %s", serialized)
 				}
-				return gateway.AgentReply{Calls: []gateway.ToolCall{{ID: "draw", Type: "function", Function: gateway.ToolFunction{Name: RENDER_UI, Arguments: canvasCall(fmt.Sprintf(`{"data_ref":%q}`, reference.DataRef), `["key","requests"]`)}}}}, nil
+				program := fmt.Sprintf("root = Card([chart])\nusage = Query(\"data_rows\", {data_ref: \"%s\"}, {rows: []})\nchart = BarChart(usage.rows.key, [Series(\"Requests\", usage.rows.requests)])", reference.DataRef)
+				arguments, _ := json.Marshal(OpenUIInput{UI: program})
+				return gateway.AgentReply{Calls: []gateway.ToolCall{{ID: "draw", Type: "function", Function: gateway.ToolFunction{Name: PRESENT_OPENUI, Arguments: string(arguments)}}}}, nil
 			default:
-				return gateway.AgentReply{Content: "Here is the same recorded data."}, nil
+				t.Fatal("a presented answer was followed by another round")
+				return gateway.AgentReply{}, nil
 			}
 		}), nil
 	}
@@ -157,7 +153,7 @@ func TestRuntimeKeepsReferencesPrivateAndUsesThemAfterCompaction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := runtime.Run(context.Background(), Input{ConversationID: current.ID, Revision: current.Revision, Message: message, Model: "fixture", Fingerprint: "key", DisplayTools: []string{RENDER_UI}}, func(event Event) error {
+		if err := runtime.Run(context.Background(), Input{ConversationID: current.ID, Revision: current.Revision, Message: message, Model: "fixture", Fingerprint: "key", DisplayTools: []string{PRESENT_OPENUI}}, func(event Event) error {
 			if event.Type == "tool_result" && strings.Contains(event.Content, "data_sources") {
 				t.Fatal("private source metadata leaked into console events")
 			}
@@ -167,7 +163,7 @@ func TestRuntimeKeepsReferencesPrivateAndUsesThemAfterCompaction(t *testing.T) {
 		}
 	}
 	conversation, err := runtime.Current(context.Background())
-	if err != nil || executions != 1 || rounds != 4 || conversation.Turns[1].Traces[0].Result.Status != "success" || !strings.Contains(string(conversation.Turns[1].Traces[0].View), `"requests":12`) {
+	if err != nil || executions != 1 || rounds != 3 || conversation.Turns[1].Status != "success" || conversation.Turns[1].Traces[0].Result.Status != "success" || !strings.Contains(conversation.Turns[1].Traces[0].Arguments, reference.DataRef) {
 		t.Fatalf("compacted follow-up: %+v executions %d rounds %d error %v", conversation, executions, rounds, err)
 	}
 	if !strings.Contains(conversation.Turns[0].Messages[2].Content, "private-value-only-in-raw-result") {
@@ -225,18 +221,25 @@ func TestCompletedHistoryCarriesTheWritesOfAnUnsuccessfulTurn(t *testing.T) {
 	}
 }
 
-func TestCompletedHistoryPrioritizesDisplayedSourcesAndBoundsOutcomes(t *testing.T) {
+// TestCompletedHistoryReplaysPresentedInterfacesAndBoundsOutcomes: a settled turn's interface is
+// replayed as the call it was, with its result, and the reference it reads is kept ahead of the
+// others when the list is cut.
+func TestCompletedHistoryReplaysPresentedInterfacesAndBoundsOutcomes(t *testing.T) {
 	trace := sourceFixtureTrace()
-	turn := Turn{User: "count", Reply: "Twelve requests.", Traces: []Trace{trace}}
-	view, _ := json.Marshal(View{Source: &DataSource{CallID: trace.ID, Path: "data.groups"}})
-	turn.Traces = append(turn.Traces, Trace{Name: RENDER_UI, Result: capability.Result{Status: "success"}, View: view})
+	reference := createDataReferenceID(trace.ID, "data.groups")
+	turn := Turn{User: "count", Traces: []Trace{}}
 	for index := 0; index < MAX_DATA_SOURCES+3; index++ {
 		other := sourceFixtureTrace()
 		other.ID = fmt.Sprintf("other_%d", index)
 		turn.Traces = append(turn.Traces, other, Trace{Name: "fixture_write", Result: capability.Result{Status: "uncertain", OperationID: fmt.Sprintf("operation_%d", index)}})
 	}
+	program, _ := json.Marshal(OpenUIInput{UI: "root = Card([t])\nrows = Query(\"data_rows\", {data_ref: \"" + reference + "\"}, {rows: []})\nt = TextContent(\"Twelve\")"})
+	turn.Traces = append(turn.Traces, trace, Trace{ID: "answer", Name: PRESENT_OPENUI, Arguments: string(program), Result: capability.Result{Status: "success", Data: json.RawMessage(`{"displayed":true}`)}})
 	messages := buildCompletedTurnMessages(turn, nil)
-	if !strings.Contains(messages[1].Content, createDataReferenceID(trace.ID, "data.groups")) || !strings.Contains(messages[1].Content, `"has_omitted_outcomes":true`) || strings.Count(messages[1].Content, `"operation_id"`) != MAX_DATA_SOURCES {
-		t.Fatalf("unbounded outcomes or displayed source lost: %s", messages[1].Content)
+	if len(messages) != 3 || len(messages[1].ToolCalls) != 1 || messages[1].ToolCalls[0].Function.Arguments != string(program) || messages[2].Role != "tool" || messages[2].ToolCallID != "answer" {
+		t.Fatalf("presented interface not replayed as its call: %+v", messages)
+	}
+	if !strings.Contains(messages[1].Content, `"data_sources":[{"data_ref":"`+reference) || !strings.Contains(messages[1].Content, `"has_omitted_outcomes":true`) || strings.Count(messages[1].Content, `"operation_id"`) != MAX_DATA_SOURCES {
+		t.Fatalf("unbounded outcomes or the interface's source lost: %s", messages[1].Content)
 	}
 }

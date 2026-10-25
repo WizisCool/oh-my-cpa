@@ -28,6 +28,11 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
+      // The official renderer mounts its own inspector widget in development builds. It is a
+      // third-party overlay in the corner the composer's controls use (and the browser checks
+      // click in), so the package resolves to a component that draws nothing; a production build
+      // drops the import entirely.
+      { find: '@openuidev/devtools', replacement: path.resolve(__dirname, './src/agent/openui/inspectorOff.tsx') },
       {
         find: /^monaco-editor$/,
         replacement: path.resolve(__dirname, './node_modules/monaco-editor/esm/vs/editor/editor.api.js'),

@@ -2,7 +2,7 @@ import { modelSquare, modelSquareFixtures, modelSquareLedgerFixtures } from './p
 import { mobileConsole } from './probes/mobileConsole.mjs';
 import { insights, insightsFixtures, insightsPhone } from './probes/insights.mjs';
 import { routeRenderError, routeLazyError } from './probes/routeError.mjs';
-import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentReplace, agentAttach, agentFixtures } from './probes/agent.mjs';
+import { agentWorkspace, agentExternal, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentAsk, agentViews, agentReplace, agentAttach, agentFollowUps, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
  * The browser probe scenarios, as a registry rather than a script.
@@ -193,9 +193,11 @@ export const SCENARIOS = [
   },
   { id: 'agent', name: 'Agent opens on a centred composer, names its model there, authorizes inline, remembers its target and recovers the server conversation', options: { routes: agentFixtures() }, run: agentWorkspace },
   { id: 'agent-external', name: 'an external agent\'s approval link opens a standalone consent screen, and Agent shows how to connect one over MCP', options: { routes: agentFixtures() }, run: agentExternal },
-  { id: 'agent-question', name: 'Agent asks a question in the composer and continues once it is answered', options: { routes: agentFixtures() }, run: agentQuestion },
+  { id: 'agent-question', name: 'Agent asks with an inline OpenUI form and continues once it is submitted', options: { routes: agentFixtures() }, run: agentQuestion },
+  { id: 'agent-followups', name: 'Agent returns to the newest end when a suggestion sends on a phone', options: { routes: agentFixtures() }, run: agentFollowUps },
+  { id: 'agent-ask', name: 'Agent asks in its own panel, which takes the composer and answers in one decision', options: { routes: agentFixtures() }, run: agentAsk },
   { id: 'agent-live', name: 'Agent shows a sent message at once, queues the next one and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
-  { id: 'agent-views', name: 'Agent draws a canvas from frozen rows, fills the viewport with it and saves it as an image', options: { routes: agentFixtures() }, run: agentViews },
+  { id: 'agent-views', name: 'Agent draws an OpenUI program that reads conversation rows and runs an approved change', options: { routes: agentFixtures() }, run: agentViews },
   { id: 'agent-replace', name: 'Agent retries or edits the newest turn in place, unless that turn changed something', options: { routes: agentFixtures() }, run: agentReplace },
   { id: 'agent-attach', name: 'Agent takes text files and images with a message and refuses what is neither', options: { routes: agentFixtures() }, run: agentAttach },
   { id: 'agent-failure', name: 'Agent hands a refused message back and reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },

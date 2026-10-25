@@ -423,6 +423,9 @@ func (h *Handler) ensureAgent() error {
 		registry := capability.NewRegistry()
 		h.agent.err = h.operationsService().Register(registry)
 		if h.agent.err == nil {
+			h.agent.err = agent.RegisterPromptOpenUI(registry)
+		}
+		if h.agent.err == nil {
 			h.agent.err = agent.RegisterAskQuestion(registry)
 		}
 		if h.agent.err != nil {

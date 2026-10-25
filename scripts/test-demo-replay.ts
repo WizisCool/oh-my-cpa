@@ -12,6 +12,7 @@ import { applyAgentEvent, EMPTY_FRAME } from '../web/src/agent/runReducer.ts';
 import type { AgentRunRequest } from '../web/src/agent/protocol.ts';
 import { DEMO_REPLAY_ONLY, replayAgentRun } from '../web/src/demo/agentReplay.ts';
 import agentRecording from '../web/src/demo/agentRecording.json' with { type: 'json' };
+import { programOf } from '../web/src/agent/openui/program.ts';
 import { chunkText, recordingLanguage } from '../web/src/demo/pacing.ts';
 import { replayPlaygroundChat } from '../web/src/demo/playgroundReplay.ts';
 import playgroundRecording from '../web/src/demo/playgroundRecording.json' with { type: 'json' };
@@ -68,13 +69,13 @@ test('a generated interface arrives as a draft before it settles', async () => {
   let frame = EMPTY_FRAME;
   for await (const event of replayAgentRun(runRequest(QUESTION.en, 'en'), new AbortController().signal, instant)) {
     frame = applyAgentEvent(frame, event);
-    const display = frame.traces.find(trace => trace.name === 'render_ui');
+    const display = frame.traces.find(trace => trace.name === 'present_openui');
     if (display?.result.status === 'running') drafts.push(display.arguments ?? '');
   }
-  assert.ok(drafts.length > 10, 'the markup is written over many frames');
-  const view = frame.traces.find(trace => trace.name === 'render_ui')?.view;
-  assert.equal(view?.kind, 'ui');
-  assert.equal(view?.title, agentRecording.turn.traces.at(-1)?.view?.title.en);
+  assert.ok(drafts.length > 10, 'the program is written over many frames');
+  // The program is readable from the argument stream, which is what draws it while it is written.
+  assert.ok(drafts.some(draft => /^root = Card\(/.test(programOf(draft))), 'a program is drawn before its call ends');
+  assert.match(programOf(frame.traces.find(trace => trace.name === 'present_openui')?.arguments), /^root = Card\([\s\S]*OverviewCardBlock/);
 });
 
 test('a message with no recording is refused before it is accepted', async () => {
@@ -93,7 +94,7 @@ test('the question is accepted as the page offers it in a third reading language
   const { frame } = await fold(runRequest(offered, 'ms'));
   assert.equal(frame.errorCode, '');
   // A reader in a language the recording is not written in reads the English answer.
-  assert.match(frame.snapshot?.turns.at(-1)?.reply ?? '', /failure rate/);
+  assert.match(programOf(frame.snapshot?.turns.at(-1)?.traces.at(-1)?.arguments), /failure rate/);
   writeDemoQuestion('');
 });
 
@@ -129,10 +130,11 @@ test('a recording is measured from the moment it is replayed', () => {
     assert.match(resolved, /2031-01-03/);
     assert.match(resolved, /09:05/);
   }
-  const zh = resolveRecording<{ parts: { content?: string }[] }>(agentRecording.turn, anchorMS, 'zh');
-  assert.match(zh.parts.map(part => part.content ?? '').join(''), /12 月 27 日 09:05 至 1 月 3 日 09:05/);
-  const en = resolveRecording<{ parts: { content?: string }[] }>(agentRecording.turn, anchorMS, 'en');
-  assert.match(en.parts.map(part => part.content ?? '').join(''), /Dec 27 09:05 to Jan 3 09:05/);
+  // The window an answer names is the window it was asked about: the card states it in the reader's language.
+  const zh = resolveRecording<{ traces: { arguments: { ui: string } }[] }>(agentRecording.turn, anchorMS, 'zh');
+  assert.match(zh.traces.at(-1)!.arguments.ui, /2030 年 12 月 27 日 09:05 – 1 月 3 日 09:05/);
+  const en = resolveRecording<{ traces: { arguments: { ui: string } }[] }>(agentRecording.turn, anchorMS, 'en');
+  assert.match(en.traces.at(-1)!.arguments.ui, /From Dec 27, 2030 09:05 to Jan 3 09:05/);
   // Fields that hold instants are numbers on the wire, not digits in a string.
   const call = resolveRecording<{ traces: { arguments: { from_ms: unknown; to_ms: unknown } }[] }>(agentRecording.turn, anchorMS, 'en').traces[0];
   assert.equal(call.arguments.to_ms, anchorMS);
@@ -140,16 +142,21 @@ test('a recording is measured from the moment it is replayed', () => {
 });
 
 test('the recorded figures agree with each other', () => {
-  const view = agentRecording.turn.traces.at(-1)?.view;
-  assert.ok(view);
-  const requests = view.rows.reduce((sum, row) => sum + row.requests, 0);
-  const failures = view.rows.reduce((sum, row) => sum + row.failures, 0);
+  // The demonstration cannot read rows it did not receive, so its program carries them; the card
+  // derives every figure from them rather than restating a number nobody checked.
+  const rows = [...agentRecording.turn.traces.at(-1)!.arguments.ui.en.matchAll(/\{day: "[^"]+", requests: (\d+), failures: (\d+), failure_rate: ([\d.]+)\}/g)]
+    .map(([, requests, failures, rate]) => ({ requests: Number(requests), failures: Number(failures), rate: Number(rate) }));
+  assert.equal(rows.length, 8, 'one row per day of the window');
+  const requests = rows.reduce((sum, row) => sum + row.requests, 0);
+  const failures = rows.reduce((sum, row) => sum + row.failures, 0);
+  assert.equal(requests, 1632);
+  assert.equal(failures, 88);
+  for (const row of rows) assert.equal(row.rate, Math.round(1e4 * row.failures / row.requests) / 1e4);
   for (const language of ['zh', 'en'] as const) {
-    const answer = agentRecording.turn.parts.map(part => (typeof part.content === 'object' ? part.content[language] : '')).join('');
-    assert.ok(answer.includes(requests.toLocaleString('en-US')), `${language}: the answer states the table's total`);
-    assert.ok(answer.includes(`${(100 * failures / requests).toFixed(1)}%`), `${language}: the answer states the table's rate`);
+    const program = agentRecording.turn.traces.at(-1)!.arguments.ui[language];
+    assert.ok(program.includes('@Sum(rows.requests)'), `${language}: the total is read from the rows`);
+    assert.ok(program.includes('@Round(100 * @Sum(rows.failures) / @Sum(rows.requests), 1)'), `${language}: the rate is read from the rows`);
   }
-  for (const row of view.rows) assert.equal(row.failure_rate, Math.round(1e4 * row.failures / row.requests) / 1e4);
 });
 
 test('text is cut on whole characters', () => {

@@ -5,6 +5,8 @@ import { capabilityTitle } from '../../i18n/capabilities';
 import { useToast } from '../feedback';
 import { getTimeZone } from '../../utils/time';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { useTheme } from '../../theme/ThemeContext';
+import { openUITheme } from '../../agent/openui/theme';
 import { callStatusKey, failureKey, formatDuration, isKnownTurnStatus, playgroundErrorKey } from './conversationLabels';
 import { formatTokens } from '../../types/tokenDisplay';
 import type { ConversationSnapshot } from '../../agent/conversationSnapshot';
@@ -14,6 +16,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
   const { t, lang } = useI18n();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const toast = useToast();
+  const { themeMode, theme: resolved } = useTheme();
   const [isExporting, setIsExporting] = React.useState(false);
   const isExportingRef = React.useRef(false);
   const exportSnapshot = async (snapshot: ConversationSnapshot, format: 'html' | 'image') => {
@@ -22,7 +25,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
     setIsExporting(true);
     const exportedAt = new Date();
     const computedStyle = getComputedStyle(document.documentElement);
-    const keys = ['bg', 'surface', 'hover', 'fg', 'fg-2', 'muted', 'meta', 'border', 'border-soft', 'accent', 'success', 'warn', 'danger', ...Array.from({ length: 6 }, (_, index) => `series-${index + 1}`)];
+    const keys = ['bg', 'surface', 'hover', 'fg', 'fg-2', 'muted', 'meta', 'border', 'border-soft', 'accent', 'accent-hover', 'accent-active', 'accent-on', 'success', 'warn', 'danger', ...Array.from({ length: 6 }, (_, index) => `series-${index + 1}`)];
     const variables = Object.fromEntries(keys.map(key => [`--${key}`, computedStyle.getPropertyValue(`--${key}`).trim()]));
     const locale = languageLocale(lang);
     const numberFormat = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 });
@@ -34,8 +37,7 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       copy: t('agent.export.copy'), copied: t('agent.export.copied'), copyFailed: t('agent.export.copy_failed'),
       search: t('agent.export.search'), expand: t('agent.export.expand'), collapse: t('agent.export.collapse'),
       panel: t('agent.panel'), close: t('common.close'), usage: t('agent.foot.tokens'),
-      noMatches: t('agent.export.no_matches'), canvasOmitted: t('agent.export.canvas_omitted'),
-      step: status => t(`agent.view.step.${status}`),
+      noMatches: t('agent.export.no_matches'), interfaceOmitted: t('agent.export.interface_omitted'),
       calls: count => t('agent.chain.used', { count: String(count) }),
       turns: count => t('agent.export.turns', { count }),
       number: value => numberFormat.format(value),
@@ -55,10 +57,9 @@ export function useConversationExport(kind: 'agent' | 'playground') {
     };
     try {
       const { downloadConversation } = await import('../../agent/conversationDownload');
-      // Exported canvases read the same format settings the live view does, so a saved page shows the
-      // operator's locale, time zone, token style and empty label rather than the kit's defaults.
-      const canvasFormat = { tokenStyle, locale, timeZone: getTimeZone(), emptyLabel: t('agent.view.empty') };
-      await downloadConversation({ snapshot, labels, appearance: { variables, isDark: document.documentElement.dataset.themeMode === 'dark', format: canvasFormat }, exportedAt, language: lang }, format, `omc-${kind}`);
+      // Interfaces are drawn in the theme the conversation shows them in.
+      const openui = { theme: openUITheme(resolved.palette.series), mode: themeMode };
+      await downloadConversation({ snapshot, labels, appearance: { variables, isDark: themeMode === 'dark' }, exportedAt, language: lang }, format, `omc-${kind}`, openui);
     } catch { toast.error(t('agent.export.failed')); }
     finally { isExportingRef.current = false; setIsExporting(false); }
   };

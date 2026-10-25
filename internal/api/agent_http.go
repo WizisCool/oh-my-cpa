@@ -262,6 +262,33 @@ func (h *Handler) agentImage(writer http.ResponseWriter, request *http.Request) 
 	_, _ = writer.Write(content)
 }
 
+// agentDataRows serves OpenUI's data_rows Query tool: the rows a data reference of the current
+// conversation names, projected to the scalar fields its data_sources entry listed. It is a read of
+// a result the console already received, so it needs nothing beyond the console session; a
+// reference the conversation does not hold is refused with a detail the interface shows.
+func (h *Handler) agentDataRows(writer http.ResponseWriter, request *http.Request) {
+	if !h.readyAgent(writer) {
+		return
+	}
+	var input struct {
+		DataRef string `json:"data_ref"`
+	}
+	if !readAgentInput(writer, request, &input) {
+		return
+	}
+	rows, err := h.agent.runtime.ReadDataRows(request.Context(), input.DataRef)
+	if err != nil {
+		writeJSON(writer, 200, capability.Result{Status: "error", Code: capability.ErrorCode(err), Detail: capability.ErrorDetail(err)})
+		return
+	}
+	data, err := json.Marshal(rows)
+	if err != nil {
+		writePlaygroundError(writer, 500, "tool_result_too_large")
+		return
+	}
+	writeJSON(writer, 200, capability.Result{Status: "success", Data: data})
+}
+
 // runAgent serves one Agent run as an AG-UI event stream (ADR 0041).
 //
 // A request the runtime refuses before it persisted the turn still gets a stream, but one without
@@ -386,12 +413,8 @@ func translateAgentEvent(translator *agui.Translator, model string, event agent.
 		if event.Trace.EndedMS > 0 {
 			metadata["ended_at_ms"] = event.Trace.EndedMS
 		}
-		if len(event.Trace.View) > 0 {
-			metadata["view"] = event.Trace.View
-		}
 		content := event.Content
 		if event.Trace.Name == "database_query" {
-			delete(metadata, "view")
 			trace := agentTraceForConsole(*event.Trace)
 			receipt, err := json.Marshal(trace.Result)
 			if err != nil {

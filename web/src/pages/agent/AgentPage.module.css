@@ -4,9 +4,14 @@
 /* ── shell ─────────────────────────────────────────────────────────────────── */
 
 /* The Agent is a conversation and nothing around it: no page head, no panel at rest. The shell
-   carries the reading column's measure for the shared transcript and composer inside it. */
+   carries the measures the shared transcript and composer inside it read: the composer and prose
+   keep a reading measure, while an answer that draws an OpenUI interface takes the wider lane. */
 .shell {
-  --workspace-column: 780px;
+  --thread-column: 960px;
+  /* The composer takes the column's own width, so the box an operator writes in and the answer it
+     produces share one left and right edge. Prose inside is still set to a reading measure. */
+  --workspace-column: var(--thread-column);
+  --thread-reading-width: 760px;
   --workspace-gutter: 8px;
   position: relative;
   height: 100%;
@@ -124,9 +129,19 @@
   }
 }
 
+@media (max-width: 1080px) {
+  .shell {
+    --thread-column: 100%;
+  }
+}
+
 @media (max-width: 900px) {
   .shell-bar {
     padding: 8px 12px;
+  }
+
+  .shell {
+    --thread-reading-width: 100%;
   }
 
   .hero,
@@ -518,93 +533,6 @@
   display: none;
 }
 
-/* ── display views ─────────────────────────────────────────────────────────── */
-
-.view {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--thread-hairline);
-  border-radius: var(--radius-document);
-  background: var(--surface);
-}
-
-/* A frameless view is part of the answer, not an object in it (ADR 0082): no edge, no ground of
-   its own and no title bar. Its controls stay reachable but quiet until the reader comes to them. */
-.view[data-frame='none']:not(.view-fullscreen) {
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.view[data-frame='none']:not(.view-fullscreen) .view-title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.view[data-frame='none']:not(.view-fullscreen) .view-head {
-  opacity: .45;
-  transition: opacity var(--motion-fast);
-}
-
-.view[data-frame='none']:not(.view-fullscreen) .view-head:hover,
-.view[data-frame='none']:not(.view-fullscreen) .view-head:focus-within {
-  opacity: 1;
-}
-
-.view[data-frame='none']:not(.view-fullscreen) .canvas-frame {
-  background: var(--bg);
-}
-
-.view-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.view-title {
-  min-width: 0;
-  color: var(--fg);
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-
-.view-spacer {
-  flex: 1;
-}
-
-/* A canvas filling the viewport. It sits above the console but below antd's popups (1000+), so
-   its own tooltips still show. */
-.view-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 950;
-  border: 0;
-  border-radius: 0;
-  padding: 12px 16px 16px;
-}
-
-.view-fullscreen .canvas-frame,
-.view-fullscreen .canvas-source {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-}
-
-.view-placeholder {
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-document);
-}
-
 /* ── files sent with a message (ADR 0074) ──────────────────────────────────── */
 
 .sent-files {
@@ -675,308 +603,11 @@
 
 /* ── panels (ADR 0079) ─────────────────────────────────────────────────────── */
 
-.panel {
-  gap: 14px;
-}
-
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.block-title {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-}
-
 /* Figures share one hairline grid instead of each sitting in its own box. */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 1px;
-  margin: 0;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-document);
-  background: var(--border-soft);
-  overflow: hidden;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  padding: 10px 12px;
-  background: var(--surface);
-}
-
-.stat-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.stat-label > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stat-value {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  margin: 0;
-  color: var(--fg);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-.stat-delta {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 400;
-}
-
-.stat[data-tone='success'] .stat-delta { color: var(--success); }
-.stat[data-tone='warning'] .stat-delta { color: var(--warn); }
-.stat[data-tone='danger'] .stat-delta { color: var(--danger); }
-
-.fields {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-
-.field {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border-soft);
-  font-size: var(--text-md);
-}
-
-.field:last-child {
-  border-bottom: 0;
-}
-
-.field dt {
-  flex: none;
-  max-width: 50%;
-  color: var(--muted);
-}
-
-.field dd {
-  min-width: 0;
-  margin: 0;
-  color: var(--fg);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.callout {
-  margin: 0;
-  padding: 8px 12px;
-  border-left: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: var(--fg);
-  font-size: var(--text-md);
-  line-height: 1.55;
-}
-
-.callout[data-tone='success'] {
-  border-left-color: var(--success);
-  background: color-mix(in srgb, var(--success) 7%, transparent);
-}
-
-.callout[data-tone='warning'] {
-  border-left-color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 8%, transparent);
-}
-
-.callout[data-tone='danger'] {
-  border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-}
-
-.steps {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 
 /* The rail is each step's own left edge, so it joins the marks whatever a step's height. */
-.step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 9px minmax(0, 1fr);
-  column-gap: 12px;
-  padding-bottom: 12px;
-  font-size: var(--text-md);
-}
-
-.step:last-child {
-  padding-bottom: 0;
-}
-
-.step:not(:last-child)::before {
-  position: absolute;
-  top: 14px;
-  bottom: -5px;
-  left: 4px;
-  width: 1px;
-  background: var(--border);
-  content: '';
-}
-
-.step-mark {
-  width: 9px;
-  height: 9px;
-  margin-top: 5px;
-  border: 1.5px solid var(--muted);
-  border-radius: 50%;
-  background: var(--surface);
-}
-
-.step[data-status='done'] .step-mark {
-  border-color: var(--success);
-  background: var(--success);
-}
-
-.step[data-status='active'] .step-mark {
-  border-color: var(--accent);
-  outline: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.step[data-status='failed'] .step-mark {
-  border-color: var(--danger);
-  background: var(--danger);
-}
-
-.step-label {
-  color: var(--fg);
-}
-
-.step[data-status='pending'] .step-label {
-  color: var(--fg-2);
-}
-
-.step-text {
-  grid-column: 2;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.meters {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.meter {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 5px 12px;
-  font-size: var(--text-md);
-}
-
-.meter-label {
-  min-width: 0;
-  color: var(--fg-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.meter-value {
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
-}
-
-.meter-track {
-  grid-column: 1 / -1;
-  height: 4px;
-  border-radius: var(--radius-xs);
-  background: var(--series-track);
-  overflow: hidden;
-}
-
-.meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-xs);
-  background: var(--accent);
-}
-
-.meter[data-tone='success'] .meter-fill { background: var(--success); }
-.meter[data-tone='warning'] .meter-fill { background: var(--warn); }
-.meter[data-tone='danger'] .meter-fill { background: var(--danger); }
-
-.links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
-}
-
-.link:hover,
-.link:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 
 /* ── canvases (ADR 0072) ───────────────────────────────────────────────────── */
-
-.canvas-frame {
-  display: block;
-  flex-shrink: 0;
-  width: 100%;
-  border: 0;
-  background: var(--surface);
-}
-
-.canvas-source {
-  max-height: 360px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-document);
-  background: var(--bg);
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 
 /* ── composer additions ────────────────────────────────────────────────────── */
 
@@ -1130,20 +761,6 @@
   font-size: var(--text-md);
 }
 
-.operation-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-  font-size: var(--text-sm);
-}
-
-.operation-capability {
-  color: var(--meta);
-  font-size: var(--text-sm);
-}
-
 .operation-fields {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -1186,6 +803,404 @@
   border-radius: var(--radius-sm);
   background: var(--bg);
   letter-spacing: .08em;
+}
+
+@media (max-width: 640px) {
+  /* A phone's column is narrow and a decision is tapped with a thumb: the card spends less of
+     its width on padding, and the two answers share the row as full-height targets. */
+  .approval:not([data-variant='consent']) {
+    padding: 12px;
+  }
+
+  .approval:not([data-variant='consent']) .operation-fields {
+    padding: 8px 10px;
+    gap: 6px 12px;
+  }
+
+  .approval:not([data-variant='consent']) .operation-actions {
+    flex-wrap: nowrap;
+  }
+
+  .approval:not([data-variant='consent']) .operation-actions > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .approval .operation-actions :global(.ant-btn) {
+    height: 40px;
+  }
+}
+
+/* ── capability directory ──────────────────────────────────────────────────── */
+
+.directory-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.count {
+  color: var(--meta);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.directory-note {
+  margin: 0;
+  padding: 16px 20px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.group + .group {
+  border-top: 1px solid var(--border-soft);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 20px 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.capabilities {
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+}
+
+.capability {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0 12px 0 20px;
+  transition: background-color var(--motion-fast);
+}
+
+.capability:hover {
+  background: var(--hover);
+}
+
+.capability-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.capability-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.capability-label {
+  flex: none;
+  max-width: 100%;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capability-name {
+  min-width: 0;
+  color: var(--meta);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capability-model {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-soft);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.capability-model-label {
+  color: var(--meta);
+  font-size: var(--text-xs);
+}
+
+.capability-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.is-expanded {
+  display: block;
+  color: var(--fg-2);
+}
+
+.capability :global(.ant-btn) {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+@media (hover: none) {
+  .capability:hover {
+    background: transparent;
+  }
+}
+
+@media (max-width: 640px) {
+  .action-label {
+    display: none;
+  }
+}
+
+/* ── external agents ─────────────────────────────────────────────────────── */
+
+.connect {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.connect-label {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.connect-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.connect-endpoint code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+/* One tile per client: each is a bounded target with its mark, so the choice reads as four
+   separate things rather than a run of words. */
+.connect-clients {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.connect-client {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+}
+
+.connect-client:hover {
+  background: var(--hover-inset);
+}
+
+.connect-client:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Its own line so the class is exported: the guide reads `styles['is-selected']` to mark the
+   chosen client, and the checker reads line-initial selectors. */
+.is-selected,
+.connect-client.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  font-weight: 600;
+}
+
+.connect-client-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-size: var(--text-lg);
+}
+
+.connect-client-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* On the authorization screen the card is the body of a request box that already has its own
+   frame, title and permission: it keeps the preview and the decision, and the two answers share
+   the row equally so neither is the smaller target. */
+.approval[data-variant='consent'] {
+  margin-left: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.approval[data-variant='consent'] .operation-actions {
+  margin-top: 6px;
+  flex-wrap: nowrap;
+}
+
+.approval[data-variant='consent'] .operation-actions > * {
+  flex: 1;
+}
+
+/* ── an OpenUI answer ──────────────────────────────────────────────────────── */
+
+/* Prose keeps the reading measure even inside a message that took the wide lane, so an answer
+   that leads with a paragraph does not stretch across a monitor. */
+.prose {
+  width: 100%;
+  max-width: var(--thread-reading-width);
+}
+
+/* A drawn interface takes the wide lane and is drawn exactly as the official renderer lays it out:
+   no OMC frame, edge or padding around it. The answer is what the model produced, and the
+   components inside it already carry the shape they asked for. */
+.openui {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Follow-up questions are the answer's offer to continue, so they read as OMC's own suggestion
+   chips - one line of quiet pills - rather than the library's full-width ruled list. Scoped to the
+   Agent's interface wrapper: the Playground draws no OpenUI answer, and the console's own chip
+   language is what an operator already knows from the composer. */
+.openui :global(.openui-follow-up-block) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.openui :global(.openui-follow-up-block__header) {
+  /* The library labels the block in English; the chips say what they are, and the console's own
+     language is the operator's. */
+  display: none;
+}
+
+/* A question is filled in, not read. The library's form primitives are fluid, so in a prompt the
+   column narrows to what a control needs - a slider, a select and a text field at the width of the
+   answer read as a page of stretched boxes, and a value's companion control drifts away from it. */
+.openui[data-tool='prompt_openui'] :global([role='form']) {
+  max-width: 480px;
+}
+
+/* A program that stacks controls without the Form container is still a question: the same width
+   applies per control, so a field never spans the lane. */
+.openui :global(.openui-input),
+.openui :global(.openui-select-trigger),
+.openui :global(.openui-slider-block) {
+  max-width: 480px;
+}
+
+/* A paragraph inside a wide answer is still read at a reading measure: the lane gives charts and
+   tables room, not a line of text across a monitor. */
+.openui :global(.openui-text-block) {
+  max-width: var(--thread-reading-width);
+}
+
+.openui :global(.openui-follow-up-item) {
+  width: auto;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+}
+
+.openui :global(.openui-follow-up-item):hover {
+  color: var(--fg);
+  border-color: var(--muted);
+  background: var(--hover);
+}
+
+.openui :global(.openui-follow-up-item):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+
+/* ── arrival ───────────────────────────────────────────────────────────────── */
+
+/* A call row, and the interface drawn in it, appear where they will stay: opacity and a 4px rise
+   inside `base`, with no fill mode, so a settled answer carries no transform of its own. */
+.call {
+  animation: agent-enter var(--motion-base) var(--ease-standard);
+}
+
+@keyframes agent-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call {
+    animation: none;
+  }
 }
 
 /* ── question panel ────────────────────────────────────────────────────────── */
@@ -1527,30 +1542,8 @@
 }
 
 @media (max-width: 640px) {
-  /* A phone's column is narrow and a decision is tapped with a thumb: the card spends less of
-     its width on padding, and the two answers share the row as full-height targets. */
-  .approval:not([data-variant='consent']) {
-    padding: 12px;
-  }
-
-  .approval:not([data-variant='consent']) .operation-fields {
-    padding: 8px 10px;
-    gap: 6px 12px;
-  }
-
-  .approval:not([data-variant='consent']) .operation-actions {
-    flex-wrap: nowrap;
-  }
-
-  .approval:not([data-variant='consent']) .operation-actions > * {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .approval .operation-actions :global(.ant-btn) {
-    height: 40px;
-  }
-
+  /* A phone's column is narrow and a decision is tapped with a thumb: the panel spends less of its
+     width on padding, and the key caps go with the keyboard they name. */
   .question {
     max-height: 70dvh;
     padding: 12px;
@@ -1561,317 +1554,3 @@
   }
 }
 
-/* ── capability directory ──────────────────────────────────────────────────── */
-
-.directory-head {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.count {
-  color: var(--meta);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.directory-note {
-  margin: 0;
-  padding: 16px 20px;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.group + .group {
-  border-top: 1px solid var(--border-soft);
-}
-
-.group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 14px 20px 6px;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.capabilities {
-  margin: 0;
-  padding: 0 0 8px;
-  list-style: none;
-}
-
-.capability {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 0 12px 0 20px;
-  transition: background-color var(--motion-fast);
-}
-
-.capability:hover {
-  background: var(--hover);
-}
-
-.capability-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.capability-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.capability-label {
-  flex: none;
-  max-width: 100%;
-  color: var(--fg);
-  font-size: var(--text-md);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capability-name {
-  min-width: 0;
-  color: var(--meta);
-  font-size: var(--text-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capability-model {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
-  padding-left: 10px;
-  border-left: 2px solid var(--border-soft);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.capability-model-label {
-  color: var(--meta);
-  font-size: var(--text-xs);
-}
-
-.capability-description {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.is-expanded {
-  display: block;
-  color: var(--fg-2);
-}
-
-.capability :global(.ant-btn) {
-  margin-top: 6px;
-  color: var(--muted);
-}
-
-@media (hover: none) {
-  .capability:hover {
-    background: transparent;
-  }
-}
-
-@media (max-width: 640px) {
-  .action-label {
-    display: none;
-  }
-}
-
-/* ── external agents ─────────────────────────────────────────────────────── */
-
-.connect {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px 20px;
-}
-
-.connect-label {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.connect-endpoint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.connect-endpoint code {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-sm);
-}
-
-/* One tile per client: each is a bounded target with its mark, so the choice reads as four
-   separate things rather than a run of words. */
-.connect-clients {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.connect-client {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--fg);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--motion-fast), background-color var(--motion-fast);
-}
-
-.connect-client:hover {
-  background: var(--hover-inset);
-}
-
-.connect-client:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.connect-client.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
-  font-weight: 600;
-}
-
-.connect-client-icon {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  font-size: var(--text-lg);
-}
-
-.connect-client-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connect-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding-left: 16px;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-/* On the authorization screen the card is the body of a request box that already has its own
-   frame, title and permission: it keeps the preview and the decision, and the two answers share
-   the row equally so neither is the smaller target. */
-.approval[data-variant='consent'] {
-  margin-left: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.approval[data-variant='consent'] .operation-actions {
-  margin-top: 6px;
-  flex-wrap: nowrap;
-}
-
-.approval[data-variant='consent'] .operation-actions > * {
-  flex: 1;
-}
-
-.ui-draft { padding: 12px; border-block: 1px solid var(--border); color: var(--fg-2); }
-.ui-draft pre { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
-.ui-draft button + button { margin-inline-start: 8px; }
-
-/* ── arrival ───────────────────────────────────────────────────────────────── */
-
-/* A figure, its draft and a call row each appear where they will stay: opacity and a 4px rise
-   inside `base`, with no fill mode, so a settled figure carries no transform of its own. */
-.view,
-.call {
-  animation: agent-enter var(--motion-base) var(--ease-standard);
-}
-
-@keyframes agent-enter {
-  from { opacity: 0; transform: translateY(4px); }
-}
-
-.view-draft {
-  border-style: dashed;
-}
-
-.view-draft-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.view-draft-label {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.view-draft-stage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  min-height: 168px;
-  border-radius: var(--radius-document);
-  background: var(--thread-field);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .view,
-  .call {
-    animation: none;
-  }
-}
