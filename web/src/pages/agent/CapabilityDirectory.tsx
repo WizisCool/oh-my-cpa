@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { CopyButton } from '../../components/common/CopyButton';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
-import { capabilityDescription, capabilityTitle } from '../../i18n/capabilities';
+import { capabilityDescription, capabilityTitle, permissionLabel } from '../../i18n/capabilities';
 import { groupCapabilities } from './state';
 import type { Capability } from './state';
 import styles from './AgentPage.module.css';
@@ -67,10 +67,10 @@ export const CapabilityDirectory = React.memo(function CapabilityDirectory({ cap
       {isPending && <p className={styles['directory-note']}>{t('common.loading')}</p>}
       {!isPending && !isError && groups.length === 0 && <p className={styles['directory-note']}>{t('agent.directory.empty')}</p>}
       {groups.map(group => (
-        <section key={group.permission} className={styles['group']} aria-label={t(`agent.permission.${group.permission}`)}>
+        <section key={group.permission} className={styles['group']} aria-label={permissionLabel(group.permission, t)}>
           <h3 className={styles['group-head']}>
             <span className={workspace['pip']} data-tone={PERMISSION_TONE[group.permission]} aria-hidden="true" />
-            <span>{t(`agent.permission.${group.permission}`)}</span>
+            <span>{permissionLabel(group.permission, t)}</span>
             <span className={styles['count']}>{group.items.length}</span>
           </h3>
           <ul className={styles['capabilities']}>

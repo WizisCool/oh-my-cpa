@@ -237,9 +237,9 @@ export async function oauthManagement({ base, page, check }) {
   );
   const cooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-10"]');
   check('a known credential_quota reason is consolidated into the CPA cooldown status',
-    await cooldownRow.getByText('CPA Cooldown', { exact: true }).isVisible()
+    await cooldownRow.getByText('CPA cooldown', { exact: true }).isVisible()
       && !(await cooldownRow.innerText()).includes('credential_quota'));
-  await cooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
+  await cooldownRow.getByText('CPA cooldown', { exact: true }).hover();
   const cooldownTooltip = page.getByRole('tooltip').filter({ hasText: 'CPA 429 rate limit protection active' });
   await cooldownTooltip.waitFor({ state: 'visible' });
   check('the consolidated cooldown status explains the known condition', (await cooldownTooltip.innerText()).includes('CPA 429 rate limit protection active'));
@@ -294,13 +294,13 @@ export async function oauthManagement({ base, page, check }) {
   await detailPanel.locator('.ant-drawer-close').click();
   await detailPanel.waitFor({ state: 'hidden' });
   const unexpectedCooldownRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-09"]');
-  await unexpectedCooldownRow.getByText('CPA Cooldown', { exact: true }).hover();
+  await unexpectedCooldownRow.getByText('CPA cooldown', { exact: true }).hover();
   const unexpectedTooltip = page.getByRole('tooltip').filter({ hasText: 'Fixture unexpected upstream cooldown' });
   check('an unexpected cooldown reason remains readable from the row status',
     await unexpectedTooltip.waitFor({ state: 'visible' }).then(() => true, () => false));
   await page.mouse.move(0, 0);
   await cooldownRow.getByRole('button', { name: /More actions|更多操作/i }).click();
-  const cooldownItem = page.getByRole('menuitem', { name: /Clear Cooldown|清除冷却/i });
+  const cooldownItem = page.getByRole('menuitem', { name: /Clear cooldown|清除冷却/i });
   check('an active cooldown stays actionable through the row menu', await cooldownItem.isEnabled());
   await page.keyboard.press('Escape');
 
@@ -357,7 +357,7 @@ export async function oauthManagement({ base, page, check }) {
   await page.locator('[data-oauth-start="codex"]').click();
   await until(() => oauthStarts.length > 0, { label: 'the explicit OAuth start request' });
   check('Start authorization issues exactly one request', oauthStarts.length === 1, `starts=${oauthStarts.length}`);
-  await page.getByRole('button', { name: 'Cancel Authorization', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Cancel authorization', exact: true }).waitFor({ state: 'visible' });
   // Minimize the active session through the drawer's explicit dismissal control.
   await page.locator('.ant-drawer-open .ant-drawer-close').click();
   await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
@@ -398,9 +398,9 @@ export async function oauthManagement({ base, page, check }) {
     `starts=${oauthStarts.length - startsBeforeBlip}`,
   );
 
-  await blipPanel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).click();
+  await blipPanel.getByRole('button', { name: /Check authorization status|检查授权状态/i }).click();
   await blipPanel.locator('[data-oauth-status-read-failure]').waitFor({ state: 'visible', timeout: 10_000 });
-  const cancelWhileUnread = await blipPanel.getByRole('button', { name: /Cancel Authorization|取消授权/i }).count();
+  const cancelWhileUnread = await blipPanel.getByRole('button', { name: /Cancel authorization|取消授权/i }).count();
   const retryWhileUnread = await blipPanel.getByRole('button', { name: /^Retry$|^重试$/ }).count();
   check(
     'a status read that fails before CPA answers leaves the attempt waiting and cancellable',
@@ -419,7 +419,7 @@ export async function oauthManagement({ base, page, check }) {
     `completed=${blipCompleted}`,
   );
   const completionToast = page.locator('.omc-toast').filter({
-    has: page.getByRole('button', { name: /View credentials|查看凭证/i }),
+    has: page.getByRole('button', { name: /View credentials|查看凭据/i }),
   });
   await completionToast.waitFor({ state: 'visible', timeout: 10_000 });
   check(
@@ -931,15 +931,15 @@ async function verifyAuthorizationOutcomes({ base, page, check }) {
       await panel.locator('#oauth-connect-provider').click();
       await page.getByTitle('Codex OAuth', { exact: true }).last().click();
       await panel.locator('[data-oauth-start="codex"]').click();
-      await panel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).waitFor();
-      await panel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).click();
-      const expectedTitle = outcome === 'new' ? /one new credential was confirmed|确认一个新的凭证/
+      await panel.getByRole('button', { name: /Check authorization status|检查授权状态/i }).waitFor();
+      await panel.getByRole('button', { name: /Check authorization status|检查授权状态/i }).click();
+      const expectedTitle = outcome === 'new' ? /one new credential was confirmed|确认一个新的凭据/
         : outcome === 'ambiguous' ? /could not be identified uniquely|无法唯一确认/
-          : /refreshing the credential list failed|刷新凭证列表失败/;
+          : /refreshing the credential list failed|刷新凭据列表失败/;
       const completionToast = page.locator('.omc-toast').filter({ hasText: expectedTitle });
       await completionToast.waitFor();
       check(`${outcome} authorization has exactly one outcome toast`, await page.locator('.omc-toast').count() === 1);
-      await completionToast.getByRole('button', { name: /View credentials|查看凭证/i }).click();
+      await completionToast.getByRole('button', { name: /View credentials|查看凭据/i }).click();
       await completionToast.waitFor({ state: 'detached' });
       await panel.waitFor({ state: 'hidden' });
       check(`${outcome} completion action reveals the provider collection`,
@@ -1065,7 +1065,7 @@ async function verifyWorkspaceScale({ base, page, check }) {
     await copyPanel.locator('#oauth-connect-provider').click();
     await page.getByTitle('Codex OAuth', { exact: true }).last().click();
     await copyPanel.locator('[data-oauth-start="codex"]').click();
-    const copyLink = copyPanel.getByRole('button', { name: /Copy Link|复制链接/i });
+    const copyLink = copyPanel.getByRole('button', { name: /Copy link|复制链接/i });
     await copyLink.waitFor();
     // Retention, not pointer geometry: dispatch the burst in one task so none of the four
     // ordinary notices can expire before the oldest-report eviction would happen.
@@ -1126,7 +1126,7 @@ async function verifyWorkspaceScale({ base, page, check }) {
       await page.locator('#oauth-connect-provider').click();
       await page.getByTitle(label, { exact: true }).last().click();
       await page.locator(`[data-oauth-start="${provider}"]`).click();
-      await page.locator(`[data-oauth-card="${provider}"]`).getByRole('button', { name: /Cancel Authorization/ }).waitFor();
+      await page.locator(`[data-oauth-card="${provider}"]`).getByRole('button', { name: /Cancel authorization/ }).waitFor();
       await page.locator('.ant-drawer-open .ant-drawer-close').click();
       await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
     }
@@ -1334,7 +1334,7 @@ export async function oauthWindowWarmup({ page, base, check }) {
     await until(() => detail.getByRole('textbox', { name: 'Prefix' }).isEnabled(), { label: 'safe credential fields loaded' });
     await note.fill('Keep the warmup draft');
     const savedFields = page.waitForResponse(response => response.url().endsWith('/management/auth-files/fields') && response.request().method() === 'PATCH');
-    await detail.getByRole('button', { name: 'Save Fields', exact: true }).click();
+    await detail.getByRole('button', { name: 'Save fields', exact: true }).click();
     await savedFields;
     await detail.getByRole('tab', { name: /Window warmup/ }).click();
     await until(() => warmup.getByRole('button', { name: 'Save', exact: true }).isEnabled(), { label: 'warmup draft remains unsaved after field save' });

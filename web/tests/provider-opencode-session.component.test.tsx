@@ -40,9 +40,9 @@ function renderEditor(provider: ProviderItem) {
   const view = renderWithOmc(<Editor provider={provider} />);
   const openEditor = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
-    await screen.findByRole('combobox', { name: 'Driver / Protocol' });
+    await screen.findByRole('combobox', { name: 'Driver / protocol' });
   };
-  const headersToggle = () => screen.getByRole('button', { name: /Custom Headers/ });
+  const headersToggle = () => screen.getByRole('button', { name: /Custom headers/ });
   const save = () => api.writes('/management/providers/openai-compat-0')[0] as { body: Record<string, unknown> } | undefined;
   return { client: view.client, api, view, openEditor, headersToggle, save };
 }
@@ -87,7 +87,7 @@ it('writes nothing when the added header is abandoned, and reopening restores th
     await openEditor();
     fireEvent.click(screen.getByRole('button', { name: 'Add x-opencode-session' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / Protocol' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / protocol' })).toBeNull());
     expect(api.writes()).toHaveLength(0);
 
     await openEditor();
@@ -121,7 +121,7 @@ it('reports two configured ids instead of choosing one of them', async () => {
     await openEditor();
     expect(await screen.findByText('This OpenCode endpoint has conflicting session headers')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add x-opencode-session' })).toBeNull();
-    expect(screen.getByText(/Custom Headers lists more than one value for x-opencode-session/)).toBeTruthy();
+    expect(screen.getByText(/Custom headers lists more than one value for x-opencode-session/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Review headers' }));
     await waitFor(() => expect(headersToggle().getAttribute('aria-expanded')).toBe('true'));

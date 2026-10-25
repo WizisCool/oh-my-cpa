@@ -157,11 +157,11 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     const { requests, failed, total_tokens: tokens } = record.usage;
     return (
       <div className={styles['usage']}>
-        <span className={styles['usage-requests']}>{requests.toLocaleString()}</span>
+        <span className={styles['usage-requests']}>{requests.toLocaleString('en')}</span>
         <span className={styles['usage-detail']}>
           {t('keys.usage_tokens', { n: formatTokens(tokens, tokenStyle) })}
           {failed > 0 && (
-            <span className={styles['usage-failed']}>{t('keys.usage_failed', { n: failed.toLocaleString() })}</span>
+            <span className={styles['usage-failed']}>{t('keys.usage_failed', { n: failed.toLocaleString('en') })}</span>
           )}
         </span>
       </div>

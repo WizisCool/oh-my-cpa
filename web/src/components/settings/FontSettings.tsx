@@ -3,7 +3,7 @@ import { AutoComplete, Button, Modal, Select, type SelectProps } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiErrorCode } from '../../api/client';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { useFontLibrary, useFontRoles } from '../../hooks/useFonts';
 import { forgetLibraryFont, registerLibraryFont } from '../../theme/fontLibrary';
 import {
@@ -27,12 +27,12 @@ import { useToast } from '../feedback';
 import { CloudDownloadOutlined, DeleteOutlined, ExternalLinkOutlined, UploadOutlined } from '../icons';
 import styles from './FontSettings.module.css';
 
-const ROLE_LABEL_KEYS: Record<FontRole, { label: string; description: string }> = {
+const ROLE_LABEL_KEYS: Record<FontRole, { label: MessageKey; description: MessageKey }> = {
   ui: { label: 'omc.font_ui', description: 'omc.font_ui_desc' },
   mono: { label: 'omc.font_mono', description: 'omc.font_mono_desc' },
 };
 
-const ERROR_KEYS: Record<string, string> = {
+const ERROR_KEYS: Record<string, MessageKey> = {
   font_invalid_file: 'omc.font_error_invalid',
   font_too_large: 'omc.font_error_too_large',
   font_limit: 'omc.font_error_limit',

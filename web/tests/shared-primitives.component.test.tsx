@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDrawer } from '../src/components/common/AppDrawer';
@@ -11,7 +12,7 @@ import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
 import { Toolbar } from '../src/components/common/Toolbar';
-import { I18nProvider } from '../src/i18n';
+import { antdLocale, I18nProvider, LANGUAGES, useI18n, useT } from '../src/i18n';
 
 describe('SearchInput', () => {
   it('is named by its label, shows it as the placeholder, and reports text rather than events', () => {
@@ -283,5 +284,59 @@ describe('Pager', () => {
     const { container } = render(<Pager variant="stepped" page={2} pageSize={10} total={48} onChange={() => undefined} />);
     expect(container.querySelector('.ant-pagination-simple')).toBeTruthy();
     expect(container.querySelector('input')).toBeNull();
+  });
+});
+
+describe('I18nProvider and language switching', () => {
+  function LanguageHarness() {
+    const { lang, setLang } = useI18n();
+    const t = useT();
+    const [draft, setDraft] = React.useState('initial draft');
+    return (
+      <div>
+        <span data-testid="current-lang">{lang}</span>
+        <span data-testid="save-text">{t('common.save')}</span>
+        <input
+          data-testid="draft-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="button" onClick={() => setLang('zh')}>Switch zh</button>
+        <button type="button" onClick={() => setLang('en')}>Switch en</button>
+      </div>
+    );
+  }
+
+  it('switches between synchronous languages without losing uncommitted draft state in children', () => {
+    window.localStorage.setItem('omc-lang', 'zh');
+    render(
+      <I18nProvider>
+        <LanguageHarness />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByTestId('current-lang').textContent).toBe('zh');
+    expect(screen.getByTestId('save-text').textContent).toBe('保存');
+    expect(document.documentElement.lang).toBe('zh-CN');
+
+    const input = screen.getByTestId('draft-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'edited draft before switch' } });
+    expect(input.value).toBe('edited draft before switch');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch en' }));
+
+    expect(screen.getByTestId('current-lang').textContent).toBe('en');
+    expect(screen.getByTestId('save-text').textContent).toBe('Save');
+    expect(document.documentElement.lang).toBe('en');
+    expect(input.value).toBe('edited draft before switch');
+    expect(window.localStorage.getItem('omc-lang')).toBe('en');
+  });
+
+  it('provides valid Ant Design locales for every registered language', () => {
+    for (const option of LANGUAGES) {
+      const locale = antdLocale(option.id as any);
+      expect(locale).toBeDefined();
+      expect(typeof locale.locale).toBe('string');
+    }
   });
 });

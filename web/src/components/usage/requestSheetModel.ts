@@ -9,6 +9,7 @@ import {
   type CredentialIndex,
   type ProviderLookupEntry,
 } from '../../types/usageEventIdentity';
+import type { MessageKey, TFunc } from '../../i18n';
 import { eventKeyLabel, eventResultLabelKey, eventUserAgentLabel } from '../../types/usageEventLabels';
 import {
   eventCacheRate,
@@ -124,7 +125,7 @@ const ROW_PAD_BLOCK = 28;
  */
 export function resolveSheetColumns(
   widths: RequestColumnWidths,
-  label: (labelKey: string) => string,
+  label: (labelKey: MessageKey) => string,
 ): { columns: SheetColumn[]; width: number } {
   const fixed = REQUEST_COLUMNS.map((column) => {
     const manual = widths[column.id];
@@ -162,7 +163,7 @@ export interface RequestSheetInput {
   masks: ReadonlySet<RequestMaskId>;
   colWidths: RequestColumnWidths;
   caption: string;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: TFunc;
   tokenStyle: TokenNumberStyle;
   tpsMode: TpsCalculationMode;
   modelView?: 'call' | 'model';

@@ -14,7 +14,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from '../utils/time';
 import { api } from '../api/client';
 import { usePreference } from '../hooks/usePreference';
-import { useT } from '../i18n';
+import { type MessageKey, useT } from '../i18n';
 import {
   usageEventParams,
   isUsageFacetsResponse,
@@ -361,7 +361,7 @@ export const UsageEventsPage: React.FC = () => {
    * nobody recognises - but the chip must still remove the value it was given,
    * not the label it displayed.
    */
-  const chipLabels: Record<EventFilterKey, string> = {
+  const chipLabels: Record<EventFilterKey, MessageKey> = {
     model: 'events.filter_chip_model',
     model_alias: 'events.filter_chip_model_alias',
     provider: 'events.filter_chip_provider',

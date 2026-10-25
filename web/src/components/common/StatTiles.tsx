@@ -61,7 +61,7 @@ export function StatTiles<K extends string>({ tiles, selected, onSelect, ariaLab
               {tile.tone === 'neutral' ? tile.label : <StatusLabel tone={tile.tone}>{tile.label}</StatusLabel>}
             </span>
             <span className={clsx(styles['stat-tile-value'], isToned && styles[`stat-${tile.tone}`])}>
-              {tile.count === undefined ? '—' : tile.count.toLocaleString()}
+              {tile.count === undefined ? '—' : tile.count.toLocaleString('en')}
             </span>
           </button>
         );

@@ -48,7 +48,7 @@ describe('payload rule disclosures', () => {
   it('keeps the chosen disclosure state when an external document arrives', () => {
     const onDocChange = vi.fn();
     const { rerender } = render(<PayloadSurface doc={parseDocument(POPULATED_YAML)} onDocChange={onDocChange} />);
-    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
+    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default rules/ });
 
     fireEvent.click(getDefaultHeader());
     expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
@@ -66,7 +66,7 @@ describe('payload rule disclosures', () => {
     const doc = parseDocument(POPULATED_YAML.replace('model-one', '""'));
     const onDocChange = vi.fn();
     const { rerender } = render(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={0} />);
-    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default Rules/ });
+    const getDefaultHeader = () => screen.getByRole('button', { name: /^Default rules/ });
 
     expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('false');
     rerender(<PayloadSurface doc={doc} onDocChange={onDocChange} validateTrigger={1} />);
@@ -92,7 +92,7 @@ it('adding a raw rule updates the actual configuration draft and exposes its sav
   try {
     const { container } = render(<React.StrictMode><I18nProvider><QueryClientProvider client={client}><AntdApp><ConfigPayloadDraft /></AntdApp></QueryClientProvider></I18nProvider></React.StrictMode>);
     await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toBe('requests: {}\n'));
-    const header = screen.getByRole('button', { name: /^Override Raw Rules/ });
+    const header = screen.getByRole('button', { name: /^Override raw rules/ });
     fireEvent.click(header);
     const panel = header.closest('.ant-collapse-item')!;
     fireEvent.click(panel.querySelector('button')!);

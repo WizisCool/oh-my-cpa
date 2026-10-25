@@ -263,7 +263,7 @@ async function main() {
     await uploadedCard.locator('[role="switch"]').click();
     await page.waitForTimeout(1200);
     const disabledText = await uploadedCard.innerText();
-    check('UI 开关真实禁用认证文件', disabledText, /已禁用|disabled/i.test(disabledText));
+    check('UI 开关真实禁用认证文件', disabledText, /已停用|disabled/i.test(disabledText));
 
     await uploadedCard.getByRole('button', { name: /更多操作|More actions/i }).click();
     await page.getByRole('menuitem', { name: /^删除凭据$|^Delete credential$/i }).click();

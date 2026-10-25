@@ -1,6 +1,6 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
 import { credentialProviderIconId } from '../components/common/providerMetadata';
-import type { TFunc } from '../i18n';
+import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
@@ -26,14 +26,14 @@ export type OAuthCallbackError = 'invalid' | 'state_mismatch';
 
 export interface OAuthCallbackErrorKeys {
   /** The paste is not a usable redirect at all. */
-  invalid: string;
+  invalid: MessageKey;
   /** The paste belongs to a different attempt. Only providers that bind state raise this. */
-  stateMismatch?: string;
+  stateMismatch?: MessageKey;
   /** There is no session state to bind the paste to. */
-  missingState: string;
+  missingState: MessageKey;
   /** Overrides the generic "paste the URL here" hint when the provider needs its own wording. */
-  hintKey?: string;
-  placeholderKey?: string;
+  hintKey?: MessageKey;
+  placeholderKey?: MessageKey;
 }
 
 export interface OAuthCallbackRules {
@@ -50,7 +50,7 @@ export interface OAuthProviderDefinition {
   /** Brand mark id resolved against the lobe icon catalog. */
   iconId: string;
   /** i18n key base: `oauth.{keyBase}_title`, `_hint` and `_login`. */
-  keyBase: string;
+  keyBase: 'kimi' | 'kimi_ai' | 'codex' | 'anthropic' | 'antigravity' | 'xai' | 'devin' | 'meta';
   flow: OAuthFlowKind;
   /**
    * A login already in flight must be cancelled before another is started.

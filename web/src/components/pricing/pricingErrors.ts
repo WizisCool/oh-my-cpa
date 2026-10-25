@@ -1,5 +1,5 @@
 import { ApiError, describeError } from '../../api/client';
-import type { TFunc } from '../../i18n';
+import { type TFunc, translateOr } from '../../i18n';
 
 /**
  * The pricing API's refusal codes, in words. A refusal the console knows - a model outside the
@@ -9,7 +9,7 @@ import type { TFunc } from '../../i18n';
 export function pricingErrorText(t: TFunc, error: unknown): string {
   if (error instanceof ApiError && error.data && typeof error.data === 'object') {
     const code = (error.data as { code?: unknown }).code;
-    if (typeof code === 'string' && PRICING_ERROR_CODES.has(code)) return t(`pricing.error.${code}`);
+    if (typeof code === 'string' && PRICING_ERROR_CODES.has(code)) return translateOr(t, `pricing.error.${code}`, describeError(error));
   }
   return describeError(error);
 }

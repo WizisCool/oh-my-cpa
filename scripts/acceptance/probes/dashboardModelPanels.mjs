@@ -352,7 +352,7 @@ export async function dashboardModelPanelFailures({ base, page, check }) {
   await page.locator('.model-alert').first().waitFor({ timeout: 20_000 });
   check(
     'a first load that failed is reported rather than left loading',
-    /Failed to load model usage|无法读取模型用量/.test(await page.locator('.model-alert').first().innerText()),
+    /Could not load model usage|无法读取模型用量/.test(await page.locator('.model-alert').first().innerText()),
     `alert=${JSON.stringify(await page.locator('.model-alert').first().innerText())}`,
   );
   check(

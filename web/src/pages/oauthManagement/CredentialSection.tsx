@@ -16,11 +16,11 @@ import {
   SyncOutlined,
   WarningOutlined,
 } from '../../components/icons';
+import { type MessageKey, type TFunc, useT } from '../../i18n';
 import { credentialProviderIconId, getCredentialProviderMetadata } from '../../components/common/providerMetadata';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { StatusLabel } from '../../components/common/StatusLabel';
 import { Meter } from '../../components/common/Meter';
-import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type { QuotaWindow } from '../../types/quota';
 import {
@@ -76,7 +76,7 @@ interface CredentialSectionProps {
   onSort: (key: string) => void;
 }
 
-const PERIOD_KEYS: Record<NonNullable<QuotaColumn['period']>, string> = {
+const PERIOD_KEYS: Record<NonNullable<QuotaColumn['period']>, MessageKey> = {
   five_hour: 'quota.slot_five_hour', daily: 'quota.slot_daily', weekly: 'quota.slot_weekly', monthly: 'quota.slot_monthly',
 };
 
@@ -108,7 +108,7 @@ export function CredentialSection({ section, title, pluginLogo, selectedKeys, no
   const selectable = section.records.filter((record) => record.canSelectForFileBatch);
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
   const statuses = section.records.map((record) => credentialStatusOf(record, isAuthFileDisabled(record.file), isAuthFileProblem(record.file)));
-  const exceptions = new Map<string, { tone: string; count: number }>();
+  const exceptions = new Map<MessageKey, { tone: string; count: number }>();
   for (const status of statuses) {
     if (status.tone === 'success') continue;
     const entry = exceptions.get(status.labelKey) ?? { tone: status.tone, count: 0 };

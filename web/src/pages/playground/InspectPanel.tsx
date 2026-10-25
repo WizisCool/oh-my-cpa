@@ -45,7 +45,7 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
   }
 
   const unavailable = t('pg.unavailable');
-  const milliseconds = (value?: number) => (value === undefined ? unavailable : `${Math.max(0, value).toLocaleString()} ms`);
+  const milliseconds = (value?: number) => (value === undefined ? unavailable : `${Math.max(0, value).toLocaleString('en')} ms`);
   const tokens = (value?: number) => (value === undefined ? unavailable : formatTokens(value, tokenStyle));
   const metrics: [string, string][] = [
     [t('pg.first_content'), milliseconds(turn.firstContentMS)],

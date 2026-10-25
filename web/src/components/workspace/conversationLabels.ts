@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n';
 /**
  * The statuses a turn can legitimately carry.
  *
@@ -16,10 +17,12 @@ const TURN_STATUSES = [
   'uncertain',
   'partial',
   'interrupted',
-];
+] as const;
 
-export function isKnownTurnStatus(status: string): boolean {
-  return TURN_STATUSES.includes(status);
+export type KnownTurnStatus = (typeof TURN_STATUSES)[number];
+
+export function isKnownTurnStatus(status: string): status is KnownTurnStatus {
+  return (TURN_STATUSES as readonly string[]).includes(status);
 }
 
 /**
@@ -28,7 +31,7 @@ export function isKnownTurnStatus(status: string): boolean {
  * The operator reads a localized sentence; the raw identifier remains below it for support.
  * Codes absent from this table fall back to `agent.error.gateway`.
  */
-const FAILURE_KEYS: Record<string, string> = {
+const FAILURE_KEYS: Record<string, MessageKey> = {
   agent_busy: 'agent.error.busy',
   agent_revision_conflict: 'agent.error.conflict',
   confirmation_pending: 'agent.error.pending',
@@ -89,7 +92,7 @@ const FAILURE_KEYS: Record<string, string> = {
   demo_replay_only: 'demo.replay_only',
 };
 
-export function failureKey(code: string): string {
+export function failureKey(code: string): MessageKey {
   return FAILURE_KEYS[code] ?? 'agent.error.gateway';
 }
 
@@ -99,7 +102,7 @@ export function failureKey(code: string): string {
  * The code itself is still printed beneath the sentence, because a support conversation needs the
  * identifier; it is just not the message. Codes absent from this table read as a gateway failure.
  */
-const ERROR_KEYS: Record<string, string> = {
+const ERROR_KEYS: Record<string, MessageKey> = {
   demo_replay_only: 'demo.replay_only',
   client_key_required: 'pg.error.key',
   client_key_missing: 'pg.error.key_missing',
@@ -132,7 +135,7 @@ const ERROR_KEYS: Record<string, string> = {
   demo_operation_refused: 'demo.blocked',
 };
 
-export function playgroundErrorKey(code: string): string {
+export function playgroundErrorKey(code: string): MessageKey {
   return ERROR_KEYS[code] ?? 'pg.error.gateway';
 }
 
@@ -158,7 +161,7 @@ const ASK_QUESTION = 'ask_question';
  * agent's form says so rather than "awaiting confirmation", which would send the operator
  * looking for an approval that is not there.
  */
-export function callStatusKey(trace: { name: string; result: { status: string } }): string {
+export function callStatusKey(trace: { name: string; result: { status: string } }): MessageKey {
   switch (trace.result.status) {
     case 'running':
       return 'agent.call.running';

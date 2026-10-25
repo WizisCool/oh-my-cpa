@@ -67,7 +67,7 @@ export function auditSearchParams(filters: AuditFilters, now = Date.now()): URLS
  * A category is what an operator asks about ("who touched the keys"), which is not always
  * one action prefix: OAuth sign-ins and credential file edits are the same credentials.
  */
-export const AUDIT_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
+export const AUDIT_CATEGORIES = {
   access: ['auth'],
   keys: ['api_key', 'client_key'],
   providers: ['provider'],
@@ -78,13 +78,23 @@ export const AUDIT_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
   plugins: ['plugin'],
   agent: ['capability'],
   system: ['system', 'logs', 'request_log', 'audit'],
-};
+} as const satisfies Readonly<Record<string, readonly string[]>>;
 
 export type AuditCategory = keyof typeof AUDIT_CATEGORIES;
 
-export function categoryOf(action: string): string | undefined {
+export const AUDIT_CATEGORY_NAMES = Object.keys(AUDIT_CATEGORIES) as AuditCategory[];
+
+export function isAuditCategory(value: string): value is AuditCategory {
+  return (AUDIT_CATEGORY_NAMES as readonly string[]).includes(value);
+}
+
+function prefixesOf(category: AuditCategory): readonly string[] {
+  return AUDIT_CATEGORIES[category];
+}
+
+export function categoryOf(action: string): AuditCategory | undefined {
   const prefix = action.split('.')[0];
-  return Object.keys(AUDIT_CATEGORIES).find((category) => AUDIT_CATEGORIES[category].includes(prefix));
+  return AUDIT_CATEGORY_NAMES.find((category) => prefixesOf(category).includes(prefix));
 }
 
 export type AuditTone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
@@ -165,9 +175,9 @@ export function dayKey(ms: number): string {
 }
 
 /** The console category whose prefixes are exactly the filter's, if any. */
-export function selectedCategory(filters: AuditFilters): string | undefined {
-  return Object.keys(AUDIT_CATEGORIES).find(
-    (name) => AUDIT_CATEGORIES[name].join(',') === filters.categories.join(','),
+export function selectedCategory(filters: AuditFilters): AuditCategory | undefined {
+  return AUDIT_CATEGORY_NAMES.find(
+    (name) => prefixesOf(name).join(',') === filters.categories.join(','),
   );
 }
 
@@ -182,7 +192,7 @@ export function readAuditFilters(params: URLSearchParams): AuditFilters {
   const outcome = params.get('outcome') as AuditOutcome | null;
   const range = params.get('range') as AuditRange | null;
   return {
-    categories: Object.prototype.hasOwnProperty.call(AUDIT_CATEGORIES, category) ? [...AUDIT_CATEGORIES[category]] : [],
+    categories: isAuditCategory(category) ? [...prefixesOf(category)] : [],
     outcome: outcome && AUDIT_OUTCOMES.includes(outcome) ? outcome : DEFAULT_AUDIT_FILTERS.outcome,
     search: (params.get('q') ?? '').trim(),
     range: range && Object.prototype.hasOwnProperty.call(AUDIT_RANGES, range) ? range : DEFAULT_AUDIT_FILTERS.range,

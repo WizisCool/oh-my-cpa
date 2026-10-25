@@ -10,7 +10,7 @@ import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { usePluginOAuthLogos } from '../../../hooks/usePluginOAuthLogos';
 import { usePreference } from '../../../hooks/usePreference';
-import { useT } from '../../../i18n';
+import { type MessageKey, useT } from '../../../i18n';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../../types/providerIcons';
 import type { ConfigScalarsResponse } from '../../../types/configManagement';
 import { EVENT_AUTO_REFRESH_MS } from '../../../types/usageEventCadence';
@@ -34,7 +34,7 @@ import { RoutingMap, type RoutingArrivals } from './RoutingMap';
 import { routeColor, type IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
 
-const STRATEGY_LABEL_KEYS: Record<string, string> = {
+const STRATEGY_LABEL_KEYS: Record<string, MessageKey> = {
   'round-robin': 'cfg.strategy_round_robin',
   'weighted-round-robin': 'cfg.strategy_wrr',
   'fill-first': 'cfg.strategy_fill_first',

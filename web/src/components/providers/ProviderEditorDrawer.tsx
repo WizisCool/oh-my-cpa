@@ -11,7 +11,7 @@ import {
 } from 'antd';
 import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined } from '../icons';
 
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import { customIconID } from '../../types/customIcons';
@@ -127,7 +127,7 @@ const THINKING_LEVEL_OPTIONS = [
   { value: 'xhigh', labelKey: 'pro.level_xhigh' },
   { value: 'max', labelKey: 'pro.level_max' },
   { value: 'auto', labelKey: 'pro.level_auto' },
-];
+] satisfies { value: string; labelKey: MessageKey }[];
 
 /**
  * The provider editor: one drawer that edits whatever CPA stores for a line.

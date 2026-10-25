@@ -1,6 +1,7 @@
 import type { TagTone } from '../common/Tag';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isSIWCPending, type SIWCSession } from '../../hooks/useSIWCBindings';
+import type { MessageKey } from '../../i18n';
 
 export type SIWCBadgeState = 'bind' | 'off' | 'active' | 'rebind' | 'pending';
 
@@ -24,6 +25,6 @@ export const SIWC_BADGE_TONES: Record<SIWCBadgeState, TagTone> = {
   bind: 'neutral', off: 'neutral', active: 'success', rebind: 'warn', pending: 'accent',
 };
 
-export const SIWC_BADGE_LABEL_KEYS: Record<SIWCBadgeState, string> = {
+export const SIWC_BADGE_LABEL_KEYS: Record<SIWCBadgeState, MessageKey> = {
   bind: 'siwc.badge_unbound', off: 'siwc.badge_off', active: 'siwc.badge_active', rebind: 'siwc.badge_rebind', pending: 'siwc.badge_pending',
 };

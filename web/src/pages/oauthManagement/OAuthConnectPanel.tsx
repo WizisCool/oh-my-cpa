@@ -16,7 +16,7 @@ import {
   ReloadOutlined,
   StopOutlined,
 } from '../../components/icons';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { isDemoMode } from '../../types/demoMode';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
@@ -61,7 +61,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
 
   useOverlayHistory({ isOpen: open, onClose });
 
-  const copyValue = async (value?: string, successKey = 'oauth.link_copied') => {
+  const copyValue = async (value?: string, successKey: MessageKey = 'oauth.link_copied') => {
     if (!value) return;
     if (await copyText(value)) {
       toast.success(t(successKey));

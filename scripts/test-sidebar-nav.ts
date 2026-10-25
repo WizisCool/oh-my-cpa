@@ -108,7 +108,7 @@ assert.deepEqual(
 const t = (key: string) => `t:${key}`;
 assert.equal(navEntryLabel({ key: '/agent', labelKey: 'nav.agent', icon: null }, t), 't:nav.agent');
 assert.equal(
-  navEntryLabel({ key: '/x', labelKey: 'Weather', isLiteralLabel: true, icon: null },
+  navEntryLabel({ key: '/x', literalLabel: 'Weather', icon: null },
   t),
   'Weather',
   'a plugin registers its own page label, which is not a translation key',

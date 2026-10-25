@@ -194,7 +194,7 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
     firstTokenMS: turn.firstContentMS,
     firstTokenKind: evidence.firstTokenKind,
   }, tpsMode);
-  const milliseconds = (value: number) => `${Math.max(0, value).toLocaleString()} ms`;
+  const milliseconds = (value: number) => `${Math.max(0, value).toLocaleString('en')} ms`;
 
   return (
     <div className={workspace['message-foot']}>

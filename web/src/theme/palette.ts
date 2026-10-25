@@ -22,6 +22,7 @@
  */
 
 import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
+import type { MessageKey } from '../i18n';
 
 // Conversation objects use foreground transparency rather than authored colours, so every
 // preset and custom palette keeps the same relationship to the conversation's ground.
@@ -424,8 +425,8 @@ export function derivePalette(mode: ThemeMode, core: ThemeCore): ThemePalette {
 export interface BuiltInPalette {
   id: BuiltInPaletteId;
   mode: ThemeMode;
-  nameKey: string;
-  descriptionKey: string;
+  nameKey: MessageKey;
+  descriptionKey: MessageKey;
   core: ThemeCore;
 }
 
@@ -604,7 +605,7 @@ export interface ResolvedPalette {
    * is called in each catalogue, which is what keeps the header's tooltip and the card's label
    * readable in whichever language the console is set to.
    */
-  nameKey: string;
+  nameKey: MessageKey;
 }
 
 export function customPaletteId(mode: ThemeMode): ResolvedPaletteId {

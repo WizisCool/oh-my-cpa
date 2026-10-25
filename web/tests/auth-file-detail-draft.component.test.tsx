@@ -54,7 +54,7 @@ it('keeps a warmup draft when saving actual credential field changes', async () 
   const surface = mountDetail();
   const note = await editWarmupAndOpenConfiguration();
   fireEvent.change(note, { target: { value: 'Updated note' } });
-  const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+  const saveButton = screen.getByRole('button', { name: 'Save fields' });
   await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(saveButton);
   await waitFor(() => expect(surface.writes).toHaveLength(1));
@@ -67,9 +67,9 @@ it('keeps a warmup draft when saving actual credential field changes', async () 
 it('keeps a warmup draft when normalized field edits produce an empty patch', async () => {
   const surface = mountDetail();
   await editWarmupAndOpenConfiguration();
-  const excludedModels = screen.getByLabelText('Excluded Models');
+  const excludedModels = screen.getByLabelText('Excluded models');
   fireEvent.change(excludedModels, { target: { value: '  \n  ' } });
-  const button = screen.getByRole('button', { name: 'Save Fields' });
+  const button = screen.getByRole('button', { name: 'Save fields' });
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(button);
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
@@ -86,7 +86,7 @@ it('rechecks the latest external draft flag when an in-flight field save complet
     fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
     await waitFor(() => expect((screen.getByLabelText('Prefix') as HTMLInputElement).disabled).toBe(false));
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Saved concurrently' } });
-    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    const saveButton = screen.getByRole('button', { name: 'Save fields' });
     await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(saveButton);
     await waitFor(() => expect(surface.writes).toHaveLength(1));
@@ -106,7 +106,7 @@ it('uses committed draft state when a concurrent draft removal suspends during a
   try {
     const note = await editWarmupAndOpenConfiguration();
     fireEvent.change(note, { target: { value: 'Saved during suspended render' } });
-    const saveButton = screen.getByRole('button', { name: 'Save Fields' });
+    const saveButton = screen.getByRole('button', { name: 'Save fields' });
     await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(saveButton);
     await waitFor(() => expect(surface.writes).toHaveLength(1));

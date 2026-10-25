@@ -31,7 +31,7 @@ it('edits a Vertex service account\'s OpenAPI overrides and returns them to inhe
     fireEvent.click(screen.getByText('Follow CPA'));
     fireEvent.change(location, { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('Registered models'), { target: { value: 'meta/a\nmeta/b' } });
-    const save = screen.getByRole('button', { name: 'Save Fields' });
+    const save = screen.getByRole('button', { name: 'Save fields' });
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(save);
     await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
@@ -48,7 +48,7 @@ it('does not offer the overrides for other credentials', async () => {
   const surface = mount(CODEX);
   try {
     fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
-    await screen.findByLabelText('Excluded Models');
+    await screen.findByLabelText('Excluded models');
     expect(screen.queryByTestId('vertex-openapi-section')).toBeNull();
   } finally {
     surface.unmount();

@@ -94,8 +94,7 @@ export function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGrou
       { key: '/plugins/store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
       ...pluginPages.map((page): NavEntry => ({
         key: page.route,
-        labelKey: page.navLabel,
-        isLiteralLabel: true,
+        literalLabel: page.navLabel,
         icon: <PluginIcon className="app-menu-plugin-logo" logo={page.logo} />,
       })),
     ],

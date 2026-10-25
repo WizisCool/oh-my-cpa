@@ -124,7 +124,7 @@ describe('credential quota presentation', () => {
     const retry = vi.fn();
     const { rerender } = render(<QuotaSurface isError error={new Error('read failed')} onRetry={retry} />);
     expect(panelState()).toBe('unknown');
-    expect(screen.getByRole('alert').textContent).toContain('Failed to load credential quota');
+    expect(screen.getByRole('alert').textContent).toContain('Could not load credential quota');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(retry).toHaveBeenCalledTimes(1);
 

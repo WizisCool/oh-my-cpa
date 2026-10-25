@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Checkbox, Drawer, Popover } from 'antd';
 import { ClockCircleOutlined, DownOutlined, LeftOutlined, RightOutlined } from '../../icons';
-import { languageLocale, useI18n } from '../../../i18n';
+import { languageLocale, type MessageKey, useI18n } from '../../../i18n';
 import { useIsNarrowViewport } from '../../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../../hooks/useOverlayHistory';
 import dayjs, { formatTimeZoneOffset } from '../../../utils/time';
@@ -45,7 +45,7 @@ export interface TimeRangePickerProps {
 
 type PanelMode = 'quick' | 'custom';
 
-const ERROR_KEYS: Record<string, string | undefined> = {
+const ERROR_KEYS: Record<string, MessageKey | undefined> = {
   reversed: 'time_range.reversed',
   future: 'time_range.in_future',
 };

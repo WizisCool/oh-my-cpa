@@ -11,7 +11,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, RobotOutlined, SwapOutlined }
 import { LobeIcon } from '../../components/LobeIcon';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useI18n } from '../../i18n';
-import { capabilityTitle } from '../../i18n/capabilities';
+import { capabilityTitle, permissionLabel } from '../../i18n/capabilities';
 import { isDemoMode } from '../../types/demoMode';
 import { decideOperation, getCapabilities, getOperation } from './api';
 import { isOperationID } from './connect';
@@ -110,7 +110,7 @@ export function AuthorizePage() {
               <div className={styles['request']} data-destructive={permission === 'destructive' || undefined}>
                 <div className={styles['request-head']}>
                   <span className={styles['request-title']}>{capabilityTitle(data.capability, t)}</span>
-                  <Tag tone={permission === 'destructive' ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
+                  <Tag tone={permission === 'destructive' ? 'danger' : 'warn'}>{permissionLabel(permission, t)}</Tag>
                 </div>
                 <code className={styles['request-name']}>{data.capability}</code>
                 {isPending ? (

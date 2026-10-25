@@ -155,7 +155,7 @@ export async function overlayBackDismisses({ base, page, check }) {
   // The provider list's icon picker is a dialog opened straight from the page.
   await arriveFrom(base, page, '/ai-providers');
   await page.locator('.providers-page').first().waitFor({ timeout: 20_000 });
-  await page.getByRole('button', { name: /^(Change Icon|更改图标)/ }).first().click();
+  await page.getByRole('button', { name: /^(Change icon|更改图标)/ }).first().click();
   await page.locator('.ant-modal').first().waitFor({ state: 'visible', timeout: 5_000 });
   await page.goBack();
   const afterModalBack = await settled(page);

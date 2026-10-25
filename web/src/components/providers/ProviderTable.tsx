@@ -279,12 +279,12 @@ export function ProviderTable({
         return (
           <div className={styles['traffic']}>
             <div className={styles['traffic-line']}>
-              <span className={styles['traffic-requests']}>{t('pro.traffic_requests', { n: row.total.toLocaleString() })}</span>
+              <span className={styles['traffic-requests']}>{t('pro.traffic_requests', { n: row.total.toLocaleString('en') })}</span>
               <span className={clsx(styles['traffic-rate'], styles[`tone-${tone}`])}>{`${rate.toFixed(1)}%`}</span>
             </div>
             <Meter className={styles['traffic-meter']} value={rate} color={`var(--${tone === 'neutral' ? 'meta' : tone})`} />
             {row.failure > 0 && (
-              <span className={styles['traffic-failed']}>{t('pro.traffic_failed', { n: row.failure.toLocaleString() })}</span>
+              <span className={styles['traffic-failed']}>{t('pro.traffic_failed', { n: row.failure.toLocaleString('en') })}</span>
             )}
           </div>
         );

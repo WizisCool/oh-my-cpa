@@ -86,7 +86,7 @@ it('saves a changed protocol with the original identity and refreshes migrated i
   const view = renderWithOmc(<Editor />, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
-    const protocol = await screen.findByRole('combobox', { name: 'Driver / Protocol' });
+    const protocol = await screen.findByRole('combobox', { name: 'Driver / protocol' });
     expect((protocol as HTMLInputElement).disabled).toBe(false);
     fireEvent.mouseDown(protocol);
     fireEvent.click(await screen.findByText('Codex (Response) (codex)'));
@@ -102,7 +102,7 @@ it('saves a changed protocol with the original identity and refreshes migrated i
     expect((writes()[0].body.model_entries as { options: Record<string, unknown> }[])[0].options.use_max_completion_tokens).toBeUndefined();
     expect(writes()[2].body).toEqual({ 'openai-compat-0': 'Anthropic', 'codex-1': 'DeepSeek', 'codex-2': 'DeepSeek' });
     expect(writes()[2].body['openai-compat-1']).toBeUndefined();
-    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / Protocol' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Driver / protocol' })).toBeNull());
   } finally { view.unmount(); }
 });
 

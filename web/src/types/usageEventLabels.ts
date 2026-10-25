@@ -1,6 +1,7 @@
 import type {
   UsageEvent,
 } from './usageEvents';
+import type { MessageKey } from '../i18n';
 
 /** One provider-filter dropdown label: the operator's name for the line, plus
  *  the window's request count that makes the option worth reading. */
@@ -24,7 +25,7 @@ export function requestGroupName(event: UsageEvent): string | undefined {
 
 /** Result-capsule label key for one record: the stored failed flag is the only
  *  success signal, so the capsule can never disagree with the filter counts. */
-export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): string {
+export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): MessageKey {
   return event.failed ? 'events.filter_failed' : 'events.filter_success';
 }
 

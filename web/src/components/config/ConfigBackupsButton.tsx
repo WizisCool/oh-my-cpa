@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
 import { api, apiErrorCode, describeError } from '../../api/client';
-import { useT } from '../../i18n';
+import { translateOr, useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
@@ -129,7 +129,7 @@ export const ConfigBackupsButton: React.FC<ConfigBackupsButtonProps> = ({ isDirt
     }
   };
 
-  const describeReason = (reason: string) => t(KNOWN_REASONS.has(reason) ? `cfg.backups_reason_${reason}` : 'cfg.backups_reason_other');
+  const describeReason = (reason: string) => KNOWN_REASONS.has(reason) ? translateOr(t, `cfg.backups_reason_${reason}`, t('cfg.backups_reason_other')) : t('cfg.backups_reason_other');
 
   const restoreBlockedReason = (backup: ConfigBackup): string | undefined => {
     if (isDemo) return t('demo.blocked');

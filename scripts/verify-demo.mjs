@@ -227,7 +227,7 @@ async function main() {
         ]);
         await page.waitForFunction(hasDemoContent, route, { timeout: NAVIGATION_TIMEOUT_MS });
         const text = await page.locator('body').innerText();
-        if (text.includes('Management Key') || text.includes('使用 CPA')) {
+        if (text.includes('登录 Oh My CPA') || text.includes('Sign in to Oh My CPA')) {
           throw new Error('rendered the sign-in card instead of the console');
         }
         if (route.path === '/agent') {

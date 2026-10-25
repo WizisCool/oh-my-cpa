@@ -9,12 +9,12 @@ import {
   SyncOutlined,
   TagOutlined,
 } from '../components/icons';
+import { type MessageKey, useT } from '../i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
 import dayjs from '../utils/time';
 import { api, ApiError, apiErrorCode, describeError } from '../api/client';
-import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { ApiKeysList } from '../components/keys/ApiKeysList';
@@ -60,7 +60,7 @@ interface EditorState {
 
 const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: '' };
 
-const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: string; hintKey?: string }[] = [
+const USE_TILES: readonly { key: KeyUseFilter; tone: StatusTone; labelKey: MessageKey; hintKey?: MessageKey }[] = [
   { key: 'all', tone: 'neutral', labelKey: 'keys.stat_all' },
   { key: 'active', tone: 'success', labelKey: 'keys.stat_active' },
   { key: 'idle', tone: 'neutral', labelKey: 'keys.stat_idle', hintKey: 'keys.stat_idle_hint' },
@@ -503,7 +503,7 @@ export const ApiKeysPage: React.FC = () => {
             <span className={styles['window-label']}>{t('pro.window_24h')}</span>
             {overview.window ? (
               <>
-                <span>{t('pro.traffic_requests', { n: overview.window.requests.toLocaleString() })}</span>
+                <span>{t('pro.traffic_requests', { n: overview.window.requests.toLocaleString('en') })}</span>
                 {overview.window.successRate !== null && (
                   <StatusLabel tone={successRateTone(overview.window.successRate)}>
                     {t('pro.window_success_rate', { rate: overview.window.successRate.toFixed(1) })}

@@ -24,6 +24,6 @@ Leave the PR number out; the squash merge appends it.
 ## Checklist
 
 - [ ] No API key, token, auth file or production data in the diff, the description or the screenshots.
-- [ ] New user-visible copy is in `web/src/i18n/messages/` and every catalog under `web/src/i18n/locales/`.
+- [ ] New user-visible copy is in every language under `web/src/i18n/locales/`, using the terms in `web/src/i18n/GLOSSARY.md`.
 - [ ] Schema changes arrive as a new migration; a consequential, hard-to-reverse decision arrives as an ADR (AGENTS.md §4).
 - [ ] New API responses go through the `internal/api` DTO allowlists.

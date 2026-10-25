@@ -18,7 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
 import { OverlayScrollArea } from './OverlayScrollArea';
-import { useT, type TFunc } from '../../i18n';
+import { type TFunc, useT } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { preloadRoute } from '../../routePreload';
@@ -93,7 +93,7 @@ function buildMenuItems(navGroups: readonly NavGroup[], t: TFunc, isCollapsed: b
       label: isFlagged(entry)
         ? <>{navEntryLabel(entry, t)}<span className="sr-only"> · {t('nav.update_available')}</span></>
         : navEntryLabel(entry, t),
-      title: entry.isLiteralLabel ? entry.labelKey : undefined,
+      title: entry.literalLabel,
       'data-route-path': entry.key,
     })),
   }));

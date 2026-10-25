@@ -103,7 +103,7 @@ check('a directory query matches names and descriptions', () => {
 
 check('a directory query can match the text the operator reads', () => {
   const items = [capability('providers_list', 'read', 'List providers'), capability('keys_list', 'read', 'List keys')];
-  const localized: Record<string, string> = { providers_list: '列出提供方', keys_list: '列出客户端密钥' };
+  const localized: Record<string, string> = { providers_list: '列出提供商', keys_list: '列出客户端密钥' };
   const groups = groupCapabilities(items, '密钥', item => `${item.name} ${localized[item.name]}`);
   assert.deepEqual(groups.flatMap(group => group.items.map(item => item.name)), ['keys_list']);
 });

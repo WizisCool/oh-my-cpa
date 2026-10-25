@@ -70,7 +70,7 @@ it('saves the real provider editor with credential defaults and alias-specific m
   const view = renderWithOmc(<Editor />, { client });
   try {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Vertex' }));
-    await screen.findByRole('combobox', { name: 'Driver / Protocol' });
+    await screen.findByRole('combobox', { name: 'Driver / protocol' });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes()).toHaveLength(1));
     expect(writes()[0]).toMatchObject({

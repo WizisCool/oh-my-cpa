@@ -10,7 +10,7 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { StatTiles } from '../components/common/StatTiles';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 
-import { useT } from '../i18n';
+import { type MessageKey, useT } from '../i18n';
 import { getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
 import { resolveProviderIcon } from '../types/providerIcons';
@@ -46,7 +46,7 @@ import { Count } from '../components/common/Count';
  */
 const TRAFFIC_WINDOW_QUERY = 'preset=24h';
 
-const STATUS_TILES: readonly { key: ProviderStatusFilter; tone: StatusTone; labelKey: string }[] = [
+const STATUS_TILES: readonly { key: ProviderStatusFilter; tone: StatusTone; labelKey: MessageKey }[] = [
   { key: 'all', tone: 'neutral', labelKey: 'pro.stat_all' },
   { key: 'active', tone: 'success', labelKey: 'pro.status_active' },
   { key: 'disabled', tone: 'warn', labelKey: 'pro.status_disabled' },
@@ -325,7 +325,7 @@ export const ProvidersPage: React.FC = () => {
             <span className={styles['window-label']}>{t('pro.window_24h')}</span>
             {windowTotals ? (
               <>
-                <span>{t('pro.traffic_requests', { n: windowTotals.total.toLocaleString() })}</span>
+                <span>{t('pro.traffic_requests', { n: windowTotals.total.toLocaleString('en') })}</span>
                 {windowTotals.successRate !== null && (
                   <StatusLabel tone={rateTone}>
                     {t('pro.window_success_rate', { rate: windowTotals.successRate.toFixed(1) })}

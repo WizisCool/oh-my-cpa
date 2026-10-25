@@ -31,9 +31,21 @@ import { isChineseLanguage, type Lang } from '../i18n/language';
  * in every console.
  */
 export const TOKEN_NUMBER_STYLES = ['en-compact', 'zh', 'full'] as const;
-export type TokenNumberStyle = (typeof TOKEN_NUMBER_STYLES)[number];
+export type TokenNumberPreference = (typeof TOKEN_NUMBER_STYLES)[number];
 
-export const DEFAULT_TOKEN_NUMBER_STYLE: TokenNumberStyle = 'en-compact';
+/**
+ * The style a surface renders: a preference resolved against the reading language. The Chinese
+ * scale has two spellings, because 萬 and 億 are the same words as 万 and 亿 written in the other
+ * script, and a Traditional Chinese reading must not print Simplified glyphs.
+ */
+export type TokenNumberStyle = TokenNumberPreference | 'zh-Hant';
+
+export const DEFAULT_TOKEN_NUMBER_STYLE: TokenNumberPreference = 'en-compact';
+
+/** The preference a rendered style was resolved from, for a control that offers the choice. */
+export function tokenStylePreference(style: TokenNumberStyle): TokenNumberPreference {
+  return style === 'zh-Hant' ? 'zh' : style;
+}
 
 /** The stored preference values for the model panels' grouping view. */
 export const MODEL_CHART_VIEWS = ['call', 'model'] as const;
@@ -58,9 +70,9 @@ export function parseRequestModelIcons(raw: unknown): boolean | undefined {
  * not state: anything unknown falls back to the default instead of rendering
  * in a style the formatter does not implement.
  */
-export function parseTokenNumberStyle(raw: unknown): TokenNumberStyle | undefined {
+export function parseTokenNumberStyle(raw: unknown): TokenNumberPreference | undefined {
   return typeof raw === 'string' && (TOKEN_NUMBER_STYLES as readonly string[]).includes(raw)
-    ? (raw as TokenNumberStyle)
+    ? (raw as TokenNumberPreference)
     : undefined;
 }
 
@@ -96,9 +108,9 @@ const COMPACT_RATE = new Intl.NumberFormat('en', { notation: 'compact', maximumF
  * gains nothing from "0.09万", and "999" is what the compact form already
  * prints.
  */
-const ZH_STEPS: Array<{ limit: number; divisor: number; suffix: string }> = [
-  { limit: 100_000_000, divisor: 100_000_000, suffix: '亿' },
-  { limit: 10_000, divisor: 10_000, suffix: '万' },
+const ZH_STEPS: Array<{ limit: number; divisor: number; suffix: string; traditional: string }> = [
+  { limit: 100_000_000, divisor: 100_000_000, suffix: '亿', traditional: '億' },
+  { limit: 10_000, divisor: 10_000, suffix: '万', traditional: '萬' },
 ];
 
 /**
@@ -107,19 +119,19 @@ const ZH_STEPS: Array<{ limit: number; divisor: number; suffix: string }> = [
  * `formatZh` and the animated readout both read the split, so a tile cannot round
  * differently from the text it stands in for.
  */
-function zhParts(tokens: number): { number: number; suffix: string } {
+function zhParts(tokens: number, isTraditional: boolean): { number: number; suffix: string } {
   if (tokens < 10_000) return { number: Math.round(tokens), suffix: '' };
   for (const step of ZH_STEPS) {
     if (tokens < step.limit) continue;
     // One decimal, trailing zeros trimmed: 300万, 1.2亿, not 300.0万.
-    return { number: Math.round((tokens / step.divisor) * 10) / 10, suffix: step.suffix };
+    return { number: Math.round((tokens / step.divisor) * 10) / 10, suffix: isTraditional ? step.traditional : step.suffix };
   }
   // Unreachable: the loop covers every value >= 10_000.
   return { number: Math.round(tokens), suffix: '' };
 }
 
-function formatZh(tokens: number): string {
-  const { number, suffix } = zhParts(tokens);
+function formatZh(tokens: number, isTraditional: boolean): string {
+  const { number, suffix } = zhParts(tokens, isTraditional);
   return Number.isInteger(number) ? `${number}${suffix}` : `${number.toFixed(1)}${suffix}`;
 }
 
@@ -139,8 +151,9 @@ const FULL = new Intl.NumberFormat('en');
  *
  * `full` is language-neutral, so it renders as itself in every console.
  */
-export function resolveTokenNumberStyle(style: TokenNumberStyle, lang: Lang): TokenNumberStyle {
+export function resolveTokenNumberStyle(style: TokenNumberPreference, lang: Lang): TokenNumberStyle {
   if (style === 'zh' && !isChineseLanguage(lang)) return DEFAULT_TOKEN_NUMBER_STYLE;
+  if (style === 'zh' && lang === 'zh-Hant') return 'zh-Hant';
   return style;
 }
 
@@ -153,7 +166,7 @@ export function resolveTokenNumberStyle(style: TokenNumberStyle, lang: Lang): To
 export function formatTokens(tokens: number, style: TokenNumberStyle): string {
   if (!Number.isFinite(tokens)) return '—';
   if (style === 'full') return FULL.format(tokens);
-  if (style === 'zh') return formatZh(tokens);
+  if (style === 'zh' || style === 'zh-Hant') return formatZh(tokens, style === 'zh-Hant');
   return COMPACT_EN.format(tokens);
 }
 
@@ -209,10 +222,10 @@ export function resolveCountFlowReadout(value: number | null | undefined): Rolli
 export function resolveTokenFlowReadout(tokens: number, style: TokenNumberStyle): RollingReadout | undefined {
   if (!Number.isFinite(tokens)) return undefined;
   if (style === 'full') return resolveCountFlowReadout(tokens);
-  if (style === 'zh') {
+  if (style === 'zh' || style === 'zh-Hant') {
     // Below 万 the printed form continues in bare digits, so grouping stays off
     // with it: "9999" is the reading, not "9,999".
-    return { ...zhParts(tokens), format: { useGrouping: false, maximumFractionDigits: 1 } };
+    return { ...zhParts(tokens, style === 'zh-Hant'), format: { useGrouping: false, maximumFractionDigits: 1 } };
   }
   return { ...splitFormatted(COMPACT_EN, tokens), format: { maximumFractionDigits: 1 } };
 }

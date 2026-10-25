@@ -6,13 +6,14 @@ import { CodeSandboxOutlined } from '../../components/icons';
 import { LobeIcon } from '../../components/LobeIcon';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
 import workspace from '../../components/workspace/Workspace.module.css';
-import { useI18n } from '../../i18n';
+import { translateOr, useI18n } from '../../i18n';
 import { getAppConfig } from '../../types/config';
 import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, mcpEndpoint } from './connect';
 import type { ConnectClient } from './connect';
 import styles from './AgentPage.module.css';
 
-const CLIENT_LABELS: Record<ConnectClient, string> = { claude: 'Claude Code', codex: 'Codex', other: '', stdio: '' };
+/** Product names, which read the same in every language; the other choices are described in the catalog. */
+const CLIENT_NAMES: Partial<Record<ConnectClient, string>> = { claude: 'Claude Code', codex: 'Codex' };
 
 /** Each client's own mark; a JSON-configured client is any MCP client, so it carries the protocol's. */
 const CLIENT_ICONS: Record<ConnectClient, React.ReactNode> = {
@@ -41,7 +42,7 @@ export const ExternalAgentGuide = React.memo(function ExternalAgentGuide({ isDem
   const origin = window.location.origin;
   const endpoint = mcpEndpoint(origin, basePath);
   const snippet = connectSnippet(client, origin, basePath, t('agent.connect.key_placeholder'));
-  const clientLabel = (value: ConnectClient) => CLIENT_LABELS[value] || t(`agent.connect.client.${value}`);
+  const clientLabel = (value: ConnectClient) => CLIENT_NAMES[value] ?? translateOr(t, `agent.connect.client.${value}`, value);
 
   return (
     <div className={workspace['panel']} data-testid="agent-connect">

@@ -1,4 +1,5 @@
 import { ApiError, apiErrorCode } from '../../api/client';
+import type { TFunc } from '../../i18n';
 
 /**
  * The sentence a refused configuration save shows, from the dictionary where the
@@ -7,7 +8,7 @@ import { ApiError, apiErrorCode } from '../../api/client';
  */
 export function describeConfigSaveError(
   err: unknown,
-  t: (key: string, vars?: Record<string, string | number>) => string,
+  t: TFunc,
 ): string {
   const code = apiErrorCode(err);
   switch (code) {

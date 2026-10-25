@@ -3,7 +3,7 @@ import { Button, Input, Segmented, Spin } from 'antd';
 import { LoadingRegion, Placeholder } from './common/Placeholder';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from '../api/client';
-import { useT } from '../i18n';
+import { type MessageKey, useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import {
   CUSTOM_ICONS_QUERY_KEY,
@@ -655,7 +655,7 @@ export const CustomIconLibrary: React.FC<Props> = ({
   );
 };
 
-const CUSTOM_ICON_ERROR_KEYS: Record<string, string> = {
+const CUSTOM_ICON_ERROR_KEYS: Record<string, MessageKey> = {
   custom_icon_too_large: 'icons.error_size',
   custom_icon_invalid_image: 'icons.error_image',
   custom_icon_invalid_name: 'icons.error_name',

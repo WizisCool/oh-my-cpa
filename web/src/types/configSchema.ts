@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n';
 export type ConfigSectionId =
   | 'connectivity'
   | 'network'
@@ -21,7 +22,7 @@ export type ConfigFieldType =
 export interface ConfigFieldOption {
   /** The picker's key. */
   value: string;
-  labelKey: string;
+  labelKey: MessageKey;
   /**
    * The value written to CPA when it is not the key itself. CPA reads some settings as either a
    * boolean or a word (`disable-image-generation: false | true | "chat" | "passthrough"`), and the
@@ -33,8 +34,8 @@ export interface ConfigFieldOption {
 export interface ConfigFieldDefinition {
   id: string;
   sectionId: ConfigSectionId;
-  labelKey: string;
-  descKey: string;
+  labelKey: MessageKey;
+  descKey: MessageKey;
   /** The canonical path in CPA's current v8 configuration tree. */
   yamlPath: string[];
   /** Earlier v8 layout; also the compatible write path when neither spelling is present. */
@@ -42,15 +43,17 @@ export interface ConfigFieldDefinition {
   type: ConfigFieldType;
   scalarEndpointKey?: string;
   defaultValue?: unknown;
-  placeholderKey?: string;
-  unitKey?: string;
+  placeholderKey?: MessageKey;
+  /** A literal example value - a path, a URL, a duration - which reads the same in every language. */
+  placeholder?: string;
+  unitKey?: MessageKey;
   min?: number;
   max?: number;
   options?: ConfigFieldOption[];
   keywords?: string[];
 }
 
-export const CONFIG_SECTIONS: { id: ConfigSectionId; labelKey: string; icon: string; descKey: string }[] = [
+export const CONFIG_SECTIONS: { id: ConfigSectionId; labelKey: MessageKey; icon: string; descKey: MessageKey }[] = [
   { id: 'connectivity', labelKey: 'cfg.sec_connectivity', icon: 'KeyOutlined', descKey: 'cfg.sec_connectivity_desc' },
   { id: 'network', labelKey: 'cfg.sec_network', icon: 'GlobalOutlined', descKey: 'cfg.sec_network_desc' },
   { id: 'logging', labelKey: 'cfg.sec_logging', icon: 'ProfileOutlined', descKey: 'cfg.sec_logging_desc' },
@@ -63,8 +66,8 @@ export const CONFIG_SECTIONS: { id: ConfigSectionId; labelKey: string; icon: str
 export interface ConfigGroupDefinition {
   id: string;
   sectionId: ConfigSectionId;
-  labelKey: string;
-  descKey?: string;
+  labelKey: MessageKey;
+  descKey?: MessageKey;
   variant: 'form-grid' | 'settings-list' | 'managed-elsewhere' | 'tls-accordion' | 'payload-builder';
   fieldIds: string[];
 }
@@ -332,7 +335,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_auth_dir_desc',
     yamlPath: ['oauth', 'auth-dir'],
     type: 'string',
-    placeholderKey: '~/.cli-proxy-api',
+    placeholder: '~/.cli-proxy-api',
     keywords: ['auth', 'dir', 'directory'],
   },
   {
@@ -419,7 +422,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_rm_panel_repo_desc',
     yamlPath: ['management', 'panel-github-repository'],
     type: 'string',
-    placeholderKey: 'https://github.com/router-for-me/Cli-Proxy-API-Management-Center',
+    placeholder: 'https://github.com/router-for-me/Cli-Proxy-API-Management-Center',
     keywords: ['repo', 'github'],
   },
   {
@@ -429,7 +432,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_trusted_proxies_desc',
     yamlPath: ['server', 'trusted-proxies'],
     type: 'string_list',
-    placeholderKey: '127.0.0.1, 192.0.2.0/24',
+    placeholder: '127.0.0.1, 192.0.2.0/24',
     keywords: ['proxy', 'trusted', 'forwarded', 'cidr', 'x-forwarded-for'],
   },
   {
@@ -462,7 +465,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_rm_base_url_desc',
     yamlPath: ['management', 'base-url'],
     type: 'string',
-    placeholderKey: 'https://proxy.example.com',
+    placeholder: 'https://proxy.example.com',
     keywords: ['management', 'tui', 'base-url'],
   },
 
@@ -564,7 +567,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_affinity_ttl_desc',
     yamlPath: ['routing', 'session-affinity-ttl'],
     type: 'string',
-    placeholderKey: '1h',
+    placeholder: '1h',
     keywords: ['affinity', 'session', 'ttl'],
   },
   {
@@ -600,7 +603,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_gpt_image_model_desc',
     yamlPath: ['multimedia', 'gpt-image-2-base-model'],
     type: 'string',
-    placeholderKey: 'gpt-5.4-mini',
+    placeholder: 'gpt-5.4-mini',
     keywords: ['image', 'base64', 'model'],
   },
   {
@@ -689,7 +692,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_video_ttl_desc',
     yamlPath: ['multimedia', 'video-result-auth-cache-ttl'],
     type: 'string',
-    placeholderKey: '3h',
+    placeholder: '3h',
     keywords: ['video', 'ttl', 'cache'],
   },
   {
@@ -976,7 +979,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_codex_siwc_identifier_desc',
     yamlPath: ['oauth', 'providers', 'codex', 'signin-with-chatgpt-identifier'],
     type: 'string',
-    placeholderKey: 'CLIProxyAPI',
+    placeholder: 'CLIProxyAPI',
     keywords: ['codex', 'chatgpt', 'sign in', 'siwc', 'user-agent'],
   },
   {
@@ -1053,7 +1056,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_codex_web_search_cache_ttl_desc',
     yamlPath: ['client', 'codex', 'web-search-result-cache', 'ttl'],
     type: 'string',
-    placeholderKey: '24h',
+    placeholder: '24h',
     keywords: ['codex', 'web', 'search', 'cache', 'ttl'],
   },
   {
@@ -1109,7 +1112,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['upstream', 'codex', 'stream-bootstrap-timeout'],
     legacyYamlPath: ['oauth', 'providers', 'codex', 'stream-bootstrap-timeout'],
     type: 'string',
-    placeholderKey: '0',
+    placeholder: '0',
     keywords: ['codex', 'stream', 'bootstrap', 'timeout'],
   },
   // CPA's JSON view redacts TURN secrets; the editor below models explicit
@@ -1164,7 +1167,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_codex_live_public_ip_desc',
     yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'public-ip'],
     type: 'string',
-    placeholderKey: '203.0.113.10',
+    placeholder: '203.0.113.10',
     keywords: ['codex', 'live', 'nat', 'public', 'ip'],
   },
   {
@@ -1258,7 +1261,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['upstream', 'claude', 'header-defaults', 'timezone'],
     legacyYamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'timezone'],
     type: 'string',
-    placeholderKey: 'Asia/Singapore',
+    placeholder: 'Asia/Singapore',
     keywords: ['claude', 'timezone', 'currentDate'],
   },
   // Operator overrides added in CPA v8.0.30. They exist only under the
@@ -1323,7 +1326,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_ag_pool_idle_timeout_desc',
     yamlPath: ['oauth', 'providers', 'antigravity', 'connection-pool', 'idle-conn-timeout'],
     type: 'string',
-    placeholderKey: '30s',
+    placeholder: '30s',
     keywords: ['antigravity', 'idle', 'timeout', 'keep-alive'],
   },
   {
@@ -1387,7 +1390,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_discovery_service_name_desc',
     yamlPath: ['server', 'discovery', 'service-name'],
     type: 'string',
-    placeholderKey: 'office',
+    placeholder: 'office',
     keywords: ['mdns', 'discovery', 'name'],
   },
   {
@@ -1428,7 +1431,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_pprof_addr_desc',
     yamlPath: ['observability', 'pprof', 'addr'],
     type: 'string',
-    placeholderKey: '127.0.0.1:8316',
+    placeholder: '127.0.0.1:8316',
     keywords: ['pprof', 'address', 'listen'],
   },
 

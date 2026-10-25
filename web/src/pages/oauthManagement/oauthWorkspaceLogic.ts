@@ -469,9 +469,16 @@ export function workspaceProviderCounts(records: OAuthWorkspaceRecord[]): Record
   return counts;
 }
 
+export type QuotaRefreshSkipReason =
+  | 'missing-auth-index'
+  | 'ambiguous-auth-index'
+  | 'missing-quota-observation'
+  | 'credential-disabled'
+  | 'refresh-unsupported';
+
 export interface QuotaRefreshTargetPlan {
   eligibleIndexes: string[];
-  skipped: Array<{ authIndex?: string; name: string; reason: string }>;
+  skipped: Array<{ authIndex?: string; name: string; reason: QuotaRefreshSkipReason }>;
 }
 
 export function buildQuotaRefreshTargets(

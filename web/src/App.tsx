@@ -7,10 +7,6 @@ import {
   Outlet,
 } from 'react-router-dom';
 import { App as AntdApp, ConfigProvider } from 'antd';
-import enUS from 'antd/locale/en_US';
-import msMY from 'antd/locale/ms_MY';
-import zhCN from 'antd/locale/zh_CN';
-import zhTW from 'antd/locale/zh_TW';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getAppConfig } from './types/config';
 import { createThemeConfig } from './theme/themeConfig';
@@ -43,7 +39,7 @@ import {
   OmcSettingsPage,
 } from './routePages';
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
-import { I18nProvider, useI18n } from './i18n';
+import { antdLocale, I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
 import { useConsoleFonts } from './hooks/useFonts';
@@ -60,13 +56,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-const ANTD_LOCALES = {
-  zh: zhCN,
-  'zh-Hant': zhTW,
-  en: enUS,
-  ms: msMY,
-} as const;
 
 export const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
@@ -116,7 +105,7 @@ const ThemedShell: React.FC = () => {
   const antdTheme = React.useMemo(() => createThemeConfig(theme), [theme]);
   return (
     <ConfigProvider
-      locale={ANTD_LOCALES[lang]}
+      locale={antdLocale(lang)}
       theme={antdTheme}
       // Fields are wells, not boxes: a filled control reads as part of the toolbar or form it sits
       // in, and its edge appears only under focus. A tag is a soft fill with no edge for the same

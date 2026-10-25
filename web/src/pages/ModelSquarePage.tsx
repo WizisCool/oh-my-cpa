@@ -50,7 +50,11 @@ import { Count } from '../components/common/Count';
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
 const COPIED_MS = 1500;
-const KNOWN_MODALITIES = ['text', 'image', 'audio', 'video', 'pdf'];
+const KNOWN_MODALITIES = ['text', 'image', 'audio', 'video', 'pdf'] as const;
+
+function isKnownModality(value: string): value is (typeof KNOWN_MODALITIES)[number] {
+  return (KNOWN_MODALITIES as readonly string[]).includes(value);
+}
 
 type Translate = ReturnType<typeof useT>;
 
@@ -188,8 +192,8 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
   const maker = resolveModelManufacturer(identity, metadata);
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
   const text = (value?: string) => value || unknown;
-  const limit = (value?: number) => value ? value.toLocaleString() : unknown;
-  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? t(`models.modality.${value}`) : value)).join(' · ') : unknown;
+  const limit = (value?: number) => value ? value.toLocaleString('en') : unknown;
+  const modalities = (values?: string[]) => values?.length ? values.map(value => (isKnownModality(value) ? t(`models.modality.${value}`) : value)).join(' · ') : unknown;
   const flag = (value?: boolean) => {
     if (value === undefined) return unknown;
     return value
@@ -269,7 +273,7 @@ const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) =
     <dl className={clsx(styles['stat-tiles'], styles['cost-tiles'])}>
       <div><dt>{t('models.input_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.prompt_price_per_1m) : noPrice}</dd></div>
       <div><dt>{t('models.output_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.completion_price_per_1m) : noPrice}</dd></div>
-      <div><dt>{t('models.requests_24h')}</dt><dd>{recentRequests === undefined ? unknown : recentRequests.toLocaleString()}</dd></div>
+      <div><dt>{t('models.requests_24h')}</dt><dd>{recentRequests === undefined ? unknown : recentRequests.toLocaleString('en')}</dd></div>
     </dl>
     <div className={styles['cost-actions']}>
       {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} type={target.price ? 'default' : 'primary'} onClick={() => onSetPrice(target)}>

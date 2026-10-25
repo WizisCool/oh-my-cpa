@@ -70,7 +70,10 @@ assert.equal(formatTokensFull(NaN), '—');
 // whenever the console is not Chinese...
 assert.equal(resolveTokenNumberStyle('zh', 'en'), 'en-compact');
 assert.equal(resolveTokenNumberStyle('zh', 'zh'), 'zh');
-assert.equal(resolveTokenNumberStyle('zh', 'zh-Hant'), 'zh');
+// Traditional Chinese reads the same scale in its own script.
+assert.equal(resolveTokenNumberStyle('zh', 'zh-Hant'), 'zh-Hant');
+assert.equal(formatTokens(1_200_000_000, 'zh-Hant'), '12億');
+assert.equal(formatTokens(300_000, 'zh-Hant'), '30萬');
 assert.equal(resolveTokenNumberStyle('zh', 'ms'), 'en-compact');
 // ...while the language-neutral styles pass through untouched in every console.
 assert.equal(resolveTokenNumberStyle('en-compact', 'en'), 'en-compact');
@@ -92,7 +95,7 @@ assert.equal(isChineseLanguage('zh'), true);
 assert.equal(isChineseLanguage('zh-Hant'), true);
 assert.equal(isChineseLanguage('en'), false);
 assert.equal(isChineseLanguage('ms'), false);
-assert.equal(languageLocale('zh-Hant'), 'zh-Hant');
+assert.equal(languageLocale('zh-Hant'), 'zh-HK');
 assert.equal(languageLocale('ms'), 'ms-MY');
 
 // ── parsing stored preferences ─────────────────────────────────────────────────

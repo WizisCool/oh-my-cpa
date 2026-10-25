@@ -1,36 +1,45 @@
 import type { ReleaseProduct, SystemProductVersion, SystemUpdaterResponse } from '../../types/system';
+import type { MessageKey } from '../../i18n';
 
-export function deriveVersionPresentation(version: SystemProductVersion, isChecking = false) {
+export interface VersionPresentation {
+  hasChangelog: boolean;
+  shouldShowNotesNotice: boolean;
+  statusKey: MessageKey;
+  tone: 'neutral' | 'warn' | 'accent' | 'success';
+  detailKey: MessageKey | undefined;
+}
+
+export function deriveVersionPresentation(version: SystemProductVersion, isChecking = false): VersionPresentation {
   const hasChangelog = version.merge_count > 0;
   const shouldShowNotesNotice = hasChangelog && !version.notes_available && !version.check_error && !isChecking && !version.checking;
   const common = { hasChangelog, shouldShowNotesNotice };
   if (isChecking || version.checking) {
-    return { ...common, statusKey: 'sys.checking_updates', tone: 'neutral' as const, detailKey: '' };
+    return { ...common, statusKey: 'sys.checking_updates', tone: 'neutral' as const, detailKey: undefined };
   }
   if (version.check_error) {
-    return { ...common, statusKey: 'sys.check_failed', tone: 'warn' as const, detailKey: '' };
+    return { ...common, statusKey: 'sys.check_failed', tone: 'warn' as const, detailKey: undefined };
   }
   switch (version.state) {
     case 'update_available':
-      return { ...common, statusKey: 'sys.update_ready', tone: 'accent' as const, detailKey: '' };
+      return { ...common, statusKey: 'sys.update_ready', tone: 'accent' as const, detailKey: undefined };
     case 'up_to_date':
-      return { ...common, statusKey: 'sys.is_latest', tone: 'success' as const, detailKey: '' };
+      return { ...common, statusKey: 'sys.is_latest', tone: 'success' as const, detailKey: undefined };
     case 'update_ahead':
-      return { ...common, statusKey: 'sys.update_ahead', tone: 'neutral' as const, detailKey: '' };
+      return { ...common, statusKey: 'sys.update_ahead', tone: 'neutral' as const, detailKey: undefined };
     default: {
-      const reasons = {
+      const reasons: Partial<Record<string, MessageKey>> = {
         running_version_not_comparable: 'sys.reason_running_not_comparable',
         newest_release_not_comparable: 'sys.reason_latest_not_comparable',
         no_releases_published: 'sys.reason_no_releases',
         not_checked_yet: 'sys.reason_not_checked',
       };
-      const reasonKey = version.reason ? reasons[version.reason] : '';
+      const reasonKey = version.reason ? reasons[version.reason] : undefined;
       const isComparisonDetail = version.reason === 'running_version_not_comparable' || version.reason === 'newest_release_not_comparable';
       return {
         ...common,
         statusKey: isComparisonDetail ? 'sys.indeterminate' : reasonKey || 'sys.indeterminate',
         tone: 'neutral' as const,
-        detailKey: isComparisonDetail ? reasonKey : '',
+        detailKey: isComparisonDetail ? reasonKey : undefined,
       };
     }
   }
@@ -56,17 +65,17 @@ export type UpdateOffer =
   /** `isBusy` is another product's update in flight: the action exists but must wait. */
   | { kind: 'available'; isBusy: boolean }
   /** `stage` is the step reached, for the step bar; `stageKey` is that step in words. */
-  | { kind: 'running'; stage: UpdateStage; stageKey: string }
-  | { kind: 'blocked'; reasonKey: string; image: string };
+  | { kind: 'running'; stage: UpdateStage; stageKey: MessageKey }
+  | { kind: 'blocked'; reasonKey: MessageKey; image: string };
 
-const UPDATE_STAGE_KEYS: Record<UpdateStage, string> = {
+const UPDATE_STAGE_KEYS: Record<UpdateStage, MessageKey> = {
   pulling: 'sys.update_stage.pulling',
   stopping: 'sys.update_stage.stopping',
   starting: 'sys.update_stage.starting',
   verifying: 'sys.update_stage.verifying',
 };
 
-const UPDATE_BLOCK_KEYS: Record<string, string> = {
+const UPDATE_BLOCK_KEYS: Record<string, MessageKey> = {
   pinned: 'sys.update_blocked.pinned',
   not_a_local_container: 'sys.update_blocked.not_a_local_container',
   signature_unavailable: 'sys.update_blocked.signature_unavailable',

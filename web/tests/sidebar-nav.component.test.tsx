@@ -24,9 +24,9 @@ let api: OmcApi;
 const MODEL_ORDER = [
   'Dashboard', 'Agent', 'Playground', 'Model Square',
   'AI providers', 'OAuth management', 'Key management',
-  'Insights', 'Request Events', 'Cost & Usage', 'Logs', 'Audit trail',
+  'Insights', 'Request records', 'Cost & usage', 'Logs', 'Audit trail',
   'Plugin management', 'Plugin store',
-  'Config', 'OMC Settings', 'System Information',
+  'Configuration', 'OMC settings', 'System information',
 ];
 
 const mount = () => renderWithOmc(<SidebarNavSettings />, { isStrict: true });
@@ -88,7 +88,7 @@ describe('sidebar layout panel', () => {
     // The console's groups, then the plugins group before Control, because that is where the rail
     // puts them.
     expect(titles).toEqual(MODEL_ORDER);
-    const settingsToggle = screen.getByRole('switch', { name: 'OMC Settings' });
+    const settingsToggle = screen.getByRole('switch', { name: 'OMC settings' });
     expect(settingsToggle.hasAttribute('disabled')).toBe(true);
     expect(settingsToggle.getAttribute('aria-checked')).toBe('true');
     expect(dialog.querySelector('.settings-toggle-desc')?.textContent).toBe('This entry manages the sidebar, so it always shows.');
@@ -123,7 +123,7 @@ describe('sidebar layout panel', () => {
     await openPanel();
     const agent = await readySwitch('Agent');
     expect(agent.getAttribute('aria-checked')).toBe('false');
-    const settingsToggle = screen.getByRole('switch', { name: 'OMC Settings' });
+    const settingsToggle = screen.getByRole('switch', { name: 'OMC settings' });
     expect(settingsToggle.getAttribute('aria-checked')).toBe('true');
     expect(settingsToggle.hasAttribute('disabled')).toBe(true);
     expect(LOCKED_NAV_KEYS.has('/omc-settings')).toBe(true);

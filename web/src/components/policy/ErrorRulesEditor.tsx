@@ -1,6 +1,6 @@
 import { Button, Input, Select } from 'antd';
 
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { PROVIDER_ERROR_RULE_ACTIONS } from '../../types/providers';
 import { ArrowDownOutlined, ArrowUpOutlined, CloseOutlined, DeleteOutlined, PlusOutlined } from '../icons';
 import {
@@ -13,14 +13,14 @@ import {
 } from './errorRules';
 import styles from './ErrorRulesEditor.module.css';
 
-const ACTION_LABEL_KEYS: Record<string, string> = {
+const ACTION_LABEL_KEYS: Record<string, MessageKey> = {
   stop: 'policy.rule_action_stop',
   'stop-and-cooldown': 'policy.rule_action_stop_cooldown',
   continue: 'policy.rule_action_continue',
   'continue-and-cooldown': 'policy.rule_action_continue_cooldown',
 };
 
-const PROBLEM_KEYS: Record<ErrorRuleProblem, string> = {
+const PROBLEM_KEYS: Record<ErrorRuleProblem, MessageKey> = {
   status: 'policy.rule_problem_status',
   action: 'policy.rule_problem_action',
   no_match: 'policy.rule_problem_no_match',

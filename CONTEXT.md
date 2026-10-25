@@ -302,15 +302,19 @@ unaudited.
 
 ## i18n
 
-Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
-dictionary lives in `web/src/i18n/messages/` as `[zh, en]` pairs, one file per
-key prefix group (`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`), while
-`web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts` carry the
-additional catalogs. All four are accessed through `t(key, vars)`; language
-persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every
-registered language fully localizes — a localized UI must not show untranslated
-captions from another language beside its own copy (proper nouns and industry
-terms excepted).
+Native Simplified Chinese, Traditional Chinese (Hong Kong usage), English and Malay
+UI, each a first-class reading rather than a translation of another. Every language
+is a directory under `web/src/i18n/locales/` with one file per product area
+(`agent.*` in `agent.ts`, `dash.*` in `dashboard.ts`). Simplified Chinese is the
+semantic source: its files define the message ids, and the compiler requires every
+other language to carry exactly the same ids. All four are read through
+`t(key, vars)`, whose key is typed, so an id that does not exist is a compile error;
+counts that inflect use ICU plural syntax. Language persists in
+`localStorage('omc-lang')` and the antd locale follows. Rule: every registered
+language fully localizes — a localized UI must not show untranslated captions from
+another language beside its own copy (proper nouns and industry terms excepted).
+Terms and register are fixed in `web/src/i18n/GLOSSARY.md` and
+`web/src/i18n/STYLE.md`; `web/src/i18n/README.md` is the contributor guide.
 
 The supported languages are listed once in `web/src/i18n/language.ts`, and every
 switcher reads that registry. A row carries the language's **endonym** — its own
@@ -321,7 +325,7 @@ to "Simplified Chinese" could not be used by the reader who needs it most, since
 someone who cannot read the console's current language cannot recognize their own
 behind a translation of it and would have no way back.
 
-The two additional catalogs are separate chunks, fetched when the language is
+The Traditional Chinese and Malay catalogs are separate chunks, fetched when the language is
 selected, so the stored preference is a **choice** rather than a guarantee: a tab
 older than the deployment serving it asks for a chunk name that no longer exists.
 A catalog that cannot be fetched leaves the console reading in its default language

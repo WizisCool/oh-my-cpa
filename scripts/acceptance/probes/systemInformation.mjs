@@ -1321,7 +1321,7 @@ async function verifyVersionCheckFeedback({ page, base, check }) {
     const gatewayText = await page.locator('[data-testid="sys-product-cpa"]').innerText();
     check('a failed feed preserves both versions and identifies the age of the stored result',
       gatewayText.includes('7.3.5') && gatewayText.includes('v7.3.7') && /Last successful check|上次成功检查/.test(gatewayText));
-    await page.locator('[data-testid="sys-card-versions"]').getByRole('button', { name: /Check for Updates|检查更新/ }).click();
+    await page.locator('[data-testid="sys-card-versions"]').getByRole('button', { name: /Check for updates|检查更新/ }).click();
     await until(async () => await page.locator('.omc-toast-warning').count() > 0, { label: 'the manual partial-failure toast' });
     check('a cached partial failure is a warning rather than a successful check',
       checkCount === 2 && await page.locator('.omc-toast-success').count() === 0 && (await page.locator('.omc-toast-warning').innerText()).includes('CLIProxyAPI') && /cached|缓存/.test(await page.locator('.omc-toast-warning').innerText()));
@@ -1465,7 +1465,7 @@ export async function systemUpdateIndicator({ base, page, check }) {
       isOnCorner: pipBox.left >= iconBox.left && pipBox.top <= iconBox.top + iconBox.height / 2,
     };
   });
-  check('an available update marks the System Information entry', mark.route === '/system', JSON.stringify(mark));
+  check('an available update marks the System information entry', mark.route === '/system', JSON.stringify(mark));
   check('the mark is a small warning-tone dot on the icon corner', mark.isWarnTone && mark.width <= 8 && mark.isOnCorner, JSON.stringify(mark));
   check(
     'a build that cannot be compared offers nothing to ignore',

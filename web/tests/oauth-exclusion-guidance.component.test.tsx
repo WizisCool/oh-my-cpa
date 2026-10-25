@@ -45,11 +45,11 @@ it('clears a non-empty credential override with an empty array and explains rest
   const surface = mountGuidance('credential');
   try {
     fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
-    const input = await screen.findByLabelText('Excluded Models');
+    const input = await screen.findByLabelText('Excluded models');
     await waitFor(() => expect((input as HTMLTextAreaElement).value).toBe('model-b'));
     expect(screen.getByText('Comma or newline separated model IDs. A non-empty list replaces provider exclusions, including *. Clearing this list restores inheritance of the current provider rules, not unrestricted access. This precedence requires CPA v8.0.33 or later; upgrade older gateways before relying on credential overrides.')).toBeTruthy();
     fireEvent.change(input, { target: { value: '' } });
-    const save = screen.getByRole('button', { name: 'Save Fields' });
+    const save = screen.getByRole('button', { name: 'Save fields' });
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(save);
     await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());

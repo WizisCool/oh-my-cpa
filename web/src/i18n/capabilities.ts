@@ -1,4 +1,4 @@
-import { hasMessage, type TFunc } from './index';
+import { hasMessage, translateOr, type TFunc } from './index';
 
 /**
  * The console's name for an Agent capability.
@@ -21,4 +21,9 @@ export function capabilityTitle(name: string, t: TFunc): string {
 export function capabilityDescription(name: string, fallback: string, t: TFunc): string {
   const key = `agent.capability.${name}.description`;
   return hasMessage(key) ? t(key) : fallback;
+}
+
+/** The console's word for a capability's permission class; an unknown class reads as itself. */
+export function permissionLabel(permission: string, t: TFunc): string {
+  return translateOr(t, `agent.permission.${permission}`, permission);
 }

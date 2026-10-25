@@ -10,6 +10,7 @@ import {
   Segmented,
   App as AntdApp,
 } from 'antd';
+import { type MessageKey, useT } from '../../i18n';
 import { Switch } from '../common/Switch';
 import {
   SaveOutlined,
@@ -20,7 +21,6 @@ import {
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, describeError } from '../../api/client';
-import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type {
   ManagementAuthFile,
@@ -105,7 +105,7 @@ interface FormValues {
 }
 
 // Listed out so the translation check can see every key the alias rules can report.
-const ALIAS_PROBLEM_KEYS: Record<OAuthModelAliasValidationError, string> = {
+const ALIAS_PROBLEM_KEYS: Record<OAuthModelAliasValidationError, MessageKey> = {
   provider: 'af.alias_error_provider',
   too_many: 'af.alias_error_too_many',
   name_alias_required: 'af.alias_error_name_alias_required',
@@ -113,7 +113,7 @@ const ALIAS_PROBLEM_KEYS: Record<OAuthModelAliasValidationError, string> = {
   alias_same: 'af.alias_error_alias_same',
   alias_duplicate: 'af.alias_error_alias_duplicate',
 };
-const VERTEX_PROBLEM_KEYS: Record<VertexOpenAPIProblem, string> = {
+const VERTEX_PROBLEM_KEYS: Record<VertexOpenAPIProblem, MessageKey> = {
   location: 'af.vertex_openapi_location_invalid',
   models_too_many: 'af.vertex_openapi_models_too_many',
   model_too_long: 'af.vertex_openapi_model_too_long',

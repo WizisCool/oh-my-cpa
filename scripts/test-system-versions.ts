@@ -45,7 +45,7 @@ test('empty or unchecked feeds show their reason without a redundant notes notic
     const presentation = deriveVersionPresentation(createVersion({ state: 'indeterminate', reason, latest_version: '', merge_count: 0, notes_available: false }));
     assert.equal(presentation.hasChangelog, false);
     assert.equal(presentation.shouldShowNotesNotice, false);
-    assert.equal(presentation.detailKey, '');
+    assert.equal(presentation.detailKey, undefined);
   }
 });
 

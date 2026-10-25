@@ -6,7 +6,7 @@ import dayjs from '../../utils/time';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
-import { useT, type TFunc } from '../../i18n';
+import { type TFunc, useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { formatTimeAgo } from '../../utils/format';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -47,7 +47,7 @@ type BookRow = { channel?: string; channelLabel?: string; targetChannel?: string
   | (PricedModel & { rowKind: 'priced' })
   | { rowKind: 'unpriced'; model: string; usage_30d: PricingUsage; suggestions: UpstreamModel[] });
 
-function rowMode(row: BookRow): ModelFilter {
+function rowMode(row: BookRow): PricingMode | 'unpriced' {
   return row.rowKind === 'unpriced' ? 'unpriced' : modeOf(row);
 }
 

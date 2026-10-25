@@ -2,7 +2,7 @@ import React from 'react';
 import { App, Button, Input, Segmented, Select, Space, Tabs, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { useI18n, useT, type TFunc } from '../../i18n';
+import { type MessageKey, type TFunc, translateOr, useI18n, useT } from '../../i18n';
 import { createID } from '../../utils/ids';
 import { languageLocale } from '../../i18n/language';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
@@ -16,7 +16,7 @@ import { LoadFailure, useToast } from '../feedback';
 import styles from './CredentialWarmup.module.css';
 
 const { Text } = Typography;
-const REASON_KEYS: Record<string, string> = {
+const REASON_KEYS: Record<string, MessageKey> = {
   disabled: 'warmup.reason_disabled', model_required: 'warmup.reason_model_required',
   model_unavailable: 'warmup.reason_model_unavailable', quota_unknown: 'warmup.reason_quota_unknown',
   paid_usage_enabled: 'warmup.reason_paid_enabled', paid_usage_unknown: 'warmup.reason_paid_unknown',
@@ -139,7 +139,7 @@ function StatusCard({ credential, result }: { credential: WarmupCredential; resu
         <dd>
           <span className={styles['last-line']}>
             <StatusLabel tone={lastTone}>{t(`warmup.status_${result.status}`)}</StatusLabel>
-            <span className={styles['last-meta']}>{formatInstant(result.finished_at_ms ?? result.started_at_ms, credential.timezone, locale)} · {t(`warmup.trigger_${result.trigger}`)}</span>
+            <span className={styles['last-meta']}>{formatInstant(result.finished_at_ms ?? result.started_at_ms, credential.timezone, locale)} · {translateOr(t, `warmup.trigger_${result.trigger}`, result.trigger)}</span>
           </span>
           {result.status !== 'activated' && result.reason && <span className={styles['last-reason']}>{warmupReason(result.reason, t)}</span>}
         </dd>

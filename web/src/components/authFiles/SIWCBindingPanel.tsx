@@ -6,7 +6,7 @@ import { App, Button, Input, Tooltip } from 'antd';
 import { CopyOutlined, InfoCircleOutlined } from '../icons';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { formatGatewayTimestamp } from '../../utils/time';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { isSIWCPending, siwcTargetKey, type SIWCBindings, type SIWCSession } from '../../hooks/useSIWCBindings';
 import { Notice, useToast } from '../feedback';
@@ -14,14 +14,14 @@ import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
 
-const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, string> = {
+const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, MessageKey> = {
   start: 'siwc.start_failed', callback: 'siwc.callback_failed', incomplete: 'siwc.callback_incomplete', cancel: 'siwc.cancel_failed',
   read: 'siwc.read_failed', expired: 'siwc.expired', failed: 'siwc.failed', conflict: 'siwc.conflict',
 };
 const PHASE_TONES: Record<SIWCSession['phase'], StatusTone> = {
   starting: 'accent', waiting: 'accent', verifying: 'accent', success: 'success', error: 'warn', cancelled: 'neutral',
 };
-const PHASE_KEYS: Record<SIWCSession['phase'], string> = {
+const PHASE_KEYS: Record<SIWCSession['phase'], MessageKey> = {
   starting: 'siwc.starting', waiting: 'siwc.waiting', verifying: 'siwc.verifying',
   success: 'siwc.success', error: 'siwc.failed', cancelled: 'siwc.cancelled',
 };

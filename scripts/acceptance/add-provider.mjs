@@ -10,7 +10,7 @@ export async function runAddProviderAcceptance({ appURL, page, check, checkEvent
   await page.locator('.providers-page').first().waitFor({ state: 'visible', timeout: 15_000 });
   const writesBefore = fakeCpa.requests.filter((request) => request.method !== 'GET').length;
 
-  await page.getByRole('button', { name: /添加提供商|Add Provider/ }).first().click();
+  await page.getByRole('button', { name: /添加提供商|Add provider/ }).first().click();
   await page.getByRole('combobox', { name: /驱动类型 \/ 协议|Driver \/ Protocol/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByPlaceholder(/DeepSeek 官方主线路|DeepSeek Official/).fill(PROVIDER_NAME);
   await page.getByPlaceholder(/api\.deepseek\.com\/v1/).fill(PROVIDER_BASE_URL);

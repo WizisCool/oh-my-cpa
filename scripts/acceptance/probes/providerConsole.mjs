@@ -43,14 +43,14 @@ export async function iconPickerStacking({ base, page, check }) {
   await page.locator('.providers-page').getByRole('button', { name: /Edit|编辑/i }).first().click({ timeout: 10_000 });
   await page.locator('.ant-drawer-open').waitFor({ state: 'visible', timeout: 10_000 });
 
-  const pickerTrigger = page.locator('.ant-drawer-open').getByRole('button', { name: /Change Icon|更改图标/i }).first();
+  const pickerTrigger = page.locator('.ant-drawer-open').getByRole('button', { name: /Change icon|更改图标/i }).first();
   if (await pickerTrigger.isVisible().catch(() => false)) {
     await pickerTrigger.click();
   } else {
     // The inline icon tile opens the same picker.
     await page.locator('.ant-drawer-open').locator('div[title]').first().click();
   }
-  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
+  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI provider icon|选择 AI 提供商图标/i });
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
 
   /**
@@ -180,7 +180,7 @@ export async function providerIconPick({ base, page, check }) {
   // The inline mark on the row opens the picker for that row, which is the path
   // that writes an override straight from the table.
   await row.locator('div[title]').first().click({ timeout: 10_000 });
-  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
+  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI provider icon|选择 AI 提供商图标/i });
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
 
   const tile = picker.locator('[data-icon-id="DeepSeek"]');
@@ -264,7 +264,7 @@ export async function providerModelPicker({ base, page, check }) {
   // A disclosure head fills a card that clips to its rounded edge, so a ring drawn outward is cut to a
   // stray stroke. Whatever the ring's shape, every part of it must land inside the clipping card.
   for (const [label, toggle] of [
-    ['a section head', drawer.locator('button[aria-expanded]').filter({ hasText: /API Keys|API 密钥条目/ })],
+    ['a section head', drawer.locator('button[aria-expanded]').filter({ hasText: /API keys|API 密钥条目/ })],
     ['a key card toggle', drawer.locator('[class*="item-card"] button[aria-expanded]').first()],
   ]) {
     await toggle.focus();
@@ -288,8 +288,8 @@ export async function providerModelPicker({ base, page, check }) {
     check(`${label}'s focus ring is drawn whole, not clipped by its card`, ring.isFocused && ring.isInside, JSON.stringify(ring));
   }
 
-  await drawer.locator('button[aria-expanded]').filter({ hasText: /Custom Models|自定义模型/ }).click({ timeout: 10_000 });
-  await drawer.getByRole('button', { name: /Fetch Model List|获取模型列表/i }).click({ timeout: 10_000 });
+  await drawer.locator('button[aria-expanded]').filter({ hasText: /Custom models|自定义模型/ }).click({ timeout: 10_000 });
+  await drawer.getByRole('button', { name: /Fetch model list|获取模型列表/i }).click({ timeout: 10_000 });
   const picker = page.locator('.ant-modal').filter({ hasText: /Choose models|选择模型/i });
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
   check('a fetch opens the model picker', true);
@@ -307,7 +307,7 @@ export async function providerModelPicker({ base, page, check }) {
 
   const readRows = () => drawer.evaluate((node) =>
     [...node.querySelectorAll('[id^="model-card-"] input')]
-      .filter((input) => /Request Model|请求模型/.test(input.getAttribute('placeholder') ?? ''))
+      .filter((input) => /Request model|请求模型/.test(input.getAttribute('placeholder') ?? ''))
       .map((input) => input.value));
   await until(async () => (await readRows()).length === 3, { label: 'the picked models to become rows' }).catch(() => {});
   const rows = await readRows();
@@ -320,7 +320,7 @@ export async function providerModelPicker({ base, page, check }) {
   const existingModel = drawer.locator('[id^="model-card-"]').first();
   await existingModel.locator('button[aria-expanded]').click();
   await existingModel.locator('[class*="item-body"]').waitFor({ state: 'visible' });
-  await drawer.getByRole('button', { name: /^(Add Model|添加模型)$/i }).click();
+  await drawer.getByRole('button', { name: /^(Add model|添加模型)$/i }).click();
   const newModel = drawer.locator('[id^="model-card-"]').last();
   await until(async () => await drawer.locator('[id^="model-card-"]').count() === 4,
     { label: 'the custom model row to be added' });
@@ -329,7 +329,7 @@ export async function providerModelPicker({ base, page, check }) {
     await expansion.getAttribute('aria-expanded') === 'false'
       && await newModel.locator('[class*="item-body"]').count() === 0
       && await existingModel.locator('button[aria-expanded]').getAttribute('aria-expanded') === 'true');
-  const requestModel = newModel.getByPlaceholder(/Request Model|请求模型/);
+  const requestModel = newModel.getByPlaceholder(/Request model|请求模型/);
   await requestModel.fill('fixture-custom-model');
   check('the collapsed custom model still allows editing its upstream name',
     await requestModel.inputValue() === 'fixture-custom-model');
@@ -401,7 +401,7 @@ export async function customIconLibrary({ base, page, check }) {
   await page.route('**/omc/api/v1/custom-icons/*/content*', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle r="10" cx="12" cy="12"/></svg>' }));
   await page.goto(`${base}/ai-providers`, { waitUntil: 'domcontentloaded' });
   const row = page.locator('.providers-page tbody tr[data-row-key="openai-compat-0"]');
-  const providerMark = row.getByRole('button', { name: `Change Icon: ${pickerProvider.name}`, exact: true });
+  const providerMark = row.getByRole('button', { name: `Change icon: ${pickerProvider.name}`, exact: true });
   const defaultArtwork = providerMark.locator('span[style*="mask"]');
   await defaultArtwork.waitFor({ state: 'visible' });
   const defaultMask = await defaultArtwork.evaluate((element) => getComputedStyle(element).maskImage);
@@ -411,7 +411,7 @@ export async function customIconLibrary({ base, page, check }) {
   const hasDefaultArtwork = async () => await providerMark.locator('img').count() === 0
     && await defaultArtwork.count() === 1
     && await defaultArtwork.evaluate((element) => getComputedStyle(element).maskImage) === defaultMask;
-  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
+  const picker = page.locator('.ant-modal').filter({ hasText: /Select AI provider icon|选择 AI 提供商图标/i });
   const openPicker = async () => { await row.waitFor({ state: 'visible' }); await providerMark.click(); await picker.waitFor({ state: 'visible' }); };
   await openPicker();
   await picker.getByText('Custom', { exact: true }).click();
@@ -485,10 +485,10 @@ export async function customIconLibrary({ base, page, check }) {
   await until(hasDefaultArtwork, { label: 'provider default artwork after reload' });
   check('reference resets persist after reload', await hasDefaultArtwork());
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Add Provider' }).click();
+  await page.getByRole('button', { name: 'Add provider' }).click();
   const drawer = page.locator('.ant-drawer-open');
   await drawer.waitFor({ state: 'visible' });
-  await drawer.locator('[title="Change Icon"]').click();
+  await drawer.locator('[title="Change icon"]').click();
   await picker.waitFor({ state: 'visible' });
   await picker.getByText('Custom', { exact: true }).click();
   const geometry = await picker.evaluate((element) => ({ width: element.getBoundingClientRect().width, viewport: innerWidth }));
@@ -502,7 +502,7 @@ export async function customIconLibrary({ base, page, check }) {
   await page.keyboard.press('Escape');
   await picker.waitFor({ state: 'hidden' });
   check('dismissal leaves the underlying provider drawer open', await drawer.isVisible());
-  await drawer.getByRole('button', { name: 'Change Icon', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Change icon', exact: true }).click();
   await picker.getByText('Custom', { exact: true }).click();
   await picker.getByRole('button', { name: 'Add icon', exact: true }).click();
   await picker.getByLabel('Icon name', { exact: true }).fill('Draft Icon');
@@ -511,9 +511,9 @@ export async function customIconLibrary({ base, page, check }) {
   await picker.getByRole('button', { name: 'Save icon', exact: true }).click();
   await tile.locator('button[data-icon-id]').click();
   await picker.waitFor({ state: 'hidden' });
-  const draftArtwork = drawer.locator('[title="Change Icon"]');
+  const draftArtwork = drawer.locator('[title="Change icon"]');
   await until(async () => (await draftArtwork.locator('img').getAttribute('src') ?? '').includes('/custom-icons/'), { label: 'custom artwork in the provider draft' });
-  await drawer.getByRole('button', { name: 'Change Icon', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Change icon', exact: true }).click();
   await tile.getByRole('button', { name: 'Delete', exact: true }).click();
   await confirmation.waitFor({ state: 'visible' });
   check('narrow deletion explains the unused draft without overflowing', await confirmation.getByText('This icon is not in use.', { exact: false }).isVisible() && await picker.evaluate((element) => element.scrollWidth <= element.clientWidth));

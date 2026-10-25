@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { TFunc } from '../i18n';
+import type { MessageKey, TFunc } from '../i18n';
 
 /**
  * The console rail as data, and the operator's choice of which entries it shows and in what order.
@@ -17,20 +17,20 @@ import type { TFunc } from '../i18n';
  * ordering is a choice inside a group, never a way to reclassify an entry by dragging it.
  */
 
-/** One destination in the rail. */
-export interface NavEntry {
+/**
+ * One destination in the rail: the console's own pages carry a translation key, and a plugin's
+ * page carries the label the plugin registered, which the console has no catalog entry for.
+ */
+export type NavEntry = {
   /** The route it opens, and the stable key the hidden set names it by. */
   key: string;
-  /** A translation key, or for a plugin's own page the label the plugin registered. */
-  labelKey: string;
-  isLiteralLabel?: boolean;
   icon: React.ReactNode;
-}
+} & ({ labelKey: MessageKey; literalLabel?: never } | { literalLabel: string; labelKey?: never });
 
 /** A run of destinations under one heading. */
 export interface NavGroup {
   key: string;
-  labelKey: string;
+  labelKey: MessageKey;
   items: NavEntry[];
 }
 
@@ -250,7 +250,7 @@ export function showNavKey(keys: readonly string[], key: string): string[] {
 
 /** The label an entry renders, translated unless a plugin registered it literally. */
 export function navEntryLabel(entry: NavEntry, t: TFunc): string {
-  return entry.isLiteralLabel ? entry.labelKey : t(entry.labelKey);
+  return entry.literalLabel ?? t(entry.labelKey);
 }
 
 /**

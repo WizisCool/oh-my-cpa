@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n';
 export type RequestColumnId =
   | 'time'
   | 'result'
@@ -14,7 +15,7 @@ export type RequestColumnId =
 
 export interface RequestColumnDefinition {
   id: RequestColumnId;
-  labelKey: string;
+  labelKey: MessageKey;
   align: 'left' | 'right' | 'center';
   defaultWidth: number;
   minWidth: number;

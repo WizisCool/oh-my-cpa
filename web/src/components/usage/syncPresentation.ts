@@ -1,3 +1,5 @@
+import type { MessageKey } from '../../i18n';
+
 /**
  * How the request list reports a manual refresh.
  *
@@ -17,7 +19,7 @@ import type { UsageIngestRefresh } from '../../types/usageEvents';
 export interface SyncMessage {
   /** Matches the antd message severity the page shows. */
   tone: 'info' | 'success' | 'warning';
-  key: string;
+  key: MessageKey;
   vars?: Record<string, string | number>;
 }
 

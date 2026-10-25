@@ -5,7 +5,7 @@ import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs, { timeZoneOptions } from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from '../icons';
-import { useT, type TFunc } from '../../i18n';
+import { type MessageKey, type TFunc, useT } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
 import type { PriceTier, UpstreamModel } from '../../types/pricing';
 import {
@@ -195,7 +195,7 @@ export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggesti
   );
 };
 
-const RATE_LABEL_KEYS: Record<RateKey, string> = {
+const RATE_LABEL_KEYS: Record<RateKey, MessageKey> = {
   prompt: 'pricing.rate.prompt',
   completion: 'pricing.rate.completion',
   cacheRead: 'pricing.rate.cache_read',

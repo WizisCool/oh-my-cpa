@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppstoreOutlined, ClearOutlined, UndoOutlined } from '../icons';
 import { SecretInput } from '../common/SecretInput';
 import { api, describeError } from '../../api/client';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { pluginDisplayName, type PluginConfigField, type PluginItem } from '../../types/plugin';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { PluginConfigEditor } from './PluginConfigEditor';
@@ -352,7 +352,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   );
 }
 
-const FIELD_ERROR_KEYS: Record<PluginFieldError, string> = {
+const FIELD_ERROR_KEYS: Record<PluginFieldError, MessageKey> = {
   'invalid-integer': 'plugin.field_error_integer',
   'invalid-number': 'plugin.field_error_number',
   'invalid-enum': 'plugin.field_error_enum',

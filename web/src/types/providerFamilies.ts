@@ -13,12 +13,13 @@
  */
 
 import type { ProviderBehaviorSwitch, ProviderModelOptionField } from './providers';
+import type { MessageKey } from '../i18n';
 
 export interface ProviderFamilyMeta {
   /** CPA's family key, as sent to and received from the management API. */
   id: string;
   /** i18n key for the family's protocol label. */
-  labelKey: string;
+  labelKey: MessageKey;
   /**
    * Brand colour for the family tag, as a 6-digit hex value.
    *

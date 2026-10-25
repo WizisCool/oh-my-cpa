@@ -25,7 +25,7 @@ interface RhythmGridProps {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const LEGEND_STEPS = [0.08, 0.3, 0.55, 0.8, 1];
 const clock = (hour: number) => `${String(hour % 24).padStart(2, '0')}:00`;
 

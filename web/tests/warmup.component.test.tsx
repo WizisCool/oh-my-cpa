@@ -24,7 +24,7 @@ it('uses safe defaults and requires a model before automatic activation', () => 
 it('reads an inherited policy as plain rules and reports credential-local draft ownership', async () => {
   const onDirtyChange = vi.fn(); const surface = mount(<CredentialWarmup authIndex="exact-claude" onDirtyChange={onDirtyChange} />);
   await screen.findByText('As soon as either window resets');
-  expect(screen.getByText('Follows the Claude default in Warmup settings.')).toBeTruthy();
+  expect(screen.getByText('Follows the Claude default in warmup settings.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   fireEvent.click(screen.getByText('Custom'));
   await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));

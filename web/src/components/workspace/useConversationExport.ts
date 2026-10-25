@@ -1,5 +1,5 @@
 import React from 'react';
-import { useI18n } from '../../i18n';
+import { translateOr, useI18n } from '../../i18n';
 import { languageLocale } from '../../i18n/language';
 import { capabilityTitle } from '../../i18n/capabilities';
 import { useToast } from '../feedback';
@@ -43,13 +43,13 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       number: value => numberFormat.format(value),
       tokens: count => `${t('pg.total_tokens')} ${new Intl.NumberFormat(locale).format(count)}`, print: t('agent.export.print'), imageOmitted: t('agent.export.image_omitted'), privacy: t('agent.export.privacy'),
       omitted: count => t('agent.export.omitted', { count }),
-      status: status => t(kind === 'playground' ? `pg.status.${status}` : status === 'cancelled' ? 'agent.status.stopped' :
+      status: status => kind === 'playground' ? translateOr(t, `pg.status.${status}`, status) : t(status === 'cancelled' ? 'agent.status.stopped' :
         status === 'running' ? 'agent.call.running' : isKnownTurnStatus(status) ? `agent.status.${status}` : 'agent.status.unknown'),
       capability: name => capabilityTitle(name, t),
       callStatus: (name, status) => t(callStatusKey({ name, result: { status } })),
       chainFailed: count => t('agent.chain.failed', { count: String(count) }),
       rounds: (rounds, calls) => t('agent.foot.rounds', { rounds: String(rounds), calls: String(calls) }),
-      present: present => t(`agent.present.${present}`),
+      present: present => translateOr(t, `agent.present.${present}`, present),
       tokenCount: count => formatTokens(count, tokenStyle),
       failure: code => t(kind === 'agent' ? failureKey(code) : playgroundErrorKey(code)),
       duration: formatDuration,

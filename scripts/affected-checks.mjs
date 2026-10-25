@@ -56,6 +56,10 @@ function planFileChecks(file) {
   if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components', 'self-tests');
   if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
+  // The translation gate reads its own source and the demo dataset's capability list.
+  if (file === 'scripts/check-i18n.ts' || file === 'deploy/cloudflare/data/responses.json') add('i18n');
+  // The English catalog's build-time compaction is guarded by a logic suite of its own.
+  if (file === 'scripts/compact-locales.mjs') add('logic');
   if (file.endsWith('.css')) add('css-modules', 'motion', 'style-tokens');
   if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)
       || file.startsWith('migrations/') || file.startsWith('internal/web/')) add('go');

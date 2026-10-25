@@ -530,9 +530,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     {section(
                       t('events.timing'),
                       fields([
-                        [t('events.duration'), `${event.latency_ms.toLocaleString()} ms`],
+                        [t('events.duration'), `${event.latency_ms.toLocaleString('en')} ms`],
                         ...(isMeasurable && event.ttft_ms != null
-                          ? [[t('events.ttft'), `${event.ttft_ms.toLocaleString()} ms`] as [string, string]]
+                          ? [[t('events.ttft'), `${event.ttft_ms.toLocaleString('en')} ms`] as [string, string]]
                           : []),
                       ]),
                     )}

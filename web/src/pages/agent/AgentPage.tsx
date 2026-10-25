@@ -11,6 +11,7 @@ import {
   BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, EditOutlined, FileTextOutlined,
   LinkOutlined, MessageOutlined, PictureOutlined, PlayCircleOutlined, PlusOutlined, QuestionCircleOutlined, QuoteOutlined, ReloadOutlined, StopOutlined, ToolOutlined, WarningOutlined,
 } from '../../components/icons';
+import { type MessageKey, useI18n } from '../../i18n';
 import { AssistantComposer } from '../../components/workspace/AssistantComposer';
 import type { ComposerCommand, ComposerTriggers } from '../../components/workspace/AssistantComposer';
 import { AssistantThread } from '../../components/workspace/AssistantThread';
@@ -33,7 +34,6 @@ import { referenceContextWindow } from '../../types/modelSquare';
 import { DEFAULT_INFERENCE_ENDPOINT, parseInferenceEndpoint } from '../../types/inferenceEndpoints';
 import type { InferenceEndpoint } from '../../types/inferenceEndpoints';
 import { ContextReadout } from '../../components/workspace/ContextReadout';
-import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { writeDemoQuestion } from '../../demo/session';
 import { useDemoArrivalToast } from '../../components/common/DemoNotice';
@@ -75,7 +75,7 @@ const EXAMPLES = [
   { key: 'agent.example.compare', icon: <PlayCircleOutlined aria-hidden="true" /> },
   { key: 'agent.example.quota', icon: <DashboardOutlined aria-hidden="true" /> },
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
-];
+] satisfies { key: MessageKey; icon: React.ReactNode }[];
 
 /** The example the demonstration has a recorded run for. */
 const DEMO_REPLAY_EXAMPLE = 'agent.example.daily';
@@ -87,13 +87,13 @@ const DEMO_REPLAY_EXAMPLE = 'agent.example.daily';
  */
 type DrawerView = 'directory' | 'connect';
 
-const DRAWER_TITLES: Record<DrawerView, string> = {
+const DRAWER_TITLES: Record<DrawerView, MessageKey> = {
   directory: 'agent.directory',
   connect: 'agent.connect',
 };
 
 /** How each presentation a command can ask for is drawn on its chip. */
-const PRESENTATIONS: Record<Presentation, { label: string; icon: React.ReactNode }> = {
+const PRESENTATIONS: Record<Presentation, { label: MessageKey; icon: React.ReactNode }> = {
   text: { label: 'agent.present.text', icon: <FileTextOutlined aria-hidden="true" /> },
 };
 

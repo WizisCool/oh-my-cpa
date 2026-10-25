@@ -4,7 +4,7 @@ import React from 'react';
 import { Button, ColorPicker, Segmented, Select } from 'antd';
 import { Switch } from '../components/common/Switch';
 import { PlusOutlined } from '../components/icons';
-import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
+import { isChineseLanguage, LANGUAGES, type MessageKey, useI18n, useT } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -24,7 +24,7 @@ import { ThemeSwatch } from '../components/common/ThemeSwatch';
 import { LanguageFlag } from '../components/common/LanguageFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TpsCalculationMode } from '../types/tpsCalculation';
-import type { TokenNumberStyle } from '../types/tokenDisplay';
+import { tokenStylePreference, type TokenNumberPreference } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
 import { useScrollSmoothingPreference } from '../hooks/useScrollSmoothing';
@@ -45,13 +45,13 @@ import {
 } from '../types/quotaAutoRefresh';
 
 
-const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
+const MODE_LABEL_KEYS: Record<ThemeModePreference, MessageKey> = {
   light: 'omc.theme_mode_light',
   dark: 'omc.theme_mode_dark',
   system: 'omc.theme_mode_system',
 };
 
-const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, string> = {
+const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, MessageKey> = {
   bg: 'omc.token_bg',
   surface: 'omc.token_surface',
   elevated: 'omc.token_elevated',
@@ -63,7 +63,7 @@ const TOKEN_LABEL_KEYS: Record<keyof ThemeCore, string> = {
   accent: 'omc.token_accent',
 };
 
-const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
+const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
   text: 'omc.contrast_role_text',
   hint: 'omc.contrast_role_hint',
   quiet: 'omc.contrast_role_quiet',
@@ -111,7 +111,7 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
  * surface is the config panel's, with its different save semantics. The two pages coexist in the
  * sidebar under "Control".
  */
-const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, string> = {
+const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, MessageKey> = {
   on: 'omc.scroll_smoothing_on',
   system: 'omc.theme_mode_system',
   off: 'omc.scroll_smoothing_off',
@@ -140,7 +140,7 @@ export const OmcSettingsPage: React.FC = () => {
   // console. The option stays visible and disabled rather than hidden: an
   // operator who knows the setting exists should find it and see why it is
   // unavailable, instead of concluding the console dropped it.
-  const tokenStyleOptions = TOKEN_NUMBER_STYLES.map((value: TokenNumberStyle) => ({
+  const tokenStyleOptions = TOKEN_NUMBER_STYLES.map((value: TokenNumberPreference) => ({
     value,
     label: value === 'zh' ? t('omc.token_style_zh') : value === 'full' ? t('omc.token_style_full') : t('omc.token_style_en'),
     disabled: value === 'zh' && !isChineseLanguage(lang),
@@ -166,9 +166,9 @@ export const OmcSettingsPage: React.FC = () => {
           description={t('omc.token_style_desc')}
           control={
             <Segmented
-              value={style}
+              value={tokenStylePreference(style)}
               options={tokenStyleOptions}
-              onChange={(next) => setStyle(next as TokenNumberStyle)}
+              onChange={(next) => setStyle(next as TokenNumberPreference)}
               aria-label={t('omc.token_style')}
               vertical={isNarrow}
               block={isNarrow}

@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { Button, Segmented, Tooltip } from 'antd';
 import { EyeInvisibleOutlined, HolderOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../icons';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import {
   dashboardWidgetSpec,
   moveDashboardWidget,
@@ -27,7 +27,7 @@ export interface DashboardBoardProps {
   onChange: (next: DashboardLayout) => void;
 }
 
-const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, string> = {
+const SPAN_LABEL_KEYS: Record<DashboardWidgetSpan, MessageKey> = {
   1: 'dash.layout.span_1',
   2: 'dash.layout.span_2',
   3: 'dash.layout.span_3',

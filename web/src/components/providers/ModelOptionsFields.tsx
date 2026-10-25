@@ -1,7 +1,7 @@
 import { Checkbox, Input, InputNumber, Select } from 'antd';
 
 import { VertexModelOpenAPI } from '../authFiles/VertexModelOpenAPI';
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import type { ProviderModelOptionField } from '../../types/providers';
 import { MODALITY_SUGGESTIONS, type ModelOptionsDraft, type ModelOptionsProblem } from './modelOptions';
 import styles from './ProviderEditorDrawer.module.css';
@@ -18,7 +18,7 @@ interface ModelOptionsFieldsProps {
 
 type FlagName = 'forceMapping' | 'isCompat' | 'supportConfigurationUpdate' | 'useMaxCompletionTokens';
 
-const FLAGS: { name: FlagName; field?: ProviderModelOptionField; labelKey: string; descKey: string }[] = [
+const FLAGS: { name: FlagName; field?: ProviderModelOptionField; labelKey: MessageKey; descKey: MessageKey }[] = [
   { name: 'forceMapping', labelKey: 'pro.model_force_mapping', descKey: 'pro.model_force_mapping_desc' },
   { name: 'isCompat', field: 'is_compat', labelKey: 'pro.model_is_compat', descKey: 'pro.model_is_compat_desc' },
   {
@@ -35,7 +35,7 @@ const FLAGS: { name: FlagName; field?: ProviderModelOptionField; labelKey: strin
   },
 ];
 
-const PROBLEM_KEYS: Record<ModelOptionsProblem, string> = {
+const PROBLEM_KEYS: Record<ModelOptionsProblem, MessageKey> = {
   context_length: 'pro.model_problem_context_length',
   thinking_bounds: 'pro.model_problem_thinking_bounds',
   thinking_order: 'pro.model_problem_thinking_order',

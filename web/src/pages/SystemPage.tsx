@@ -929,8 +929,8 @@ export const SystemPage: React.FC = () => {
                       emphasis="quiet"
                       testId="sys-component-facts"
                       facts={[
-                        { key: 'usage', label: t('sys.fact_requests'), value: sysInfo.data_volumes.usage_events.toLocaleString() },
-                        ...(sysInfo.data_volumes.inbox_pending > 0 ? [{ key: 'pending', label: t('sys.fact_pending'), value: <StatusLabel tone="warn">{sysInfo.data_volumes.inbox_pending.toLocaleString()}</StatusLabel>, testId: 'sys-health-pending' }] : []),
+                        { key: 'usage', label: t('sys.fact_requests'), value: sysInfo.data_volumes.usage_events.toLocaleString('en') },
+                        ...(sysInfo.data_volumes.inbox_pending > 0 ? [{ key: 'pending', label: t('sys.fact_pending'), value: <StatusLabel tone="warn">{sysInfo.data_volumes.inbox_pending.toLocaleString('en')}</StatusLabel>, testId: 'sys-health-pending' }] : []),
                       ]}
                     />
                   </div>
@@ -949,7 +949,7 @@ export const SystemPage: React.FC = () => {
                     testId="sys-component-facts"
                     facts={[
                       { key: 'latest', label: t('sys.fact_last_usage'), value: sysInfo.data_volumes.last_event_ms ? formatTimeAgo(sysInfo.data_volumes.last_event_ms, Date.now(), t) : '—' },
-                      ...(sysInfo.collector.gap_count > 0 ? [{ key: 'gaps', label: t('sys.fact_gaps'), value: <StatusLabel tone="warn">{sysInfo.collector.gap_count.toLocaleString()}</StatusLabel>, testId: 'sys-health-gaps' }] : []),
+                      ...(sysInfo.collector.gap_count > 0 ? [{ key: 'gaps', label: t('sys.fact_gaps'), value: <StatusLabel tone="warn">{sysInfo.collector.gap_count.toLocaleString('en')}</StatusLabel>, testId: 'sys-health-gaps' }] : []),
                     ]}
                   />
                 </div>

@@ -910,7 +910,10 @@
 }
 
 .capability-label {
-  flex: none;
+  /* The identifier beside it keeps its width in every language: a title that is longer than the
+     drawer is the title's problem, and it ellipsizes rather than pushing the id out of the row. */
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 100%;
   color: var(--fg);
   font-size: var(--text-md);
@@ -921,7 +924,9 @@
 }
 
 .capability-name {
+  flex: 0 0 auto;
   min-width: 0;
+  max-width: 100%;
   color: var(--meta);
   font-size: var(--text-xs);
   overflow: hidden;

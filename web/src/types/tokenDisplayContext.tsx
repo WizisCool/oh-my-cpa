@@ -11,6 +11,7 @@ import {
   parseTokenNumberStyle,
   resolveTokenNumberStyle,
   type ModelChartView,
+  type TokenNumberPreference,
   type TokenNumberStyle,
 } from './tokenDisplay';
 
@@ -34,7 +35,7 @@ interface TokenDisplayContextValue {
   showModelIcons: boolean;
   setShowModelIcons: (show: boolean) => void;
   setTpsMode: (mode: TpsCalculationMode) => void;
-  setStyle: (style: TokenNumberStyle) => void;
+  setStyle: (style: TokenNumberPreference) => void;
   setModelView: (view: ModelChartView) => void;
 }
 
@@ -68,7 +69,7 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const parseTpsMode = React.useRef(parseTpsCalculationMode).current;
   const parseIcons = React.useRef(parseRequestModelIcons).current;
 
-  const stylePref = usePreference<TokenNumberStyle>(TOKEN_STYLE_PREFERENCE, DEFAULT_TOKEN_NUMBER_STYLE, parseStyle);
+  const stylePref = usePreference<TokenNumberPreference>(TOKEN_STYLE_PREFERENCE, DEFAULT_TOKEN_NUMBER_STYLE, parseStyle);
   const viewPref = usePreference<ModelChartView>(MODEL_VIEW_PREFERENCE, DEFAULT_MODEL_CHART_VIEW, parseView);
   const iconsPref = usePreference<boolean>(REQUEST_MODEL_ICONS_PREFERENCE, DEFAULT_REQUEST_MODEL_ICONS, parseIcons);
 

@@ -8,7 +8,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { heatmapRampMax, heatmapRampPosition } from '../../theme/heatmapRamp';
-import { languageLocale, useT, useI18n, type Lang } from '../../i18n';
+import { type Lang, languageLocale, useI18n, useT } from '../../i18n';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
@@ -46,7 +46,7 @@ const WEEKDAY_KEYS = [
   'dash.heatmap.dow.fri',
   'dash.heatmap.dow.sat',
   'dash.heatmap.dow.sun',
-];
+] as const;
 
 /**
  * A scroll offset past any width the field can have, which the browser clamps to the newest

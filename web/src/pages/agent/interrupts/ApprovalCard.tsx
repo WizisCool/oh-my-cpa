@@ -6,7 +6,7 @@ import { Notice } from '../../../components/feedback';
 import { CodeBlock } from '../../../components/workspace/ModelMarkdown';
 import workspace from '../../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../../i18n';
-import { capabilityDescription } from '../../../i18n/capabilities';
+import { capabilityDescription, permissionLabel } from '../../../i18n/capabilities';
 import { failureCode, startOperationOAuth } from '../api';
 import { failureKey, previewEntries } from '../state';
 import type { Capability, Operation } from '../state';
@@ -100,7 +100,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
         <>
           <header className={styles['approval-head']}>
             <span className={styles['approval-title']}>{t('agent.operation.title')}</span>
-            <Tag tone={isDestructive ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
+            <Tag tone={isDestructive ? 'danger' : 'warn'}>{permissionLabel(permission, t)}</Tag>
           </header>
           <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
         </>

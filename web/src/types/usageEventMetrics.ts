@@ -2,6 +2,7 @@ import { DEFAULT_TPS_CALCULATION_MODE, type TpsCalculationMode } from './tpsCalc
 import type {
   UsageEvent,
 } from './usageEvents';
+import type { MessageKey } from '../i18n';
 
 export function eventPageMetrics(events: UsageEvent[]) {
   return {
@@ -109,7 +110,7 @@ export function isFastTierEvent(event?: Partial<Pick<UsageEvent, 'resolved_servi
   return FAST_SERVICE_TIERS.has((event?.resolved_service_tier ?? '').trim().toLowerCase());
 }
 
-export function fastTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): string {
+export function fastTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): MessageKey {
   if (event.resolved_service_tier_source === 'outbound') return 'events.fast_tier_outbound_hint';
   return event.resolved_service_tier_source === 'request'
     ? 'events.fast_tier_requested_hint'
@@ -163,7 +164,7 @@ export function eventTokensPerSecond(
   }, mode);
 }
 
-export function resolvedTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): string {
+export function resolvedTierHintKey(event: Pick<UsageEvent, 'resolved_service_tier_source'>): MessageKey {
   if (event.resolved_service_tier_source === 'outbound') return 'events.resolved_tier_outbound';
   return event.resolved_service_tier_source === 'request'
     ? 'events.resolved_tier_request'

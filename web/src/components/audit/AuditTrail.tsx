@@ -26,6 +26,7 @@ import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
   AUDIT_CATEGORIES,
+  AUDIT_CATEGORY_NAMES,
   auditFacets,
   categoryOf,
   dayKey,
@@ -33,6 +34,7 @@ import {
   readableTarget,
   resultTone,
   selectedCategory,
+  type AuditCategory,
   type AuditEvent,
   type AuditFilters,
   type AuditOutcome,
@@ -387,7 +389,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
             popupMatchSelectWidth={false}
             options={[
               { value: 'all', label: t('audit.all_categories') },
-              ...Object.keys(AUDIT_CATEGORIES).map((name) => ({
+              ...AUDIT_CATEGORY_NAMES.map((name) => ({
                 value: name,
                 label: (
                   <span className={styles['category-option']}>
@@ -397,7 +399,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
                 ),
               })),
             ]}
-            onChange={(value: string) => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
+            onChange={(value: AuditCategory | 'all') => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
           />
           {/* A phone has no width for four segments beside the category, so the range is the
               same choice as a select sharing that row. */}

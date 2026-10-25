@@ -339,7 +339,7 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
           <span className={styles['gateway-name']}>{t('routing.gateway')}</span>
           {strategy && <span className={styles['gateway-strategy']}>{strategy}</span>}
           <span className={styles['gateway-meta']}>
-            {isEmpty ? t('routing.waiting') : t('routing.attempts_count', { count: model.attempts.toLocaleString() })}
+            {isEmpty ? t('routing.waiting') : t('routing.attempts_count', { count: model.attempts.toLocaleString('en') })}
           </span>
         </div>
       </div>
@@ -498,7 +498,7 @@ function ModelNode({ row, phase, delayMs, containerRef, color, washRef, haloRef,
       <span className={styles['row-text']}>
         <span className={styles['row-name']} title={row.name}>{row.name}</span>
         <span className={styles['row-meta']}>
-          {t('routing.requests_count', { count: row.requests.toLocaleString() })} · {formatLatency(row.latencyMs)}
+          {t('routing.requests_count', { count: row.requests.toLocaleString('en') })} · {formatLatency(row.latencyMs)}
           {row.failures > 0 && <span className={styles['row-failures']}> · {t('routing.failed_count', { count: row.failures })}</span>}
         </span>
       </span>
@@ -556,7 +556,7 @@ function TargetNode({ target, phase, delayMs, containerRef, nowMs, isLatest, sou
           <StatusLabel tone="accent">{t('routing.answered_last')}</StatusLabel>
         ) : (
           <span className={styles['row-meta']}>
-            {t('routing.requests_count', { count: target.attempts.toLocaleString() })} · {formatLatency(target.latencyMs)}
+            {t('routing.requests_count', { count: target.attempts.toLocaleString('en') })} · {formatLatency(target.latencyMs)}
           </span>
         )}
         {target.failures > 0 && (

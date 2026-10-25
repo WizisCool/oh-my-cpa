@@ -136,11 +136,22 @@ reviews:
         regress, or a change that touches a pinned image is a defect. A replacement
         is removed only after its successor passes its health check; a failure
         restores the old container and re-points its image tag.
+    - path: 'web/src/i18n/locales/**'
+      instructions: >-
+        Translation catalogs. Review wording against `web/src/i18n/STYLE.md` and
+        terms against `web/src/i18n/GLOSSARY.md`: one concept takes one word per
+        language, Traditional Chinese is Hong Kong usage (軟件, 網絡, 密鑰, 帳戶,
+        not the Taiwan forms), English and Malay are sentence case, counts with
+        an inflecting noun use ICU plural syntax. A translation must keep every
+        placeholder and every condition, unit or warning its source carries, and
+        must not leave text in another language. Ids and order match
+        `locales/zh/`; `pnpm check-i18n` enforces structure, so focus on meaning.
     - path: 'web/src/**/*.{ts,tsx}'
       instructions: >-
-        React console. User-visible copy is never hardcoded: new strings are
-        `[zh, en]` pairs in `web/src/i18n/index.tsx` plus matching entries in
-        every catalog under `web/src/i18n/locales/`. Requests go through the single
+        React console. User-visible copy is never hardcoded: a new string is an
+        id in `web/src/i18n/locales/zh/<area>.ts` with the same id in the `en`,
+        `zh-Hant` and `ms` file of that name, read through the typed `t()`; a
+        server-derived id goes through `translateOr`. Requests go through the single
         typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
         a defect. Colors come from the resolved palette in
         `web/src/theme/palette.ts` - nine authored tokens with seventeen derived

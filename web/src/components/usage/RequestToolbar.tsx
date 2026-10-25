@@ -2,7 +2,7 @@
 import { Button, Segmented, Select } from 'antd';
 import { FilterOutlined } from '../icons';
 
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import type { ModelChartView } from '../../types/tokenDisplay';
 import type { EventFilterKey } from '../../types/usageEventQuery';
@@ -87,7 +87,7 @@ export function RequestToolbar({
    */
   const facetMulti = (
     key: EventFilterKey,
-    labelKey: string,
+    labelKey: MessageKey,
     values: UsageFacets[keyof UsageFacets] | undefined,
   ) => {
     const selected = committedParams[key] ?? [];

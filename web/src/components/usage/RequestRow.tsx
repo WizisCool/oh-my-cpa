@@ -458,7 +458,7 @@ export const RequestRow = React.memo<RequestRowProps>(
               cache.hasData
                 ? t('events.cache_rate_tooltip', {
                     rate: cacheLabel,
-                    count: cache.cached.toLocaleString(),
+                    count: cache.cached.toLocaleString('en'),
                   })
                 : t('events.cache_no_data')
             }

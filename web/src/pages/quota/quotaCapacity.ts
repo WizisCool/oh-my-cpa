@@ -1,4 +1,4 @@
-import type { TFunc } from '../../i18n';
+import type { MessageKey, TFunc } from '../../i18n';
 import type { QuotaCapacityUnavailableReason, QuotaWindow } from '../../types/quota';
 import { formatUsd, nanosToUsd } from '../../types/pricingDisplay';
 import { formatTokens, type TokenNumberStyle } from '../../types/tokenDisplay';
@@ -25,7 +25,7 @@ export function formatCapacityError(errorPercent: number): string {
   return `±${Number(errorPercent.toFixed(1))}%`;
 }
 
-const REASON_KEYS: Record<QuotaCapacityUnavailableReason, string | null> = {
+const REASON_KEYS: Record<QuotaCapacityUnavailableReason, MessageKey | null> = {
   scope_unknown: 'quota.capacity_reason_scope_unknown',
   history_unavailable: 'quota.capacity_reason_history_unavailable',
   usage_unavailable: 'quota.capacity_reason_usage_unavailable',

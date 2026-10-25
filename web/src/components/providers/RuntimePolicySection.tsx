@@ -1,7 +1,7 @@
 import React from 'react';
 import { Checkbox, Input, InputNumber, Segmented } from 'antd';
 
-import { useT } from '../../i18n';
+import { type MessageKey, useT } from '../../i18n';
 import type { ProviderBehaviorSwitch, ProviderOverride } from '../../types/providers';
 import { ErrorRulesEditor } from '../policy/ErrorRulesEditor';
 import type { BehaviorDraft, RuntimePolicyDraft } from './runtimePolicy';
@@ -17,7 +17,7 @@ interface RuntimePolicySectionProps {
   showProblems: boolean;
 }
 
-const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking' | 'openapi' | 'openapi_location'>; labelKey: string; descKey: string }[] = [
+const BOOLEAN_SWITCHES: { name: Exclude<ProviderBehaviorSwitch, 'codex_cloaking' | 'openapi' | 'openapi_location'>; labelKey: MessageKey; descKey: MessageKey }[] = [
   { name: 'alpha_search', labelKey: 'policy.alpha_search', descKey: 'policy.alpha_search_desc' },
   { name: 'rebuild_mid_system_message', labelKey: 'policy.rebuild_mid_system', descKey: 'policy.rebuild_mid_system_desc' },
   { name: 'native_tool_search', labelKey: 'policy.native_tool_search', descKey: 'policy.native_tool_search_desc' },
