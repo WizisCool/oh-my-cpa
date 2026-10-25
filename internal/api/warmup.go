@@ -607,7 +607,7 @@ func (h *Handler) executeWarmup(ctx context.Context, authIndex, requestID, revis
 	result.OutputTokens = outcome.OutputTokens
 	result.FinishedAtMS = h.now().UnixMilli()
 	if outcome.Status == "pending" {
-		after, readErr := h.refreshWarmupObservation(ctx, client, file)
+		after, readErr := h.readWarmupObservation(ctx, client, file, !isManual)
 		state.VerificationReads = 1
 		if readErr == nil {
 			if isWarmupActivated(before, after) {

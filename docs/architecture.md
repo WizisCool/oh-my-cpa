@@ -2430,7 +2430,8 @@ lifecycle. There are no new tables, migrations or routing inputs (ADR 0058 and A
 **A failed read is not a reading, but it is recorded.** Every surface that reads a
 credential — the manual refresh, the background loop, the warmup probe and the Agent
 capability — goes through `Handler.refreshQuotaReading`
-(`internal/api/management_quota.go`), which classifies the outcome with
+(`internal/api/management_quota.go`) or, for a caller no operator is waiting on,
+`Handler.refreshAutomaticQuotaReading`. Both classify the outcome with
 `quota.ReadOutcome` and upserts one row per credential in `quota_refresh_attempts`
 (migration 044: `auth_index`, `attempted_at_ms`, `outcome`, `error`; an older attempt
 never overwrites a newer one). The overview and the credential detail serve that row as
@@ -2457,7 +2458,7 @@ hour), and a scheduled read once the newer of the observation and the process's 
 attempt is `interval_minutes` old, less a thirty-second slack for the observation being
 stamped after its tick. Due credentials - reset-driven first,
 then oldest reading first, at most sixteen per round and four at a time - go through
-`Handler.refreshQuotaReading` and `persistNormalizedQuotaSnapshot`, exactly as a manual
+`Handler.refreshAutomaticQuotaReading` and `persistNormalizedQuotaSnapshot`, exactly as a manual
 refresh does, so the attempt is recorded beside the reading it could not replace. `refreshQuotaReading` passes Claude reads through a process-wide gate
 (`internal/api/quota_read_gate.go`) for every caller: one read at a time, and a 429
 (`quota.RateLimitSignal`, with the parsed `Retry-After`) pauses every Claude read for the

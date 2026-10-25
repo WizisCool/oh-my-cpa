@@ -20,6 +20,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/warmup"
 )
 
@@ -1150,6 +1151,52 @@ func TestWarmupRateLimitRetryWithoutProtocolPause(t *testing.T) {
 	fixture.mu.Unlock()
 	if sends != 2 {
 		t.Fatalf("backoff changed consumption: %d", sends)
+	}
+}
+
+func TestWarmupAutomaticPendingConfirmationHonorsCredentialBackoff(t *testing.T) {
+	// A send that lands while another read is being refused must not spend a confirmation request
+	// on the credential backoff that refusal established. Only the longer backoff can defer this
+	// read: the provider pause has already passed by the time the send returns.
+	ctx := context.Background()
+	fixture := &warmupFixture{isActivationDelayed: true}
+	handler := newWarmupHandler(t, fixture)
+	var clockMu sync.Mutex
+	now := time.Now().UTC()
+	handler.nowFn = func() time.Time {
+		clockMu.Lock()
+		defer clockMu.Unlock()
+		return now
+	}
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := handler.warmupFile(ctx, client, "exact-claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := handler.quotaReadGates.forFile(file)
+	readsAtSend := -1
+	fixture.onSend = func() {
+		fixture.mu.Lock()
+		readsAtSend = fixture.usageReads
+		fixture.mu.Unlock()
+		refusedAt := handler.now()
+		gate.observe(file.AuthIndex, &quota.NormalizedQuota{RateLimit: &quota.RateLimitSignal{StatusCode: http.StatusTooManyRequests}}, refusedAt.UnixMilli())
+		clockMu.Lock()
+		now = now.Add(3 * time.Minute)
+		clockMu.Unlock()
+	}
+	result, err := handler.executeWarmup(ctx, file.AuthIndex, "", "", false)
+	if err != nil || result.Status != "pending" {
+		t.Fatalf("automatic run: %+v %v, want the send left pending", result, err)
+	}
+	fixture.mu.Lock()
+	usageReads := fixture.usageReads
+	fixture.mu.Unlock()
+	if readsAtSend < 0 || usageReads != readsAtSend {
+		t.Fatalf("usage reads after the send = %d, want the %d made before it: the confirmation spent a request during the credential backoff", usageReads, readsAtSend)
 	}
 }
 
