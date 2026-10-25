@@ -10,6 +10,7 @@ const owner = randomUUID();
 export default defineConfig({
   testDir: join(ROOT, 'scripts/acceptance/tests'),
   testMatch: 'catalog.spec.ts',
+  globalSetup: join(ROOT, 'scripts/testing/probe-warmup.ts'),
   webServer: {
     command: `"${process.execPath}" --import tsx "${join(ROOT, 'scripts/testing/vite-server.ts')}" ${port}`,
     cwd: join(ROOT, 'web'),

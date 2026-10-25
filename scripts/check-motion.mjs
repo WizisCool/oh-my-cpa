@@ -96,13 +96,6 @@ const EXCEPTIONS = [
   {
     kind: 'duration',
     file: 'components/workspace/Workspace.module.css',
-    selector: '.generation-loader-cell',
-    property: 'animation',
-    why: 'The generation loader\u2019s lit run travels its nine cells for as long as work is running; 2700ms is the cycle, not a transition between two states, and reduced motion freezes it (ADR 0080).',
-  },
-  {
-    kind: 'duration',
-    file: 'components/workspace/Workspace.module.css',
     selector: '.stream-caret',
     property: 'animation',
     why: 'The caret at the end of arriving text pulses while the stream is open; 1200ms is the pulse period, not a state transition, and reduced motion freezes it (ADR 0080).',

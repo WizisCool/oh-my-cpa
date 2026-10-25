@@ -11,12 +11,6 @@ import {
   failureKey,
   isAgentSendDisabled,
   isAwaitingAnswer,
-  EMPTY_DRAFT,
-  chooseOption,
-  chooseOther,
-  draftReply,
-  isQuestionAnswered,
-  operationQuestions,
   pendingOperationID,
   replaceableTurnID,
   groupCapabilities,
@@ -30,10 +24,7 @@ import {
   callStatusKey,
   callDuration,
 } from '../web/src/pages/agent/state.ts';
-import { completedDisplayViews, displayCallStage, draftViewHTML, draftViewTitle, isDraftViewFrameless } from '../web/src/agent/types.ts';
 import { attachedFileBlock, decodeAttachedText, splitAttachedFiles } from '../web/src/pages/agent/attachments.ts';
-import { lucideMarkup, lucideNodes, parseIconReference } from '../web/src/agent/agentIcons.ts';
-import { CANVAS_DRAFT_MESSAGE, CANVAS_HEIGHT_REPORTER, CANVAS_MAX_HEIGHT, CANVAS_MESSAGE, CANVAS_MIN_HEIGHT, canvasDocument, canvasDraftDocument, canvasHeight, canvasRasterScale, MAX_RASTER_AREA, MAX_RASTER_SIDE } from '../web/src/agent/canvasDocument.ts';
 import { contextShare } from '../web/src/components/workspace/contextShare.ts';
 import { referenceContextWindow } from '../web/src/types/modelSquare.ts';
 import type { ModelSquareDirectory } from '../web/src/types/modelSquare.ts';
@@ -130,42 +121,11 @@ check('the operation a conversation waits on is the pending call of its last tur
 });
 
 check('a turn stopped on a question is told apart from one awaiting approval', () => {
-  const asking = turn({ status: 'pending', traces: [{ id: 'q', name: 'ask_question', result: { status: 'pending', operation_id: 'op-q' } }] });
+  const asking = turn({ status: 'pending', traces: [{ id: 'q', name: 'prompt_openui', result: { status: 'pending', operation_id: 'op-q' } }] });
   const approving = turn({ status: 'pending', traces: [{ id: 'w', name: 'keys_create', result: { status: 'pending', operation_id: 'op-w' } }] });
   assert.equal(isAwaitingAnswer(asking), true);
   assert.equal(isAwaitingAnswer(approving), false);
   assert.equal(isAwaitingAnswer({ ...asking, status: 'success' }), false);
-});
-
-check('something else replaces a single choice and joins a multiple one', () => {
-  const single = { question: 'Window?', options: [{ label: '1h' }, { label: '24h' }] };
-  const multiple = { ...single, multi_select: true };
-  let draft = chooseOption(EMPTY_DRAFT, single, '1h');
-  draft = chooseOption(draft, single, '24h');
-  assert.deepEqual(draft.selected, ['24h']);
-  draft = { ...chooseOther(draft, single), text: ' later ' };
-  assert.deepEqual(draftReply(draft, single), { selected: [], text: 'later' });
-  // Typed text that is no longer chosen is kept for switching back, but never sent.
-  assert.deepEqual(draftReply(chooseOption(draft, single, '1h'), single), { selected: ['1h'], text: '' });
-  let many = chooseOption(chooseOption(EMPTY_DRAFT, multiple, '1h'), multiple, '24h');
-  many = { ...chooseOther(many, multiple), text: 'both' };
-  assert.deepEqual(draftReply(many, multiple), { selected: ['1h', '24h'], text: 'both' });
-  assert.deepEqual(chooseOption(many, multiple, '1h').selected, ['24h']);
-  assert.deepEqual(draftReply({ ...EMPTY_DRAFT, text: 'free' }, { question: 'Anything?' }), { selected: [], text: 'free' });
-});
-
-check('a question is sendable only when every question has a choice or typed text', () => {
-  const operation: Operation = { id: 'op', capability: 'ask_question', status: 'pending', human_input: 'answer', result: { status: 'pending' }, preview: { target: 'Which window?', changes: { questions: [
-    { question: 'Which window?', options: [{ label: '1h' }, { label: '24h' }] },
-    { question: 'Anything else?' },
-    { header: 'not a question' },
-  ] } } };
-  const questions = operationQuestions(operation);
-  assert.equal(questions.length, 2);
-  assert.equal(isQuestionAnswered([{ selected: ['1h'], text: '' }, { selected: [], text: '  ' }], questions.length), false);
-  assert.equal(isQuestionAnswered([{ selected: ['1h'], text: '' }, { selected: [], text: 'no' }], questions.length), true);
-  assert.equal(isQuestionAnswered([{ selected: ['1h'], text: '' }], questions.length), false);
-  assert.deepEqual(operationQuestions({ ...operation, preview: { target: 'x', changes: { name: 'provider' } } }), []);
 });
 
 check('a trace carries its capability name for the transcript to name', () => {
@@ -249,7 +209,7 @@ check('the stream is rebuilt into the parts the server stores, in order', () => 
   // A call is visible, with its arguments, before it has a result.
   assert.deepEqual(frame.traces, [{ id: 'call', name: 'usage_aggregate', arguments: '{"window":"24h"}', result: { status: 'running' }, started_at_ms: 10 }]);
   const settled = fold([
-    { type: 'TOOL_CALL_RESULT', messageId: 'result:call', toolCallId: 'call', content: '{"status":"success","invalidates":["keys"]}', metadata: { ended_at_ms: 25, view: { kind: 'table', title: 'T', columns: ['a'], rows: [{ a: 1 }] } } },
+    { type: 'TOOL_CALL_RESULT', messageId: 'result:call', toolCallId: 'call', content: '{"status":"success","invalidates":["keys"]}', metadata: { ended_at_ms: 25 } },
     { type: 'STEP_FINISHED', stepName: 'round:1' },
     { type: 'STEP_STARTED', stepName: 'round:2', metadata: { round: 2 } },
     { type: 'TEXT_MESSAGE_START', messageId: 'r:3', role: 'assistant' },
@@ -263,7 +223,6 @@ check('the stream is rebuilt into the parts the server stores, in order', () => 
   assert.equal(settled.parts[3].content, 'answer', 'nothing after the finish is folded in');
   assert.equal(settled.traces[0].result.status, 'success');
   assert.equal(settled.traces[0].ended_at_ms, 25);
-  assert.equal(settled.traces[0].view?.title, 'T');
   assert.equal(settled.round, 2);
   assert.deepEqual(settled.usage, { input_tokens: 10, output_tokens: 4, total_tokens: 14 });
   assert.equal(settled.snapshot?.revision, 2);
@@ -299,7 +258,7 @@ check('a tool result names the views it invalidated, and an unreadable receipt i
 });
 
 check('a run request carries one message or a resume, and never history, state or tool results', () => {
-  const input = buildRunInput({ threadId: 'c', runId: 'r', message: { id: 'm', content: 'hi' }, tools: [{ name: 'render_canvas', description: 'canvas' }], language: 'zh', forwardedProps: { revision: 3, model: 'm', client_key_fingerprint: 'k' } });
+  const input = buildRunInput({ threadId: 'c', runId: 'r', message: { id: 'm', content: 'hi' }, tools: [{ name: 'present_openui', description: 'interface' }], language: 'zh', forwardedProps: { revision: 3, model: 'm', client_key_fingerprint: 'k' } });
   assert.deepEqual(Object.keys(input).sort(), ['context', 'forwardedProps', 'messages', 'protocolVersion', 'runId', 'threadId', 'tools']);
   assert.equal(input.protocolVersion, '1.0');
   assert.deepEqual(input.messages, [{ id: 'm', role: 'user', content: 'hi' }]);
@@ -350,14 +309,16 @@ check('a call waiting on the operator carries an approval, or an interrupt for a
   assert.equal(approval.result, undefined);
   assert.equal(approval.interrupt, undefined);
   assert.deepEqual(approval.args, { id: 'p1' });
-  const question = toolCallPart({ id: 'q', name: 'ask_question', result: { status: 'pending', operation_id: 'op-q' } }, true);
+  const question = toolCallPart({ id: 'q', name: 'prompt_openui', result: { status: 'pending', operation_id: 'op-q' } }, true);
   assert.deepEqual(question.interrupt, { type: 'human', payload: { operation_id: 'op-q' } });
   assert.equal(question.approval, undefined);
   assert.equal(toolCallPart(pendingTurn.traces[0], false).approval, undefined, 'only the open turn asks');
-  const done = toolCallPart({ id: 'd', name: 'render_canvas', result: { status: 'success', data: { rendered: true } }, view: { kind: 'canvas', title: 'T', columns: [], rows: [], html: '<p>T</p>' }, started_at_ms: 1, ended_at_ms: 3 }, false);
-  assert.deepEqual(done.timing, { startedAt: 1, completedAt: 3 });
-  assert.equal((done.artifact as { title: string }).title, 'T');
-  assert.equal(done.modelContent?.[0].type, 'text');
+  // An OpenUI call carries the program as far as it has streamed, and its own result data.
+  const drawn = toolCallPart({ id: 'd', name: 'present_openui', arguments: '{"ui":"root = Card([t])"}', result: { status: 'success', data: { displayed: true } }, started_at_ms: 1, ended_at_ms: 3 }, false);
+  assert.deepEqual(drawn.timing, { startedAt: 1, completedAt: 3 });
+  assert.deepEqual(drawn.args, { ui: 'root = Card([t])' });
+  assert.deepEqual(drawn.result, { displayed: true });
+  assert.equal(drawn.modelContent?.[0].type, 'text');
 });
 
 check('a stopped turn is incomplete rather than failed, and a failure carries its code', () => {
@@ -403,7 +364,7 @@ check('a call row states its arguments in brief', () => {
 check('a call row names what the call needs: running, you, an answer, or nothing', () => {
   assert.equal(callStatusKey({ name: 'x', result: { status: 'running' } }), 'agent.call.running');
   assert.equal(callStatusKey({ name: 'x', result: { status: 'pending' } }), 'agent.call.needs_you');
-  assert.equal(callStatusKey({ name: 'ask_question', result: { status: 'pending' } }), 'agent.status.question');
+  assert.equal(callStatusKey({ name: 'prompt_openui', result: { status: 'pending' } }), 'agent.status.question');
   assert.equal(callStatusKey({ name: 'x', result: { status: 'uncertain' } }), 'agent.status.uncertain');
   assert.equal(callStatusKey({ name: 'x', result: { status: 'teleported' } }), 'agent.status.unknown');
   assert.equal(callDuration({ started_at_ms: 100, ended_at_ms: 350 }), 250);
@@ -416,32 +377,6 @@ check('a call row names what the call needs: running, you, an answer, or nothing
 check('an export file name is sortable and safe on every file system', () => {
   assert.equal(exportFileName('Requests / 24h', 'csv', new Date(2026, 8, 29, 7, 5, 9)), 'requests-24h-20260929-070509.csv');
   assert.equal(exportFileName('', 'html', new Date(2026, 0, 1)), 'export-20260101-000000.html');
-});
-
-check('a successful display is usable while the model continues working', () => {
-  const view = { kind: 'canvas', title: 'Requests', columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }], source: { call_id: 'q', path: 'rows' }, html: '<div id="plot"></div>' } as const;
-  const display: Trace = { id: 'd', name: 'render_canvas', arguments: '{}', result: { status: 'success', data: { rendered: true } }, view };
-  // A conversation stored before charts and tables became canvases still holds their views; the
-  // call stays in the trace, and nothing is drawn for a kind this console no longer has.
-  const retired = { id: 'old', name: 'render_chart', arguments: '{}', result: { status: 'success', data: { rendered: true } }, view: { ...view, kind: 'chart' } } as unknown as Trace;
-  const plain: Trace = { id: 'r', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: {} } };
-  const base = { id: 't', user: 'Q', reply: 'Done.', status: 'success', parts: [], traces: [display, retired, plain] } as const;
-  assert.deepEqual(completedDisplayViews(base).map(trace => trace.id), ['d']);
-  for (const status of ['running', 'pending', 'error', 'cancelled']) {
-    assert.deepEqual(completedDisplayViews({ ...base, status, code: status === 'error' ? 'failed' : status }).map(trace => trace.id), ['d']);
-  }
-  assert.deepEqual(completedDisplayViews(undefined), []);
-
-  // A display call is drawn where it was made: a draft while it is written, the figure once it
-  // settled, and a call row when it failed.
-  const writing: Trace = { id: 'w', name: 'render_ui', arguments: '{"title":"Tokens by \\"model\\"","html":"<div', result: { status: 'running' } };
-  assert.deepEqual([display, writing, { ...writing, id: 'f', result: { status: 'error', code: 'invalid_arguments' } }].map(displayCallStage), ['figure', 'draft', 'row']);
-  // The arguments are a JSON prefix: the title is read once its string has closed, escapes included.
-  assert.equal(draftViewTitle(writing.arguments), 'Tokens by "model"');
-  assert.equal(draftViewTitle('{"title":"Tokens by mo'), '');
-  assert.equal(draftViewTitle('{"html":"<p>"'), '');
-  assert.equal(draftViewTitle(undefined), '');
-
 });
 
 check('an unavailable recovery journal names the recovery boundary rather than an upstream outage', () => {
@@ -513,107 +448,6 @@ check('Agent send policy exempts local demo targets while preserving live target
 
 console.log(`\n${passed} assertions passed`);
 
-check('an icon reference is read however the model spells it, and an unknown one is simply absent', () => {
-  for (const spelling of ['trending-up', 'TrendingUp', 'trending_up', 'lucide:trending-up', ' Trending-Up ']) {
-    assert.deepEqual(parseIconReference(spelling), { kind: 'lucide', name: 'trending-up' }, spelling);
-  }
-  assert.deepEqual(parseIconReference('brand:openai'), { kind: 'brand', id: 'OpenAI' });
-  assert.equal(parseIconReference('brand:no-such-maker'), undefined);
-  assert.equal(parseIconReference(''), undefined);
-  assert.equal(parseIconReference('<svg onload=x>'), undefined);
-  const icons = { house: [['path', { d: 'M1 2' }] as [string, Record<string, string>]], home: 'house', 'bar-chart2': 'house', constructor: 'missing' };
-  assert.equal(lucideNodes(icons, 'home'), icons.house, 'a retired name leads to its replacement');
-  assert.equal(lucideNodes(icons, 'bar-chart-2'), icons.house);
-  assert.equal(lucideNodes(icons, 'toString'), undefined, 'an inherited property is not an icon');
-  assert.equal(lucideNodes(icons, 'constructor'), undefined);
-  assert.equal(lucideMarkup([['path', { d: '"><script>' }]], 12).includes('<script>'), false);
-});
-
-check('a canvas document states its policy before the model\'s markup and cannot be closed by its data', () => {
-  const html = canvasDocument({ html: '<p>drawn</p>', rows: [{ label: '</script><script>alert(1)</script>' }],
-    variables: { bg: '#121214', accent: 'red;} body{display:none', fg: '' }, isDark: true, language: 'en"><script>' });
-  assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('<p>drawn</p>'));
-  assert.ok(html.includes("default-src 'none'") && !html.includes('connect-src'), 'nothing loads: every fetch directive falls back to none');
-  assert.equal(html.split('</script>').length, 2, 'row data cannot end the script element');
-  assert.ok(html.includes('--bg:#121214') && !html.includes('display:none') && !html.includes('--fg:'));
-  assert.ok(html.startsWith('<!doctype html><html lang="enscript">'));
-});
-
-check('a frameless canvas changes only its ground, retaining the same sandbox policy', () => {
-  const options = { html: '<p>Inline status</p>', rows: [], variables: { bg: '#121214', surface: '#1b1b1f' }, isDark: true, language: 'en' };
-  const card = canvasDocument(options);
-  const frameless = canvasDocument({ ...options, isFrameless: true });
-  assert.ok(frameless.includes('body{background:var(--bg)}'));
-  assert.equal(frameless.replace('body{background:var(--bg)}', ''), card);
-});
-
-check('a canvas height report is clamped, and anything else is not a report', () => {
-  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: 300.2 }), 301);
-  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: 1e9 }), CANVAS_MAX_HEIGHT);
-  assert.equal(canvasHeight({ type: CANVAS_MESSAGE, height: -5 }), CANVAS_MIN_HEIGHT);
-  for (const message of [null, 'x', { type: 'other', height: 10 }, { type: CANVAS_MESSAGE, height: '300' }, { type: CANVAS_MESSAGE, height: NaN }]) {
-    assert.equal(canvasHeight(message), undefined);
-  }
-});
-
-check('a canvas is rasterised within what a browser will draw', () => {
-  assert.equal(canvasRasterScale(760, 400, 2), 2, 'a figure that already fits keeps its scale');
-  for (const [width, height] of [[760, 12000], [4096, 16384], [320, 16384], [4096, 400], [1, 1]]) {
-    const scale = canvasRasterScale(width, height, 2);
-    const surfaceWidth = Math.max(1, Math.floor(width * scale));
-    const surfaceHeight = Math.max(1, Math.floor(height * scale));
-    assert.ok(scale > 0 && scale <= 2, `${width}x${height} scale ${scale}`);
-    assert.ok(surfaceWidth <= MAX_RASTER_SIDE && surfaceHeight <= MAX_RASTER_SIDE, `${width}x${height} side`);
-    assert.ok(surfaceWidth * surfaceHeight <= MAX_RASTER_AREA, `${width}x${height} area`);
-  }
-  // The largest capture the frame may send is halved to sit inside both bounds.
-  assert.equal(canvasRasterScale(4096, 16384, 2), 0.5);
-});
-
-check('a canvas that grows with its frame is not reported taller again', () => {
-  const posted: number[] = [];
-  const listeners: Record<string, () => void> = {};
-  const frames: (() => void)[] = [];
-  let viewport = CANVAS_MIN_HEIGHT;
-  let trailing = 40;
-  let layoutChanged: (() => void) | undefined;
-  let contentChanged: (() => void) | undefined;
-  const flush = () => { for (const frame of frames.splice(0)) frame(); };
-  // The canvas is a hero that fills whatever frame it is in plus a footer: its height follows the
-  // viewport it is given, which is the loop the reporter has to break.
-  const measuredHeight = () => Math.round(viewport + trailing);
-  const harnessWindow = {
-    get innerHeight() { return viewport; },
-    ResizeObserver: class { constructor(callback: () => void) { layoutChanged = callback; } observe(): void {} },
-    MutationObserver: class { constructor(callback: () => void) { contentChanged = callback; } observe(): void {} },
-  };
-  const harnessDocument = {
-    documentElement: { getBoundingClientRect: () => ({ height: measuredHeight() }) },
-    get body() { return { scrollHeight: 0 }; },
-  };
-  const runReporter = new Function('window', 'document', 'parent', 'addEventListener', 'requestAnimationFrame', 'ResizeObserver', 'MutationObserver', CANVAS_HEIGHT_REPORTER);
-  runReporter(
-    harnessWindow,
-    harnessDocument,
-    { postMessage: (message: { height: number }) => { posted.push(message.height); viewport = message.height; } },
-    (type: string, callback: () => void) => { listeners[type] = callback; },
-    (callback: () => void) => { frames.push(callback); },
-    harnessWindow.ResizeObserver,
-    harnessWindow.MutationObserver,
-  );
-  listeners['load']?.();
-  flush();
-  assert.deepEqual(posted, [CANVAS_MIN_HEIGHT + trailing]);
-  for (let round = 0; round < 5; round += 1) { layoutChanged?.(); flush(); }
-  assert.deepEqual(posted, [CANVAS_MIN_HEIGHT + trailing], 'a frame that only grew is never grown again');
-  // Content the canvas really added still reports, however tall the frame has become.
-  trailing = 30;
-  const settledFrame = viewport;
-  contentChanged?.();
-  flush();
-  assert.deepEqual(posted, [CANVAS_MIN_HEIGHT + 40, settledFrame + trailing]);
-});
-
 check('only a settled turn that read and drew may be retried or edited', () => {
   const directory = [{ name: 'providers_list', permission: 'read' }, { name: 'providers_set_status', permission: 'write' }];
   const conversationOf = (turn: Partial<Turn>): Conversation => ({ id: 'c', revision: 1, model: 'm', client_key_fingerprint: 'f', omitted: 0,
@@ -622,7 +456,7 @@ check('only a settled turn that read and drew may be retried or edited', () => {
   assert.equal(replaceableTurnID(undefined, directory), '');
   assert.equal(replaceableTurnID(conversationOf({}), directory), 'new');
   assert.equal(replaceableTurnID(conversationOf({ status: 'error' }), directory), 'new');
-  assert.equal(replaceableTurnID(conversationOf({ traces: [call('providers_list'), call('render_view')] }), directory), 'new');
+  assert.equal(replaceableTurnID(conversationOf({ traces: [call('providers_list'), call('present_openui')] }), directory), 'new');
   assert.equal(replaceableTurnID(conversationOf({ traces: [call('providers_set_status')] }), directory), '');
   assert.equal(replaceableTurnID(conversationOf({ traces: [call('unlisted_capability')] }), directory), '');
   assert.equal(replaceableTurnID(conversationOf({ status: 'pending' }), directory), '');
@@ -667,48 +501,4 @@ check('context overflow and upstream rejection have distinct localized reasons',
   assert.equal(failureKey('upstream_rate_limited'), 'agent.error.rate_limited');
   assert.equal(failureKey('gateway_auth_failed'), 'agent.error.upstream_auth');
   assert.equal(failureKey('model_not_found'), 'agent.error.model');
-});
-
-check('the markup of a canvas being written is read as far as it has been written', () => {
-  const whole = JSON.stringify({ title: 'Gateway', html: '<div class="omc-card">路由 "A"\n</div><p>\u00e9</p>' });
-  assert.equal(draftViewHTML(whole), '<div class="omc-card">路由 "A"\n</div><p>é</p>');
-  // Every prefix decodes to a prefix of the markup: a stream may stop inside any escape.
-  const full = draftViewHTML(whole);
-  for (let end = 0; end <= whole.length; end++) {
-    const partial = draftViewHTML(whole.slice(0, end));
-    assert.ok(full.startsWith(partial), `prefix ${end}: ${partial}`);
-  }
-  assert.equal(draftViewHTML('{"title":"Gateway"'), '');
-  assert.equal(draftViewHTML(undefined), '');
-  assert.equal(isDraftViewFrameless(undefined), true);
-  assert.equal(isDraftViewFrameless('{"title":"Inline status","html":"<p>'), true);
-  assert.equal(isDraftViewFrameless(undefined, 'render_canvas'), false);
-  assert.equal(isDraftViewFrameless('{"frame":"none","html":"<p>'), true);
-  assert.equal(isDraftViewFrameless('{"frame":"card","html":"<p>'), false);
-});
-
-check('a canvas preview keeps the sandbox and grants script execution only to its bootstrap', () => {
-  const options = { variables: { bg: '#121214', surface: '#1b1b1f' }, isDark: true, language: 'en' };
-  const draft = canvasDraftDocument(options);
-  const canvas = canvasDocument({ ...options, html: '', rows: [] });
-  const policy = /Content-Security-Policy" content="([^"]*)"/;
-  const draftPolicy = policy.exec(draft)?.[1] ?? '';
-  const nonce = /<script nonce="([a-f0-9]{32})">/.exec(draft)?.[1];
-  assert.ok(nonce);
-  assert.equal(draftPolicy.replace(`script-src 'nonce-${nonce}'`, "script-src 'unsafe-inline'"), policy.exec(canvas)?.[1]);
-  assert.ok(!draftPolicy.includes("script-src 'unsafe-inline'"), 'event handlers and javascript URLs are inactive');
-  assert.notEqual(/<script nonce="([^"]+)">/.exec(canvasDraftDocument(options))?.[1], nonce);
-  assert.ok(draft.includes('.omc-card{') && draft.includes(CANVAS_DRAFT_MESSAGE) && draft.includes(CANVAS_MESSAGE));
-  assert.ok(!draft.includes('window.OMC=') && !draft.includes('OMC_DATA'));
-  assert.ok(draft.includes('event.source!==parent') && draft.includes('innerHTML'));
-});
-
-check('the kit offers a diagram and fluid components beside charts and tables', () => {
-  const canvas = canvasDocument({ html: '', rows: [], variables: {}, isDark: false, language: 'en' });
-  assert.ok(canvas.includes('diagram:diagram') && canvas.includes('mountTabs'));
-  for (const name of ['.omc-stack{', '.omc-grid{', '.omc-card{', '.omc-stat{', '.omc-badge{', '.omc-callout{', '.omc-kv{', '.omc-field{', '.omc-tabs{', '.omc-diagram-node{']) {
-    assert.ok(canvas.includes(name), name);
-  }
-  // Nothing a canvas draws may be wider than its frame.
-  assert.ok(canvas.includes('svg,img,canvas,video{max-width:100%}') && canvas.includes('minmax(min(100%,200px),1fr)'));
 });
