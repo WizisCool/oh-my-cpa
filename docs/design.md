@@ -1792,6 +1792,16 @@ column the transcript, the notices and the composer share one reading width
 (`--workspace-column`, 760px): long enough for a code block, short enough to read prose without
 losing the line. The scroll box itself stays full width so its scrollbar sits at the pane's edge.
 
+**The Agent's answer and its composer are one column** (ADR 0107). The column is 960px
+(`--thread-column`), and the composer takes the same width and the same edges, so the box an
+operator writes in and the answer it produces line up; prose inside the answer is still set to a
+760px reading measure (`--thread-reading-width`), because a lane that gives charts room must not
+give a sentence a monitor's width. A drawn interface carries no OMC frame, edge or padding: the
+official renderer's own components already carry the shape they asked for, and a follow-up block
+becomes the console's quiet suggestion chips rather than the library's ruled list. The Playground
+sets none of these variables and keeps its single column; nothing wider than a phone's column
+scrolls the page sideways, because a wide table scrolls inside its own frame.
+
 **What a message is sent with is chosen in the composer, on both pages.** Key and model are one
 decision - the model list is whatever the gateway serves to that key - so they are one chip: it
 names the model, and its list ends with the client key. A key is named by its alias, and by its
@@ -1981,11 +1991,12 @@ A database query is the same disclosure without a receipt block: its status, SQL
 timing are inspectable, its rows stay on the server, and data selected for an explicit display
 belongs in the final answer's figure.
 
-**Display calls are part of the answer.** A `render_ui` call, or a stored legacy display, is drawn outside
-the chain at its own place among the answer parts, where the answer reads. New calls default to
-`frame: none`: a component on the conversation ground, with no frame or title bar, retaining an
-accessible title and quiet controls. Explicit `frame: card` draws a hairline `--border` frame under
-a title in `--fg` 600; stored displays retain their original framing (ADR 0082, 0087). A stored panel (`render_view`, ADR 0079) holds blocks, each drawn only
+**Display calls are part of the answer.** A `present_openui` call, or a stored legacy display, is
+drawn outside the chain at its own place among the answer parts, where the answer reads
+(ADR 0107). OpenUI draws it with its own components: OMC adds no frame, edge or padding around
+them, so a card, a table and a chart carry the only chrome the answer has. A stored legacy display
+keeps its original framing (ADR 0082, 0087) and a stored panel (`render_view`, ADR 0079) holds
+blocks, each drawn only
 from tokens: `stats` as tiles on one `--border-soft` hairline grid (label `--muted` 12px with an
 optional 13px icon, value 20px 600 tabular, change toned by `--success` / `--warn` / `--danger`);
 `fields` as label/value rows on `--border-soft` rules; `callout` as a 2px toned left rule on a 7-8%
@@ -2093,13 +2104,10 @@ without changing the request. Enter, Space or click confirms and closes; Escape 
 without changing the value. Both return focus to the chip. Existing theme tokens are reused.
 A stored conversation's first load is a thread-shaped placeholder at the column's width. A display
 call is drawn where the model made it, between the text before and after it (ADR 0082); one the
-model is still writing is a draft figure in that place - the figure's frame
-with a dashed edge, its title once the arguments hold it, and a `--thread-field` stage holding the
-generation loader (a three-by-three field of `--fg` dots with a lit run travelling through it)
-over its label - which the settled figure replaces in place. Figures, drafts, call rows and
-follow-up questions arrive with opacity and a 4px rise inside `base`. An inline view (`frame: none`, the default for new calls) has no edge, ground or
-title bar: its canvas sits on `--bg` and its controls rest at 45% opacity until hovered or
-focused. Reasoning is written straight on the page in `--fg-2` 12.5px with no frame; while it
+model is still writing is drawn by OpenUI's own streaming parse - the shell first, then each
+statement as its line completes - and the settled program replaces that partial drawing in place
+(ADR 0107). OpenUI calls and follow-up questions arrive with opacity and a 4px rise inside
+`base`: nothing scales, and a settled answer carries no transform of its own. Reasoning is written straight on the page in `--fg-2` 12.5px with no frame; while it
 arrives it is a 168px window that keeps to its newest line after Markdown commits and viewport
 reflows. The top edge fades only while following and only when history is hidden above it; short
 text and manual scrollback retain full ink. Scrolling to the bottom resumes following, and reopening
@@ -2114,11 +2122,13 @@ Playground uses, open while it is being written, and stays with the stored turn,
 the answer. The key, model and effort are the operator's choice and are remembered across reloads;
 New conversation replaces the transcript and nothing else. Failure is stated
 as a sentence with its code beneath it, and a run the operator stopped reads as stopped rather than
-failed. A live run carries one activity line: the generation loader at mark size and how long the
-run has taken, because a spinner cannot tell working from stuck. A phase is named where it is
-drawn - the reasoning disclosure reads "Thinking…" while it is written, a running call's row
-carries its title - so the line itself names one only when nothing in the answer does: waiting on
-the model, or retrying it. The elapsed time counts on the browser's clock; a run rejoined after
+failed. A live run carries one activity line: how long the run has taken, beside a live label only
+when nothing in the answer names the phase. One moving element at a time is the rule: the reasoning
+disclosure's highlight while it is written, a running call's row with its title, or the activity
+line while waiting on the model or retrying it - never several at once. The composer is one soft
+pill at the column's width: a `--border-soft` edge, the raised shadow, the input and its controls
+in one row, and the chips - endpoint, effort, model - inside the same shape rather than in a
+separate bar under it. The elapsed time counts on the browser's clock; a run rejoined after
 leaving the page starts from the server's stamp brought onto that clock by the response's `Date`
 header, so a browser whose clock trails its server never shows a stalled zero. The line follows
 the reasoning body in normal document flow with the answer's 12px gap. Round counts remain in

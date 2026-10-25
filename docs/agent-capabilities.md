@@ -157,86 +157,53 @@ secrets.
 
 ### Display tools
 
-`render_ui` is how the Agent gives an answer a shape and shows data rather
-than retelling it (ADR 0042, 0072, 0073, 0082).
-`internal/agent` owns it, and it is offered only when the client declares that it can draw
-it - the console does, the MCP bridge does not. It is not a capability: it changes nothing,
-never passes through the executor and never interrupts a run. `render_chart`, `render_table`,
-`render_view` and `render_canvas` are withdrawn; a call to any of them is refused, and a stored trace that names one is
-still read as a display call.
+An Agent answer is an OpenUI program drawn by the official renderer (ADR 0107).
+`present_openui` carries it in `ui`; `prompt_openui` carries a form the turn waits on, and it is a
+capability with an `answer` human input, so its wait, audit and reply go through the executor like
+any other question. Neither changes a managed resource, so neither waits for approval.
+`internal/agent` owns both names, and they are offered only when the client declares that it can
+draw them: the console does, the MCP bridge does not. `render_ui`, `render_chart`, `render_table`,
+`render_view` and `render_canvas` are withdrawn; a call to any of them is refused, and a stored
+trace that names one is still read as a display call.
 
-The runtime augments successful capability results in **private model messages** with up to
-eight `data_sources` entries (`internal/agent/data_sources.go`, ADR 0078). Each names a stable
-conversation-scoped `data_ref`, tool-call `call_id`, path relative to result data, up to twelve
-selectable scalar fields and row count. It contains no row values and does not change the
-capability executor result, console DTO, streamed receipt or MCP contract. Object paths are
-inspected deterministically with bounded depth and node count; oversized and malformed datasets
-are not advertised.
+The instructions that teach the language are generated from the installed `@openuidev` packages,
+the console's prompt options and the capability catalogue, then embedded in the server
+(`internal/agent/openui/openui.json`, `pnpm openui:prompt`, checked by
+`pnpm check:openui-prompt`). The console renders them with the official toolkit and renderer, so
+the components the model is taught and the components that draw are the same library.
 
-A Canvas copies `source {data_ref}` from that metadata and places `fields` beside `source`.
-The server resolves the reference against a retained successful capability trace, projects and
-checks the fields, freezes the dataset and returns a receipt (`rendered`, `rows`, `fields`)
-instead of the rows. Legacy `source {call_id, path}` remains accepted: `call_id` is a tool-call
-trace id, not `operation_id`; paths start inside result data (`data.groups` for `usage_aggregate`,
-`rows` for SQL). Conflicting reference forms, missing/foreign handles, display results and
-unsuccessful capability results are refused. A view is bounded to 1000 rows and 96 KiB.
+A program reads rows through `Query("data_rows", {data_ref}, {rows: []})`. The runtime augments
+successful capability results in **private model messages** with up to eight `data_sources`
+entries (`internal/agent/data_sources.go`, ADR 0078). Each names a stable conversation-scoped
+`data_ref`, tool-call `call_id`, path relative to result data, up to twelve selectable scalar
+fields and row count; it contains no row values. The endpoint resolves the reference against a
+retained successful trace and returns only the listed scalar fields, so a chart says the same
+thing after a reload. `database_query` is not itself callable from an interface; a projected
+reference to a query's rows is, which is what lets an interface draw a result the model read.
+A reference is bounded to 1000 rows and its fields to scalars.
 
-Refusals name the field, required type or valid reference form without quoting submitted HTML
-or row values. Canvas failures receive available source metadata in private model feedback;
-consecutive failures also receive a repair instruction. This is guidance, not a fixed call limit
-or automatic execution of corrected arguments. A receipt acknowledges validation and storage;
-it does not certify browser rendering. Custom diagrams may still use a Canvas without a dataset.
+Query and Mutation calls from a program reach capabilities through the console's executor
+endpoint with the ordinary permission, approval, audit and invalidation rules. A change runs only
+from the operator's own click (`navigator.userActivation`), and a browser that cannot prove the
+click refuses; a high-risk change still waits for approval. Assets a program names are fenced to
+the console's own origin, `data:` and `blob:`; the fence is a net rather than a wall, so the prompt
+also forbids external assets (ADR 0107).
 
-Completed settled turns - successful, failed or stopped - enter later requests as questions,
-images, conclusions and bounded dataset/mutation metadata rather than their full tool transcript,
-so a write that ran before a run ended is still visible to the next question. Up to eight references are kept,
-prioritizing datasets used by a successful Canvas; up to eight recent mutation/refusal outcomes
-are retained and omission is disclosed. Stored messages, traces and frozen views remain unchanged,
-so retained references work across follow-ups and reloads. Missing non-display details are read
-again through a dedicated capability; no raw-result retrieval surface is added.
+Asking the operator has two doors. `ask_question` is the console's own panel: one to four
+questions, each with 0 or 2-6 labelled options and a typed answer always available, answered in
+place of the composer, with a pending operation that expires after 24 hours and an answer
+validated against the questions before the operation is claimed. `prompt_openui` draws a form the
+model composes, for a question that genuinely needs one. Neither is a way to ask for approval
+(writes already ask) or for secrets.
 
-Stored `render_view` panels remain readable through the console's block renderer (ADR 0079),
-and stored `render_canvas` views remain readable through the sandbox renderer. New calls use
-`render_ui` for model-authored HTML, SVG and script (at most 48 KiB per payload, with no count
-limit on displays). The server stores the markup as written and never sanitises it; the console only
-ever shows it in a `sandbox="allow-scripts"` frame whose document forbids every network load, and
-the console's `frame-src` policy stops the frame from navigating away (ADR 0072). The `html`
-parameter's description states the frame's geometry as a layout contract, because a model that is
-not told the frame's size designs for a page: about 720px wide on a desktop and 320px on a phone,
-height following the content (bounded at 16384px). The default inline component supplies no padding,
-card ground or visible title; an explicit `frame: card` supplies those. Use natural document height,
-not viewport units, a fixed page height or a vertically scrolling page wrapper; fluid widths that fall to one column below 560px, no card inside a card,
-wide tables in a horizontally scrolling block, and anything with parts and connections drawn with
-`OMC.diagram` rather than as a grid of boxes. The description also names the frame's component
-classes, which the model composes from before writing CSS of its own (ADR 0085): `omc-stack`,
-`omc-row`, `omc-grid`, `omc-card`, `omc-stat`, `omc-badge`, `omc-callout`, `omc-kv`, `omc-field`
-and `omc-tabs` (wired from `data-omc-tabs`, `data-tab` and `data-panel`). The frame's base styles
-keep media and preformatted text inside its width. While the call's arguments are still arriving
-the console draws the markup written so far in a script-free preview of the same frame, so the
-component fills in as it is written. Model scripts become active only after the completed component
-replaces its preview. The draft policy grants a fresh nonce only to the host bootstrap, so inline
-event handlers and JavaScript URLs cannot execute model code during streaming. Local controls
-operate on frozen rows; requests for new data or writes go through `OMC.compose` and the ordinary capability and approval flow. Inside the frame
-the console provides a kit (ADR 0073), so a chart or a table is a call rather than hand-drawn marks:
+A turn can be held to text with `forwardedProps.present = "text"` (`/text`): that turn is offered
+no display tool, and the model is never told about a tool it was not given. There is no `/ui`
+value any more - OpenUI is the default answer.
 
-| Call | Draws |
-| --- | --- |
-| `OMC.rows` | The frozen rows of `source`, as objects keyed by field (`window.OMC_DATA` is the same array) |
-| `OMC.fmt(value, unit)` | A number as the console writes it: `tokens`, `usd`, `ms`, `percent` (a 0-1 share), `bytes`, `time` (epoch ms), `number` |
-| `OMC.chart(target, {type, x, y, series, stacked, unit, rows})` | `line`, `area`, `column`, `bar` or `pie`; `y` one field or several, `series` a field to split by. Drawn at the frame's width, so axis text keeps its size on a phone |
-| `OMC.table(target, {columns: [{field, label, unit}], rows})` | A sortable table with formatted cells |
-| `OMC.compose(message)` | Offers a follow-up in the composer for operator review; does not send, read live data or execute a write |
-| `OMC.diagram(target, {nodes: [{id, label, note, detail, tone, icon}], edges: [{from, to, label}], direction})` | An architecture, flow or topology: nodes layered by distance from a source and joined by arrows, side by side in a wide frame and as an indented tree in a narrow one; picking a node shows its detail and connections |
-
-`rows` defaults to `OMC.rows`. The kit follows the operator's token unit style, language and the
-deployment's time zone, and colours from the theme variables.
-
-A turn can be held to a presentation by a composer command, sent as `forwardedProps.present`:
-`ui` (`/ui`) offers the turn `render_ui`; `text` (`/text`) offers no display. Both keep
-`suggest_next` when declared. The wire value `canvas` remains accepted for compatibility and
-has the same tool selection as `ui`.
-
-Displays are selective artifacts of the answer, not progress reports, and the model draws one without being asked whenever the answer has a shape: the system prompt names the shapes - a trend or a comparison of three or more items is a chart (with a table when exact figures matter), several resources' status is stat cards, an architecture, flow or dependency is `OMC.diagram`, a what-if is adjustable controls - and leaves one fact, a short list or an error to text. It states the conclusion beside the figure and does not repeat the figure's numbers in a Markdown table. The model investigates and verifies before preparing one, uses `render_ui` when structure or interaction is clearer than sentences (filters, forms, calculators, status, workflow explorers, charts, tables or diagrams), uses the smallest complementary set, and leaves exploration in the trace. The console draws a frozen view where the model made the call, between the text written before it and the text after it (ADR 0082), so the model places a figure where the reader needs it and may draw more than one. `render_ui` takes an optional `frame`: `none` (the default for new calls) sets the UI straight on the conversation without border, ground or title bar; explicit `card` is a titled, bordered figure. The server persists the new inline default as `none`, while card remains stored as absence, so earlier conversations retain their original framing (ADR 0087). A call that failed stays a call row with its code and detail.
+The generated prompt asks for the composition a question needs rather than a fixed dashboard, and
+forbids stating the same figure twice. A program that fails to render stays a call row carrying
+the renderer's structured errors; the console offers a repair action that sends those diagnostics
+back to the model. Exports embed inert markup drawn by the same official library.
 
 `suggest_next` rides the same declaration and is not a display call. The model calls it in the
 response that carries its final answer, with one to three follow-up questions (80 characters each);
@@ -280,10 +247,10 @@ The console draws a query as a normal capability-call row, without a raw-result 
 session reads, final snapshots and streamed query receipts omit raw query data; the session DTO
 also omits the private model history and queued model calls. This applies to restored sessions as
 well as new runs. Query status, diagnostics, SQL arguments and timing remain inspectable. The
-full result stays in the server-side conversation for subsequent model rounds and explicit
-`render_ui` calls. This is a browser-preview boundary, not an upstream-data
-restriction: the selected model still receives query rows and may quote them in its answer or
-choose them for a final display.
+full result stays in the server-side conversation for subsequent model rounds and for the
+projected `data_rows` reference a program may use. This is a browser-preview boundary, not an
+upstream-data restriction: the selected model still receives query rows and may quote them in its
+answer or choose them for a final display.
 
 ### Secrets and OAuth
 

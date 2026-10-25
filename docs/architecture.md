@@ -301,44 +301,62 @@ and explicitly generated display views remain visible and may include data selec
 
 The turn records its output as ordered `parts` - reasoning, text and capability calls, in arrival
 order, with a new part for each model round - plus its rounds, token usage (summed over the rounds,
-and `context_tokens`, the input of the last round that reported one), any follow-up `suggestions`
+and `context_tokens`, the input of the last round that reported one),
 the presentation it was asked for and the `agent.PROMPT_VERSION` it ran with. The system prompt is built from named sections (identity,
 approach, data, safety, wording, presentation, context) in `internal/agent/prompt.go`, bounded by
-`agent.MAX_PROMPT_BYTES` because it is resent on every round. The wording section is what makes an
+`agent.MAX_PROMPT_BYTES` for OMC's own sections because they are resent on every round.
+The generated official OpenUI instructions are measured separately. The wording section is what makes an
 answer read like the console beside it: things are called by their display names, alias or label
 rather than by identifiers, fields are described rather than quoted, and numbers follow fixed
 forms - grouped digits, token counts in the operator's unit style (`TOKEN_STYLES`), USD, durations,
 percentages, and clock times in the deployment's zone. Domain terms, shared half-open analysis
 windows and configured request identity are explicit; model aliases do not attest upstream identity.
 Earlier settled turns contribute their question, images, conclusion and bounded provenance
-metadata in chronological order (`buildCompletedTurnMessages`, ADR 0078), without replaying SQL,
-HTML or repair transcripts; a turn that failed or was stopped contributes too, so the writes it
+metadata in chronological order (`buildCompletedTurnMessages`, ADR 0078), without replaying raw
+query results. OpenUI programs and their tool results are retained for follow-up and repair;
+a turn that failed or was stopped contributes too, so the writes it
 ran stay visible to the next question. Up to eight dataset references and eight recent mutation/refusal
 outcomes remain available per completed turn; references already used by a display take priority.
 Omitted outcomes are disclosed, never interpreted as write success. The active turn keeps every
 model message and result. The runtime neither truncates requests to an estimated context budget
 nor drops stored turns to meet a session size cap; actual provider context limits can still
 refuse a request. Image inclusion has its own newest-eight policy below.
-The display tool `render_ui` (`internal/agent/display.go`, ADR 0042, 0072, 0073, 0082) is offered
-only when the client declares it. `presentedTools` offers `render_ui` for `ui` (and legacy
-`canvas`) presentations, no display for `text`, and keeps declared `suggest_next` in both cases.
-A canvas references rows of an earlier
-capability result by `source {data_ref}` with top-level `fields`; the runtime supplies bounded,
-value-free `data_sources` metadata in private model messages (`internal/agent/data_sources.go`).
-Legacy `source {call_id, path}` remains accepted, with a tool-call id and a path inside result data.
-These handles grant no access outside the retained conversation. The server resolves and checks them, freezes the dataset on the call's trace as its `view`, and returns
-a small receipt instead of the rows. Display calls never pass through the executor. `render_chart`, `render_table`, `render_view`
-and `render_canvas` are withdrawn (`RETIRED_DISPLAY_TOOLS`): a stored trace that names one is still
-read as a display call, and nothing new can call or reference it. `suggest_next` is
-declared the same way but is not a call the turn makes: `takeSuggestions` removes it from a round's
-calls, so it has no trace, no stored tool call and no further model round, and its questions are
-kept on the turn only when that round ends it. Stored `render_view` panels (ADR 0079) remain
-readable alongside stored canvases (ADR 0072); new `render_ui` calls freeze the model's markup
-beside resolved rows. New calls default to inline components and persist `frame: none`,
-removing card chrome without changing the sandbox. Explicit `card` remains omitted in storage,
-so earlier views retain their original framing (ADR 0087). `AgentMessage` excludes
-displays from chain grouping and `DisplayCall` draws the draft or frozen view at the call's
-ordered part; failed displays stay diagnostic call rows. Reasoning uses the shared unframed
+The display tool `present_openui` (`internal/agent/openui.go`) is offered when the console
+declares it, unless the operator requests `/text`. It carries an OpenUI Lang program in `ui`.
+The server checks the argument envelope and size, stores the call, and ends a presentation-only
+round after accepting it. Acceptance is not a rendering acknowledgement: the official browser
+renderer reports syntax and component errors, and its repair action sends those diagnostics
+back to the Agent. `prompt_openui` instead waits for a submitted form through the executor's
+human-input path.
+
+Asking the operator has two doors, and the console owns the first. `ask_question`
+(`internal/agent/question.go`) is a capability with an `answer` human input: one to four
+questions, each with a short list of options and a typed answer always available, rendered
+by the console's own panel (`interrupts/QuestionPanel.tsx`) in the composer's place - tabs per
+question, numbered options a digit key picks, a review step and a single decision. Because the
+console draws it, it reads and behaves the same in every conversation. `prompt_openui` draws a
+form the model composes, which is worth its freedom only when the question needs one; the prompt
+names both and says what each is for. Neither asks permission, so neither renders an approval
+card. A submitted form's answer is drawn as the operator's own message under the form, and
+sending anything - a suggestion chip included - returns the transcript to its newest end.
+
+The official `createOpenUIInstructions` generator combines the chat library, OMC's rules and the
+capability catalogue into `internal/agent/openui/openui.json`, embedded in the backend. Its
+syntax, component signatures and root-first streaming rules come from the installed official
+packages. `pnpm check:openui-prompt` checks staleness, and Air watches the embedded file.
+
+Programs read retained capability rows with `Query("data_rows", {data_ref: ...}, {rows: []})`.
+`internal/agent/data_sources.go` supplies value-free references to the model; the authenticated
+`/agent/data-rows` endpoint resolves them only against the current conversation, projecting the
+listed scalar fields. The browser's `agent/openui/toolProvider.ts` connects other Query and
+Mutation calls to the existing executor endpoint, withholding private-input capabilities and
+raw SQL. Mutations require user activation in the browser and retain the executor's approval
+and audit requirements. `useOpenUIToolHost.tsx` presents pending changes with `ApprovalCard`.
+
+`AgentMessage` draws the official toolkit's OpenUI tools outside the capability chain, in their
+ordered positions. `thread.ts` supplies the decoded `ui` prefix while arguments are still
+streaming; the official parser and renderer handle incomplete programs. Failed tool receipts
+remain diagnostic call rows. Reasoning uses the shared unframed
 `ReasoningBlock`, following the latest line until the reader scrolls up and folding on completion.
 Its effect-owned ResizeObserver tracks both the unbounded Markdown content and its scroll viewport,
 so deferred Markdown commits and reflow stay pinned after the live body reaches its height cap.
@@ -347,26 +365,14 @@ commit cannot erase a pending backscroll. Shrinking content clamps the previous 
 mistaking that clamp for reader intent. Corrections are instant. Closing the live disclosure
 disconnects the observer, and reopening resumes at the tail. The Agent's disclosure
 names the thought process while the separate activity row owns the live phase and elapsed time.
-The console builds a canvas's document in `web/src/agent/canvasDocument.ts` - the content security policy, the theme variables,
-the frozen rows, then the kit in `web/src/agent/canvasKit.ts` (`OMC.rows`, `OMC.fmt`, `OMC.chart`,
-`OMC.table`, `OMC.diagram`, `OMC.icon` and `OMC.compose`, configured with the operator's token
-style, language and time zone; `OMC.compose` only drafts a composer message; a chart is drawn at
-its frame's width between 280px and 760px and again when that width changes, so its text keeps
-its size on a phone) ahead of the
-model's markup - and shows it in a script-only sandboxed `srcdoc`
-frame. Drafts draw partial markup under a fresh nonce-only script policy, allowing only the
-host bootstrap to execute: neither model scripts nor inline event handlers run until the
-completed component replaces its preview. Height observations coalesce after resize and
-mutation, growing or shrinking within 48px–16384px without retaining the previous viewport
-as a minimum. `tools/CanvasView.tsx` can portal the same figure over the viewport, and saves it as an
-image by posting a capture request the kit answers with an SVG of its own document; `canvasImage`
-validates that reply before it is rasterised. `web/index.html` declares `frame-src 'self' blob:` so that frame cannot navigate away.
-Panel icons resolve against `web/src/generated/lucideIcons.json`, generated by
-`scripts/generate-lucide-icons.mjs` and loaded on first use.
+The official OpenUI renderer draws native React components rather than model-authored HTML
+or scripts in an iframe. `web/src/agent/openui/theme.ts` maps OMC typography and palette tokens
+to the official ThemeProvider. `staticRender.tsx` uses the same official library offscreen for
+exports, retaining sanitised inert markup rather than an executable generated document.
 
 The workspace above that loop is `web/src/pages/agent`, on assistant-ui's `ExternalStore` runtime
 over the shared shell in `web/src/components/workspace`. Text files attached in the composer are folded into the message by `web/src/pages/agent/attachments.ts` (ADR 0074), so the server stores and resumes them as part of the one string it already keeps. The composer's `/` list is built in `AgentPage.tsx` from what the page can do at that moment;
-`/ui` and `/text` hold a presentation until the next message takes it (`takeSendOptions`). The framework-free run layer is
+`/text` selects Markdown for the next message (`takeSendOptions`); OpenUI is the default. The framework-free run layer is
 `web/src/agent/`: the request builder and event parser (`protocol.ts`), the chunk-safe SSE reader
 (`sse.ts`), the transport (`transport.ts`), a pure reducer that folds the events into the parts the
 server stores (`runReducer.ts`) and the exports (`export.ts`). `useAgentRun.ts` drives one run and
@@ -375,12 +381,13 @@ frame to thread messages; `runtime.ts` is the one module that knows assistant-ui
 routes every framework action - send, stop, approve, answer - back into OMC's code. A message sent
 during a run waits in a queue behind it. Capability calls render through a toolkit of
 render-only `backend` entries (`tools/registry.tsx`) handed to the runtime provider: one disclosure per call (`tools/CapabilityCall.tsx`), joined into a collapsible timeline, each opening its arguments and the receipt
-the model received under its own row (ADR 0084); display calls render as a
-panel or a canvas inside the answer. A prepared operation is decided on a card under
-the call that raised it (`interrupts/ApprovalCard.tsx`, ADR 0043), and an `ask_question` call is
-answered in a panel that takes the composer's place (`interrupts/QuestionPanel.tsx`); deciding
-either one resumes the run (ADR 0035). A conversation exports as a self-contained HTML page, a PNG image or JSON, one answer as HTML,
-and one canvas as HTML or PNG (see "Conversation exports" below). The presentation rules - status vocabulary,
+the model received under its own row (ADR 0084); OpenUI calls render interactive interfaces
+inside the answer. A prepared operation is decided on a card under the call that raised it
+(`interrupts/ApprovalCard.tsx`, ADR 0043), while `prompt_openui` renders an inline form and
+`ask_question` takes the composer's place with the console's panel. Either submission goes
+through `decideOperation` and resumes the run. A conversation exports as a
+self-contained HTML page, a PNG image or JSON, and one answer as HTML
+(see "Conversation exports" below). The presentation rules - status vocabulary,
 failure copy, argument summaries, change preview - are pure functions in `state.ts`,
 `thread.ts` and `web/src/agent/`, which is what lets `scripts/test-agent-workspace.ts` assert them
 without a browser.
@@ -397,9 +404,9 @@ in the browser and is re-validated against the capability version, the caller's 
 revision while the write gate is held. An unverified or interrupted write is reported
 as `uncertain` rather than retried. Secrets and OAuth authorization never enter tool
 arguments or model-visible results: the console posts them directly while approving the
-operation. `ask_question`, which `internal/agent` registers, uses the same pending-operation
-path with an `answer` input and is the only capability that belongs to the conversation rather
-than to `internal/operations`.
+operation. `prompt_openui` and `ask_question`, which `internal/agent` registers, use the same
+pending-operation path with an `answer` input; they are the capabilities that belong to the
+conversation rather than to `internal/operations`.
 
 `database_schema` and `database_query` read OMC's own database through a second, read-only
 SQLite pool that `internal/repository` opens on first use (`mode=ro`, `query_only`, no attached
@@ -1061,14 +1068,14 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through a toast (`useToast`), which needs the antd `App` context. In demo mode it neither pushes nor adopts: the theme stays in the visitor's browser |
 | `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The Playground's `pages/playground/api.ts` and the Agent's `agent/transport.ts` wrap `requestResponse` and `agent/sse.ts` for their SSE routes, without duplicating auth or retry policy |
-| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types and the canvas document and kit (`canvasDocument.ts`, `canvasKit.ts`) and the browser-side exports (`export.ts`: file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
+| `agent/` | The Agent's framework-free run layer (ADR 0041): AG-UI request building and event parsing (`protocol.ts`), the chunk-safe SSE reader the Playground shares (`sse.ts`), the transport, the run reducer, the wire types, official OpenUI integration (`openui/`) and the browser-side exports (`export.ts`: file names; `conversationSnapshot.ts`, `conversationHtml.ts`, `conversationStyles.ts`, `conversationControls.ts` and `conversationDownload.ts`: the portable conversation page and image) |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the auth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useProgressTask` (counts a component's lifetime, such as a Suspense fallback's, as loading-bar work), `useCustomIcons` (shared revisioned custom-icon metadata), `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useLiveRevision` (binds the shared live usage channel in `api/usageLive.ts` to a query revision, §6 "The live change signal"), `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useVisibleViewport` (effect-owned usable-viewport bounds; pure policy in `types/visibleViewport.ts`), `useFocusedRegion` (in-place workspace isolation and focus cleanup), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch for library-controlled geometry animation) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the eighteen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `scrollSmoothing.ts` (the console-wide wheel and keyboard glide, ADR 0046: discrete wheel notches and scrolling keys glide over the `scroll` token, virtualized lists are driven through their own wheel handling and get a glide's first step inside the input event, so the glide adds no latency to their own jump (ADR 0047), trackpads and touch are never glided; loaded on demand by `hooks/useScrollSmoothing.ts` and switched by the `omc_scroll_smoothing` preference, whose words live in `scrollSmoothingPreference.ts` so the engine stays out of the main entry), `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below), `download.ts` (`saveBlob`, the one download path: it attaches the anchor and releases the object URL on a delay, because revoking it in the click's own task cancels the save in Firefox and Safari), `format.ts` (`formatBytes`), `loadProgress.ts` (the loading bar's pure, clock-injected model: batches, settled and pending credit, the show delay and the never-backwards smoothing), `progressController.ts` (the injected clock, scheduling and hidden/reduced-motion lifecycle) and `progressTasks.ts` (the module-level registry of non-query work in flight, and the source shape the bar reads) |
 | `components/common/` | What more than one page renders: the shared primitives a page composes instead of an antd component - `AppDrawer` (every side panel: three widths, named close, two-slot footer), `SearchInput` (every filter-as-you-type field), `EmptyState` (every empty region), `SectionHeading` (every section head, three weights), `Tag` and `ToggleTag` (a short fact about a row, five tones), `ConfirmAction` (a confirmation anchored to its trigger), `SelectionBar` (the actions on ticked rows), `Toolbar` (the row above a list), `Panel` (the framed surface), `FactList` (a label/value list), `Pager` (page navigation), `Meter` (a reading on a track), `Count` (a row count beside its label), `CopyButton`, `ToolButton` (a secondary action as a glyph square named by its tooltip, labelled again inside `ActionMenu`) and `Fold` (the disclosure body that unfolds from its own height); the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`, and `HeaderAction`, the one control every header and sign-in action is built from); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, desktop `actions` and explicit `mobileActions`), `ActionMenu` (click-open secondary tools, focus and overlay history), `FilterDisclosure` (phone-only extra filters with selected-state summary), `timeRange/TimeRangePicker` (the one window picker the dashboard and the request list both adapt: presets first and an inline range calendar one level down, in a popover or a bottom sheet; its rules are `timeRange/rangeDraft.ts`), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `Switch` (the one on/off control, a native `role="switch"` button with the console's own drawing; `pnpm check:feedback` refuses antd's), `FactList` (label/value rows), `StatTiles` (counted tiles that double as a list's filter), the loading feedback (ADRs 0052 and 0054: `ProgressBar` draws rough task progress from `utils/loadProgress.ts` through `utils/progressController.ts`, with an independent CSS waiting-activity segment, `DataProgress` feeds it the reads the reader waits on (`isQueryProgressWork`) and `utils/progressTasks.ts`; `Placeholder.tsx` holds the eager shell/sign-in kit, while `ContentPlaceholder.tsx` keeps paragraph/table compositions behind route imports; `utils/progressSources.ts` classifies query reads and merges sources only for the loaded shell; the kit is composed by `PageLoading`, `RouteLoading`, `SuspenseFallback` and the shell's `ShellLoading`), `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); `SecretInput` (a secret that is not the console login, masked by style so the browser's password manager leaves it alone); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
-| `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (the Playground's frame: head with title and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `AssistantThread` (assistant-ui's thread viewport: follows the newest message while the reader is at the bottom, holds their place once they scroll away, and offers "back to latest" only then), `AssistantComposer` (assistant-ui's composer with Ant Design controls: attachments, the queue of messages sent during a run, the `/` command and `@` mention lists a page may hand it, recall of sent messages with Up, and Enter and the send button both asking the runtime to send, because the framework's own send controls decide from state that reaches them a task after the page changed it), `ContextReadout` (the share of the model's reference context window a conversation occupies, from `contextShare.ts`), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (a collapsible reasoning disclosure that follows its newest output while it streams and folds when the stream ends), `ReasoningEffortPicker`, `ComposerPicker` (the one keyboard-navigated list behind the composer's `/` commands and `@` mentions, navigated by `pickerNavigation.ts`), `TargetChip` (the composer's target as a chip), `EndpointPicker` (the inference endpoint as a chip, ADR 0088), `ModelMark` (a call point's maker's mark), and `GenerationLoader` (the waiting figure a run in flight shows). The side panel is the Playground's: its parameters beside its request debug view. The Agent has its own shell (ADR 0076), opens a call's details under the call (ADR 0084), and keeps its capability directory and connection guide in a Drawer |
+| `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (the Playground's frame: head with title and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `AssistantThread` (assistant-ui's thread viewport: follows the newest message while the reader is at the bottom, holds their place once they scroll away, and offers "back to latest" only then), `AssistantComposer` (assistant-ui's composer with Ant Design controls: attachments, the queue of messages sent during a run, the `/` command and `@` mention lists a page may hand it, recall of sent messages with Up, and Enter and the send button both asking the runtime to send, because the framework's own send controls decide from state that reaches them a task after the page changed it), `ContextReadout` (the share of the model's reference context window a conversation occupies, from `contextShare.ts`), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (a collapsible reasoning disclosure that follows its newest output while it streams and folds when the stream ends), `ReasoningEffortPicker`, `ComposerPicker` (the one keyboard-navigated list behind the composer's `/` commands and `@` mentions, navigated by `pickerNavigation.ts`), `TargetChip` (the composer's target as a chip), `EndpointPicker` (the inference endpoint as a chip, ADR 0088), `ModelMark` (a call point's maker's mark). The side panel is the Playground's: its parameters beside its request debug view. The Agent has its own shell (ADR 0076), opens a call's details under the call (ADR 0084), and keeps its capability directory and connection guide in a Drawer |
 | `components/feedback/` | Every notification and failure surface (ADR 0045): `useToast` (an action's outcome, including report toasts with per-target reasons), `LoadFailure` (a region's failed read, in its place, with Retry) and `Notice` (a condition, or a refusal beside its input; drawn by the module itself as a callout headed by an untranslated tone code, without antd's `Alert`). `toastContent.ts` holds the pure parts - `readableReason`, grouping, lifetimes. `pnpm check:feedback` keeps raw antd `Alert`, `message`, `notification` and information-only dialogs out of the rest of `web/src` |
 | `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. `CpaLogPanel` renders into a host element it moves to the document body for its fullscreen viewer, because a routed page sits inside a transformed container that would confine `position: fixed`. Wire types and pure helpers (line parsing, the filters and their per-value counts) live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
