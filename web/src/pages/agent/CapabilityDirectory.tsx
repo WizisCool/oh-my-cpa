@@ -1,3 +1,4 @@
+import { translateOr } from '../../i18n/catalog';
 import React from 'react';
 import { clsx } from 'clsx';
 import { CopyButton } from '../../components/common/CopyButton';
@@ -67,10 +68,10 @@ export const CapabilityDirectory = React.memo(function CapabilityDirectory({ cap
       {isPending && <p className={styles['directory-note']}>{t('common.loading')}</p>}
       {!isPending && !isError && groups.length === 0 && <p className={styles['directory-note']}>{t('agent.directory.empty')}</p>}
       {groups.map(group => (
-        <section key={group.permission} className={styles['group']} aria-label={t(`agent.permission.${group.permission}`)}>
+        <section key={group.permission} className={styles['group']} aria-label={translateOr(t, `agent.permission.${group.permission}`, group.permission)}>
           <h3 className={styles['group-head']}>
             <span className={workspace['pip']} data-tone={PERMISSION_TONE[group.permission]} aria-hidden="true" />
-            <span>{t(`agent.permission.${group.permission}`)}</span>
+            <span>{translateOr(t, `agent.permission.${group.permission}`, group.permission)}</span>
             <span className={styles['count']}>{group.items.length}</span>
           </h3>
           <ul className={styles['capabilities']}>

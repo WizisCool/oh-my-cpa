@@ -1,4 +1,5 @@
 import { isKnownTurnStatus } from '../../components/workspace/conversationLabels';
+import { messageKey, type MessageKey } from '../../i18n/catalog';
 export { callStatusKey, failureKey, formatDuration, isKnownTurnStatus } from '../../components/workspace/conversationLabels';
 export { argumentSummary, callDuration, statusTone } from '../../agent/callFacts';
 import { getTimeZone } from '../../utils/time';
@@ -150,9 +151,10 @@ export interface Capability {
  * as a failure would be the console mislabelling their own action. Nothing rewrites the stored
  * turn - the label is derived at render time from the code that is already on the wire.
  */
-export function turnLabelKey(turn: Pick<Turn, 'status' | 'code'>): string {
+export function turnLabelKey(turn: Pick<Turn, 'status' | 'code'>): MessageKey {
   if (turn.status === 'error' && turn.code === 'cancelled') return 'agent.status.stopped';
-  return isKnownTurnStatus(turn.status) ? `agent.status.${turn.status}` : 'agent.status.unknown';
+  // A status the console has no sentence for reads as unknown, not as an id.
+  return (isKnownTurnStatus(turn.status) ? messageKey(`agent.status.${turn.status}`) : undefined) ?? 'agent.status.unknown';
 }
 
 /**

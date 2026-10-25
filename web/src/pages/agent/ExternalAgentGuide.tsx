@@ -1,3 +1,4 @@
+import { prefixedKey } from '../../i18n/catalog';
 import React from 'react';
 import { clsx } from 'clsx';
 import { CopyButton } from '../../components/common/CopyButton';
@@ -41,7 +42,7 @@ export const ExternalAgentGuide = React.memo(function ExternalAgentGuide({ isDem
   const origin = window.location.origin;
   const endpoint = mcpEndpoint(origin, basePath);
   const snippet = connectSnippet(client, origin, basePath, t('agent.connect.key_placeholder'));
-  const clientLabel = (value: ConnectClient) => CLIENT_LABELS[value] || t(`agent.connect.client.${value}`);
+  const clientLabel = (value: ConnectClient) => CLIENT_LABELS[value] || t(prefixedKey('agent.connect.client.', value) ?? 'agent.connect.client.other');
 
   return (
     <div className={workspace['panel']} data-testid="agent-connect">

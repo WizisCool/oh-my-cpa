@@ -1,6 +1,6 @@
 import { collectPluginPages } from '../components/plugins/pluginPages';
 import { credentialProviderIconId } from '../components/common/providerMetadata';
-import type { TFunc } from '../i18n';
+import type { MessageKey, TFunc } from '../i18n';
 import { pluginDisplayName, type PluginItem } from '../types/plugin';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
@@ -26,14 +26,14 @@ export type OAuthCallbackError = 'invalid' | 'state_mismatch';
 
 export interface OAuthCallbackErrorKeys {
   /** The paste is not a usable redirect at all. */
-  invalid: string;
+  invalid: MessageKey;
   /** The paste belongs to a different attempt. Only providers that bind state raise this. */
-  stateMismatch?: string;
+  stateMismatch?: MessageKey;
   /** There is no session state to bind the paste to. */
-  missingState: string;
+  missingState: MessageKey;
   /** Overrides the generic "paste the URL here" hint when the provider needs its own wording. */
-  hintKey?: string;
-  placeholderKey?: string;
+  hintKey?: MessageKey;
+  placeholderKey?: MessageKey;
 }
 
 export interface OAuthCallbackRules {
@@ -44,13 +44,32 @@ export interface OAuthCallbackRules {
   errorKeys: OAuthCallbackErrorKeys;
 }
 
+/**
+ * A built-in provider's three sentences, one line per provider.
+ *
+ * They are written out rather than composed from `keyBase` so that renaming a provider's copy is a
+ * compile error in this table instead of a card that renders an id.
+ */
+export type BuiltinOAuthKeyBase = 'kimi' | 'kimi_ai' | 'codex' | 'anthropic' | 'antigravity' | 'xai' | 'devin' | 'meta';
+
+const OAUTH_COPY: Record<BuiltinOAuthKeyBase, { title: MessageKey; hint: MessageKey; login: MessageKey }> = {
+  kimi: { title: 'oauth.kimi_title', hint: 'oauth.kimi_hint', login: 'oauth.kimi_login' },
+  kimi_ai: { title: 'oauth.kimi_ai_title', hint: 'oauth.kimi_ai_hint', login: 'oauth.kimi_ai_login' },
+  codex: { title: 'oauth.codex_title', hint: 'oauth.codex_hint', login: 'oauth.codex_login' },
+  anthropic: { title: 'oauth.anthropic_title', hint: 'oauth.anthropic_hint', login: 'oauth.anthropic_login' },
+  antigravity: { title: 'oauth.antigravity_title', hint: 'oauth.antigravity_hint', login: 'oauth.antigravity_login' },
+  xai: { title: 'oauth.xai_title', hint: 'oauth.xai_hint', login: 'oauth.xai_login' },
+  devin: { title: 'oauth.devin_title', hint: 'oauth.devin_hint', login: 'oauth.devin_login' },
+  meta: { title: 'oauth.meta_title', hint: 'oauth.meta_hint', login: 'oauth.meta_login' },
+};
+
 export interface OAuthProviderDefinition {
   /** Provider id, as the console's OAuth facade and the backend provider registry name it. */
   id: string;
   /** Brand mark id resolved against the lobe icon catalog. */
   iconId: string;
-  /** i18n key base: `oauth.{keyBase}_title`, `_hint` and `_login`. */
-  keyBase: string;
+  /** The provider's three sentences, from `OAUTH_COPY` below. */
+  keyBase: BuiltinOAuthKeyBase;
   flow: OAuthFlowKind;
   /**
    * A login already in flight must be cancelled before another is started.
@@ -329,9 +348,9 @@ export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
     id: provider.id,
     flow: provider.flow,
     iconId: provider.iconId,
-    title: t(`oauth.${provider.keyBase}_title`),
-    description: t(`oauth.${provider.keyBase}_hint`),
-    loginLabel: t(`oauth.${provider.keyBase}_login`),
+    title: t(OAUTH_COPY[provider.keyBase].title),
+    description: t(OAUTH_COPY[provider.keyBase].hint),
+    loginLabel: t(OAUTH_COPY[provider.keyBase].login),
     requiresExplicitCancel: provider.requiresExplicitCancel,
     callback: provider.callback,
   }));

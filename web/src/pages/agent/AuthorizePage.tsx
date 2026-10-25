@@ -1,3 +1,4 @@
+import { translateOr } from '../../i18n/catalog';
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -110,7 +111,7 @@ export function AuthorizePage() {
               <div className={styles['request']} data-destructive={permission === 'destructive' || undefined}>
                 <div className={styles['request-head']}>
                   <span className={styles['request-title']}>{capabilityTitle(data.capability, t)}</span>
-                  <Tag tone={permission === 'destructive' ? 'danger' : 'warn'}>{t(`agent.permission.${permission}`)}</Tag>
+                  <Tag tone={permission === 'destructive' ? 'danger' : 'warn'}>{translateOr(t, `agent.permission.${permission}`, permission)}</Tag>
                 </div>
                 <code className={styles['request-name']}>{data.capability}</code>
                 {isPending ? (

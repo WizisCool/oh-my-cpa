@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Checkbox, Input, InputNumber, Segmented, Select, TimePicker, Tooltip } from 'antd';
@@ -195,7 +196,7 @@ export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggesti
   );
 };
 
-const RATE_LABEL_KEYS: Record<RateKey, string> = {
+const RATE_LABEL_KEYS: Record<RateKey, MessageKey> = {
   prompt: 'pricing.rate.prompt',
   completion: 'pricing.rate.completion',
   cacheRead: 'pricing.rate.cache_read',

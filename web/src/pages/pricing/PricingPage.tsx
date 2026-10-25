@@ -42,12 +42,15 @@ type PricingTab = 'models' | 'channels';
 /** `candidates` narrows to custom and linked models OpenRouter has a new price for. */
 type ModelFilter = 'all' | PricingMode | 'unpriced' | 'candidates';
 
+/** What a row's price state is, in the four words the book names: the pricing modes, plus unpriced. */
+type RowMode = PricingMode | 'unpriced';
+
 /** A row of the book: a priced model, or a current model with no price yet. */
 type BookRow = { channel?: string; channelLabel?: string; targetChannel?: string } & (
   | (PricedModel & { rowKind: 'priced' })
   | { rowKind: 'unpriced'; model: string; usage_30d: PricingUsage; suggestions: UpstreamModel[] });
 
-function rowMode(row: BookRow): ModelFilter {
+function rowMode(row: BookRow): RowMode {
   return row.rowKind === 'unpriced' ? 'unpriced' : modeOf(row);
 }
 

@@ -885,7 +885,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   let becameTraditionalChinese = false;
   await until(async () => {
     becameTraditionalChinese = /OMC 設定/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
-      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-Hant';
+      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-HK';
     return becameTraditionalChinese;
   }, { label: 'the header menu to switch the console to Traditional Chinese' }).catch(() => {});
   check(
@@ -936,7 +936,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // The fetch is failed by aborting the chunk request, which is the same state a redeploy produces.
   // The browser refuses to re-fetch a module whose import has already failed in a document, so the
   // recovery asserted below is the reload, not a second click.
-  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
+  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\/index)?(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
   const pageErrors = [];
   const collectPageError = (error) => pageErrors.push(String(error.message));
   page.on('pageerror', collectPageError);

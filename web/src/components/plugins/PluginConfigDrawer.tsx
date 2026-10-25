@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
 import { Switch } from '../common/Switch';
@@ -352,7 +353,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   );
 }
 
-const FIELD_ERROR_KEYS: Record<PluginFieldError, string> = {
+const FIELD_ERROR_KEYS: Record<PluginFieldError, MessageKey> = {
   'invalid-integer': 'plugin.field_error_integer',
   'invalid-number': 'plugin.field_error_number',
   'invalid-enum': 'plugin.field_error_enum',

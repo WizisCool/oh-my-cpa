@@ -1,3 +1,4 @@
+import { translateOr } from '../../i18n/catalog';
 import { FilterDisclosure } from '../common/FilterDisclosure';
 import { ActionMenu } from '../common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -125,7 +126,7 @@ const AuditPhoneEntry: React.FC<AuditPhoneEntryProps> = ({ event, isOpen, onOpen
           <span className={styles['phone-entry-meta']}>
             <span className={styles['audit-time']}>{dayjs(event.occurred_at_ms).format('HH:mm:ss')}</span>
             {target && <span className={styles['audit-target']}>{target}</span>}
-            {!target && eventCategory && <span className={styles['audit-meta']}>{t(`audit.cat.${eventCategory}`)}</span>}
+            {!target && eventCategory && <span className={styles['audit-meta']}>{translateOr(t, `audit.cat.${eventCategory}`, eventCategory)}</span>}
           </span>
         </span>
         <RightOutlined className={styles['phone-entry-chevron']} aria-hidden="true" />
@@ -290,7 +291,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       width: 140,
       render: (_, event) => {
         const eventCategory = categoryOf(event.action);
-        return <span className={styles['audit-meta']}>{eventCategory ? t(`audit.cat.${eventCategory}`) : '—'}</span>;
+        return <span className={styles['audit-meta']}>{eventCategory ? translateOr(t, `audit.cat.${eventCategory}`, eventCategory) : '—'}</span>;
       },
     },
     {
@@ -377,7 +378,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
           onChange={setSearchDraft}
         />
         <FilterDisclosure activeLabel={[
-          category ? t(`audit.cat.${category}`) : '',
+          category ? translateOr(t, `audit.cat.${category}`, category) : '',
           filters.range !== 'all' ? t(`audit.range_${filters.range}`) : '',
         ].filter(Boolean).join(' · ')}>
           <Select
@@ -391,7 +392,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
                 value: name,
                 label: (
                   <span className={styles['category-option']}>
-                    <span>{t(`audit.cat.${name}`)}</span>
+                    <span>{translateOr(t, `audit.cat.${name}`, name)}</span>
                     {hasCounts && <Count>{facets.categories[name] ?? 0}</Count>}
                   </span>
                 ),

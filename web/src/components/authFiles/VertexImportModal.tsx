@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { Button, Input, Modal } from 'antd';
 import { useMutation } from '@tanstack/react-query';
@@ -16,7 +17,7 @@ import {
 } from './vertexImport';
 import styles from './VertexImportModal.module.css';
 
-const PROBLEM_KEYS: Record<VertexKeyProblem, string> = {
+const PROBLEM_KEYS: Record<VertexKeyProblem, MessageKey> = {
   too_large: 'af.vertex_problem_too_large',
   not_json: 'af.vertex_problem_not_json',
   no_private_key: 'af.vertex_problem_no_private_key',

@@ -30,7 +30,7 @@ Not every rule weighs the same. Know which tier you are working in.
 
 ### Tier 2 — contracts. Change deliberately, verify before and after, and say what changed.
 
-- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (`[zh, en]` pairs in `web/src/i18n/messages/` plus every catalog under `web/src/i18n/locales/`).
+- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (the catalogs under `web/src/i18n/locales/`).
 - Release and publication integrity: version identity, image tags and aliases, release gates, pinned workflow actions.
 
 ### Tier 3 — engineering preferences. Change freely.
@@ -117,7 +117,7 @@ Do not rerun a gate that already passed on unchanged code; when a check fails, r
 
 - Booleans carry a state prefix (`isActive`, `hasPermission`, `canEdit`, `shouldRetry`); functions are verb-noun phrases.
 - External contract names keep their required spelling: `json:` tags, CPA native fields, DB columns, query parameters, and third-party component props. CSS-module classes are read as `styles['kebab-case']` (`pnpm check-css-modules` enforces that).
-- User-visible copy is never hardcoded: add `[zh, en]` pairs to the `web/src/i18n/messages/` file named by the key's prefix and to every catalog under `web/src/i18n/locales/` (`pnpm check-i18n` finds gaps).
+- User-visible copy is never hardcoded: add the id to the `web/src/i18n/locales/zh/` file that holds its siblings (a prefix can span files: `af.*` lives in `authFiles.ts`, `pg.*` in `agent.ts`), then to the same file under `locales/en/`, `locales/zh-Hant/` and `locales/ms/`; the type check and `pnpm check-i18n` find gaps.
 
 ---
 
@@ -140,6 +140,7 @@ Where things live, when you need to check or update them:
 | `docs/ops/cloudflare-demo.md` | Deployment runbook for the public demonstration |
 | `docs/releasing.md` | Distribution, tag publishing, version identity |
 | `docs/testing.md` | Test layers, the golden runner, the CI lanes and how to reproduce them |
+| `web/src/i18n/README.md` / `GLOSSARY.md` / `STYLE.md` | Where copy lives, how to add or translate a sentence, the enforced term per concept, and how a sentence reads |
 | `docs/agent-capabilities.md` | Agent capability contract and the MCP bridge |
 | `docs/cpa-v8-compat.md` / `docs/cpamc-parity.md` | CPA v8 baseline and relocation; CPAMC parity matrix |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations |

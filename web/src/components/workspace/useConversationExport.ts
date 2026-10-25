@@ -1,3 +1,4 @@
+import { messageKey, translateOr, type MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useI18n } from '../../i18n';
 import { languageLocale } from '../../i18n/language';
@@ -11,6 +12,19 @@ import { callStatusKey, failureKey, formatDuration, isKnownTurnStatus, playgroun
 import { formatTokens } from '../../types/tokenDisplay';
 import type { ConversationSnapshot } from '../../agent/conversationSnapshot';
 import type { SnapshotLabels } from '../../agent/conversationHtml';
+
+/**
+ * The word a run's status prints in an exported conversation.
+ *
+ * The two products name their states differently and the export carries both, so the mapping lives
+ * here rather than in the exported document's own vocabulary.
+ */
+function turnStatusKey(kind: 'playground' | 'agent', status: string): MessageKey {
+  if (kind === 'playground') return messageKey(`pg.status.${status}`) ?? 'agent.status.unknown';
+  if (status === 'cancelled') return 'agent.status.stopped';
+  if (status === 'running') return 'agent.call.running';
+  return (isKnownTurnStatus(status) ? messageKey(`agent.status.${status}`) : undefined) ?? 'agent.status.unknown';
+}
 
 export function useConversationExport(kind: 'agent' | 'playground') {
   const { t, lang } = useI18n();
@@ -43,13 +57,12 @@ export function useConversationExport(kind: 'agent' | 'playground') {
       number: value => numberFormat.format(value),
       tokens: count => `${t('pg.total_tokens')} ${new Intl.NumberFormat(locale).format(count)}`, print: t('agent.export.print'), imageOmitted: t('agent.export.image_omitted'), privacy: t('agent.export.privacy'),
       omitted: count => t('agent.export.omitted', { count }),
-      status: status => t(kind === 'playground' ? `pg.status.${status}` : status === 'cancelled' ? 'agent.status.stopped' :
-        status === 'running' ? 'agent.call.running' : isKnownTurnStatus(status) ? `agent.status.${status}` : 'agent.status.unknown'),
+      status: status => t(turnStatusKey(kind, status)),
       capability: name => capabilityTitle(name, t),
       callStatus: (name, status) => t(callStatusKey({ name, result: { status } })),
       chainFailed: count => t('agent.chain.failed', { count: String(count) }),
       rounds: (rounds, calls) => t('agent.foot.rounds', { rounds: String(rounds), calls: String(calls) }),
-      present: present => t(`agent.present.${present}`),
+      present: present => translateOr(t, `agent.present.${present}`, present),
       tokenCount: count => formatTokens(count, tokenStyle),
       failure: code => t(kind === 'agent' ? failureKey(code) : playgroundErrorKey(code)),
       duration: formatDuration,

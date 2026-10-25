@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -61,7 +62,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
 
   useOverlayHistory({ isOpen: open, onClose });
 
-  const copyValue = async (value?: string, successKey = 'oauth.link_copied') => {
+  const copyValue = async (value?: string, successKey: MessageKey = 'oauth.link_copied') => {
     if (!value) return;
     if (await copyText(value)) {
       toast.success(t(successKey));

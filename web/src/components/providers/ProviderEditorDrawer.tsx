@@ -12,6 +12,7 @@ import {
 import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined } from '../icons';
 
 import { useT } from '../../i18n';
+import type { MessageKey } from '../../i18n/catalog';
 import { useCustomIcons } from '../../hooks/useCustomIcons';
 import { usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
 import { customIconID } from '../../types/customIcons';
@@ -118,7 +119,7 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'handleSaveProvider'
 > {}
 
-const THINKING_LEVEL_OPTIONS = [
+const THINKING_LEVEL_OPTIONS: readonly { value: string; labelKey: MessageKey }[] = [
   { value: 'none', labelKey: 'pro.level_none' },
   { value: 'minimal', labelKey: 'pro.level_minimal' },
   { value: 'low', labelKey: 'pro.level_low' },
