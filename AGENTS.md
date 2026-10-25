@@ -117,7 +117,7 @@ Do not rerun a gate that already passed on unchanged code; when a check fails, r
 
 - Booleans carry a state prefix (`isActive`, `hasPermission`, `canEdit`, `shouldRetry`); functions are verb-noun phrases.
 - External contract names keep their required spelling: `json:` tags, CPA native fields, DB columns, query parameters, and third-party component props. CSS-module classes are read as `styles['kebab-case']` (`pnpm check-css-modules` enforces that).
-- User-visible copy is never hardcoded: add the id to the `web/src/i18n/locales/zh/` file named by its prefix and the same id to every other language's file of that name (the type check and `pnpm check-i18n` find gaps).
+- User-visible copy is never hardcoded: add the id to the `web/src/i18n/locales/zh/` file named by its prefix, then to the same file under `locales/en/`, and to the `zh-Hant` and `ms` catalogs, which are still one module each; the type check and `pnpm check-i18n` find gaps.
 
 ---
 

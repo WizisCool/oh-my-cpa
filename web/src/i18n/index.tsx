@@ -74,8 +74,14 @@ export function makeT(lang: Lang): TFunc {
   const lookup = catalog as Readonly<Record<string, string | undefined>>;
   const locale = languageLocale(lang);
   // An id the catalog does not define renders as itself: a miss stays visible in the console rather
-  // than printing an empty gap, which is how every catalogue miss has read so far.
-  return (key, vars) => formatMessage(lookup[key] ?? key, vars, locale);
+  // than printing an empty gap, which is how every catalogue miss has read so far. The own-property
+  // test is what makes that true of every string a caller can pass: a plain property read would
+  // answer `toString` with a function, and filling placeholders into a function throws.
+  return (key, vars) => formatMessage(
+    Object.prototype.hasOwnProperty.call(lookup, key) ? lookup[key] ?? key : key,
+    vars,
+    locale,
+  );
 }
 
 /** Ant Design's locale for a reading language; `ConfigProvider` follows the console's choice. */
