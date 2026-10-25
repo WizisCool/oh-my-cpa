@@ -43,7 +43,7 @@ importers:
     dependencies:
       '@ag-ui/core':
         specifier: 1.0.0
-        version: 1.0.0(zod@4.6.5)
+        version: 1.0.0(zod@4.6.6)
       '@ant-design/x':
         specifier: 2.9.0
         version: 2.9.0(antd@6.6.2(date-fns@4.4.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -61,16 +61,16 @@ importers:
         version: 0.6.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@openuidev/assistant-ui':
         specifier: 0.2.0
-        version: 0.2.0(@assistant-ui/react@0.15.25(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1)))(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
+        version: 0.2.0(@assistant-ui/react@0.15.25(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1)))(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
       '@openuidev/react-headless':
         specifier: 0.18.1
         version: 0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
       '@openuidev/react-lang':
         specifier: 1.0.1
-        version: 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)
+        version: 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)
       '@openuidev/react-ui':
         specifier: 0.18.1
-        version: 0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
+        version: 0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.102.8(react@18.3.1)
@@ -117,8 +117,8 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
       zod:
-        specifier: ^4.6.5
-        version: 4.6.5
+        specifier: ^4.6.6
+        version: 4.6.6
       zustand:
         specifier: ^4.5.7
         version: 4.5.7(@types/react@18.3.31)(react@18.3.1)
@@ -4290,8 +4290,8 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
   zrender@6.1.0:
     resolution: {integrity: sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==}
@@ -4338,9 +4338,9 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@ag-ui/core@1.0.0(zod@4.6.5)':
+  '@ag-ui/core@1.0.0(zod@4.6.6)':
     optionalDependencies:
-      zod: 4.6.5
+      zod: 4.6.6
 
   '@ant-design/cli@6.6.2':
     dependencies:
@@ -4474,7 +4474,7 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       react-textarea-autosize: 8.5.9(@types/react@18.3.31)(react@18.3.1)
       safe-content-frame: 0.0.33
-      zod: 4.6.5
+      zod: 4.6.6
       zustand: 5.0.15(@types/react@18.3.31)(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1))
     optionalDependencies:
       '@types/react': 18.3.31
@@ -5039,30 +5039,30 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@openuidev/assistant-ui@0.2.0(@assistant-ui/react@0.15.25(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1)))(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))':
+  '@openuidev/assistant-ui@0.2.0(@assistant-ui/react@0.15.25(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1)))(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))':
     dependencies:
       '@assistant-ui/react': 0.15.25(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1))
       '@openuidev/react-headless': 0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
-      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)
-      '@openuidev/react-ui': 0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
+      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)
+      '@openuidev/react-ui': 0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      zod: 4.6.5
+      zod: 4.6.6
       zustand: 4.5.7(@types/react@18.3.31)(react@18.3.1)
 
-  '@openuidev/devtools@0.3.0(@openuidev/observability@0.0.4)(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@openuidev/devtools@0.3.0(@openuidev/observability@0.0.4)(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@openuidev/observability': 0.0.4
       lucide-react: 0.575.0(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     optionalDependencies:
-      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)
+      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)
 
-  '@openuidev/lang-core@1.0.1(zod@4.6.5)':
+  '@openuidev/lang-core@1.0.1(zod@4.6.6)':
     dependencies:
       ci-info: 4.4.0
-      zod: 4.6.5
+      zod: 4.6.6
 
   '@openuidev/observability@0.0.4': {}
 
@@ -5073,21 +5073,21 @@ snapshots:
       react: 18.3.1
       zustand: 4.5.7(@types/react@18.3.31)(react@18.3.1)
 
-  '@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)':
+  '@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)':
     dependencies:
-      '@openuidev/devtools': 0.3.0(@openuidev/observability@0.0.4)(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@openuidev/lang-core': 1.0.1(zod@4.6.5)
+      '@openuidev/devtools': 0.3.0(@openuidev/observability@0.0.4)(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@openuidev/lang-core': 1.0.1(zod@4.6.6)
       '@openuidev/observability': 0.0.4
       react: 18.3.1
-      zod: 4.6.5
+      zod: 4.6.6
     optionalDependencies:
       react-dom: 18.3.1(react@18.3.1)
 
-  '@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.5)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))':
+  '@openuidev/react-ui@0.18.1(@openuidev/react-headless@0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1)))(@openuidev/react-lang@1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(supports-color@10.2.2)(zod@4.6.6)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))':
     dependencies:
       '@floating-ui/react-dom': 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@openuidev/react-headless': 0.18.1(react@18.3.1)(zustand@4.5.7(@types/react@18.3.31)(react@18.3.1))
-      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.5)
+      '@openuidev/react-lang': 1.0.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.6.6)
       '@radix-ui/react-accordion': 1.2.20(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-aspect-ratio': 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.3.11(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -5123,7 +5123,7 @@ snapshots:
       remark-math: 6.0.0(supports-color@10.2.2)
       tiny-invariant: 1.3.3
       unist-util-visit: 5.1.0
-      zod: 4.6.5
+      zod: 4.6.6
       zustand: 4.5.7(@types/react@18.3.31)(react@18.3.1)
     transitivePeerDependencies:
       - '@types/react'
@@ -8758,7 +8758,7 @@ snapshots:
 
   zod@3.25.76: {}
 
-  zod@4.6.5: {}
+  zod@4.6.6: {}
 
   zrender@6.1.0:
     dependencies:
