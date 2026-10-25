@@ -35,7 +35,7 @@
     "react-router-dom": "^7.18.4",
     "remark-gfm": "^4.0.1",
     "yaml": "^2.9.0",
-    "zod": "^4.6.5",
+    "zod": "^4.6.6",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

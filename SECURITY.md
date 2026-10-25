@@ -58,12 +58,17 @@ patched releases even when their parent packages still request vulnerable versio
 | KaTeX | 0.18.2 | GHSA-238p-pmpm-9mq7 | Markdown and Mermaid rendering through Ant Design X |
 | sharp | 0.35.5 | GHSA-wq5f-xc86-pv6w | Wrangler / Miniflare demonstration tooling |
 | source-map-js | 1.2.2 | GHSA-68fv-2mgg-jv7q | Vite / PostCSS source-map processing |
+| undici 7 | 7.30.1 | GHSA-xjj6-f33q-929c | Wrangler / Miniflare demonstration tooling |
+| undici 8 | 8.12.3 | GHSA-xjj6-f33q-929c, GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472 | jsdom, the DOM the component tests render into |
+| zod | 4.6.6 | GHSA-mrhx-c7xc-m3w5 | Agent and Playground event schemas through OpenUI's `@ag-ui/core` 0.0.x |
 
 These overrides apply to every consumer in the workspace. Remove one only after
 all parent packages resolve to a patched version without it. Use
 `pnpm why <package> --recursive` to inspect consumers and `pnpm audit` to inspect
 the resolved graph. The KaTeX override crosses the minor version requested by its
-parents, so check their mathematical rendering when changing it.
+parents, so check their mathematical rendering when changing it. The zod override
+crosses the major version the same way — `@ag-ui/core@0.0.53` asks for `^3.22.4` —
+so Agent and Playground event parsing is what to exercise when changing it.
 
 ## Trusted plugin pages
 

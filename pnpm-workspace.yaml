@@ -13,3 +13,10 @@ overrides:
   katex: 0.18.2
   sharp: 0.35.5
   source-map-js: 1.2.2
+  # miniflare pins undici 7.29.1 and jsdom resolved its ^8.11.2 to 8.11.2, both
+  # below the advisory floors; hold each major line at its patched release.
+  undici@^7.0.0: 7.30.1
+  undici@^8.0.0: 8.12.3
+  # @ag-ui/core@0.0.53 still asks for zod ^3.22.4 and no patched 3.x exists, so
+  # its instance is lifted onto the patched 4.x line rather than left vulnerable.
+  zod: 4.6.6
