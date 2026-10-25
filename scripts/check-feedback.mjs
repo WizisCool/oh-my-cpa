@@ -187,10 +187,10 @@ function walkSourceFiles(directory, found = []) {
   return found;
 }
 
-export function runCheck({ projectRoot = DEFAULT_ROOT, output = console } = {}) {
+export function runCheck({ projectRoot = DEFAULT_ROOT, output = console, files } = {}) {
   const sourceRoot = path.join(projectRoot, 'web', 'src');
   const failures = [];
-  for (const file of walkSourceFiles(sourceRoot)) {
+  for (const file of files ? files.map(file => path.join(projectRoot, file)).filter(file => fs.existsSync(file)) : walkSourceFiles(sourceRoot)) {
     const relative = path.relative(projectRoot, file).split(path.sep).join('/');
     if (relative.startsWith(FEEDBACK_MODULE)) continue;
     for (const violation of findViolations(fs.readFileSync(file, 'utf8'))) {
@@ -204,12 +204,12 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console } = {}) 
       output.error(`  ${failure.file}:${failure.line} [${failure.rule}] ${failure.message}`);
     }
   } else {
-    output.log('Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, tag, empty state, panel, fact list, pager, meter, side panel and anchored confirmation through its shared component.');
+    output.log(files ? `Feedback surfaces: ${files.length} changed source(s) checked.` : 'Feedback surfaces: every toast and inline notice goes through components/feedback, and every switch, tag, empty state, panel, fact list, pager, meter, side panel and anchored confirmation through its shared component.');
   }
   return failures;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const failures = runCheck();
+  const failures = runCheck({ files: process.argv[2] === '--files' ? process.argv.slice(3) : undefined });
   if (failures.length > 0) process.exitCode = 1;
 }

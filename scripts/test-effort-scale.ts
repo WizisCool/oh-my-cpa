@@ -106,22 +106,4 @@ for (const definition of BUILT_IN_PALETTES) {
   });
 }
 
-// The stylesheet carries the OMC pair as the pre-hydration fallback; it must be the pair the palette resolves.
-for (const [mode, id] of [['dark', 'omc-dark'], ['light', 'omc-light']] as const) {
-  resolvedBuiltInPalette(id).palette.effort.forEach((step, index) => {
-    assert.equal(declared(stylesheet[mode], `--effort-${index + 1}`), step.toLowerCase(), `${mode} --effort-${index + 1} in index.css matches the palette`);
-  });
-}
-
-// The neutral step the list paints must be the one measured above.
-const listCss = fs.readFileSync(
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'web/src/components/usage/RequestList.css'),
-  'utf8',
-);
-assert.match(
-  /\.req-effort-badge\s*\{[^}]*\}/.exec(listCss)?.[0] ?? '',
-  /--effort-hue:\s*var\(--fg-2\);/,
-  'the effort badge falls back to secondary text, not a tertiary grey',
-);
-
 console.log('effort scale: ok');

@@ -50,9 +50,10 @@ reviews:
     # generated docstring would add noise instead of documentation.
     docstrings:
       enabled: false
-    # Unit-test generation stays on. The recipe below is the finishing touch this
-    # repository actually needs: documentation the change invalidates is
-    # updated in the same change.
+    # Admission is risk-driven: the reviewer checks ownership and gaps rather
+    # than generating another suite for every patch.
+    unit_tests:
+      enabled: false
     custom:
       - name: stale context documents
         instructions: >-
@@ -139,8 +140,8 @@ reviews:
     - path: 'web/src/**/*.{ts,tsx}'
       instructions: >-
         React console. User-visible copy is never hardcoded: new strings are
-        `[zh, en]` pairs in `web/src/i18n/index.tsx` plus matching entries in
-        every catalog under `web/src/i18n/locales/`. Requests go through the single
+        typed keys in the matching area file under every language in
+        `web/src/i18n/locales/`. Requests go through the single
         typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
         a defect. Colors come from the resolved palette in
         `web/src/theme/palette.ts` - nine authored tokens with seventeen derived
@@ -196,8 +197,11 @@ reviews:
         The verification harness. `pnpm test:fast` must never build the SPA, start
         the product Vite HTTP listener, start Chromium, or start the fake CPA, and a
         planner that cannot place a change runs everything rather than nothing.
-        Flag a new self-test for tooling that does not ship, a skip switch, a retry
-        or a longer wait (AGENTS.md §5).
+        Test additions must identify an uncovered product failure mode, their cheapest
+        credible owner and net cost. Prefer a case or replacement to another file or
+        layer; internal refactors need no new tests by default. Flag a new self-test
+        for tooling that does not ship, a skip switch, a retry or a longer wait
+        (AGENTS.md §5).
     - path: '.github/workflows/**'
       instructions: >-
         Every `uses:` is pinned to a commit SHA and every checkout sets

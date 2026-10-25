@@ -82,18 +82,20 @@ An ADR (`docs/adr/`) records a consequential decision and its context at a point
 | Build, embedded distribution, probe harness or workflow changes | `pnpm verify:full` (also for reproducing a CI failure) |
 | Everything else | CI. Do not run `verify`, `verify:browser` or the probe catalog locally to prove a routine change |
 
-Do not rerun a gate that already passed on unchanged code; when a check fails, rerun that check first. `pnpm test:fast --plan` shows the selection. `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification or chunk boundaries.
+Do not rerun a gate that already passed on unchanged code (except an explicitly requested comparable measurement); when a check fails, rerun that check first. `pnpm test:fast --plan` shows the selection. `pnpm check:ui` runs against the dev server with mocked endpoints, so it never replaces built-artifact acceptance for path resolution, minification or chunk boundaries.
 
 ### Tests: few, owned, proven
 
-- **A fix comes with one test that fails without it.** Put the old code back, watch the test fail for the reason its name gives, restore the fix. The commit body says what it failed with.
-- **Add a case, not a file.** A one-line or mapping fix adds a row to an existing table-driven test or an input file to a golden directory. It does not add a `*_test.go` file, a probe, a step in `scripts/browser-acceptance.mjs`, or a self-test for a script.
+- **Admission before addition.** Name the user-visible behaviour, external contract or safety invariant at risk; check whether an existing test catches the same failure; choose its lowest credible layer; prefer an existing case; account for execution and maintenance cost. If there is no new failure mode, add no test. Test count and coverage growth are not measures of quality.
+- **A bug needs the smallest proven regression.** Prefer extending an existing test, including one that already exposes the bug. Revert the fix temporarily, observe the named failure, and restore it; report that evidence in the commit. Internal renames and behaviour-preserving refactors do not automatically earn new tests. New features need their behaviour and critical contracts checked, not imagined edge-case inventories.
+- **Replace before stacking.** Consolidate duplicate claims during ordinary work. A new file, browser scenario or verification mechanism needs an independently valuable claim that existing tests cannot own; explain what it replaces and its net cost. Do not layer unit, component and browser checks over the same failure mode or create a framework to police another framework.
 - **Assert the output, not its parts.** A parser, projection or response is compared whole with a golden file (`internal/testkit`: `testkit.Cases` over `testdata/golden/<name>/*.input.json`; `UPDATE_GOLDEN=1 go test ./<pkg>` regenerates, and the diff is the review).
 - **One layer per claim, the lowest that can fail for the right reason:** Go for server behaviour; the logic suite for pure frontend functions; component tests (Vitest + jsdom) for rendered wiring; a probe only for what only a browser engine shows; built-artifact acceptance only for its smoke paths.
 - **Do not test** copy or translations, CSS class names, `package.json` or workflow YAML shape, document contents, the test tooling itself, exact log text, or defensive branches for states the types already exclude.
 - **Tier 1 keeps hard tests:** secrets in responses, logs and storage; DTO allowlists; migrations; CPA writes and their backups; the update boundary; offline embedding.
 - **Never add a skip switch, a retry, a fixed sleep or a longer wait to get a run green.** `-short` is for cost, never for flakiness: a test skipped under it still runs in CI.
 - Deleting a test is ordinary work when its claim is obsolete, duplicated, or of a kind listed above. When the claim still matters, the commit names the test that now makes it.
+- **Keep the measured feedback budget.** Fast checks select affected suites and Go dependants; UI checks select owned pages or representative shell scenarios, not the complete local CI catalog. Review the plan and its widening reason. Successful local runs retain a same-host baseline; CI reports native job costs and rejects sustained, significant growth (§ `docs/testing.md`). A justified baseline adjustment includes repeated measurements, the new failure mode and consolidation considered; never hide a test or weaken an assertion to meet it.
 - Release and security gates — secret scans, image smoke, publication checks — are never optional.
 
 ---

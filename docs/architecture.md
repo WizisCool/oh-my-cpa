@@ -2896,7 +2896,7 @@ script; that duplication cost every later change more than it caught, and was re
 | Go tests and golden cases | `go test ./...` | Handlers, DTO allowlists, redaction, auth, repository queries, migrations, background loops. Parsers and projections are asserted by their whole output against `testdata/golden/` files through `internal/testkit`. |
 | Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation. Node only; every `scripts/test-*.ts` is discovered. |
 | Components and API contract | `pnpm test:components` | Rendered hook, provider and component wiring under jsdom with the real QueryClient and typed client, and the reviewed wire corpus the Go handlers also check (ADR 0089, ADR 0090). |
-| Repository scripts | `pnpm test:self` | Only scripts whose output ships: release planning, signing, the Worker, the embedded distribution, and the fixed-wait ratchet. |
+| Repository scripts | `pnpm test:self` | Only scripts whose output ships: release planning, signing, the Worker and the embedded distribution. |
 | UI fast path | `pnpm check:ui` | The scenarios a frontend change can affect, on the Vite dev server with mocked routes. It runs `React.StrictMode` double invocation, which a production build cannot expose. |
 | Probe catalog | `pnpm verify:probes` | Every scenario; CI runs it in three Playwright shards on full runs. |
 | Built-artifact acceptance | `pnpm verify:browser` (`:smoke`) | The built binary, the embedded SPA, the fake CPA and seeded SQLite together: sign-in, every route's render and secret boundary, the request list, MCP, adding a provider, the production YAML worker and the plugin host. |
@@ -2908,14 +2908,14 @@ minification, chunk loading and the embedded Go surface are exercised only by
 controller-cleanup regression that left production checks green but stopped search
 commits on the dev server, which is why development coverage is kept.
 
-Selection is coarse on purpose. `scripts/acceptance/check-ui-plan.mjs` maps a routed
-page's files to the scenarios that load it and runs every scenario for anything else; the
-full catalog runs on pushes to `main`, nightly, on demand and under the `full-ci` label,
-so a narrow local plan is a speed-up, never the only check. `scripts/ci-scope.mjs` makes the same trade for
-CI lanes: an unrecognised path runs every lane.
-
-`scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser tests and
-Go tests: adding one fails, and removing one fails until its recorded count is lowered.
+`scripts/affected-files.mjs` follows imports for affected frontend suites. The UI planner reads
+routes and probe navigation instead of maintaining a component-prefix map; shared common-component changes run
+representative recovery, settings and phone scenarios, while global runtime and authentication
+changes retain the complete catalog. Unknown ownership widens the plan and
+explains why. The full catalog runs on pushes to `main`, nightly, on demand and under the
+`full-ci` label. `scripts/ci-scope.mjs` retains an all-lane fallback for unfamiliar paths.
+Measured local baselines and native CI job timing detect sustained growth; `docs/testing.md`
+describes the noise allowance and the evidence needed to adjust a budget.
 
 `scripts/browser-acceptance.mjs` is the lifecycle entrypoint, and each step it runs is a
 module under `scripts/acceptance/` that needs the built binary to make its claim: the
