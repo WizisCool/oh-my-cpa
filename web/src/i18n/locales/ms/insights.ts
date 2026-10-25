@@ -47,7 +47,7 @@ export default {
   "insights.filter_back": "Kembali ke dimensi",
   "insights.filter_no_values": "Tiada nilai sepadan",
   "insights.filter_to_key": "Tapis kepada kunci ini",
-  "insights.ranking.provider": "Pembekal AI",
+  "insights.ranking.provider": "Penyedia AI",
   "insights.ranking.credential": "Kelayakan OAuth",
   "insights.filter_clear_one": "Kosongkan ({n})",
   "insights.click_to_unfilter": "Klik lagi untuk buang penapis",

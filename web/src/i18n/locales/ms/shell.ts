@@ -107,7 +107,7 @@ export default {
   "nav.playground": "Ruang uji",
   "nav.dashboard": "Papan pemuka",
   "nav.insights": "Wawasan",
-  "nav.providers": "Pembekal AI",
+  "nav.providers": "Penyedia AI",
   "nav.api_keys": "Pengurusan kunci",
   "nav.auth_files": "Pengurusan OAuth",
   "nav.logs": "Log",

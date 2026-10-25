@@ -79,7 +79,7 @@ export default {
   "dash.providers_show_all": "顯示全部 {n} 個供應商",
   "dash.providers_show_less": "收合",
   "dash.empty_providers": "尚無 provider 流量資料",
-  "dash.credentials_n": "{n} 個憑據",
+  "dash.credentials_n": "{n} 個憑證",
   "dash.quota.title": "憑證額度",
   "dash.layout.arrange": "自訂版面",
   "dash.layout.done": "完成",

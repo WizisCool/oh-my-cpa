@@ -315,7 +315,8 @@ sentence where it does not. Language persists in `localStorage('omc-lang')` and
 the antd locale follows. Rule: every
 registered language fully localizes — a localized UI must not show untranslated
 captions from another language beside its own copy (proper nouns and industry
-terms excepted).
+terms excepted). `web/src/i18n/GLOSSARY.md` holds the one word per concept and
+the variants the gate refuses; `STYLE.md` holds how a sentence reads.
 
 The supported languages are listed once in `web/src/i18n/language.ts`, and every
 switcher reads that registry. A row carries the language's **endonym** — its own

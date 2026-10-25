@@ -236,6 +236,54 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
     }
   }
 
+  // Spellings GLOSSARY.md has settled. The table is prose for a reader and a block at the end of the
+  // same file for this check, so the two cannot drift into disagreeing about what is enforced.
+  const glossaryPath = path.join(I18N, 'GLOSSARY.md');
+  const glossary = fs.existsSync(glossaryPath) ? fs.readFileSync(glossaryPath, 'utf8') : '';
+  const enforcedBlock = /```glossary-enforced\n([\s\S]*?)```/.exec(glossary)?.[1] ?? '';
+  for (const line of enforcedBlock.split('\n')) {
+    if (!line.trim()) continue;
+    const [lang, rejected, preferred] = line.split('\t');
+    if (!lang || !rejected || !preferred) {
+      fail('glossary', `GLOSSARY.md line "${line}" is not "language<TAB>rejected<TAB>preferred"`);
+      continue;
+    }
+    const catalog = catalogs.get(lang);
+    if (!catalog) {
+      fail('glossary', `GLOSSARY.md enforces a spelling for "${lang}", which is not a registered language`);
+      continue;
+    }
+    for (const [key, value] of Object.entries(catalog)) {
+      if (value.includes(rejected)) fail('glossary', `${lang}: "${key}" writes ${rejected}; GLOSSARY.md says ${preferred}`);
+    }
+  }
+
+  // Copy that never reached the catalogs. A Chinese caption in a component reads as Chinese to
+  // every reader, whatever language they chose, which is the one failure the catalog checks cannot
+  // see. Files that name their language or a font in Chinese are listed here rather than exempted
+  // wholesale.
+  const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+  // Words that are data rather than copy: the language registry's endonyms, font family names, the
+  // 亿/万 a compact Chinese number ends in, the Chinese provider names CPA reports (matched, never
+  // shown), the period words a quota label is parsed for, and the date strings the demo recorder
+  // writes into its own fixture.
+  const ALLOWED_COPY = new Set([
+    'src/i18n/language.ts',
+    'src/types/fonts.ts',
+    'src/types/tokenDisplay.ts',
+    'src/types/providerIconIds.ts',
+    'src/pages/oauthManagement/credentialSections.ts',
+    'src/demo/recordingTemplate.ts',
+  ]);
+  for (const file of sourceFiles(path.join(ROOT, 'web', 'src'))) {
+    const relative = path.relative(path.join(ROOT, 'web'), file).split(path.sep).join('/');
+    if (ALLOWED_COPY.has(relative)) continue;
+    const lines = withoutComments(fs.readFileSync(file, 'utf8')).split('\n');
+    for (const [index, line] of lines.entries()) {
+      if (CJK.test(line)) fail('hardcoded', `${relative}:${index + 1} holds Chinese text outside the catalogs`);
+    }
+  }
+
   // Review hints: a translation identical to its most likely origin may simply not be translated yet.
   const origins: Record<string, string> = { 'zh-Hant': 'zh', ms: 'en' };
   for (const [lang, origin] of Object.entries(origins)) {
