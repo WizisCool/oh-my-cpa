@@ -125,6 +125,14 @@ export default defineConfig(({ command }) => ({
           if (id.includes('node_modules/@tanstack/react-query')) {
             return 'vendor-query';
           }
+          // A deferred catalog keeps its own name: the acceptance probes fail the fetch of one
+          // language's chunk by name, which a shared `index-*` name cannot express.
+          if (id.includes('/locales/zh-Hant/')) {
+            return 'zh-Hant';
+          }
+          if (id.includes('/locales/ms/')) {
+            return 'ms';
+          }
         },
       },
     },

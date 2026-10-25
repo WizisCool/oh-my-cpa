@@ -2858,7 +2858,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "quota.in_minutes": "{n}分鐘後",
   "quota.in_hours": "{n}小時後",
   "quota.in_hours_min": "{h}小時{m}分後",
-  "quota.in_days": "{n}天后",
+  "quota.in_days": "{n}天後",
   "quota.in_days_min": "{d}天{h}小時後",
   "quota.expired": "已過期",
   "quota.days_ago": "{n}天前",

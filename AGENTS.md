@@ -30,7 +30,7 @@ Not every rule weighs the same. Know which tier you are working in.
 
 ### Tier 2 — contracts. Change deliberately, verify before and after, and say what changed.
 
-- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (`[zh, en]` pairs in `web/src/i18n/messages/` plus every catalog under `web/src/i18n/locales/`).
+- Wire formats and JSON field names; database schema and stored semantics; the CPA v0/v8 management contracts; the committed demonstration dataset's shape; environment variables and defaults; user-visible behavior and copy (every catalog under `web/src/i18n/locales/`, one file per product area per language).
 - Release and publication integrity: version identity, image tags and aliases, release gates, pinned workflow actions.
 
 ### Tier 3 — engineering preferences. Change freely.
@@ -117,7 +117,7 @@ Do not rerun a gate that already passed on unchanged code; when a check fails, r
 
 - Booleans carry a state prefix (`isActive`, `hasPermission`, `canEdit`, `shouldRetry`); functions are verb-noun phrases.
 - External contract names keep their required spelling: `json:` tags, CPA native fields, DB columns, query parameters, and third-party component props. CSS-module classes are read as `styles['kebab-case']` (`pnpm check-css-modules` enforces that).
-- User-visible copy is never hardcoded: add `[zh, en]` pairs to the `web/src/i18n/messages/` file named by the key's prefix and to every catalog under `web/src/i18n/locales/` (`pnpm check-i18n` finds gaps).
+- User-visible copy is never hardcoded: add the id to the `web/src/i18n/locales/zh/` file named by its prefix and the same id to every other language's file of that name (the type check and `pnpm check-i18n` find gaps).
 
 ---
 

@@ -92,7 +92,7 @@ assert.equal(isChineseLanguage('zh'), true);
 assert.equal(isChineseLanguage('zh-Hant'), true);
 assert.equal(isChineseLanguage('en'), false);
 assert.equal(isChineseLanguage('ms'), false);
-assert.equal(languageLocale('zh-Hant'), 'zh-Hant');
+assert.equal(languageLocale('zh-Hant'), 'zh-HK');
 assert.equal(languageLocale('ms'), 'ms-MY');
 
 // ── parsing stored preferences ─────────────────────────────────────────────────

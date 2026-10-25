@@ -11,7 +11,7 @@
     "check-brand": "node scripts/sync-brand.mjs --check",
     "check-css-modules": "node scripts/check-css-modules.mjs",
     "check-docs": "node scripts/check-docs.mjs",
-    "check-i18n": "node scripts/check-missing-i18n.mjs",
+    "check-i18n": "node --import tsx scripts/check-i18n.ts",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "check:demo": "node --import tsx scripts/check-demo.ts",
     "check:motion": "node scripts/check-motion.mjs",
