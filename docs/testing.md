@@ -262,11 +262,19 @@ probes alone took 405–461 seconds while build/smoke took 177–188 seconds: wh
 selection on shared paths, not just build time, dominated feedback. An initial local full
 run at `38bbfe9c` took 1,204.53 seconds and failed workspace bootstrap; that failed,
 colder run is diagnostic evidence, not a successful speedup denominator. The final
-pinned-Go full run passed in 1,016.72 seconds: build 81.88, static 134.48, packaged
-browser 48.75, all 76 probes 679.31, and all 19 demo routes 59.98 seconds (the remainder
-is toolchain, secret and bundle gates). It establishes the first successful local full
-sample, not a three-run stable baseline. Full-catalog cost remains substantial; the daily
-loop avoids paying it rather than hiding or weakening those checks.
+pinned-Go full catalog passed three controlled runs in 1,016.72 / 989.28 / 1,011.66 seconds
+(median 1,011.66). In the first, build took 81.88, static 134.48, packaged browser 48.75,
+all 76 probes 679.31, and all 19 demo routes 59.98 seconds; the remainder was toolchain,
+secret and bundle gates. The four affected shell representatives passed in 120.06 / 118.12 /
+117.42 seconds (median 118.12), and both workload histories now have three successful
+same-host samples. Full-catalog cost remains substantial; the daily loop avoids paying
+it rather than hiding or weakening those checks.
+
+The three initial hosted full-catalog stack runs had 298 / 313 / 314-second execution
+paths and 1,238 / 1,293 / 1,293 runner-seconds. Their 313-second median is above the
+historical full-run median of 282 seconds; this audit does not establish a full-CI
+speedup or reduced memory use. Daily affected selection is the demonstrated improvement,
+and the fixed catalog-specific budget retains visibility into total regression cost.
 
 From the PR #166 merge to `15952aa3`, product source grew from 154,006 to 190,044 lines
 (23%), and tests from 90,623 to 104,309 (15%). Test volume did not outgrow product source
