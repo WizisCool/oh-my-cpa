@@ -1,3 +1,4 @@
+import { SecretInput } from '../common/SecretInput';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import {
@@ -714,8 +715,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                           <Form.Item name="prefix" label={t('af.field_prefix')}>
                             <Input allowClear maxLength={4096} disabled={!safeFieldsReady} />
                           </Form.Item>
-                          <Form.Item name="proxy_url" label={t('af.field_proxy_url')}>
-                            <Input allowClear maxLength={4096} disabled={!safeFieldsReady} />
+                          <Form.Item name="proxy_url" label={t('af.field_proxy_url')} extra={t('af.field_proxy_auth_hint')}>
+                            <SecretInput allowClear maxLength={4096} disabled={!safeFieldsReady} />
                           </Form.Item>
 
                           <Form.Item

@@ -357,6 +357,50 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		t.Fatalf("safe fields response = %#v", safe)
 	}
 
+	for _, proxyURL := range []string{"http://proxy-user:proxy-password@proxy.example.test:8080", "socks5h://proxy-user:proxy-password@proxy.example.test:1080"} {
+		body, _ := json.Marshal(map[string]any{"name": "claude.json", "auth_index": "idx-1", "proxy_url": proxyURL})
+		response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", string(body))
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("proxy patch status = %d", response.StatusCode)
+		}
+		if safeFields["proxy_url"] != proxyURL {
+			t.Fatal("CPA must retain the exact proxy authentication")
+		}
+		if strings.Contains(string(raw), "proxy-user") || strings.Contains(string(raw), "proxy-password") {
+			t.Fatal("proxy auth escaped through patch readback")
+		}
+		response, raw = doJSON(t, client, http.MethodGet, base+"/safe-fields?name=claude.json&auth_index=idx-1", "")
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("proxy readback status = %d", response.StatusCode)
+		}
+		if strings.Contains(string(raw), "proxy-user") || strings.Contains(string(raw), "proxy-password") {
+			t.Fatal("proxy auth escaped through safe fields")
+		}
+		if !strings.Contains(string(raw), "proxy.example.test") {
+			t.Fatal("safe routing host must remain visible")
+		}
+		var masked managementAuthFileSafeFields
+		if err := json.Unmarshal(raw, &masked); err != nil {
+			t.Fatal(err)
+		}
+		masked.ProxyURL = strings.Replace(masked.ProxyURL, "proxy.example.test", "other.example.test", 1)
+		body, _ = json.Marshal(map[string]any{"name": "claude.json", "proxy_url": masked.ProxyURL})
+		response, _ = doJSON(t, client, http.MethodPatch, base+"/fields", string(body))
+		if response.StatusCode != 400 || safeFields["proxy_url"] != proxyURL {
+			t.Fatal("masked authentication must never be written back to CPA")
+		}
+
+		body, _ = json.Marshal(map[string]any{
+			"name":      "claude.json",
+			"proxy_url": "http://proxy-user:%5Bredacted%5D@other.example.test:8080",
+		})
+		response, _ = doJSON(t, client, http.MethodPatch, base+"/fields", string(body))
+		if response.StatusCode != 400 || safeFields["proxy_url"] != proxyURL {
+			t.Fatal("a percent-encoded masked password must never be written back to CPA")
+		}
+
+	}
+
 	response, raw = doJSON(t, client, http.MethodPost, base+"?name=uploaded.json", `{"type":"gemini","token":"secret-token"}`)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("raw upload = %d body = %s", response.StatusCode, raw)

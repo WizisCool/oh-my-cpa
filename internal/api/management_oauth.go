@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -53,6 +55,7 @@ func (h *Handler) listOAuthProviders(writer http.ResponseWriter, request *http.R
 
 type startOAuthRequest struct {
 	Provider string `json:"provider"`
+	ProxyURL string `json:"proxy_url,omitempty"`
 }
 
 // normalizeOAuthStatus maps CPA get-auth-status variants to one facade
@@ -72,6 +75,10 @@ func normalizeOAuthStatus(status string) string {
 
 func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	if query := request.URL.Query(); query.Has("proxy_url") || query.Has("proxy-url") {
+		writeError(writer, http.StatusBadRequest, "proxy_url must be provided in the request body")
+		return
+	}
 	var req startOAuthRequest
 	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
 		return
@@ -86,14 +93,22 @@ func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
+	proxyURL, err := management.NormalizeOAuthProxyURL(req.ProxyURL)
+	if err != nil {
+		writeCPAFacadeError(writer, err)
 		return
 	}
-
-	authRes, err := client.OAuthAuthURL(request.Context(), provider)
+	if err := h.recordAudit(request, "oauth.start", "oauth_provider", provider, "attempt", nil); err != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; authorization aborted")
+		return
+	}
+	authRes, err := h.operationsService().StartOAuth(request.Context(), provider, proxyURL)
 	if err != nil {
-		_ = h.recordAudit(request, "oauth.start", "oauth_provider", provider, "failure", map[string]any{"error": err.Error()})
+		_ = h.recordAudit(request, "oauth.start", "oauth_provider", provider, "failure", nil)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(writer, http.StatusServiceUnavailable, "default CPA instance is not configured")
+			return
+		}
 		writeCPAFacadeError(writer, err)
 		return
 	}

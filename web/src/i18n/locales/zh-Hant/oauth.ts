@@ -2,6 +2,13 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/oauth';
 
 export default {
+  "oauth.use_default_route": "使用 CPA 預設路由",
+  "oauth.session_proxy": "工作階段代理（選填）",
+  "oauth.session_proxy_hint": "留空使用 CPA 預設路由。支援 HTTP(S) 和 SOCKS5(H)。CPA 使用此代理完成授權，並將其儲存至新帳號供後續請求使用。不會變更閘道共用設定。",
+  "oauth.proxy_upgrade_required": "請升級 CPA 以使用工作階段代理。未使用所選代理發起授權。",
+  "oauth.proxy_invalid": "請輸入有效的 HTTP(S) 或 SOCKS5(H) 代理網址；SOCKS 代理必須包含連接埠。",
+  "oauth.proxy_start_failed": "無法使用所選代理發起授權。請檢查代理與 CPA 連線，然後重新輸入代理。",
+
   "siwc.status_off": "未使用",
   "siwc.status_valid": "本機有效",
   "siwc.status_invalid": "本機無效",

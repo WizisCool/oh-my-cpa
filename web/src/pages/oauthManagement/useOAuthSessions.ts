@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, describeError } from '../../api/client';
+import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
   resolveStartedOAuthFlow,
@@ -28,12 +28,15 @@ export interface OAuthSessionState {
   callbackSubmitting?: boolean;
   callbackStatus?: 'success' | 'error';
   callbackError?: string;
+  /** Selected proxy intent survives panel remounts; never contains the secret. */
+  requiresProxyReentry?: boolean;
 }
 
 export interface OAuthSessionsController {
   states: Record<string, OAuthSessionState>;
   activeProviders: string[];
-  start: (providerId: string) => Promise<void>;
+  start: (providerId: string, proxyUrl?: string) => Promise<void>;
+  startDefaultRoute: (providerId: string) => Promise<void>;
   cancel: (providerId: string) => Promise<void>;
   submitCallback: (providerId: string) => Promise<void>;
   check: (providerId: string) => Promise<void>;
@@ -87,6 +90,7 @@ export function useOAuthSessions(
   const disposedRef = React.useRef(false);
   const statusTimersRef = React.useRef<Record<string, number>>({});
   const statusReadFailuresRef = React.useRef<Record<string, string>>({});
+  const attemptUsesProxyRef = React.useRef<Record<string, boolean>>({});
   const successTimersRef = React.useRef<Record<string, number>>({});
   const checkQueuesRef = React.useRef<Record<string, Promise<void>>>({});
   const completedRef = React.useRef(onCompleted);
@@ -141,6 +145,7 @@ export function useOAuthSessions(
   const reset = React.useCallback((providerId: string) => {
     clearProviderTimers(providerId);
     delete statusReadFailuresRef.current[providerId];
+    delete attemptUsesProxyRef.current[providerId];
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
@@ -148,6 +153,7 @@ export function useOAuthSessions(
   const complete = React.useCallback((providerId: string, generation: number) => {
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
     clearProviderTimers(providerId);
+    delete attemptUsesProxyRef.current[providerId];
     updateProviderState(providerId, {
       url: undefined,
       state: undefined,
@@ -204,6 +210,8 @@ export function useOAuthSessions(
       }
       if (status === 'error') {
         const errorMessage = (response.message || response.error || '').trim() || t('oauth.status_failed');
+        const requiresProxyReentry = attemptUsesProxyRef.current[providerId] === true;
+        delete attemptUsesProxyRef.current[providerId];
         clearStatusTimer(providerId);
         updateProviderState(providerId, {
           status: 'error',
@@ -211,6 +219,7 @@ export function useOAuthSessions(
           polling: false,
           checkingDevice: false,
           error: errorMessage,
+          requiresProxyReentry,
           ...(choicesRef.current.find((choice) => choice.id === providerId)?.requiresExplicitCancel
             ? { url: undefined, state: undefined, flow: undefined, userCode: undefined, callbackUrl: '' }
             : {}),
@@ -254,11 +263,17 @@ export function useOAuthSessions(
     }, STATUS_POLL_INTERVAL_MS);
   }, [clearStatusTimer, enqueueCheck, performStatusCheck]);
 
-  const start = React.useCallback(async (providerId: string) => {
+  const startAttempt = React.useCallback(async (
+    providerId: string,
+    proxyUrl: string | undefined,
+    isDefaultRouteConfirmed: boolean,
+  ) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
     if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
+    if (current?.requiresProxyReentry && !proxyUrl?.trim() && !isDefaultRouteConfirmed) return;
+    attemptUsesProxyRef.current[providerId] = Boolean(proxyUrl?.trim());
     startInFlightRef.current[providerId] = true;
 
     clearProviderTimers(providerId);
@@ -269,10 +284,11 @@ export function useOAuthSessions(
       ...emptySession(),
       status: 'starting',
       starting: true,
+      requiresProxyReentry: false,
     });
 
     try {
-      const response = await api.startOAuthFlow(providerId);
+      const response = await api.startOAuthFlow(providerId, proxyUrl);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
       const flow = resolveStartedOAuthFlow(choice.flow, response);
@@ -289,17 +305,33 @@ export function useOAuthSessions(
       if (token) scheduleStatusPoll(providerId, token, generation);
     } catch (error: unknown) {
       if (generationRef.current[providerId] !== generation) return;
-      const errorMessage = describeError(error);
+      delete attemptUsesProxyRef.current[providerId];
+      const code = apiErrorCode(error);
+      const errorMessage = code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
+        : code === 'invalid_oauth_proxy' ? t('oauth.proxy_invalid')
+        : proxyUrl?.trim() && (code === 'cpa_unavailable' || code === 'cpa_rejected_request')
+          ? t('oauth.proxy_start_failed') : describeError(error);
       updateProviderState(providerId, {
         status: 'error',
         starting: false,
         error: errorMessage,
+        requiresProxyReentry: Boolean(proxyUrl?.trim()),
       });
       toast.error(t('oauth.status_error_badge', { msg: errorMessage }));
     } finally {
       startInFlightRef.current[providerId] = false;
     }
   }, [clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
+
+  const start = React.useCallback(
+    (providerId: string, proxyUrl?: string) => startAttempt(providerId, proxyUrl, false),
+    [startAttempt],
+  );
+
+  const startDefaultRoute = React.useCallback(
+    (providerId: string) => startAttempt(providerId, undefined, true),
+    [startAttempt],
+  );
 
   const cancel = React.useCallback(async (providerId: string) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
@@ -316,6 +348,7 @@ export function useOAuthSessions(
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       clearProviderTimers(providerId);
       if (response.cancelled) {
+        delete attemptUsesProxyRef.current[providerId];
         setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
         toast.info(t('oauth.session_cancelled'));
         return;
@@ -439,5 +472,6 @@ export function useOAuthSessions(
     check,
     setCallbackUrl,
     reset,
+    startDefaultRoute,
   };
 }

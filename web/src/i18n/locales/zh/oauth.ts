@@ -1,4 +1,11 @@
 export default {
+  "oauth.use_default_route": "使用 CPA 默认路由",
+  "oauth.session_proxy": "会话代理（可选）",
+  "oauth.session_proxy_hint": "留空使用 CPA 默认路由。支持 HTTP(S) 和 SOCKS5(H)。CPA 使用此代理完成授权，并将其保存到新账号以用于后续请求。不会更改网关共享设置。",
+  "oauth.proxy_upgrade_required": "请升级 CPA 以使用会话代理。未使用所选代理发起授权。",
+  "oauth.proxy_invalid": "请输入有效的 HTTP(S) 或 SOCKS5(H) 代理地址；SOCKS 代理必须包含端口。",
+  "oauth.proxy_start_failed": "无法使用所选代理发起授权。请检查代理和 CPA 连接，然后重新输入代理。",
+
   'siwc.status_off': '未使用',
   'siwc.status_valid': '本地有效',
   'siwc.status_invalid': '本地无效',

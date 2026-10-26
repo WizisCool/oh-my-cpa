@@ -2,6 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/authFiles';
 
 export default {
+  "af.field_proxy_auth_hint": "Pengesahan proksi tersimpan disamarkan. Untuk menukar laluan ini, masukkan URL proksi lengkap semula; biarkannya tidak berubah ketika menyunting medan lain.",
   "af.status_all": "Semua status",
   "af.enabled": "Didayakan",
   "af.disabled": "Dilumpuhkan",

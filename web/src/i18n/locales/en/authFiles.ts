@@ -2,6 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/authFiles';
 
 export default {
+  "af.field_proxy_auth_hint": "Saved proxy authentication is masked. To change this route, enter the complete proxy URL again; leave it unchanged when editing other fields.",
   'af.status_all': 'All statuses',
   'af.enabled': 'Enabled',
   'af.disabled': 'Disabled',

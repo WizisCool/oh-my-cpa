@@ -26,6 +26,12 @@ type oauthCPAState struct {
 	// lastAuthURLQuery records the is_webui value CPA received on the most
 	// recent authorization-URL request.
 	lastAuthURLQuery string
+	startCalls       int
+	startMethod      string
+	startQuery       string
+	startBody        map[string]any
+	startStatus      int
+	startResponse    string
 }
 
 func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *repository.Repository) {
@@ -39,6 +45,20 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 		path := request.URL.Path
 
 		provider := request.URL.Query().Get("provider")
+		if path == "/v8/management/oauth/auth-url" {
+			state.startCalls++
+			state.startMethod = request.Method
+			state.startQuery = request.URL.RawQuery
+			if request.Method == http.MethodPost {
+				_ = json.NewDecoder(request.Body).Decode(&state.startBody)
+				provider, _ = state.startBody["provider"].(string)
+			}
+			if state.startStatus != 0 {
+				writer.WriteHeader(state.startStatus)
+				_, _ = writer.Write([]byte(state.startResponse))
+				return
+			}
+		}
 		switch {
 		case path == "/v8/management/config/config-version":
 			_, _ = writer.Write([]byte("8"))
@@ -46,6 +66,9 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			_, _ = writer.Write([]byte(`{"url":"https://auth.example.test/authorize?client_id=nostate"}`))
 		case path == "/v8/management/oauth/auth-url":
 			isWebUI := request.URL.Query().Get("is_webui")
+			if state.startBody["is_webui"] == true {
+				isWebUI = "true"
+			}
 			state.lastAuthURLQuery = isWebUI
 			stateVal := "cpa-state-123"
 			if isWebUI == "true" {
@@ -452,5 +475,105 @@ func TestOAuthProviderRegistryWiring(t *testing.T) {
 	}
 	if metaStart.Flow != "device" || metaStart.UserCode != "META-1234" || metaStart.Expires != 900 {
 		t.Fatalf("device grant metadata was dropped: %s", payload)
+	}
+}
+
+// The facade is the lowest layer that can prove request forwarding, mandatory
+// attempt auditing, and the response/audit boundary together.
+func TestOAuthStartProxyBoundary(t *testing.T) {
+	const proxyURL = "socks5h://route-user:route-pass@127.0.0.1:1080"
+	for _, scenario := range []string{"selected", "default", "invalid", "query", "audit", "missing", "method", "unimplemented", "rejected", "reflected"} {
+		t.Run(scenario, func(t *testing.T) {
+			client, baseURL, state, repo := startOAuthTestServer(t)
+			body := `{"provider":"anthropic","proxy_url":"` + proxyURL + `"}`
+			endpoint := baseURL + "/omc/api/v1/management/oauth/start"
+			wantStatus, wantCalls := http.StatusOK, 1
+			switch scenario {
+			case "default":
+				body = `{"provider":"anthropic"}`
+			case "invalid":
+				body = `{"provider":"anthropic","proxy_url":"http://route-user:route-pass@host:0"}`
+				wantStatus, wantCalls = 400, 0
+			case "query":
+				endpoint += "?proxy_url=forbidden"
+				wantStatus, wantCalls = 400, 0
+			case "audit":
+				_, err := repo.SQL().Exec(`CREATE TRIGGER reject_oauth_attempt BEFORE INSERT ON audit_events WHEN NEW.action = 'oauth.start' AND NEW.result = 'attempt' BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantStatus, wantCalls = 500, 0
+			case "missing":
+				state.startStatus = 404
+				wantStatus = 501
+			case "method":
+				state.startStatus = 405
+				wantStatus = 501
+			case "unimplemented":
+				state.startStatus = 501
+				wantStatus = 501
+			case "rejected":
+				state.startStatus = 400
+				wantStatus = 502
+			case "reflected":
+				state.startStatus = 200
+				wantStatus = 502
+			}
+			if state.startStatus != 0 {
+				state.startResponse = `{"url":"https://auth.example.test/?proxy_url=` + proxyURL + `","state":"route-pass","error":"` + proxyURL + `"}`
+			}
+			if scenario == "invalid" {
+				for _, invalid := range []string{"://bad-url", "not-a-url", "ftp://127.0.0.1:21", "http://:8080", "http://127.0.0.1:99999", "http://127.0.0.1:0", "http://127.0.0.1:", "socks5://127.0.0.1", "socks5h://127.0.0.1", "direct", "none", "https://proxy.example.test/path", "https://proxy.example.test/?q=value", "https://proxy.example.test/#fragment", "http://route-user:route-pass@host:bad"} {
+					requestBody, _ := json.Marshal(map[string]string{"provider": "codex", "proxy_url": invalid})
+					response, _ := doJSON(t, client, http.MethodPost, endpoint, string(requestBody))
+					if response.StatusCode != 400 {
+						t.Fatal("invalid session proxy must be rejected before CPA")
+					}
+				}
+			}
+			response, payload := doJSON(t, client, http.MethodPost, endpoint, body)
+			if response.StatusCode != wantStatus {
+				t.Fatalf("status = %d, want %d", response.StatusCode, wantStatus)
+			}
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			if state.startCalls != wantCalls {
+				t.Fatalf("OAuth calls = %d, want %d", state.startCalls, wantCalls)
+			}
+			if scenario == "selected" {
+				want := `{"is_webui":true,"provider":"claude","proxy_url":"` + proxyURL + `"}`
+				got, _ := json.Marshal(state.startBody)
+				if state.startMethod != http.MethodPost || state.startQuery != "" || string(got) != want {
+					t.Fatal("selected proxy must use the exact mapped POST JSON contract without a query")
+				}
+			}
+			if scenario == "default" && (state.startMethod != http.MethodGet || state.startBody != nil) {
+				t.Fatal("omission must preserve the GET default")
+			}
+			events, err := repo.ListAuditEvents(context.Background(), 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			auditJSON, _ := json.Marshal(events)
+			for _, surface := range []string{string(payload), string(auditJSON)} {
+				for _, secret := range []string{proxyURL, "route-user", "route-pass"} {
+					if strings.Contains(surface, secret) {
+						t.Fatal("proxy material escaped into a response or audit")
+					}
+				}
+			}
+			startEvents := events[:0]
+			for _, event := range events {
+				if event.Action == "oauth.start" {
+					startEvents = append(startEvents, event)
+				}
+			}
+			if wantCalls > 0 && (len(startEvents) != 2 || startEvents[1].Result != "attempt") {
+				t.Fatal("start requires an attempt audit before its result")
+			}
+			if wantStatus == 501 && !strings.Contains(string(payload), "oauth_proxy_upgrade_required") {
+				t.Fatal("selected proxy on older CPA needs an explicit upgrade error")
+			}
+		})
 	}
 }

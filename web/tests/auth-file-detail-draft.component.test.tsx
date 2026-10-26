@@ -7,7 +7,7 @@ import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
 const FILE: ManagementAuthFile = { name: 'claude.json', auth_index: 'exact-claude', type: 'claude', provider: 'claude', disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, note: 'Original note' };
-const FIELDS = { name: FILE.name, note: FILE.note, disable_cooling: false, websockets: false, using_api: false, excluded_models: [], model_aliases: [] };
+const FIELDS = { proxy_url: 'socks5h://%5Bredacted%5D@proxy.example.test:1080', name: FILE.name, note: FILE.note, disable_cooling: false, websockets: false, using_api: false, excluded_models: [], model_aliases: [] };
 function mountDetail(holdSave?: Promise<void>) {
   const onClose = vi.fn(); const onSaved = vi.fn();
   const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }] });
@@ -61,6 +61,7 @@ it('keeps a warmup draft when saving actual credential field changes', async () 
   await waitFor(() => expect(surface.onSaved).toHaveBeenCalledOnce());
   expect(surface.onClose).not.toHaveBeenCalled();
   expect(surface.writes).toHaveLength(1);
+  expect(surface.writes[0]).not.toHaveProperty('proxy_url');
   expect((await screen.findByLabelText('Warmup draft') as HTMLInputElement).value).toBe('Unsaved warmup policy');
   surface.unmount();
 });

@@ -672,6 +672,24 @@ Every operation is addressed at its `/v8/management` route, with no fallback:
 | Credential cooldown reset | `/routing/cooldown/reset` |
 | Latest release | `/server/latest-version` |
 
+OAuth Connect also accepts optional `proxy_url` in OMC's `POST /management/oauth/start`
+request. A selected proxy is sent only in JSON to CPA's `POST /oauth/auth-url`, with
+mapped `provider` and the provider's existing `is_webui` flag. This capability requires
+upstream commit `27f3abfb70a6d05d4f11b49e5d0bc70c05e1ef14`; an unavailable POST
+returns upgrade guidance without starting through another route. Omitting the proxy
+keeps the existing GET contract and CPA's default routing. CPA owns exchange and
+per-account persistence; no shared proxy configuration is written. HTTP(S) proxies
+allow default ports; SOCKS5(H) proxies require an explicit port. The console accepts
+no proxy query parameters, paths beyond `/`, queries, fragments, or direct/inherit
+keywords. Proxy input stays ephemeral, and the required pre-start audit records only
+the provider, never the proxy. Existing safe credential readback shows the resulting
+routing setting with authentication masked. The credential editor keeps that masked
+value out of unrelated field patches; replacing the route requires the complete proxy
+URL, and submitting masked authentication is refused before reaching CPA. A proxied
+attempt that fails during start or later reports a terminal status error records only
+route intent: Retry and the primary action require a newly entered proxy, while an
+explicit default-route action lets the operator abandon that intent. CPA and audit failures retain their actionable safe error messages.
+
 The shared login endpoint names Claude `claude`, while the console and CPA's credential
 files call it `anthropic`; `OAuthProvider.LoginProvider` carries the difference. Plugin
 login providers are served by the same endpoint.

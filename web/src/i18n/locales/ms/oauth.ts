@@ -2,6 +2,13 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/oauth';
 
 export default {
+  "oauth.use_default_route": "Gunakan laluan lalai CPA",
+  "oauth.session_proxy": "Proksi sesi (pilihan)",
+  "oauth.session_proxy_hint": "Biarkan kosong untuk menggunakan laluan lalai CPA. Menyokong HTTP(S) dan SOCKS5(H). CPA menggunakan proksi ini untuk kebenaran dan menyimpannya pada akaun baharu untuk permintaan seterusnya. Tetapan get laluan kongsi tidak berubah.",
+  "oauth.proxy_upgrade_required": "Naik taraf CPA untuk menggunakan proksi bagi sesi kebenaran ini. Tiada kebenaran dimulakan dengan proksi yang dipilih.",
+  "oauth.proxy_invalid": "Masukkan URL proksi HTTP(S) atau SOCKS5(H) yang sah; proksi SOCKS memerlukan port.",
+  "oauth.proxy_start_failed": "Tidak dapat memulakan kebenaran dengan proksi yang dipilih. Semak proksi dan sambungan CPA, kemudian masukkan proksi semula.",
+
   "siwc.status_off": "Dimatikan",
   "siwc.status_valid": "Sah secara setempat",
   "siwc.status_invalid": "Tidak sah secara setempat",

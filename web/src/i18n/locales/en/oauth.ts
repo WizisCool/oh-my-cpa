@@ -2,6 +2,13 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/oauth';
 
 export default {
+  "oauth.use_default_route": "Use CPA’s default route",
+  "oauth.session_proxy": "Session proxy (optional)",
+  "oauth.session_proxy_hint": "Leave empty to use CPA’s default route. Supports HTTP(S) and SOCKS5(H). CPA uses this proxy for authorization and saves it on the resulting account for future requests. Shared gateway settings are unchanged.",
+  "oauth.proxy_upgrade_required": "Upgrade CPA to use a proxy for this authorization session. No authorization was started with the selected proxy.",
+  "oauth.proxy_invalid": "Enter a valid HTTP(S) or SOCKS5(H) proxy URL; SOCKS proxies require a port.",
+  "oauth.proxy_start_failed": "Could not start authorization with the selected proxy. Check the proxy and CPA connection, then enter the proxy again.",
+
   'siwc.status_off': 'Off',
   'siwc.status_valid': 'Locally valid',
   'siwc.status_invalid': 'Locally invalid',
