@@ -338,6 +338,12 @@ export const OAuthManagementPage: React.FC = () => {
     });
   }, [records]);
 
+  const selectableFilteredRecords = React.useMemo(
+    () => visibleRecords.filter((record) => record.canSelectForFileBatch),
+    [visibleRecords],
+  );
+  const hasUnselectedFilteredRecords = selectableFilteredRecords.some((record) => !selectedKeySet.has(record.key));
+
   const [selectedIdentity, setSelectedIdentity] = React.useState<SelectedIdentity>();
   const [drawerSection, setDrawerSection] = React.useState<'overview' | 'configuration' | 'models'>('overview');
   const selectedRecord = selectedIdentity
@@ -698,24 +704,6 @@ export const OAuthManagementPage: React.FC = () => {
         pluginLogos={pluginLogos}
       />
 
-      <BatchActionBar
-        selectedCount={selectedRecords.length}
-        selectablePageCount={pagedRecords.filter((record) => record.canSelectForFileBatch).length}
-        hiddenCount={hiddenSelectionCount}
-        isMutating={actions.isOperating}
-        onSelectPage={() => {
-          const keys = pagedRecords.filter((record) => record.canSelectForFileBatch).map((record) => record.key);
-          setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
-        }}
-        onClearSelection={() => setSelectedKeys([])}
-        onEnable={() => void actions.batchStatus(false, selectedRecords)}
-        onDisable={() => void actions.batchStatus(true, selectedRecords)}
-        onRefresh={() => void actions.batchRefresh(selectedRecords)}
-        // The demonstration never contacts a provider, so it refuses a refresh.
-        canRefresh={!isDemo}
-        onDelete={() => void actions.batchDelete(selectedRecords)}
-      />
-
       <Toolbar className={styles.toolbar}>
         <div className={styles.search}>
           <SearchInput
@@ -831,6 +819,31 @@ export const OAuthManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <BatchActionBar
+        selectedCount={selectedRecords.length}
+        selectablePageCount={pagedRecords.filter((record) => record.canSelectForFileBatch).length}
+        selectableFilteredCount={selectableFilteredRecords.length}
+        canSelectFiltered={hasUnselectedFilteredRecords}
+        isSelectionReady={isViewLoaded}
+        onSelectFiltered={() => {
+          const keys = selectableFilteredRecords.map((record) => record.key);
+          setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
+        }}
+        hiddenCount={hiddenSelectionCount}
+        isMutating={actions.isOperating}
+        onSelectPage={() => {
+          const keys = pagedRecords.filter((record) => record.canSelectForFileBatch).map((record) => record.key);
+          setSelectedKeys((previous) => Array.from(new Set([...previous, ...keys])));
+        }}
+        onClearSelection={() => setSelectedKeys([])}
+        onEnable={() => void actions.batchStatus(false, selectedRecords)}
+        onDisable={() => void actions.batchStatus(true, selectedRecords)}
+        onRefresh={() => void actions.batchRefresh(selectedRecords)}
+        // The demonstration never contacts a provider, so it refuses a refresh.
+        canRefresh={!isDemo}
+        onDelete={() => void actions.batchDelete(selectedRecords)}
+      />
 
       {filesQuery.isPending && !filesQuery.data ? (
         <LoadingRegion>

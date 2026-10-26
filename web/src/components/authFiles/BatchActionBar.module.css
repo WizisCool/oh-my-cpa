@@ -1,0 +1,71 @@
+.bar:global(.is-inline) {
+  margin-bottom: 12px;
+  padding: 8px 0;
+  gap: 12px 16px;
+  background: transparent;
+  border-block: 1px solid var(--border-soft);
+}
+
+.bar :global(.selection-bar-start) {
+  flex: 1 1 420px;
+  gap: 8px 16px;
+}
+
+.scope-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.destructive-action {
+  padding-inline-start: 12px;
+  margin-inline-start: 4px;
+  border-inline-start: 1px solid var(--border-soft);
+}
+
+@media (max-width: 640px) {
+  .bar :global(.selection-bar-start) {
+    flex-basis: 100%;
+  }
+
+  .scope-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .scope-controls > :global(.ant-btn) {
+    height: auto;
+    min-height: 24px;
+    white-space: normal;
+  }
+
+  .scope-filtered {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .scope-clear {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .bar :global(.selection-bar-actions) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-inline-start: 0;
+    gap: 8px;
+  }
+
+  .destructive-action {
+    padding-inline-start: 0;
+    margin-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  .destructive-action > :global(.ant-btn) {
+    width: 100%;
+  }
+}

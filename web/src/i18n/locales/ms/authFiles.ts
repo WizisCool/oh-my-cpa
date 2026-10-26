@@ -66,6 +66,7 @@ export default {
   "af.batch_enable_success": "Mendayakan kredensial {n}.",
   "af.batch_disable_success": "Melumpuhkan kredensial {n}.",
   "af.select_page": "Pilih Halaman Semasa",
+  "af.select_filtered": "Pilih semua hasil ditapis ({n})",
   "af.clear_selection": "Kosongkan Pilihan",
   "af.runtime_only_badge": "Masa Jalan Sahaja",
   "af.warning_status": "Amaran Status",

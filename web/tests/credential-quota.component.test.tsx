@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/i18n';
@@ -446,6 +446,57 @@ describe('provider sections across pages', () => {
       fireEvent.click(screen.getByTitle('2'));
       await waitFor(() => expect(visibleIdentities()).toEqual(['account-13']));
       expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(headers);
+    } finally { view.unmount(); }
+  });
+
+  it('adds every eligible filtered credential across pages without expanding the filter or replacing selection', async () => {
+    const matchingFiles = Array.from({ length: 13 }, (_, index) => file(`account-${String(index + 1).padStart(2, '0')}`));
+    const files = [
+      ...matchingFiles,
+      file('outside'),
+      file('account-other-provider', { type: 'claude' }),
+      file('account-disabled', { disabled: true }),
+      file('account-observed'),
+      file('account-runtime', { runtime_only: true }),
+      file('account-duplicate', { auth_index: 'duplicate-1' }),
+      file('account-duplicate', { auth_index: 'duplicate-2' }),
+    ];
+    const api = installOmcApi({ authFiles: files.map(entry => ({ file: entry, fields: {} })) });
+    api.on('GET', '/management/quota', () => ({ quotas: [quota('account-observed', [quotaWindow('weekly', 80, 100)])] }));
+    api.on('PATCH', '/management/auth-files/status', request => ({ status: 'ok', name: (request.body as { name: string }).name }));
+    const router = createMemoryRouter([{ path: '*', element: <OAuthManagementPage /> }], {
+      initialEntries: ['/oauth-management?q=outside&page_size=12'],
+    });
+    const view = renderWithOmc(<RouterProvider router={router} />);
+    const filteredRoute = '/oauth-management?q=account&provider=codex&status=enabled&quota=unobserved&page_size=12&page=2';
+    try {
+      expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select outside' }));
+      expect(screen.getByRole('region', { name: '1 selected' })).toBeTruthy();
+      await act(async () => { await router.navigate(filteredRoute); });
+      await screen.findByRole('checkbox', { name: 'Select account-13' });
+      fireEvent.click(screen.getByRole('button', { name: 'Select Current Page' }));
+      expect(screen.getByRole('region', { name: '2 selected' })).toBeTruthy();
+      const selectFiltered = screen.getByRole('button', { name: 'Select all filtered (13)' });
+      fireEvent.click(selectFiltered);
+      expect(screen.getByRole('region', { name: '14 selected' })).toBeTruthy();
+      expect((selectFiltered as HTMLButtonElement).disabled).toBe(true);
+      expect(router.state.location.search).toBe(new URL(filteredRoute, 'http://localhost').search);
+      expect((screen.getByRole('checkbox', { name: 'Select account-13' }) as HTMLInputElement).checked).toBe(true);
+      expect(screen.getAllByRole('checkbox', { name: 'Select account-duplicate' }).every(input => !(input as HTMLInputElement).checked)).toBe(true);
+
+      fireEvent.click(screen.getByRole('button', { name: /Clear Selection/ }));
+      expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select account-13' }));
+      const selectFilteredAgain = screen.getByRole('button', { name: 'Select all filtered (13)' });
+      fireEvent.click(selectFilteredAgain);
+      fireEvent.click(screen.getByRole('button', { name: 'Batch Disable' }));
+      await waitFor(() => expect(api.writes('/management/auth-files/status')).toHaveLength(13));
+      expect(api.writes('/management/auth-files/status').map(request => request.body)).toEqual(
+        matchingFiles.map(entry => ({ name: entry.name, disabled: true, auth_index: entry.auth_index })),
+      );
+      await waitFor(() => expect(screen.queryByRole('region', { name: '0 selected' })).toBeNull());
     } finally { view.unmount(); }
   });
 

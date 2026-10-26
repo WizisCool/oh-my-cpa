@@ -63,6 +63,7 @@ export default {
   'af.batch_enable_success': '已启用 {n} 个凭证',
   'af.batch_disable_success': '已禁用 {n} 个凭证',
   'af.select_page': '全选当前页',
+  'af.select_filtered': '全选筛选结果（{n}）',
   'af.clear_selection': '取消选择',
   'af.runtime_only_badge': '运行时虚拟',
   'af.warning_status': '状态告警',

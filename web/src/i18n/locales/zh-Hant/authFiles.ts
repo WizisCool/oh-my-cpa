@@ -66,6 +66,7 @@ export default {
   "af.batch_enable_success": "已啟用 {n} 個憑證",
   "af.batch_disable_success": "已禁用 {n} 個憑證",
   "af.select_page": "全選目前頁",
+  "af.select_filtered": "全選篩選結果（{n}）",
   "af.clear_selection": "取消選擇",
   "af.runtime_only_badge": "執行時虛擬",
   "af.warning_status": "狀態告警",
