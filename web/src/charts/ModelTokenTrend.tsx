@@ -5,7 +5,7 @@ import { renderChartTooltip } from './chartTooltip';
 import { buildModelTrendSeries } from './modelTrendData';
 import { useTheme } from '../theme/ThemeContext';
 import { EChart } from './echarts/EChart';
-import type { ECharts, EChartsCoreOption } from './echarts/core';
+import type { EChartsCoreOption } from './echarts/core';
 import { seriesColorRange, seriesDomainKey, seriesGroupLabel } from './chartTheme';
 import { currentFontStack } from '../theme/fontLibrary';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
@@ -14,33 +14,30 @@ import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 
 export interface ModelTokenTrendProps {
   groups: DashboardModelUsage[];
-  /** A non-empty subset keeps the legend's full colour domain while drawing only the chosen lines. */
-  visibleKeys?: readonly string[];
+  /** A pinned group is emphasised while every other line stays painted for comparison. */
+  focusedKey?: string | null;
   foldedLabel: string;
   unnamedLabel: string;
   tokenUnitLabel?: string;
   height?: number;
-  /** A painted line selects its group; the background clears the selection. */
-  onSelectGroup?: (key: string | null) => void;
-  onApplied?: (chart: ECharts) => void;
+  /** A painted line toggles its group; the background clears the focus. */
+  onFocusGroup?: (key: string) => void;
+  onClearFocus?: () => void;
 }
 
 /** Lines separate overlapping model readings; their DOM legend owns the ranked color assignment. */
 export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
-  groups, visibleKeys, foldedLabel, unnamedLabel, tokenUnitLabel = '', height = 260, onSelectGroup, onApplied,
+  groups, focusedKey = null, foldedLabel, unnamedLabel, tokenUnitLabel = '', height = 260, onFocusGroup, onClearFocus,
 }) => {
   const timeZone = useTimeZone();
   const { theme } = useTheme();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const visibleGroups = React.useMemo(
-    () => (visibleKeys?.length ? groups.filter((group) => visibleKeys.includes(seriesDomainKey(group))) : groups),
-    [groups, visibleKeys],
-  );
   const option = React.useMemo<EChartsCoreOption>(() => {
-    const { categories, series } = buildModelTrendSeries(visibleGroups);
-    const domain = visibleGroups.map(seriesDomainKey);
+    const { categories, series } = buildModelTrendSeries(groups);
+    const domain = groups.map(seriesDomainKey);
     const range = seriesColorRange(theme.palette, groups);
     const colorIndex = new Map(groups.map((group, index) => [seriesDomainKey(group), index]));
+    const hasFocus = focusedKey !== null;
     const labelOf = (key: string) => seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel);
     const labelFormat = Number(categories.at(-1)) - Number(categories[0]) > 24 * 60 * 60 * 1000 ? 'MM-DD' : 'HH:mm';
     const ticks = new Set(Array.from({ length: Math.min(4, categories.length) }, (_, index) =>
@@ -78,27 +75,35 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
           }));
         },
       },
-      series: series.map((item) => ({
-        id: item.id, name: labelOf(item.id), type: 'line', data: item.values,
-        smooth: true, smoothMonotone: 'x', showSymbol: false, symbol: 'circle', symbolSize: 5,
-        lineStyle: { color: range[colorIndex.get(item.id) ?? 0], width: 1.75, cap: 'round', join: 'round' },
-        itemStyle: { color: range[colorIndex.get(item.id) ?? 0] },
-        emphasis: { focus: 'series', lineStyle: { width: 2.5 } },
-        blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
-      })),
+      series: series.map((item) => {
+        const isFocused = item.id === focusedKey;
+        const isDimmed = hasFocus && !isFocused;
+        return {
+          id: item.id, name: labelOf(item.id), type: 'line', data: item.values,
+          smooth: true, smoothMonotone: 'x', showSymbol: false, symbol: 'circle', symbolSize: 5,
+          triggerEvent: 'line',
+          lineStyle: {
+            color: range[colorIndex.get(item.id) ?? 0], width: isFocused ? 2.75 : 1.75,
+            opacity: isDimmed ? 0.35 : 1, cap: 'round', join: 'round',
+          },
+          itemStyle: { color: range[colorIndex.get(item.id) ?? 0], opacity: isDimmed ? 0.4 : 1 },
+          emphasis: { focus: 'series', lineStyle: { width: 2.5, opacity: 1 }, itemStyle: { opacity: 1 } },
+          blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
+        };
+      }),
     };
-  }, [groups, visibleGroups, theme.palette, foldedLabel, unnamedLabel, tokenUnitLabel, tokenStyle, timeZone]);
+  }, [groups, focusedKey, theme.palette, foldedLabel, unnamedLabel, tokenUnitLabel, tokenStyle, timeZone]);
   const seriesIds = React.useMemo(
     () => (option.series as Array<{ id: string }>).map((series) => series.id),
     [option],
   );
   const handlers = React.useMemo(() => ({
-    backgroundClick: () => onSelectGroup?.(null),
+    backgroundClick: () => onClearFocus?.(),
     click: (params: unknown) => {
       const item = params as { seriesId?: string; seriesIndex?: number };
       const key = item.seriesId ?? (item.seriesIndex === undefined ? undefined : seriesIds[item.seriesIndex]);
-      if (key !== undefined) onSelectGroup?.(key);
+      if (key !== undefined) onFocusGroup?.(key);
     },
-  }), [onSelectGroup, seriesIds]);
-  return <div className="model-trend"><EChart option={option} height={height} label={visibleGroups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')} handlers={handlers} onApplied={onApplied} /></div>;
+  }), [onClearFocus, onFocusGroup, seriesIds]);
+  return <div className="model-trend"><EChart option={option} height={height} label={groups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')} handlers={handlers} /></div>;
 });

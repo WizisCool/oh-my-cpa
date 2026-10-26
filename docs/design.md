@@ -902,9 +902,10 @@ floor is what makes a quiet stretch read as zero rather than as absent data.
 `--border`, labels use `--fg-2`, and the pointer uses `--muted`. The shared ECharts theme follows the
 console palette in place, and the browser probe matches actual SVG strokes and text fills in both
 modes. Legend entries and painted lines are selection controls: clicking a model name focuses its
-series, any non-empty subset is the only set drawn, and clicking the plot background restores every
-line. Hovering a name does not change which series are visible; the tooltip retains legend order and
-explicitly lists quiet groups as zero.
+series as a highlight, while every other line stays painted but faded and the tooltip keeps the full
+ranking for comparison. Clicking the same entry or the plot background clears the highlight. Hovering
+a name does not change the highlight; the tooltip retains legend order and explicitly lists quiet
+groups as zero.
 
 **Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
 same instant forty-eight times across a half-width card. The first and last bucket are always among the
@@ -921,8 +922,10 @@ one ranked list produces both.
 **The ring's centre is DOM**, and it is the model read's own total rather than the KPI tile's. The two
 read on different cadences, so borrowing the tile's number would let the centre disagree with the
 slices drawn around it. With no selection the centre, the ring and the ranked list all use the full
-window total. A selection narrows the ring and makes the centre and hover share use the visible total,
-while the ranked list keeps each model's share of the full window so the list remains comparable.
+window total. Clicking a ranked name or a slice pins that group without removing any slice: the
+selected slice stays fully opaque, the centre reports its tokens and share of the full window, and
+the other slices remain readable for comparison. Clicking the same entry or the ring background
+restores the total.
 
 **The ranked list is the ring's legend and its values in one.** A separate library legend would print
 the same ranking a second time with no numbers, and a reader comparing two models needs the numbers: a
@@ -937,10 +940,10 @@ the ring near the top of the card and made the unused space below look like a mi
 **Both marks share the lazy SVG ECharts runtime** (`vendor-echarts`, ADR 0106) with Insights and
 morph between revisions on §7's `roll` token. The ring uses 66%/92% inner/outer radii, 1.5-degree gaps
 and 3px rounded slice corners. A slice expands by 4px on emphasis. Clicking a ranked model name toggles
-that slice in the ring; clicking a painted slice focuses it, and clicking the ring's background restores
-the full set. Hovering a slice swaps the DOM centre to that model's tokens and share, restoring the
-visible total on leave; hovering a ranked name does not. The ring is not a chart-runtime heatmap, so
-ADR 0005's DOM grid is untouched.
+that slice's highlight; clicking a painted slice toggles it, and clicking the ring's background clears
+the highlight. Every slice remains painted. Hovering a slice supplies its tooltip but does not change
+the DOM centre; hovering a ranked name has no chart effect. The ring is not a chart-runtime heatmap,
+so ADR 0005's DOM grid is untouched.
 
 **The usage list's columns are one grid, not one per row.** The tracks are declared on the list and the
 rows inherit them as a subgrid. Per-row tracks resolve against each row's own content, so one amount a
@@ -962,8 +965,9 @@ retaining either dimension from an earlier layout.
 
 **The ring hover states the group, its volume and its share**, matching the trend's tooltip rather than
 the share being left to the list alone. A slice is read as a fraction of the ring, so the percentage is
-part of what is being pointed at; it is derived from the same visible total the centre reports, so the
-readout and the centre cannot disagree. A slice carries its stable series-domain key as its datum name.
+part of what is being pointed at; it is derived from the same full-window total the unfocused centre
+reports, so the tooltip, ranked list and centre cannot disagree. A slice carries its stable
+series-domain key as its datum name.
 The ECharts tooltip formatter resolves that key with the shared translated group-label function, so
 the tooltip, ranked list and centre use the same readable name.
 

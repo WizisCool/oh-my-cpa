@@ -152,27 +152,21 @@ export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
   hasViewToggle?: boolean;
 }
 
-/** Click selection shared by the two cards: an empty set means every ranked group is shown. */
-function useSeriesSelection(groups: DashboardModelUsage[]) {
-  const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
+/**
+ * Click focus shared by the two cards. Focus is a reading aid, never a filter: the other groups stay
+ * on screen and in the tooltip, because the selected model's shape only means something beside them.
+ */
+function useSeriesFocus(groups: DashboardModelUsage[]) {
+  const [focusedKey, setFocusedKey] = React.useState<string | null>(null);
   const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
-  const visibleKeys = React.useMemo(
-    () => selectedKeys.filter((key) => availableKeys.has(key)),
-    [availableKeys, selectedKeys],
-  );
   React.useEffect(() => {
-    setSelectedKeys((current) => {
-      const next = current.filter((key) => availableKeys.has(key));
-      return next.length === current.length ? current : next;
-    });
+    setFocusedKey((current) => (current !== null && !availableKeys.has(current) ? null : current));
   }, [availableKeys]);
   const toggleSeries = React.useCallback((key: string) => {
-    setSelectedKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+    setFocusedKey((current) => (current === key ? null : key));
   }, []);
-  const selectSeries = React.useCallback((key: string | null) => {
-    setSelectedKeys(key === null ? [] : [key]);
-  }, []);
-  return { selectedKeys: visibleKeys, toggleSeries, selectSeries };
+  const clearFocus = React.useCallback(() => setFocusedKey(null), []);
+  return { focusedKey, toggleSeries, clearFocus };
 }
 
 const ModelSeriesName: React.FC<{
@@ -196,7 +190,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
-  const { selectedKeys, toggleSeries, selectSeries } = useSeriesSelection(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
 
   return (
     <Panel
@@ -215,9 +209,9 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
               id: key,
               color: seriesColor(theme.palette, index),
               content: <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />,
-              title: t('dash.models.focus_series'),
-              isPressed: selectedKeys.includes(key),
-              isDimmed: selectedKeys.length > 0 && !selectedKeys.includes(key),
+              title: t(focusedKey === key ? 'dash.models.clear_series_focus' : 'dash.models.focus_series'),
+              isPressed: focusedKey === key,
+              isDimmed: focusedKey !== null && focusedKey !== key,
               onToggle: () => toggleSeries(key),
             };
           })}
@@ -226,7 +220,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
           <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
           <React.Suspense fallback={chartFallback}>
-            <LazyModelTokenTrend groups={groups} visibleKeys={selectedKeys} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onSelectGroup={selectSeries} />
+            <LazyModelTokenTrend groups={groups} focusedKey={focusedKey} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onFocusGroup={toggleSeries} onClearFocus={clearFocus} />
           </React.Suspense>
         )}
       </ModelPanelBody>
@@ -244,7 +238,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const total = models.data?.total_tokens ?? 0;
-  const { selectedKeys, toggleSeries, selectSeries } = useSeriesSelection(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
 
   return (
     <Panel
@@ -258,7 +252,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
         ) : (
           <div className="model-usage-body">
             <React.Suspense fallback={chartFallback}>
-              <LazyModelUsageDonut groups={groups} visibleKeys={selectedKeys} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} onSelectGroup={selectSeries} />
+              <LazyModelUsageDonut groups={groups} totalTokens={total} focusedKey={focusedKey} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} onFocusGroup={toggleSeries} onClearFocus={clearFocus} />
             </React.Suspense>
             {/*
               The ranked list is the ring's legend, its label column and its values in one. A separate
@@ -279,9 +273,9 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
                     <button
                       type="button"
                       className={clsx('model-usage-name-button', selectionStyles['selection-control'])}
-                      aria-pressed={selectedKeys.includes(seriesDomainKey(group))}
-                      data-dimmed={selectedKeys.length > 0 && !selectedKeys.includes(seriesDomainKey(group))}
-                      title={t('dash.models.focus_series')}
+                      aria-pressed={focusedKey === seriesDomainKey(group)}
+                      data-dimmed={focusedKey !== null && focusedKey !== seriesDomainKey(group)}
+                      title={t(focusedKey === seriesDomainKey(group) ? 'dash.models.clear_series_focus' : 'dash.models.focus_series')}
                       onClick={() => toggleSeries(seriesDomainKey(group))}
                     >
                       <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />

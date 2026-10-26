@@ -115,37 +115,58 @@ export async function dashboardModelPanels({ base, page, check }) {
   });
   await page.mouse.move(target.x, target.y);
   await page.locator('.model-ring .omc-tip').waitFor({ state: 'visible' });
-  check('a hovered slice reports its model, tokens and share in the centre', (await page.locator('.model-ring').getAttribute('aria-label')).includes(list[0].name) && await page.locator('.model-ring-unit').innerText() === list[0].share);
+  check('hovering a slice reports its tooltip without pinning the centre', (await page.locator('.model-ring').getAttribute('aria-label')) === totalLabel);
   await checkDashboardTooltipRows({ page, check }, '.model-ring .omc-tip', 'Model usage ring', { hasNames: true, hasShares: true });
   await page.mouse.move(0, 0);
   await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'ring total restored after slice leave' });
 
   await firstRow.locator('.model-usage-name-button').click();
-  const selectedRingSlices = await until(async () => {
-    const count = await page.evaluate(async () => {
-      const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-      return echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data.length;
-    });
-    return count === 1 ? count : null;
-  }, { label: 'the usage name to focus one ring slice' });
-  check('clicking a usage name focuses its slice and marks the row selected', selectedRingSlices === 1
-    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'true');
-  await firstRow.locator('.model-usage-name-button').click();
-  await until(async () => await page.evaluate(async () => {
+  await until(async () => (await page.locator('.model-ring').getAttribute('aria-label')).includes(list[0].name), { label: 'the usage name to focus one ring slice' });
+  const focusedRing = await page.evaluate(async () => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-    return echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data.length === 6;
-  }), { label: 'the usage selection to restore every slice' });
+    const data = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data;
+    return { count: data.length, opacities: data.map((item) => item.itemStyle.opacity) };
+  });
+  check('clicking a usage name highlights its slice without hiding the other slices', focusedRing.count === 6
+    && focusedRing.opacities.filter((opacity) => opacity === 1).length === 1
+    && focusedRing.opacities.filter((opacity) => opacity < 1).length === 5
+    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'true'
+    && await page.locator('.model-ring-unit').innerText() === list[0].share, JSON.stringify(focusedRing));
+  await firstRow.locator('.model-usage-name-button').click();
+  await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'the usage selection to restore the centre' });
+  const restoredRing = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const data = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data;
+    return { count: data.length, opacities: data.map((item) => item.itemStyle.opacity) };
+  });
+  check('clearing the usage highlight restores every slice at full opacity', restoredRing.count === 6 && restoredRing.opacities.every((opacity) => opacity === 1)
+    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'false', JSON.stringify(restoredRing));
 
   const selectedLegend = page.locator('[data-testid="model-trend-legend"] button').nth(1);
+  await selectedLegend.hover();
+  const hoveredTrend = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    return echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series
+      .map((series) => ({ width: series.lineStyle.width, opacity: series.lineStyle.opacity }));
+  });
+  check('hovering a trend legend entry does not highlight a line', hoveredTrend.every((series) => series.width === 1.75 && series.opacity === 1), JSON.stringify(hoveredTrend));
   await selectedLegend.click();
-  await until(async () => await page.evaluate(() => {
-    return document.querySelector('.model-trend .omc-echart').getAttribute('aria-label') === document.querySelectorAll('[data-testid="model-trend-legend"] button')[1].textContent;
-  }), { label: 'the trend legend to focus one line' });
-  const selectedLineCount = await until(() => page.evaluate((colors) => {
-    const paths = [...document.querySelectorAll('.model-trend svg path')];
-    const count = colors.filter((color) => paths.some((path) => path.getAttribute('stroke') === color)).length;
-    return count === 1 ? count : null;
-  }, paint.colors), { label: 'the focused trend line to be the only one painted' });
+  await until(async () => await selectedLegend.getAttribute('aria-pressed') === 'true', { label: 'the trend legend to pin one line' });
+  const focusedTrend = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const option = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption();
+    return {
+      count: option.series.length,
+      lines: option.series.map((series) => ({ name: series.name, width: series.lineStyle.width, opacity: series.lineStyle.opacity })),
+      label: document.querySelector('.model-trend .omc-echart').getAttribute('aria-label'),
+    };
+  });
+  check('clicking a trend legend entry highlights one line while every line stays painted',
+    focusedTrend.count === 6
+      && focusedTrend.lines.filter((series) => series.width === 2.75 && series.opacity === 1).length === 1
+      && focusedTrend.lines.filter((series) => series.opacity === 0.35).length === 5
+      && focusedTrend.label === [...await page.locator('[data-testid="model-trend-legend"] button').allTextContents()].join(', '),
+    JSON.stringify(focusedTrend));
   await page.locator('.model-trend').scrollIntoViewIfNeeded();
   const trendBox = await page.locator('.model-trend').boundingBox();
   await page.mouse.move(trendBox.x + trendBox.width / 2, trendBox.y + trendBox.height / 2);
@@ -154,15 +175,42 @@ export async function dashboardModelPanels({ base, page, check }) {
     names: [...tip.querySelectorAll('.omc-tip-name')].map((name) => name.textContent),
     color: getComputedStyle(tip.querySelector('.omc-tip-swatch')).backgroundColor,
   }));
-  check('clicking a trend legend entry paints only its line, marks the entry selected, and keeps its tooltip colour',
-    selectedLineCount === 1 && await selectedLegend.getAttribute('aria-pressed') === 'true'
-      && selectedTooltip.names.length === 1 && selectedTooltip.names[0] === legend[1].name && selectedTooltip.color === legend[1].color,
+  check('the highlighted trend keeps the full tooltip ranking',
+    selectedTooltip.names.length === 6 && selectedTooltip.names.includes(legend[1].name),
     JSON.stringify(selectedTooltip));
   await page.mouse.move(0, 0);
   await selectedLegend.click();
-  await until(async () => await page.evaluate(() => {
-    return document.querySelector('.model-trend .omc-echart').getAttribute('aria-label') === [...document.querySelectorAll('[data-testid="model-trend-legend"] button')].map((button) => button.textContent).join(', ');
-  }), { label: 'the trend selection to restore every line' });
+  await until(async () => await selectedLegend.getAttribute('aria-pressed') === 'false', { label: 'the trend highlight to clear' });
+  const restoredTrend = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    return echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series
+      .map((series) => ({ width: series.lineStyle.width, opacity: series.lineStyle.opacity }));
+  });
+  check('clearing the trend highlight restores every line to its resting weight', restoredTrend.every((series) => series.width === 1.75 && series.opacity === 1), JSON.stringify(restoredTrend));
+  const lineTarget = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const host = document.querySelector('.model-trend .omc-echart');
+    const chart = echarts.getInstanceByDom(host);
+    const series = chart.getOption().series[0];
+    const values = series.data.map(Number);
+    const dataIndex = values.indexOf(Math.max(...values));
+    const point = chart.convertToPixel({ seriesIndex: 0 }, [dataIndex, values[dataIndex]]);
+    const box = host.getBoundingClientRect();
+    return { x: box.left + point[0], y: box.top + point[1] };
+  });
+  await page.mouse.click(lineTarget.x, lineTarget.y);
+  await until(async () => await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').count() === 1, {
+    label: 'a painted trend line to pin its legend entry',
+  });
+  const lineFocus = await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    return echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption().series
+      .map((series) => series.lineStyle.opacity);
+  });
+  check('clicking a painted trend line pins one legend entry without hiding the other lines', lineFocus.length === 6
+    && lineFocus.filter((opacity) => opacity === 1).length === 1 && lineFocus.filter((opacity) => opacity < 1).length === 5,
+  JSON.stringify(lineFocus));
+  await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').click();
   const surfaces = [];
   for (const theme of ['omc-light', 'omc-dark']) {
     await page.evaluate((theme) => localStorage.setItem('omc-theme', theme), theme);
