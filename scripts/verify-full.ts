@@ -48,7 +48,7 @@ export async function runFullVerification({ execute = runChecks, isSerial = fals
     }
     // The demo has its own server; keep it out of the CPU-sensitive browser group.
     const hasPassedDemo = await runGroup([{ label: 'demo', command: 'pnpm', args: ['verify:demo'] }]);
-    return hasPassedBundle && hasPassedBrowser && hasPassedDemo;
+    return !cancellation.signal.aborted && hasPassedBundle && hasPassedBrowser && hasPassedDemo;
   } finally {
     process.removeListener('SIGTERM', cancel);
     process.removeListener('SIGINT', cancel);
