@@ -44,6 +44,7 @@ export default {
   "dash.models.cost_partial": "{priced}/{total} permintaan berharga",
   "dash.models.folded": "Model lain",
   "dash.models.unnamed": "Model tidak dinamakan",
+  "dash.models.focus_series": "Klik untuk fokus pada siri ini",
   "dash.models.empty": "Tiada penggunaan model dalam tetingkap masa ini",
   "dash.models.error": "Gagal memuatkan penggunaan model",
   "dash.models.stale": "Penggunaan model menyegarkan gagal; menunjukkan bacaan terakhir yang berjaya",

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Segmented, Tooltip } from 'antd';
+import { clsx } from 'clsx';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
@@ -7,8 +8,6 @@ import { useT } from '../../i18n';
 import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { seriesColor, seriesDomainKey, seriesGroupLabel as groupLabel } from '../../charts/chartTheme';
 import { useTheme } from '../../theme/ThemeContext';
-import type { ECharts } from '../../charts/echarts/core';
-import type { ThemePalette } from '../../theme/palette';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   DASHBOARD_MODELS_QUERY_KEY,
@@ -24,6 +23,9 @@ import { formatCost } from '../../types/tokenDisplay';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 import { LoadFailure } from '../feedback';
 import { Panel } from '../common/Panel';
+import { ChartLegend } from '../common/ChartLegend';
+import { ModelMark } from '../ModelMark';
+import selectionStyles from '../common/selection.module.css';
 import './dashboard.css';
 
 const LazyModelTokenTrend = React.lazy(() =>
@@ -150,26 +152,51 @@ export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
   hasViewToggle?: boolean;
 }
 
+/** Click selection shared by the two cards: an empty set means every ranked group is shown. */
+function useSeriesSelection(groups: DashboardModelUsage[]) {
+  const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
+  const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
+  const visibleKeys = React.useMemo(
+    () => selectedKeys.filter((key) => availableKeys.has(key)),
+    [availableKeys, selectedKeys],
+  );
+  React.useEffect(() => {
+    setSelectedKeys((current) => {
+      const next = current.filter((key) => availableKeys.has(key));
+      return next.length === current.length ? current : next;
+    });
+  }, [availableKeys]);
+  const toggleSeries = React.useCallback((key: string) => {
+    setSelectedKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  }, []);
+  const selectSeries = React.useCallback((key: string | null) => {
+    setSelectedKeys(key === null ? [] : [key]);
+  }, []);
+  return { selectedKeys: visibleKeys, toggleSeries, selectSeries };
+}
+
+const ModelSeriesName: React.FC<{
+  group: DashboardModelUsage;
+  foldedLabel: string;
+  unnamedLabel: string;
+}> = ({ group, foldedLabel, unnamedLabel }) => {
+  const label = groupLabel(group, foldedLabel, unnamedLabel);
+  return (
+    <span className="model-series-name" title={label}>
+      {!group.folded && <ModelMark model={group.model} size={16} className="model-series-mark" />}
+      <span className="model-series-text">{label}</span>
+    </span>
+  );
+};
+
 export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle = false, ...props }) => {
   const t = useT();
   const { theme } = useTheme();
-  const chartRef = React.useRef<ECharts | null>(null);
-  const hoveredKeyRef = React.useRef<string | null>(null);
-  const highlightModel = React.useCallback((key: string | null) => {
-    hoveredKeyRef.current = key;
-    const chart = chartRef.current;
-    if (!chart || chart.isDisposed()) return;
-    chart.dispatchAction({ type: 'downplay' });
-    if (key !== null) chart.dispatchAction({ type: 'highlight', seriesId: key });
-  }, []);
-  const onApplied = React.useCallback((chart: ECharts) => {
-    chartRef.current = chart;
-    highlightModel(hoveredKeyRef.current);
-  }, [highlightModel]);
   const models = useDashboardModels(props);
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
-  const groups = models.data?.models ?? [];
+  const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
+  const { selectedKeys, toggleSeries, selectSeries } = useSeriesSelection(groups);
 
   return (
     <Panel
@@ -178,12 +205,28 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
       extra={hasViewToggle ? <ModelViewToggle /> : undefined}
     >
       <ModelPanelBody models={models}>
-        <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} onHover={highlightModel} />
+        <ChartLegend
+          className="model-trend-legend"
+          label={t('dash.models.trend_title')}
+          testId="model-trend-legend"
+          items={groups.map((group, index) => {
+            const key = seriesDomainKey(group);
+            return {
+              id: key,
+              color: seriesColor(theme.palette, index),
+              content: <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />,
+              title: t('dash.models.focus_series'),
+              isPressed: selectedKeys.includes(key),
+              isDimmed: selectedKeys.length > 0 && !selectedKeys.includes(key),
+              onToggle: () => toggleSeries(key),
+            };
+          })}
+        />
         {groups.length === 0 ? (
           <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
           <React.Suspense fallback={chartFallback}>
-            <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onApplied={onApplied} />
+            <LazyModelTokenTrend groups={groups} visibleKeys={selectedKeys} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} onSelectGroup={selectSeries} />
           </React.Suspense>
         )}
       </ModelPanelBody>
@@ -192,7 +235,6 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
 };
 
 export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
-  const [activeKey, setActiveKey] = React.useState<string | null>(null);
   const t = useT();
   const { theme } = useTheme();
   const { modelView, style: tokenStyle } = useTokenDisplayStyle();
@@ -200,8 +242,9 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const models = useDashboardModels(props);
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
-  const groups = models.data?.models ?? [];
+  const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const total = models.data?.total_tokens ?? 0;
+  const { selectedKeys, toggleSeries, selectSeries } = useSeriesSelection(groups);
 
   return (
     <Panel
@@ -215,7 +258,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
         ) : (
           <div className="model-usage-body">
             <React.Suspense fallback={chartFallback}>
-              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} activeKey={activeKey} onHover={setActiveKey} />
+              <LazyModelUsageDonut groups={groups} visibleKeys={selectedKeys} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} tokenUnitLabel={t('dash.unit_tokens')} onSelectGroup={selectSeries} />
             </React.Suspense>
             {/*
               The ranked list is the ring's legend, its label column and its values in one. A separate
@@ -223,20 +266,26 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
               comparing two models needs the numbers - a slice's angle is a poor way to compare 5.9%
               against 4.6%.
             */}
-            <ol className="model-usage-list">
+            <ol className="model-usage-list" aria-label={t('dash.models.usage_title')}>
               {groups.map((group, index) => (
                 // Reading order is name, cost, volume, share - widest to narrowest claim: what
                 // the group is, what it cost, how much it moved, and its slice of the window.
                 // The cost sits beside the name rather than at the far edge because it is the
                 // second thing an operator reads a spend table for, and the share stays last
                 // where it continues the percentage column of the ring beside it.
-                <li className="model-usage-row" key={seriesDomainKey(group)}
-                  onMouseEnter={() => setActiveKey(seriesDomainKey(group))} onMouseLeave={() => setActiveKey(null)}
-                  onFocus={() => setActiveKey(seriesDomainKey(group))} onBlur={() => setActiveKey(null)}
-                >
+                <li className="model-usage-row" key={seriesDomainKey(group)}>
                   <span className="model-usage-swatch" style={{ background: seriesColor(theme.palette, index) }} aria-hidden="true" />
-                  <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
-                    {groupLabel(group, foldedLabel, unnamedLabel)}
+                  <span className="model-usage-name">
+                    <button
+                      type="button"
+                      className={clsx('model-usage-name-button', selectionStyles['selection-control'])}
+                      aria-pressed={selectedKeys.includes(seriesDomainKey(group))}
+                      data-dimmed={selectedKeys.length > 0 && !selectedKeys.includes(seriesDomainKey(group))}
+                      title={t('dash.models.focus_series')}
+                      onClick={() => toggleSeries(seriesDomainKey(group))}
+                    >
+                      <ModelSeriesName group={group} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} />
+                    </button>
                   </span>
                   <ModelCost
                     group={group}
@@ -299,38 +348,6 @@ const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> 
     </Tooltip>
   );
 };
-
-/**
- * ModelLegend is the trend's key.
- *
- * It exists because the trend draws up to six lines and a line with no label is unreadable. It is the
- * app's own DOM rather than the chart library's legend so it is set in the console's type scale, and
- * it numbers the swatches so the colour identity is legible without relying on the hue alone.
- *
- * The colour alone is never the only encoding: each entry prints the model's name, and the usage list
- * beside the ring prints the name, the volume and the share. A reader who cannot separate two hues
- * reads the label instead - which is the rule `docs/design.md` sets for every state colour in the app.
- */
-const ModelLegend: React.FC<{
-  groups: DashboardModelUsage[];
-  foldedLabel: string;
-  unnamedLabel: string;
-  palette: ThemePalette;
-  onHover: (key: string | null) => void;
-}> = ({ groups, foldedLabel, unnamedLabel, palette, onHover }) => (
-  <ul className="model-legend">
-    {groups.map((group, index) => (
-      <li className="model-legend-item" key={seriesDomainKey(group)}
-        onMouseEnter={() => onHover(seriesDomainKey(group))} onMouseLeave={() => onHover(null)}
-      >
-        <span className="model-legend-swatch" style={{ background: seriesColor(palette, index) }} aria-hidden="true" />
-        <span className="model-legend-label" title={groupLabel(group, foldedLabel, unnamedLabel)}>
-          {groupLabel(group, foldedLabel, unnamedLabel)}
-        </span>
-      </li>
-    ))}
-  </ul>
-);
 
 const ModelPanelsError: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => {
   const t = useT();

@@ -111,6 +111,7 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'handleAddModel'
   | 'updateModelImage'
   | 'toggleThinkingLevel'
+  | 'setThinkingLevels'
   | 'toggleKeyExpanded'
   | 'handleKeyAdd'
   | 'handleTestKey'
@@ -211,6 +212,7 @@ export function ProviderEditorDrawer({
     handleAddModel,
     updateModelImage,
     toggleThinkingLevel,
+    setThinkingLevels,
     toggleKeyExpanded,
     handleKeyAdd,
     handleTestKey,
@@ -912,8 +914,26 @@ export function ProviderEditorDrawer({
 
                             {/* Option: Allowed Thinking Levels */}
                             <div>
-                              <div className={styles['item-field-label']}>
-                                {t('pro.allowed_thinking_levels')}
+                              <div className={styles['level-head']}>
+                                <span className={styles['item-field-label']}>
+                                  {t('pro.allowed_thinking_levels')}
+                                </span>
+                                <Checkbox
+                                  className={styles['level-select-all']}
+                                  checked={THINKING_LEVEL_OPTIONS.every((opt) => m.thinking?.levels?.includes(opt.value))}
+                                  indeterminate={THINKING_LEVEL_OPTIONS.some((opt) => m.thinking?.levels?.includes(opt.value))
+                                    && !THINKING_LEVEL_OPTIONS.every((opt) => m.thinking?.levels?.includes(opt.value))}
+                                  onChange={(event) => {
+                                    const current = m.thinking?.levels ?? [];
+                                    const known = new Set(THINKING_LEVEL_OPTIONS.map((opt) => opt.value));
+                                    const next = event.target.checked
+                                      ? [...THINKING_LEVEL_OPTIONS.map((opt) => opt.value), ...current.filter((level) => !known.has(level))]
+                                      : current.filter((level) => !known.has(level));
+                                    setThinkingLevels(m.id, next);
+                                  }}
+                                >
+                                  {t('pro.select_all')}
+                                </Checkbox>
                               </div>
                               <Row gutter={[10, 10]}>
                                 {THINKING_LEVEL_OPTIONS.map((opt) => {

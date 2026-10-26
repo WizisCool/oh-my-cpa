@@ -67,7 +67,7 @@ import { RankingPanel } from './components/RankingPanel';
 import { KeyTable } from './components/KeyTable';
 import { KeyCompositionPanel } from './components/KeyCompositionPanel';
 import { InsightsValue } from './components/InsightsValue';
-import { InsightsLegend } from './components/InsightsLegend';
+import { ChartLegend } from '../../components/common/ChartLegend';
 import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
 import { KeyDetailDrawer } from './components/KeyDetailDrawer';
@@ -483,7 +483,7 @@ export const InsightsPage: React.FC = () => {
         ) : (
           <>
           {groupingDimension && (
-            <InsightsLegend
+            <ChartLegend
               label={t('insights.group_label')}
               testId="insights-trend-legend"
               items={[

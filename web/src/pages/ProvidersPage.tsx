@@ -137,6 +137,7 @@ export const ProvidersPage: React.FC = () => {
     handleAddModel,
     updateModelImage,
     toggleThinkingLevel,
+    setThinkingLevels,
     handleSelectIcon,
     toggleKeyExpanded,
     handleKeyAdd,
@@ -421,6 +422,7 @@ export const ProvidersPage: React.FC = () => {
         handleAddModel={handleAddModel}
         updateModelImage={updateModelImage}
         toggleThinkingLevel={toggleThinkingLevel}
+        setThinkingLevels={setThinkingLevels}
         toggleKeyExpanded={toggleKeyExpanded}
         handleKeyAdd={handleKeyAdd}
         handleTestKey={handleTestKey}

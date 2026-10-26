@@ -1,10 +1,10 @@
 import React from 'react';
 import clsx from 'clsx';
-import { useT } from '../../../i18n';
-import styles from '../insights.module.css';
-import selectionStyles from '../../../components/common/selection.module.css';
+import { useT } from '../../i18n';
+import selectionStyles from './selection.module.css';
+import styles from './ChartLegend.module.css';
 
-export interface InsightsLegendItem {
+export interface ChartLegendItem {
   id: string;
   /** The swatch; omitted for a reference line, which draws `isDashed` instead. */
   color?: string;
@@ -19,9 +19,10 @@ export interface InsightsLegendItem {
   testId?: string;
 }
 
-interface InsightsLegendProps {
-  items: readonly InsightsLegendItem[];
+interface ChartLegendProps {
+  items: readonly ChartLegendItem[];
   label: string;
+  className?: string;
   testId?: string;
 }
 
@@ -30,20 +31,20 @@ interface InsightsLegendProps {
  * own hairline box. An entry that can be toggled is a button in the console's selection style; the
  * rest - a remainder, a reference line - are plain keys.
  */
-export const InsightsLegend: React.FC<InsightsLegendProps> = ({ items, label, testId }) => {
+export const ChartLegend: React.FC<ChartLegendProps> = ({ items, label, className, testId }) => {
   const t = useT();
   return (
-    <ul className={styles['legend']} aria-label={label} data-testid={testId}>
+    <ul className={clsx(styles['legend'], className)} aria-label={label} data-testid={testId}>
       {items.map((item) => {
         const mark = item.isDashed
-          ? <i className={clsx(styles['legend-swatch'], styles['legend-swatch-dashed'])} aria-hidden="true" />
-          : <i className={styles['legend-swatch']} style={{ background: item.color }} aria-hidden="true" />;
+          ? <i className={clsx(styles['swatch'], styles['swatch-dashed'])} aria-hidden="true" />
+          : <i className={styles['swatch']} style={{ background: item.color }} aria-hidden="true" />;
         return (
           <li key={item.id} data-testid={item.testId}>
             {item.onToggle ? (
               <button
                 type="button"
-                className={clsx(styles['legend-button'], selectionStyles['selection-control'])}
+                className={clsx(styles['button'], selectionStyles['selection-control'])}
                 aria-pressed={Boolean(item.isPressed)}
                 data-dimmed={Boolean(item.isDimmed)}
                 title={item.title ?? t(item.isPressed ? 'insights.click_to_unfilter' : 'insights.click_to_filter')}

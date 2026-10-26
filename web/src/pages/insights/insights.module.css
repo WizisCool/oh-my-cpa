@@ -19,22 +19,6 @@
 .window-span { font-variant-numeric: tabular-nums; }
 .panel-meta { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
 
-.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0; list-style: none; font-size: var(--text-sm); }
-.legend > li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; }
-.legend > li:not(:has(button)) { padding: 2px 8px; color: var(--fg-2); }
-.legend-swatch { flex: none; width: 10px; height: 10px; border-radius: var(--radius-xs); }
-.legend-swatch-dashed { width: 14px; height: 1px; border-top: 1px dashed var(--muted); border-radius: 0; opacity: 0.72; }
-/* Each entry is bounded by its own hairline, so a swatch can only belong to the name inside its box. */
-.legend-button {
-  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; min-height: 26px;
-  padding: 2px 8px 2px 7px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: transparent; color: var(--fg-2);
-  font: inherit; line-height: 1.5; cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
-}
-.legend-button:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
-.legend-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.legend-button[data-dimmed='true'] { opacity: 0.42; }
-
 .scale-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; color: var(--muted); font-size: var(--text-2xs); }
 .scale-legend > i { width: 12px; height: 12px; min-height: 0; }
 .is-muted { color: var(--muted); }

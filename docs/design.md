@@ -901,8 +901,10 @@ floor is what makes a quiet stretch read as zero rather than as absent data.
 **The plot's chrome is the palette's ink at full opacity.** Dashboard grid and axis rules use
 `--border`, labels use `--fg-2`, and the pointer uses `--muted`. The shared ECharts theme follows the
 console palette in place, and the browser probe matches actual SVG strokes and text fills in both
-modes. Hovering a DOM legend entry emphasizes its line and blurs the other series; the tooltip retains
-legend order and explicitly lists quiet groups as zero.
+modes. Legend entries and painted lines are selection controls: clicking a model name focuses its
+series, any non-empty subset is the only set drawn, and clicking the plot background restores every
+line. Hovering a name does not change which series are visible; the tooltip retains legend order and
+explicitly lists quiet groups as zero.
 
 **Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
 same instant forty-eight times across a half-width card. The first and last bucket are always among the
@@ -910,14 +912,17 @@ four, because those are the two a reader places the window with. The label forma
 `HH:mm` within a day, `MM-DD` beyond it - which is the only place the window's extent is stated, and
 keeps the outermost label narrow enough to sit inside the card's gutter.
 
-**The legend is app-owned DOM.** It follows the console's type scale and chosen interface font.
-It also has to be the same colour assignment the usage list uses, which is only guaranteed if one
-ranked list produces both.
+**The legend is app-owned DOM.** It follows the console's type scale and chosen interface font, and
+uses the shared chart legend. Each named-model entry carries the model's maker mark beside the rank's
+colour, and the same mark appears in the usage list, so a model is recognised before its name is read.
+The legend also has to be the same colour assignment the usage list uses, which is only guaranteed if
+one ranked list produces both.
 
-**The ring's centre is DOM**, and it is the window's own total rather than the KPI tile's. The two read
-on different cadences, so borrowing the tile's number would let the centre disagree with the slices
-drawn around it. Its percentages are derived from the same total, so the list, the ring and the centre
-cannot drift.
+**The ring's centre is DOM**, and it is the model read's own total rather than the KPI tile's. The two
+read on different cadences, so borrowing the tile's number would let the centre disagree with the
+slices drawn around it. With no selection the centre, the ring and the ranked list all use the full
+window total. A selection narrows the ring and makes the centre and hover share use the visible total,
+while the ranked list keeps each model's share of the full window so the list remains comparable.
 
 **The ranked list is the ring's legend and its values in one.** A separate library legend would print
 the same ranking a second time with no numbers, and a reader comparing two models needs the numbers: a
@@ -931,10 +936,11 @@ the ring near the top of the card and made the unused space below look like a mi
 
 **Both marks share the lazy SVG ECharts runtime** (`vendor-echarts`, ADR 0106) with Insights and
 morph between revisions on §7's `roll` token. The ring uses 66%/92% inner/outer radii, 1.5-degree gaps
-and 3px rounded slice corners. A slice expands by 4px on emphasis. Hovering either a slice or its ranked
-list row swaps the DOM centre to that model's tokens and share, restoring the window total on leave.
-The ring is not a chart-runtime
-heatmap, so ADR 0005's DOM grid is untouched.
+and 3px rounded slice corners. A slice expands by 4px on emphasis. Clicking a ranked model name toggles
+that slice in the ring; clicking a painted slice focuses it, and clicking the ring's background restores
+the full set. Hovering a slice swaps the DOM centre to that model's tokens and share, restoring the
+visible total on leave; hovering a ranked name does not. The ring is not a chart-runtime heatmap, so
+ADR 0005's DOM grid is untouched.
 
 **The usage list's columns are one grid, not one per row.** The tracks are declared on the list and the
 rows inherit them as a subgrid. Per-row tracks resolve against each row's own content, so one amount a
@@ -956,7 +962,7 @@ retaining either dimension from an earlier layout.
 
 **The ring hover states the group, its volume and its share**, matching the trend's tooltip rather than
 the share being left to the list alone. A slice is read as a fraction of the ring, so the percentage is
-part of what is being pointed at; it is derived from the same window total the centre reports, so the
+part of what is being pointed at; it is derived from the same visible total the centre reports, so the
 readout and the centre cannot disagree. A slice carries its stable series-domain key as its datum name.
 The ECharts tooltip formatter resolves that key with the shared translated group-label function, so
 the tooltip, ranked list and centre use the same readable name.
@@ -2153,7 +2159,7 @@ sending, and they leave with the next message.
 
 Adding a provider custom model creates a collapsed row: its request model and optional alias are immediately editable, while image capability and reasoning-effort controls open only through the row's disclosure action. Existing row expansion is preserved.
 
-The row's head stands on the card itself rather than a `--surface` band, because the two name fields are filled wells and a well on its own colour has no edge. Its body - and every other disclosure in the provider editor, a key's body and a section's - unfolds through the shared `Fold` (`components/common/Fold.tsx`): the grid 0fr/1fr technique over `base`, the content fading with it, and one chevron that turns rather than two icons swapped. A body mounts the first time it opens and stays, so closing folds it away instead of cutting it; the caller's padding and rule sit inside the clipping row, so a card folded shut is exactly as tall as before it opened. Thinking levels are tiles drawn as washes - 4% of the ink at rest, 7% under the pointer, a 12% accent tint once picked - so eight tiles do not draw sixteen outlines.
+The row's head stands on the card itself rather than a `--surface` band, because the two name fields are filled wells and a well on its own colour has no edge. Its body - and every other disclosure in the provider editor, a key's body and a section's - unfolds through the shared `Fold` (`components/common/Fold.tsx`): the grid 0fr/1fr technique over `base`, the content fading with it, and one chevron that turns rather than two icons swapped. A body mounts the first time it opens and stays, so closing folds it away instead of cutting it; the caller's padding and rule sit inside the clipping row, so a card folded shut is exactly as tall as before it opened. Thinking levels are tiles drawn as washes - 4% of the ink at rest, 7% under the pointer, a 12% accent tint once picked - so eight tiles do not draw sixteen outlines. A select-all checkbox beside the field applies the complete set, or clears it, without eight separate clicks.
 
 ## 6. antd theme wiring (themeConfig.ts)
 

@@ -41,6 +41,7 @@ export default {
   'dash.models.cost_partial': '{priced}/{total} 次请求已计价',
   'dash.models.folded': '其他模型',
   'dash.models.unnamed': '未命名模型',
+  'dash.models.focus_series': '点击以聚焦此系列',
   'dash.models.empty': '该时间窗口内没有模型用量',
   'dash.models.error': '无法读取模型用量',
   'dash.models.stale': '模型用量刷新失败，当前显示的是上一次的数据',

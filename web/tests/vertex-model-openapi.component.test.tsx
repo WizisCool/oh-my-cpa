@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { I18nProvider, useT } from '../src/i18n';
 import { CredentialModelAliasesEditor } from '../src/components/authFiles/CredentialModelAliasesEditor';
@@ -78,4 +78,38 @@ it('saves the real provider editor with credential defaults and alias-specific m
       model_entries: [{ name: 'partner/model', alias: 'first', options: { openapi: false } }, { name: 'partner/model', alias: 'second', options: { openapi: true } }],
     });
   } finally { view.unmount(); }
+});
+
+it('selects every allowed thinking level on a model entry in one action', async () => {
+  const client = createTestQueryClient();
+  client.setQueryData(['management-plugins'], { plugins: [] });
+  const api = installOmcApi({ providers: [PROVIDER] });
+  const writes = () => api.writes('/management/providers/vertex-0').map(request => request.body);
+  const scrollIntoView = vi.fn();
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = scrollIntoView;
+  const view = renderWithOmc(<Editor />, { client });
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Vertex' }));
+    await screen.findByRole('combobox', { name: 'Driver / Protocol' });
+    fireEvent.click(screen.getByRole('button', { name: /Custom Models/ }));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'partner/model' }))[0]);
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+
+    const card = document.querySelector('[id^="model-card-"]') as HTMLElement;
+    const selectAll = await within(card).findByRole('checkbox', { name: 'Select all' });
+    fireEvent.click(selectAll);
+    await waitFor(() => expect(within(card).getAllByRole('button', { pressed: true })).toHaveLength(8));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    const entries = (writes()[0] as { model_entries: Array<Record<string, unknown>> }).model_entries;
+    expect(entries[0]).toMatchObject({
+      thinking: { levels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto'] },
+    });
+    expect(entries[1].thinking).toBeUndefined();
+  } finally {
+    view.unmount();
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  }
 });

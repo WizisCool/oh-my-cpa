@@ -44,6 +44,7 @@ export default {
   'dash.models.cost_partial': '{priced}/{total} requests priced',
   'dash.models.folded': 'Other models',
   'dash.models.unnamed': 'Unnamed model',
+  'dash.models.focus_series': 'Click to focus this series',
   'dash.models.empty': 'No model usage in this time window',
   'dash.models.error': 'Failed to load model usage',
   'dash.models.stale': 'Refreshing model usage failed; showing the last successful reading',
