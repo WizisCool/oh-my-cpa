@@ -66,6 +66,7 @@ export default {
   'af.batch_enable_success': 'Enabled {n} credentials',
   'af.batch_disable_success': 'Disabled {n} credentials',
   'af.select_page': 'Select Current Page',
+  'af.select_filtered': 'Select all filtered ({n})',
   'af.clear_selection': 'Clear Selection',
   'af.runtime_only_badge': 'Runtime Only',
   'af.warning_status': 'Status Warning',

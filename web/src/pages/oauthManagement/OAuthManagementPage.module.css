@@ -224,7 +224,8 @@
     align-items: flex-start;
   }
 
-  .toolbar > :global(.ant-dropdown-button) {
+  .toolbar > :global(.ant-dropdown-button),
+  .toolbar > :global(.ant-space-compact) {
     grid-column: 1 / -1;
     width: 100%;
   }
