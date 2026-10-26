@@ -409,3 +409,33 @@ test('the web search result cache writes the TTL as text and the limit as an int
   assert.equal(getFieldSemanticValue(reloaded, field('codexWebSearchCacheLimit')), 0, 'an explicit zero survives readback rather than reading as the default');
   assert.equal(reloaded.getIn(['client', 'codex', 'optimize-multi-agent-v2']), true);
 });
+
+test('compression settings keep omitted defaults and send only canonical overrides', () => {
+  const yaml = `${SERVER_YAML}upstream:\n    codex:\n        response-steering: true\n`;
+  const baseline = parseDocument(yaml);
+  const draft = parseDocument(yaml);
+  const settings = [
+    ['responseCompressionEnabled', true, false],
+    ['responseCompressionMinBytes', 1024, 0],
+    ['codexUpstreamRequestCompression', false, true],
+    ['codexUpstreamRequestCompressionMinBytes', 1024, 0],
+    ['codexWebsocketCompression', true, false],
+  ] as const;
+
+  assert.deepEqual(settings.map(([id]) => getFieldSemanticValue(baseline, field(id))), [true, 1024, false, 1024, true]);
+  for (const [id, defaultValue] of settings) updateFieldWithBaseline(draft, baseline, field(id), defaultValue);
+  assert.deepEqual(computeConfigChanges(baseline, draft), []);
+
+  for (const [id, , value] of settings) updateFieldWithBaseline(draft, baseline, field(id), value);
+  assert.deepEqual(computeConfigChanges(baseline, draft), [
+    { path: ['server', 'response-compression'], value: { enabled: false, 'min-bytes': 0 } },
+    { path: ['upstream', 'codex', 'upstream-request-compression'], value: true },
+    { path: ['upstream', 'codex', 'upstream-request-compression-min-bytes'], value: 0 },
+    { path: ['upstream', 'codex', 'websocket-compression'], value: false },
+  ]);
+
+  const readback = parseDocument(draft.toString());
+  assert.deepEqual(settings.map(([id]) => getFieldSemanticValue(readback, field(id))), [false, 0, true, 0, false]);
+  for (const [id, defaultValue] of settings) updateFieldWithBaseline(draft, baseline, field(id), defaultValue);
+  assert.deepEqual(draft.toJS(), baseline.toJS());
+});

@@ -7,6 +7,36 @@ decides that a gateway is v8, how it edits the configuration (ADR 0037), which r
 calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
+## Compression settings (post-baseline source contract)
+
+CPA commit [`064e008b079fae13e58c7d4007322482eb600695`](https://github.com/router-for-me/CLIProxyAPI/commit/064e008b079fae13e58c7d4007322482eb600695)
+defines the five canonical v8 controls below. Verification is limited to pinned
+source: the historical v8.0.2 binary acceptance does not cover these additions,
+and binary write/readback/restart or live HTTP/SSE/WebSocket integration remains
+unverified.
+
+| Canonical YAML path | Editor field | Omitted / effective value | Scope |
+| --- | --- | --- | --- |
+| `server.response-compression.enabled` | `responseCompressionEnabled` | `true` when omitted | Negotiated downstream HTTP response compression, including SSE, using the client's accepted zstd or gzip encoding. WebSocket upgrades are not wrapped. |
+| `server.response-compression.min-bytes` | `responseCompressionMinBytes` | `1024` bytes when omitted or `<= 0` | Minimum non-streaming response size; SSE is not subject to this threshold. |
+| `upstream.codex.upstream-request-compression` | `codexUpstreamRequestCompression` | `false` when omitted | Opt-in zstd request-body compression only for OAuth requests targeting the verified ChatGPT Codex backend (`chatgpt.com/backend-api/codex`). API-key credentials, custom base URLs and SIWC requests are excluded. |
+| `upstream.codex.upstream-request-compression-min-bytes` | `codexUpstreamRequestCompressionMinBytes` | `1024` bytes when omitted or `<= 0` | Minimum eligible request-body size; enabling the switch still requires the backend, credential and compression-benefit checks. |
+| `upstream.codex.websocket-compression` | `codexWebsocketCompression` | `true` when omitted | Controls compressed upstream writes and downstream `permessage-deflate` negotiation, independently of HTTP compression. Upstream negotiation remains enabled even when this switch is `false`. |
+
+These controls use canonical paths and the existing revision-guarded path-level
+save and backup flow. Omitted defaults are displayed without being written by
+unrelated edits; explicit `false`, zero and negative thresholds, and unrelated
+fields are preserved. An older CPA refusing a new path returns `config_rejected`
+when no earlier write landed; otherwise existing partial-application reporting
+applies.
+
+Source verification used the following files at that exact commit:
+
+- [Configuration types and effective defaults](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/config/config_types.go) and [canonical v8 path mapping](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/config/config_v8.go).
+- [HTTP response negotiation and SSE threshold handling](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/api/response_compression.go).
+- [Codex request eligibility and size/benefit gating](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/runtime/executor/codex_executor_request.go).
+- [Upstream WebSocket compression](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/runtime/executor/codex_websockets_connection.go), [downstream WebSocket negotiation](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/sdk/api/handlers/openai/openai_responses_websocket.go) and [configuration reload wiring](https://github.com/router-for-me/CLIProxyAPI/blob/064e008b079fae13e58c7d4007322482eb600695/internal/api/server_reload.go).
+
 ## Canonical usage accounting
 
 CPA source contract `8289ec4c71ad914d0612c2776352b76ba3d355a6` preserves
@@ -352,7 +382,7 @@ legacy file. OMC does not carry a copy: its editor schema (`web/src/types/config
 names the v8 column. The last column names the editor field; a `—` means no editor field
 edits that setting.
 
-Every schema path was measured against the v8.0.2 binary (Go build of tag `v8.0.2`,
+Every schema path in this baseline table was measured against the v8.0.2 binary (Go build of tag `v8.0.2`,
 commit `4a2c818`, on 2026-09-29): each one was written with a `PATCH
 /v8/management/config` carrying the field's own default, and then read back out of the
 persisted `config.yaml`. All 36 paths the OAuth-provider, discovery and pprof fields
