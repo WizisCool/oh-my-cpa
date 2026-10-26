@@ -1,5 +1,7 @@
 import { stopProcess } from './acceptance/lifecycle.mjs';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { availableParallelism } from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -135,4 +137,90 @@ export async function runChecks(checks, { quiet = false, signal } = {}) {
   fs.mkdirSync(timingDirectory, {recursive:true});
   fs.writeFileSync(path.join(timingDirectory, `${process.pid}-${Date.now()}.json`), JSON.stringify(results, null, 2) + '\n');
   return !controller.signal.aborted && results.every(result => result.code === 0);
+}
+
+// A sample is not a regression. Keep the first three successful observations as
+// this host's baseline and fail only when three subsequent samples all exceed it
+// substantially. Cold starts and failures remain visible but cannot ratchet it up.
+export function recordVerificationCost(lane, seconds, { directory = path.join(root, 'tmp/verification-cost'), baselineSeconds, workload = [], output = console } = {}) {
+  fs.mkdirSync(directory, { recursive: true });
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !/^[a-z0-9-]+-(?:linux|darwin|win32)-[a-z0-9]+-\d+-[a-f0-9]{12}\.json$/.test(entry.name)) continue;
+    const candidate = path.join(directory, entry.name);
+    try { if (Date.now() - fs.statSync(candidate).mtimeMs > CHECK_ARTIFACT_RETENTION_MS) fs.unlinkSync(candidate); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const planId = createHash('sha256').update(JSON.stringify(workload)).digest('hex').slice(0, 12);
+  const file = path.join(directory, `${lane}-${process.platform}-${process.arch}-${availableParallelism()}-${planId}.json`);
+  const history = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { baseline: [], recent: [] };
+  if (baselineSeconds === undefined && history.baseline.length < 3) history.baseline.push(seconds);
+  else history.recent = [...history.recent, seconds].slice(-3);
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(history, null, 2)}\n`);
+  fs.renameSync(temporary, file);
+  const sorted = [...history.baseline].sort((a, b) => a - b);
+  const baseline = baselineSeconds ?? (sorted.length === 3 ? sorted[1] : undefined);
+  const limit = baseline === undefined ? undefined : baseline * 1.5 + 10;
+  const message = `[cost] ${lane}: ${seconds.toFixed(2)}s; ${limit === undefined ? `collecting baseline (${sorted.length}/3)` : `baseline ${baseline.toFixed(2)}s, significant-growth threshold ${limit.toFixed(2)}s`}`;
+  output.log(message);
+  if (limit !== undefined && seconds > limit) output.warn('[cost] Investigate the slow check/scenario in the timing report; remove duplicate work or justify a measured baseline change. Do not retry, skip tests or relax assertions.');
+  const hasRegression = limit !== undefined && history.recent.length === 3 && history.recent.every(value => value > limit);
+  if (hasRegression) output.error(`[cost] ${lane} exceeded its budget on three successive successful runs; inspect tmp/check-timings before adjusting the baseline.`);
+  return !hasRegression;
+}
+
+export async function measureVerification(lane, task, workload = []) {
+  const started = performance.now();
+  const hasPassed = await task();
+  if (!hasPassed) return false;
+  return recordVerificationCost(lane, (performance.now() - started) / 1000, { workload });
+}
+
+// Native Actions timestamps include setup/cache costs, without a new service or
+// another test suite. Compare three completed runs so one cold runner only warns.
+export async function checkCiVerificationCost(env = process.env) {
+  const api = endpoint => JSON.parse(execFileSync('gh', ['api', `repos/${env.GITHUB_REPOSITORY}/${endpoint}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 }));
+  const summary = [];
+  try {
+    const current = api(`actions/runs/${env.GITHUB_RUN_ID}`);
+    const previous = api(`actions/workflows/${current.workflow_id}/runs?event=${current.event}&status=success&per_page=10`).workflow_runs.filter(run => run.id !== current.id);
+    const samples = [];
+    let isFullCatalog;
+    for (const run of [current, ...previous].slice(0, 10)) {
+      const jobs = api(`actions/runs/${run.id}/jobs?per_page=100`).jobs.filter(job => job.conclusion === 'success' && job.completed_at);
+      if (!jobs.length) throw new Error('No completed verification jobs');
+      const hasFullCatalog = jobs.some(job => job.name.startsWith('probes-full ('));
+      if (isFullCatalog === undefined) isFullCatalog = hasFullCatalog;
+      if (hasFullCatalog !== isFullCatalog) continue;
+      const duration = job => (Date.parse(job.completed_at) - Date.parse(job.started_at)) / 1000;
+      const setup = jobs.find(job => job.name === 'changes');
+      const seconds = (setup ? duration(setup) : 0) + Math.max(0, ...jobs.filter(job => !['changes', 'static', 'probes'].includes(job.name)).map(duration));
+      const runnerSeconds = jobs.reduce((total, job) => total + duration(job), 0);
+      samples.push({ id: run.id, seconds, runnerSeconds });
+      if (samples.length === 3) break;
+    }
+    const baselineSeconds = isFullCatalog ? 282 : 506;
+    const baselineRunnerSeconds = isFullCatalog ? 1167 : 857;
+    const limit = baselineSeconds * 1.5 + 30;
+    const runnerLimit = baselineRunnerSeconds * 1.5 + 30;
+    summary.push(`### Verification cost\n\nCatalog: ${isFullCatalog ? 'full' : 'affected PR'}; ${samples.length} comparable successful run(s).\n\nBaseline: ${baselineSeconds}s; significant-growth threshold: ${limit}s (50% + 30s runner/cache allowance).\n`, ...samples.map(sample => `- Run ${sample.id}: ${sample.seconds.toFixed(1)}s execution critical path, ${sample.runnerSeconds.toFixed(1)} runner-seconds`));
+    const isSlow = samples[0].seconds > limit;
+    if (isSlow || samples[0].runnerSeconds > runnerLimit) console.warn(`::warning::Verification exceeds its ${isFullCatalog ? 'full' : 'affected PR'} budget (${limit}s critical path or ${runnerLimit} runner-seconds). Inspect job timings; consolidate duplicate tests before changing the measured baseline.`);
+    const hasRegression = samples.length === 3 && (samples.every(sample => sample.seconds > limit) || samples.every(sample => sample.runnerSeconds > runnerLimit));
+    summary.push(`Runner-time baseline: ${baselineRunnerSeconds}s; significant-growth threshold: ${runnerLimit}s.`);
+    if (hasRegression) console.error('::error::Three consecutive verification runs exceed the measured budget. Reduce cost or document evidence for a new baseline in scripts/parallel-checks.mjs and docs/testing.md.');
+    console.log(summary.join('\n'));
+    return !hasRegression;
+  } catch (error) {
+    // Cost telemetry cannot turn a GitHub API outage into a product-test failure.
+    summary.push('### Verification cost\n\nGitHub timing data unavailable; verification verdicts remain independent. Inspect the native job timings.');
+    console.warn(`::warning::GitHub verification-cost telemetry is unavailable (${error.code ?? error.status ?? error.name}): ${error.message.split('\n')[0]}`);
+    return true;
+  } finally {
+    if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${summary.join('\n')}\n`);
+  }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--ci-cost') {
+  if (!await checkCiVerificationCost()) process.exitCode = 1;
 }

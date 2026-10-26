@@ -24,9 +24,11 @@ export function componentCommand(directory = root) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 2) throw new Error('Component runner takes no options; full discovery is intentional');
   const { command, args, files } = componentCommand();
-  console.log(`[frontend integration] ${files.length} automatically discovered suite(s)`);
+  const selected = process.argv.slice(2);
+  if (selected.some(file => !files.includes(file))) throw new Error('Unknown component test file');
+  args.push(...selected.map(file => path.resolve(root, file)));
+  console.log(`[frontend integration] ${selected.length || files.length} suite(s)`);
   // Reuse the repository's process-group ownership, cancellation and retained
   // diagnostics instead of letting a directly spawned Vitest worker outlive us.
   if (!await runChecks([{ label: 'Frontend integration', command, args }])) process.exitCode = 1;

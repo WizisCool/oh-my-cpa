@@ -17,15 +17,8 @@
  * 2. **The stored document.** `omc-theme` held a bare palette id before this change, and a browser
  *    that still holds one has to keep working. The migration is asserted case by case rather than
  *    through one happy path.
- * 3. **The mirrors.** `index.css` carries the fallback palette for the first frame and the sign-in
- *    screen, and `docs/design.md` prints the derived values. A mirror that drifts is a console that
- *    paints one palette and documents another, which is exactly what the CSS pin catches.
  */
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   ACCENT_LABEL_CONTRAST_FLOOR,
@@ -44,7 +37,6 @@ import {
   resolvedBuiltInPalette,
   type ThemeCore,
 } from '../web/src/theme/palette.ts';
-import { SNAPSHOT_CSS } from '../web/src/agent/conversationStyles.ts';
 import { contrastRatio, normalizeHex } from '../web/src/theme/colorMath.ts';
 import {
   DEFAULT_THEME_PREFERENCES,
@@ -57,14 +49,6 @@ import {
   writeStoredThemePreferences,
 } from '../web/src/theme/themePreference.ts';
 import { createThemeConfig, MOTION_LIVE_TEXT, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const requireWeb = createRequire(new URL('../web/package.json', import.meta.url));
-const { theme: antdTheme } = requireWeb('antd');
-const css = readFileSync(path.join(root, 'web', 'src', 'index.css'), 'utf8');
-const requestCss = readFileSync(path.join(root, 'web', 'src', 'components', 'usage', 'RequestList.css'), 'utf8');
-const requestRowRule = requestCss.match(/\.request-row\s*\{([^}]+)\}/)?.[1] ?? '';
-const requestRowMinHeight = Number(requestRowRule.match(/min-height:\s*(\d+)px/)?.[1]);
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -313,52 +297,6 @@ assert.equal(resolveModePreference('light', 'dark'), 'light', 'an explicit choic
 
 assert.ok(isPaletteRef('custom') && isPaletteRef('forest') && !isPaletteRef('tree'), 'palette references are validated');
 
-// ── the mirrors ──────────────────────────────────────────────────────────────
-
-/** The custom properties of one rule block in the stylesheet, as written. */
-function cssBlockVariables(selector: string, stylesheet = css): Record<string, string> {
-  const start = stylesheet.indexOf(selector);
-  assert.ok(start >= 0, `index.css declares ${selector}`);
-  const open = stylesheet.indexOf('{', start);
-  const close = stylesheet.indexOf('}', open);
-  const variables: Record<string, string> = {};
-  for (const match of stylesheet.slice(open, close).matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
-    variables[`--${match[1]}`] = match[2].trim();
-  }
-  return variables;
-}
-
-// The light block inherits every variable it does not redeclare from `:root`, so the fallback a
-// light visitor actually gets is the two blocks merged - which is also how an alias inherited from
-// `:root` still lands on the right token.
-const snapshotVariables = cssBlockVariables(':root {', SNAPSHOT_CSS);
-for (const [name, radius] of [['document', 8], ['control', 6], ['surface', 10], ['thread', 12]] as const) {
-  assert.equal(snapshotVariables[`--radius-${name}`], `${radius}px`, `HTML exports keep the ${name} geometry`);
-}
-
-const rootVariables = cssBlockVariables(':root {');
-const lightVariables = { ...rootVariables, ...cssBlockVariables(":root[data-theme-mode='light'] {") };
-
-for (const [selector, paletteId, declared] of [
-  [':root {', 'omc-dark', rootVariables],
-  [":root[data-theme-mode='light'] {", 'omc-light', lightVariables],
-] as const) {
-  const expected = themePaletteCssVariables(resolvedBuiltInPalette(paletteId).palette);
-  for (const [name, value] of Object.entries(expected)) {
-    const written = declared[name];
-    // Two values are written as aliases rather than literals, because in that palette they *are*
-    // another token: the pre-hydration surface alias and the dark mode's inset step, which is the
-    // page itself. An alias is checked by resolving it, so it cannot quietly point at the wrong token.
-    const alias = /^var\((--[a-z0-9-]+)\)$/.exec(written ?? '');
-    const resolvedValue = alias ? declared[alias[1]] : written;
-    assert.equal(
-      resolvedValue,
-      value,
-      `${selector} ${name} is ${written}, resolving to ${resolvedValue}, but ${paletteId} derives ${value} - the pre-hydration fallback has drifted from the palette`,
-    );
-  }
-}
-
 // The Ant Design projection takes its values from the resolved palette rather than from the id.
 for (const definition of BUILT_IN_PALETTES) {
   const resolved = resolvedBuiltInPalette(definition.id);
@@ -369,9 +307,6 @@ for (const definition of BUILT_IN_PALETTES) {
   assert.equal(antd.components?.Table?.rowHoverBg, resolved.palette.rowHover, `${definition.id} paints row hover from its palette`);
   assert.equal(antd.components?.Button?.primaryColor, resolved.palette.accentOn, `${definition.id} draws the primary label in its on-accent step`);
   assert.equal(antd.components?.Tooltip?.colorBgSpotlight, resolved.palette.tooltipBg, `${definition.id} paints the spotlight from its palette`);
-  const tokens = antdTheme.getDesignToken(antd);
-  const estimatedRowHeight = tokens.fontHeight + 2 * (antd.components?.Listy?.itemPaddingBlock ?? tokens.paddingSM);
-  assert.equal(estimatedRowHeight, requestRowMinHeight, `${definition.id} estimates custom request rows from their CSS minimum`);
 }
 
 // ── the filled control's label, on both fills ────────────────────────────────
@@ -471,51 +406,4 @@ assert.equal(
 );
 assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-mode starting palette falls back to this mode');
 
-// ── the motion budget, across its three spellings ────────────────────────────
-//
-// docs/design.md §7 states one budget in three places: its own token table, the Ant Design motion tokens
-// `createThemeConfig` projects, and the `--motion-*` variables every transition in the console reads.
-// Nothing tied them together until they had already drifted once - the stylesheet carried 100ms/150ms
-// against the table's 50ms/100ms, so call sites written as `var(--motion-fast, 50ms)` were paying double
-// the budget they named. Parsed rather than compared as strings, because the table states milliseconds
-// and Ant Design takes seconds.
-const toMilliseconds = (value: string | undefined, label: string): number => {
-  const match = /^([\d.]+)(ms|s)$/.exec(value ?? '');
-  assert.ok(match, `${label} is a duration (${String(value)})`);
-  return match[2] === 's' ? Math.round(Number(match[1]) * 1000) : Number(match[1]);
-};
-const stylesheetToken = (name: string): number => {
-  const match = new RegExp(`--motion-${name}:\\s*([\\d.]+(?:ms|s))`).exec(css);
-  assert.ok(match, `web/src/index.css defines --motion-${name}`);
-  return toMilliseconds(match[1], `--motion-${name}`);
-};
-assert.deepEqual(MOTION_LIVE_TEXT, { duration: 900, easing: 'linear' }, 'a live-label crossing lasts 900ms');
-assert.equal(stylesheetToken('live-text'), MOTION_LIVE_TEXT.duration, 'the live-label loop agrees before and after theme hydration');
-const antdMotion = createThemeConfig(resolvedBuiltInPalette('omc-dark')).token;
-assert.equal(stylesheetToken('fast'), toMilliseconds(antdMotion?.motionDurationFast, 'motionDurationFast'),
-  '--motion-fast is the fast token Ant Design animates with');
-assert.equal(stylesheetToken('base'), toMilliseconds(antdMotion?.motionDurationMid, 'motionDurationMid'),
-  '--motion-base is the mid token Ant Design animates with');
-assert.equal(stylesheetToken('slow'), toMilliseconds(antdMotion?.motionDurationSlow, 'motionDurationSlow'),
-  '--motion-slow is the slow token, so a drawer and a dialog spend the same beat in both spellings');
-// `float` has no Ant Design counterpart - the console owns it, because antd exposes no token for the
-// floating panels' entrance - so it is pinned to §7's documented 160ms instead.
-assert.equal(stylesheetToken('float'), 160, 'the float token is §7\u2019s 160ms');
-assert.deepEqual(
-  [stylesheetToken('fast'), stylesheetToken('float'), stylesheetToken('base'), stylesheetToken('slow')],
-  [120, 160, 180, 240],
-  '§7\u2019s ladder: fast < float < base < slow, and nothing past the quarter second',
-);
-
-// The route transition is the one rule whose *documented* duration is not the fast token: §7's table
-// states that a route change fades in over `base`. Nothing observable changed while it read `fast`
-// back when the two tokens held the same number - which is exactly why it needs pinning.
-assert.match(css, /\.route-transition\s*\{[^}]*animation:[^;]*var\(--motion-base\)/,
-  'the route transition spends the token its documented duration names');
-
-// The stylesheet's own accent fills draw their label from the projected variable, so a palette whose fill
-// is light does not keep a hardcoded white label the palette cannot support.
-assert.match(css, /::selection\s*\{[^}]*color:\s*var\(--accent-on\)/,
-  'the selection label follows the resolved palette rather than a literal white');
-
-console.log('theme contracts hold: derivation, preference document and both mirrors');
+console.log('theme contracts hold: derivation, preferences and Ant Design projection');

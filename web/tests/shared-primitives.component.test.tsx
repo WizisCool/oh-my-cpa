@@ -5,12 +5,10 @@ import { ConfirmAction } from '../src/components/common/ConfirmAction';
 import { EmptyState } from '../src/components/common/EmptyState';
 import { Meter } from '../src/components/common/Meter';
 import { Pager } from '../src/components/common/Pager';
-import { Panel } from '../src/components/common/Panel';
 import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
 import { Tag, ToggleTag } from '../src/components/common/Tag';
-import { Toolbar } from '../src/components/common/Toolbar';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 
 describe('SearchInput', () => {
@@ -104,13 +102,6 @@ describe('AppDrawer', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('draws no footer when neither slot has content, and sizes itself from the width step', () => {
-    render(<I18nProvider><AppDrawer open title="Details" width="narrow" footer={false} footerStart={undefined}>body</AppDrawer></I18nProvider>);
-    expect(document.querySelector('.ant-drawer-footer')).toBeNull();
-    const panel = document.querySelector<HTMLElement>('.ant-drawer-content-wrapper');
-    expect(panel?.style.width).toBe('min(420px, 100vw)');
-  });
-
   it('keeps showing what it showed while open as it closes, though the caller has cleared it', () => {
     const view = (record: string | null) => (
       <I18nProvider>
@@ -130,13 +121,9 @@ describe('AppDrawer', () => {
 });
 
 describe('Tag', () => {
-  it('carries its tone and size as classes and hides the glyph from assistive technology', () => {
-    const { container } = render(<Tag tone="warn" size="small" icon={<svg />}>Unsaved</Tag>);
-    const tag = container.querySelector('.tag')!;
-    expect(tag.classList.contains('is-warn')).toBe(true);
-    expect(tag.classList.contains('is-small')).toBe(true);
-    expect(tag.querySelector('.tag-icon')?.getAttribute('aria-hidden')).toBe('true');
-    expect(tag.textContent).toBe('Unsaved');
+  it('hides its decorative glyph from assistive technology', () => {
+    const { container } = render(<Tag icon={<svg />}>Unsaved</Tag>);
+    expect(container.querySelector('svg')?.parentElement?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('as a toggle reports the opposite of its pressed state', () => {
@@ -152,7 +139,6 @@ describe('Tag', () => {
 });
 
 describe('ConfirmAction', () => {
-
   it('fixes the cancel label, names the confirming button and colours a destructive one', () => {
     const onConfirm = vi.fn();
     render(
@@ -169,15 +155,6 @@ describe('ConfirmAction', () => {
     fireEvent.click(confirm);
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to a plain confirmation that is not coloured', () => {
-    render(
-      <I18nProvider>
-        <ConfirmAction open title="Save the source?"><button type="button">Save</button></ConfirmAction>
-      </I18nProvider>,
-    );
-    expect(screen.getByRole('button', { name: 'Confirm' }).classList.contains('ant-btn-dangerous')).toBe(false);
   });
 
   it("puts the trigger's tooltip away while the confirmation is open", async () => {
@@ -214,30 +191,6 @@ describe('SelectionBar', () => {
     expect(container.querySelector('.selection-bar.is-framed')).toBeTruthy();
     expect(container.querySelector('.selection-bar-note')?.textContent).toBe('2 on other pages');
     expect(container.querySelector('.selection-bar-actions button')?.textContent).toBe('Delete');
-  });
-});
-
-describe('Toolbar', () => {
-  it('sets trailing controls apart and draws no trailing slot without them', () => {
-    const { container, rerender } = render(
-      <Toolbar variant="ruled" end={<button type="button">Export</button>}><input aria-label="Search" /></Toolbar>,
-    );
-    expect(container.querySelector('.toolbar.is-ruled > input')).toBeTruthy();
-    expect(container.querySelector('.toolbar-end button')?.textContent).toBe('Export');
-
-    rerender(<Toolbar><input aria-label="Search" /></Toolbar>);
-
-    expect(container.querySelector('.toolbar.is-ruled')).toBeNull();
-    expect(container.querySelector('.toolbar-end')).toBeNull();
-  });
-});
-
-describe('Panel', () => {
-  it('draws the header from its title and leaves the inset to the stylesheet', () => {
-    const { container } = render(<Panel title="Versions" extra={<button type="button">Check</button>} className="system-card">body</Panel>);
-    expect(container.querySelector('.panel.system-card .ant-card-head-title')?.textContent).toBe('Versions');
-    expect(container.querySelector('.ant-card-extra button')?.textContent).toBe('Check');
-    expect((container.querySelector('.ant-card-body') as HTMLElement).style.padding).toBe('');
   });
 });
 

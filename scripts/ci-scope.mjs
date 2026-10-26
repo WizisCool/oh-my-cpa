@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/ci-scope\.mjs)$/;
+export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|scripts\/(?:ci-scope|affected-files|affected-checks|verify-fast|parallel-checks)\.mjs)$/;
 // Go tests also read a few files outside the module: the console's public assets, the
 // committed demonstration dataset and the shared API contract fixtures.
 const GO = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^(?:internal|cmd|migrations)\/|^scripts\/fixture\/|^scripts\/fake-cpa\.mjs$|^scripts\/browser-acceptance\.mjs$|^web\/public\/|^web\/index\.html$|^deploy\/cloudflare\/data\/|^scripts\/acceptance\/contracts\/)/;

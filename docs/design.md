@@ -44,8 +44,8 @@ A palette is **nine authored tokens and eighteen derived ones**. `web/src/theme/
 authored set and computes the rest; `docs/adr/0011-theme-modes-and-derived-palettes.md` records the
 formula, its calibrated constants, and the places where applying it changed the values below. Nothing in
 this section is hand-tuned any more, so a value here that disagrees with `derivePalette` is a defect in
-this document rather than a palette exception - `scripts/test-theme-presets.ts` asserts the stylesheet's
-fallback against the same function, though it cannot read this table.
+this document rather than a palette exception. `scripts/test-theme-presets.ts` checks the derivation,
+preferences and runtime projection from the same palette source.
 
 **One visible step in both modes.** The derivation's blends are fractions of a palette's own
 distances, and a light palette's distances are short, so a soft rule and a chart's grid
@@ -167,7 +167,7 @@ clears **4.5:1**. Every palette's label clears it, and the registry check fails 
 The OMC Settings page presents two groups of named cards with a four-swatch preview, one per mode, and
 each group's last card is the operator's own. The header's control presents the mode alone. The appearance
 controls must not introduce a second palette source: both read the registry, so new palettes extend
-`web/src/theme/palette.ts`, and the derivation, contrast and mirror checks in
+`web/src/theme/palette.ts`, and the derivation, contrast and projection checks in
 `scripts/test-theme-presets.ts` fail if a palette is incomplete or unreadable.
 
 ### Accent ladder
@@ -701,7 +701,7 @@ tokens keep those hues exclusively, and both panels state their categories in te
 names each group, and the ranked list prints each group's name, volume and share. Colour is never the
 only encoding.
 
-Rules, all measured and asserted by `scripts/test-chart-marks.ts`:
+Palette contrast, separation and runtime-projection rules asserted by `scripts/test-chart-marks.ts`:
 
 1. **Every slot clears 3:1 against the card it is drawn on** (WCAG's bar for a graphical object, not
 the 4.5:1 body-text bar - these are 1.6px lines and 8px swatches). Measured across both themes the
@@ -711,10 +711,8 @@ swatch. The sequence exists for that bound: it alternates warm and cool families
 warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
 3. **The runtime projection is what every palette is checked against.** `web/src/theme/palette.ts` is
 the only source of the six slots. `index.css` carries the dark and light sets as the pre-hydration
-fallback, and the suite compares that fallback with the derived palettes character for character; every
-other palette's slots are projected at runtime by `themePaletteCssVariables` and asserted against its own
-derivation. A token changed in one place and not the other fails rather than shipping a chart in a colour
-the legend does not show.
+fallback. `themePaletteCssVariables` projects each resolved palette's slots at runtime, and the suite
+checks that projection against the same palette.
 4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group -
 `model:<name>` or the folded discriminator - rather than the display label, so a real model whose name
 equals the remainder's translated label cannot take the remainder's colour. The range is then generated
@@ -2272,12 +2270,10 @@ ease    cubic-bezier(0.2, 0, 0, 1)      state changes and leaving panels (--ease
 ease-out cubic-bezier(0.16, 1, 0.3, 1)  entrances: most of the move lands in the first third (--ease-out)
 ```
 
-**The table is the budget, and the stylesheet is held to it.** `web/src/index.css` mirrors `fast`,
-`float`, `base` and `slow` as `--motion-fast`, `--motion-float`, `--motion-base` and `--motion-slow`
-for every CSS transition and animation the console owns;
-`scripts/test-theme-presets.ts` parses both, asserts `fast`, `base` and `slow` equal the Ant Design
-tokens above and pins the ladder itself, so the two spellings of one budget cannot drift apart again. `roll` and `route` are the only tokens with an
-exception attached, both scoped to the dashboard: `roll` by rules 5 and 8, `route`, `land`, `glow`, `enter`,
+**The table is the motion budget.** `web/src/index.css` declares `fast`, `float`, `base` and
+`slow` as `--motion-fast`, `--motion-float`, `--motion-base` and `--motion-slow` for CSS transitions
+and animations. `scripts/check-motion.mjs` enforces declared-token use at call sites, layout-property
+restrictions and reduced-motion counterparts. `roll` and `route` have exceptions attached, both scoped to the dashboard: `roll` by rules 5 and 8, `route`, `land`, `glow`, `enter`,
 `exit` and `presence` by rule 9. The rule-9 tokens are JavaScript-only (`MOTION_ROUTE`,
 `MOTION_ROUTE_LAND`, `MOTION_ROUTE_GLOW`, `MOTION_ROUTE_ENTER`, `MOTION_ROUTE_EXIT` and
 `MOTION_ROUTE_PRESENCE` in `themeConfig.ts`) and drive Web Animations rather than a stylesheet; the

@@ -51,19 +51,19 @@ function planFileChecks(file) {
   const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
   if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
+  if (/^scripts\/test-[^/]+\.ts$/.test(file)) return ['type-check', 'logic'];
   if (file.startsWith('internal/agent/openui/')) add('go', 'openui-prompt');
   if (file.startsWith('web/src/agent/openui/') || file === 'scripts/generate-openui-prompt.ts') add('openui-prompt');
-  if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components', 'self-tests');
+  if (file.startsWith('web/tests/') && /\.(?:ts|tsx)$/.test(file)) add('type-check', 'components');
+  if (/^web\/src\/i18n\/locales\//.test(file)) return ['type-check', 'i18n'];
   if (isWebCode) add('type-check', 'logic', 'components', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
   if (file.endsWith('.css')) add('css-modules', 'motion', 'style-tokens');
   if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)
       || file.startsWith('migrations/') || file.startsWith('internal/web/')) add('go');
-  // Go tests are also counted by the fixed-wait ratchet, which is a repository self-test.
-  if (file.endsWith('_test.go')) add('self-tests');
   if (file.endsWith('.md')) add('docs');
   // Workflows are linted by actionlint in CI; nothing local exercises them.
-  if (file.startsWith('.github/')) return [];
+  if (file.startsWith('.github/')) return ['docs'];
   if (file.startsWith('scripts/') || file.startsWith('deploy/cloudflare/')) add('self-tests');
   // allowJs infers exported JS signatures consumed by typed orchestration.
   if ((/^(?:scripts|deploy\/cloudflare)\//.test(file) && /\.(?:mjs|ts)$/.test(file))

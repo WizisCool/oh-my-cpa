@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { runProbeCatalog } from './testing/probes.ts';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
+import { measureVerification } from './parallel-checks.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -144,4 +145,4 @@ if (selectedIds.length === 0) {
 
 console.log(`Running ${selectedIds.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
 console.log(`Reason: ${selectionReason}; workers: ${options.workers}\n`);
-if (!await runProbeCatalog({ port: PORT, workers: options.workers, ids: selectedIds })) process.exitCode = 1;
+if (!await measureVerification(options.all ? 'ui-full' : 'ui-affected', () => runProbeCatalog({ port: PORT, workers: options.workers, ids: selectedIds }), selectedIds)) process.exitCode = 1;
