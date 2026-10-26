@@ -2,6 +2,8 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
+import { AppLayout } from '../src/components/common/AppLayout';
+import { ThemeProvider } from '../src/theme/ThemeContext';
 import { SidebarNavSettings } from '../src/components/settings/SidebarNavSettings';
 import { buildNavGroups } from '../src/components/common/navigation';
 import { LOCKED_NAV_KEYS, applyNavOrder, retainVisibleGroups } from '../src/types/sidebarNav';
@@ -230,5 +232,43 @@ describe('sidebar layout panel', () => {
     expect(rowOrder(dialog)).toEqual(MODEL_ORDER);
     expect(agent.getAttribute('aria-checked')).toBe('true');
     expect((screen.getByRole('button', { name: 'Show all' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+/** Shell wiring owns hydration and the shared preference hook owns write serialization/rollback. */
+describe('desktop sidebar preference', () => {
+  const mountShell = () => renderWithOmc(<ThemeProvider><AppLayout /></ThemeProvider>, { route: '/dashboard', isStrict: true });
+
+  beforeEach(() => {
+    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+    api.on('GET', '/management/system/updates', () => ({ omc_version: { state: 'unchecked' }, cpa_version: { state: 'unchecked' } }));
+  });
+
+  it('waits for the stored choice before admitting a toggle and never writes during hydration', async () => {
+    api.state.preferences.omc_sidebar_collapsed = true;
+    const read = api.hold('GET', '/preferences');
+    mountShell();
+    await read.arrived;
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' });
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(api.preferenceWrites()).toEqual([]);
+    await act(async () => { read.release(); });
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Expand sidebar' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(api.preferenceWrites()).toEqual([]);
+  });
+
+  it('uses the shared rollback when expanding the collapsed brand is refused', async () => {
+    api.state.preferences.omc_sidebar_collapsed = true;
+    mountShell();
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    const write = api.hold('PUT', '/preferences/omc_sidebar_collapsed');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Expand Sider' }), { key: 'Enter' });
+    await write.arrived;
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
+    await act(async () => { write.release(new Response('{"error":"write_busy"}', { status: 503 })); });
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    expect(api.preferenceWrites()).toEqual([{ key: 'omc_sidebar_collapsed', value: false }]);
+    expect(api.state.preferences.omc_sidebar_collapsed).toBe(true);
   });
 });

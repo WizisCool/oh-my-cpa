@@ -51,6 +51,38 @@ export async function sidebarNavCustomization({ base, page, check }) {
     return route.fallback();
   });
 
+  const collapsedWrites = () => writes.filter((write) => write.key === 'omc_sidebar_collapsed');
+  await page.goto(base + '/omc-settings', { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  await until(() => collapsedWrites().length === 1, { label: 'the collapsed sidebar preference to be stored' });
+  check('collapsing the desktop rail stores a boolean', bodyOf(collapsedWrites()[0]) === 'true');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
+  check('a reload keeps the desktop rail collapsed',
+    (await page.locator('.app-sider').boundingBox()).width === 58);
+  const desktopViewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.locator('.mobile-nav-drawer .app-menu').waitFor();
+  check('a fresh phone sheet keeps full navigation groups with a collapsed desktop preference',
+    await page.locator('.mobile-nav-drawer .ant-menu-item-group-title').count() > 0);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).waitFor();
+  check('the phone sheet reopens closed without rewriting the desktop preference',
+    await page.locator('.mobile-nav-drawer .app-menu').count() === 0
+      && collapsedWrites().length === 1 && preferences.omc_sidebar_collapsed === true);
+  await page.setViewportSize(desktopViewport);
+  await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
+  await until(() => collapsedWrites().length === 2, { label: 'the expanded sidebar preference to be stored' });
+  check('expanding the desktop rail stores false', bodyOf(collapsedWrites()[1]) === 'false');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).waitFor();
+  check('a reload keeps the desktop rail expanded',
+    (await page.locator('.app-sider').boundingBox()).width > 58);
+
   // Every row lives in the panel, so each journey to a row opens the panel first and closes it
   // before doing anything the overlay would sit in front of. What the page itself carries is one row
   // whose description says how many entries are out of the rail.
@@ -278,4 +310,6 @@ export async function sidebarNavCustomization({ base, page, check }) {
   check('both header actions stay usable in the phone dialog',
     await page.getByRole('button', { name: 'Tetapkan semula susunan' }).isVisible()
       && await page.getByRole('button', { name: 'Tunjuk semua' }).isVisible());
+  check('opening the phone sheet does not change the desktop rail preference',
+    collapsedWrites().length === 2 && preferences.omc_sidebar_collapsed === false);
 }

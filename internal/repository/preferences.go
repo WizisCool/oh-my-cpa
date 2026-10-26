@@ -49,6 +49,9 @@ const (
 	// own order, so a release that adds a group or an entry needs no rewrite of what is stored.
 	PreferenceNavOrder = "omc_nav_order"
 
+	// PreferenceSidebarCollapsed remembers the desktop rail independently of the transient phone drawer.
+	PreferenceSidebarCollapsed = "omc_sidebar_collapsed"
+
 	// PreferenceDashboardLayout is the dashboard's widget arrangement: every widget the console
 	// knows, in reading order, with its width and whether it is hidden. A widget a later release
 	// adds is missing from an older document, and the console places and shows it by default.
