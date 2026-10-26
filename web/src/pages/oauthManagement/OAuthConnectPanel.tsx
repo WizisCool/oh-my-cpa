@@ -82,8 +82,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const useDefaultRoute = () => {
     if (!choice) return;
     setProxyUrl('');
-    sessions.clearProxyReentry(choice.id);
-    void sessions.start(choice.id);
+    void sessions.startDefaultRoute(choice.id);
   };
 
   useOverlayHistory({ isOpen: open, onClose });

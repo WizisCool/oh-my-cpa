@@ -147,18 +147,19 @@ it('starts the default route after explicit selection and retains ordinary defau
     fireEvent.click(start());
     await waitFor(() => expect(session().status).toBe('error'));
     fireEvent.click(surface.baseElement.querySelector('[data-oauth-default-route]')!);
-    expect(server.writes('/management/oauth/start')).toHaveLength(1);
-    fireEvent.click(start());
     await waitFor(() => expect(server.writes('/management/oauth/start')).toHaveLength(2));
     await waitFor(() => expect(session().status).toBe('error'));
+    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([
+      { provider: 'codex', proxy_url: 'https://proxy.example.test' }, { provider: 'codex' },
+    ]);
+    expect(surface.baseElement.querySelector('[data-oauth-default-route]')).toBeNull();
     expect(start().disabled).toBe(false);
     const retry = surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-retry]')!;
     expect(retry.disabled).toBe(false);
     shouldSucceed = true;
     fireEvent.click(retry);
     await waitFor(() => expect(session().status).toBe('waiting'));
-    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([
-      { provider: 'codex', proxy_url: 'https://proxy.example.test' }, { provider: 'codex' }, { provider: 'codex' },
-    ]);
+    expect(server.writes('/management/oauth/start')).toHaveLength(3);
+    expect(server.writes('/management/oauth/start').at(-1)!.body).toEqual({ provider: 'codex' });
   } finally { surface.unmount(); }
 });

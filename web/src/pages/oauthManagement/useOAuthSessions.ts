@@ -36,12 +36,12 @@ export interface OAuthSessionsController {
   states: Record<string, OAuthSessionState>;
   activeProviders: string[];
   start: (providerId: string, proxyUrl?: string) => Promise<void>;
+  startDefaultRoute: (providerId: string) => Promise<void>;
   cancel: (providerId: string) => Promise<void>;
   submitCallback: (providerId: string) => Promise<void>;
   check: (providerId: string) => Promise<void>;
   setCallbackUrl: (providerId: string, value: string) => void;
   reset: (providerId: string) => void;
-  clearProxyReentry: (providerId: string) => void;
 }
 
 const STATUS_POLL_INTERVAL_MS = 3000;
@@ -147,10 +147,6 @@ export function useOAuthSessions(
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
-
-  const clearProxyReentry = React.useCallback((providerId: string) => {
-    updateProviderState(providerId, { requiresProxyReentry: false });
-  }, [updateProviderState]);
 
   const complete = React.useCallback((providerId: string, generation: number) => {
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
@@ -261,12 +257,16 @@ export function useOAuthSessions(
     }, STATUS_POLL_INTERVAL_MS);
   }, [clearStatusTimer, enqueueCheck, performStatusCheck]);
 
-  const start = React.useCallback(async (providerId: string, proxyUrl?: string) => {
+  const startAttempt = React.useCallback(async (
+    providerId: string,
+    proxyUrl: string | undefined,
+    isDefaultRouteConfirmed: boolean,
+  ) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
     if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
-    if (current?.requiresProxyReentry && !proxyUrl?.trim()) return;
+    if (current?.requiresProxyReentry && !proxyUrl?.trim() && !isDefaultRouteConfirmed) return;
     startInFlightRef.current[providerId] = true;
 
     clearProviderTimers(providerId);
@@ -314,6 +314,16 @@ export function useOAuthSessions(
       startInFlightRef.current[providerId] = false;
     }
   }, [clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
+
+  const start = React.useCallback(
+    (providerId: string, proxyUrl?: string) => startAttempt(providerId, proxyUrl, false),
+    [startAttempt],
+  );
+
+  const startDefaultRoute = React.useCallback(
+    (providerId: string) => startAttempt(providerId, undefined, true),
+    [startAttempt],
+  );
 
   const cancel = React.useCallback(async (providerId: string) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
@@ -453,6 +463,6 @@ export function useOAuthSessions(
     check,
     setCallbackUrl,
     reset,
-    clearProxyReentry,
+    startDefaultRoute,
   };
 }
