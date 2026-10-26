@@ -367,7 +367,7 @@ export default {
   "cfg.grp_other_providers": "Penyedia Lain",
   "cfg.grp_other_providers_desc": "Pilihan penyedia untuk xAI dan Devin",
   "cfg.grp_discovery": "Penemuan Rangkaian",
-  "cfg.grp_discovery_desc": "Iklankan perkhidmatan ini di LAN melalui mDNS / DNS-SD; gateway baharu tidak mengiklankan titik akhir pengurusan, dan penemuan tidak merentas rangkaian jambatan lalai Docker",
+  "cfg.grp_discovery_desc": "Iklankan perkhidmatan ini di LAN melalui mDNS / DNS-SD; gateway yang dikemas kini tidak mengiklankan titik akhir pengurusan, dan penemuan tidak merentas rangkaian jambatan lalai Docker",
   "cfg.grp_pprof": "Pemprofilan (pprof)",
   "cfg.grp_pprof_desc": "Pelayan nyahpepijat Go pprof; ikat pada localhost sahaja",
   "cfg.image_gen_enabled": "Didayakan (lalai)",
