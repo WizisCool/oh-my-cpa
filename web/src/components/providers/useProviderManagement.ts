@@ -254,6 +254,12 @@ export function useProviderManagement({
     );
   };
 
+  const setThinkingLevels = (modelId: string, levels: string[]) => {
+    setFormModels((prev) =>
+      prev.map((item) => (item.id === modelId ? { ...item, thinking: { levels } } : item))
+    );
+  };
+
   const handleSelectIcon = async (selectedIconId: string): Promise<boolean> => {
     if (targetProviderForIcon) {
       const result = await writeProviderIcon(targetProviderForIcon.id, selectedIconId);
@@ -841,6 +847,7 @@ export function useProviderManagement({
     handleAddModel,
     updateModelImage,
     toggleThinkingLevel,
+    setThinkingLevels,
     handleSelectIcon,
     toggleKeyExpanded,
     handleKeyAdd,

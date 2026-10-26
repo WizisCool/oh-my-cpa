@@ -395,6 +395,24 @@
 /* A thinking level is a toggle drawn as a tile: a wash of the ink at rest, a deeper one under the
    pointer, and a tint of the accent once picked. Washes rather than edges, so eight tiles do not
    draw sixteen outlines, and mixed over whatever card they sit on, so they hold in either mode. */
+.level-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.level-head .item-field-label {
+  margin-bottom: 0;
+}
+
+.level-select-all {
+  flex: none;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
 .level-option {
   display: flex;
   align-items: center;

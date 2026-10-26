@@ -21,11 +21,16 @@ export async function dashboardModelPanels({ base, page, check }) {
       swatch: box('swatch'), label: box('name'), spend: box('cost'), volume: box('tokens'), fraction: box('share'),
       width: row.getBoundingClientRect().width };
   }));
-  const legend = await page.locator('.model-legend-item').evaluateAll((rows) => rows.map((row) => ({
-    name: row.querySelector('.model-legend-label').textContent,
-    color: getComputedStyle(row.querySelector('.model-legend-swatch')).backgroundColor,
+  const legend = await page.locator('[data-testid="model-trend-legend"] li').evaluateAll((rows) => rows.map((row) => ({
+    name: row.querySelector('.model-series-text').textContent,
+    color: getComputedStyle(row.querySelector('i')).backgroundColor,
   })));
   check('both DOM rankings show all six groups in the same colors', list.length === 6 && legend.length === 6 && list.every((row, index) => row.name === legend[index].name && row.color === legend[index].color), JSON.stringify({ list, legend }));
+  const namedGroups = list.filter((row) => !/其他模型|Other models/.test(row.name)).length;
+  const legendMarks = await page.locator('[data-testid="model-trend-legend"] .model-series-mark').count();
+  const usageMarks = await page.locator('.model-usage-name-button .model-series-mark').count();
+  check('both model rankings draw a maker mark for every named model', namedGroups === 5 && legendMarks === namedGroups && usageMarks === namedGroups,
+    JSON.stringify({ namedGroups, legendMarks, usageMarks }));
   check('each group states name, cost, volume, share and an exact count', list.every((row) => row.name && row.cost.trim() && /[\d.]/.test(row.tokens) && /%/.test(row.share) && /^(\d{1,3}(,\d{3})+|\d{1,3}) tokens$/.test(row.exact)), JSON.stringify(list));
   check('the folded remainder has a translated label', list.some((row) => /其他模型|Other models/.test(row.name)));
   check('usage columns read name, cost, volume, share with a separate swatch', list.every((row) => row.label.left - row.swatch.right >= 6 && row.label.right <= row.spend.left && row.spend.right <= row.volume.left && row.volume.right <= row.fraction.left));
@@ -95,19 +100,8 @@ export async function dashboardModelPanels({ base, page, check }) {
   const totalLabel = await page.locator('.model-ring').getAttribute('aria-label');
   const firstRow = page.locator('.model-usage-row').first();
   await firstRow.hover();
-  check('hovering the ranked list swaps the centre to that model and its share', (await page.locator('.model-ring').getAttribute('aria-label')).includes(list[0].name) && await page.locator('.model-ring-unit').innerText() === list[0].share);
-  // React updates the centre before ECharts applies the visual state on its next frame.
-  const listHighlight = await until(async () => {
-    const states = await page.evaluate(async () => {
-      const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-      const chart = echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart'));
-      return chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(0).currentStates;
-    });
-    return states.includes('emphasis') && states;
-  }, { label: 'ranked list slice emphasis painted' });
-  check('the ranked list highlights its slice', listHighlight.includes('emphasis'), JSON.stringify(listHighlight));
-  await page.mouse.move(0, 0);
-  await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'ring total restored after list leave' });
+  check('hovering a ranked model name does not change the ring or its centre', (await page.locator('.model-ring').getAttribute('aria-label')) === totalLabel
+    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'false');
   await page.locator('.model-ring').scrollIntoViewIfNeeded();
   const target = await page.evaluate(async () => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
@@ -126,21 +120,49 @@ export async function dashboardModelPanels({ base, page, check }) {
   await page.mouse.move(0, 0);
   await until(async () => await page.locator('.model-ring').getAttribute('aria-label') === totalLabel, { label: 'ring total restored after slice leave' });
 
-  await page.locator('.model-legend-item').first().hover();
-  const highlighted = await until(async () => {
-    const seriesStates = await page.evaluate(async () => {
+  await firstRow.locator('.model-usage-name-button').click();
+  const selectedRingSlices = await until(async () => {
+    const count = await page.evaluate(async () => {
       const { echarts } = await import('/omc/src/charts/echarts/core.ts');
-      const chart = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart'));
-      return chart.getModel().getSeries().map((series) => {
-        const states = new Set();
-        chart.getViewOfSeriesModel(series).group.traverse((node) => node.currentStates?.forEach((state) => states.add(state)));
-        return { id: series.id, states: [...states] };
-      });
+      return echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data.length;
     });
-    return seriesStates.some((series) => series.states.includes('emphasis')) && seriesStates.some((series) => series.states.includes('blur')) && seriesStates;
-  }, { label: 'legend series emphasis and peer blur painted' });
-  check('legend hover emphasizes its series and blurs peers', highlighted.some((series) => series.states?.includes('emphasis')) && highlighted.some((series) => series.states?.includes('blur')), JSON.stringify(highlighted));
+    return count === 1 ? count : null;
+  }, { label: 'the usage name to focus one ring slice' });
+  check('clicking a usage name focuses its slice and marks the row selected', selectedRingSlices === 1
+    && await firstRow.locator('.model-usage-name-button').getAttribute('aria-pressed') === 'true');
+  await firstRow.locator('.model-usage-name-button').click();
+  await until(async () => await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    return echarts.getInstanceByDom(document.querySelector('.model-ring .omc-echart')).getOption().series[0].data.length === 6;
+  }), { label: 'the usage selection to restore every slice' });
+
+  const selectedLegend = page.locator('[data-testid="model-trend-legend"] button').nth(1);
+  await selectedLegend.click();
+  await until(async () => await page.evaluate(() => {
+    return document.querySelector('.model-trend .omc-echart').getAttribute('aria-label') === document.querySelectorAll('[data-testid="model-trend-legend"] button')[1].textContent;
+  }), { label: 'the trend legend to focus one line' });
+  const selectedLineCount = await until(() => page.evaluate((colors) => {
+    const paths = [...document.querySelectorAll('.model-trend svg path')];
+    const count = colors.filter((color) => paths.some((path) => path.getAttribute('stroke') === color)).length;
+    return count === 1 ? count : null;
+  }, paint.colors), { label: 'the focused trend line to be the only one painted' });
+  await page.locator('.model-trend').scrollIntoViewIfNeeded();
+  const trendBox = await page.locator('.model-trend').boundingBox();
+  await page.mouse.move(trendBox.x + trendBox.width / 2, trendBox.y + trendBox.height / 2);
+  await page.locator('.model-trend .omc-tip').waitFor({ state: 'visible' });
+  const selectedTooltip = await page.locator('.model-trend .omc-tip').evaluate((tip) => ({
+    names: [...tip.querySelectorAll('.omc-tip-name')].map((name) => name.textContent),
+    color: getComputedStyle(tip.querySelector('.omc-tip-swatch')).backgroundColor,
+  }));
+  check('clicking a trend legend entry paints only its line, marks the entry selected, and keeps its tooltip colour',
+    selectedLineCount === 1 && await selectedLegend.getAttribute('aria-pressed') === 'true'
+      && selectedTooltip.names.length === 1 && selectedTooltip.names[0] === legend[1].name && selectedTooltip.color === legend[1].color,
+    JSON.stringify(selectedTooltip));
   await page.mouse.move(0, 0);
+  await selectedLegend.click();
+  await until(async () => await page.evaluate(() => {
+    return document.querySelector('.model-trend .omc-echart').getAttribute('aria-label') === [...document.querySelectorAll('[data-testid="model-trend-legend"] button')].map((button) => button.textContent).join(', ');
+  }), { label: 'the trend selection to restore every line' });
   const surfaces = [];
   for (const theme of ['omc-light', 'omc-dark']) {
     await page.evaluate((theme) => localStorage.setItem('omc-theme', theme), theme);

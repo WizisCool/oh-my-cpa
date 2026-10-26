@@ -240,26 +240,12 @@
   display: flex;
   flex-direction: column;
 }
-/* The trend's key. It wraps rather than scrolls: a legend that scrolls hides the very series the
-   reader is looking for, and six entries in a two-column card is at most two rows. */
-.model-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin: 12px 0 4px;
-  padding: 0;
-  list-style: none;
-}
-.model-legend-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.model-legend-swatch { width: 8px; height: 8px; border-radius: 999px; flex: none; }
-.model-legend-label {
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* The trend's shared chart legend wraps rather than scrolls: a legend that scrolls hides the very
+   series the reader is looking for, and six entries in a two-column card is at most two rows. */
+.model-trend-legend { margin: 12px 0 4px; }
+.model-series-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+.model-series-mark { flex: none; }
+.model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-usage-card .ant-card-body {
   flex: 1 1 auto;
   /* Centre the row in the height the card actually has below its header. Grid centring keeps the
@@ -320,12 +306,33 @@
 .model-usage-row:last-child { border-bottom: none; }
 .model-usage-swatch { width: 8px; height: 8px; border-radius: 999px; }
 .model-usage-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--fg);
   font-size: var(--text-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
+.model-usage-name-button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+}
+.model-usage-name-button:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.model-usage-name-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.model-usage-name-button[data-dimmed='true'] { opacity: 0.42; }
 .model-usage-tokens { color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
 .model-usage-share { color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; text-align: right; }
 /* The cost cell follows the name, so it is left-aligned against it rather than against the right

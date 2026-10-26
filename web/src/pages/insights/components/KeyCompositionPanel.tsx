@@ -3,6 +3,7 @@ import { Segmented } from 'antd';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
+import { ChartLegend } from '../../../components/common/ChartLegend';
 import { BarChartOutlined, TableOutlined } from '../../../components/icons';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -14,7 +15,6 @@ import type { InsightsLabels } from '../useInsightsLabels';
 import type { CompositionSegment } from '../charts/InsightsCompositionChart';
 import { MatrixTable } from './MatrixTable';
 import { InsightsValue } from './InsightsValue';
-import { InsightsLegend } from './InsightsLegend';
 import { PanelNarrowing } from './PanelNarrowing';
 
 const InsightsCompositionChart = React.lazy(() => import('../charts/InsightsCompositionChart'));
@@ -125,7 +125,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
         <EmptyState size="compact" title={t('insights.no_usage')} />
       ) : view === 'chart' ? (
         <>
-          <InsightsLegend
+          <ChartLegend
             label={columnName}
             items={composition.segments.map((segment) => (segment.id === null
               ? { id: '\u0000rest', color: segment.color, content: <span>{segment.name}</span> }
