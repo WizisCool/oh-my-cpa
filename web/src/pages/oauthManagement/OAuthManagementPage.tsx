@@ -242,13 +242,20 @@ export const OAuthManagementPage: React.FC = () => {
   const siwcBindings = useSIWCBindings();
   const [siwcRecordKey, setSIWCRecordKey] = React.useState<string>();
   const sessions = useOAuthSessions(choices, handleAuthorizationCompleted, { shouldNotifyCompletion: false });
-  const startSession = React.useCallback((providerId: string, proxyUrl?: string) => {
+  const rememberPreStartSnapshot = React.useCallback((providerId: string) => {
     preStartSnapshotRef.current[providerId] = new Set(recordsRef.current.map((record) => record.key));
+  }, []);
+  const startSession = React.useCallback((providerId: string, proxyUrl?: string) => {
+    rememberPreStartSnapshot(providerId);
     return sessions.start(providerId, proxyUrl);
-  }, [sessions]);
+  }, [rememberPreStartSnapshot, sessions]);
+  const startDefaultRouteSession = React.useCallback((providerId: string) => {
+    rememberPreStartSnapshot(providerId);
+    return sessions.startDefaultRoute(providerId);
+  }, [rememberPreStartSnapshot, sessions]);
   const sessionController = React.useMemo(
-    () => ({ ...sessions, start: startSession }),
-    [sessions, startSession],
+    () => ({ ...sessions, start: startSession, startDefaultRoute: startDefaultRouteSession }),
+    [sessions, startDefaultRouteSession, startSession],
   );
 
   // Sessions outlive the drawer, so an ordinary route departure must be an
