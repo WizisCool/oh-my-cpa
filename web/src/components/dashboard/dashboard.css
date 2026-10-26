@@ -259,11 +259,13 @@
 .model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
 @container modelusage (max-width: 500px) {
   .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
-  .model-usage-list { max-height: none; min-width: 0; }
+  .model-usage-list { min-width: 0; }
 }
-/* The ranked list is the ring's legend and its values in one. It takes the remaining width and
-   caps its own height, because a deployment can serve more models than a card can show and the
-   list must not push the card taller than its peer beside it.
+/* The ranked list is the ring's legend and its values in one. It takes the remaining width.
+
+   It is not a scroll container: the read folds every model outside the top five into one group, so a
+   ranking is at most six rows and a taller list is not a state the endpoint answers with. The card
+   takes the height the ranking has.
 
    The columns live on the list, not on each row. Per-row tracks are resolved against that row's
    own content, so a single row whose cost is a character wider - an amount with an extra digit,
@@ -272,8 +274,6 @@
    every row resolve the same tracks, which is what the header's reading order promises. */
 .model-usage-list {
   flex: 1 1 auto;
-  max-height: 220px;
-  overflow-y: auto;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -299,7 +299,9 @@
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
   align-items: center;
-  padding: 7px 0;
+  /* The pill's padding and hairline are its hit area, not the row's rhythm: the row pads 4px around
+     a control that carries its own air, so six rows fit the card without a scrollbar. */
+  padding: 4px 0;
   border-bottom: 1px solid var(--border-soft);
   font-variant-numeric: tabular-nums;
 }

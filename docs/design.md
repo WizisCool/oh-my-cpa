@@ -932,6 +932,11 @@ the same ranking a second time with no numbers, and a reader comparing two model
 slice's angle is a poor way to compare 5.9% against 4.6%. A share that rounds to zero is reported as
 under the smallest step rather than as `0%`, which would claim a model carried nothing.
 
+**The ranking is six rows, and the card takes their height.** The read folds every model outside the
+top five into one group, so a ranking is at most six rows and the list carries no scrollbar of its
+own. Each row pads 4px around a name pill that already holds its own hit area, rather than the 7px a
+bare text line needed, which is what keeps all six groups on the card.
+
 **A stretched card still centres its reading.** The two model cards share a grid row, so the taller
 trend card can leave the usage card with more height than its ring and list need. The usage body
 claims that remaining height and centres the row in it; leaving the body at its intrinsic height put
