@@ -87,8 +87,17 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
             opacity: isDimmed ? 0.35 : 1, cap: 'round', join: 'round',
           },
           itemStyle: { color: range[colorIndex.get(item.id) ?? 0], opacity: isDimmed ? 0.4 : 1 },
-          emphasis: { focus: 'series', lineStyle: { width: 2.5, opacity: 1 }, itemStyle: { opacity: 1 } },
-          blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
+          // Hover is a temporary preview when nothing is pinned. Once a line is pinned, hovering must
+          // not steal the reading or raise another line above it.
+          emphasis: hasFocus
+            ? {
+                disabled: true,
+                focus: 'none',
+                lineStyle: { width: isFocused ? 2.75 : 1.75, opacity: isDimmed ? 0.35 : 1 },
+                itemStyle: { opacity: isDimmed ? 0.4 : 1 },
+              }
+            : { disabled: false, focus: 'series', lineStyle: { width: 2.5, opacity: 1 }, itemStyle: { opacity: 1 } },
+          blur: hasFocus ? undefined : { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
         };
       }),
     };

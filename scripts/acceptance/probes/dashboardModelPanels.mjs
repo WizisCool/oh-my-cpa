@@ -157,7 +157,7 @@ export async function dashboardModelPanels({ base, page, check }) {
     const option = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getOption();
     return {
       count: option.series.length,
-      lines: option.series.map((series) => ({ name: series.name, width: series.lineStyle.width, opacity: series.lineStyle.opacity })),
+      lines: option.series.map((series) => ({ name: series.name, color: series.lineStyle.color, width: series.lineStyle.width, opacity: series.lineStyle.opacity })),
       label: document.querySelector('.model-trend .omc-echart').getAttribute('aria-label'),
     };
   });
@@ -168,6 +168,69 @@ export async function dashboardModelPanels({ base, page, check }) {
       && focusedTrend.label === [...await page.locator('[data-testid="model-trend-legend"] button').allTextContents()].join(', '),
     JSON.stringify(focusedTrend));
   await page.locator('.model-trend').scrollIntoViewIfNeeded();
+  const hoverSeries = focusedTrend.lines.find((series) => series.name !== legend[1].name);
+  const capturePaintedTrend = () => page.evaluate(async (legendItems) => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const chart = echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart'));
+    const names = chart.getOption().series.map((series) => series.name);
+    const lines = chart.getZr().storage.getDisplayList().filter((element) => element.type === 'ec-polyline');
+    const colorKey = (color) => echarts.color.parse(color).slice(0, 3).join(',');
+    const colors = new Map(legendItems.map((item) => [item.name, colorKey(item.color)]));
+    window.__omcTrendPaint = names.map((name) => {
+      const line = lines.find((element) => colorKey(element.style.stroke) === colors.get(name));
+      return { name, line };
+    });
+    const displayed = new Set(chart.getZr().storage.getDisplayList());
+    return window.__omcTrendPaint.map(({ name, line }) => ({
+      name, width: line?.style.lineWidth, opacity: line?.style.opacity, isDisplayed: Boolean(line && displayed.has(line)),
+    }));
+  }, legend);
+  const readPaintedTrend = () => page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    const displayed = new Set(echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).getZr().storage.getDisplayList());
+    return window.__omcTrendPaint.map(({ name, line }) => ({
+      name, width: line?.style.lineWidth, opacity: line?.style.opacity, isDisplayed: Boolean(line && displayed.has(line)),
+    }));
+  });
+  const beforeHoverPaint = await capturePaintedTrend();
+  const otherLineTarget = await page.evaluate((color) => {
+    const path = [...document.querySelectorAll('.model-trend svg path')]
+      .find((candidate) => candidate.getAttribute('stroke') === color && candidate.getTotalLength() > 20);
+    const point = path.getPointAtLength(path.getTotalLength() / 2);
+    const matrix = path.getScreenCTM();
+    return { x: matrix.a * point.x + matrix.c * point.y + matrix.e, y: matrix.b * point.x + matrix.d * point.y + matrix.f };
+  }, hoverSeries.color);
+  await page.evaluate(async () => {
+    const { echarts } = await import('/omc/src/charts/echarts/core.ts');
+    window.__omcHoveredTrendSeries = null;
+    echarts.getInstanceByDom(document.querySelector('.model-trend .omc-echart')).on('mouseover', (params) => {
+      if (params.componentSubType === 'line' && params.seriesName) window.__omcHoveredTrendSeries = params.seriesName;
+    });
+  });
+  await page.mouse.move(otherLineTarget.x, otherLineTarget.y);
+  await until(() => page.evaluate(() => window.__omcHoveredTrendSeries ?? null), { label: 'a non-pinned trend line to receive the pointer' });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const hoveredName = await page.evaluate(() => window.__omcHoveredTrendSeries);
+  const duringHoverPaint = await readPaintedTrend();
+  const beforePinned = beforeHoverPaint.find((series) => series.name === legend[1].name);
+  const duringPinned = duringHoverPaint.find((series) => series.name === legend[1].name);
+  const beforeHovered = beforeHoverPaint.find((series) => series.name === hoveredName);
+  const duringHovered = duringHoverPaint.find((series) => series.name === hoveredName);
+  const samePaint = (before, during) => before && during && before.width === during.width && before.opacity === during.opacity;
+  const everyLineUnchanged = beforeHoverPaint.every((before) => {
+    const during = duringHoverPaint.find((series) => series.name === before.name);
+    return before.isDisplayed && during?.isDisplayed && samePaint(before, during);
+  });
+  check('hovering another trend line keeps the pinned highlight and faded context unchanged',
+    hoveredName !== legend[1].name
+      && beforeHoverPaint.length === 6 && duringHoverPaint.length === 6
+      && everyLineUnchanged
+      && samePaint(beforePinned, duringPinned) && samePaint(beforeHovered, duringHovered)
+      && duringPinned?.width === 2.75 && duringPinned.opacity === 1
+      && duringHovered?.width === 1.75 && duringHovered.opacity === 0.35
+      && await page.locator('[data-testid="model-trend-legend"] button[aria-pressed="true"]').innerText() === legend[1].name,
+  JSON.stringify({ hoveredName, beforeHoverPaint, duringHoverPaint }));
+  await page.mouse.move(0, 0);
   const trendBox = await page.locator('.model-trend').boundingBox();
   await page.mouse.move(trendBox.x + trendBox.width / 2, trendBox.y + trendBox.height / 2);
   await page.locator('.model-trend .omc-tip').waitFor({ state: 'visible' });
