@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -94,5 +95,61 @@ func TestOAuthCatalogRefusesUnreadableAliasRules(t *testing.T) {
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("alias read failure lost classification: %v", err)
+	}
+}
+
+// catalogTransportFunc observes dispatch even when net/http would reject an
+// already-cancelled request before it could reach the test server.
+type catalogTransportFunc func(*http.Request) (*http.Response, error)
+
+func (transport catalogTransportFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestOAuthCatalogCancellationStopsCredentialDiscovery(t *testing.T) {
+	for _, isProvenance := range []bool{false, true} {
+		t.Run(fmt.Sprintf("provenance=%t", isProvenance), func(t *testing.T) {
+			files := []AuthFile{}
+			for index := range 32 {
+				files = append(files, AuthFile{Name: fmt.Sprintf("scale-%d.json", index), Provider: "grok"})
+			}
+			files = append(files, AuthFile{Provider: "codex", Models: []AuthModel{{ID: "inline-model"}}})
+			encoded, err := json.Marshal(files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client, _ := newOAuthCatalogClient(t, string(encoded), `{}`, http.StatusOK)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var modelReads atomic.Int64
+			transport := client.httpClient.Transport
+			client.httpClient.Transport = catalogTransportFunc(func(request *http.Request) (*http.Response, error) {
+				if request.URL.Path == "/v8/management/credentials/models" {
+					modelReads.Add(1)
+					cancel()
+					return nil, ctx.Err()
+				}
+				return transport.RoundTrip(request)
+			})
+			var snapshot ConfiguredModelSnapshot
+			if isProvenance {
+				snapshot, err = client.ListConfiguredModelProvenance(ctx)
+			} else {
+				snapshot, err = client.ListConfiguredModelSnapshot(ctx)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("lost cancellation: %v", err)
+			}
+			if reads := modelReads.Load(); reads == 0 || reads > 4 {
+				t.Fatalf("dispatched %d credential reads after cancellation; want at most one in-flight wave", reads)
+			}
+			if isProvenance {
+				if snapshot.Models["inline-model"] != "inline-model" {
+					t.Fatal("cancellation discarded already-known inline membership")
+				}
+			} else if snapshot.Models != nil || snapshot.Providers != nil {
+				t.Fatal("pricing must refuse the entire incomplete catalog")
+			}
+		})
 	}
 }
