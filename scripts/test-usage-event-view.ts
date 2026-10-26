@@ -1032,7 +1032,7 @@ const apiKeyEvent = {
 
 const apiKeyResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'openai': 'OpenAI' });
 assert.equal(apiKeyResolved.isOAuth, false);
-assert.equal(apiKeyResolved.title, 'Openai');
+assert.equal(apiKeyResolved.title, 'openai');
 assert.equal(apiKeyResolved.credential, undefined);
 
 // Configured AI provider match
@@ -1055,6 +1055,44 @@ const byServingKey = resolveProviderInfo(secondKeyEvent, credFiles, {}, [
 ]);
 assert.equal(byServingKey.title, 'Relay');
 
+// Removing a provider must not transfer its history to a surviving name match.
+const relayProviders = [
+  { id: 'openai-compat-0', name: 'Relay', upstream_name: 'relay', family: 'openai-compatibility', auth_indexes: ['relay-key'] },
+  { id: 'openai-compat-1', name: 'Relay Pro', upstream_name: 'relay-pro', family: 'openai-compatibility', auth_indexes: ['relay-pro-key'] },
+];
+for (const authIndex of ['relay-pro-key', '']) {
+  const relayEvent = Object.freeze({
+    ...apiKeyEvent,
+    provider: 'openai-compatible-relay-pro',
+    auth_index: authIndex,
+    resource_name: 'relay-pro',
+  });
+  assert.equal(resolveProviderInfo(relayEvent, credFiles, {}, relayProviders).title, 'Relay Pro');
+  assert.deepEqual(
+    resolveProviderInfo(relayEvent, credFiles, {}, relayProviders.slice(0, 1)),
+    resolveProviderInfo(relayEvent, credFiles),
+    'deleting a provider must leave its request unclaimed instead of assigning a substring match',
+  );
+}
+
+// An index is authoritative only when one provider claims it. Neither an exact
+// label nor list order can resolve a deleted or multiply claimed credential.
+const staleCredentialEvent = { ...apiKeyEvent, provider: 'openai-compatible-relay', auth_index: 'removed-key' };
+assert.deepEqual(
+  resolveProviderInfo(staleCredentialEvent, credFiles, {}, relayProviders),
+  resolveProviderInfo(staleCredentialEvent, credFiles),
+  'a current provider label cannot substitute for a deleted credential',
+);
+const duplicateCredentials = relayProviders.map((provider) => ({ ...provider, auth_indexes: ['shared-index'] }));
+const duplicateCredentialEvent = { ...apiKeyEvent, provider: 'openai-compatible-relay', auth_index: 'shared-index' };
+for (const providers of [duplicateCredentials, [...duplicateCredentials].reverse()]) {
+  assert.deepEqual(
+    resolveProviderInfo(duplicateCredentialEvent, credFiles, {}, providers),
+    resolveProviderInfo(duplicateCredentialEvent, credFiles),
+    'an ambiguous credential must not select a provider by label or list order',
+  );
+}
+
 // Technical driver string: openai-compatible-opencode go -> Opencode
 const opencodeEvent = {
   id: 12,
@@ -1067,7 +1105,7 @@ assert.equal(opencodeResolved.isOAuth, false);
 assert.equal(opencodeResolved.title, 'Opencode');
 assert.equal(opencodeResolved.credential, undefined);
 
-// Unconfigured fallback also cleans technical prefixes/suffixes
+// Unconfigured records retain the exact upstream label rather than inventing a name.
 const fallbackOpencodeEvent = {
   id: 13,
   provider: 'openai-compatible-opencode go',
@@ -1075,7 +1113,7 @@ const fallbackOpencodeEvent = {
 } as UsageEvent;
 const fallbackOpencodeResolved = resolveProviderInfo(fallbackOpencodeEvent, credFiles, {}, []);
 assert.equal(fallbackOpencodeResolved.isOAuth, false);
-assert.equal(fallbackOpencodeResolved.title, 'Opencode');
+assert.equal(fallbackOpencodeResolved.title, 'openai-compatible-opencode go');
 assert.equal(fallbackOpencodeResolved.credential, undefined);
 
 // A request answered by a plugin-registered OAuth provider carries that plugin's own
@@ -1156,6 +1194,32 @@ const customName = createProviderNameResolver([
 assert.equal(customName('openai-compatible-vendor-x'), '我的专线');
 // The custom name alone must not resolve, because it is not what CPA stores.
 assert.equal(customName('openai-compatible-我的专线'), 'openai-compatible-我的专线');
+const upstreamOnlyEvent = { ...apiKeyEvent, provider: 'openai-compatible-vendor-x', auth_index: '' };
+assert.equal(resolveProviderInfo(upstreamOnlyEvent, credFiles, {}, [
+  { id: 'openai-compat-3', name: '我的专线', upstream_name: 'vendor-x' },
+]).title, customName(upstreamOnlyEvent.provider), 'rows and facets resolve the same exact upstream identity');
+// CPA's compatibility namespace distinguishes an upstream named "codex" from
+// the native family's indexless records; the bare family is not its identity.
+const familyNamedRelay = [{ id: 'openai-compat-0', name: 'Codex relay', upstream_name: 'codex', family: 'openai-compatibility' }];
+const familyOnlyEvent = { ...upstreamOnlyEvent, provider: 'codex' };
+assert.deepEqual(
+  resolveProviderInfo(familyOnlyEvent, credFiles, {}, familyNamedRelay),
+  resolveProviderInfo(familyOnlyEvent, credFiles),
+  'an upstream name in a different CPA namespace cannot claim a family label',
+);
+assert.equal(createProviderNameResolver(familyNamedRelay)('codex'), 'codex');
+assert.equal(createProviderNameResolver(familyNamedRelay)('openai-compatible-codex'), 'Codex relay');
+const duplicateNames = [
+  { id: 'openai-compat-0', name: 'Relay', upstream_name: 'relay' },
+  { id: 'openai-compat-1', name: 'Relay', upstream_name: 'relay' },
+];
+const duplicateNameEvent = { ...upstreamOnlyEvent, provider: 'openai-compatible-relay' };
+assert.equal(createProviderNameResolver(duplicateNames)(duplicateNameEvent.provider), duplicateNameEvent.provider);
+assert.deepEqual(
+  resolveProviderInfo(duplicateNameEvent, credFiles, {}, duplicateNames),
+  resolveProviderInfo(duplicateNameEvent, credFiles),
+  'identical display names do not make two provider identities unambiguous',
+);
 // An empty configuration resolves nothing and never throws.
 const emptyResolver = createProviderNameResolver([]);
 assert.equal(emptyResolver('openai-compatible-anything'), 'openai-compatible-anything');

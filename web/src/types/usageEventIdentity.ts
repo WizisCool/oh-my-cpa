@@ -71,67 +71,44 @@ export interface ProviderLookupEntry {
 export const PROVIDER_KEY_PREFIX = 'openai-compatible-';
 
 /**
- * createProviderNameResolver maps one stored provider key to the name the operator
- * gave that provider.
- *
- * CPA's usage records carry its own provider key, typically
- * "openai-compatible-<upstream name>". Resolving that to the configured name is a
- * lookup, never a prettification: guessing a name from the key would print
- * something the operator never wrote and would disagree with the providers page
- * for the same line.
- *
- * The match is exact and is tried against the fields that actually carry
- * identity, in order of how much they prove:
- *
- *   1. the recorded upstream name (`upstream_name`), which is exactly the text
- *      CPA embeds in the key, and survives a local custom name;
- *   2. the key with the openai-compatible- prefix removed, against the same field;
- *   3. the local provider id.
- *
- * No substring or containment matching: a name that merely appears inside the key
- * is not proof the key denotes that provider. An identity two providers both claim
- * is treated as unresolved rather than silently assigned to whichever was listed
- * first - the custom name is what differs between them, so a name that matches two
- * entries cannot be the identity of either. Anything unresolved falls back to the
- * raw key, which is still the record's true identity and never an invention.
- *
- * auth_index is not consulted: a provider facet does not carry one.
+ * Rows and facets share the same identity claims. Display names and resource
+ * names are presentation, not proof that a current provider served a request.
  */
+function createProviderResolver(configured: readonly ProviderLookupEntry[]) {
+  const providerClaims = new Map<string, ProviderLookupEntry | null>();
+  const credentialClaims = new Map<string, ProviderLookupEntry | null>();
+  const claim = (claims: Map<string, ProviderLookupEntry | null>, key: string, provider: ProviderLookupEntry) => {
+    if (!key) return;
+    const current = claims.get(key);
+    if (current === undefined) claims.set(key, provider);
+    else if (current !== provider) claims.set(key, null);
+  };
+  for (const provider of configured) {
+    claim(providerClaims, provider.id.trim().toLowerCase(), provider);
+    const upstreamName = provider.upstream_name?.trim().toLowerCase();
+    if (upstreamName) claim(providerClaims, `${PROVIDER_KEY_PREFIX}${upstreamName}`, provider);
+    for (const authIndex of [provider.auth_index, ...(provider.auth_indexes ?? [])]) {
+      claim(credentialClaims, authIndex?.trim() || '', provider);
+    }
+  }
+
+  return (providerKey: string | null | undefined, authIndex?: string): ProviderLookupEntry | undefined => {
+    // A missing or ambiguous credential cannot be replaced by a weaker label:
+    // that would transfer history after deletion, rotation or name reuse.
+    const credentialKey = authIndex?.trim();
+    if (credentialKey) return credentialClaims.get(credentialKey) ?? undefined;
+
+    const rawKey = providerKey?.trim().toLowerCase() || '';
+    return providerClaims.get(rawKey) ?? undefined;
+  };
+}
+
+/** Provider facets have no credential index, so only exact provider keys resolve. */
 export function createProviderNameResolver(
   configured: readonly ProviderLookupEntry[] = [],
 ): (providerKey: string | null | undefined) => string {
-  // Identity -> display name, or null once a second claimant makes the identity
-  // ambiguous. Storing null rather than overwriting is the point: a duplicate
-  // cannot be resolved by list order.
-  const claimants = new Map<string, string | null>();
-  const claim = (identity: string | undefined, name: string) => {
-    const key = identity?.trim().toLowerCase();
-    if (!key) return;
-    if (!claimants.has(key)) claimants.set(key, name);
-    else if (claimants.get(key) !== name) claimants.set(key, null);
-  };
-  for (const provider of configured) {
-    const name = provider.name?.trim();
-    if (!name) continue;
-    claim(provider.upstream_name, name);
-    claim(provider.id, name);
-  }
-
-  const lookup = (identity: string | undefined): string | undefined => {
-    const key = identity?.trim().toLowerCase();
-    if (!key) return undefined;
-    return claimants.get(key) ?? undefined;
-  };
-
-  return (providerKey) => {
-    const raw = providerKey?.trim();
-    if (!raw) return '';
-    const lowered = raw.toLowerCase();
-    const stripped = lowered.startsWith(PROVIDER_KEY_PREFIX)
-      ? lowered.slice(PROVIDER_KEY_PREFIX.length)
-      : lowered;
-    return lookup(stripped) ?? lookup(lowered) ?? raw;
-  };
+  const resolveProvider = createProviderResolver(configured);
+  return (providerKey) => resolveProvider(providerKey)?.name.trim() || providerKey?.trim() || '';
 }
 
 export interface ResolvedProviderInfo {
@@ -210,54 +187,10 @@ export function resolveProviderInfo(
     };
   }
 
-  // AI Provider flow
-  // 1. The key that served the record names its provider outright; only without one do the
-  //    weaker identities (resource, id, name) decide. Checking them in one pass let an earlier
-  //    row that merely shared a name win over the row whose key actually answered.
-  const eventAuthIndex = event.auth_index?.trim();
-  let matched = eventAuthIndex
-    ? configuredProviders.find((p) => p.auth_index === eventAuthIndex || (p.auth_indexes ?? []).includes(eventAuthIndex))
-    : undefined;
-  matched ??= configuredProviders.find(
-    (p) =>
-      (event.resource_id && p.id === event.resource_id) ||
-      (event.resource_name && p.name.toLowerCase() === event.resource_name.toLowerCase()) ||
-      (p.id && p.id.toLowerCase() === (event.provider || '').toLowerCase()) ||
-      (p.name && p.name.toLowerCase() === (event.provider || '').toLowerCase()),
-  );
-
-  // 2. If no exact match, check if any unique configured provider's name is contained in event.provider or event.resource_name
-  if (!matched && configuredProviders.length > 0) {
-    const candidateText = `${event.provider || ''} ${event.resource_name || ''}`.toLowerCase();
-    const candidateMatches = configuredProviders.filter(
-      (p) => p.name && candidateText.includes(p.name.toLowerCase()),
-    );
-    if (candidateMatches.length === 1) {
-      matched = candidateMatches[0];
-    }
-  }
-
+  const matched = createProviderResolver(configuredProviders)(event.provider, event.auth_index);
   const credIdentity = resolveCredential(event, credentials);
   const fileName = credIdentity.name || event.source || '';
-
-  // Determine clean display name: configured name -> resource name -> cleaned provider text
-  let providerName = matched?.name;
-  if (!providerName && event.resource_name?.trim()) {
-    providerName = event.resource_name.trim();
-  }
-  if (!providerName && event.provider) {
-    // Strip technical prefixes like openai-compatible- and trailing -go/ go
-    let cleaned = event.provider.trim().replace(/^openai-compat(ibility|ible)?[-/_\s]*/i, '');
-    cleaned = cleaned.replace(/[-_\s]+go$/i, '');
-    if (cleaned) {
-      providerName = cleaned === cleaned.toLowerCase() ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : cleaned;
-    } else {
-      providerName = event.provider;
-    }
-  }
-  if (!providerName) {
-    providerName = 'Unknown';
-  }
+  const providerName = matched?.name.trim() || event.resource_name?.trim() || event.provider?.trim() || 'Unknown';
 
   const providerFamily = (matched?.family || event.provider || '').toLowerCase();
   // The matched provider's own override resolves through the same order the

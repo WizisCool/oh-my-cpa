@@ -1995,6 +1995,24 @@ The provider page reuses this aggregation rather than reimplementing it
 dashboard's panel and the provider list cannot credit one request to two different
 rows.
 
+### Request provider identity
+
+`web/src/types/usageEventIdentity.ts` shares one exact claim resolver between
+request-row provider details and provider-facet names. A request carrying an
+`auth_index` resolves only when one configured provider claims that credential;
+an absent or duplicate current claim is terminal, so deleting or rotating a key
+cannot transfer its history through a weaker name match. A record without an
+index, and a provider facet that has no credential dimension, can resolve an exact
+configured id or CPA's full `openai-compatible-<upstream_name>` label.
+Display names, resource names and substring containment are not identity claims.
+Duplicate provider claims remain unresolved even when their display names match.
+
+Rows that cannot resolve keep their available resource name or raw provider key;
+facets keep the raw key. The key is not stripped or rewritten for display. The
+request list, sheet and routing labels consume this row resolver, so they share
+its attribution rule. These are current-configuration display joins, not stored
+provider-name snapshots, and they never rewrite historical usage rows.
+
 ### Provider key masks: which upstream key answered
 
 A request record names its provider, and an operator reading it needs one more
