@@ -2,6 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/oauth';
 
 export default {
+  "oauth.use_default_route": "Proksi yang dipilih tidak disimpan. Masukkan semula untuk mencuba lagi, atau teruskan secara eksplisit dengan laluan lalai CPA.",
   "oauth.session_proxy": "Proksi sesi (pilihan)",
   "oauth.session_proxy_hint": "Biarkan kosong untuk menggunakan laluan lalai CPA. Menyokong HTTP(S) dan SOCKS5(H). CPA menggunakan proksi ini untuk kebenaran dan menyimpannya pada akaun baharu untuk permintaan seterusnya. Tetapan get laluan kongsi tidak berubah.",
   "oauth.proxy_upgrade_required": "Naik taraf CPA untuk menggunakan proksi bagi sesi kebenaran ini. Tiada kebenaran dimulakan dengan proksi yang dipilih.",

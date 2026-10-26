@@ -28,6 +28,8 @@ export interface OAuthSessionState {
   callbackSubmitting?: boolean;
   callbackStatus?: 'success' | 'error';
   callbackError?: string;
+  /** Selected proxy intent survives panel remounts; never contains the secret. */
+  requiresProxyReentry?: boolean;
 }
 
 export interface OAuthSessionsController {
@@ -39,6 +41,7 @@ export interface OAuthSessionsController {
   check: (providerId: string) => Promise<void>;
   setCallbackUrl: (providerId: string, value: string) => void;
   reset: (providerId: string) => void;
+  clearProxyReentry: (providerId: string) => void;
 }
 
 const STATUS_POLL_INTERVAL_MS = 3000;
@@ -144,6 +147,10 @@ export function useOAuthSessions(
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
+
+  const clearProxyReentry = React.useCallback((providerId: string) => {
+    updateProviderState(providerId, { requiresProxyReentry: false });
+  }, [updateProviderState]);
 
   const complete = React.useCallback((providerId: string, generation: number) => {
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
@@ -259,6 +266,7 @@ export function useOAuthSessions(
     if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
+    if (current?.requiresProxyReentry && !proxyUrl?.trim()) return;
     startInFlightRef.current[providerId] = true;
 
     clearProviderTimers(providerId);
@@ -269,6 +277,7 @@ export function useOAuthSessions(
       ...emptySession(),
       status: 'starting',
       starting: true,
+      requiresProxyReentry: false,
     });
 
     try {
@@ -292,11 +301,13 @@ export function useOAuthSessions(
       const code = apiErrorCode(error);
       const errorMessage = code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
         : code === 'invalid_oauth_proxy' ? t('oauth.proxy_invalid')
-        : proxyUrl?.trim() ? t('oauth.proxy_start_failed') : describeError(error);
+        : proxyUrl?.trim() && (code === 'cpa_unavailable' || code === 'cpa_rejected_request')
+          ? t('oauth.proxy_start_failed') : describeError(error);
       updateProviderState(providerId, {
         status: 'error',
         starting: false,
         error: errorMessage,
+        requiresProxyReentry: Boolean(proxyUrl?.trim()),
       });
       toast.error(t('oauth.status_error_badge', { msg: errorMessage }));
     } finally {
@@ -442,5 +453,6 @@ export function useOAuthSessions(
     check,
     setCallbackUrl,
     reset,
+    clearProxyReentry,
   };
 }

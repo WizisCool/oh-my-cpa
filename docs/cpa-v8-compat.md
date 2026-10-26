@@ -685,7 +685,10 @@ keywords. Proxy input stays ephemeral, and the required pre-start audit records 
 the provider, never the proxy. Existing safe credential readback shows the resulting
 routing setting with authentication masked. The credential editor keeps that masked
 value out of unrelated field patches; replacing the route requires the complete proxy
-URL, and submitting masked authentication is refused before reaching CPA.
+URL, and submitting masked authentication is refused before reaching CPA. A failed
+proxied start records only route intent: Retry and the primary action require a newly
+entered proxy, while an explicit default-route action lets the operator abandon that
+intent. CPA and audit failures retain their actionable safe error messages.
 
 The shared login endpoint names Claude `claude`, while the console and CPA's credential
 files call it `anthropic`; `OAuthProvider.LoginProvider` carries the difference. Plugin

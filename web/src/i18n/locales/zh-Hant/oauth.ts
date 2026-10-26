@@ -2,6 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/oauth';
 
 export default {
+  "oauth.use_default_route": "所選代理未被保留。請重新輸入後重試，或明確改用 CPA 預設路由。",
   "oauth.session_proxy": "工作階段代理（選填）",
   "oauth.session_proxy_hint": "留空使用 CPA 預設路由。支援 HTTP(S) 和 SOCKS5(H)。CPA 使用此代理完成授權，並將其儲存至新帳號供後續請求使用。不會變更閘道共用設定。",
   "oauth.proxy_upgrade_required": "請升級 CPA 以使用工作階段代理。未使用所選代理發起授權。",

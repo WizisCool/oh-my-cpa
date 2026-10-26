@@ -63,10 +63,80 @@ it('submits an ephemeral proxy once and keeps provider sessions independent acro
   } finally { surface.unmount(); }
 });
 
-it('clears the input and offers localized upgrade guidance when CPA lacks session proxies', async () => {
+it('preserves safe actionable failures and requires fresh proxy intent for both failed-session entrypoints', async () => {
+  const proxyURL = 'https://proxy.example.test';
   const server = installOmcApi();
-  server.on('POST', '/management/oauth/start', () => json({ code: 'oauth_proxy_upgrade_required', error: 'server detail' }, 501));
+  let failureCode = 'cpa_authentication_failed';
+  let shouldSucceed = false;
+  server.on('POST', '/management/oauth/start', () => shouldSucceed
+    ? { url: 'https://auth.example.test/authorize', state: 'codex-retry' }
+    : json({ code: failureCode, error: 'safe actionable detail' }, 502));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
   const surface = renderWithOmc(<ConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const input = () => surface.baseElement.querySelector<HTMLInputElement>('#oauth-connect-proxy')!;
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!;
+  const retry = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-retry]')!;
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).codex;
+  try {
+    await waitFor(() => expect(input()).toBeTruthy());
+    for (const code of ['cpa_authentication_failed', 'cpa_v8_required', 'cpa_management_disabled', 'audit_write_failed']) {
+      failureCode = code;
+      const previousWrites = server.writes('/management/oauth/start').length;
+      fireEvent.change(input(), { target: { value: proxyURL } });
+      fireEvent.click(start());
+      await waitFor(() => expect(server.writes('/management/oauth/start')).toHaveLength(previousWrites + 1));
+      await waitFor(() => expect(session().status).toBe('error'));
+      expect(input().value).toBe('');
+      if (['cpa_authentication_failed', 'cpa_v8_required', 'cpa_management_disabled', 'audit_write_failed'].includes(code)) {
+        expect(session().error).toBe('safe actionable detail');
+      } else {
+        expect(session().error).not.toBe('safe actionable detail');
+      }
+    }
+    // Boundary classifications still hide upstream prose but retain the blocked route intent.
+    for (const code of ['cpa_unavailable', 'cpa_rejected_request', 'oauth_proxy_upgrade_required', 'invalid_oauth_proxy']) {
+      failureCode = code;
+      fireEvent.change(input(), { target: { value: proxyURL } });
+      fireEvent.click(start());
+      await waitFor(() => expect(session().status).toBe('error'));
+      expect(session().error).not.toBe('safe actionable detail');
+      expect(input().value).toBe('');
+    }
+    const failedWrites = server.writes('/management/oauth/start').length;
+    expect(start().disabled).toBe(true);
+    expect(retry().disabled).toBe(true);
+    fireEvent.click(start());
+    fireEvent.click(retry());
+    expect(server.writes('/management/oauth/start')).toHaveLength(failedWrites);
+    fireEvent.click(screen.getByTestId('minimize'));
+    fireEvent.click(screen.getByTestId('other-provider'));
+    fireEvent.click(screen.getByTestId('other-provider'));
+    fireEvent.click(screen.getByTestId('reopen'));
+    await waitFor(() => expect(input().value).toBe(''));
+    expect(start().disabled).toBe(true);
+    expect(retry().disabled).toBe(true);
+    fireEvent.click(start());
+    fireEvent.click(retry());
+    expect(server.writes('/management/oauth/start')).toHaveLength(failedWrites);
+    shouldSucceed = true;
+    fireEvent.change(input(), { target: { value: proxyURL } });
+    fireEvent.click(retry());
+    await waitFor(() => expect(session().status).toBe('waiting'));
+    expect(server.writes('/management/oauth/start').at(-1)!.body).toEqual({ provider: 'codex', proxy_url: proxyURL });
+    expect(screen.getByTestId('sessions').textContent).not.toContain(proxyURL);
+  } finally { surface.unmount(); }
+});
+
+it('starts the default route after explicit selection and retains ordinary default-route retries', async () => {
+  const server = installOmcApi();
+  let shouldSucceed = false;
+  server.on('POST', '/management/oauth/start', () => shouldSucceed
+    ? { url: 'https://auth.example.test/authorize', state: 'default-retry' }
+    : json({ code: 'cpa_unavailable', error: 'safe connection detail' }, 502));
+  server.on('GET', '/management/oauth/status', () => ({ status: 'wait' }));
+  const surface = renderWithOmc(<ConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!;
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).codex;
   try {
     const input = await waitFor(() => {
       const field = surface.baseElement.querySelector<HTMLInputElement>('#oauth-connect-proxy');
@@ -74,10 +144,21 @@ it('clears the input and offers localized upgrade guidance when CPA lacks sessio
       return field!;
     });
     fireEvent.change(input, { target: { value: 'https://proxy.example.test' } });
-    fireEvent.click(surface.baseElement.querySelector('[data-oauth-start]')!);
-    await waitFor(() => expect(JSON.parse(screen.getByTestId('sessions').textContent!).codex.status).toBe('error'));
-    expect(surface.baseElement.querySelector<HTMLInputElement>('#oauth-connect-proxy')!.value).toBe('');
-    expect(JSON.parse(screen.getByTestId('sessions').textContent!).codex.error).not.toContain('server detail');
+    fireEvent.click(start());
+    await waitFor(() => expect(session().status).toBe('error'));
+    fireEvent.click(surface.baseElement.querySelector('[data-oauth-default-route]')!);
     expect(server.writes('/management/oauth/start')).toHaveLength(1);
+    fireEvent.click(start());
+    await waitFor(() => expect(server.writes('/management/oauth/start')).toHaveLength(2));
+    await waitFor(() => expect(session().status).toBe('error'));
+    expect(start().disabled).toBe(false);
+    const retry = surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-retry]')!;
+    expect(retry.disabled).toBe(false);
+    shouldSucceed = true;
+    fireEvent.click(retry);
+    await waitFor(() => expect(session().status).toBe('waiting'));
+    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([
+      { provider: 'codex', proxy_url: 'https://proxy.example.test' }, { provider: 'codex' }, { provider: 'codex' },
+    ]);
   } finally { surface.unmount(); }
 });

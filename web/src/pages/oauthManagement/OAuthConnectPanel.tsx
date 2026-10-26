@@ -64,11 +64,26 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const [proxyUrl, setProxyUrl] = React.useState('');
   React.useEffect(() => { setProxyUrl(''); }, [open, selectedProviderId]);
 
+  // This boolean records route intent across drawer remounts, never the secret itself.
+  const requiresProxyReentry = Boolean(session?.requiresProxyReentry);
+  const isStartBlocked = requiresProxyReentry
+    && !proxyUrl.trim()
+    && !session?.starting
+    && !session?.polling
+    && !isWaiting;
+
   const startAuthorization = () => {
-    if (!choice) return;
+    if (!choice || isStartBlocked) return;
     const selectedProxy = proxyUrl.trim();
     setProxyUrl('');
     void sessions.start(choice.id, selectedProxy || undefined);
+  };
+
+  const useDefaultRoute = () => {
+    if (!choice) return;
+    setProxyUrl('');
+    sessions.clearProxyReentry(choice.id);
+    void sessions.start(choice.id);
   };
 
   useOverlayHistory({ isOpen: open, onClose });
@@ -234,7 +249,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               <Button
                 type="primary"
                 loading={session?.starting}
-                disabled={isWaiting || (isDemo && !choice.pluginPageRoute)}
+                disabled={isWaiting || isStartBlocked || (isDemo && !choice.pluginPageRoute)}
                 onClick={() => {
                   if (choice.pluginPageRoute) {
                     onClose();
@@ -248,6 +263,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               >
                 {isSuccess ? t('oauth.login_another') : choice.loginLabel}
               </Button>
+              {isStartBlocked && (
+                <Button type="link" data-oauth-default-route onClick={useDefaultRoute}>
+                  {t('oauth.use_default_route')}
+                </Button>
+              )}
             </div>
 
             {hasStarted && (
@@ -405,7 +425,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                         </div>
                       </div>
                       <div>
-                        <Button icon={<ReloadOutlined />} onClick={startAuthorization}>
+                        <Button icon={<ReloadOutlined />} disabled={isStartBlocked} data-oauth-retry onClick={startAuthorization}>
                           {t('common.retry')}
                         </Button>
                       </div>

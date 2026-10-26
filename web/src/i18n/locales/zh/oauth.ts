@@ -1,4 +1,5 @@
 export default {
+  "oauth.use_default_route": "所选代理未被保留。请重新输入后重试，或明确改用 CPA 默认路由。",
   "oauth.session_proxy": "会话代理（可选）",
   "oauth.session_proxy_hint": "留空使用 CPA 默认路由。支持 HTTP(S) 和 SOCKS5(H)。CPA 使用此代理完成授权，并将其保存到新账号以用于后续请求。不会更改网关共享设置。",
   "oauth.proxy_upgrade_required": "请升级 CPA 以使用会话代理。未使用所选代理发起授权。",
