@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
@@ -27,6 +28,8 @@ type ModelSquareProvider struct {
 	IsOAuth      bool   `json:"is_oauth"`
 	IconID       string `json:"icon_id,omitempty"`
 }
+
+const MODEL_SQUARE_ENRICHMENT_TIMEOUT = 5 * time.Second
 
 var ErrClientKeyRequired = errors.New("client_key_required")
 
@@ -127,10 +130,12 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 	if err != nil {
 		return ModelSquareDirectory{}, err
 	}
-	snapshot, snapshotErr := client.ListConfiguredModelSnapshot(ctx)
-	if snapshotErr != nil {
-		snapshot = management.ConfiguredModelSnapshot{}
-	}
+	// Availability has already been read. All optional provenance shares one
+	// budget, so credential count and slow follow-up reads cannot consume the
+	// HTTP server's write timeout or hide advertised models.
+	enrichmentCtx, cancelEnrichment := context.WithTimeout(ctx, MODEL_SQUARE_ENRICHMENT_TIMEOUT)
+	defer cancelEnrichment()
+	snapshot, snapshotErr := client.ListConfiguredModelProvenance(enrichmentCtx)
 	// A native API-key entry may rely on CPA's built-in catalog rather than listing
 	// every model in configuration. Resolve only those configured families, never the
 	// OpenRouter universe, and apply that entry's exclusions before publishing routes.
@@ -147,7 +152,7 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 		}
 		models, hasDefinitions := definitions[provider.Family]
 		if !hasDefinitions {
-			models, err = client.StaticModelDefinitions(ctx, provider.Family)
+			models, err = client.StaticModelDefinitions(enrichmentCtx, provider.Family)
 			if err != nil {
 				models = nil
 			}
@@ -168,8 +173,15 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 			provider.Routes = append(provider.Routes, management.ConfiguredModelRoute{UpstreamModel: model.ID, CallPoint: callPoint})
 		}
 	}
-	aliases, aliasErr := client.OAuthModelAliases(ctx)
-	directory := ProjectModelSquare(snapshot, aliases, aliasErr == nil)
+	// Alias rules observed before the budget expires remain valid provenance.
+	// Re-reading them here could erase resolved identities after a later timeout.
+	aliases, hasAliases := snapshot.OAuthAliases, snapshot.HasOAuthAliases
+	if !hasAliases {
+		var aliasErr error
+		aliases, aliasErr = client.OAuthModelAliases(enrichmentCtx)
+		hasAliases = aliasErr == nil
+	}
+	directory := ProjectModelSquare(snapshot, aliases, hasAliases)
 	if snapshotErr != nil {
 		directory.Partial = append(directory.Partial, "routes")
 	}

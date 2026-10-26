@@ -1,0 +1,51 @@
+{
+  "metadata_updated_at": "2026-10-05",
+  "model_info": {},
+  "models": [
+    {
+      "call_point": "scale-alias",
+      "id": "scale-alias",
+      "vision": "unknown"
+    },
+    {
+      "call_point": "scale-unresolved",
+      "id": "scale-unresolved",
+      "vision": "unknown"
+    }
+  ],
+  "partial": [
+    "oauth_aliases",
+    "routes"
+  ],
+  "providers": [
+    {
+      "family": "claude",
+      "id": "oauth:claude",
+      "is_oauth": true,
+      "name": "claude"
+    },
+    {
+      "family": "grok",
+      "id": "oauth:grok",
+      "is_oauth": true,
+      "name": "grok"
+    }
+  ],
+  "routes": [
+    {
+      "call_point": "scale-alias",
+      "provider_id": "oauth:claude",
+      "upstream_model": ""
+    },
+    {
+      "call_point": "scale-alias",
+      "provider_id": "oauth:grok",
+      "upstream_model": ""
+    },
+    {
+      "call_point": "scale-unresolved",
+      "provider_id": "",
+      "upstream_model": ""
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,11 +11,15 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/testkit"
 )
 
 func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
@@ -123,6 +128,108 @@ func TestModelSquareLiveDirectorySurvivesEnrichmentFailure(t *testing.T) {
 	}
 	if response.StatusCode != 200 || len(directory.Models) != 1 || len(directory.Routes) != 1 || directory.Routes[0].UpstreamModel != "" || len(directory.Partial) == 0 || strings.Contains(string(body), "private-upstream-failure") {
 		t.Fatalf("partial live directory: %d %s", response.StatusCode, body)
+	}
+
+	for _, hasAliases := range []bool{true, false} {
+		t.Run(fmt.Sprintf("cancelled-with-known-aliases=%t", hasAliases), func(t *testing.T) {
+			fixture := newProviderTestFixture(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v8/management/config":
+					io.WriteString(writer, `{"access":{"api-keys":["directory-cancel-fixture"]}}`)
+				case "/v1/models":
+					io.WriteString(writer, `{"data":[{"id":"scale-alias"},{"id":"scale-unresolved"}]}`)
+				case "/v8/management/credentials":
+					io.WriteString(writer, `{"files":[{"provider":"claude","models":[{"id":"scale-alias"}]},{"provider":"grok","models":[{"id":"scale-alias"}]},{"provider":"codex","name":"slow.json"}]}`)
+				case "/v8/management/config/oauth/model-alias":
+					if !hasAliases {
+						writer.WriteHeader(http.StatusServiceUnavailable)
+					}
+					io.WriteString(writer, `{"claude":[{"name":"scale-first","alias":"scale-alias"}],"grok":[{"name":"scale-second","alias":"scale-alias"}]}`)
+				case "/v8/management/credentials/models":
+					// Cancel after alias rules and inline membership are already observed.
+					cancel()
+					<-request.Context().Done()
+				default:
+					io.WriteString(writer, `{}`)
+				}
+			}))
+			defer upstream.Close()
+			pointPlaygroundAt(t, fixture.handler, upstream.URL)
+			recorder := httptest.NewRecorder()
+			fixture.handler.listModelSquare(recorder, httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("cancelled enrichment: %d %s", recorder.Code, recorder.Body)
+			}
+			var directory any
+			if err := json.Unmarshal(recorder.Body.Bytes(), &directory); err != nil {
+				t.Fatal(err)
+			}
+			testkit.Golden(t, fmt.Sprintf("testdata/golden/model-square/cancelled-aliases-%t.golden.json", hasAliases), directory)
+		})
+	}
+}
+
+func TestModelSquareBoundsCredentialEnrichment(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	var modelReads atomic.Int64
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v8/management/config":
+			io.WriteString(writer, `{"access":{"api-keys":["directory-scale-fixture"]}}`)
+		case "/v1/models":
+			io.WriteString(writer, `{"data":[{"id":"scale-free"},{"id":"scale-paid"},{"id":"team/scale-native"},{"id":"scale-inline"}]}`)
+		case "/v8/management/credentials":
+			files := []map[string]any{}
+			for index := range 32 {
+				files = append(files, map[string]any{"name": fmt.Sprintf("scale-%d.json", index), "provider": "grok"})
+			}
+			// Inline membership after the lookup budget still has to survive.
+			files = append(files, map[string]any{"provider": "codex", "models": []map[string]string{{"id": "scale-inline"}}})
+			json.NewEncoder(writer).Encode(map[string]any{"files": files})
+		case "/v8/management/credentials/models":
+			modelReads.Add(1)
+			if request.URL.Query().Get("name") == "scale-31.json" {
+				io.WriteString(writer, `{"models":[{"id":"scale-paid"}]}`)
+			} else {
+				io.WriteString(writer, `{"models":[{"id":"scale-free"}]}`)
+			}
+		case "/v8/management/config/oauth/model-alias":
+			io.WriteString(writer, `{}`)
+		case "/v0/management/openai-compatibility":
+			io.WriteString(writer, `{"openai-compatibility":[{"name":"relay","prefix":"team","models":[{"name":"scale-upstream","alias":"scale-native"}]}]}`)
+		default:
+			io.WriteString(writer, `{}`)
+		}
+	}))
+	defer upstream.Close()
+	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/model-square")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("directory: %d %s", response.StatusCode, body)
+	}
+	if reads := modelReads.Load(); reads > 8 {
+		t.Fatalf("credential-model reads = %d, want at most 8 independent of credential count", reads)
+	}
+	var directory any
+	if err := json.Unmarshal(body, &directory); err != nil {
+		t.Fatal(err)
+	}
+	testkit.Golden(t, "testdata/golden/model-square/bounded-enrichment.golden.json", directory)
+
+	// Pricing must still visit the late credential with a different account tier.
+	client, err := management.NewClient(upstream.URL, "catalog-scale-fixture", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := client.ListConfiguredModelSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Models["scale-paid"] != "scale-paid" || modelReads.Load() != 40 {
+		t.Fatalf("pricing discovery was bounded: paid=%q, total model reads=%d", snapshot.Models["scale-paid"], modelReads.Load())
 	}
 }
 

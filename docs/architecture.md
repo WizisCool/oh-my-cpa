@@ -3509,6 +3509,19 @@ live advertised IDs. Unmatched live models retain empty provider/upstream identi
 failed enrichment emits named `partial` conditions without hiding the live list. This
 additional in-memory projection does not change pricing persistence.
 
+Model Square uses `ListConfiguredModelProvenance` rather than the exhaustive pricing
+snapshot. Optional enrichment has one five-second context shared by credential,
+configuration, static-definition and alias reads. It reads at most eight missing
+credential model lists, with at most four in flight; inline lists cost no lookup and
+remain usable even after that budget is exhausted. Each fetched list describes only
+its credential: accounts of the same provider may have different tiers, prefixes or
+routing rules. Exhaustion preserves resolved routes and the complete advertised list,
+adds `routes` to `partial`, and leaves unrepresented models with unresolved provenance.
+Pricing continues to use exhaustive, fail-closed discovery and never persists this
+bounded enrichment snapshot. Successfully read OAuth alias rules travel with the
+internal snapshot, so a later enrichment timeout cannot erase known upstream fanout;
+unreadable rules still leave upstream identities unknown.
+
 The shared management snapshot also reads sanitized global OAuth alias rules once
 when enabled credentials exist. Only rules matching a credential's registered ID
 add their upstream to the pricing identity map and OAuth route provenance.
