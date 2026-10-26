@@ -131,6 +131,14 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['routingStrategy', 'routingSessionAffinityTTL', 'routingSessionAffinity', 'routingSessionAffinitySubagents', 'routingSessionAffinityRebindOn'],
   },
   {
+    id: 'grp_response_compression',
+    sectionId: 'network',
+    labelKey: 'cfg.grp_response_compression',
+    descKey: 'cfg.grp_response_compression_desc',
+    variant: 'settings-list',
+    fieldIds: ['responseCompressionEnabled', 'responseCompressionMinBytes'],
+  },
+  {
     id: 'grp_network_flags',
     sectionId: 'network',
     labelKey: 'cfg.grp_network_flags',
@@ -167,10 +175,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['streamingKeepaliveSeconds', 'streamingBootstrapRetries', 'streamingNonstreamKeepalive', 'streamingSendKeepaliveBeforeFt'],
   },
 
-  // ── 5. OAuth provider behaviour ──────────────────────────────────────────
-  //
-  // `oauth.providers.<provider>` applies to OAuth/file-backed credentials only; an
-  // API-key provider carries its own options in its `api-keys` group.
+  // ── 5. Shared provider behaviour ──────────────────────────────────────────
   {
     id: 'grp_codex_behavior',
     sectionId: 'providers',
@@ -179,6 +184,9 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     variant: 'settings-list',
     fieldIds: [
       'codexResponseSteering',
+      'codexUpstreamRequestCompression',
+      'codexUpstreamRequestCompressionMinBytes',
+      'codexWebsocketCompression',
       'codexIdentityConfuse',
       'codexDisableCloaking',
       'codexOptimizeMultiAgentV2',
@@ -634,6 +642,28 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['header', 'passthrough'],
   },
   {
+    id: 'responseCompressionEnabled',
+    sectionId: 'network',
+    labelKey: 'cfg.f_response_compression_enabled',
+    descKey: 'cfg.f_response_compression_enabled_desc',
+    yamlPath: ['server', 'response-compression', 'enabled'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['compression', 'http', 'sse', 'zstd', 'gzip'],
+  },
+  {
+    id: 'responseCompressionMinBytes',
+    sectionId: 'network',
+    labelKey: 'cfg.f_response_compression_min_bytes',
+    descKey: 'cfg.f_response_compression_min_bytes_desc',
+    yamlPath: ['server', 'response-compression', 'min-bytes'],
+    type: 'number',
+    min: Number.MIN_SAFE_INTEGER,
+    unitKey: 'cfg.unit_bytes',
+    defaultValue: 1024,
+    keywords: ['compression', 'http', 'size', 'threshold'],
+  },
+  {
     id: 'disableCooling',
     sectionId: 'network',
     labelKey: 'cfg.f_disable_cooling',
@@ -998,6 +1028,38 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'switch',
     defaultValue: false,
     keywords: ['codex', 'websocket', 'steering'],
+  },
+  {
+    id: 'codexUpstreamRequestCompression',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_upstream_request_compression',
+    descKey: 'cfg.f_codex_upstream_request_compression_desc',
+    yamlPath: ['upstream', 'codex', 'upstream-request-compression'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'compression', 'zstd', 'oauth', 'request'],
+  },
+  {
+    id: 'codexUpstreamRequestCompressionMinBytes',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_upstream_request_compression_min_bytes',
+    descKey: 'cfg.f_codex_upstream_request_compression_min_bytes_desc',
+    yamlPath: ['upstream', 'codex', 'upstream-request-compression-min-bytes'],
+    type: 'number',
+    min: Number.MIN_SAFE_INTEGER,
+    unitKey: 'cfg.unit_bytes',
+    defaultValue: 1024,
+    keywords: ['codex', 'compression', 'size', 'threshold'],
+  },
+  {
+    id: 'codexWebsocketCompression',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_websocket_compression',
+    descKey: 'cfg.f_codex_websocket_compression_desc',
+    yamlPath: ['upstream', 'codex', 'websocket-compression'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['codex', 'compression', 'websocket', 'permessage-deflate'],
   },
   {
     id: 'codexIdentityConfuse',
