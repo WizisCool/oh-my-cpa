@@ -1050,10 +1050,10 @@ export const api = {
     return request<OAuthCancelResponse>(`/management/oauth/siwc/session?state=${encodeURIComponent(state)}`, { method: 'DELETE' });
   },
 
-  async startOAuthFlow(provider: string): Promise<StartOAuthResponse> {
+  async startOAuthFlow(provider: string, proxyUrl?: string): Promise<StartOAuthResponse> {
     return request<StartOAuthResponse>('/management/oauth/start', {
       method: 'POST',
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, ...(proxyUrl?.trim() ? { proxy_url: proxyUrl.trim() } : {}) }),
     });
   },
 

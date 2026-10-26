@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // errAuthFileFieldsNotVerified reports a field write whose persisted state could not be confirmed.
@@ -377,7 +379,14 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 		return nil, nil
 	}
 	switch name {
-	case "prefix", "proxy_url", "note":
+	case "proxy_url":
+		proxyURL := strings.TrimSpace(value.(string))
+		parsed, _ := url.Parse(proxyURL)
+		if strings.Contains(proxyURL, security.RedactedValue) || (parsed != nil && parsed.User != nil && parsed.User.Username() == security.RedactedValue) {
+			return nil, errors.New("re-enter the complete proxy URL to replace masked authentication")
+		}
+		return proxyURL, nil
+	case "prefix", "note":
 		return strings.TrimSpace(value.(string)), nil
 	case "priority":
 		number, err := numberInt64(value)

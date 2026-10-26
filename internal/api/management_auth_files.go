@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 const (
@@ -74,6 +77,29 @@ type managementQuotaObservation struct {
 type managementAuthFilesResponse struct {
 	Files []managementAuthFileResponse `json:"files"`
 	Total int                          `json:"total"`
+}
+
+// MarshalJSON preserves raw proxy authentication only for server-side write
+// verification. Browser drafts receive a stable route display, so unchanged
+// proxy fields remain absent from patches of other credential settings.
+func (fields managementAuthFileSafeFields) MarshalJSON() ([]byte, error) {
+	type wireFields managementAuthFileSafeFields
+	safe := wireFields(fields)
+	if safe.ProxyURL != "" {
+		parsed, err := url.Parse(safe.ProxyURL)
+		if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" {
+			if !strings.EqualFold(safe.ProxyURL, "direct") && !strings.EqualFold(safe.ProxyURL, "none") {
+				safe.ProxyURL = security.RedactedValue
+			}
+		} else {
+			if parsed.User != nil {
+				parsed.User = url.User(security.RedactedValue)
+			}
+			parsed.RawQuery, parsed.Fragment, parsed.RawFragment = "", "", ""
+			safe.ProxyURL = parsed.String()
+		}
+	}
+	return json.Marshal(safe)
 }
 
 // managementAuthFileSafeFields is the allowlisted subset of an auth file that

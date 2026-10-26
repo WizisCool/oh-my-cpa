@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -35,9 +36,77 @@ func usesLoopbackCallback(provider string) bool {
 	return ok && registered.UsesLoopbackCallback
 }
 
-func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (OAuthAuthURLResponse, error) {
+var (
+	ErrInvalidOAuthProxy         = errors.New("invalid OAuth proxy URL")
+	ErrOAuthProxyUpgradeRequired = errors.New("session proxy selection requires a CPA upgrade")
+	ErrOAuthStartFailed          = errors.New("CPA OAuth start failed")
+)
+
+// NormalizeOAuthProxyURL matches CPA's concrete session-proxy contract, not its
+// global direct/inherit settings. Errors deliberately never contain the input.
+func NormalizeOAuthProxyURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", ErrInvalidOAuthProxy
+	}
+	switch parsed.Scheme {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return "", ErrInvalidOAuthProxy
+	}
+	if strings.TrimSpace(parsed.Hostname()) == "" || strings.HasSuffix(parsed.Host, ":") || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return "", ErrInvalidOAuthProxy
+	}
+	port := parsed.Port()
+	if port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return "", ErrInvalidOAuthProxy
+		}
+	}
+	if (parsed.Scheme == "socks5" || parsed.Scheme == "socks5h") && port == "" {
+		return "", ErrInvalidOAuthProxy
+	}
+	return value, nil
+}
+
+func (c *Client) OAuthAuthURL(ctx context.Context, provider, proxyURL string) (OAuthAuthURLResponse, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	var response OAuthAuthURLResponse
+	proxyURL, err := NormalizeOAuthProxyURL(proxyURL)
+	if err != nil {
+		return response, err
+	}
+	if proxyURL != "" {
+		body := struct {
+			Provider string `json:"provider"`
+			ProxyURL string `json:"proxy_url"`
+			IsWebUI  bool   `json:"is_webui,omitempty"`
+		}{loginProviderFor(provider), proxyURL, usesLoopbackCallback(provider)}
+		if err := c.doJSONBody(ctx, http.MethodPost, "/oauth/auth-url", body, &response); err != nil {
+			// CPA and transports can reflect secret-bearing input. Keep status classes,
+			// never their free-form bodies or causes, across the adapter boundary.
+			if IsMissingCapability(err) {
+				return OAuthAuthURLResponse{}, ErrOAuthProxyUpgradeRequired
+			}
+			var upstream *HTTPError
+			if errors.As(err, &upstream) {
+				return OAuthAuthURLResponse{}, &HTTPError{StatusCode: upstream.StatusCode}
+			}
+			if errors.Is(err, ErrManagementV8Required) || errors.Is(err, ErrManagementDisabled) {
+				return OAuthAuthURLResponse{}, err
+			}
+			return OAuthAuthURLResponse{}, ErrOAuthStartFailed
+		}
+		if reflectsOAuthProxy(response, proxyURL) {
+			return OAuthAuthURLResponse{}, ErrOAuthStartFailed
+		}
+		return response, nil
+	}
 	query := url.Values{"provider": []string{loginProviderFor(provider)}}
 	if usesLoopbackCallback(provider) {
 		query.Set("is_webui", "true")
@@ -47,6 +116,27 @@ func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (OAuthAuthUR
 		return OAuthAuthURLResponse{}, err
 	}
 	return response, nil
+}
+
+// CPA's DTO remains the response allowlist. This extra guard rejects a
+// reflected proxy URL or structured userinfo, including query-encoded forms.
+func reflectsOAuthProxy(response OAuthAuthURLResponse, proxyURL string) bool {
+	parsed, _ := url.Parse(proxyURL)
+	markers := []string{proxyURL}
+	if parsed.User != nil {
+		userinfo := parsed.User.String() + "@"
+		decoded, _ := url.QueryUnescape(userinfo)
+		markers = append(markers, userinfo, decoded)
+	}
+	for _, value := range []string{response.URL, response.State, response.Flow, response.UserCode} {
+		decoded, _ := url.QueryUnescape(value)
+		for _, marker := range markers {
+			if strings.Contains(value, marker) || strings.Contains(decoded, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // BindSIWC delegates token exchange and credential preservation entirely to CPA.

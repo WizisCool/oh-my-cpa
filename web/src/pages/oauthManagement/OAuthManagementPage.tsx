@@ -242,9 +242,9 @@ export const OAuthManagementPage: React.FC = () => {
   const siwcBindings = useSIWCBindings();
   const [siwcRecordKey, setSIWCRecordKey] = React.useState<string>();
   const sessions = useOAuthSessions(choices, handleAuthorizationCompleted, { shouldNotifyCompletion: false });
-  const startSession = React.useCallback((providerId: string) => {
+  const startSession = React.useCallback((providerId: string, proxyUrl?: string) => {
     preStartSnapshotRef.current[providerId] = new Set(recordsRef.current.map((record) => record.key));
-    return sessions.start(providerId);
+    return sessions.start(providerId, proxyUrl);
   }, [sessions]);
   const sessionController = React.useMemo(
     () => ({ ...sessions, start: startSession }),

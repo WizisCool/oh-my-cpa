@@ -1,4 +1,5 @@
 export default {
+  "af.field_proxy_auth_hint": "已保存的代理认证信息会被遮蔽。如需更改路由，请重新输入完整代理地址；编辑其他字段时请保持此项不变。",
   'af.status_all': '全部状态',
   'af.enabled': '已启用',
   'af.disabled': '已禁用',

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, describeError } from '../../api/client';
+import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
   resolveStartedOAuthFlow,
@@ -33,7 +33,7 @@ export interface OAuthSessionState {
 export interface OAuthSessionsController {
   states: Record<string, OAuthSessionState>;
   activeProviders: string[];
-  start: (providerId: string) => Promise<void>;
+  start: (providerId: string, proxyUrl?: string) => Promise<void>;
   cancel: (providerId: string) => Promise<void>;
   submitCallback: (providerId: string) => Promise<void>;
   check: (providerId: string) => Promise<void>;
@@ -254,7 +254,7 @@ export function useOAuthSessions(
     }, STATUS_POLL_INTERVAL_MS);
   }, [clearStatusTimer, enqueueCheck, performStatusCheck]);
 
-  const start = React.useCallback(async (providerId: string) => {
+  const start = React.useCallback(async (providerId: string, proxyUrl?: string) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
     if (!choice || choice.pluginPageRoute) return;
     const current = states[providerId];
@@ -272,7 +272,7 @@ export function useOAuthSessions(
     });
 
     try {
-      const response = await api.startOAuthFlow(providerId);
+      const response = await api.startOAuthFlow(providerId, proxyUrl);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       const token = (response.state || response.session_id || '').trim();
       const flow = resolveStartedOAuthFlow(choice.flow, response);
@@ -289,7 +289,10 @@ export function useOAuthSessions(
       if (token) scheduleStatusPoll(providerId, token, generation);
     } catch (error: unknown) {
       if (generationRef.current[providerId] !== generation) return;
-      const errorMessage = describeError(error);
+      const code = apiErrorCode(error);
+      const errorMessage = code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
+        : code === 'invalid_oauth_proxy' ? t('oauth.proxy_invalid')
+        : proxyUrl?.trim() ? t('oauth.proxy_start_failed') : describeError(error);
       updateProviderState(providerId, {
         status: 'error',
         starting: false,

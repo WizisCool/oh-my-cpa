@@ -7,6 +7,15 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+// StartOAuth leaves exchange, session routing, and credential persistence in CPA.
+func (s *Service) StartOAuth(ctx context.Context, provider, proxyURL string) (management.OAuthAuthURLResponse, error) {
+	client, err := s.Client(ctx)
+	if err != nil {
+		return management.OAuthAuthURLResponse{}, err
+	}
+	return client.OAuthAuthURL(ctx, provider, proxyURL)
+}
+
 type Credential struct {
 	SIWCStatus        string `json:"siwc_status,omitempty"`
 	SIWCBindSupported bool   `json:"siwc_bind_supported"`

@@ -100,44 +100,51 @@ func TestConfigAPIKeysReportsAMissingFamilyAsAMissingCapability(t *testing.T) {
 }
 
 func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
-	queries := map[string]string{}
-	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v8/management/oauth/auth-url" {
-			t.Errorf("login started at %s, want the shared v8 endpoint", request.URL.Path)
-		}
-		provider := request.URL.Query().Get("provider")
-		queries[provider] = request.URL.Query().Get("is_webui")
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"status":"ok","url":"https://auth.example.test/authorize","state":"st-1"}`))
-	}))
-	defer server.Close()
-
-	client, err := NewClient(server.URL, "management-secret", time.Second, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin", "kimi", "meta", "some-plugin"} {
-		if _, err := client.OAuthAuthURL(ctx, provider); err != nil {
-			t.Fatalf("%s: %v", provider, err)
-		}
-	}
-
-	// CPA's shared endpoint names Claude "claude"; the console's id is "anthropic".
-	if _, sentAsConsoleID := queries["anthropic"]; sentAsConsoleID {
-		t.Fatal("anthropic must be sent as provider=claude")
-	}
-	for _, provider := range []string{"codex", "claude", "antigravity", "xai", "devin"} {
-		if queries[provider] != "true" {
-			t.Fatalf("%s is_webui = %q, want true", provider, queries[provider])
-		}
-	}
-	// Device grants have no redirect for a forwarder to serve, and a plugin
-	// provider declares its own route, so neither asks CPA to open a listener.
-	for _, provider := range []string{"kimi", "meta", "some-plugin"} {
-		if queries[provider] != "" {
-			t.Fatalf("%s is_webui = %q, want it omitted", provider, queries[provider])
-		}
+	for _, proxyURL := range []string{"", "https://proxy.example.test"} {
+		t.Run(proxyURL, func(t *testing.T) {
+			queries := map[string]bool{}
+			server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/v8/management/oauth/auth-url" {
+					t.Error("login must use the shared v8 endpoint")
+				}
+				provider := request.URL.Query().Get("provider")
+				isWebUI := request.URL.Query().Get("is_webui") == "true"
+				if proxyURL != "" {
+					var body struct {
+						Provider string `json:"provider"`
+						ProxyURL string `json:"proxy_url"`
+						IsWebUI  bool   `json:"is_webui"`
+					}
+					if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+						t.Error(err)
+					}
+					if request.Method != http.MethodPost || request.URL.RawQuery != "" || body.ProxyURL != proxyURL {
+						t.Error("proxy must be POST JSON only")
+					}
+					provider, isWebUI = body.Provider, body.IsWebUI
+				} else if request.Method != http.MethodGet {
+					t.Error("omission must retain GET")
+				}
+				queries[provider] = isWebUI
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(`{"status":"ok","url":"https://auth.example.test/authorize","state":"st-1"}`))
+			}))
+			defer server.Close()
+			client, err := NewClient(server.URL, "management-secret", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin", "kimi", "kimi-ai", "meta", "some-plugin"} {
+				if _, err := client.OAuthAuthURL(context.Background(), provider, proxyURL); err != nil {
+					t.Fatalf("%s: %v", provider, err)
+				}
+			}
+			actual, _ := json.Marshal(queries)
+			const expected = `{"antigravity":true,"claude":true,"codex":true,"devin":true,"kimi":false,"kimi-ai":false,"meta":false,"some-plugin":false,"xai":true}`
+			if string(actual) != expected {
+				t.Fatalf("provider/loopback mapping = %s, want %s", actual, expected)
+			}
+		})
 	}
 }
 
@@ -220,5 +227,39 @@ func TestConfigKeyFamiliesCoverEveryCPAList(t *testing.T) {
 		if !sections[section] {
 			t.Fatalf("ConfigKeyFamilies is missing %s", section)
 		}
+	}
+}
+
+func TestOAuthProxyResponseBoundary(t *testing.T) {
+	const proxyURL = "http://a:https@proxy.example.test:8080"
+	for _, scenario := range []struct {
+		name, authURL string
+		status        int
+	}{
+		{"authorization", "https://auth.example.test/authorize", 200},
+		{"proxy_url", proxyURL, 200},
+		{"userinfo", "https://a:https@auth.example.test/authorize", 200},
+		{"encoded", "https://auth.example.test/?route=http%3A%2F%2Fa%3Ahttps%40proxy.example.test%3A8080", 200},
+		{"rejection", proxyURL, 400},
+		{"missing", proxyURL, 404},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.WriteHeader(scenario.status)
+				_ = json.NewEncoder(writer).Encode(OAuthAuthURLResponse{URL: scenario.authURL, State: "state-a"})
+			}))
+			defer server.Close()
+			client, err := NewClient(server.URL, "management-secret", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.OAuthAuthURL(context.Background(), "codex", proxyURL)
+			if (err != nil) != (scenario.name != "authorization") {
+				t.Fatalf("response boundary error = %v", err)
+			}
+			if err != nil && strings.Contains(err.Error(), proxyURL) {
+				t.Fatal("adapter errors must not retain reflected proxy input")
+			}
+		})
 	}
 }

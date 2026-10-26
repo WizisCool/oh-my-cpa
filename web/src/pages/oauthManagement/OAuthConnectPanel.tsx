@@ -27,6 +27,7 @@ import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
 import { useToast } from '../../components/feedback';
 import { AppDrawer } from '../../components/common/AppDrawer';
+import { SecretInput } from '../../components/common/SecretInput';
 import { Tag } from '../../components/common/Tag';
 
 interface OAuthConnectPanelProps {
@@ -59,6 +60,16 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const isSuccess = session?.status === 'success';
   const isError = session?.status === 'error';
   const hasStarted = Boolean(session?.url || isWaiting || isSuccess || isError);
+
+  const [proxyUrl, setProxyUrl] = React.useState('');
+  React.useEffect(() => { setProxyUrl(''); }, [open, selectedProviderId]);
+
+  const startAuthorization = () => {
+    if (!choice) return;
+    const selectedProxy = proxyUrl.trim();
+    setProxyUrl('');
+    void sessions.start(choice.id, selectedProxy || undefined);
+  };
 
   useOverlayHistory({ isOpen: open, onClose });
 
@@ -194,6 +205,21 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               </div>
             </div>
 
+            {!choice.pluginPageRoute && !isWaiting && !session?.starting && (
+              <div>
+                <label className={styles['field-label']} htmlFor="oauth-connect-proxy">{t('oauth.session_proxy')}</label>
+                <SecretInput
+                  key={choice.id}
+                  id="oauth-connect-proxy"
+                  maxLength={4096}
+                  value={proxyUrl}
+                  disabled={isDemo}
+                  aria-describedby="oauth-connect-proxy-hint"
+                  onChange={(event) => setProxyUrl(event.target.value)}
+                />
+                <p id="oauth-connect-proxy-hint" className={styles['step-hint']}>{t('oauth.session_proxy_hint')}</p>
+              </div>
+            )}
             <div className={styles['connect-actions']}>
               {isWaiting && (
                 <Button
@@ -214,7 +240,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                     onClose();
                     navigate(choice.pluginPageRoute);
                   } else {
-                    void sessions.start(choice.id);
+                    startAuthorization();
                   }
                 }}
                 data-oauth-start={choice.pluginPageRoute ? undefined : choice.id}
@@ -379,7 +405,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                         </div>
                       </div>
                       <div>
-                        <Button icon={<ReloadOutlined />} onClick={() => void sessions.start(choice.id)}>
+                        <Button icon={<ReloadOutlined />} onClick={startAuthorization}>
                           {t('common.retry')}
                         </Button>
                       </div>

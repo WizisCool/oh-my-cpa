@@ -49,7 +49,7 @@ func (h *Handler) startAgentOAuth(writer http.ResponseWriter, request *http.Requ
 			writePlaygroundError(writer, 503, "capability_unavailable")
 			return
 		}
-		flow, err = client.OAuthAuthURL(request.Context(), input.Provider)
+		flow, err = client.OAuthAuthURL(request.Context(), input.Provider, "")
 		parsed, parseErr := url.Parse(flow.URL)
 		if err != nil || parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || flow.State == "" {
 			writePlaygroundError(writer, 502, "operation_failed")

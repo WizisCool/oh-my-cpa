@@ -39,7 +39,15 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 	// from the message so the console can frame it in the reader's language.
 	reason := ""
 	var httpErr *management.HTTPError
-	if errors.Is(err, management.ErrManagementV8Required) {
+	if errors.Is(err, management.ErrInvalidOAuthProxy) {
+		status = http.StatusBadRequest
+		code = "invalid_oauth_proxy"
+		message = "invalid OAuth proxy URL"
+	} else if errors.Is(err, management.ErrOAuthProxyUpgradeRequired) {
+		status = http.StatusNotImplemented
+		code = "oauth_proxy_upgrade_required"
+		message = "session proxy selection requires a CPA upgrade"
+	} else if errors.Is(err, management.ErrManagementV8Required) {
 		status = http.StatusBadGateway
 		code = "cpa_v8_required"
 		message = "CPA does not serve the v8 Management API; upgrade CPA to v8.0.0 or later"

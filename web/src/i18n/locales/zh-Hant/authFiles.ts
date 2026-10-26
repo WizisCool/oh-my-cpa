@@ -2,6 +2,7 @@ import type { Translation } from '../../catalog';
 import type source from '../zh/authFiles';
 
 export default {
+  "af.field_proxy_auth_hint": "已儲存的代理驗證資訊會被遮蔽。如需變更路由，請重新輸入完整代理網址；編輯其他欄位時請保持此項不變。",
   "af.status_all": "全部狀態",
   "af.enabled": "已啟用",
   "af.disabled": "已禁用",
