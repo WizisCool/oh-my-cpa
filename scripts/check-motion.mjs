@@ -1,11 +1,9 @@
 /**
  * The motion budget, enforced.
  *
- * docs/design.md §7 states one budget three times - its token table, the Ant Design motion tokens in
- * `themeConfig.ts`, and the `--motion-*` variables in `index.css` - and the stylesheet had drifted
- * from the other two (100ms/150ms against a documented 50ms/100ms) for long enough that call sites
- * written as `var(--motion-fast, 50ms)` were paying double the budget they named. `test-theme-presets`
- * pins the variables to the tokens; this checker pins the *call sites* to the variables.
+ * docs/design.md §7 defines the motion roles; themeConfig.ts projects runtime
+ * tokens and index.css declares CSS tokens. Call sites must use declared tokens
+ * so their timing remains a shared design decision rather than a local literal.
  *
  * Four rules, all of them objective:
  *
