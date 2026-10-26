@@ -269,7 +269,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_discovery',
     descKey: 'cfg.grp_discovery_desc',
     variant: 'settings-list',
-    fieldIds: ['discoveryEnabled', 'discoveryServiceName', 'discoveryAuthRequired', 'discoveryAdvertiseManagement'],
+    fieldIds: ['discoveryEnabled', 'discoveryServiceName', 'discoveryAuthRequired'],
   },
   {
     id: 'grp_pprof',
@@ -1409,16 +1409,6 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'switch',
     defaultValue: true,
     keywords: ['mdns', 'discovery', 'auth'],
-  },
-  {
-    id: 'discoveryAdvertiseManagement',
-    sectionId: 'advanced',
-    labelKey: 'cfg.f_discovery_advertise_mgmt',
-    descKey: 'cfg.f_discovery_advertise_mgmt_desc',
-    yamlPath: ['server', 'discovery', 'advertise-management'],
-    type: 'switch',
-    defaultValue: false,
-    keywords: ['mdns', 'discovery', 'management'],
   },
   {
     id: 'pprofEnable',

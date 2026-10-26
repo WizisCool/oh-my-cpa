@@ -369,6 +369,17 @@ Three value ranges in the schema were measured the same way rather than assumed:
 floor is `-1`, not `0`), and `request-retry` has no upper bound in CPA (50 is stored
 unchanged, so the editor sets no maximum).
 
+### Network discovery management advertisement
+
+CPA [commit b214385](https://github.com/router-for-me/CLIProxyAPI/commit/b214385c1cf31b5aee6885b108538663731a2610)
+deprecated `server.discovery.advertise-management`: the draft DNS-SD schema never
+advertises management endpoints. The field remains accepted so existing files load,
+but it has no effect on updated gateways. OMC therefore exposes only discovery's
+enabled, service-name and authentication-required controls. The source editor still
+shows a stored legacy entry; unrelated visual saves neither remove nor rewrite it.
+The v8.0.2 measurements above describe historical acceptance, not current runtime
+support for management advertisement.
+
 ### Settings (leaves)
 
 A leaf is the unit of CPA's precedence rule. "OMC editor field" names the configuration
@@ -377,7 +388,7 @@ page field that edits it.
 | v8 section | Legacy path | v8 path | OMC editor field |
 | --- | --- | --- | --- |
 | `server` | `commercial-mode` | `server.commercial-mode` | `commercialMode` |
-| `server` | `discovery.advertise-management` | `server.discovery.advertise-management` | `discoveryAdvertiseManagement` |
+| `server` | `discovery.advertise-management` | `server.discovery.advertise-management` | — (deprecated; ignored by updated CPA gateways) |
 | `server` | `discovery.auth-required` | `server.discovery.auth-required` | `discoveryAuthRequired` |
 | `server` | `discovery.enabled` | `server.discovery.enabled` | `discoveryEnabled` |
 | `server` | `discovery.interfaces.exclude` | `server.discovery.interfaces.exclude` | — |
