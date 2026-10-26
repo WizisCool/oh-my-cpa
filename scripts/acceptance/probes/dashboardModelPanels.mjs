@@ -83,12 +83,19 @@ export async function dashboardModelPanels({ base, page, check }) {
         insideHole: total.width < frame.width * 0.66 && unit.width < frame.width * 0.66 && unit.bottom - total.top < frame.height * 0.66,
         listOverflow: list.scrollWidth - list.clientWidth, pastCard: box('.model-usage-share').right - card.right,
         nameWidth: box('.model-usage-name').width,
+        // The ranking folds to six rows, so the list never scrolls and no row may fall outside the card.
+        ranking: { rows: list.querySelectorAll('.model-usage-row').length, scroll: list.scrollHeight - list.clientHeight,
+          insideCard: [...list.querySelectorAll('.model-usage-row')].every((row) => {
+            const rowBox = row.getBoundingClientRect();
+            return rowBox.top >= list.getBoundingClientRect().top - 1 && rowBox.bottom <= list.getBoundingClientRect().bottom + 1 && rowBox.bottom <= card.bottom + 1;
+          }) },
         labelsInside: labels.every((label) => label.left >= trend.left - 1 && label.right <= trend.right + 1 && label.bottom <= trend.bottom + 1),
         pageOverflow: document.documentElement.scrollWidth - innerWidth };
     }, width);
     layouts.push(await layout.jsonValue());
   }
   check('model columns remain readable without card or page overflow across widths', layouts.every((entry) => entry.listOverflow <= 1 && entry.pastCard <= 1 && entry.nameWidth >= 140 && entry.pageOverflow <= 1), JSON.stringify(layouts));
+  check('every ranked group stays on the card without a scrollbar at any width', layouts.every((entry) => entry.ranking.rows === 6 && entry.ranking.scroll <= 1 && entry.ranking.insideCard), JSON.stringify(layouts.map((entry) => [entry.width, entry.ranking])));
   check('the ring SVG stays square and the DOM readout stays inside its hole', layouts.every((entry) => Math.abs(entry.frame.width - entry.frame.height) <= 1 && Math.abs(entry.svg.width - entry.svg.height) <= 1 && entry.drift <= 1 && entry.verticalDrift <= 1 && entry.insideHole), JSON.stringify(layouts));
   check('trend labels stay inside their plot container', layouts.every((entry) => entry.labelsInside), JSON.stringify(layouts));
   await page.setViewportSize({ width: 1440, height: 1000 });
