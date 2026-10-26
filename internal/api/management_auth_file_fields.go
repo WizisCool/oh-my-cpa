@@ -382,7 +382,13 @@ func normalizeManagementAuthFileField(name string, value any) (any, error) {
 	case "proxy_url":
 		proxyURL := strings.TrimSpace(value.(string))
 		parsed, _ := url.Parse(proxyURL)
-		if strings.Contains(proxyURL, security.RedactedValue) || (parsed != nil && parsed.User != nil && parsed.User.Username() == security.RedactedValue) {
+		hasMaskedUserinfo := false
+		if parsed != nil && parsed.User != nil {
+			password, hasPassword := parsed.User.Password()
+			hasMaskedUserinfo = parsed.User.Username() == security.RedactedValue ||
+				(hasPassword && strings.Contains(password, security.RedactedValue))
+		}
+		if strings.Contains(proxyURL, security.RedactedValue) || hasMaskedUserinfo {
 			return nil, errors.New("re-enter the complete proxy URL to replace masked authentication")
 		}
 		return proxyURL, nil

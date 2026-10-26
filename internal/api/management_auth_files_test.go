@@ -390,6 +390,15 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 			t.Fatal("masked authentication must never be written back to CPA")
 		}
 
+		body, _ = json.Marshal(map[string]any{
+			"name":      "claude.json",
+			"proxy_url": "http://proxy-user:%5Bredacted%5D@other.example.test:8080",
+		})
+		response, _ = doJSON(t, client, http.MethodPatch, base+"/fields", string(body))
+		if response.StatusCode != 400 || safeFields["proxy_url"] != proxyURL {
+			t.Fatal("a percent-encoded masked password must never be written back to CPA")
+		}
+
 	}
 
 	response, raw = doJSON(t, client, http.MethodPost, base+"?name=uploaded.json", `{"type":"gemini","token":"secret-token"}`)

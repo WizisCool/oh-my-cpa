@@ -90,6 +90,7 @@ export function useOAuthSessions(
   const disposedRef = React.useRef(false);
   const statusTimersRef = React.useRef<Record<string, number>>({});
   const statusReadFailuresRef = React.useRef<Record<string, string>>({});
+  const attemptUsesProxyRef = React.useRef<Record<string, boolean>>({});
   const successTimersRef = React.useRef<Record<string, number>>({});
   const checkQueuesRef = React.useRef<Record<string, Promise<void>>>({});
   const completedRef = React.useRef(onCompleted);
@@ -144,6 +145,7 @@ export function useOAuthSessions(
   const reset = React.useCallback((providerId: string) => {
     clearProviderTimers(providerId);
     delete statusReadFailuresRef.current[providerId];
+    delete attemptUsesProxyRef.current[providerId];
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
@@ -151,6 +153,7 @@ export function useOAuthSessions(
   const complete = React.useCallback((providerId: string, generation: number) => {
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
     clearProviderTimers(providerId);
+    delete attemptUsesProxyRef.current[providerId];
     updateProviderState(providerId, {
       url: undefined,
       state: undefined,
@@ -207,6 +210,8 @@ export function useOAuthSessions(
       }
       if (status === 'error') {
         const errorMessage = (response.message || response.error || '').trim() || t('oauth.status_failed');
+        const requiresProxyReentry = attemptUsesProxyRef.current[providerId] === true;
+        delete attemptUsesProxyRef.current[providerId];
         clearStatusTimer(providerId);
         updateProviderState(providerId, {
           status: 'error',
@@ -214,6 +219,7 @@ export function useOAuthSessions(
           polling: false,
           checkingDevice: false,
           error: errorMessage,
+          requiresProxyReentry,
           ...(choicesRef.current.find((choice) => choice.id === providerId)?.requiresExplicitCancel
             ? { url: undefined, state: undefined, flow: undefined, userCode: undefined, callbackUrl: '' }
             : {}),
@@ -267,6 +273,7 @@ export function useOAuthSessions(
     const current = states[providerId];
     if (startInFlightRef.current[providerId] || isOAuthSessionActive(current) || current?.starting) return;
     if (current?.requiresProxyReentry && !proxyUrl?.trim() && !isDefaultRouteConfirmed) return;
+    attemptUsesProxyRef.current[providerId] = Boolean(proxyUrl?.trim());
     startInFlightRef.current[providerId] = true;
 
     clearProviderTimers(providerId);
@@ -298,6 +305,7 @@ export function useOAuthSessions(
       if (token) scheduleStatusPoll(providerId, token, generation);
     } catch (error: unknown) {
       if (generationRef.current[providerId] !== generation) return;
+      delete attemptUsesProxyRef.current[providerId];
       const code = apiErrorCode(error);
       const errorMessage = code === 'oauth_proxy_upgrade_required' ? t('oauth.proxy_upgrade_required')
         : code === 'invalid_oauth_proxy' ? t('oauth.proxy_invalid')
@@ -340,6 +348,7 @@ export function useOAuthSessions(
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
       clearProviderTimers(providerId);
       if (response.cancelled) {
+        delete attemptUsesProxyRef.current[providerId];
         setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
         toast.info(t('oauth.session_cancelled'));
         return;

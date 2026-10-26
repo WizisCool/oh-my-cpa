@@ -163,3 +163,78 @@ it('starts the default route after explicit selection and retains ordinary defau
     expect(server.writes('/management/oauth/start').at(-1)!.body).toEqual({ provider: 'codex' });
   } finally { surface.unmount(); }
 });
+
+
+it('requires a fresh route decision when a proxied session later reports a status error', async () => {
+  const proxyURL = 'https://proxy.example.test';
+  const server = installOmcApi();
+  const providerStarts: Record<string, number> = {};
+  server.on('POST', '/management/oauth/start', request => {
+    const body = request.body as { provider: string; proxy_url?: string };
+    providerStarts[body.provider] = (providerStarts[body.provider] ?? 0) + 1;
+    const route = body.proxy_url ? 'proxied' : 'default';
+    const state = `${body.provider}-${route}-${providerStarts[body.provider]}`;
+    return { url: `https://auth.example.test/${state}`, state, flow: 'device', user_code: 'COMPLETE-ME' };
+  });
+  const errorStatuses = new Set(['codex-proxied-1', 'anthropic-proxied-1']);
+  server.on('GET', '/management/oauth/status', request => {
+    const state = request.query.get('state') ?? '';
+    return errorStatuses.has(state) ? { status: 'error', message: 'session expired' } : { status: 'wait' };
+  });
+
+  const surface = renderWithOmc(<ConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const input = () => surface.baseElement.querySelector<HTMLInputElement>('#oauth-connect-proxy')!;
+  const start = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start]')!;
+  const retry = () => surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-retry]')!;
+  const session = (providerId: string) => JSON.parse(screen.getByTestId('sessions').textContent!)[providerId];
+  try {
+    await waitFor(() => expect(input()).toBeTruthy());
+    fireEvent.change(input(), { target: { value: proxyURL } });
+    fireEvent.click(start());
+    await waitFor(() => expect(session('codex').status).toBe('waiting'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check Authorization Status' }));
+    await waitFor(() => expect(session('codex').status).toBe('error'));
+
+    const afterStatusError = server.writes('/management/oauth/start').length;
+    expect(start().disabled).toBe(true);
+    expect(retry().disabled).toBe(true);
+    fireEvent.click(start());
+    fireEvent.click(retry());
+    expect(server.writes('/management/oauth/start')).toHaveLength(afterStatusError);
+
+    fireEvent.change(input(), { target: { value: proxyURL } });
+    fireEvent.click(retry());
+    await waitFor(() => expect(session('codex').status).toBe('waiting'));
+    expect(server.writes('/management/oauth/start').at(-1)!.body).toEqual({ provider: 'codex', proxy_url: proxyURL });
+
+    fireEvent.click(screen.getByTestId('other-provider'));
+    await waitFor(() => expect(input().value).toBe(''));
+    fireEvent.change(input(), { target: { value: proxyURL } });
+    fireEvent.click(start());
+    await waitFor(() => expect(session('anthropic').status).toBe('waiting'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check Authorization Status' }));
+    await waitFor(() => expect(session('anthropic').status).toBe('error'));
+
+    const afterSecondStatusError = server.writes('/management/oauth/start').length;
+    expect(start().disabled).toBe(true);
+    expect(retry().disabled).toBe(true);
+    fireEvent.click(surface.baseElement.querySelector('[data-oauth-default-route]')!);
+    await waitFor(() => expect(server.writes('/management/oauth/start')).toHaveLength(afterSecondStatusError + 1));
+    await waitFor(() => expect(session('anthropic').status).toBe('waiting'));
+    errorStatuses.add('anthropic-default-2');
+    const noProxyRetryCheck = screen.queryByRole('button', { name: 'Check Authorization Status' });
+    if (noProxyRetryCheck) fireEvent.click(noProxyRetryCheck);
+    await waitFor(() => expect(session('anthropic').status).toBe('error'), { timeout: 4000 });
+    expect(start().disabled).toBe(false);
+    expect(retry().disabled).toBe(false);
+    fireEvent.click(retry());
+    await waitFor(() => expect(session('anthropic').status).toBe('waiting'));
+    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([
+      { provider: 'codex', proxy_url: proxyURL },
+      { provider: 'codex', proxy_url: proxyURL },
+      { provider: 'anthropic', proxy_url: proxyURL },
+      { provider: 'anthropic' },
+      { provider: 'anthropic' },
+    ]);
+  } finally { surface.unmount(); }
+});
