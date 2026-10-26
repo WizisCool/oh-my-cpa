@@ -88,17 +88,17 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({
       })),
     };
   }, [groups, visibleGroups, theme.palette, foldedLabel, unnamedLabel, tokenUnitLabel, tokenStyle, timeZone]);
-  const seriesIdsRef = React.useRef<string[]>([]);
-  seriesIdsRef.current = (option.series as Array<{ id: string }>).map((series) => series.id);
-  const selectGroupRef = React.useRef(onSelectGroup);
-  selectGroupRef.current = onSelectGroup;
+  const seriesIds = React.useMemo(
+    () => (option.series as Array<{ id: string }>).map((series) => series.id),
+    [option],
+  );
   const handlers = React.useMemo(() => ({
-    backgroundClick: () => selectGroupRef.current?.(null),
+    backgroundClick: () => onSelectGroup?.(null),
     click: (params: unknown) => {
       const item = params as { seriesId?: string; seriesIndex?: number };
-      const key = item.seriesId ?? (item.seriesIndex === undefined ? undefined : seriesIdsRef.current[item.seriesIndex]);
-      if (key !== undefined) selectGroupRef.current?.(key);
+      const key = item.seriesId ?? (item.seriesIndex === undefined ? undefined : seriesIds[item.seriesIndex]);
+      if (key !== undefined) onSelectGroup?.(key);
     },
-  }), []);
+  }), [onSelectGroup, seriesIds]);
   return <div className="model-trend"><EChart option={option} height={height} label={visibleGroups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')} handlers={handlers} onApplied={onApplied} /></div>;
 });

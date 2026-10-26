@@ -310,7 +310,6 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
   color: var(--fg);
   font-size: var(--text-md);
 }

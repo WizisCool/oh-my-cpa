@@ -155,20 +155,24 @@ export interface ModelTrendPanelProps extends ModelUsagePanelsProps {
 /** Click selection shared by the two cards: an empty set means every ranked group is shown. */
 function useSeriesSelection(groups: DashboardModelUsage[]) {
   const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
+  const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
+  const visibleKeys = React.useMemo(
+    () => selectedKeys.filter((key) => availableKeys.has(key)),
+    [availableKeys, selectedKeys],
+  );
   React.useEffect(() => {
-    const available = new Set(groups.map(seriesDomainKey));
     setSelectedKeys((current) => {
-      const next = current.filter((key) => available.has(key));
+      const next = current.filter((key) => availableKeys.has(key));
       return next.length === current.length ? current : next;
     });
-  }, [groups]);
+  }, [availableKeys]);
   const toggleSeries = React.useCallback((key: string) => {
     setSelectedKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   }, []);
   const selectSeries = React.useCallback((key: string | null) => {
     setSelectedKeys(key === null ? [] : [key]);
   }, []);
-  return { selectedKeys, toggleSeries, selectSeries };
+  return { selectedKeys: visibleKeys, toggleSeries, selectSeries };
 }
 
 const ModelSeriesName: React.FC<{
