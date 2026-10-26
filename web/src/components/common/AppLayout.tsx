@@ -25,6 +25,7 @@ import { preloadRoute } from '../../routePreload';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
 import { buildNavGroups } from './navigation';
 import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebarNav';
+import { usePreference } from '../../hooks/usePreference';
 import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 
@@ -103,13 +104,22 @@ function isNarrowViewport(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
 }
 
+function parseSidebarCollapsed(raw: unknown): boolean | undefined {
+  return typeof raw === 'boolean' ? raw : undefined;
+}
+
 export const AppLayout: React.FC = () => {
   const t = useT();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const sidebarPreference = usePreference('omc_sidebar_collapsed', false, parseSidebarCollapsed);
+  const isCollapsed = sidebarPreference.value;
+  const setIsCollapsed = (next: boolean) => {
+    // A toggle derived from the fallback must not overwrite a stored choice still being read.
+    if (sidebarPreference.loaded) void sidebarPreference.set(next);
+  };
   const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
 
@@ -180,7 +190,7 @@ export const AppLayout: React.FC = () => {
   const currentLabel = currentEntry ? navEntryLabel(currentEntry, t) : t('common.management');
   useDocumentTitle(currentLabel);
   const hasPendingUpdate = usePendingUpdates().length > 0;
-  const menuItems = React.useMemo(() => buildMenuItems(visibleNavGroups, t, isCollapsed, hasPendingUpdate), [visibleNavGroups, t, isCollapsed, hasPendingUpdate]);
+  const menuItems = React.useMemo(() => buildMenuItems(visibleNavGroups, t, !isMobile && isCollapsed, hasPendingUpdate), [visibleNavGroups, t, isMobile, isCollapsed, hasPendingUpdate]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);
@@ -282,7 +292,7 @@ export const AppLayout: React.FC = () => {
               <Button type="text" icon={<MenuUnfoldOutlined />} onClick={() => setIsMobileNavOpen(true)} aria-label={t('header.open_nav')} />
             ) : (
               <Tooltip title={isCollapsed ? t('header.expand_sidebar') : t('header.collapse_sidebar')}>
-                <Button type="text" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} aria-label={t('header.collapse_sidebar')} />
+                <Button type="text" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} disabled={!sidebarPreference.loaded} aria-label={t(isCollapsed ? 'header.expand_sidebar' : 'header.collapse_sidebar')} />
               </Tooltip>
             )}
             <Breadcrumb

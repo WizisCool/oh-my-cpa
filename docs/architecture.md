@@ -1280,6 +1280,12 @@ prefetch authenticated data, mount the target or load the configuration page's Y
 The sign-in screen has no navigation menu and starts none of these speculative imports.
 `web/src/utils/routeLoader.ts` shares one import across intent and navigation, reusing success
 and clearing a failed speculative attempt so a later navigation can retry.
+The desktop rail's expanded/collapsed choice is the boolean `omc_sidebar_collapsed`
+server preference (expanded when absent), read directly from the shared preference cache.
+Its header toggle and collapsed brand expansion wait for a successful preference read;
+optimistic writes use the shared serialized queue and rollback on refusal. The phone
+navigation drawer remains transient and never changes the desktop choice.
+
 The content column records whether it has scrolled through its own scroll events.
 Path navigation resets it only after actual scrolling; a column already at the top
 avoids the otherwise redundant `scrollTo` call and its synchronous layout flush.

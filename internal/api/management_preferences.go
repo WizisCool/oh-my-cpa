@@ -39,6 +39,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceFonts:               true,
 	repository.PreferenceNavHidden:           true,
 	repository.PreferenceNavOrder:            true,
+	repository.PreferenceSidebarCollapsed:    true,
 	repository.PreferenceDashboardLayout:     true,
 	repository.PreferencePlaygroundSession:   true,
 	repository.PreferenceAgentTarget:         true,
@@ -120,6 +121,13 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		var enabled *bool
 		if json.Unmarshal(body, &enabled) != nil || enabled == nil {
 			writeError(writer, http.StatusBadRequest, "the plugin source preference must be true or false")
+			return
+		}
+	}
+	if key == repository.PreferenceSidebarCollapsed {
+		var isCollapsed *bool
+		if json.Unmarshal(body, &isCollapsed) != nil || isCollapsed == nil {
+			writeError(writer, http.StatusBadRequest, "the sidebar collapsed preference must be true or false")
 			return
 		}
 	}
