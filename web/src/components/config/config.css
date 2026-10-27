@@ -148,7 +148,7 @@
   padding: 20px;
   border-top: 1px solid var(--border-soft);
 }
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion='true'] {
   .settings-tls-body { transition: none; }
 }
 .config-mono-textarea {

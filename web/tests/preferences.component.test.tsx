@@ -5,6 +5,9 @@ import { usePreference, type PreferenceWrite } from '../src/hooks/usePreference'
 import { installOmcApi, json as jsonResponse, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { TokenDisplayProvider, useTokenDisplayStyle } from '../src/types/tokenDisplayContext';
+import { MotionPreferenceSync, MotionProvider, useReducedMotionPreference } from '../src/hooks/useReducedMotionPreference';
+import { usePrefersReducedMotion } from '../src/hooks/usePrefersReducedMotion';
+import { isMotionReduced, REDUCED_MOTION_QUERY } from '../src/utils/motionPreference';
 import { ContextReadout } from '../src/components/workspace/ContextReadout';
 
 function deferred<Value>() {
@@ -208,5 +211,70 @@ describe('shared provider and real rendered consumer', () => {
     await waitFor(() => expect(meter.getAttribute('aria-valuetext')).toContain('10,000'));
     await act(async () => { stored.omc_token_style = 'full'; writes[0].response.resolve(jsonResponse({ key: 'omc_token_style', value: 'full' })); });
     expect(reads()).toBe(1);
+  });
+});
+
+
+describe('console motion preference', () => {
+  it('resolves live system changes, explicit overrides, persistence and failed-write rollback for every consumer', async () => {
+    let hasSystemReducedMotion = false;
+    const listeners = new Set<() => void>();
+    const query = {
+      get matches() { return hasSystemReducedMotion; },
+      addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+    };
+    const originalMatchMedia = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation(value => value === REDUCED_MOTION_QUERY
+      ? query as unknown as MediaQueryList : originalMatchMedia(value));
+    function Control() {
+      const preference = useReducedMotionPreference();
+      const isReduced = usePrefersReducedMotion();
+      return <>
+        <output aria-label="motion">{String(isReduced)}</output>
+        <output aria-label="motion preference">{preference.value}</output>
+        {(['on', 'system', 'off'] as const).map(value =>
+          <button key={value} onClick={() => { writeResults.push(preference.set(value)); }}>{value}</button>)}
+      </>;
+    }
+    const { unmount } = mount(<MotionProvider><MotionPreferenceSync /><Control /></MotionProvider>);
+    await waitFor(() => expect(reads()).toBe(1));
+    const expectReduced = (isReduced: boolean) => {
+      expect(screen.getByLabelText('motion').textContent).toBe(String(isReduced));
+      expect(document.documentElement.dataset.reducedMotion).toBe(String(isReduced));
+      expect(isMotionReduced()).toBe(isReduced);
+    };
+    expectReduced(false);
+    expect(screen.getByLabelText('motion preference').textContent).toBe('system');
+    const changeSystem = async (isReduced: boolean) => {
+      await act(async () => { hasSystemReducedMotion = isReduced; for (const listener of listeners) listener(); });
+    };
+    await changeSystem(true);
+    expectReduced(true);
+    fireEvent.click(screen.getByRole('button', { name: 'off' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expectReduced(false);
+    expect(writes[0]).toMatchObject({ key: 'omc_reduced_motion', value: 'off' });
+    await completeWrite(0, 500);
+    await waitFor(() => expectReduced(true));
+    await changeSystem(false);
+    fireEvent.click(screen.getByRole('button', { name: 'on' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expectReduced(true);
+    await completeWrite(1);
+    expect(stored.omc_reduced_motion).toBe('on');
+    await changeSystem(true);
+    await changeSystem(false);
+    expectReduced(true);
+    fireEvent.click(screen.getByRole('button', { name: 'off' }));
+    await waitFor(() => expect(writes).toHaveLength(3));
+    await completeWrite(2);
+    await changeSystem(true);
+    expectReduced(false);
+    unmount();
+    expect(listeners.size).toBe(0);
+    mount(<MotionProvider><MotionPreferenceSync /><Control /></MotionProvider>);
+    await waitFor(() => expect(screen.getByLabelText('motion preference').textContent).toBe('off'));
+    expectReduced(false);
   });
 });

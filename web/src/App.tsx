@@ -46,6 +46,7 @@ import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { useScrollSmoothing } from './hooks/useScrollSmoothing';
+import { MotionPreferenceSync, MotionProvider } from './hooks/useReducedMotionPreference';
 import { useConsoleFonts } from './hooks/useFonts';
 
 // The recovery boundary stays eager even when the authenticated shell cannot be downloaded.
@@ -127,15 +128,18 @@ const ThemedShell: React.FC = () => {
       wave={WAVE_CONFIG}
       button={BUTTON_CONFIG}
     >
-      <AntdApp notification={TOAST_CONFIG}>
-        <ThemeServerSync />
-        <ScrollSmoothingSync />
-        <FontSync />
-        <DemoNotice />
-        <TokenDisplayProvider>
-          <AppRoutes />
-        </TokenDisplayProvider>
-      </AntdApp>
+      <MotionProvider>
+        <AntdApp notification={TOAST_CONFIG}>
+          <ThemeServerSync />
+          <MotionPreferenceSync />
+          <ScrollSmoothingSync />
+          <FontSync />
+          <DemoNotice />
+          <TokenDisplayProvider>
+            <AppRoutes />
+          </TokenDisplayProvider>
+        </AntdApp>
+      </MotionProvider>
     </ConfigProvider>
   );
 };

@@ -492,8 +492,8 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   and column layout, and the console's own display settings — the token unit
   style (`omc_token_style`), TPS calculation mode (`omc_tps_calculation_mode`),
   the model display view (`omc_models_view`), request list model brand icons
-  (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), scroll smoothing
-  (`omc_scroll_smoothing`), the typeface roles (`omc_fonts`), the rail entries the
+  (`omc_request_model_icons`, boolean, default true), the theme (`omc_theme`), reduced motion
+  (`omc_reduced_motion`), the typeface roles (`omc_fonts`), the rail entries the
   console hides (`omc_nav_hidden`) and the order it puts them in (`omc_nav_order`), and the
   dashboard's widget arrangement (`omc_dashboard_layout`), and the separate Insights
   window (`insights_range`).
@@ -528,13 +528,12 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   stored in the database and served from the console's own origin, so the browser never
   loads a font from another host and an installed family needs no network. Deleting a
   family returns the roles that used it to the default (ADR 0100).
-- **Scroll Smoothing**: Whether a wheel notch or a scrolling key glides to its
-  destination instead of jumping — `on` (default), `system` (glide unless the
-  system reports reduced motion) or `off`, stored as `omc_scroll_smoothing`.
-  It smooths only discrete input; trackpads and touch are never glided.
-  It is the one motion that does not follow `prefers-reduced-motion` by
-  default, because it is the reader's own input and on Windows that signal is
-  the switch that removes the browser's glide (ADR 0046).
+- **Reduced Motion**: One console-wide motion policy, stored as `omc_reduced_motion`:
+  `on` reduces animation, `system` (default) follows the live `prefers-reduced-motion`
+  signal, and `off` allows animation regardless of that signal. It governs interface
+  transitions, Dashboard and Insights charts and rolling numbers, routing-map travel,
+  theme cross-fades, wheel/keyboard glide and return-to-top gestures. Readings still
+  update when motion is reduced. Trackpad and touch scrolling remain unchanged (ADR 0108).
 - **Token Unit Style**: How the console abbreviates token counts — `en-compact`
   (300K, 300M, 1.2B), `zh` (30万, 300万, 12亿) or `full` (300,000,000) — stored as
   the `omc_token_style` preference and applied by one shared frontend layer

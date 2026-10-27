@@ -229,20 +229,26 @@ export async function routingMap({ base, page, check, fixtures }) {
   check('a model whose last request turned a minute old animates out before it goes', exits.some((text) => text.includes('claude-sonnet-5-5')), JSON.stringify(exits));
   check('the model that is still inside the minute stays', (await modelRow('glm-5-air').count()) === 1);
 
-  // Windows' "Animation effects" switch reports reduced motion; the trip is the panel's reading, so
-  // it still plays for every reader (ADR 0102).
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Reducing motion also ends a trip already running, rather than only gating later arrivals.
   fixtures.arrive('kimi-k3');
-  await until(async () => (await modelRow('kimi-k3').count()) === 1, { label: 'the next read' });
-  const travelsUnderReducedMotion = await until(async () => (await packets.count()) > 0, { label: 'a request packet under reduced motion', timeoutMs: 5_000 })
-    .then(() => true, () => false);
-  check('reduced motion still plays the request across the map', travelsUnderReducedMotion);
-  const flowsUnderReducedMotion = await until(
-    () => map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
-      .evaluateAll((flows) => flows.some((flow) => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0)),
-    { label: 'a lane flowing under reduced motion', timeoutMs: 3_000 },
-  ).then(() => true, () => false);
-  check('reduced motion still flows the lane under the request', flowsUnderReducedMotion);
+  await until(async () => (await packets.count()) > 0, { label: 'a trip before motion is reduced' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.documentElement.dataset.reducedMotion === 'true');
+  check('reducing motion ends an active trip immediately', (await packets.count()) === 0);
+  await map.locator('[data-testid="routing-packets"]').evaluate(layer => {
+    window.__reducedPackets = 0;
+    new MutationObserver(mutations => {
+      for (const mutation of mutations) window.__reducedPackets += mutation.addedNodes.length;
+    }).observe(layer, { childList: true });
+  });
+  fixtures.arrive('gemini-3-pro');
+  await until(async () => (await modelRow('gemini-3-pro').count()) === 1, { label: 'the reduced-motion model to appear' });
+  const reducedRead = fixtures.reads();
+  await until(() => fixtures.reads() > reducedRead, { label: 'the reduced-motion arrival applied' });
+  check('reduced motion updates the map without a travelling packet', (await page.evaluate(() => window.__reducedPackets)) === 0 && (await packets.count()) === 0);
+  const hasFlow = await map.locator('[data-testid="routing-lane"] > path:nth-child(2)')
+    .evaluateAll(flows => flows.some(flow => getComputedStyle(flow).animationName !== 'none' && Number(getComputedStyle(flow).opacity) > 0));
+  check('reduced motion leaves every lane at rest', !hasFlow);
 }
 
 export async function routingNarrow({ base, page, check }) {

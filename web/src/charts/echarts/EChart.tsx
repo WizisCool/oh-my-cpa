@@ -4,7 +4,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { currentFontStack } from '../../theme/fontLibrary';
 import { echarts, type ECharts, type EChartsCoreOption } from './core';
-import { buildEchartsTheme, echartsMotion } from './echartsTheme';
+import { buildEchartsTheme, applyEchartsMotion } from './echartsTheme';
 import './echarts.css';
 
 /** ECharts events the page listens to, by name. */
@@ -76,7 +76,7 @@ const EChartView: React.FC<EChartProps> = ({ option, height, className, label, h
   React.useEffect(() => {
     const instance = chart.current;
     if (!instance) return;
-    instance.setOption({ ...echartsMotion(isReducedMotion), aria: { enabled: true, label: { description: label } }, ...option }, {
+    instance.setOption(applyEchartsMotion({ aria: { enabled: true, label: { description: label } }, ...option }, isReducedMotion), {
       replaceMerge: ['series', 'xAxis', 'yAxis', 'grid'],
     });
     appliedRef.current?.(instance);

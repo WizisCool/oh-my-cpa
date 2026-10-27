@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -47,5 +48,63 @@ func TestPutPreferencesWritesEveryDocument(t *testing.T) {
 		if raw != want {
 			t.Fatalf("%s = %s, want %s", key, raw, want)
 		}
+	}
+}
+
+// The inverse labels must not reverse an operator's existing scrolling choice on upgrade.
+func TestReducedMotionPreferenceMigration(t *testing.T) {
+	for _, entry := range []struct {
+		name, oldValue, existingValue, wantValue string
+	}{
+		{name: "fresh"},
+		{name: "full motion", oldValue: `"on"`, wantValue: `"off"`},
+		{name: "reduced motion", oldValue: `"off"`, wantValue: `"on"`},
+		{name: "system", oldValue: `"system"`, wantValue: `"system"`},
+		{name: "formatted JSON", oldValue: " \n\t\"off\" ", wantValue: `"on"`},
+		{name: "invalid", oldValue: `true`},
+		{name: "existing choice", oldValue: `"on"`, existingValue: `"on"`, wantValue: `"on"`},
+	} {
+		t.Run(entry.name, func(t *testing.T) {
+			ctx := context.Background()
+			db := openDatabaseAtMigration(t, 48)
+			for key, value := range map[string]string{"omc_scroll_smoothing": entry.oldValue, PreferenceReducedMotion: entry.existingValue} {
+				if value != "" {
+					if _, err := db.SQL.ExecContext(ctx, `INSERT INTO ui_preferences(pref_key, pref_value, updated_at_ms) VALUES (?, ?, 1234)`, key, value); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			db.migrateUntil = 0
+			if err := db.Migrate(ctx); err != nil {
+				t.Fatal(err)
+			}
+			rows, err := db.SQL.QueryContext(ctx, `SELECT pref_key, pref_value, updated_at_ms FROM ui_preferences`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			got := map[string]string{}
+			for rows.Next() {
+				var key, value string
+				var updatedAt int64
+				if err := rows.Scan(&key, &value, &updatedAt); err != nil {
+					t.Fatal(err)
+				}
+				if updatedAt != 1234 {
+					t.Fatalf("preference timestamp changed: %d", updatedAt)
+				}
+				got[key] = value
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]string{}
+			if entry.wantValue != "" {
+				want[PreferenceReducedMotion] = entry.wantValue
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("preferences after upgrade = %v, want %v", got, want)
+			}
+		})
 	}
 }

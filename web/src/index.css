@@ -342,12 +342,6 @@ a { color: inherit; }
   from { opacity: 1; }
   to { opacity: 0; transform: scale(0.98); }
 }
-@keyframes omc-fade-in {
-  from { opacity: 0; }
-}
-@keyframes omc-fade-out {
-  to { opacity: 0; }
-}
 @keyframes omc-dialog-in {
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
   to { opacity: 1; transform: none; }
@@ -1604,66 +1598,34 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 @keyframes omc-icon-spin {
   to { transform: rotate(360deg); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ant-drawer .ant-drawer-content-wrapper {
-    transition: none !important;
+:root[data-reduced-motion='true'] {
+  /* Library lifecycles use MotionProvider; CSS-owned effects settle in place. */
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
   }
-  /* antd animates a floating panel in with a zoom (`antZoomBigIn`) and does so under reduced motion
-     as well - measured, not assumed. Killing the animation alone is not enough: rc-motion sets the
-     enter state inline and waits for the animation to remove it, so `animation: none` left the panel
-     at scale 0 and opacity 0, i.e. never visible at all (also measured). The settled state is
-     therefore pinned alongside it - which is exactly the state the animation would have reached, so
-     no positioning is changed - and the panel appears in the frame the click happened. */
   .ant-popover,
   .ant-dropdown,
   .ant-select-dropdown,
-  .ant-picker-dropdown {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-  /* The console's own panel entrances (above) are pinned the same way: no fade, no settle, the panel is
-     simply there. Leaving panels are hidden by the rule below. */
+  .ant-picker-dropdown,
+  .ant-tooltip,
   .ant-zoom-big-enter.ant-zoom-big-enter-active, .ant-zoom-big-appear.ant-zoom-big-appear-active,
   .ant-zoom-big-fast-enter.ant-zoom-big-fast-enter-active, .ant-zoom-big-fast-appear.ant-zoom-big-fast-appear-active,
   .ant-slide-up-enter.ant-slide-up-enter-active, .ant-slide-up-appear.ant-slide-up-appear-active,
   .ant-slide-down-enter.ant-slide-down-enter-active, .ant-slide-down-appear.ant-slide-down-appear-active,
-  .ant-tooltip {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
   .ant-zoom-big-leave.ant-zoom-big-leave-active, .ant-zoom-big-fast-leave.ant-zoom-big-fast-leave-active,
-  .ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active {
-    animation: none !important;
-    visibility: hidden !important;
-  }
-  /* A dialog cannot be pinned the way a panel is: rc-dialog moves focus into it when its entrance
-     ends and unmounts its wrapper when its exit ends, so a dialog with no animation keeps focus
-     outside and leaves a transparent wrapper over the page that swallows every click. It therefore
-     keeps a plain cross-fade - opacity only, nothing moves. */
-  .ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active {
-    animation-name: omc-fade-in !important;
-    animation-duration: var(--motion-fast) !important;
-    animation-timing-function: linear !important;
-  }
+  .ant-slide-up-leave.ant-slide-up-leave-active, .ant-slide-down-leave.ant-slide-down-leave-active,
+  .ant-modal.ant-zoom-enter.ant-zoom-enter-active, .ant-modal.ant-zoom-appear.ant-zoom-appear-active,
   .ant-modal.ant-zoom-leave.ant-zoom-leave-active {
-    animation-name: omc-fade-out !important;
-    animation-duration: var(--motion-fast) !important;
-    animation-timing-function: linear !important;
-  }
-  /* rc-motion can retain its leaving node when animation is disabled. A closed
-     popup must disappear rather than remain painted in its pinned entering state. */
-  .ant-popover[class*="-leave"],
-  .ant-dropdown[class*="-leave"],
-  .ant-select-dropdown[class*="-leave"],
-  .ant-picker-dropdown[class*="-leave"],
-  .ant-tooltip[class*="-leave"] {
-    visibility: hidden !important;
+    animation: none !important;
   }
   .route-transition { animation: none; }
-  ::view-transition-old(root),
-  ::view-transition-new(root) { animation: none; }
+  &::view-transition-old(root),
+  &::view-transition-new(root) { animation: none; }
   /* Rough progress updates on task events only; waiting activity and the completion fade are removed. */
   .progress-bar { transition: none; }
   .progress-bar-activity-mark { animation: none; opacity: 0; }

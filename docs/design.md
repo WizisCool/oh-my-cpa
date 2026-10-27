@@ -648,7 +648,7 @@ Rules:
 8. **Hover lifts the cell.** A `transform: scale()` — compositor-only, per §7 rule 1 — with the
    ring, and `z-index` so the enlarged square is not clipped by its neighbours. Deliberately no
    colour transition: §7 rule 7 forbids one, and a fade behind a fast sweep reads as lag. The
-   `prefers-reduced-motion` override drops the movement and keeps the ring and the cursor.
+   resolved reduced-motion policy drops the movement and keeps the ring and the cursor.
 9. **Every line of the tooltip clears WCAG AA on the popper's own surface** (measured, and
    asserted from painted pixels in both themes). Two things this pins down, because both shipped
    broken: the tooltip's fill is the palette surface in *both* themes - antd's `colorBgSpotlight`
@@ -2298,30 +2298,48 @@ The separate `--motion-live-text` token (`MOTION_LIVE_TEXT`) is a 900ms linear l
 work-in-flight labels, not a state-transition budget. `themePaletteCssVariables` and the root
 stylesheet project the same period for every palette, pinned by the theme logic suite.
 
+### One motion preference
+
+OMC Settings exposes **Reduce motion** (`On` / `Follow system` / `Off`), persisted as
+`omc_reduced_motion`. `On` reduces motion, `Follow system` is the default and tracks live
+`prefers-reduced-motion` changes, and `Off` allows full motion even on a reduced-motion system.
+The policy applies immediately across the console, including Dashboard and Insights, and rolls
+back with a refused preference write. Migration 049 preserves explicitly chosen scrolling behaviour
+by inverting the old preference's `on` and `off` values (ADR 0108).
+
+New React consumers use `usePrefersReducedMotion`; imperative consumers use `isMotionReduced`
+from `utils/motionPreference.ts`. Only that shared layer reads the system query. `MotionPreferenceSync`
+applies the persisted preference before paint, and the same layer publishes
+`data-reduced-motion="true|false"` on the document root for CSS, including portalled surfaces.
+A permanently mounted `MotionProvider` projects the same policy into `@rc-component/motion`,
+which Ant Design uses for portal, notification, dialog and segmented-control lifecycles. It disables
+those effects through the library's context without remounting the page. The CSS projection updates
+in place, preserving mounted page state and chart instances.
+Stylesheets scope reduced-motion rules under `:root[data-reduced-motion='true']` (wrapped in
+`:global(...)` in CSS modules); full-motion-only rules use the `false` value. Do not add an
+independent system query to a component or library. ECharts options pass through
+`applyEchartsMotion`, which controls mark, emphasis, tooltip and axis-pointer motion and prevents
+page-level overrides from re-enabling them. NumberFlow delegates its decision to this policy.
+CSS-owned transitions settle immediately. Library cleanup, notification dismissal and dialog focus
+and unmount are managed by the motion provider rather than by waiting for CSS completion events.
+Trackpad and touch scrolling are unchanged.
+
 ### The budget is enforced, not documented
 
 `pnpm check:motion` reads every stylesheet and every inline `transition:` in a component, and fails
 on four things: a duration that is not a `--motion-*` token (or a `var()` fallback, which is never
 applied and is how a wrong value hid for months), a transition on a layout property or on `all`, a
-keyframe animation with no `prefers-reduced-motion` counterpart, and a hover transitioning colour
+keyframe animation with no reduced-motion counterpart, and a hover transitioning colour
 outside `fast`. The exceptions are listed in the checker's `EXCEPTIONS` table with the reason each is
 one, and an exception that stops matching a rule is itself a failure — the list cannot rot into
-things that were once true. Three kinds exist. A `layout` exception waives rule 1 for a disclosure,
+things that were once true. Two kinds exist. A `layout` exception waives rule 1 for a disclosure,
 where a reflow is the point and the alternative is an accordion that snaps open. A `duration`
 exception waives the token requirement for a loop whose period is how long one cycle takes rather
 than a transition between two states: the heatmap's re-read bar, the icon spinner, the generation
 loader, the streaming caret, the loading bar's waiting activity and the first-load placeholders'
 breath. §7 handles those by freezing or removing them under reduced motion rather than by shortening them.
-A `reduced` exception waives the reduced-motion counterpart for one selector whose motion is the
-reading rather than decoration, or whose end the library waits for: the live routing map's lane flow
-(ADR 0102 records why the whole trip plays under the preference), and a dialog's entrance and exit,
-which rc-dialog finishes on `animationend` - it moves focus in when the entrance ends and unmounts the
-wrapper when the exit ends - so they cross-fade over `fast` instead of being removed.
-`pnpm check:motion` enforces every rule on the repository.
-Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
-with a zoom under reduced motion as well, and the panel has to be pinned to its settled state rather
-than merely un-animated, because rc-motion holds the enter state inline until the animation ends.
-That surface is asserted in the browser now, not only in the declaration.
+The motion provider owns library lifecycle completion, so reduced motion needs no lifecycle fade.
+`pnpm check:motion` enforces the stylesheet rules on the repository.
 
 **Entrances fade and settle; nothing flies.** Ant Design zooms a panel in from 80% (a dialog from
 20%, out of the pointer) and stretches a menu down from 80% of its height; the stylesheet replaces
@@ -2329,9 +2347,8 @@ those keyframes. A summoned panel fades in over `float` while settling the last 
 origin, a menu or select panel also drops its last 4px toward its control, a dialog rises 8px into
 place over `slow`, and a leaving panel fades over `fast` - all on `--ease-out`, opacity and
 transform only. No bounce and no overshoot: the reader sees the result arrive, not travel. Under
-reduced motion a panel is pinned to its settled state, and a dialog keeps only an opacity fade:
-removing its animation would leave focus behind it on open and a transparent wrapper over the page
-on close.
+reduced motion panels and dialogs appear in place. The library motion provider completes focus
+and unmount without waiting for an entrance or exit animation.
 
 **Feedback that follows the hand.** A button gives a little under a press (`scale(0.97)`) and
 returns on release, so a click is felt before what it starts has answered; a field never does,
@@ -2380,7 +2397,7 @@ Hard rules:
    it. First paint reveals sparklines left to right and presents the complete ring; subsequent
    revisions morph.
    Chart emphasis uses the 120ms `fast` token, and each series pins its update timing to `roll`.
-   The reduced-motion switch is app-owned (`usePrefersReducedMotion` through `echartsMotion`) because
+   The reduced-motion switch is app-owned (`usePrefersReducedMotion` through `applyEchartsMotion`) because
    library geometry animation is not controlled by CSS. It disables first-paint and update animation.
    SVG geometry updates are not compositor-only, so these `roll`-bounded charts remain an explicit
    exception to rule 1 (ADRs 0008 and 0106).
@@ -2409,7 +2426,7 @@ Hard rules:
    the digits the exception is cheap and scoped -
    glyphs transforming inside a 34px-tall box, so rules 1 and 2 hold as written, and a change
    of *unit* prints in place, because rolling 1.2 into 900 under a swapping unit word would
-   show digits that never described the window. `prefers-reduced-motion` removes it and the
+   show digits that never described the window. The resolved reduced-motion policy removes it and the
    value still updates. See ADR 0007 for the token and ADR 0008 for what rule 5 costs.
 9. **A stored request travels the routing map, and comes back** - Magpie's motion. When the
    dashboard's live routing panel reads a request it has not shown, a glowing 9px dot in the model's
@@ -2444,12 +2461,9 @@ Hard rules:
    finished while the page was hidden - the live stream is closed then, so the read on return carries
    them, and they are counted on the rows instead. Hiding the page ends every trip on the map: a
    hidden page runs no animation frames, so a trip left running would complete every missed hop in a
-   frame each on return and replay the time away at speed. The trip is the one motion the console starts
-   on its own that plays in full under `prefers-reduced-motion`: a lane's flow, a dot's travel and a
-   row's entrance are the reading itself, and Windows' "Animation effects" switch - which many readers
-   turn off for speed rather than for vestibular reasons - is reported by Chromium as that query. The
-   map therefore keeps its animation for every reader; ADR 0102 records the scoped exception and the
-   trade-off. Counts never animate.
+   frame each on return and replay the time away at speed. The resolved reduced-motion policy stops every trip, lane flow, node glow and row
+   animation; readings and lane geometry update in place. Turning motion back on plays only later
+   arrivals rather than replaying the reduced interval. Counts never animate (ADR 0108).
 
    The map learns of a request when CPA stores its record, which is when it finished: CPA reports
    nothing about a request while it runs. The trip therefore starts as soon as the record is read and
@@ -2470,7 +2484,7 @@ custom range changes, manual refresh and background refetch.
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
 | Auto-refresh poll | The view does not move, though a reading and a mark may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". Three things may move: a dashboard KPI number rolling to its new value, any dashboard chart mark morphing to its own new revision - the six KPI sparklines, and the model trend and usage ring, which re-read on their own endpoint rather than on the tiles' (rules 8 and 5) - and a newly stored request travelling the routing map (rule 9). |
 
-`prefers-reduced-motion` removes the fade, drops the bar's pending estimate (it
+The resolved reduced-motion policy removes the fade, drops the bar's pending estimate (it
 steps only when a task settles) and freezes the placeholders' breath, but the
 no-blank rule still applies — fall back to a static loading state.
 
@@ -2578,7 +2592,7 @@ must not share a behaviour:
 
 | Intent | Scrolls | Behaviour |
 | --- | --- | --- |
-| Gesture | Back to top, applying the `N new records` backlog | Animated, unless `prefers-reduced-motion` |
+| Gesture | Back to top, applying the `N new records` backlog | Animated, unless the resolved policy reduces motion |
 | Correction | Pinning row one after the header collapses, resetting on page change | Instant |
 
 A correction is not a weaker gesture, it is a different job. Collapsing the header
@@ -2640,12 +2654,11 @@ every frame until it lands.
 A component that turns a notch into something else — the request list collapsing its header on the
 first notch — says so with `consumeWheel`, since `preventDefault` from a React handler is ignored.
 
-The glide is on by default and is **not** switched off by `prefers-reduced-motion`: it is the
-reader's own input following their hand, as inertial scrolling stays on under Reduce Motion on
-macOS and iOS, and on Windows the reduced-motion signal is the same switch that removed the
-browser's glide. The OMC settings page's **Smooth scrolling** row (`On` / `Follow system` / `Off`,
-the `omc_scroll_smoothing` preference) hands the decision to that signal or turns the glide off.
-The return-to-top gesture above is page-initiated travel and keeps honouring reduced motion.
+The glide runs while the console's resolved motion policy allows it. **Reduce motion** in OMC
+Settings controls it together with return-to-top gestures, charts, numbers and other interface
+animation. The default follows the system, `On` disables the glide, and `Off` allows it even when
+the system reports reduced motion. Disabling the policy cancels an in-flight glide; trackpad and
+touch input stay unchanged (ADR 0108).
 
 ### Nothing expensive rides along with the scroll
 

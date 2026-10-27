@@ -1,5 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
+import { usePrefersReducedMotion } from '../../../hooks/usePrefersReducedMotion';
+import { isMotionReduced } from '../../../utils/motionPreference';
 
 import { BrandArtwork } from '../../common/BrandArtwork';
 import { ProviderBrandIcon } from '../../LobeIcon';
@@ -68,22 +70,27 @@ function useRegistry<T extends Element>() {
 
 /** A lane's motion: it fades in once its row has begun to arrive, and out as the row leaves. */
 function useLaneMotion(ref: React.RefObject<SVGGElement | null>, phase: PresencePhase, delayMs: number) {
+  const isReducedMotion = usePrefersReducedMotion();
+  const entranceRef = React.useRef<Animation>();
   React.useLayoutEffect(() => {
-    if (phase !== 'entering') return;
-    ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
+    if (phase !== 'entering' || isMotionReduced()) return;
+    entranceRef.current = ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: MOTION_ROUTE_PRESENCE.duration, easing: MOTION_ROUTE_PRESENCE.easing,
       delay: delayMs + MOTION_ROUTE_ENTER.duration / 3, fill: 'backwards',
     });
+    return () => entranceRef.current?.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   React.useLayoutEffect(() => {
-    if (phase !== 'exiting') return;
+    if (isReducedMotion) entranceRef.current?.cancel();
+  }, [isReducedMotion]);
+  React.useLayoutEffect(() => {
+    if (phase !== 'exiting' || isReducedMotion) return;
     const animation = ref.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
       duration: MOTION_ROUTE_EXIT.duration, easing: MOTION_ROUTE_EXIT.easing, fill: 'forwards',
     });
     return () => animation?.cancel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, isReducedMotion, ref]);
 }
 
 export interface RoutingArrivals {
@@ -130,13 +137,15 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
   const halos = useRegistry<HTMLElement>();
   const rings = useRegistry<HTMLElement>();
 
+  const isReducedMotion = usePrefersReducedMotion();
+  const exitMs = isReducedMotion ? 0 : MOTION_ROUTE_EXIT.duration;
   const isEmpty = model.models.length === 0;
-  const models = usePresence(model.models, modelKey, MOTION_ROUTE_EXIT.duration);
-  const targets = usePresence(model.targets, targetKey, MOTION_ROUTE_EXIT.duration);
+  const models = usePresence(model.models, modelKey, exitMs);
+  const targets = usePresence(model.targets, targetKey, exitMs);
   // An empty minute keeps the map's shape with a placeholder row on each side, which
   // leaves as the first request's rows arrive rather than being swapped out.
   const ghostItems = React.useMemo(() => (isEmpty ? [GHOST] : []), [isEmpty]);
-  const ghosts = usePresence(ghostItems, ghostKey, MOTION_ROUTE_EXIT.duration);
+  const ghosts = usePresence(ghostItems, ghostKey, exitMs);
 
   // A leaving row keeps the colour it had; the panel may already have given its slot away.
   const colorsRef = React.useRef(new Map<string, string>());
@@ -197,6 +206,7 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
     .map((list) => list.map((entry) => `${entry.key}:${entry.phase}`).join(','))
     .join('|');
   React.useLayoutEffect(() => {
+    if (isReducedMotion) return;
     const until = performance.now() + TRACKING_MS;
     let frame = 0;
     const tick = () => {
@@ -205,7 +215,7 @@ export function RoutingMap({ model, colorOf, nowMs, strategy, sources, arrivals 
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [presenceSignature, draw]);
+  }, [presenceSignature, draw, isReducedMotion]);
   React.useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;

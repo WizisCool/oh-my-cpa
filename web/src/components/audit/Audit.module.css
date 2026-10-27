@@ -280,7 +280,7 @@
   font-size: var(--text-sm);
 }
 
-@media (prefers-reduced-motion: reduce) {
+:global(:root[data-reduced-motion='true']) {
   .phone-entry {
     transition: none;
   }

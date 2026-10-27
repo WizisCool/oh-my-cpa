@@ -1,3 +1,5 @@
+import { isMotionReduced } from './motionPreference';
+
 /**
  * Smooth scrolling for the request list.
  *
@@ -32,22 +34,13 @@
  */
 export type ScrollIntent = 'smooth' | 'instant';
 
-/** Whether the platform is currently honouring animation requests. */
-export function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
-
 /** Longest a gesture scroll may take, in milliseconds. */
 export const SCROLL_ANIMATION_MS = 260;
 
 /** Reduced motion collapses a gesture to a correction rather than to nothing. */
 export function scrollDurationFor(intent: ScrollIntent): number {
   if (intent === 'instant') return 0;
-  return prefersReducedMotion() ? 0 : SCROLL_ANIMATION_MS;
+  return isMotionReduced() ? 0 : SCROLL_ANIMATION_MS;
 }
 
 /**
@@ -120,7 +113,7 @@ export function animateScrollToTop(
 
   const step = () => {
     if (cancelled) return;
-    const elapsed = performance.now() - startedAt;
+    const elapsed = isMotionReduced() ? durationMs : performance.now() - startedAt;
     applyTop(scrollTopAt(from, elapsed, durationMs));
     if (elapsed >= durationMs) {
       // The final write, so the gesture lands on row one exactly.

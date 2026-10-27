@@ -1,6 +1,6 @@
 # ADR 0102: The live routing trip plays under reduced motion
 
-- Status: Accepted
+- Status: Superseded in its motion-preference policy by ADR 0108 (2026-10-27); routing lifecycle and animation budgets remain unchanged.
 - Date: 2026-10-17
 
 ## Context

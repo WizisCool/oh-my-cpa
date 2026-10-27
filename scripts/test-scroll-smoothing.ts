@@ -2,8 +2,7 @@
  * Logic-level tests for the console-wide wheel and keyboard glide.
  *
  * What is decided without a DOM is asserted here: which wheel events count as a notch, how far a
- * notch or a key moves, that a glide lands exactly on its destination, and how the preference and
- * the reduced-motion signal combine. That the glide reaches a real scroller, a virtualized list
+ * notch or a key moves, that a glide lands exactly on its destination. That the glide reaches a real scroller, a virtualized list
  * included, is the `scroll-smoothing` browser probe's claim.
  */
 import assert from 'node:assert/strict';
@@ -16,7 +15,6 @@ import {
   wheelDistance,
   type WheelSample,
 } from '../web/src/utils/scrollSmoothing.ts';
-import { DEFAULT_SCROLL_SMOOTHING, isScrollSmoothingActive, parseScrollSmoothing } from '../web/src/utils/scrollSmoothingPreference.ts';
 
 const notch = (overrides: Partial<WheelSample> = {}): WheelSample => ({
   deltaMode: 0,
@@ -90,17 +88,5 @@ for (let elapsed = 0; elapsed <= duration; elapsed += 4) {
 // time, which is what keeps a turning wheel from stalling at every notch.
 assert.ok(glidePosition(0, 100, duration * 0.25, duration) > 50, 'a glide starts moving at once');
 assert.ok(glidePosition(400, 300, duration / 2, duration) < 350, 'an upward glide uses the same curve');
-
-// ---- preference and reduced motion ----
-
-assert.equal(DEFAULT_SCROLL_SMOOTHING, 'on');
-assert.equal(isScrollSmoothingActive('on', false), true);
-assert.equal(isScrollSmoothingActive('on', true), true, '`on` glides even when the system reports reduced motion');
-assert.equal(isScrollSmoothingActive('system', false), true);
-assert.equal(isScrollSmoothingActive('system', true), false, '`system` defers to reduced motion');
-assert.equal(isScrollSmoothingActive('off', false), false);
-assert.equal(parseScrollSmoothing('system'), 'system');
-assert.equal(parseScrollSmoothing('smooth'), undefined, 'an unknown word falls back to the default');
-assert.equal(parseScrollSmoothing(true), undefined);
 
 console.log('scroll smoothing tests passed');

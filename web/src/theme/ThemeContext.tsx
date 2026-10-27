@@ -26,6 +26,7 @@ import { themePaletteCssVariables } from './themeConfig';
 import { usePreference } from '../hooks/usePreference';
 import { parseThemePreferences, THEME_PREFERENCE_KEY } from './themePreference';
 import { isDemoMode } from '../types/demoMode';
+import { isMotionReduced } from '../utils/motionPreference';
 
 export interface ThemeContextValue {
   /** The preference as stored, without any in-progress edit. */
@@ -77,7 +78,7 @@ type ViewTransitionDocument = Document & { startViewTransition?: (update: () => 
  */
 function withCrossFade(update: () => void): void {
   const start = (document as ViewTransitionDocument).startViewTransition;
-  if (typeof start !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (typeof start !== 'function' || isMotionReduced()) {
     update();
     return;
   }

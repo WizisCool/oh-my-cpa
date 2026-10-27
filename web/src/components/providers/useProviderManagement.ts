@@ -12,6 +12,7 @@ import { isSafeExternalURL } from '../../utils/externalUrl';
 import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
 import { modelsToAdd } from '../../utils/modelOptions';
+import { isMotionReduced } from '../../utils/motionPreference';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -180,7 +181,7 @@ export function useProviderManagement({
         setTimeout(() => {
           const el = document.getElementById(`model-card-${id}`);
           if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            el.scrollIntoView({ behavior: isMotionReduced() ? 'instant' : 'smooth', block: 'nearest' });
           }
         }, 80);
       } else {
@@ -206,7 +207,7 @@ export function useProviderManagement({
     setTimeout(() => {
       const el = document.getElementById(`model-card-${newId}`);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        el.scrollIntoView({ behavior: isMotionReduced() ? 'instant' : 'smooth', block: 'end' });
       }
     }, 80);
   };

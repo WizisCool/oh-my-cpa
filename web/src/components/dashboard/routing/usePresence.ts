@@ -34,6 +34,13 @@ export function usePresence<T>(items: readonly T[], keyOf: (item: T) => string, 
 
   const timers = React.useRef(new Map<string, ReturnType<typeof setTimeout>>()).current;
   React.useEffect(() => {
+    if (exitMs === 0) {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+      setList(previous => previous.some(entry => entry.phase === 'exiting')
+        ? previous.filter(entry => entry.phase !== 'exiting') : previous);
+      return;
+    }
     const exiting = new Set(list.filter((entry) => entry.phase === 'exiting').map((entry) => entry.key));
     for (const key of exiting) {
       if (timers.has(key)) continue;

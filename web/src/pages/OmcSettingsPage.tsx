@@ -28,8 +28,8 @@ import type { TpsCalculationMode } from '../types/tpsCalculation';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
 import { PageHeader } from '../components/common/PageHeader';
-import { useScrollSmoothingPreference } from '../hooks/useScrollSmoothing';
-import { SCROLL_SMOOTHING_PREFERENCES, type ScrollSmoothingPreference } from '../utils/scrollSmoothingPreference';
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
+import { REDUCED_MOTION_PREFERENCES, type ReducedMotionPreference } from '../utils/motionPreference';
 import { SectionHeading } from '../components/common/SectionHeading';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
@@ -112,10 +112,10 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, MessageKey> = {
  * surface is the config panel's, with its different save semantics. The two pages coexist in the
  * sidebar under "Control".
  */
-const SCROLL_SMOOTHING_LABEL_KEYS: Record<ScrollSmoothingPreference, MessageKey> = {
-  on: 'omc.scroll_smoothing_on',
+const REDUCED_MOTION_LABEL_KEYS: Record<ReducedMotionPreference, MessageKey> = {
+  on: 'omc.reduced_motion_on',
   system: 'omc.theme_mode_system',
-  off: 'omc.scroll_smoothing_off',
+  off: 'omc.reduced_motion_off',
 };
 
 export const OmcSettingsPage: React.FC = () => {
@@ -135,7 +135,7 @@ export const OmcSettingsPage: React.FC = () => {
   // and the items do not wrap, so later options paint past the card's edge. Below the console's
   // narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
   const isNarrow = useIsNarrowViewport();
-  const scrollSmoothing = useScrollSmoothingPreference();
+  const reducedMotion = useReducedMotionPreference();
 
   // The Chinese scale is words - 万, 亿 - so it is offered only to a Chinese
   // console. The option stays visible and disabled rather than hidden: an
@@ -272,14 +272,14 @@ export const OmcSettingsPage: React.FC = () => {
           }
         />
         <SettingRow
-          label={t('omc.scroll_smoothing')}
-          description={t('omc.scroll_smoothing_desc')}
+          label={t('omc.reduced_motion')}
+          description={t('omc.reduced_motion_desc')}
           control={
             <Segmented
-              value={scrollSmoothing.value}
-              options={SCROLL_SMOOTHING_PREFERENCES.map((value) => ({ value, label: t(SCROLL_SMOOTHING_LABEL_KEYS[value]) }))}
-              onChange={(next) => { void scrollSmoothing.set(next as ScrollSmoothingPreference); }}
-              aria-label={t('omc.scroll_smoothing')}
+              value={reducedMotion.value}
+              options={REDUCED_MOTION_PREFERENCES.map((value) => ({ value, label: t(REDUCED_MOTION_LABEL_KEYS[value]) }))}
+              onChange={(next) => { void reducedMotion.set(next as ReducedMotionPreference); }}
+              aria-label={t('omc.reduced_motion')}
               vertical={isNarrow}
               block={isNarrow}
             />
