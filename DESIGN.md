@@ -176,7 +176,7 @@ The navigation stands on a canvas one step behind the page (`--canvas`); the hea
 
 ## Colors
 
-The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. A palette is **nine authored tokens and eighteen derived ones**: `web/src/theme/palette.ts` declares the authored set and computes the rest, so the six registered palettes - OMC Dark, Midnight and Forest for dark mode; OMC Light, Porcelain and Sandstone for light mode - and an operator's own are the same kind of object. The resolved palette feeds Ant Design, CSS variables, charts, the heatmap, the Monaco editor, the settings preview and the brand artwork from that one place. A theme mode (light, dark, or follow-the-system) holds one palette of its own, and an operator-authored palette is labelled «Custom» in the reading language. `omc-theme` stores the whole preference document and still reads an older build's bare palette id or bare `dark`/`light`. See `docs/adr/0011-theme-modes-and-derived-palettes.md`.
+The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. A palette is **nine authored tokens and eighteen derived ones**: `web/src/theme/palette.ts` declares the authored set and computes the rest, so the six registered palettes - OMC Dark, Pewter and Forest for dark mode; OMC Light, Fog and Sandstone for light mode - and an operator's own are the same kind of object. The resolved palette feeds Ant Design, CSS variables, charts, the heatmap, the Monaco editor, the settings preview and the brand artwork from that one place. A theme mode (light, dark, or follow-the-system) holds one palette of its own, and an operator-authored palette is labelled «Custom» in the reading language. `omc-theme` stores the whole preference document and still reads an older build's bare palette id or bare `dark`/`light`. See `docs/adr/0011-theme-modes-and-derived-palettes.md`.
 
 ### Primary
 - **Deep Accent Blue** (`#0579bd` dark / `#004a73` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark mode.
@@ -208,7 +208,7 @@ rule above; see `docs/adr/0006-categorical-series-palette.md` and `docs/design.m
   `scripts/test-chart-marks.ts` asserts these bounds from the resolved palette and checks its runtime
   CSS-variable projection. The slots above are the OMC Dark/OMC Light pair;
   the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
-  mode's set.
+  mode's set, moved only in lightness where its ground would otherwise fade them.
 
 ### Routing lanes (categorical, cool only)
 

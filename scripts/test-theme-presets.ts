@@ -68,6 +68,20 @@ for (const id of BUILT_IN_PALETTE_IDS) assert.ok(!['dark', 'light', 'system'].in
 
 // ── the derivation's guaranteed relationships ────────────────────────────────
 
+/**
+ * A semantic colour is as legible on a palette as on its mode's own (up to the text floor), so a grey
+ * page cannot quietly fade a failure count or a chart slot.
+ */
+function assertSignalsHold(mode: 'dark' | 'light', palette: ReturnType<typeof derivePalette>, where: string): void {
+  const reference = resolvedBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').palette;
+  const signals = (of: typeof palette) => [of.success, of.warn, of.danger, ...of.series, ...of.route];
+  const weakest = (color: string, of: typeof palette) => Math.min(contrastRatio(color, of.bg), contrastRatio(color, of.surface));
+  signals(palette).forEach((color, index) => {
+    const floor = Math.min(weakest(signals(reference)[index], reference), CONTRAST_FLOORS.text ?? 4.5);
+    assert.ok(weakest(color, palette) >= floor, `${where} signal ${index} (${color}) reads ${weakest(color, palette).toFixed(2)}:1, want >= ${floor.toFixed(2)}:1`);
+  });
+}
+
 for (const definition of BUILT_IN_PALETTES) {
   const palette = derivePalette(definition.mode, definition.core);
   const where = `${definition.id}:`;
@@ -91,6 +105,8 @@ for (const definition of BUILT_IN_PALETTES) {
     // Light mode's inset step is a blend toward the foreground, so an inset hover is visible.
     assert.notEqual(palette.hoverInset, palette.bg, `${where} light mode's inset step differs from the page`);
   }
+
+  assertSignalsHold(definition.mode, palette, where);
 
   // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
   // same colour has no hover state, and one whose hover and pressed fills match has no press.
@@ -118,11 +134,16 @@ for (const definition of BUILT_IN_PALETTES) {
   assert.equal(resolvedBuiltInPalette(definition.id).palette.bg, palette.bg, `${where} the resolution cache agrees`);
 }
 
+// An operator may author a dark-mode palette on a light page, or the reverse. The signals then have to
+// move toward the mode's own ink rather than away from it, or they walk into the page.
+assertSignalsHold('dark', derivePalette('dark', getBuiltInPalette('fog').core), 'a dark palette on a light page:');
+assertSignalsHold('light', derivePalette('light', getBuiltInPalette('pewter').core), 'a light palette on a dark page:');
+
 /**
  * The dead zone, and the loop that gets out of it.
  *
- * These are the accents where a fixed lightness step fails: measured against the six built-ins, a
- * −0.075 step put OMC Dark's label at 3.73:1 and Midnight's at 3.38:1, and neither white nor
+ * These are the accents where a fixed lightness step fails: measured against the built-ins of the time, a
+ * −0.075 step put OMC Dark's label at 3.73:1 and a `#58a6ff` accent's at 3.38:1, and neither white nor
  * near-black could carry the label. The sweep asserts the loop lands a legible pair for all of them,
  * and for the extremes - a near-black accent and a near-white one - that a proportional step alone
  * would carry off the end of the scale.
@@ -154,8 +175,8 @@ for (const mode of ['dark', 'light'] as const) {
 // ── custom palettes ──────────────────────────────────────────────────────────
 
 for (const mode of ['dark', 'light'] as const) {
-  const seeded = emptyCustomPalette(mode, mode === 'dark' ? 'forest' : 'porcelain');
-  assert.equal(seeded.base, mode === 'dark' ? 'forest' : 'porcelain', 'a custom palette starts from a palette of its own mode');
+  const seeded = emptyCustomPalette(mode, mode === 'dark' ? 'forest' : 'fog');
+  assert.equal(seeded.base, mode === 'dark' ? 'forest' : 'fog', 'a custom palette starts from a palette of its own mode');
   assert.deepEqual(seeded.core, getBuiltInPalette(seeded.base).core, 'a fresh custom palette borrows its base verbatim');
   // A custom palette carries no name: it is labelled by a dictionary entry like every other control,
   // which is what keeps the card and the header tooltip translatable.
@@ -203,15 +224,24 @@ for (const mode of ['dark', 'light'] as const) {
 
 const stored = {
   mode: 'system',
-  palettes: { dark: 'midnight', light: 'custom' },
-  custom: { light: { base: 'porcelain', core: getBuiltInPalette('porcelain').core } },
+  palettes: { dark: 'pewter', light: 'custom' },
+  custom: { light: { base: 'fog', core: getBuiltInPalette('fog').core } },
 };
 const parsed = parseThemePreferences(stored);
 assert.ok(parsed, 'a well-formed document parses');
 assert.equal(parsed.mode, 'system');
-assert.equal(parsed.palettes.dark, 'midnight');
+assert.equal(parsed.palettes.dark, 'pewter');
 assert.equal(parsed.palettes.light, 'custom');
-assert.equal(parsed.custom.light?.base, 'porcelain');
+assert.equal(parsed.custom.light?.base, 'fog');
+
+// A withdrawn palette is read as the one that replaced it, so a stored choice keeps its mode's nearest
+// look and an authored palette started from it is kept rather than dropped with its starting point.
+const retired = parseThemePreferences({
+  palettes: { dark: 'midnight', light: 'porcelain' },
+  custom: { light: { base: 'porcelain', core: getBuiltInPalette('fog').core } },
+});
+assert.deepEqual(retired?.palettes, { dark: 'pewter', light: 'fog' }, 'a withdrawn palette reads as its successor');
+assert.equal(retired?.custom.light?.base, 'fog', 'and an authored palette started from it survives');
 
 // A document written by a build that still held a name parses without it: the field is ignored, so a
 // browser carrying one is not asked to re-author its palette.
@@ -240,8 +270,9 @@ assert.equal(parseThemePreferences([]), undefined, 'an array is not a preference
 // that; both have to arrive as a usable document rather than as a default.
 assert.equal(migrateLegacyThemeValue('omc-dark')?.mode, 'dark');
 assert.equal(migrateLegacyThemeValue('omc-light')?.mode, 'light');
-assert.equal(migrateLegacyThemeValue('midnight')?.mode, 'dark');
-assert.equal(migrateLegacyThemeValue('midnight')?.palettes.dark, 'midnight', 'a legacy palette becomes that mode\'s choice');
+assert.equal(migrateLegacyThemeValue('pewter')?.mode, 'dark');
+assert.equal(migrateLegacyThemeValue('pewter')?.palettes.dark, 'pewter', 'a legacy palette becomes that mode\'s choice');
+assert.equal(migrateLegacyThemeValue('porcelain')?.palettes.light, 'fog', 'a withdrawn bare id reads as its successor');
 assert.equal(migrateLegacyThemeValue('sandstone')?.mode, 'light');
 assert.equal(migrateLegacyThemeValue('sandstone')?.palettes.light, 'sandstone');
 assert.equal(migrateLegacyThemeValue('dark')?.mode, 'dark', 'the pre-palette bare mode still reads');
@@ -313,7 +344,7 @@ for (const definition of BUILT_IN_PALETTES) {
 // ── the filled control's label, on both fills ────────────────────────────────
 //
 // One label sits on all three filled-control states, so the floor has to hold on the pressed state too
-// and not only on the resting hover. Solving the ladder against the hover fill alone left Midnight's
+// and not only on the resting hover. Solving the ladder against the hover fill alone left a `#58a6ff` accent's
 // near-black label at 3.14:1 the moment its button was pressed, and seven of eighteen authored accents
 // broke the same way - which is why the derivation now solves the two fills together and why this
 // checks both rather than the pair that happens to be the resting one.
@@ -396,7 +427,7 @@ for (const resolved of projectedPalettes) {
 const crossMode = parseThemePreferences({
   mode: 'dark',
   palettes: { dark: 'omc-light' },
-  custom: { dark: { base: 'porcelain', core: getBuiltInPalette('porcelain').core } },
+  custom: { dark: { base: 'fog', core: getBuiltInPalette('fog').core } },
 });
 assert.equal(crossMode?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'a reference from the other mode is refused');
 assert.equal(crossMode?.custom.dark, undefined, 'and so is a custom palette started from one');

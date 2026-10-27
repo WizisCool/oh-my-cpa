@@ -556,11 +556,11 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   // palette would offer a dark palette to a light console.
   check(
     'a mode groups only its own palettes',
-    (await lightGroup.getByText(/Porcelain|Sandstone/).count()) === 2
-      && (await lightGroup.getByText(/Midnight|Forest/).count()) === 0
-      && (await darkGroup.getByText(/Midnight|Forest/).count()) === 2
-      && (await darkGroup.getByText(/Porcelain|Sandstone/).count()) === 0,
-    `light-only=${await lightGroup.getByText(/Midnight|Forest/).count()} dark-only=${await darkGroup.getByText(/Porcelain|Sandstone/).count()}`,
+    (await lightGroup.getByText(/Fog|Sandstone/).count()) === 2
+      && (await lightGroup.getByText(/Pewter|Forest/).count()) === 0
+      && (await darkGroup.getByText(/Pewter|Forest/).count()) === 2
+      && (await darkGroup.getByText(/Fog|Sandstone/).count()) === 0,
+    `light-only=${await lightGroup.getByText(/Pewter|Forest/).count()} dark-only=${await darkGroup.getByText(/Fog|Sandstone/).count()}`,
   );
   check(
     'every palette group marks exactly one active choice',
@@ -569,12 +569,12 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   );
 
   // ── choosing a palette for the mode that is not in force ─────────────────
-  // A click says "dark mode uses Midnight", not "show me Midnight". The mode control is the row
+  // A click says "dark mode uses Pewter", not "show me Pewter". The mode control is the row
   // above; a click that changed both would be a click whose second effect was not asked for.
-  await darkGroup.locator('.theme-preset-card').filter({ hasText: /Midnight/ }).click();
+  await darkGroup.locator('.theme-preset-card').filter({ hasText: /Pewter/ }).click();
   await until(
-    async () => JSON.parse(await page.evaluate(() => localStorage.getItem('omc-theme'))).palettes.dark === 'midnight',
-    { label: 'the dark mode to record Midnight' },
+    async () => JSON.parse(await page.evaluate(() => localStorage.getItem('omc-theme'))).palettes.dark === 'pewter',
+    { label: 'the dark mode to record Pewter' },
   );
   check(
     'choosing a palette for the other mode does not move the console',
@@ -585,16 +585,16 @@ export async function omcSettings({ base, page, check, context, expectProblem })
 
   const modeRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Theme mode|主题模式/ });
   await modeRow.locator('.ant-segmented-item').filter({ hasText: /Dark|暗色/ }).click();
-  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'midnight', {
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'pewter', {
     label: 'the recorded dark palette to apply when dark mode arrives',
   });
-  const midnightBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
-  check('the recorded palette paints the console when its mode arrives', midnightBg === '#0d1117', `--bg=${midnightBg}`);
+  const pewterBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  check('the recorded palette paints the console when its mode arrives', pewterBg === '#222226', `--bg=${pewterBg}`);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   check(
     'both the mode and the palette it recorded survive a reload',
-    (await page.locator('html').getAttribute('data-theme')) === 'midnight'
+    (await page.locator('html').getAttribute('data-theme')) === 'pewter'
       && (await page.locator('html').getAttribute('data-theme-mode')) === 'dark',
   );
 
@@ -716,7 +716,7 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   const baseOptions = await page.locator('.ant-select-dropdown:visible .ant-select-item-option').allInnerTexts();
   check(
     'the editor starts a palette from this mode\'s own palettes',
-    baseOptions.length === 3 && !baseOptions.some((label) => /Midnight|Forest|OMC Dark/.test(label)),
+    baseOptions.length === 3 && !baseOptions.some((label) => /Pewter|Forest|OMC Dark/.test(label)),
     JSON.stringify(baseOptions),
   );
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /Sandstone/ }).first().click();

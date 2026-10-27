@@ -3,6 +3,10 @@
 - Status: Accepted
 - Date: 2026-09-18
 - Amended by: ADR 0103, which adds `canvas` as an eighteenth derived token.
+- Amended (2026-10-27): Midnight and Porcelain were withdrawn for the grey palettes Pewter and Fog, and a
+  stored reference to either reads as its successor. The mode semantics stay constants of identity, but
+  each palette now holds them at their reference contrast by moving lightness alone (`holdSignal`,
+  `docs/design.md` §2). Palette names below are as they stood when this was decided.
 
 ## Context
 

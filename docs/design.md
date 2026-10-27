@@ -134,10 +134,10 @@ reading palettes *for* dark, whichever mode is in force.
 | Palette | Mode | Authored `bg` | Accent |
 | --- | --- | --- | --- |
 | OMC Dark | dark | `#121214` | `#00a2fb` |
-| Midnight | dark | `#0d1117` | `#58a6ff` |
+| Pewter | dark | `#222226` | `#47b5fa` |
 | Forest | dark | `#0e1411` | `#6ee7a8` |
 | OMC Light | light | `#ffffff` | `#005d8f` |
-| Porcelain | light | `#f7f8fa` | `#0b6e99` |
+| Fog | light | `#e7e7eb` | `#005b8b` |
 | Sandstone | light | `#f8f3e8` | `#0f766e` |
 
 A **theme mode** is light, dark or follow-the-system; each mode holds one palette. The resolved palette is
@@ -205,6 +205,24 @@ browser tab has no console theme to follow; `pnpm check-brand` fails when it is 
 Success, warn and danger are per-mode constants rather than derived tokens (`MODE_SEMANTICS` in
 `web/src/theme/palette.ts`): `#10b981` / `#f59e0b` / `#ef4444` in dark mode, `#059669` / `#b45309` /
 `#dc2626` in light mode.
+
+They are tuned on OMC Dark and OMC Light, and that tuning includes their contrast: the same green reads
+3.3:1 on OMC Light's white and 3.1:1 on Fog's grey. So every semantic colour - the three status hues, the
+series and routing slots and the effort steps - is *held* per palette by `holdSignal`: it keeps the
+weakest of its contrasts against the reference palette's grounds by moving only its OKLCH lightness away
+from the ground; hue and chroma, and therefore its identity, stay. A mark is held against the page and the
+card up to 4.5:1. An effort step is also held against the row hover, up to 6:1, because its badge prints
+it on a wash of itself that costs over a ratio point on a lifted dark ground. The two OMC palettes carry
+the constants unchanged; Pewter and Fog, whose grounds sit closer to the signals, move most of them, and
+Forest and Sandstone move a few by a hair. `scripts/test-theme-presets.ts` asserts the floor for every
+registered palette and `scripts/test-effort-scale.ts` the badges.
+
+The two grey palettes take their shape from the same reasoning. Pewter is a dimmed dark - its page sits
+ΔL +0.07 above OMC Dark, the elevation steps keep OMC Dark's spacing, and the foreground eases off white -
+for the halation a bright glyph has on a near-black ground. Fog is a grey that stays a light theme: the
+page is OKLCH 0.93, its cards lift toward white rather than sinking below the page, and its text ladder is
+deepened so `muted` and `meta` read above OMC Light's. Both keep OMC's faint cool neutral and its blue
+accent, moved in lightness to keep a link's margin on the new page.
 
 ### Status pip semantics
 
@@ -473,7 +491,8 @@ Rules:
    neutral step is `--fg-2`, secondary text: the badge's tint is thin by design, and
    `--muted` through them left the level close to unreadable.
 4. **The steps are per-mode constants, not derived tokens**, for the reason the series slots are: an
-   operator's accent must not rotate what a level looks like. Every palette inherits its mode's set.
+   operator's accent must not rotate what a level looks like. Every palette inherits its mode's set,
+   lightness-held to its ground like every semantic colour (§2).
 5. **Each step, the neutral one included, clears 4.5:1** as 11px badge text on its own tint, over the page, the card and the
    row's hover fill, in every registered palette. `scripts/test-effort-scale.ts` asserts that, the
    ranking, and that the stylesheet's fallback values match the palette.
@@ -684,7 +703,8 @@ colour are untouched and still mean exactly one thing.
 
 The six slots are **per-mode constants, not derived tokens**: they are semantics rather than palette,
 so an operator's accent cannot rotate them (`docs/adr/0011-theme-modes-and-derived-palettes.md`). Every
-palette therefore inherits its mode's set through `derivePalette`, and `--series-track` is the mode's
+palette therefore inherits its mode's set through `derivePalette`, held in lightness to its own ground
+(§2), and `--series-track` is the mode's
 `border` step. The table shows the OMC Dark/OMC Light pair, which is also what `web/src/index.css`
 carries as the pre-hydration fallback; `scripts/test-chart-marks.ts` checks every registered palette for
 exactly six slots, graphical contrast on its own card surface, and adjacent-slot distance.
