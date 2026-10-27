@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { CurrencyDisplayProvider } from '../src/types/CurrencyDisplayContext';
 import { CurrencySettings } from '../src/components/settings/CurrencySettings';
@@ -31,6 +31,7 @@ const EVENT: UsageEvent = {
 
 it('shares the display choice and refreshed rates with requests and Insights while Cost & Usage stays USD', async () => {
   const api = installOmcApi();
+  const read = api.hold('GET', '/preferences');
   api.on('GET', '/exchange-rates', () => CACHED);
   api.on('POST', '/exchange-rates/refresh', () => ({ ...CACHED, rates: [{ ...CACHED.rates[0], rate: 4.5 }] }));
   const { container } = renderWithOmc(<TokenDisplayProvider><CurrencyDisplayProvider>
@@ -41,7 +42,13 @@ it('shares the display choice and refreshed rates with requests and Insights whi
   </CurrencyDisplayProvider></TokenDisplayProvider>);
   await waitFor(() => expect(api.requests.some(request => request.path === '/exchange-rates')).toBe(true));
   expect(container.querySelector('.req-cost-val')?.textContent).toBe('$2.0000');
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Display currency' }));
+  // The picker waits for the stored document: a read that lands after a choice would replace
+  // the optimistic value in the shared cache.
+  const picker = screen.getByRole('combobox', { name: 'Display currency' });
+  expect(picker.hasAttribute('disabled')).toBe(true);
+  await act(async () => { read.release(); });
+  await waitFor(() => expect(picker.hasAttribute('disabled')).toBe(false));
+  fireEvent.mouseDown(picker);
   fireEvent.click(await screen.findByTitle('MYR · Malaysian Ringgit'));
   await waitFor(() => expect(container.querySelector('.req-cost-val')?.textContent).toBe('MYR\u00a08.0000'));
   expect(screen.getByTestId('insights-tile-cost').textContent).toContain('MYR\u00a08.00');

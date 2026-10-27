@@ -20,7 +20,7 @@ export const CurrencySettings: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const rates = useExchangeRates();
-  const { currency, selectedCurrency, setCurrency } = useDisplayCurrency();
+  const { currency, selectedCurrency, setCurrency, isLoaded } = useDisplayCurrency();
   const [isTableOpen, setIsTableOpen] = React.useState(false);
   const names = React.useMemo(() => new Intl.DisplayNames([LANGUAGES.find((entry) => entry.id === lang)!.locale], { type: 'currency' }), [lang]);
   const refresh = useMutation({
@@ -53,6 +53,9 @@ export const CurrencySettings: React.FC = () => {
         options={options}
         onChange={setCurrency}
         loading={rates.isPending}
+        // A read that lands after a choice would replace the optimistic value in the shared
+        // cache, so the choice waits for the stored document instead.
+        disabled={!isLoaded}
         showSearch={{ optionFilterProp: 'label' }}
         aria-label={t('omc.display_currency')}
       />}
