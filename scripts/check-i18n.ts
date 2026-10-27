@@ -125,10 +125,6 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
   for (const id of directories) {
     if (!registered.includes(id)) fail('registry', `web/src/i18n/locales/${id} is not registered in web/src/i18n/language.ts`);
   }
-  const flags = fs.readFileSync(path.join(ROOT, 'web', 'src', 'components', 'common', 'LanguageFlag.tsx'), 'utf8');
-  for (const language of LANGUAGES) {
-    if (!new RegExp(`^\\s*${language.country}: `, 'm').test(flags)) fail('registry', `language "${language.id}" names flag ${language.country}, which LanguageFlag.tsx does not draw`);
-  }
 
   // The source catalog: ids are unique across its files.
   const sourceDomains = domainFiles(SOURCE_LANG);

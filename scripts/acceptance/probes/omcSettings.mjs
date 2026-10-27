@@ -816,8 +816,8 @@ export async function omcSettings({ base, page, check, context, expectProblem })
   check(
     'the header language menu lists the registered languages with their flags',
     (await languageMenuItems.count()) === 4
-      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 4,
-    `items=${await languageMenuItems.count()} flags=${await page.locator('.ant-dropdown:visible .language-flag svg').count()}`,
+      && (await page.locator('.ant-dropdown:visible .country-flag svg').count()) === 4,
+    `items=${await languageMenuItems.count()} flags=${await page.locator('.ant-dropdown:visible .country-flag svg').count()}`,
   );
   await languageMenuItems.filter({ hasText: /English/ }).click();
   let becameEnglish = false;

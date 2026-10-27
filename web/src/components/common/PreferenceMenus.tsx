@@ -3,7 +3,7 @@ import React from 'react';
 import { Dropdown, type MenuProps } from 'antd';
 import { DesktopOutlined, MoonOutlined, SunOutlined } from '../icons';
 import { HeaderAction } from './HeaderAction';
-import { LanguageFlag } from './LanguageFlag';
+import { CountryFlag, LANGUAGE_FLAGS } from './CountryFlag';
 import { LANGUAGES, useI18n, useT } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
 import type { ThemeModePreference } from '../../theme/themePreference';
@@ -62,7 +62,7 @@ export const PreferenceMenus: React.FC = () => {
     key: language.id,
     label: (
       <span className="language-menu-item">
-        <LanguageFlag country={language.country} />
+        <CountryFlag markup={LANGUAGE_FLAGS[language.country]} />
         <span>{language.name}</span>
       </span>
     ),
@@ -100,7 +100,7 @@ export const PreferenceMenus: React.FC = () => {
         <HeaderAction
           label={t('header.language')}
           tooltip={`${t('header.language')} · ${activeLanguage ? activeLanguage.name : lang}`}
-          icon={activeLanguage ? <LanguageFlag country={activeLanguage.country} /> : undefined}
+          icon={activeLanguage ? <CountryFlag markup={LANGUAGE_FLAGS[activeLanguage.country]} /> : undefined}
         >
           <span className="language-trigger-code">{activeLanguage?.code ?? lang}</span>
         </HeaderAction>

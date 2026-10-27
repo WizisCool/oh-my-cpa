@@ -354,7 +354,7 @@
     "exchange-rates": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",
-      "body": "{\"attempted_at_ms\":1767225600000,\"base_currency\":\"USD\",\"last_error\":\"\",\"next_refresh_at_ms\":1767312000000,\"rates\":[{\"currency\":\"CNY\",\"date\":\"2026-01-01\",\"rate\":7.1},{\"currency\":\"EUR\",\"date\":\"2026-01-01\",\"rate\":0.9},{\"currency\":\"JPY\",\"date\":\"2026-01-01\",\"rate\":150},{\"currency\":\"MYR\",\"date\":\"2026-01-01\",\"rate\":4.2},{\"currency\":\"SGD\",\"date\":\"2026-01-01\",\"rate\":1.3}],\"refresh_interval_hours\":24,\"source\":\"frankfurter_v2\",\"updated_at_ms\":1767225600000}"
+      "body": "{\"attempted_at_ms\":1767225600000,\"base_currency\":\"USD\",\"last_error\":\"\",\"next_refresh_at_ms\":1767312000000,\"rates\":[{\"currency\":\"CNY\",\"date\":\"2026-01-01\",\"rate\":7.1},{\"currency\":\"EUR\",\"date\":\"2026-01-01\",\"rate\":0.9},{\"currency\":\"JPY\",\"date\":\"2026-01-01\",\"rate\":150},{\"currency\":\"MYR\",\"date\":\"2026-01-01\",\"rate\":4.2},{\"currency\":\"SGD\",\"date\":\"2026-01-01\",\"rate\":1.3},{\"currency\":\"GBP\",\"date\":\"2026-01-01\",\"rate\":0.78},{\"currency\":\"HKD\",\"date\":\"2026-01-01\",\"rate\":7.8},{\"currency\":\"KRW\",\"date\":\"2026-01-01\",\"rate\":1380},{\"currency\":\"AUD\",\"date\":\"2026-01-01\",\"rate\":1.52},{\"currency\":\"CAD\",\"date\":\"2026-01-01\",\"rate\":1.37}],\"refresh_interval_hours\":24,\"source\":\"frankfurter_v2\",\"updated_at_ms\":1767225600000}"
     },
     "fonts": {
       "status": 200,

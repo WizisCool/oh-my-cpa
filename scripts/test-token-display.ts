@@ -244,10 +244,10 @@ const cachedRates = [
   { currency: 'EUR', rate: 0.9, date: '2026-10-27' },
 ];
 assert.equal(parseDisplayCurrency('MYR'), 'MYR');
-for (const invalid of [null, 1, {}, 'usd', 'US', 'USDD']) assert.equal(parseDisplayCurrency(invalid), undefined);
+for (const invalid of [null, 1, {}, 'usd', 'US', 'USDD', 'PLN']) assert.equal(parseDisplayCurrency(invalid), undefined);
 assert.deepEqual(resolveDisplayCurrency('USD', []), USD_CURRENCY);
-assert.equal(formatCost(2, resolveDisplayCurrency('MYR', cachedRates)), 'MYR\u00a08.5000');
-assert.equal(formatCost(2, resolveDisplayCurrency('CNY', cachedRates)), 'CN¥14.0000');
+assert.equal(formatCost(2, resolveDisplayCurrency('MYR', cachedRates)), 'RM8.5000');
+assert.equal(formatCost(2, resolveDisplayCurrency('CNY', cachedRates)), '¥14.0000');
 assert.equal(formatCost(2, resolveDisplayCurrency('JPY', cachedRates)), '¥300.0000');
 assert.equal(formatCost(2, resolveDisplayCurrency('EUR', cachedRates)), '€1.8000');
 assert.equal(formatCost(2, resolveDisplayCurrency('SGD', cachedRates)), '—');

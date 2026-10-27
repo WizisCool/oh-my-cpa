@@ -360,18 +360,19 @@ responses.
 
 ## Display currency and exchange rates
 
-OMC Settings → Data display → Display currency selects USD (default), CNY, MYR,
-JPY, EUR or another currency in the cached reference table. The preference follows
+OMC Settings → Data display → Display currency selects one of eleven currencies:
+USD (default), CNY, EUR, JPY, GBP, HKD, SGD, MYR, KRW, AUD or CAD. Every amount
+prints one symbol flush against its number (`RM8.50`, `S$1.30`). The preference follows
 this deployment across browsers. Dashboard, Request Records and Insights convert
 at the latest cached rate; Cost & Usage, price editing and accounting remain USD.
 JSON exports and USD-denominated filters retain their stored units. Image exports
 follow the displayed currency.
 
 The server reads the fixed Frankfurter v2 USD-base rates endpoint every 24 hours,
-including an initial download when no attempt is cached. **Update now** refreshes
-the table immediately; **Rate table** shows each currency's rate for 1 USD and its
-observation date. Last-update and next-update times use the console timezone.
-Reference dates can differ by currency and do not indicate when OMC downloaded them.
+including an initial download when no attempt is cached, and keeps only the eleven
+display currencies. The refresh glyph beside the picker updates them immediately; a
+non-USD choice states its rate for 1 USD and that quote's observation date, which
+can trail the download.
 
 Rates, last-attempt/last-success times and refresh failure state live in SQLite's
 `exchange_rate_cache` and are included in normal database backups. A failed refresh

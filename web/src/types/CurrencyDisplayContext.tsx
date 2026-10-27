@@ -1,12 +1,12 @@
 import React from 'react';
 import { usePreference } from '../hooks/usePreference';
 import { useExchangeRates } from '../hooks/useExchangeRates';
-import { DISPLAY_CURRENCY_PREFERENCE, USD_CURRENCY, parseDisplayCurrency, resolveDisplayCurrency, type DisplayCurrency } from './currencyDisplay';
+import { DISPLAY_CURRENCY_PREFERENCE, USD_CURRENCY, parseDisplayCurrency, resolveDisplayCurrency, type DisplayCurrency, type DisplayCurrencyCode } from './currencyDisplay';
 
 interface CurrencyDisplayValue {
   currency: DisplayCurrency;
-  selectedCurrency: string;
-  setCurrency: (code: string) => void;
+  selectedCurrency: DisplayCurrencyCode;
+  setCurrency: (code: DisplayCurrencyCode) => void;
   /** False until the stored preference has been read, so a picker can wait instead of offering a write it may have to undo. */
   isLoaded: boolean;
 }

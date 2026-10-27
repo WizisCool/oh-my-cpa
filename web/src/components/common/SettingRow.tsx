@@ -10,7 +10,7 @@ import React from 'react';
  */
 export const SettingRow: React.FC<{
   label: React.ReactNode;
-  description?: string;
+  description?: React.ReactNode;
   control: React.ReactNode;
   /** The control is a gallery wider than a control column (the palette cards): it takes the row's full width under the label. */
   isStacked?: boolean;

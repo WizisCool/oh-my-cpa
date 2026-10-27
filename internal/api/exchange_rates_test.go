@@ -35,7 +35,7 @@ func TestExchangeRatesAreCachedAllowlistedReads(t *testing.T) {
 	}
 	testkit.Golden(t, "testdata/golden/exchange-rates/empty.golden.json", actual)
 	for _, entry := range []struct{ body, code string }{
-		{`"usd"`, "invalid_display_currency"}, {`null`, "invalid_display_currency"}, {`"MYR"`, "display_currency_unavailable"},
+		{`"usd"`, "invalid_display_currency"}, {`null`, "invalid_display_currency"}, {`"PLN"`, "invalid_display_currency"}, {`"MYR"`, "display_currency_unavailable"},
 	} {
 		response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/omc_display_currency", entry.body)
 		if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), entry.code) {
