@@ -33,17 +33,19 @@ credential kind, a cache tint) land in one glance and none reads as a signal.
    row; a head that held only the title takes no room.
 2. **A stacked request record is three lines of two facts each**: the model with its
    reasoning effort badge and the cost, in the primary weight; the provider with its account,
-   and the total tokens; the time and verdict, and the latency, in the quiet tone. A record in a list is there to be
-   recognised, and the detail drawer is where it is read: first-token time, the token
-   breakdown, the cache rate, speed, the credential kind, the caller's key and the client label
-   are in the drawer only. Repeating every table column in four lines of small type was tried
+   and the cache rate; the time and verdict, and the speed (the latency when the record has
+   none), in the quiet tone. A record in a list is there to be recognised, and the detail
+   drawer is where it is read: first-token time, the token counts, the credential kind, the
+   caller's key and the client label are in the drawer only. (Amended 2026-10-27: the second
+   and third lines first carried the total tokens and the latency; on one record the total
+   said little, while the cache rate explains the cost and the speed the wait.) Repeating every table column in four lines of small type was tried
    and read as noise. It is the table row's own DOM: cells that hold two facts dissolve with
    `display: contents`, each line has one zero-basis cell that gives way, so no line wraps at
    320px, and the checkbox sits in the left padding so the three lines share one edge.
 3. **A stacked record is drawn in the text colours.** Hue is kept for what a list is scanned
-   for: the verdict's pip, a failure in full, and the reasoning effort badge, which keeps the
-   table's own drawing and is never cut short. The table
-   above the container threshold is unchanged.
+   for: the verdict's pip, a failure in full, the reasoning effort badge, which keeps the
+   table's own drawing and is never cut short, and the cache rate's pill, also as the table
+   draws it. The table above the container threshold is unchanged.
 4. **The request filters are two rows.** Search and the way into the full filter panel hold the
    first; the window, the verdict, the two facets, the grouping and the model view are one strip
    that swipes inside itself. Every control is kept. The list runs to the screen's edges.
@@ -73,5 +75,5 @@ credential kind, a cache tint) land in one glance and none reads as a signal.
   DOM, rearranged, cannot.
 - **Keeping every table field in the stacked record.** Packing every table column into four
   lines of small type was tried and read as noise. The adopted three-line layout keeps the
-  provider and its account together on the second line, beside the total tokens; secondary
+  provider and its account together on the second line, beside the cache rate; secondary
   fields are read in the detail drawer.

@@ -2785,17 +2785,20 @@ Below the container threshold a record is three lines of two facts each (ADR 009
 | Line | Leading | Trailing | Tone |
 | --- | --- | --- | --- |
 | 1 | model, the substituted or routed model beside it, then the reasoning effort badge and mode marks | cost | primary: `--text-base`, weight 600 |
-| 2 | provider and account | total tokens | `--fg-2`, weight 400 |
-| 3 | time, the control that copies the request id, verdict | latency | `--muted`, `--text-sm` |
+| 2 | provider and account | cache rate, in the table's pill | `--fg-2`, weight 400 |
+| 3 | time, the control that copies the request id, verdict | TPS as the table computes it, or the latency when the record has none | `--muted`, `--text-sm` |
 
 A record in a list is there to be recognised; the detail drawer, one tap away, is where it is
-read. First-token time, the token breakdown, the cache rate, speed, the credential kind, the
-caller's key and the client label are therefore not drawn in a stacked record. A phone-wide
+read. First-token time, the token counts, the credential kind, the caller's key and the client
+label are therefore not drawn in a stacked record. The cache rate and the speed are: on one
+record the token total says little, while the cache rate explains its cost and the speed its
+wait. A phone-wide
 record that repeats every table column in small type cannot be scanned, however few pixels it
 takes.
 
 It is the table row's own DOM. The cells that hold two facts (time and id, total and breakdown,
-latency and first token) dissolve with `display: contents`, and the line breaks are those cells'
+latency and first token) dissolve with `display: contents`, the speed and latency share the third
+line's trailing slot by whichever the record states, and the line breaks are those cells'
 pseudo-elements. Each line has one cell with a zero flex basis that gives way first, so a line is
 cut short rather than wrapped; the record is the same height at 320px and at 390px. The checkbox
 is placed in the record's left padding, so the three lines share one left edge and the model and
@@ -2803,10 +2806,11 @@ provider marks form one column.
 
 **Hue is for the exception.** In the table each mark's tint has a column to itself. Folded into
 a few lines, a success fill, an effort hue and a credential kind land in one glance and none
-reads as a signal. A stacked record is therefore drawn in the text colours, and three things
-keep a hue: the verdict's pip, a failed verdict in full, and the reasoning effort badge, which
+reads as a signal. A stacked record is therefore drawn in the text colours, and four things
+keep a hue: the verdict's pip, a failed verdict in full, the reasoning effort badge, which
 is drawn exactly as the table draws it because it is the one mark that explains a record's cost
-and latency at a glance. The badge is never cut short: on its line the model's name gives way.
+and latency at a glance, and the cache rate's pill, whose hue is what lets a bare percentage
+read as the cache rate. The badge is never cut short: on its line the model's name gives way.
 The table above the threshold is unchanged.
 
 ### A page never moves sideways
