@@ -198,9 +198,10 @@ export const ModelSeriesFocusProvider: React.FC<{ children: React.ReactNode }> =
  * A key that is no longer in the ranking - the grouping changed, the window no longer ranks that
  * model, or it fell out of the fold - is cleared rather than kept: a focus with no matching group
  * would fade every remaining series and leave the reader looking at a dim chart with nothing
- * highlighted.
+ * highlighted. A ranking that has not been read yet proves nothing about the key: a card mounting
+ * after the shared read expired must not be what drops a selection the model would keep.
  */
-function useSeriesFocus(groups: DashboardModelUsage[]): ModelSeriesFocus {
+function useSeriesFocus(groups: DashboardModelUsage[], hasRanking: boolean): ModelSeriesFocus {
   const focus = React.useContext(ModelSeriesFocusContext);
   if (focus === null) {
     throw new Error('The dashboard model panels must be rendered inside ModelSeriesFocusProvider');
@@ -208,8 +209,8 @@ function useSeriesFocus(groups: DashboardModelUsage[]): ModelSeriesFocus {
   const { focusedKey, clearFocus } = focus;
   const availableKeys = React.useMemo(() => new Set(groups.map(seriesDomainKey)), [groups]);
   React.useEffect(() => {
-    if (focusedKey !== null && !availableKeys.has(focusedKey)) clearFocus();
-  }, [availableKeys, clearFocus, focusedKey]);
+    if (hasRanking && focusedKey !== null && !availableKeys.has(focusedKey)) clearFocus();
+  }, [availableKeys, clearFocus, focusedKey, hasRanking]);
   return focus;
 }
 
@@ -234,7 +235,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = ({ hasViewToggle 
   const foldedLabel = t('dash.models.folded');
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
-  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
 
   return (
     <Panel
@@ -282,7 +283,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = (props) => {
   const unnamedLabel = t('dash.models.unnamed');
   const groups = React.useMemo(() => models.data?.models ?? [], [models.data]);
   const total = models.data?.total_tokens ?? 0;
-  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups);
+  const { focusedKey, toggleSeries, clearFocus } = useSeriesFocus(groups, models.data !== undefined);
 
   return (
     <Panel

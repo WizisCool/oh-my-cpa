@@ -55,6 +55,17 @@ export async function dashboardLayout({ base, page, check }) {
 
   // Arranging is a mode: until it is entered there is no handle on the page.
   check('the board carries no editing chrome while it is read', await page.getByTestId('dashboard-layout-tray').count() === 0);
+
+  // A selection is card state the arrangement must not disturb: the card holding it can leave the
+  // board, and the card beside it keeps naming the same model.
+  const usageSelection = page.locator('.model-usage-name-button').first();
+  await usageSelection.waitFor();
+  const selectedModel = await usageSelection.locator('.model-series-text').textContent();
+  await usageSelection.click();
+  await until(async () => await usageSelection.getAttribute('aria-pressed') === 'true', { label: 'a model selected on the usage card' });
+  const trendSelection = () => cell('model_trend').locator('[data-testid="model-trend-legend"] button[aria-pressed="true"] .model-series-text');
+  const restoredSelection = () => page.locator('.model-usage-name-button[aria-pressed="true"] .model-series-text');
+
   await arrange();
   const inertState = await cell('requests').evaluate((node) => ({
     inert: node.querySelectorAll('[inert]').length,
@@ -76,8 +87,13 @@ export async function dashboardLayout({ base, page, check }) {
   await until(async () => (await cell('model_usage').count()) === 0, { label: 'the usage card to leave the board' });
   await until(async () => (await trendToggles()) === 1, { label: 'the grouping toggle on the trend card' });
   check('the trend card takes the grouping toggle only while the usage card is hidden', togglesWithUsage === 0);
+  await until(async () => (await trendSelection().count()) === 1, { label: 'the trend card to keep the shared selection' });
+  check('hiding the usage card leaves its selected model selected on the trend card',
+    await trendSelection().textContent() === selectedModel);
   await page.locator('[data-widget-restore="model_usage"]').click();
   await until(async () => (await trendToggles()) === 0, { label: 'the grouping toggle back on the usage card' });
+  await until(async () => (await restoredSelection().count()) === 1, { label: 'the usage card to show the shared selection again' });
+  check('restoring the usage card returns the shared selection', await restoredSelection().textContent() === selectedModel);
 
   const quarter = await widthOf('tpm');
   await cell('rpm').locator('.ant-segmented-item', { hasText: '1/2' }).click();
@@ -88,6 +104,10 @@ export async function dashboardLayout({ base, page, check }) {
   await cell('requests').getByRole('button', { name: /^Move later/ }).click();
   await until(async () => (await order())[0] === 'tokens', { label: 'the requests tile to step later' });
   check('a step moves a widget one place in the reading order', (await order()).slice(0, 2).join(',') === 'tokens,requests');
+  check('reordering the board keeps the shared model selection',
+    await trendSelection().count() === 1 && await restoredSelection().count() === 1
+      && await trendSelection().textContent() === selectedModel
+      && await restoredSelection().textContent() === selectedModel);
 
   // Both cells are on the first row, so the drag never has to scroll the page under the pointer.
   await cell('tpm').locator('[data-drag-handle]').dragTo(cell('tokens'), { targetPosition: { x: 8, y: 40 } });
