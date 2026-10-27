@@ -48,6 +48,16 @@ func TestWarmupActivationTellsSlidingFromFrozenCodexWindow(t *testing.T) {
 	}
 }
 
+func TestCodexWarmupActivationIgnoresCreditStatus(t *testing.T) {
+	before := &warmup.Observation{Provider: "codex", ObservedAtMS: 1, FiveHour: warmup.Window{State: "idle"}, Weekly: warmup.Window{State: "active"}}
+	for _, paid := range []string{"unknown", "enabled"} {
+		after := &warmup.Observation{Provider: "codex", ObservedAtMS: 2, PaidFallback: paid, FiveHour: warmup.Window{State: "active"}, Weekly: warmup.Window{State: "active"}}
+		if !isWarmupActivated(before, after) {
+			t.Errorf("Codex activation rejected for paid status %q", paid)
+		}
+	}
+}
+
 // A second manual click while the first run is still confirming must not send
 // again, and must not cut the first run's confirmation short.
 func TestWarmupSecondClickLeavesPendingRunConfirming(t *testing.T) {

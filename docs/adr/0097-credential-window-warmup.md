@@ -1,6 +1,6 @@
 # ADR 0097: Credential window warmup through bounded CPA requests
 
-Status: Accepted
+Status: Accepted; the Codex billing admission rule is revised in ADR 0098
 
 ## Context
 
@@ -20,9 +20,9 @@ is not broadened into an inference proxy.
 
 Automation requires a manually confirmed and observed activation for the exact
 credential and selected model. This is a runtime acceptance gate, not a claim that
-mocked requests establish upstream compatibility. An unknown or enabled paid fallback
-pauses both manual and automatic consuming requests. Providers without affirmative
-billing evidence remain paused. No reset credit or Claude reset grant is spent.
+mocked requests establish upstream compatibility. For Claude, an unknown or enabled paid fallback pauses both manual and automatic consuming
+requests. Codex requests are eligible regardless of credit status and may incur charges
+(see ADR 0098). No reset credit or Claude reset grant is spent.
 
 A window's zero usage alone is not idle evidence. Explicit unused windows, and repeated
 zero readings whose full-duration boundary slides with observation time, distinguish

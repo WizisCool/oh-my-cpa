@@ -5313,7 +5313,7 @@
   },
   {
     "name": "quota_warmup_run",
-    "description": "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and initial protocol validation. Unknown billing state, enabled paid fallback and active windows are refused; never retry an uncertain result.",
+    "description": "Send one tiny request to the exact credential to start an idle subscription window. Human confirmation authorizes quota consumption and possible Codex charges. Claude requires paid fallback to be disabled. Active windows are refused; never retry an uncertain result.",
     "permission": "write",
     "input_schema": {
       "type": "object",
@@ -5376,7 +5376,7 @@
   },
   {
     "name": "quota_warmup_settings_get",
-    "description": "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes subscription quota; it never redeems reset entitlements.",
+    "description": "Read opt-in credential window warmup defaults, timezone and revision. Warmup consumes quota and Codex requests may incur charges; it never redeems reset entitlements.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -5442,7 +5442,7 @@
   },
   {
     "name": "quota_warmup_settings_set",
-    "description": "Change one provider's default warmup policy for existing and future inheriting credentials. Consumes a small amount of quota when enabled. Paid fallback must be explicitly disabled; unverified activation pauses automation.",
+    "description": "Change one provider's default warmup policy for existing and future inheriting credentials. Requests consume quota and Codex may incur charges. Claude requires paid fallback to be disabled.",
     "permission": "write",
     "input_schema": {
       "type": "object",

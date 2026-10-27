@@ -50,6 +50,24 @@ func TestWarmupDecisions(t *testing.T) {
 		t.Fatal("off consumed")
 	}
 }
+func TestCodexWarmupIgnoresCreditStatus(t *testing.T) {
+	now := time.Now()
+	policy := Policy{ResetMode: "all", DailyTime: "06:00", Model: "codex"}
+	for _, credits := range []string{
+		`"credits":{"has_credits":false,"unlimited":false,"balance":null}`,
+		`"credits":{"has_credits":true,"unlimited":false,"balance":"10"}`,
+		`"credits":null`,
+	} {
+		raw := `{"rate_limit":{"primary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_at":null},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":null}},` + credits + `}`
+		observation := ParseObservation("codex", []byte(raw), now.UnixMilli())
+		for _, manual := range []bool{false, true} {
+			trigger, reason, _, _ := Decide(policy, State{Observation: &observation}, now, manual)
+			if trigger == "" || reason != "" {
+				t.Errorf("credits %s manual %t: trigger=%q reason=%q", credits, manual, trigger, reason)
+			}
+		}
+	}
+}
 func TestStrictPaidFallbackAndQuotaProtection(t *testing.T) {
 	now := time.Now()
 	policy := DefaultPolicy()
@@ -64,6 +82,11 @@ func TestStrictPaidFallbackAndQuotaProtection(t *testing.T) {
 		{"stale", func(observation *Observation) { observation.ObservedAtMS = now.Add(-6 * time.Minute).UnixMilli() }, "quota_unknown"},
 		{"future", func(observation *Observation) { observation.ObservedAtMS = now.Add(time.Minute).UnixMilli() }, "quota_unknown"},
 		{"unknown window", func(observation *Observation) { observation.Weekly.State = "unknown" }, "quota_unknown"},
+		{"codex unknown window", func(observation *Observation) {
+			observation.Provider = "codex"
+			observation.PaidFallback = "unknown"
+			observation.Weekly.State = "unknown"
+		}, "quota_unknown"},
 		{"blocked", func(observation *Observation) { observation.IsBlocked = true }, "quota_exhausted"},
 		{"weekly exhausted", func(observation *Observation) {
 			observation.Weekly.State = "active"

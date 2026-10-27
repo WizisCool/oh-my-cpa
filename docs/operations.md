@@ -635,15 +635,15 @@ credential override from its Window warmup tab. Reset mode is Off, Weekly, or We
 Daily warmup defaults off with 06:00 as its editable time in the effective OMC timezone.
 Choose an available model; Claude's available Haiku models are listed first. Changing a
 model never silently selects a replacement. Saving an enabled policy authorizes automatic
-attempts once current billing and window checks permit them; a first manual activation
+attempts once the applicable billing and window checks permit them; a first manual activation
 is not required. Warm up now remains an optional, separately confirmed consuming action.
 Previously enabled policies begin participating on the next scheduler round after upgrade,
 including credentials with no prior activation observation; defaults remain off.
 
-Paid fallback must be affirmatively disabled by a fresh usage read. Claude uses
-`extra_usage.is_enabled`; Codex uses the credits standing (published `has_credits`,
-`unlimited` and balance). Missing evidence remains unknown. OMC does not change upstream
-billing settings or redeem a reset credit to make warmup eligible. A zero reading with
+Claude warmup requires a fresh usage read confirming `extra_usage.is_enabled` is false.
+Codex warmup does not depend on credit status: each short request consumes quota and
+may incur charges, including when credit status is unknown or paid usage is available.
+OMC does not change upstream billing settings or redeem a reset credit to make warmup eligible. A zero reading with
 an active fixed boundary is not an idle window. Model-scoped Sonnet, Opus and Fable
 limits can pause the selected family without blocking unrelated Haiku. Fable evidence
 accepts the legacy `iguana_necktie` (unless it carries dollar amounts, which make it the
@@ -659,10 +659,9 @@ missed by more than one hour are not replayed. If starting now would overlap the
 daily time, reset-driven requests wait, including weekly triggers. Changing the OMC
 zone changes future calendar decisions, not stored instants.
 
-The credential section always shows selected-model activation observations and paid-fallback
-evidence. No activation observed is a neutral historical fact, while absent billing evidence
-reads Unknown and pauses requests. Current reasons distinguish active windows, missing quota
-and billing refusals. An unsupported response pauses automatic requests for the selected
+The credential section shows a cost notice for Codex and paid-fallback evidence for Claude.
+No activation observed is a neutral historical fact; missing Claude billing evidence pauses
+requests. Current reasons distinguish active windows, missing quota and Claude billing refusals. An unsupported response pauses automatic requests for the selected
 model until a confirmed recheck succeeds or an available replacement model is explicitly
 selected. Rechecks still obey unresolved-outcome suppression. Manual actions report an outcome
 through a toast; sent requests also update the durable last result in the Window warmup tab.
