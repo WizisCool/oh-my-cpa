@@ -85,7 +85,9 @@ export async function dashboardChartMarks({ base, page, check }) {
   await page.route(/\/management\/dashboard(?:\/tail)?(?:\?|$)/, (route) => route.fulfill({ json: partialCost }));
   await page.route('**/pricing/attention', (route) => route.fulfill({ json: { unpriced: ['unpriced-model'] } }));
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await until(async () => await page.locator('.chart-slot svg path').count() >= 12,
+  // The mount queue yields between charts; one chart's paths say nothing about its siblings.
+  await until(() => page.locator('.chart-slot').evaluateAll(slots => slots.length === 6
+    && slots.every(slot => slot.querySelectorAll('.omc-echart svg path').length >= 2)),
     { label: 'six KPI lines and their areas', timeoutMs: 20_000 });
   const marks = await page.evaluate(async () => {
     const { echarts } = await import('/omc/src/charts/echarts/core.ts');
@@ -449,7 +451,11 @@ export async function dashboardChartMotion({ base, page, context, check }) {
   await page.locator('.range-trigger').click();
   const popover = page.locator('.ant-popover:visible').first();
   await popover.waitFor({ state: 'visible' });
-  const surface = await popover.evaluate((node) => ({ opacity: getComputedStyle(node).opacity, width: node.getBoundingClientRect().width }));
+  // Playwright visibility includes opacity zero while the popup prepares its alignment.
+  const surface = await until(async () => {
+    const state = await popover.evaluate(node => ({ opacity: getComputedStyle(node).opacity, width: node.getBoundingClientRect().width }));
+    return state.opacity === '1' && state.width > 0 ? state : false;
+  }, { label: 'the reduced-motion floating panel to finish opening' });
   check('a floating panel still arrives under reduced motion', surface.opacity === '1' && surface.width > 0, JSON.stringify(surface));
   await page.keyboard.press('Escape');
 }

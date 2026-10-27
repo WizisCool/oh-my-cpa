@@ -201,6 +201,13 @@ Wait on something observable: a response, an element state, `until(...)` from
 has to wait out belongs in the component's config with a production default, so the test
 can set it to milliseconds. Do not maintain source-text wait counts: they conflate polling and rejecting deadlines with sleeps. Keep readiness observable and investigate real execution-cost growth.
 
+Browser media emulation can precede the application's media-query change notification;
+wait for the resolved `data-reduced-motion` policy before inspecting motion. Chart creation
+is queued across frames, so wait for each chart the assertion reads rather than an aggregate
+SVG-path count. Popup visibility alone does not establish completed alignment or full opacity;
+use the state the following assertion needs. Scroll frame sampling starts when the trusted input
+arrives, so protocol dispatch cannot exhaust the observation window before the gesture begins.
+
 ## Verification cost and admission
 
 Before adding a test, identify a failure mode not already owned by a cheaper test. Extend
