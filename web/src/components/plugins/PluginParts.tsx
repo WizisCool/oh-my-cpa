@@ -1,10 +1,11 @@
 import React from 'react';
-import { Tooltip } from 'antd';
+
 import { ExternalLinkOutlined, GithubOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { PluginIcon } from './PluginIcon';
 import { safeExternalURL } from '../../utils/externalUrl';
 import styles from './Plugins.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 interface PluginLogoProps {
   logo?: string;

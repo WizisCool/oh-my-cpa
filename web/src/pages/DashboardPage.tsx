@@ -2,7 +2,7 @@ import { ActionMenu } from '../components/common/ActionMenu';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Select, Tooltip } from 'antd';
+import { Button, Select } from 'antd';
 import { AppstoreOutlined, HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { LoadingRegion, Placeholder } from '../components/common/Placeholder';
@@ -69,6 +69,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { Panel } from '../components/common/Panel';
 import { ToolButton } from '../components/common/ToolButton';
 import '../components/dashboard/dashboard.css';
+import { Tooltip } from '../components/common/Tooltip';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 

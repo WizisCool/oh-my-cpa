@@ -683,6 +683,8 @@ export async function requestListInteractions({ base, page, check }) {
   await page.mouse.move(0, 0);
 
   const priceAction = page.locator('[data-testid="request-set-price"]').first();
+  // A keyboard focus: the popup answers a visible focus, not the one a click leaves behind.
+  await page.keyboard.press('Shift');
   await priceAction.focus();
   await cellPopup.waitFor({ state: 'visible' });
   await until(async () => (await cellPopup.innerText()) === (await priceAction.getAttribute('aria-label')),

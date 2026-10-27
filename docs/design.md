@@ -1582,6 +1582,15 @@ supplies content and layout width; what is inside the frame is not restyled per 
   selection does not send it out blank; its body holds a stable scrollbar gutter, so a section
   unfolding past the panel's height does not narrow every card mid-fold. The phone navigation sheet
   and the time-range sheet are not side panels and keep antd's `Drawer`.
+- **`Tooltip` - a hint the reader asked for.** Ant Design's popup, opened only on intent: a mouse
+  or pen that moved onto the trigger and rested there 450ms (at once within half a second of the
+  last hint closing, so a row of tools reads quickly), never a pointer a layout moved a control
+  under. Pressing the trigger puts the hint away until the pointer leaves, and it stays down while
+  the trigger has a menu or panel open. A tap opens it only on a trigger that is not a control -
+  text, a mark, an info glyph marked `isTapReadable` - and a touch elsewhere or a scroll closes it;
+  a tap on a control only operates it, which is also what spares iOS's second tap. A keyboard
+  focus opens it when the focus is visible, so the focus a click or a closing drawer leaves behind
+  does not. The request list's delegated cell popup follows the same rules (`tooltipIntent.ts`).
 - **`SearchInput` - a filter-as-you-type field.** The search glyph in `--muted`, the text, and a
   clear control. `label` is its accessible name and its placeholder unless a longer placeholder is
   given; `onChange` receives the text. Width is the caller's.
@@ -1832,11 +1841,11 @@ changed - during a Playground run, or while an Agent turn waits on a decision - 
 and caret to `--meta` together, with a maker's mark at half opacity.
 
 **An action's name is a tooltip only for a pointer that can rest.** Icon actions in the
-conversation workspaces name themselves through `LabelTip`, which draws nothing where the primary
-pointer cannot hover: on a touch screen the browser keeps a hover at the last place touched, so a
-label opened over whatever the layout moved there - Send, once a tapped example raised the
-keyboard. A tooltip that says more than the control's name (a measurement's meaning) stays an
-ordinary Tooltip, since a tap is how a touch reader asks for it.
+conversation workspaces name themselves through the shared `Tooltip`, which a tap on a control
+never opens: on a touch screen the browser keeps a hover at the last place touched, so a label
+opened over whatever the layout moved there - Send, once a tapped example raised the keyboard. A
+tooltip on a measurement or a mark that is not a control opens on a tap, since a tap is how a
+touch reader asks for it.
 
 **The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
 window splitter (arrows step it, Home and End jump to its bounds, a double click restores the

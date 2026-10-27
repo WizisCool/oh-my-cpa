@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import { api } from '../../api/client';
 import { GithubOutlined, LogoutOutlined, ReloadOutlined, Star } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -12,6 +12,7 @@ import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
+import { Tooltip } from './Tooltip';
 
 const REPOSITORY_URL = 'https://github.com/WizisCool/oh-my-cpa';
 /** The server reads the count at most hourly, so asking more often learns nothing. */

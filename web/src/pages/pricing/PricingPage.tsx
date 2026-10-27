@@ -1,7 +1,7 @@
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Button, Popover, Segmented, Select } from 'antd';
 import dayjs from '../../utils/time';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
@@ -34,6 +34,7 @@ import { SearchInput } from '../../components/common/SearchInput';
 import { Toolbar } from '../../components/common/Toolbar';
 import { Pager } from '../../components/common/Pager';
 import { Count } from '../../components/common/Count';
+import { Tooltip } from '../../components/common/Tooltip';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at either width. */
 const PAGE_SIZE = 20;

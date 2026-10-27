@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
+import { Layout, Menu, Drawer, Button, Breadcrumb } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -28,6 +28,7 @@ import { navEntryLabel, type NavEntry, type NavGroup } from '../../types/sidebar
 import { usePreference } from '../../hooks/usePreference';
 import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
+import { Tooltip } from './Tooltip';
 
 const { Sider, Content } = Layout;
 

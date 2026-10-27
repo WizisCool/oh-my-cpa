@@ -1,7 +1,8 @@
 import React from 'react';
-import { Popconfirm, Tooltip } from 'antd';
+import { Popconfirm } from 'antd';
 import type { ButtonProps, PopconfirmProps } from 'antd';
 import { useT } from '../../i18n';
+import { Tooltip } from './Tooltip';
 
 export interface ConfirmActionProps
   extends Omit<PopconfirmProps, 'okText' | 'cancelText' | 'okButtonProps' | 'okType'> {

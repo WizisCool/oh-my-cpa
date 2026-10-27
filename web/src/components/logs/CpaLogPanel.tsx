@@ -2,7 +2,7 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Checkbox, Segmented, Select, Tabs, Tooltip, Typography } from 'antd';
+import { Button, Checkbox, Segmented, Select, Tabs, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -59,6 +59,7 @@ import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Count } from '../common/Count';
 import './logs.css';
+import { Tooltip } from '../common/Tooltip';
 
 const { Text } = Typography;
 

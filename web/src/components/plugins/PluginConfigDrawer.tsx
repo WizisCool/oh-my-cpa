@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
-import { App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
+import { App as AntdApp, Button, Input, Segmented, Select } from 'antd';
 import { Switch } from '../common/Switch';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,6 +34,7 @@ import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
 import { SectionHeading } from '../common/SectionHeading';
 import { AppDrawer } from '../common/AppDrawer';
+import { Tooltip } from '../common/Tooltip';
 
 type EditorMode = 'form' | 'json';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, InputNumber, Tooltip } from 'antd';
+import { Button, Input, InputNumber } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckOutlined, UndoOutlined } from '../../components/icons';
 import { api } from '../../api/client';
@@ -15,6 +15,7 @@ import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
 import { useToast } from '../../components/feedback';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
+import { Tooltip } from '../../components/common/Tooltip';
 
 /**
  * Channel multipliers: what one CPA provider actually charges relative to list price. A relay

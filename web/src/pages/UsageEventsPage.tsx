@@ -6,7 +6,6 @@ import {
   Button,
   Listy,
   Popover,
-  Tooltip,
 } from 'antd';
 import clsx from 'clsx';
 import { Switch } from '../components/common/Switch';
@@ -74,6 +73,7 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { LoadFailure, Notice } from '../components/feedback';
 import { EmptyState } from '../components/common/EmptyState';
 import { FactList } from '../components/common/FactList';
+import { Tooltip } from '../components/common/Tooltip';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();

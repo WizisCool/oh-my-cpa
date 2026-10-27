@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip } from 'antd';
+
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -10,6 +10,7 @@ import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { resolveQuotaCooldownTooltip } from './quotaCooldown';
 import { Tag } from '../../components/common/Tag';
+import { Tooltip } from '../../components/common/Tooltip';
 
 /**
  * The one status vocabulary for credential quota.

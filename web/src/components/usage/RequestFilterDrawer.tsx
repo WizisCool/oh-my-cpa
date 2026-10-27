@@ -1,7 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
 import clsx from 'clsx';
 import React from 'react';
-import { Button, Input, InputNumber, Segmented, Select, Space, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Segmented, Select, Space } from 'antd';
 import type {
   UsageCostFilter,
   UsageFacetValue,
@@ -36,6 +36,7 @@ import { AppDrawer } from '../common/AppDrawer';
 import styles from './RequestFilterDrawer.module.css';
 import { SectionHeading } from '../common/SectionHeading';
 import './requestMarks.css';
+import { Tooltip } from '../common/Tooltip';
 
 /**
  * canonicalViewKey gives the committed view a stable identity so the drawer can

@@ -2,9 +2,11 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Popover, Tooltip } from 'antd';
 import { RequestFailureDetail } from './RequestFailureDetail';
+import { hoverIntentDelay, noteHintClosed } from '../common/tooltipIntent';
 import './requestMarks.css';
 
-const TOOLTIP_INTENT_DELAY_MS = 100;
+/** The grace for moving between cells, or from a cell into its popup, without the popup closing. */
+const TOOLTIP_SWITCH_DELAY_MS = 100;
 /** The class both popups carry on their root; the page has one of them at a time. */
 const POPUP_CLASS = 'request-cell-tooltip';
 
@@ -33,6 +35,10 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     let pending: ReturnType<typeof setTimeout> | undefined;
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
+    // A pressed cell keeps its popup down until the pointer leaves it: the press was the reader
+    // acting on the cell, not asking what it is.
+    let pressed: HTMLElement | null = null;
+    let isShowing = false;
 
     const cancelPending = () => {
       if (pending !== undefined) clearTimeout(pending);
@@ -55,13 +61,17 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       if (!title || !host.contains(element)) return;
       // Geometry is needed only after intent, never while mounting all rows during navigation.
       const bounds = element.getBoundingClientRect();
+      isShowing = true;
       setTarget({ element, title, bounds, isOpen: true });
     };
     const dismiss = () => {
       cancelPending();
+      isShowing = false;
       setTarget((current) => current?.isOpen ? { ...current, isOpen: false } : current);
     };
-    const handlePointerOver = (event: PointerEvent) => {
+    // Movement, not `pointerover`: rows scrolled or refreshed under a still pointer report it over a
+    // new cell, and a popup rising there answers nobody.
+    const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
       if (isInsidePopup(event.target)) {
         cancelPending();
@@ -71,33 +81,46 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       if (!element || element === hovered) return;
       hovered = element;
       cancelPending();
-      pending = setTimeout(() => activate(element), TOOLTIP_INTENT_DELAY_MS);
+      if (element === pressed) return;
+      const { clientX, clientY } = event;
+      pending = setTimeout(() => {
+        // A refresh may have redrawn the cell during the wait; the pointer resting where it was is
+        // still asking about whatever cell is under it now.
+        const current = element.isConnected ? element : findTarget(document.elementFromPoint(clientX, clientY));
+        if (!current) return;
+        hovered = current;
+        activate(current);
+      }, isShowing ? TOOLTIP_SWITCH_DELAY_MS : hoverIntentDelay());
     };
     const handlePointerOut = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
       const next = findTarget(event.relatedTarget);
       if (next === hovered && next !== null) return;
       if (!findTarget(event.target) && !isInsidePopup(event.target)) return;
+      if (pressed && !pressed.contains(event.relatedTarget as Node | null)) pressed = null;
       hovered = null;
       if (isInsidePopup(event.relatedTarget)) return;
       cancelPending();
       pending = setTimeout(() => {
         if (focused) activate(focused);
         else dismiss();
-      }, TOOLTIP_INTENT_DELAY_MS);
+      }, TOOLTIP_SWITCH_DELAY_MS);
     };
+    // Keyboard focus only: a click focuses what it pressed too, and that is not a request to read it.
     const handleFocusIn = (event: FocusEvent) => {
-      focused = findTarget(event.target);
+      const element = findTarget(event.target);
+      focused = element && element.matches(':focus-visible') ? element : null;
       if (focused) activate(focused);
     };
-    const handleFocusOut = (event: FocusEvent) => {
-      focused = findTarget(event.relatedTarget);
-      if (focused) activate(focused);
-      else if (hovered) activate(hovered);
-      else dismiss();
+    // Where focus goes next answers for itself in `focusin`; a popup a resting pointer opened stays.
+    const handleFocusOut = () => {
+      focused = null;
+      if (!hovered || hovered === pressed) dismiss();
     };
     const handlePointerDown = (event: PointerEvent) => {
-      if (!findTarget(event.target) && !isInsidePopup(event.target)) dismiss();
+      if (isInsidePopup(event.target)) return;
+      pressed = findTarget(event.target);
+      dismiss();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -114,7 +137,7 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
       focused = null;
       dismiss();
     };
-    document.addEventListener('pointerover', handlePointerOver);
+    document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerout', handlePointerOut);
     host.addEventListener('focusin', handleFocusIn);
     host.addEventListener('focusout', handleFocusOut);
@@ -124,7 +147,7 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     window.addEventListener('resize', handleGeometryChange);
     return () => {
       cancelPending();
-      document.removeEventListener('pointerover', handlePointerOver);
+      document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerout', handlePointerOut);
       host.removeEventListener('focusin', handleFocusIn);
       host.removeEventListener('focusout', handleFocusOut);
@@ -177,7 +200,9 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
     />
   );
   const afterOpenChange = (hasOpened: boolean) => {
-    if (!hasOpened) setTarget((current) => current?.isOpen ? current : null);
+    if (hasOpened) return;
+    noteHintClosed();
+    setTarget((current) => current?.isOpen ? current : null);
   };
   // A failure is read and copied from, so it is a floating panel on the console's
   // own surface; a label stays the compact tooltip every other cell uses.

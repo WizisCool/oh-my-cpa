@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dropdown, Tooltip } from 'antd';
+import { Button, Dropdown } from 'antd';
 import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
+import { Tooltip } from '../common/Tooltip';
 
 interface InstalledPluginsPanelProps {
   plugins: PluginItem[];

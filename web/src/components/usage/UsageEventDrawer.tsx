@@ -1,7 +1,7 @@
 import { TokenAccountingNote } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Button, Modal, Tabs, Tooltip } from 'antd';
+import { Button, Modal, Tabs } from 'antd';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
@@ -49,6 +49,7 @@ import { AppDrawer } from '../common/AppDrawer';
 import { CopyButton } from '../common/CopyButton';
 import './UsageEventDrawer.css';
 import './requestMarks.css';
+import { Tooltip } from '../common/Tooltip';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;

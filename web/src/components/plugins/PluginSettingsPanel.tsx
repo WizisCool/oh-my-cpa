@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Checkbox, Input, Select, Tooltip } from 'antd';
+import { Button, Checkbox, Input, Select } from 'antd';
 import { Switch } from '../common/Switch';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +23,7 @@ import { LoadFailure, Notice } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
 import { Panel } from '../common/Panel';
+import { Tooltip } from '../common/Tooltip';
 
 interface SettingsDraft {
   enabled: boolean;

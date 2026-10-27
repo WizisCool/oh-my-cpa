@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, InputNumber, Slider, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Slider } from 'antd';
 import { clsx } from 'clsx';
 import { UndoOutlined } from '../../components/icons';
 import workspace from '../../components/workspace/Workspace.module.css';
@@ -7,6 +7,7 @@ import { useI18n } from '../../i18n';
 import { hasCustomParameters, readCustomBody } from './state';
 import type { PlaygroundParameters } from './state';
 import styles from './PlaygroundPage.module.css';
+import { Tooltip } from '../../components/common/Tooltip';
 
 interface NumberParameterProps {
   id: string;

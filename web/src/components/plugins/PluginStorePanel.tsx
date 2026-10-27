@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Input, Modal, Radio, Segmented, Tooltip } from 'antd';
+import { Button, Input, Modal, Radio, Segmented } from 'antd';
 import { PageLoading } from '../common/PageLoading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,6 +33,7 @@ import { Notice } from '../feedback';
 import { SearchInput } from '../common/SearchInput';
 import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
+import { Tooltip } from '../common/Tooltip';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;

@@ -2,10 +2,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderAction } from '../src/components/common/HeaderAction';
 
-/** Hovers the control and runs the clock past the tooltip's open delay. */
+/** Moves a mouse onto the control and runs the clock past the tooltip's open delay. */
 function hoverUntilSettled(control: HTMLElement) {
-  fireEvent.mouseEnter(control);
+  fireEvent.pointerMove(control, { pointerType: 'mouse' });
   act(() => { vi.advanceTimersByTime(1000); });
+}
+
+/** Whether a tooltip is up: one on its way out keeps its node, in the leave state, under jsdom. */
+function isTooltipShown() {
+  const tooltip = screen.queryByRole('tooltip')?.closest('.ant-tooltip');
+  return Boolean(tooltip) && !/-leave\b|-hidden\b/.test(tooltip!.className);
 }
 
 beforeEach(() => {
@@ -29,6 +35,46 @@ describe('header action', () => {
     hoverUntilSettled(screen.getByRole('button', { name: 'Theme: Dark' }));
 
     expect(screen.getByRole('tooltip').textContent).toBe('Theme');
+  });
+
+  // A press is the reader acting, not asking: the hint rose over the menu a press had just opened
+  // while the pointer still rested on its trigger. It stays down until the pointer leaves.
+  it('puts its tooltip away when pressed and keeps it down until the pointer leaves', () => {
+    render(<HeaderAction label="Language" />);
+    const control = screen.getByRole('button', { name: 'Language' });
+    hoverUntilSettled(control);
+    expect(isTooltipShown()).toBe(true);
+
+    fireEvent.pointerDown(control, { pointerType: 'mouse' });
+    hoverUntilSettled(control);
+    expect(isTooltipShown()).toBe(false);
+
+    fireEvent.pointerLeave(control, { pointerType: 'mouse' });
+    hoverUntilSettled(control);
+    expect(isTooltipShown()).toBe(true);
+  });
+
+  // A keyboard reader has no hover to rest; a visible focus is how they ask for the name.
+  it('names itself to a keyboard focus and leaves with it', () => {
+    render(<HeaderAction label="Refresh all" />);
+    const control = screen.getByRole('button', { name: 'Refresh all' });
+
+    act(() => { control.focus(); });
+    expect(isTooltipShown()).toBe(true);
+    act(() => { control.blur(); });
+    expect(isTooltipShown()).toBe(false);
+  });
+
+  // On a touch screen a hint that appears on a tap is a change iOS answers by swallowing the tap.
+  it('opens nothing when a finger taps it', () => {
+    render(<HeaderAction label="Refresh all" />);
+    const control = screen.getByRole('button', { name: 'Refresh all' });
+
+    fireEvent.pointerDown(control, { pointerType: 'touch' });
+    fireEvent.click(control);
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
   // The absence is only a claim once the clock has passed the point where the cases above

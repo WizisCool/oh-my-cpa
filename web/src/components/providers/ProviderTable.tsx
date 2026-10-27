@@ -1,6 +1,6 @@
 import type React from 'react';
 import clsx from 'clsx';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import { Switch } from '../common/Switch';
 import { DeleteOutlined, EditOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -27,6 +27,7 @@ import {
 import { Tag } from '../common/Tag';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Meter } from '../common/Meter';
+import { Tooltip } from '../common/Tooltip';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 

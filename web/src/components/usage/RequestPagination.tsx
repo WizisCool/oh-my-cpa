@@ -1,8 +1,9 @@
 
-import { Button, Select, Tooltip } from 'antd';
+import { Button, Select } from 'antd';
 import { LeftOutlined, RightOutlined } from '../icons';
 
 import { useT } from '../../i18n';
+import { Tooltip } from '../common/Tooltip';
 
 interface RequestPaginationProps {
   /** The last successful page is on screen while a newer one is in flight. */

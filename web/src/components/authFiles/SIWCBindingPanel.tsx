@@ -3,7 +3,7 @@ import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { Switch } from '../common/Switch';
-import { App, Button, Input, Tooltip } from 'antd';
+import { App, Button, Input } from 'antd';
 import { CopyOutlined, InfoCircleOutlined } from '../icons';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { formatGatewayTimestamp } from '../../utils/time';
@@ -14,6 +14,7 @@ import { Notice, useToast } from '../feedback';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import styles from './SIWCBindingPanel.module.css';
+import { Tooltip } from '../common/Tooltip';
 
 const ERROR_KEYS: Record<NonNullable<SIWCSession['error']>, MessageKey> = {
   start: 'siwc.start_failed', callback: 'siwc.callback_failed', incomplete: 'siwc.callback_incomplete', cancel: 'siwc.cancel_failed',
@@ -64,7 +65,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     <div className={styles['status-card']}>
       <div className={styles['status-head']}>
         <StatusLabel tone={statusTone} className={styles['status-label']}>{t(statusKey)}</StatusLabel>
-        <Tooltip title={t('siwc.summary_hint')}>
+        <Tooltip title={t('siwc.summary_hint')} isTapReadable>
           <button type="button" className={styles['info']} aria-label={t('siwc.about_status')}><InfoCircleOutlined /></button>
         </Tooltip>
       </div>
@@ -82,7 +83,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
     <div className={styles['setting']}>
       <span className={styles['setting-label']}>
         {t('siwc.use')}
-        <Tooltip title={t('siwc.use_hint')}>
+        <Tooltip title={t('siwc.use_hint')} isTapReadable>
           <button type="button" className={styles['info']} aria-label={t('siwc.about_use')}><InfoCircleOutlined /></button>
         </Tooltip>
       </span>
@@ -120,7 +121,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
           <div className={styles['step-body']}>
             <span className={styles['step-title']}>
               {t('siwc.callback')}
-              <Tooltip title={t('siwc.callback_hint')}>
+              <Tooltip title={t('siwc.callback_hint')} isTapReadable>
                 <button type="button" className={styles['info']} aria-label={t('siwc.about_callback')}><InfoCircleOutlined /></button>
               </Tooltip>
             </span>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Segmented, Tooltip } from 'antd';
+import { Segmented } from 'antd';
 import { clsx } from 'clsx';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -27,6 +27,7 @@ import { ChartLegend } from '../common/ChartLegend';
 import { ModelMark } from '../ModelMark';
 import selectionStyles from '../common/selection.module.css';
 import './dashboard.css';
+import { Tooltip } from '../common/Tooltip';
 
 const LazyModelTokenTrend = React.lazy(() =>
   import('../../charts/ModelTokenTrend').then((module) => ({ default: module.ModelTokenTrend }))
